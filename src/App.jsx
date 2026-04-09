@@ -1,1106 +1,538 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
-/* ───────────────────────── CONSTANTS ───────────────────────── */
+/* CONSTANTS */
 const BLUE = "#2E75B6";
 const RED = "#C00000";
-const DARK_BG = "#0a0a0f";
-const CARD_BG = "#12121a";
-const CARD_BORDER = "#1e1e2e";
-const TEXT = "#e2e2e8";
-const TEXT_DIM = "#8888a0";
-const LABOR_RATE = 55;
+const DARK = "#0a0a0f";
+const CARD = "#12121a";
+const BORDER = "#1e1e2e";
+const TXT = "#e2e2e8";
+const DIM = "#8888a0";
+const GREEN = "#00cc66";
+const ORANGE = "#ff8800";
+const YELLOW = "#ffcc00";
+const RATE = 55;
 const MARKUP = 0.10;
+const LOGO = "/CREED_LOGO.png";
 
-/* ───────────────────────── LOGO (base64 placeholder - replace with real) ───────────────────────── */
-const LOGO_URL = "/CREED_LOGO.png"; // put in public folder
+/* STORAGE */
+function load(key, fb) { try { const v = localStorage.getItem("creed_" + key); return v ? JSON.parse(v) : fb; } catch { return fb; } }
+function save(key, val) { localStorage.setItem("creed_" + key, JSON.stringify(val)); }
 
-/* ───────────────────────── STYLES ───────────────────────── */
+const DEFAULT_USERS = [
+  { email: "admin@creedhandyman.com", password: "Creed2026!", name: "Bernard", role: "owner" },
+  { email: "tech@creedhandyman.com", password: "CreedTech1", name: "Tech 1", role: "tech" },
+  { email: "manager@creedhandyman.com", password: "CreedMgr1", name: "Manager", role: "manager" },
+];
+
+/* CSS */
 const css = `
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap');
-
-:root {
-  --blue: ${BLUE};
-  --red: ${RED};
-  --bg: ${DARK_BG};
-  --card: ${CARD_BG};
-  --border: ${CARD_BORDER};
-  --text: ${TEXT};
-  --dim: ${TEXT_DIM};
-}
-
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background: var(--bg); color: var(--text); font-family: 'Source Sans 3', sans-serif; }
-h1,h2,h3,h4,h5 { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
-
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--blue); border-radius: 3px; }
-
-input, textarea, select {
-  background: #1a1a28;
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-input:focus, textarea:focus, select:focus { border-color: var(--blue); }
-
-button {
-  font-family: 'Oswald', sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s;
-}
-button:hover { transform: translateY(-1px); }
-button:active { transform: translateY(0); }
-
-.btn-blue { background: var(--blue); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; }
-.btn-red { background: var(--red); color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; }
-.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--dim); padding: 8px 16px; border-radius: 8px; font-size: 13px; }
-.btn-ghost:hover { border-color: var(--blue); color: var(--blue); }
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.badge-d { background: ${RED}33; color: ${RED}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-.badge-p { background: #ff880033; color: #ff8800; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-.badge-f { background: #ffcc0033; color: #ffcc00; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-.badge-s { background: #00cc6633; color: #00cc66; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-
-@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-.fade-in { animation: fadeIn 0.3s ease forwards; }
-
-@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
-.pulse { animation: pulse 1.5s infinite; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:${DARK};color:${TXT};font-family:'Source Sans 3',sans-serif}
+h1,h2,h3,h4,h5{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.05em}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:${DARK}}::-webkit-scrollbar-thumb{background:${BLUE};border-radius:3px}
+input,textarea,select{background:#1a1a28;border:1px solid ${BORDER};color:${TXT};padding:10px 14px;border-radius:8px;font-family:'Source Sans 3',sans-serif;font-size:14px;outline:none;width:100%}
+input:focus,textarea:focus,select:focus{border-color:${BLUE}}
+button{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;border:none;transition:all .2s}
+button:hover{transform:translateY(-1px)}button:active{transform:translateY(0)}
+.bb{background:${BLUE};color:#fff;padding:10px 20px;border-radius:8px;font-size:14px}
+.br{background:${RED};color:#fff;padding:10px 20px;border-radius:8px;font-size:14px}
+.bg{background:${GREEN};color:#fff;padding:10px 20px;border-radius:8px;font-size:14px}
+.bo{background:transparent;border:1px solid ${BORDER};color:${DIM};padding:8px 16px;border-radius:8px;font-size:13px}
+.bo:hover{border-color:${BLUE};color:${BLUE}}
+.cd{background:${CARD};border:1px solid ${BORDER};border-radius:12px;padding:20px}
+@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fi{animation:fi .3s ease forwards}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.g4{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.mt{margin-top:16px}.mb{margin-bottom:16px}
+.sv{font-size:28px;font-family:'Oswald',sans-serif;font-weight:700}
+.sl{font-size:11px;color:${DIM};font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.1em}
+.bd{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.bd-d{background:${RED}33;color:${RED}}.bd-p{background:${ORANGE}33;color:${ORANGE}}
+.bd-f{background:${YELLOW}33;color:${YELLOW}}.bd-s{background:${GREEN}33;color:${GREEN}}
+.sep{border-bottom:1px solid ${BORDER};padding:8px 0}
 `;
 
-/* ───────────────────────── INSPECTION PARSER ───────────────────────── */
-function parseInspectionReport(text) {
+/* ZINSPECTOR PARSER */
+function parseZInspector(text) {
+  if (!text || text.trim().length < 50) return [];
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
   const rooms = [];
-  let currentRoom = null;
-  const roomHeaders = [
-    "Kitchen", "Appliances", "Laundry Room", "Living Room", "Dining Room",
-    "Entry", "Hallway/Stairs", "Bedroom", "Bathroom", "Garage/Parking",
-    "Compliance", "Exterior", "Keys/Remotes"
-  ];
+  let cur = null;
+  const RP = [/^(Kitchen)\b/i,/^(Appliances)\b/i,/^(Laundry\s*Room)\b/i,/^(Living\s*Room)\b/i,/^(Dining\s*Room)\b/i,/^(Entry)\b/i,/^(Hallway\/Stairs)\b/i,/^(Bedroom\s*[\d:]*\s*[:\-]?\s*\w*)/i,/^(Bathroom\s*[\d:]*\s*[:\-]?\s*\w*)/i,/^(Garage\/Parking)\b/i,/^(Compliance\s*[:\-]?\s*\w*)/i,/^(Exterior\s*[:\-]?\s*\w*)/i];
+  const SKIP = new Set(["Image","View Image","View Video","None","S","F","P","D","-","Detail","Condition","Actions","Comment","Media","Page","Report"]);
+  const isSkip = l => SKIP.has(l)||/^\d{4}-\d{2}-\d{2}/.test(l)||/^\d+\.\d+,\s*-?\d+/.test(l)||l.startsWith("Page ")||l.startsWith("Report generated")||l==="Maintenance";
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    // detect room header
-    const isRoom = roomHeaders.some(r => line.startsWith(r));
-    if (isRoom && !line.includes("Condition") && !line.includes("Actions") && line.length < 60) {
-      currentRoom = { name: line.replace(/:/g, " ").trim(), items: [] };
-      rooms.push(currentRoom);
-      continue;
-    }
-    // detect maintenance items - look for "Maintenance" keyword in context
-    if (currentRoom && line === "Maintenance") {
-      // backtrack to find detail name
-      let detail = "";
-      for (let j = i - 1; j >= Math.max(0, i - 4); j--) {
-        const prev = lines[j];
-        if (prev && !["S","F","P","D","-","None","Maintenance","Image","View Image","View Video"].includes(prev)
-            && !prev.match(/^\d{4}-\d{2}/) && !prev.match(/^\d+\.\d+,/) && prev.length > 1
-            && !prev.startsWith("Page ") && !prev.startsWith("Report ")) {
-          detail = prev;
-          break;
-        }
-      }
-      // forward to find comment
-      let comment = "";
-      for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
-        const next = lines[j];
-        if (next === "Image" || next === "View Image" || next === "View Video"
-            || next.match(/^\d{4}-\d{2}/) || next.match(/^\d+\.\d+,/)
-            || next === "Maintenance" || next === "None"
-            || roomHeaders.some(r => next.startsWith(r))) break;
-        if (["S","F","P","D","-"].includes(next)) continue;
-        if (next.length > 3) { comment += (comment ? " " : "") + next; }
-      }
-      // find condition
-      let condition = "-";
-      for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-        if (["S","F","P","D"].includes(lines[j])) { condition = lines[j]; break; }
-        if (lines[j] === "-") { condition = "-"; break; }
-      }
-
-      if (detail || comment) {
-        currentRoom.items.push({
-          detail: detail || "General",
-          condition,
-          comment: comment || "Maintenance required",
-          laborHrs: estimateLabor(comment, detail),
-          materials: estimateMaterials(comment, detail),
-        });
-      }
-    }
-  }
-
-  // Fallback: structured parse by looking for known patterns
-  if (rooms.length === 0 || rooms.reduce((s, r) => s + r.items.length, 0) < 5) {
-    return parseStructured(text);
+    let rm = null;
+    for (const p of RP) { const m = line.match(p); if (m && line.length < 50 && !line.includes("Condition")) { rm = m[1]; break; } }
+    if (rm) { cur = { name: rm.replace(/\s+/g," ").replace(/:/g," ").trim(), items: [] }; rooms.push(cur); continue; }
+    if (!cur || line !== "Maintenance") continue;
+    let detail = "", cond = "-";
+    for (let j = i-1; j >= Math.max(0,i-5); j--) { const p = lines[j]; if (["S","F","P","D"].includes(p)){cond=p;continue;} if (p==="-"){continue;} if (isSkip(p)) continue; if (p.length > 2 && !detail){detail=p;break;} }
+    let comment = "";
+    for (let j = i+1; j < Math.min(lines.length,i+8); j++) { const n = lines[j]; if (isSkip(n)) continue; if (n==="Maintenance"||n==="None") break; let nr=false; for (const p of RP){if(p.test(n)&&n.length<50){nr=true;break;}} if(nr) break; if(n.length>3){comment+=(comment?" ":"")+n;} if(comment.length>20) break; }
+    if (detail||comment) cur.items.push({ id:Math.random().toString(36).slice(2,8), detail:detail||"General", condition:cond, comment:comment||"Maintenance required", laborHrs:autoLabor(comment+" "+detail), materials:autoMat(comment+" "+detail) });
   }
   return rooms.filter(r => r.items.length > 0);
 }
 
-function parseStructured(text) {
-  const sections = [];
-  // Parse the summary table format: Area | Detail | Condition | Actions | Comment
-  const regex = /^(Kitchen|Appliances|Laundry|Living|Dining|Entry|Hallway|Bedroom|Bathroom|Garage|Compliance|Exterior)\s*[:\d\s]*(.*)/gim;
-  const allLines = text.split("\n");
-  let currentArea = null;
-
-  const maintenanceBlocks = [];
-  let i = 0;
-  while (i < allLines.length) {
-    const l = allLines[i].trim();
-    // Match area headers from the condition summary
-    const areaMatch = l.match(/^(Kitchen|Appliances|Laundry Room|Living Room|Dining Room|Entry|Hallway\/Stairs|Bedroom\s*[\d:]*\s*\w*|Bathroom\s*[\d:]*\s*\w*|Garage\/Parking|Compliance\s*:\s*\w+|Exterior\s*:\s*\w+)/i);
-    if (areaMatch) {
-      currentArea = areaMatch[1].trim();
-    }
-    // Look for maintenance action lines with comments
-    if (l === "Maintenance" && currentArea) {
-      // Already handled in main parser - skip
-    }
-    i++;
-  }
-
-  // Use a direct approach: scan for the condition summary table patterns
-  const summaryPattern = /^(\w[\w\s\/.:]+?)\s+([\w\s\/.:]+?)\s+[-SFPD]\s+Maintenance\s+(.+)$/;
-
-  // Better: parse from the known document structure
-  const roomData = extractFromDocument(text);
-  return roomData;
-}
-
-function extractFromDocument(text) {
-  const rooms = [];
-  // Split by known room headers and extract maintenance items
-  const roomPatterns = [
-    { pattern: /Kitchen/i, name: "Kitchen" },
-    { pattern: /Appliances/i, name: "Appliances" },
-    { pattern: /Laundry Room/i, name: "Laundry Room" },
-    { pattern: /Living Room/i, name: "Living Room" },
-    { pattern: /Dining Room/i, name: "Dining Room" },
-    { pattern: /Entry/i, name: "Entry" },
-    { pattern: /Hallway\/Stairs/i, name: "Hallway/Stairs" },
-    { pattern: /Bedroom\s*:?\s*North/i, name: "Bedroom North" },
-    { pattern: /Bedroom\s*2\s*:?\s*South/i, name: "Bedroom 2 South" },
-    { pattern: /Bedroom\s*3\s*:?\s*Master/i, name: "Bedroom 3 Master" },
-    { pattern: /Bathroom\s*:?\s*Main/i, name: "Bathroom Main" },
-    { pattern: /Bathroom\s*2\s*:?\s*Master/i, name: "Bathroom 2 Master" },
-    { pattern: /Garage/i, name: "Garage/Parking" },
-    { pattern: /Compliance/i, name: "Compliance" },
-    { pattern: /Exterior/i, name: "Exterior" },
-  ];
-
-  // Hardcoded extraction from the known zInspector format
-  const items = [
-    { room: "Kitchen", detail: "Sink Sprayer", condition: "-", comment: "Sprayer needs replacement", laborHrs: 0.5, materials: [{ name: "Kitchen sink sprayer", cost: 15 }] },
-    { room: "Kitchen", detail: "Counters/Cabinets/Drawers", condition: "-", comment: "Missing or loose trim, broken cabinet door and hinges, drawer railing repair", laborHrs: 3, materials: [{ name: "Cabinet hinges (set)", cost: 12 }, { name: "Drawer slides", cost: 18 }, { name: "Trim pieces", cost: 10 }] },
-    { room: "Kitchen", detail: "Electrical Outlets", condition: "F", comment: "Replace outlet cover near fridge", laborHrs: 0.25, materials: [{ name: "Outlet cover", cost: 2 }] },
-    { room: "Kitchen", detail: "Lights/Fans", condition: "F", comment: "Replace missing bulbs in light fixtures", laborHrs: 0.25, materials: [{ name: "Light bulbs (pack)", cost: 8 }] },
-    { room: "Kitchen", detail: "Wall/Ceiling/Paint", condition: "F", comment: "Touch up paint on wall and trim", laborHrs: 1.5, materials: [{ name: "Interior paint (qt)", cost: 18 }, { name: "Primer (qt)", cost: 12 }] },
-    { room: "Kitchen", detail: "Flooring/Baseboard", condition: "P", comment: "Replace damaged flooring and install new transition strip", laborHrs: 3, materials: [{ name: "LVP flooring (box)", cost: 45 }, { name: "Transition strip", cost: 12 }] },
-    { room: "Kitchen", detail: "Fire Extinguisher", condition: "-", comment: "Fire extinguisher missing, install required", laborHrs: 0.25, materials: [{ name: "Fire extinguisher", cost: 25 }] },
-    { room: "Appliances", detail: "Oven/Stove", condition: "-", comment: "Missing knob on countertop controls", laborHrs: 0.25, materials: [{ name: "Stove knob", cost: 8 }] },
-    { room: "Appliances", detail: "Dishwasher", condition: "D", comment: "Top rack needs to be reattached to railing", laborHrs: 0.5, materials: [{ name: "Dishwasher rack clips", cost: 10 }] },
-    { room: "Laundry Room", detail: "Wall/Ceiling/Paint", condition: "S", comment: "Patch and repair area with missing brick", laborHrs: 2, materials: [{ name: "Mortar mix", cost: 12 }, { name: "Replacement brick", cost: 8 }] },
-    { room: "Living Room", detail: "Wall/Ceiling/Paint", condition: "P", comment: "Full paint required for the room", laborHrs: 6, materials: [{ name: "Interior paint (gal)", cost: 38 }, { name: "Primer (gal)", cost: 28 }, { name: "Painter supplies", cost: 20 }] },
-    { room: "Living Room", detail: "Flooring/Baseboard", condition: "D", comment: "Carpet in horrible condition, replacement required", laborHrs: 4, materials: [{ name: "Carpet (per sq yd)", cost: 180 }, { name: "Carpet pad", cost: 60 }, { name: "Tack strips", cost: 15 }] },
-    { room: "Living Room", detail: "Switch/Outlet", condition: "F", comment: "Outlets ungrounded, consult electrician", laborHrs: 0.5, materials: [{ name: "Electrical assessment (sub)", cost: 150 }] },
-    { room: "Living Room", detail: "Window Blinds", condition: "D", comment: "Missing two blinds, 35in replacement", laborHrs: 0.5, materials: [{ name: '35" blinds (x2)', cost: 24 }] },
-    { room: "Living Room", detail: "Fire Alarm", condition: "F", comment: "Replace 9-volt battery", laborHrs: 0.1, materials: [{ name: "9V battery", cost: 4 }] },
-    { room: "Dining Room", detail: "Wall/Ceiling/Paint", condition: "F", comment: "Touch-up paint or full repaint on walls and trim", laborHrs: 4, materials: [{ name: "Interior paint (gal)", cost: 38 }, { name: "Trim paint (qt)", cost: 18 }] },
-    { room: "Dining Room", detail: "Light Fixture", condition: "P", comment: "Replace fixture - bulbs no longer secured", laborHrs: 1, materials: [{ name: "Ceiling light fixture", cost: 35 }] },
-    { room: "Dining Room", detail: "Switch/Outlet", condition: "-", comment: "Crack present, repair needed", laborHrs: 0.25, materials: [{ name: "Outlet/switch cover", cost: 3 }] },
-    { room: "Entry", detail: "Door/Knob/Lock", condition: "P", comment: "Adjust entry door, replace missing striker plate", laborHrs: 1, materials: [{ name: "Striker plate", cost: 6 }, { name: "Weather stripping", cost: 8 }] },
-    { room: "Entry", detail: "Screen Door", condition: "P", comment: "Repair damaged screen in multiple areas", laborHrs: 1, materials: [{ name: "Screen repair kit", cost: 12 }] },
-    { room: "Hallway/Stairs", detail: "Closet/Cabinet", condition: "F", comment: "Reinstall drawer", laborHrs: 0.5, materials: [{ name: "Drawer slides", cost: 12 }] },
-    { room: "Hallway/Stairs", detail: "Light Fixture", condition: "F", comment: "Replace bulb", laborHrs: 0.1, materials: [{ name: "Light bulb", cost: 3 }] },
-    { room: "Hallway/Stairs", detail: "Smoke/CO Detector", condition: "D", comment: "Missing smoke alarm, replace CO battery", laborHrs: 0.5, materials: [{ name: "Smoke alarm", cost: 18 }, { name: "9V battery", cost: 4 }] },
-    { room: "Hallway/Stairs", detail: "Wall/Ceiling/Paint", condition: "P", comment: "Heavy touch-up paint required", laborHrs: 3, materials: [{ name: "Interior paint (gal)", cost: 38 }] },
-    { room: "Bedroom North", detail: "Window Covering", condition: "P", comment: "Install replacement blind 63-64 inches", laborHrs: 0.5, materials: [{ name: '64" blind', cost: 18 }] },
-    { room: "Bedroom North", detail: "Door Knob", condition: "D", comment: "Missing brass knob", laborHrs: 0.25, materials: [{ name: "Brass door knob", cost: 15 }] },
-    { room: "Bedroom North", detail: "Wall/Ceiling/Paint", condition: "P", comment: "Complete repaint needed - drawings/stains, patch holes, paint trim", laborHrs: 8, materials: [{ name: "Interior paint (gal x2)", cost: 76 }, { name: "Primer (gal)", cost: 28 }, { name: "Spackle/patch", cost: 10 }, { name: "Painter supplies", cost: 15 }] },
-    { room: "Bedroom North", detail: "Closet Door", condition: "D", comment: "Replace pocket door with 26in bifold", laborHrs: 2, materials: [{ name: '26" bifold door', cost: 55 }, { name: "Bifold hardware", cost: 12 }] },
-    { room: "Bedroom North", detail: "Smoke Alarm", condition: "P", comment: "Missing - install", laborHrs: 0.25, materials: [{ name: "Smoke alarm", cost: 18 }] },
-    { room: "Bedroom North", detail: "Vent", condition: "-", comment: "Secure vent", laborHrs: 0.25, materials: [{ name: "Vent screws", cost: 2 }] },
-    { room: "Bedroom 2 South", detail: "Window/Blinds", condition: "D", comment: "Blinds missing 35x64, screen reattachment", laborHrs: 0.75, materials: [{ name: '35x64 blinds', cost: 14 }, { name: "Screen clips", cost: 4 }] },
-    { room: "Bedroom 2 South", detail: "Door/Hinges", condition: "F", comment: "Touch up door, secure loose hinges", laborHrs: 0.5, materials: [{ name: "Hinge screws", cost: 3 }, { name: "Touch-up paint", cost: 8 }] },
-    { room: "Bedroom 2 South", detail: "Wall/Ceiling/Paint", condition: "D", comment: "Multiple patches, full repaint walls and trim", laborHrs: 6, materials: [{ name: "Interior paint (gal)", cost: 38 }, { name: "Primer (gal)", cost: 28 }, { name: "Spackle", cost: 8 }] },
-    { room: "Bedroom 2 South", detail: "Flooring", condition: "D", comment: "Flooring needs full replacement", laborHrs: 5, materials: [{ name: "LVP flooring (3 box)", cost: 135 }, { name: "Underlayment", cost: 25 }] },
-    { room: "Bedroom 2 South", detail: "Closet Doors", condition: "D", comment: "Closet doors missing, reinstall", laborHrs: 1.5, materials: [{ name: "Bifold closet doors", cost: 65 }] },
-    { room: "Bedroom 2 South", detail: "Smoke Alarm", condition: "P", comment: "No smoke alarm present", laborHrs: 0.25, materials: [{ name: "Smoke alarm", cost: 18 }] },
-    { room: "Bedroom 3 Master", detail: "Window Blind", condition: "P", comment: "45 inch blind replacement", laborHrs: 0.5, materials: [{ name: '45" blind', cost: 16 }] },
-    { room: "Bedroom 3 Master", detail: "Door", condition: "D", comment: "Replace door (severe damage), install 2 brass doorstops", laborHrs: 3, materials: [{ name: "Interior door slab", cost: 65 }, { name: "Brass doorstops (x2)", cost: 10 }] },
-    { room: "Bedroom 3 Master", detail: "Wall/Ceiling/Paint", condition: "F", comment: "Touch-up or complete repaint on each wall and trim", laborHrs: 6, materials: [{ name: "Interior paint (gal x2)", cost: 76 }, { name: "Trim paint (qt)", cost: 18 }] },
-    { room: "Bedroom 3 Master", detail: "Flooring/Baseboard", condition: "D", comment: "All new trim - water damage from shower. Carpet full replacement", laborHrs: 8, materials: [{ name: "Baseboard trim (lot)", cost: 50 }, { name: "Carpet (per room)", cost: 220 }, { name: "Carpet pad", cost: 60 }] },
-    { room: "Bedroom 3 Master", detail: "Closet Door", condition: "P", comment: "Off track and missing", laborHrs: 1, materials: [{ name: "Closet door track hardware", cost: 18 }] },
-    { room: "Bedroom 3 Master", detail: "Light Fixture", condition: "P", comment: "Globe broken", laborHrs: 0.5, materials: [{ name: "Light fixture globe", cost: 15 }] },
-    { room: "Bedroom 3 Master", detail: "Smoke Alarm", condition: "D", comment: "Missing - install replacement", laborHrs: 0.25, materials: [{ name: "Smoke alarm", cost: 18 }] },
-    { room: "Bathroom Main", detail: "Door Knob", condition: "D", comment: "Replace missing doorknob with brass knob", laborHrs: 0.25, materials: [{ name: "Brass door knob", cost: 15 }] },
-    { room: "Bathroom Main", detail: "Medicine Cabinet/Mirror", condition: "P", comment: "Mirror missing, needs remount and repaint", laborHrs: 1.5, materials: [{ name: "Mirror/medicine cabinet", cost: 30 }, { name: "Mounting hardware", cost: 6 }] },
-    { room: "Bathroom Main", detail: "Sink/Faucet", condition: "F", comment: "Drain stopper missing", laborHrs: 0.25, materials: [{ name: "Drain stopper", cost: 8 }] },
-    { room: "Bathroom Main", detail: "Toilet", condition: "D", comment: "Tank seat cracked and broken, replacement needed", laborHrs: 1.5, materials: [{ name: "Toilet tank lid", cost: 35 }] },
-    { room: "Bathroom Main", detail: "Tub/Shower", condition: "P", comment: "Missing shower head, re-caulk tub and spout", laborHrs: 1, materials: [{ name: "Shower head", cost: 20 }, { name: "Caulk (tube x2)", cost: 12 }] },
-    { room: "Bathroom Main", detail: "Accessories", condition: "D", comment: "Install TP holder, missing towel bar, touch-up trim", laborHrs: 1, materials: [{ name: "TP holder", cost: 10 }, { name: "Towel bar", cost: 14 }, { name: "Touch-up paint", cost: 8 }] },
-    { room: "Bathroom 2 Master", detail: "Flooring", condition: "D", comment: "Extensive water damage, cracked tiles, full replacement", laborHrs: 8, materials: [{ name: "Floor tile (lot)", cost: 120 }, { name: "Thinset/grout", cost: 30 }, { name: "Backer board", cost: 25 }] },
-    { room: "Bathroom 2 Master", detail: "Toilet", condition: "F", comment: "Tighten seat, replace flapper and fill valve", laborHrs: 0.75, materials: [{ name: "Toilet repair kit", cost: 15 }] },
-    { room: "Bathroom 2 Master", detail: "Tub/Shower", condition: "D", comment: "Tile wall broken, backing detached, full tile replacement, tub refinish, patch holes", laborHrs: 16, materials: [{ name: "Shower wall tile (lot)", cost: 180 }, { name: "Thinset/grout/backer", cost: 45 }, { name: "Tub refinish kit", cost: 50 }, { name: "Caulk", cost: 8 }] },
-    { room: "Bathroom 2 Master", detail: "Wall/Ceiling", condition: "P", comment: "Tile coming off, loose sections, repair tiles", laborHrs: 3, materials: [{ name: "Replacement tile", cost: 25 }, { name: "Adhesive/grout", cost: 15 }] },
-    { room: "Bathroom 2 Master", detail: "Window", condition: "P", comment: "Sun-worn blind replacement, defective window latch", laborHrs: 0.75, materials: [{ name: "Replacement blind", cost: 12 }, { name: "Window latch", cost: 8 }] },
-    { room: "Bathroom 2 Master", detail: "TP Holder", condition: "P", comment: "Broken or missing, replace", laborHrs: 0.25, materials: [{ name: "TP holder", cost: 10 }] },
-    { room: "Compliance", detail: "Filters", condition: "D", comment: "20x30x1 replace", laborHrs: 0.25, materials: [{ name: "20x30x1 air filter", cost: 8 }] },
-    { room: "Exterior", detail: "Landscaping", condition: "F", comment: "Remove throne bush", laborHrs: 1.5, materials: [{ name: "Disposal bags", cost: 8 }] },
-    { room: "Exterior", detail: "Fence/Gate", condition: "F", comment: "Gate latch not secure", laborHrs: 0.5, materials: [{ name: "Gate latch", cost: 12 }] },
-    { room: "Exterior", detail: "Lights", condition: "D", comment: "Replace back patio light", laborHrs: 0.5, materials: [{ name: "Exterior light fixture", cost: 25 }] },
-    { room: "Exterior", detail: "Downspout/Porch", condition: "D", comment: "Missing downspout, install 90° curb; resecure porch stairs/railing", laborHrs: 3, materials: [{ name: "Downspout + elbow", cost: 20 }, { name: "Deck screws/brackets", cost: 15 }] },
-  ];
-
-  // Group by room
-  const roomMap = {};
-  items.forEach(item => {
-    if (!roomMap[item.room]) roomMap[item.room] = { name: item.room, items: [] };
-    roomMap[item.room].items.push(item);
-  });
-  return Object.values(roomMap);
-}
-
-function estimateLabor(comment, detail) {
-  const c = (comment + " " + detail).toLowerCase();
-  if (c.includes("full replace") || c.includes("full repaint") || c.includes("complete repaint")) return 6;
-  if (c.includes("replace") && c.includes("floor")) return 4;
-  if (c.includes("repaint") || c.includes("full paint")) return 5;
-  if (c.includes("replace door")) return 2;
-  if (c.includes("touch up") || c.includes("touch-up")) return 1.5;
-  if (c.includes("install")) return 1;
-  if (c.includes("replace")) return 1;
-  if (c.includes("repair")) return 1;
-  if (c.includes("missing bulb") || c.includes("battery")) return 0.25;
+function autoLabor(t) {
+  t = t.toLowerCase();
+  if (t.includes("full replace")||t.includes("full repaint")||t.includes("complete repaint")) return 6;
+  if (t.includes("replace")&&(t.includes("floor")||t.includes("carpet")||t.includes("tile"))) return 5;
+  if (t.includes("water damage")) return 8;
+  if (t.includes("repaint")||t.includes("full paint")) return 5;
+  if (t.includes("replace door")) return 2.5;
+  if (t.includes("refinish")||t.includes("tile wall")) return 10;
+  if (t.includes("touch up")||t.includes("touch-up")) return 1.5;
+  if (t.includes("patch")&&t.includes("paint")) return 2;
+  if (t.includes("install")&&!t.includes("bulb")) return 1;
+  if (t.includes("replace")) return 1;
+  if (t.includes("repair")) return 1;
+  if (t.includes("bulb")||t.includes("battery")||t.includes("filter")) return 0.25;
+  if (t.includes("secure")||t.includes("tighten")) return 0.5;
+  if (t.includes("caulk")) return 0.75;
   return 1;
 }
 
-function estimateMaterials(comment, detail) {
-  return [{ name: "Materials (estimate)", cost: 20 }];
+function autoMat(t) {
+  t = t.toLowerCase();
+  const m = [];
+  if (t.includes("paint")&&t.includes("full")) m.push({name:"Paint + primer (gal)",cost:66},{name:"Supplies",cost:20});
+  else if (t.includes("paint")) m.push({name:"Paint (qt)",cost:18});
+  if (t.includes("carpet")) m.push({name:"Carpet + pad",cost:240});
+  if (t.includes("tile")&&t.includes("floor")) m.push({name:"Floor tile + thinset",cost:150});
+  if (t.includes("tile")&&t.includes("wall")) m.push({name:"Wall tile + thinset",cost:180});
+  if (t.includes("blind")) m.push({name:"Blind",cost:16});
+  if (t.includes("door")&&t.includes("replace")) m.push({name:"Door + hardware",cost:75});
+  if (t.includes("knob")||t.includes("doorknob")) m.push({name:"Door knob",cost:15});
+  if (t.includes("smoke alarm")||t.includes("smoke detector")) m.push({name:"Smoke alarm",cost:18});
+  if (t.includes("battery")) m.push({name:"9V battery",cost:4});
+  if (t.includes("bulb")) m.push({name:"Light bulbs",cost:8});
+  if (t.includes("fire ext")) m.push({name:"Fire extinguisher",cost:25});
+  if (t.includes("caulk")) m.push({name:"Caulk",cost:8});
+  if (t.includes("shower head")) m.push({name:"Shower head",cost:20});
+  if (t.includes("flapper")||t.includes("fill valve")) m.push({name:"Toilet kit",cost:15});
+  if (t.includes("hinge")) m.push({name:"Hinges",cost:12});
+  if (t.includes("flooring")||t.includes("lvp")) m.push({name:"LVP flooring",cost:135});
+  if (t.includes("sprayer")) m.push({name:"Sprayer",cost:15});
+  if (t.includes("bifold")) m.push({name:"Bifold door",cost:65});
+  if (t.includes("fixture")) m.push({name:"Light fixture",cost:30});
+  if (t.includes("screen")) m.push({name:"Screen kit",cost:12});
+  if (t.includes("mirror")) m.push({name:"Mirror",cost:30});
+  if (t.includes("towel bar")) m.push({name:"Towel bar",cost:14});
+  if (t.includes("tp holder")||t.includes("toilet paper")) m.push({name:"TP holder",cost:10});
+  if (t.includes("refinish")) m.push({name:"Refinish kit",cost:50});
+  if (t.includes("latch")||t.includes("gate")) m.push({name:"Latch",cost:12});
+  if (t.includes("downspout")) m.push({name:"Downspout",cost:20});
+  if (m.length===0) m.push({name:"Materials",cost:15});
+  return m;
 }
 
-/* ───────────────────────── WATCH OUT CLASSIFIER ───────────────────────── */
 function classifyIssues(rooms) {
-  const critical = [], important = [], minor = [];
-  rooms.forEach(room => {
-    room.items.forEach(item => {
-      const entry = { room: room.name, ...item };
-      const c = (item.comment + " " + item.detail).toLowerCase();
-      if (c.includes("water damage") || c.includes("ungrounded") || c.includes("smoke alarm") || c.includes("fire ext") ||
-          c.includes("electrician") || c.includes("code compliance") || c.includes("water intrusion") || c.includes("missing smoke")) {
-        critical.push(entry);
-      } else if (item.condition === "D" || c.includes("broken") || c.includes("horrible") || c.includes("severe") ||
-                 c.includes("full replace") || c.includes("cracked")) {
-        important.push(entry);
-      } else {
-        minor.push(entry);
-      }
-    });
-  });
-  return { critical, important, minor };
+  const c=[],im=[],mi=[];
+  rooms.forEach(r=>r.items.forEach(item=>{
+    const e={room:r.name,...item};
+    const t=(item.comment+" "+item.detail).toLowerCase();
+    if(t.includes("water damage")||t.includes("ungrounded")||t.includes("smoke alarm")||t.includes("fire ext")||t.includes("electrician")||t.includes("code")||t.includes("water intrusion")||t.includes("missing smoke")) c.push(e);
+    else if(item.condition==="D"||t.includes("broken")||t.includes("horrible")||t.includes("severe")||t.includes("full replace")||t.includes("cracked")) im.push(e);
+    else mi.push(e);
+  }));
+  return {critical:c,important:im,minor:mi};
 }
 
-/* ───────────────────────── JOB GUIDE GENERATOR ───────────────────────── */
-function generateJobGuide(rooms) {
-  const tools = new Set(["Drill/driver", "Tape measure", "Level", "Utility knife", "Caulk gun", "Putty knife"]);
-  const shopping = [];
-  const steps = [];
-
-  rooms.forEach(room => {
-    room.items.forEach(item => {
-      const c = (item.comment + " " + item.detail).toLowerCase();
-      if (c.includes("paint")) { tools.add("Paint roller/brush kit"); tools.add("Drop cloths"); tools.add("Painter's tape"); }
-      if (c.includes("tile")) { tools.add("Tile cutter"); tools.add("Trowel"); tools.add("Grout float"); }
-      if (c.includes("floor") || c.includes("carpet")) { tools.add("Knee kicker"); tools.add("Carpet knife"); }
-      if (c.includes("plumb") || c.includes("shower") || c.includes("toilet") || c.includes("faucet")) { tools.add("Adjustable wrench"); tools.add("Plumber's tape"); }
-      if (c.includes("electric") || c.includes("outlet") || c.includes("light")) { tools.add("Voltage tester"); tools.add("Wire strippers"); }
-      if (c.includes("door")) { tools.add("Chisel set"); tools.add("Hammer"); }
-      if (c.includes("bush") || c.includes("landscap")) { tools.add("Pruning shears"); tools.add("Shovel"); }
-
-      item.materials.forEach(m => shopping.push({ ...m, room: room.name, detail: item.detail }));
-      steps.push({ room: room.name, detail: item.detail, action: item.comment });
-    });
-  });
-
-  return { tools: [...tools].sort(), shopping, steps };
+function buildGuide(rooms) {
+  const tools=new Set(["Drill/driver","Tape measure","Level","Utility knife","Caulk gun","Putty knife","PPE"]);
+  const shopping=[],steps=[];
+  rooms.forEach(r=>r.items.forEach(item=>{
+    const t=(item.comment+" "+item.detail).toLowerCase();
+    if(t.includes("paint")){tools.add("Roller/brush kit");tools.add("Drop cloths");tools.add("Painter's tape");}
+    if(t.includes("tile")){tools.add("Tile cutter");tools.add("Trowel");}
+    if(t.includes("plumb")||t.includes("shower")||t.includes("toilet")){tools.add("Adjustable wrench");tools.add("Plumber's tape");}
+    if(t.includes("electric")||t.includes("outlet")){tools.add("Voltage tester");}
+    if(t.includes("door")){tools.add("Chisel");tools.add("Hammer");}
+    item.materials.forEach(m=>shopping.push({...m,room:r.name,detail:item.detail}));
+    steps.push({room:r.name,detail:item.detail,action:item.comment});
+  }));
+  return {tools:[...tools].sort(),shopping,steps};
 }
 
-/* ───────────────────────── MAIN APP ───────────────────────── */
+function calcLine(item) {
+  const lc = item.laborHrs * RATE;
+  const mc = item.materials.reduce((s,m)=>s+m.cost,0);
+  return { laborCost:lc, matCost:mc, total:Math.round((lc+mc)*(1+MARKUP)*100)/100 };
+}
+
+/* MAIN APP */
 export default function App() {
+  const [user, setUser] = useState(()=>load("user",null));
+  const [users, setUsers] = useState(()=>load("users",DEFAULT_USERS));
   const [page, setPage] = useState("dashboard");
-  const [user, setUser] = useState({ name: "Creed Team", role: "admin" });
-  const [quoteData, setQuoteData] = useState(null);
-  const [jobs, setJobs] = useState([]);
-  const [timeEntries, setTimeEntries] = useState([]);
-  const [timerActive, setTimerActive] = useState(false);
-  const [timerStart, setTimerStart] = useState(null);
-  const [timerElapsed, setTimerElapsed] = useState(0);
-  const [timerJob, setTimerJob] = useState("");
-  const [testimonials, setTestimonials] = useState([
-    { name: "Keyrenter PMC", text: "Creed Handyman delivered quality turnover work on time.", rating: 5 },
-  ]);
-  const [referrals, setReferrals] = useState([]);
-  const [quests, setQuests] = useState([
-    { id: 1, title: "Complete 5 jobs this week", progress: 2, target: 5, xp: 100 },
-    { id: 2, title: "Get 3 five-star reviews", progress: 1, target: 3, xp: 75 },
-    { id: 3, title: "Zero callbacks this month", progress: 28, target: 30, xp: 150 },
-  ]);
+  const [jobs, setJobs] = useState(()=>load("jobs",[]));
+  const [timeEntries, setTimeEntries] = useState(()=>load("time",[]));
+  const [testimonials, setTestimonials] = useState(()=>load("reviews",[{name:"Keyrenter PMC",text:"Creed Handyman delivered quality turnover work on time.",rating:5}]));
+  const [referrals, setReferrals] = useState(()=>load("referrals",[]));
+  const [quests, setQuests] = useState(()=>load("quests",[{id:1,title:"Complete 5 jobs this week",progress:2,target:5,xp:100},{id:2,title:"Get 3 five-star reviews",progress:1,target:3,xp:75},{id:3,title:"Zero callbacks this month",progress:28,target:30,xp:150}]));
 
-  // Timer tick
-  useEffect(() => {
-    let interval;
-    if (timerActive && timerStart) {
-      interval = setInterval(() => {
-        setTimerElapsed(Date.now() - timerStart);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [timerActive, timerStart]);
+  useEffect(()=>{save("user",user)},[user]);
+  useEffect(()=>{save("users",users)},[users]);
+  useEffect(()=>{save("jobs",jobs)},[jobs]);
+  useEffect(()=>{save("time",timeEntries)},[timeEntries]);
+  useEffect(()=>{save("reviews",testimonials)},[testimonials]);
+  useEffect(()=>{save("referrals",referrals)},[referrals]);
+  useEffect(()=>{save("quests",quests)},[quests]);
 
-  const formatTime = (ms) => {
-    const s = Math.floor(ms / 1000);
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}:${sec.toString().padStart(2,"0")}`;
-  };
+  if (!user) return <Login users={users} setUsers={setUsers} setUser={setUser}/>;
+
+  const NAV=[{id:"dashboard",l:"Dashboard",i:"◆"},{id:"quoteforge",l:"QuoteForge",i:"⚡"},{id:"jobs",l:"Jobs",i:"📋"},{id:"time",l:"Time",i:"⏱"},{id:"payroll",l:"Payroll",i:"💰"},{id:"quests",l:"Quests",i:"🎯"},{id:"reviews",l:"Reviews",i:"⭐"},{id:"referrals",l:"Referrals",i:"🤝"}];
 
   return (
-    <div style={{ minHeight: "100vh", background: DARK_BG }}>
+    <div style={{minHeight:"100vh",background:DARK}}>
       <style>{css}</style>
-
-      {/* ─── HEADER ─── */}
-      <header style={{
-        background: `linear-gradient(135deg, ${DARK_BG}, #14142a)`,
-        borderBottom: `1px solid ${CARD_BORDER}`,
-        padding: "12px 24px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-        backdropFilter: "blur(12px)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img src={LOGO_URL} alt="Creed" style={{ height: 44, borderRadius: 6 }} onError={(e) => { e.target.style.display = "none"; }} />
-          <div>
-            <h1 style={{ fontSize: 20, color: BLUE, lineHeight: 1.1 }}>Creed Handyman</h1>
-            <span style={{ fontSize: 11, color: TEXT_DIM, fontFamily: "'Oswald', sans-serif", letterSpacing: "0.15em", textTransform: "uppercase" }}>Business Command Center</span>
-          </div>
+      <header style={{background:`linear-gradient(135deg,${DARK},#14142a)`,borderBottom:`1px solid ${BORDER}`,padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,backdropFilter:"blur(12px)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <img src={LOGO} alt="Creed" style={{height:40,borderRadius:6}} onError={e=>e.target.style.display="none"}/>
+          <div><h1 style={{fontSize:18,color:BLUE,lineHeight:1.1}}>Creed Handyman</h1><span style={{fontSize:10,color:DIM,fontFamily:"'Oswald'",letterSpacing:".15em"}}>BUSINESS COMMAND CENTER</span></div>
         </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {[
-            { id: "dashboard", label: "Dashboard", icon: "◆" },
-            { id: "quoteforge", label: "QuoteForge", icon: "⚡" },
-            { id: "jobs", label: "Jobs", icon: "📋" },
-            { id: "time", label: "Time", icon: "⏱" },
-            { id: "payroll", label: "Payroll", icon: "💰" },
-            { id: "quests", label: "Quests", icon: "🎯" },
-            { id: "reviews", label: "Reviews", icon: "⭐" },
-            { id: "referrals", label: "Referrals", icon: "🤝" },
-          ].map(tab => (
-            <button key={tab.id} onClick={() => setPage(tab.id)}
-              style={{
-                padding: "6px 14px", borderRadius: 6, fontSize: 12,
-                background: page === tab.id ? BLUE : "transparent",
-                color: page === tab.id ? "#fff" : TEXT_DIM,
-                border: page === tab.id ? "none" : `1px solid transparent`,
-                fontFamily: "'Oswald', sans-serif",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}>
-              {tab.icon} {tab.label}
-            </button>
-          ))}
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+          {NAV.map(n=><button key={n.id} onClick={()=>setPage(n.id)} style={{padding:"5px 12px",borderRadius:6,fontSize:11,background:page===n.id?BLUE:"transparent",color:page===n.id?"#fff":DIM,fontFamily:"'Oswald'",letterSpacing:".06em"}}>{n.i} {n.l}</button>)}
+          <button onClick={()=>setUser(null)} style={{padding:"5px 12px",borderRadius:6,fontSize:11,background:RED+"44",color:RED,fontFamily:"'Oswald'"}}>↪ {user.name}</button>
         </div>
       </header>
-
-      {/* ─── CONTENT ─── */}
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 16px" }}>
-        {page === "dashboard" && <Dashboard jobs={jobs} timeEntries={timeEntries} quests={quests} setPage={setPage} />}
-        {page === "quoteforge" && <QuoteForge quoteData={quoteData} setQuoteData={setQuoteData} jobs={jobs} setJobs={setJobs} />}
-        {page === "jobs" && <JobsPage jobs={jobs} setJobs={setJobs} />}
-        {page === "time" && <TimeTracker
-          timerActive={timerActive} setTimerActive={setTimerActive}
-          timerStart={timerStart} setTimerStart={setTimerStart}
-          timerElapsed={timerElapsed} setTimerElapsed={setTimerElapsed}
-          timerJob={timerJob} setTimerJob={setTimerJob}
-          timeEntries={timeEntries} setTimeEntries={setTimeEntries}
-          formatTime={formatTime} jobs={jobs}
-        />}
-        {page === "payroll" && <Payroll timeEntries={timeEntries} formatTime={formatTime} />}
-        {page === "quests" && <Quests quests={quests} setQuests={setQuests} />}
-        {page === "reviews" && <Reviews testimonials={testimonials} setTestimonials={setTestimonials} />}
-        {page === "referrals" && <Referrals referrals={referrals} setReferrals={setReferrals} />}
+      <main style={{maxWidth:1200,margin:"0 auto",padding:"20px 16px"}}>
+        {page==="dashboard"&&<Dash jobs={jobs} timeEntries={timeEntries} quests={quests} setPage={setPage} user={user}/>}
+        {page==="quoteforge"&&<QF jobs={jobs} setJobs={setJobs}/>}
+        {page==="jobs"&&<JobsPage jobs={jobs} setJobs={setJobs}/>}
+        {page==="time"&&<TT timeEntries={timeEntries} setTimeEntries={setTimeEntries} jobs={jobs}/>}
+        {page==="payroll"&&<Pay timeEntries={timeEntries}/>}
+        {page==="quests"&&<QuestsPage quests={quests} setQuests={setQuests}/>}
+        {page==="reviews"&&<Rev testimonials={testimonials} setTestimonials={setTestimonials}/>}
+        {page==="referrals"&&<Ref referrals={referrals} setReferrals={setReferrals}/>}
       </main>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════
-   DASHBOARD
-   ═══════════════════════════════════════════════════════ */
-function Dashboard({ jobs, timeEntries, quests, setPage }) {
-  const totalRevenue = jobs.reduce((s, j) => s + (j.total || 0), 0);
-  const activeJobs = jobs.filter(j => j.status !== "complete").length;
-  const questProgress = quests.reduce((s, q) => s + q.progress, 0);
-  const questTotal = quests.reduce((s, q) => s + q.target, 0);
-
-  const stats = [
-    { label: "Active Jobs", value: activeJobs, color: BLUE },
-    { label: "Revenue Pipeline", value: `$${totalRevenue.toLocaleString()}`, color: "#00cc66" },
-    { label: "Hours Logged", value: (timeEntries.reduce((s, e) => s + e.hours, 0)).toFixed(1), color: "#ff8800" },
-    { label: "Quest Progress", value: `${Math.round(questProgress / questTotal * 100 || 0)}%`, color: RED },
-  ];
-
+/* LOGIN */
+function Login({users,setUsers,setUser}) {
+  const [mode,setMode]=useState("login");
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
+  const [name,setName]=useState("");
+  const [err,setErr]=useState("");
+  const login=()=>{const u=users.find(u=>u.email===email&&u.password===pass);if(u){setUser(u);setErr("")}else setErr("Invalid email or password")};
+  const signup=()=>{if(!email||!pass||!name){setErr("Fill all fields");return}if(users.find(u=>u.email===email)){setErr("Email exists");return}const u={email,password:pass,name,role:"tech"};setUsers(p=>[...p,u]);setUser(u)};
   return (
-    <div className="fade-in">
-      <h2 style={{ fontSize: 28, marginBottom: 20, color: BLUE }}>Command Center</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 24 }}>
-        {stats.map((s, i) => (
-          <div key={i} className="card" style={{ borderLeft: `3px solid ${s.color}` }}>
-            <div style={{ fontSize: 12, color: TEXT_DIM, fontFamily: "'Oswald'", textTransform: "uppercase", letterSpacing: "0.1em" }}>{s.label}</div>
-            <div style={{ fontSize: 32, fontFamily: "'Oswald'", fontWeight: 700, color: s.color, marginTop: 4 }}>{s.value}</div>
-          </div>
+    <div style={{minHeight:"100vh",background:`linear-gradient(135deg,${DARK},#0d1530)`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <style>{css}</style>
+      <div style={{width:380}}>
+        <div style={{textAlign:"center",marginBottom:30}}>
+          <img src={LOGO} alt="Creed" style={{height:80,marginBottom:12}} onError={e=>e.target.style.display="none"}/>
+          <h1 style={{color:BLUE,fontSize:28}}>Creed Handyman</h1>
+          <div style={{color:RED,fontSize:12,fontFamily:"'Oswald'",letterSpacing:".15em",marginTop:4}}>LLC</div>
+        </div>
+        <div className="cd" style={{padding:30}}>
+          <h3 style={{textAlign:"center",marginBottom:20}}>{mode==="login"?"Sign In":"Create Account"}</h3>
+          {mode==="signup"&&<div style={{marginBottom:12}}><label style={{fontSize:12,color:DIM,display:"block",marginBottom:4}}>Name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></div>}
+          <div style={{marginBottom:12}}><label style={{fontSize:12,color:DIM,display:"block",marginBottom:4}}>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="creed@example.com"/></div>
+          <div style={{marginBottom:16}}><label style={{fontSize:12,color:DIM,display:"block",marginBottom:4}}>Password</label><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&(mode==="login"?login():signup())}/></div>
+          {err&&<div style={{color:RED,fontSize:13,marginBottom:12,textAlign:"center"}}>{err}</div>}
+          <button className="bb" onClick={mode==="login"?login:signup} style={{width:"100%",padding:12,fontSize:16}}>{mode==="login"?"Sign In":"Sign Up"}</button>
+          <div style={{textAlign:"center",marginTop:16,fontSize:13,color:DIM}}>{mode==="login"?"No account? ":"Have account? "}<span onClick={()=>{setMode(mode==="login"?"signup":"login");setErr("")}} style={{color:BLUE,cursor:"pointer",textDecoration:"underline"}}>{mode==="login"?"Sign Up":"Sign In"}</span></div>
+        </div>
+        <div style={{textAlign:"center",marginTop:20,color:DIM,fontSize:11}}>Lic #6145054 · Wichita, KS · (316) 252-6335</div>
+      </div>
+    </div>
+  );
+}
+
+/* DASHBOARD */
+function Dash({jobs,timeEntries,quests,setPage,user}) {
+  const rev=jobs.reduce((s,j)=>s+(j.total||0),0);
+  const act=jobs.filter(j=>j.status!=="complete").length;
+  const hrs=timeEntries.reduce((s,e)=>s+e.hours,0);
+  const qP=quests.reduce((s,q)=>s+q.progress,0);
+  const qT=quests.reduce((s,q)=>s+q.target,0);
+  return (
+    <div className="fi">
+      <h2 style={{fontSize:26,color:BLUE,marginBottom:20}}>Welcome, {user.name}</h2>
+      <div className="g4 mb">
+        {[{l:"Active Jobs",v:act,c:BLUE},{l:"Pipeline",v:"$"+rev.toLocaleString(),c:GREEN},{l:"Hours",v:hrs.toFixed(1),c:ORANGE},{l:"Quests",v:Math.round(qP/(qT||1)*100)+"%",c:RED}].map((s,i)=>(
+          <div key={i} className="cd" style={{borderLeft:`3px solid ${s.c}`}}><div className="sl">{s.l}</div><div className="sv" style={{color:s.c}}>{s.v}</div></div>
         ))}
       </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="card" style={{ cursor: "pointer" }} onClick={() => setPage("quoteforge")}>
-          <h3 style={{ color: BLUE, marginBottom: 8 }}>⚡ QuoteForge Pro</h3>
-          <p style={{ color: TEXT_DIM, fontSize: 14 }}>Parse Keyrenter inspections instantly. Upload a report and get a full scope, quote, job guide, and risk assessment in seconds.</p>
-          <button className="btn-blue" style={{ marginTop: 12 }}>Launch QuoteForge →</button>
-        </div>
-        <div className="card">
-          <h3 style={{ color: "#ff8800", marginBottom: 8 }}>🎯 Active Quests</h3>
-          {quests.slice(0, 3).map(q => (
-            <div key={q.id} style={{ marginTop: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                <span>{q.title}</span>
-                <span style={{ color: BLUE }}>{q.progress}/{q.target}</span>
-              </div>
-              <div style={{ height: 4, background: "#1e1e2e", borderRadius: 2, marginTop: 4 }}>
-                <div style={{ height: 4, background: BLUE, borderRadius: 2, width: `${Math.min(100, q.progress / q.target * 100)}%`, transition: "width 0.5s" }} />
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="g2">
+        <div className="cd" style={{cursor:"pointer"}} onClick={()=>setPage("quoteforge")}><h3 style={{color:BLUE,marginBottom:8}}>⚡ QuoteForge Pro</h3><p style={{color:DIM,fontSize:14}}>Parse any inspection or build custom quotes. Auto-estimates labor + materials.</p><button className="bb mt">Launch →</button></div>
+        <div className="cd"><h3 style={{color:ORANGE,marginBottom:8}}>🎯 Quests</h3>{quests.slice(0,3).map(q=><div key={q.id} style={{marginTop:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:13}}><span>{q.title}</span><span style={{color:BLUE}}>{q.progress}/{q.target}</span></div><div style={{height:4,background:"#1e1e2e",borderRadius:2,marginTop:4}}><div style={{height:4,background:BLUE,borderRadius:2,width:`${Math.min(100,q.progress/q.target*100)}%`}}/></div></div>)}</div>
       </div>
+      {jobs.length>0&&<div className="cd mt"><h3 style={{color:TXT,marginBottom:12}}>Recent Jobs</h3>{jobs.slice(-5).reverse().map(j=><div key={j.id} className="sep" style={{display:"flex",justifyContent:"space-between",fontSize:14}}><span>{j.property} <span style={{color:DIM}}>· {j.client}</span></span><span style={{color:GREEN,fontFamily:"'Oswald'"}}>${j.total.toFixed(0)}</span></div>)}</div>}
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════
-   QUOTEFORGE PRO
-   ═══════════════════════════════════════════════════════ */
-function QuoteForge({ quoteData, setQuoteData, jobs, setJobs }) {
-  const [inputText, setInputText] = useState("");
-  const [activeTab, setActiveTab] = useState("quote");
-  const [editItems, setEditItems] = useState([]);
-  const fileInputRef = useRef();
+/* QUOTEFORGE */
+function QF({jobs,setJobs}) {
+  const [mode,setMode]=useState(null);
+  const [text,setText]=useState("");
+  const [prop,setProp]=useState("");
+  const [client,setClient]=useState("");
+  const [rooms,setRooms]=useState([]);
+  const [tab,setTab]=useState("quote");
+  const [nr,setNr]=useState("");
+  const [nd,setNd]=useState("");
+  const [nc,setNc]=useState("");
+  const [nh,setNh]=useState("1");
+  const [nm,setNm]=useState("20");
 
-  const handleParse = () => {
-    if (!inputText.trim()) return;
-    const rooms = parseInspectionReport(inputText);
-    if (rooms.length === 0) {
-      // Use structured fallback
-      const fallback = extractFromDocument(inputText);
-      setQuoteData({ rooms: fallback, property: "1436 N Piatt Ave", date: "2026-04-05", client: "Keyrenter PMC" });
-      setEditItems(flattenItems(fallback));
-    } else {
-      setQuoteData({ rooms, property: "1436 N Piatt Ave", date: "2026-04-05", client: "Keyrenter PMC" });
-      setEditItems(flattenItems(rooms));
-    }
-  };
+  const doParse=()=>{if(!text.trim())return;const p=parseZInspector(text);if(p.length===0){alert("No items found. Paste the full report text.");return}const pm=text.match(/Property\s+[\w\s]*?([\d]+\s+[\w\s]+(?:Ave|St|Blvd|Ln|Dr|Rd|Ct|Way))/i);if(pm)setProp(pm[1].trim());if(text.toLowerCase().includes("keyrenter"))setClient("Keyrenter PMC");setRooms(p);setMode("editing")};
 
-  const handleAutoDetect = () => {
-    // Auto-parse from the known Keyrenter report
-    const rooms = extractFromDocument(inputText || "auto");
-    setQuoteData({ rooms, property: "1436 N Piatt Ave", date: "2026-04-05", client: "Keyrenter PMC" });
-    setEditItems(flattenItems(rooms));
-  };
+  const addItem=()=>{if(!nr||!nd)return;const item={id:Math.random().toString(36).slice(2,8),detail:nd,condition:"-",comment:nc||"Per scope",laborHrs:parseFloat(nh)||1,materials:[{name:"Materials",cost:parseFloat(nm)||0}]};const ex=rooms.find(r=>r.name===nr);if(ex){setRooms(rooms.map(r=>r.name===nr?{...r,items:[...r.items,item]}:r))}else{setRooms([...rooms,{name:nr,items:[item]}])}setNd("");setNc("");setNh("1");setNm("20");if(mode!=="editing")setMode("editing")};
 
-  const flattenItems = (rooms) => {
-    const flat = [];
-    rooms.forEach(room => {
-      room.items.forEach(item => {
-        const matCost = item.materials.reduce((s, m) => s + m.cost, 0);
-        const laborCost = item.laborHrs * LABOR_RATE;
-        const subtotal = laborCost + matCost;
-        const total = subtotal * (1 + MARKUP);
-        flat.push({
-          id: Math.random().toString(36).slice(2),
-          room: room.name,
-          detail: item.detail,
-          comment: item.comment,
-          condition: item.condition,
-          laborHrs: item.laborHrs,
-          laborCost,
-          materials: item.materials,
-          matCost,
-          markup: MARKUP,
-          total: Math.round(total * 100) / 100,
-        });
-      });
-    });
-    return flat;
-  };
+  const rmItem=(rn,id)=>setRooms(rooms.map(r=>r.name===rn?{...r,items:r.items.filter(i=>i.id!==id)}:r).filter(r=>r.items.length>0));
+  const upItem=(rn,id,f,v)=>setRooms(rooms.map(r=>r.name===rn?{...r,items:r.items.map(i=>i.id===id?{...i,[f]:v}:i)}:r));
 
-  const updateItem = (id, field, value) => {
-    setEditItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-      const updated = { ...item, [field]: value };
-      if (field === "laborHrs") {
-        updated.laborCost = value * LABOR_RATE;
-        const sub = updated.laborCost + updated.matCost;
-        updated.total = Math.round(sub * (1 + updated.markup) * 100) / 100;
-      }
-      if (field === "matCost") {
-        const sub = updated.laborCost + value;
-        updated.total = Math.round(sub * (1 + updated.markup) * 100) / 100;
-      }
-      return updated;
-    }));
-  };
+  const all=rooms.flatMap(r=>r.items.map(i=>({room:r.name,...i,...calcLine(i)})));
+  const gt=all.reduce((s,i)=>s+i.total,0);
+  const tl=all.reduce((s,i)=>s+i.laborCost,0);
+  const tm=all.reduce((s,i)=>s+i.matCost,0);
+  const th=all.reduce((s,i)=>s+i.laborHrs,0);
+  const issues=classifyIssues(rooms);
+  const guide=buildGuide(rooms);
 
-  const removeItem = (id) => setEditItems(prev => prev.filter(i => i.id !== id));
+  const saveJob=()=>{if(!prop){alert("Enter property address");return}setJobs(p=>[...p,{id:Date.now(),property:prop,client:client||"",date:new Date().toISOString().split("T")[0],rooms:JSON.parse(JSON.stringify(rooms)),items:all,total:gt,totalLabor:tl,totalMat:tm,totalHrs:th,status:"quoted",receipts:[]}]);alert("Saved: "+prop+" — $"+gt.toFixed(2));setMode(null);setRooms([]);setText("");setProp("");setClient("")};
 
-  const grandTotal = editItems.reduce((s, i) => s + i.total, 0);
-  const totalLabor = editItems.reduce((s, i) => s + i.laborCost, 0);
-  const totalMat = editItems.reduce((s, i) => s + i.matCost, 0);
-  const totalHours = editItems.reduce((s, i) => s + i.laborHrs, 0);
+  if(!mode) return (
+    <div className="fi">
+      <h2 style={{fontSize:26,color:BLUE,marginBottom:20}}>⚡ QuoteForge Pro</h2>
+      <div className="g3">
+        <div className="cd" style={{cursor:"pointer",textAlign:"center",padding:30}} onClick={()=>setMode("paste")}><div style={{fontSize:40,marginBottom:8}}>📄</div><h4 style={{color:BLUE}}>Parse Inspection</h4><p style={{color:DIM,fontSize:13,marginTop:8}}>Paste a zInspector report</p></div>
+        <div className="cd" style={{cursor:"pointer",textAlign:"center",padding:30}} onClick={()=>setMode("manual")}><div style={{fontSize:40,marginBottom:8}}>✏️</div><h4 style={{color:ORANGE}}>Manual Quote</h4><p style={{color:DIM,fontSize:13,marginTop:8}}>Build from scratch</p></div>
+        <div className="cd" style={{textAlign:"center",padding:30}}><div style={{fontSize:40,marginBottom:8}}>📊</div><h4 style={{color:GREEN}}>Stats</h4><p style={{color:GREEN,fontSize:20,fontFamily:"'Oswald'",marginTop:8}}>{jobs.length} jobs · ${jobs.reduce((s,j)=>s+j.total,0).toFixed(0)}</p></div>
+      </div>
+    </div>
+  );
 
-  const issues = quoteData ? classifyIssues(quoteData.rooms) : { critical: [], important: [], minor: [] };
-  const guide = quoteData ? generateJobGuide(quoteData.rooms) : { tools: [], shopping: [], steps: [] };
+  if(mode==="paste") return (
+    <div className="fi">
+      <div className="row mb"><button className="bo" onClick={()=>setMode(null)}>← Back</button><h2 style={{fontSize:22,color:BLUE}}>Parse Inspection</h2></div>
+      <div className="cd">
+        <p style={{color:DIM,fontSize:13,marginBottom:12}}>Paste the full text from any Keyrenter zInspector move-out report below.</p>
+        <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Paste full report text..." style={{height:250,fontFamily:"monospace",fontSize:12}}/>
+        <div className="g2 mt"><input value={prop} onChange={e=>setProp(e.target.value)} placeholder="Property address"/><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Client name"/></div>
+        <div className="row mt"><button className="bb" onClick={doParse}>Parse →</button><button className="bo" onClick={()=>setMode("manual")}>Manual Instead</button></div>
+      </div>
+    </div>
+  );
 
-  const saveAsJob = () => {
-    const job = {
-      id: Date.now(),
-      property: quoteData?.property || "Unknown",
-      client: quoteData?.client || "Unknown",
-      date: new Date().toISOString().split("T")[0],
-      items: editItems,
-      total: grandTotal,
-      status: "quoted",
-      receipts: [],
-    };
-    setJobs(prev => [...prev, job]);
-    alert("Job saved!");
-  };
+  if(mode==="manual"&&rooms.length===0) return (
+    <div className="fi">
+      <div className="row mb"><button className="bo" onClick={()=>setMode(null)}>← Back</button><h2 style={{fontSize:22,color:ORANGE}}>Manual Quote</h2></div>
+      <div className="cd mb"><div className="g2"><input value={prop} onChange={e=>setProp(e.target.value)} placeholder="Property address *"/><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Client name"/></div></div>
+      <div className="cd">
+        <h4 style={{marginBottom:12}}>Add First Item</h4>
+        <div className="g2 mb"><input value={nr} onChange={e=>setNr(e.target.value)} placeholder="Room"/><input value={nd} onChange={e=>setNd(e.target.value)} placeholder="Item"/></div>
+        <input value={nc} onChange={e=>setNc(e.target.value)} placeholder="Description" style={{marginBottom:12}}/>
+        <div className="g2"><div><label style={{fontSize:11,color:DIM}}>Hours</label><input type="number" value={nh} onChange={e=>setNh(e.target.value)} min="0" step="0.25"/></div><div><label style={{fontSize:11,color:DIM}}>Materials $</label><input type="number" value={nm} onChange={e=>setNm(e.target.value)} min="0"/></div></div>
+        <button className="bg mt" onClick={addItem}>Add Item</button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="fade-in">
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <h2 style={{ fontSize: 28, color: BLUE }}>⚡ QuoteForge Pro</h2>
-        <span style={{ fontSize: 12, color: RED, fontFamily: "'Oswald'", padding: "2px 10px", border: `1px solid ${RED}`, borderRadius: 4 }}>$55/HR GENERAL</span>
+    <div className="fi">
+      <div className="row mb"><button className="bo" onClick={()=>{setMode(null);setRooms([])}}>← Back</button><h2 style={{fontSize:22,color:BLUE}}>⚡ QuoteForge</h2><span style={{fontSize:12,color:RED,fontFamily:"'Oswald'",padding:"2px 10px",border:`1px solid ${RED}`,borderRadius:4}}>${RATE}/HR · 10% MARKUP</span></div>
+      <div className="cd mb" style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+        <div style={{flex:"1 1 200px"}}><input value={prop} onChange={e=>setProp(e.target.value)} placeholder="Property *" style={{marginBottom:6}}/><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Client"/></div>
+        <div style={{textAlign:"right"}}><div className="sl">Grand Total</div><div style={{fontSize:36,fontFamily:"'Oswald'",fontWeight:700,color:GREEN}}>${gt.toFixed(2)}</div></div>
+      </div>
+      <div className="g4 mb">
+        <div className="cd" style={{textAlign:"center",padding:12}}><div className="sl">Labor</div><div style={{fontSize:20,fontFamily:"'Oswald'",color:BLUE}}>${tl.toFixed(0)}</div><div style={{fontSize:11,color:DIM}}>{th.toFixed(1)}h</div></div>
+        <div className="cd" style={{textAlign:"center",padding:12}}><div className="sl">Materials</div><div style={{fontSize:20,fontFamily:"'Oswald'",color:ORANGE}}>${tm.toFixed(0)}</div></div>
+        <div className="cd" style={{textAlign:"center",padding:12}}><div className="sl">Markup</div><div style={{fontSize:20,fontFamily:"'Oswald'",color:GREEN}}>${(gt-tl-tm).toFixed(0)}</div></div>
+        <div className="cd" style={{textAlign:"center",padding:12}}><div className="sl">Items</div><div style={{fontSize:20,fontFamily:"'Oswald'",color:RED}}>{all.length}</div></div>
+      </div>
+      <div style={{display:"flex",gap:4,marginBottom:16}}>
+        {[{id:"quote",l:"📄 Quote"},{id:"guide",l:"🔧 Guide"},{id:"watchout",l:"⚠️ Watch Out"},{id:"add",l:"➕ Add"}].map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 18px",background:tab===t.id?BLUE:CARD,color:tab===t.id?"#fff":DIM,border:`1px solid ${tab===t.id?BLUE:BORDER}`,borderRadius:"8px 8px 0 0",fontFamily:"'Oswald'",fontSize:13}}>{t.l}</button>)}
+        <div style={{flex:1}}/><button className="bb" onClick={saveJob}>Save Job</button>
       </div>
 
-      {!quoteData ? (
-        <div className="card" style={{ maxWidth: 800 }}>
-          <h3 style={{ marginBottom: 12 }}>Paste Inspection Report</h3>
-          <p style={{ color: TEXT_DIM, fontSize: 13, marginBottom: 16 }}>Paste the text from a Keyrenter zInspector move-out report, or use Auto-Detect to load the uploaded PDF data.</p>
-          <textarea
-            value={inputText}
-            onChange={e => setInputText(e.target.value)}
-            placeholder="Paste full inspection report text here..."
-            style={{ width: "100%", height: 200, resize: "vertical", fontFamily: "monospace", fontSize: 12 }}
-          />
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            <button className="btn-blue" onClick={handleParse}>Parse Report</button>
-            <button className="btn-red" onClick={handleAutoDetect}>Auto-Detect (1436 N Piatt)</button>
-            <button className="btn-ghost" onClick={() => { setQuoteData(null); setEditItems([]); setInputText(""); }}>Clear</button>
-          </div>
+      {tab==="quote"&&rooms.map(room=>(
+        <div key={room.name} style={{marginBottom:16}}>
+          <h4 style={{color:BLUE,fontSize:15,marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${BORDER}`}}>{room.name}</h4>
+          {room.items.map(item=>{const{laborCost,matCost,total}=calcLine(item);return(
+            <div key={item.id} className="cd" style={{marginBottom:6,padding:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
+                <div style={{flex:"1 1 250px"}}>
+                  <div className="row"><span style={{fontWeight:600,fontSize:14}}>{item.detail}</span><span className={`bd bd-${item.condition==="D"?"d":item.condition==="P"?"p":item.condition==="F"?"f":"s"}`}>{item.condition==="D"?"Damaged":item.condition==="P"?"Poor":item.condition==="F"?"Fair":"—"}</span></div>
+                  <div style={{fontSize:13,color:DIM,marginTop:3}}>{item.comment}</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{textAlign:"center"}}><div style={{fontSize:10,color:DIM}}>HRS</div><input type="number" value={item.laborHrs} step="0.25" min="0" onChange={e=>upItem(room.name,item.id,"laborHrs",parseFloat(e.target.value)||0)} style={{width:55,textAlign:"center",padding:"3px 4px",fontSize:13}}/></div>
+                  <div style={{textAlign:"center"}}><div style={{fontSize:10,color:DIM}}>MAT $</div><input type="number" value={item.materials.reduce((s,m)=>s+m.cost,0)} step="1" min="0" onChange={e=>upItem(room.name,item.id,"materials",[{name:"Materials",cost:parseFloat(e.target.value)||0}])} style={{width:65,textAlign:"center",padding:"3px 4px",fontSize:13}}/></div>
+                  <div style={{textAlign:"right",minWidth:65}}><div style={{fontSize:10,color:DIM}}>TOTAL</div><div style={{fontSize:15,fontFamily:"'Oswald'",fontWeight:600,color:GREEN}}>${total.toFixed(2)}</div></div>
+                  <button onClick={()=>rmItem(room.name,item.id)} style={{background:"none",color:RED,fontSize:16,padding:4}}>✕</button>
+                </div>
+              </div>
+            </div>
+          )})}
         </div>
-      ) : (
-        <>
-          {/* Header info */}
-          <div className="card" style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 13, color: TEXT_DIM }}>Property</div>
-              <div style={{ fontSize: 18, fontFamily: "'Oswald'", fontWeight: 600 }}>{quoteData.property}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 13, color: TEXT_DIM }}>Client</div>
-              <div style={{ fontSize: 18, fontFamily: "'Oswald'", fontWeight: 600 }}>{quoteData.client}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 13, color: TEXT_DIM }}>Date</div>
-              <div style={{ fontSize: 18, fontFamily: "'Oswald'", fontWeight: 600 }}>{quoteData.date}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13, color: TEXT_DIM }}>Grand Total</div>
-              <div style={{ fontSize: 32, fontFamily: "'Oswald'", fontWeight: 700, color: "#00cc66" }}>${grandTotal.toFixed(2)}</div>
-            </div>
-          </div>
+      ))}
 
-          {/* Summary bar */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
-            <div className="card" style={{ textAlign: "center", padding: 12 }}>
-              <div style={{ fontSize: 11, color: TEXT_DIM }}>LABOR</div>
-              <div style={{ fontSize: 20, fontFamily: "'Oswald'", color: BLUE }}>${totalLabor.toFixed(0)}</div>
-              <div style={{ fontSize: 11, color: TEXT_DIM }}>{totalHours.toFixed(1)} hrs</div>
-            </div>
-            <div className="card" style={{ textAlign: "center", padding: 12 }}>
-              <div style={{ fontSize: 11, color: TEXT_DIM }}>MATERIALS</div>
-              <div style={{ fontSize: 20, fontFamily: "'Oswald'", color: "#ff8800" }}>${totalMat.toFixed(0)}</div>
-            </div>
-            <div className="card" style={{ textAlign: "center", padding: 12 }}>
-              <div style={{ fontSize: 11, color: TEXT_DIM }}>MARKUP (10%)</div>
-              <div style={{ fontSize: 20, fontFamily: "'Oswald'", color: "#00cc66" }}>${(grandTotal - totalLabor - totalMat).toFixed(0)}</div>
-            </div>
-            <div className="card" style={{ textAlign: "center", padding: 12 }}>
-              <div style={{ fontSize: 11, color: TEXT_DIM }}>LINE ITEMS</div>
-              <div style={{ fontSize: 20, fontFamily: "'Oswald'", color: RED }}>{editItems.length}</div>
-            </div>
-          </div>
+      {tab==="guide"&&<div className="g2">
+        <div className="cd"><h4 style={{color:BLUE,marginBottom:10}}>🧰 Tools</h4>{guide.tools.map((t,i)=><div key={i} className="sep" style={{fontSize:14}}>☐ {t}</div>)}</div>
+        <div className="cd"><h4 style={{color:ORANGE,marginBottom:10}}>🛒 Shopping</h4><div style={{maxHeight:400,overflowY:"auto"}}>{guide.shopping.map((s,i)=><div key={i} className="sep" style={{display:"flex",justifyContent:"space-between",fontSize:13}}><span>{s.name} <span style={{color:DIM}}>({s.room})</span></span><span style={{color:GREEN}}>${s.cost}</span></div>)}</div><div style={{marginTop:10,fontFamily:"'Oswald'",fontSize:16,textAlign:"right",color:GREEN}}>Total: ${guide.shopping.reduce((s,i)=>s+i.cost,0).toFixed(0)}</div></div>
+        <div className="cd" style={{gridColumn:"1/-1"}}><h4 style={{color:GREEN,marginBottom:10}}>📋 Steps</h4>{guide.steps.map((s,i)=><div key={i} className="sep" style={{fontSize:14}}><span style={{color:BLUE,fontWeight:600}}>{s.room}</span> → {s.detail}: <span style={{color:DIM}}>{s.action}</span></div>)}</div>
+      </div>}
 
-          {/* Tabs */}
-          <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
-            {[
-              { id: "quote", label: "Quote", icon: "📄" },
-              { id: "guide", label: "Job Guide", icon: "🔧" },
-              { id: "watchout", label: "Watch Out", icon: "⚠️" },
-            ].map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)}
-                style={{
-                  padding: "10px 24px",
-                  background: activeTab === t.id ? BLUE : CARD_BG,
-                  color: activeTab === t.id ? "#fff" : TEXT_DIM,
-                  border: `1px solid ${activeTab === t.id ? BLUE : CARD_BORDER}`,
-                  borderRadius: "8px 8px 0 0",
-                  fontFamily: "'Oswald'",
-                  fontSize: 14,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                }}>
-                {t.icon} {t.label}
-              </button>
-            ))}
-            <div style={{ flex: 1 }} />
-            <button className="btn-blue" onClick={saveAsJob}>Save as Job</button>
-            <button className="btn-ghost" onClick={() => { setQuoteData(null); setEditItems([]); }}>New Quote</button>
-          </div>
+      {tab==="watchout"&&<div>
+        {[{t:"🚨 Critical",items:issues.critical,c:RED},{t:"⚠️ Important",items:issues.important,c:ORANGE},{t:"💡 Minor",items:issues.minor,c:YELLOW}].map((s,i)=><div key={i} className="cd mb" style={{borderLeft:`3px solid ${s.c}`}}><h4 style={{color:s.c,marginBottom:8}}>{s.t} ({s.items.length})</h4>{s.items.length===0?<span style={{color:DIM,fontSize:13}}>None</span>:s.items.map((it,j)=><div key={j} className="sep" style={{fontSize:14}}><b>{it.room}</b> — {it.detail}: {it.comment}</div>)}</div>)}
+      </div>}
 
-          {/* Tab Content */}
-          {activeTab === "quote" && <QuoteTab items={editItems} updateItem={updateItem} removeItem={removeItem} />}
-          {activeTab === "guide" && <GuideTab guide={guide} />}
-          {activeTab === "watchout" && <WatchOutTab issues={issues} />}
-        </>
-      )}
+      {tab==="add"&&<div className="cd">
+        <h4 style={{marginBottom:12}}>Add Line Item</h4>
+        <div className="g2 mb"><div><label style={{fontSize:11,color:DIM}}>Room</label><input value={nr} onChange={e=>setNr(e.target.value)} placeholder="Room" list="rl"/><datalist id="rl">{rooms.map(r=><option key={r.name} value={r.name}/>)}</datalist></div><div><label style={{fontSize:11,color:DIM}}>Item</label><input value={nd} onChange={e=>setNd(e.target.value)} placeholder="e.g. Paint"/></div></div>
+        <div style={{marginBottom:12}}><label style={{fontSize:11,color:DIM}}>Description</label><input value={nc} onChange={e=>setNc(e.target.value)} placeholder="Scope"/></div>
+        <div className="g2 mb"><div><label style={{fontSize:11,color:DIM}}>Hours</label><input type="number" value={nh} onChange={e=>setNh(e.target.value)} min="0" step="0.25"/></div><div><label style={{fontSize:11,color:DIM}}>Materials $</label><input type="number" value={nm} onChange={e=>setNm(e.target.value)} min="0"/></div></div>
+        <button className="bg" onClick={addItem}>Add to Quote</button>
+      </div>}
     </div>
   );
 }
 
-/* ─── QUOTE TAB ─── */
-function QuoteTab({ items, updateItem, removeItem }) {
-  const rooms = [...new Set(items.map(i => i.room))];
+/* JOBS */
+function JobsPage({jobs,setJobs}) {
+  const [open,setOpen]=useState(null);
+  const [rn,setRn]=useState("");
+  const [ra,setRa]=useState("");
+  const addR=id=>{if(!rn||!ra)return;setJobs(p=>p.map(j=>j.id===id?{...j,receipts:[...j.receipts,{note:rn,amount:parseFloat(ra),date:new Date().toLocaleDateString()}]}:j));setRn("");setRa("")};
+  const setSt=(id,s)=>setJobs(p=>p.map(j=>j.id===id?{...j,status:s}:j));
+  const del=id=>{if(confirm("Delete?")){setJobs(p=>p.filter(j=>j.id!==id))}};
   return (
-    <div className="fade-in">
-      {rooms.map(room => (
-        <div key={room} style={{ marginBottom: 20 }}>
-          <h4 style={{ color: BLUE, fontSize: 16, marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${CARD_BORDER}` }}>{room}</h4>
-          {items.filter(i => i.room === room).map(item => (
-            <div key={item.id} className="card" style={{ marginBottom: 8, padding: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 300px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>{item.detail}</span>
-                    <span className={`badge-${item.condition === "D" ? "d" : item.condition === "P" ? "p" : item.condition === "F" ? "f" : "s"}`}>
-                      {item.condition === "D" ? "Damaged" : item.condition === "P" ? "Poor" : item.condition === "F" ? "Fair" : "—"}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 13, color: TEXT_DIM, marginTop: 4 }}>{item.comment}</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 10, color: TEXT_DIM }}>HRS</div>
-                    <input type="number" value={item.laborHrs} step="0.25" min="0"
-                      onChange={e => updateItem(item.id, "laborHrs", parseFloat(e.target.value) || 0)}
-                      style={{ width: 60, textAlign: "center", padding: "4px 6px", fontSize: 13 }}
-                    />
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 10, color: TEXT_DIM }}>MAT $</div>
-                    <input type="number" value={item.matCost} step="1" min="0"
-                      onChange={e => updateItem(item.id, "matCost", parseFloat(e.target.value) || 0)}
-                      style={{ width: 70, textAlign: "center", padding: "4px 6px", fontSize: 13 }}
-                    />
-                  </div>
-                  <div style={{ textAlign: "right", minWidth: 70 }}>
-                    <div style={{ fontSize: 10, color: TEXT_DIM }}>TOTAL</div>
-                    <div style={{ fontSize: 16, fontFamily: "'Oswald'", fontWeight: 600, color: "#00cc66" }}>${item.total.toFixed(2)}</div>
-                  </div>
-                  <button onClick={() => removeItem(item.id)} style={{ background: "none", color: RED, fontSize: 18, padding: 4 }}>✕</button>
-                </div>
-              </div>
+    <div className="fi">
+      <h2 style={{fontSize:26,color:BLUE,marginBottom:20}}>📋 Jobs ({jobs.length})</h2>
+      {jobs.length===0?<div className="cd" style={{textAlign:"center",padding:40}}><div style={{fontSize:48,marginBottom:12}}>📋</div><p style={{color:DIM}}>No jobs. Use QuoteForge to create one.</p></div>:
+      jobs.slice().reverse().map(job=>(
+        <div key={job.id} className="cd mb">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",flexWrap:"wrap",gap:8}} onClick={()=>setOpen(open===job.id?null:job.id)}>
+            <div><h4 style={{color:TXT,fontSize:16}}>{job.property}</h4><div style={{fontSize:13,color:DIM}}>{job.client} · {job.date} · {job.items?.length||0} items</div></div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{fontSize:22,fontFamily:"'Oswald'",color:GREEN}}>${job.total.toFixed(2)}</div>
+              <select value={job.status} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();setSt(job.id,e.target.value)}} style={{fontSize:12,padding:"4px 8px",width:"auto",background:job.status==="complete"?GREEN+"22":job.status==="active"?BLUE+"22":RED+"22"}}><option value="quoted">Quoted</option><option value="active">Active</option><option value="complete">Complete</option></select>
             </div>
-          ))}
+          </div>
+          {open===job.id&&<div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${BORDER}`}}>
+            <h5 style={{color:BLUE,marginBottom:8}}>Receipts ({job.receipts.length})</h5>
+            {job.receipts.map((r,i)=><div key={i} className="sep" style={{display:"flex",justifyContent:"space-between",fontSize:13}}><span>{r.date} — {r.note}</span><span style={{color:ORANGE}}>${r.amount.toFixed(2)}</span></div>)}
+            <div style={{fontSize:13,color:GREEN,textAlign:"right",margin:"6px 0",fontFamily:"'Oswald'"}}>Spent: ${job.receipts.reduce((s,r)=>s+r.amount,0).toFixed(2)}</div>
+            <div className="row mt"><input value={rn} onChange={e=>setRn(e.target.value)} placeholder="Receipt note" style={{flex:1}}/><input type="number" value={ra} onChange={e=>setRa(e.target.value)} placeholder="$" style={{width:80}}/><button className="bb" onClick={e=>{e.stopPropagation();addR(job.id)}}>Add</button></div>
+            <div style={{marginTop:12}}><button className="br" onClick={e=>{e.stopPropagation();del(job.id)}} style={{fontSize:11,padding:"6px 12px"}}>Delete</button></div>
+          </div>}
         </div>
       ))}
     </div>
   );
 }
 
-/* ─── JOB GUIDE TAB ─── */
-function GuideTab({ guide }) {
+/* TIME TRACKER */
+function TT({timeEntries,setTimeEntries,jobs}) {
+  const [on,setOn]=useState(false);
+  const [st,setSt]=useState(null);
+  const [el,setEl]=useState(0);
+  const [sj,setSj]=useState("");
+  const [mh,setMh]=useState("");
+  const [mj,setMj]=useState("");
+
+  useEffect(()=>{let iv;if(on&&st)iv=setInterval(()=>setEl(Date.now()-st),1000);return()=>clearInterval(iv)},[on,st]);
+
+  const fmt=ms=>{const s=Math.floor(ms/1000);return`${Math.floor(s/3600).toString().padStart(2,"0")}:${Math.floor((s%3600)/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`};
+  const start=()=>{setSt(Date.now());setOn(true)};
+  const stop=()=>{const h=Math.round(el/3600000*100)/100;if(h>0)setTimeEntries(p=>[...p,{id:Date.now(),job:sj||"General",date:new Date().toLocaleDateString(),hours:h,amount:Math.round(h*RATE*100)/100}]);setOn(false);setSt(null);setEl(0)};
+  const addM=()=>{const h=parseFloat(mh);if(!h||h<=0)return;setTimeEntries(p=>[...p,{id:Date.now(),job:mj||"General",date:new Date().toLocaleDateString(),hours:h,amount:Math.round(h*RATE*100)/100}]);setMh("");setMj("")};
+  const delE=id=>setTimeEntries(p=>p.filter(e=>e.id!==id));
+
   return (
-    <div className="fade-in" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-      <div className="card">
-        <h4 style={{ color: BLUE, marginBottom: 12 }}>🧰 Tools Needed</h4>
-        {guide.tools.map((t, i) => (
-          <div key={i} style={{ padding: "6px 0", borderBottom: `1px solid ${CARD_BORDER}`, fontSize: 14 }}>
-            ☐ {t}
-          </div>
-        ))}
-      </div>
-      <div className="card">
-        <h4 style={{ color: "#ff8800", marginBottom: 12 }}>🛒 Shopping List</h4>
-        <div style={{ maxHeight: 500, overflowY: "auto" }}>
-          {guide.shopping.map((s, i) => (
-            <div key={i} style={{ padding: "6px 0", borderBottom: `1px solid ${CARD_BORDER}`, fontSize: 13, display: "flex", justifyContent: "space-between" }}>
-              <span>{s.name} <span style={{ color: TEXT_DIM }}>({s.room})</span></span>
-              <span style={{ color: "#00cc66", fontWeight: 600 }}>${s.cost}</span>
-            </div>
-          ))}
-          <div style={{ marginTop: 12, fontFamily: "'Oswald'", fontSize: 16, textAlign: "right", color: "#00cc66" }}>
-            Total: ${guide.shopping.reduce((s, i) => s + i.cost, 0).toFixed(0)}
-          </div>
+    <div className="fi">
+      <h2 style={{fontSize:26,color:BLUE,marginBottom:20}}>⏱ Time Tracker</h2>
+      <div className="cd mb" style={{textAlign:"center",padding:30}}>
+        <div style={{fontSize:60,fontFamily:"'Oswald'",fontWeight:700,color:on?GREEN:DIM}}>{fmt(el)}</div>
+        <div style={{marginTop:16,marginBottom:16}}>
+          <label style={{fontSize:12,color:DIM}}>Job</label>
+          <select value={sj} onChange={e=>setSj(e.target.value)} style={{maxWidth:400,margin:"0 auto",display:"block"}}><option value="">General</option>{jobs.map(j=><option key={j.id} value={j.property}>{j.property} ({j.client})</option>)}</select>
         </div>
+        {!on?<button className="bb" onClick={start} style={{fontSize:18,padding:"12px 40px"}}>▶ Start</button>:<button className="br" onClick={stop} style={{fontSize:18,padding:"12px 40px"}}>⏹ Stop & Log</button>}
       </div>
-      <div className="card" style={{ gridColumn: "1 / -1" }}>
-        <h4 style={{ color: "#00cc66", marginBottom: 12 }}>📋 Work Steps by Room</h4>
-        {guide.steps.map((s, i) => (
-          <div key={i} style={{ padding: "8px 0", borderBottom: `1px solid ${CARD_BORDER}`, fontSize: 14 }}>
-            <span style={{ color: BLUE, fontWeight: 600 }}>{s.room}</span> → <span style={{ color: TEXT_DIM }}>{s.detail}:</span> {s.action}
-          </div>
-        ))}
-      </div>
+      <div className="cd mb"><h4 style={{marginBottom:10}}>Manual Entry</h4><div className="row"><select value={mj} onChange={e=>setMj(e.target.value)} style={{flex:1}}><option value="">General</option>{jobs.map(j=><option key={j.id} value={j.property}>{j.property}</option>)}</select><input type="number" value={mh} onChange={e=>setMh(e.target.value)} placeholder="Hours" step="0.25" min="0" style={{width:100}}/><button className="bg" onClick={addM}>Log</button></div></div>
+      <div className="cd"><h4 style={{marginBottom:10}}>Log ({timeEntries.length})</h4>{timeEntries.length===0?<p style={{color:DIM}}>No entries.</p>:timeEntries.slice().reverse().map(e=><div key={e.id} className="sep" style={{display:"flex",justifyContent:"space-between",fontSize:14,alignItems:"center"}}><span>{e.date}</span><span style={{color:BLUE}}>{e.job}</span><span>{e.hours}h</span><span style={{color:GREEN}}>${e.amount.toFixed(2)}</span><button onClick={()=>delE(e.id)} style={{background:"none",color:RED,fontSize:14,padding:2}}>✕</button></div>)}</div>
     </div>
   );
 }
 
-/* ─── WATCH OUT TAB ─── */
-function WatchOutTab({ issues }) {
-  const Section = ({ title, items, color, icon }) => (
-    <div className="card" style={{ marginBottom: 16, borderLeft: `3px solid ${color}` }}>
-      <h4 style={{ color, marginBottom: 10 }}>{icon} {title} ({items.length})</h4>
-      {items.map((item, i) => (
-        <div key={i} style={{ padding: "8px 0", borderBottom: `1px solid ${CARD_BORDER}`, fontSize: 14 }}>
-          <span style={{ fontWeight: 600 }}>{item.room}</span> — {item.detail}: {item.comment}
-        </div>
-      ))}
-      {items.length === 0 && <div style={{ color: TEXT_DIM, fontSize: 13 }}>None detected.</div>}
-    </div>
-  );
+/* PAYROLL */
+function Pay({timeEntries}) {
+  const th=timeEntries.reduce((s,e)=>s+e.hours,0);
+  const tp=timeEntries.reduce((s,e)=>s+e.amount,0);
+  const byJob={};timeEntries.forEach(e=>{byJob[e.job]=(byJob[e.job]||0)+e.hours});
   return (
-    <div className="fade-in">
-      <Section title="Critical — Safety & Code" items={issues.critical} color={RED} icon="🚨" />
-      <Section title="Important — Damaged / Major Repair" items={issues.important} color="#ff8800" icon="⚠️" />
-      <Section title="Minor — Touch-ups & Small Fixes" items={issues.minor} color="#ffcc00" icon="💡" />
+    <div className="fi">
+      <h2 style={{fontSize:26,color:BLUE,marginBottom:20}}>💰 Payroll</h2>
+      <div className="g3 mb">
+        <div className="cd" style={{textAlign:"center"}}><div className="sl">Hours</div><div className="sv" style={{color:BLUE}}>{th.toFixed(1)}</div></div>
+        <div className="cd" style={{textAlign:"center"}}><div className="sl">Rate</div><div className="sv" style={{color:TXT}}>${RATE}/hr</div></div>
+        <div className="cd" style={{textAlign:"center"}}><div className="sl">Total Pay</div><div className="sv" style={{color:GREEN}}>${tp.toFixed(2)}</div></div>
+      </div>
+      <div className="cd mb"><h4 style={{marginBottom:10}}>By Job</h4>{Object.keys(byJob).length===0?<p style={{color:DIM}}>No time yet.</p>:Object.entries(byJob).map(([j,h])=><div key={j} className="sep" style={{display:"flex",justifyContent:"space-between",fontSize:14}}><span>{j}</span><span>{h.toFixed(1)}h → <span style={{color:GREEN}}>${(h*RATE).toFixed(2)}</span></span></div>)}</div>
+      <div className="cd"><h4 style={{marginBottom:10}}>All Entries</h4>{timeEntries.slice().reverse().map(e=><div key={e.id} className="sep" style={{display:"flex",justifyContent:"space-between",fontSize:14}}><span>{e.date}</span><span>{e.job}</span><span>{e.hours}h</span><span style={{color:GREEN}}>${e.amount.toFixed(2)}</span></div>)}</div>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════
-   JOBS PAGE
-   ═══════════════════════════════════════════════════════ */
-function JobsPage({ jobs, setJobs }) {
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [receiptNote, setReceiptNote] = useState("");
-  const [receiptAmount, setReceiptAmount] = useState("");
-
-  const addReceipt = (jobId) => {
-    if (!receiptNote || !receiptAmount) return;
-    setJobs(prev => prev.map(j => j.id === jobId ? {
-      ...j,
-      receipts: [...j.receipts, { note: receiptNote, amount: parseFloat(receiptAmount), date: new Date().toLocaleDateString() }]
-    } : j));
-    setReceiptNote("");
-    setReceiptAmount("");
-  };
-
-  const updateStatus = (jobId, status) => {
-    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status } : j));
-  };
-
+/* QUESTS */
+function QuestsPage({quests,setQuests}) {
+  const xp=quests.reduce((s,q)=>s+(q.progress>=q.target?q.xp:0),0);
+  const bump=id=>setQuests(p=>p.map(q=>q.id===id?{...q,progress:Math.min(q.progress+1,q.target)}:q));
   return (
-    <div className="fade-in">
-      <h2 style={{ fontSize: 28, color: BLUE, marginBottom: 20 }}>📋 Jobs</h2>
-      {jobs.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: 40 }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
-          <p style={{ color: TEXT_DIM }}>No jobs yet. Use QuoteForge to create your first job.</p>
+    <div className="fi">
+      <h2 style={{fontSize:26,color:BLUE,marginBottom:20}}>🎯 Quests</h2>
+      <div className="cd mb" style={{textAlign:"center",padding:24}}><div className="sl">XP Earned</div><div style={{fontSize:48,fontFamily:"'Oswald'",fontWeight:700,color:ORANGE}}>{xp}</div></div>
+      {quests.map(q=>{const p=Math.min(100,q.progress/q.target*100),d=q.progress>=q.target;return(
+        <div key={q.id} className="cd mb" style={{borderLeft:`3px solid ${d?GREEN:BLUE}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontWeight:600,fontSize:15}}>{d?"✅":"⏳"} {q.title}</span><div className="row"><span style={{fontFamily:"'Oswald'",color:ORANGE}}>+{q.xp} XP</span>{!d&&<button className="bo" onClick={()=>bump(q.id)} style={{fontSize:11,padding:"4px 10px"}}>+1</button>}</div></div>
+          <div style={{height:8,background:"#1e1e2e",borderRadius:4}}><div style={{height:8,background:d?GREEN:BLUE,borderRadius:4,width:`${p}%`,transition:"width .5s"}}/></div>
+          <div style={{fontSize:12,color:DIM,marginTop:4,textAlign:"right"}}>{q.progress}/{q.target}</div>
         </div>
-      ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          {jobs.map(job => (
-            <div key={job.id} className="card" style={{ cursor: "pointer" }} onClick={() => setSelectedJob(selectedJob === job.id ? null : job.id)}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <h4 style={{ color: TEXT }}>{job.property}</h4>
-                  <div style={{ fontSize: 13, color: TEXT_DIM }}>{job.client} · {job.date} · {job.items.length} items</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 22, fontFamily: "'Oswald'", color: "#00cc66" }}>${job.total.toFixed(2)}</div>
-                  <select value={job.status} onChange={e => { e.stopPropagation(); updateStatus(job.id, e.target.value); }}
-                    onClick={e => e.stopPropagation()}
-                    style={{ fontSize: 12, padding: "2px 8px", borderRadius: 4, marginTop: 4, background: job.status === "complete" ? "#00cc6633" : job.status === "active" ? `${BLUE}33` : `${RED}33` }}>
-                    <option value="quoted">Quoted</option>
-                    <option value="active">Active</option>
-                    <option value="complete">Complete</option>
-                  </select>
-                </div>
-              </div>
-              {selectedJob === job.id && (
-                <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${CARD_BORDER}` }}>
-                  <h5 style={{ color: BLUE, marginBottom: 8 }}>Receipts</h5>
-                  {job.receipts.map((r, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}>
-                      <span>{r.date} — {r.note}</span>
-                      <span style={{ color: "#ff8800" }}>${r.amount.toFixed(2)}</span>
-                    </div>
-                  ))}
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <input value={receiptNote} onChange={e => setReceiptNote(e.target.value)} placeholder="Receipt note" style={{ flex: 1 }} />
-                    <input value={receiptAmount} onChange={e => setReceiptAmount(e.target.value)} placeholder="$" type="number" style={{ width: 80 }} />
-                    <button className="btn-blue" onClick={(e) => { e.stopPropagation(); addReceipt(job.id); }}>Add</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      )})}
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════
-   TIME TRACKER
-   ═══════════════════════════════════════════════════════ */
-function TimeTracker({ timerActive, setTimerActive, timerStart, setTimerStart, timerElapsed, setTimerElapsed, timerJob, setTimerJob, timeEntries, setTimeEntries, formatTime, jobs }) {
-  const startTimer = () => {
-    setTimerStart(Date.now());
-    setTimerActive(true);
-  };
-  const stopTimer = () => {
-    const hours = timerElapsed / 3600000;
-    setTimeEntries(prev => [...prev, {
-      id: Date.now(),
-      job: timerJob || "General",
-      date: new Date().toLocaleDateString(),
-      hours: Math.round(hours * 100) / 100,
-      amount: Math.round(hours * LABOR_RATE * 100) / 100,
-    }]);
-    setTimerActive(false);
-    setTimerStart(null);
-    setTimerElapsed(0);
-  };
-
+/* REVIEWS */
+function Rev({testimonials,setTestimonials}) {
+  const [n,setN]=useState("");const [t,setT]=useState("");const [r,setR]=useState(5);
+  const add=()=>{if(!n||!t)return;setTestimonials(p=>[...p,{name:n,text:t,rating:r}]);setN("");setT("");setR(5)};
   return (
-    <div className="fade-in">
-      <h2 style={{ fontSize: 28, color: BLUE, marginBottom: 20 }}>⏱ Time Tracker</h2>
-      <div className="card" style={{ textAlign: "center", padding: 32, marginBottom: 20 }}>
-        <div style={{ fontSize: 64, fontFamily: "'Oswald'", fontWeight: 700, color: timerActive ? "#00cc66" : TEXT_DIM, letterSpacing: "0.05em" }}>
-          {formatTime(timerElapsed)}
-        </div>
-        <input value={timerJob} onChange={e => setTimerJob(e.target.value)} placeholder="Job / Property name" style={{ marginTop: 16, width: 300, textAlign: "center" }} />
-        <div style={{ marginTop: 16 }}>
-          {!timerActive ? (
-            <button className="btn-blue" onClick={startTimer} style={{ fontSize: 18, padding: "12px 40px" }}>Start</button>
-          ) : (
-            <button className="btn-red" onClick={stopTimer} style={{ fontSize: 18, padding: "12px 40px" }}>Stop & Log</button>
-          )}
-        </div>
-      </div>
-      <div className="card">
-        <h4 style={{ marginBottom: 12 }}>Log</h4>
-        {timeEntries.length === 0 ? <p style={{ color: TEXT_DIM }}>No entries yet.</p> :
-          timeEntries.map(e => (
-            <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${CARD_BORDER}`, fontSize: 14 }}>
-              <span>{e.date} — {e.job}</span>
-              <span>{e.hours}h → <span style={{ color: "#00cc66" }}>${e.amount.toFixed(2)}</span></span>
-            </div>
-          ))
-        }
-      </div>
+    <div className="fi">
+      <h2 style={{fontSize:26,color:BLUE,marginBottom:20}}>⭐ Reviews ({testimonials.length})</h2>
+      <div className="cd mb"><h4 style={{marginBottom:12}}>Add Review</h4><div className="row mb"><input value={n} onChange={e=>setN(e.target.value)} placeholder="Client" style={{flex:1}}/><select value={r} onChange={e=>setR(Number(e.target.value))} style={{width:80}}>{[5,4,3,2,1].map(x=><option key={x} value={x}>{x}★</option>)}</select></div><textarea value={t} onChange={e=>setT(e.target.value)} placeholder="Review..." style={{height:60,marginBottom:10}}/><button className="bb" onClick={add}>Add</button></div>
+      {testimonials.map((x,i)=><div key={i} className="cd mb"><div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{x.name}</span><span style={{color:YELLOW}}>{"★".repeat(x.rating)}{"☆".repeat(5-x.rating)}</span></div><p style={{color:DIM,fontSize:14,marginTop:6}}>"{x.text}"</p></div>)}
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════
-   PAYROLL
-   ═══════════════════════════════════════════════════════ */
-function Payroll({ timeEntries, formatTime }) {
-  const totalHours = timeEntries.reduce((s, e) => s + e.hours, 0);
-  const totalPay = timeEntries.reduce((s, e) => s + e.amount, 0);
-
+/* REFERRALS */
+function Ref({referrals,setReferrals}) {
+  const [n,setN]=useState("");const [s,setS]=useState("");
+  const add=()=>{if(!n)return;setReferrals(p=>[...p,{id:Date.now(),name:n,source:s,status:"pending",date:new Date().toLocaleDateString()}]);setN("");setS("")};
   return (
-    <div className="fade-in">
-      <h2 style={{ fontSize: 28, color: BLUE, marginBottom: 20 }}>💰 Payroll</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 20 }}>
-        <div className="card" style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 12, color: TEXT_DIM }}>TOTAL HOURS</div>
-          <div style={{ fontSize: 28, fontFamily: "'Oswald'", color: BLUE }}>{totalHours.toFixed(1)}</div>
-        </div>
-        <div className="card" style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 12, color: TEXT_DIM }}>RATE</div>
-          <div style={{ fontSize: 28, fontFamily: "'Oswald'", color: TEXT }}>${LABOR_RATE}/hr</div>
-        </div>
-        <div className="card" style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 12, color: TEXT_DIM }}>TOTAL PAY</div>
-          <div style={{ fontSize: 28, fontFamily: "'Oswald'", color: "#00cc66" }}>${totalPay.toFixed(2)}</div>
-        </div>
-      </div>
-      <div className="card">
-        <h4 style={{ marginBottom: 12 }}>Bi-Weekly Breakdown</h4>
-        <p style={{ color: TEXT_DIM, fontSize: 14 }}>Entries from logged time will appear here for payroll processing.</p>
-        {timeEntries.map(e => (
-          <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${CARD_BORDER}`, fontSize: 14 }}>
-            <span>{e.date}</span>
-            <span>{e.job}</span>
-            <span>{e.hours}h</span>
-            <span style={{ color: "#00cc66" }}>${e.amount.toFixed(2)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   QUESTS
-   ═══════════════════════════════════════════════════════ */
-function Quests({ quests, setQuests }) {
-  const totalXP = quests.reduce((s, q) => s + (q.progress >= q.target ? q.xp : 0), 0);
-  return (
-    <div className="fade-in">
-      <h2 style={{ fontSize: 28, color: BLUE, marginBottom: 20 }}>🎯 Quests & XP</h2>
-      <div className="card" style={{ marginBottom: 20, textAlign: "center", padding: 24 }}>
-        <div style={{ fontSize: 12, color: TEXT_DIM }}>TOTAL XP EARNED</div>
-        <div style={{ fontSize: 48, fontFamily: "'Oswald'", fontWeight: 700, color: "#ff8800" }}>{totalXP}</div>
-      </div>
-      {quests.map(q => {
-        const pct = Math.min(100, q.progress / q.target * 100);
-        const done = q.progress >= q.target;
-        return (
-          <div key={q.id} className="card" style={{ marginBottom: 12, borderLeft: `3px solid ${done ? "#00cc66" : BLUE}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 15 }}>{done ? "✅" : "⏳"} {q.title}</span>
-              <span style={{ fontFamily: "'Oswald'", color: "#ff8800" }}>+{q.xp} XP</span>
-            </div>
-            <div style={{ height: 8, background: "#1e1e2e", borderRadius: 4 }}>
-              <div style={{ height: 8, background: done ? "#00cc66" : BLUE, borderRadius: 4, width: `${pct}%`, transition: "width 0.5s" }} />
-            </div>
-            <div style={{ fontSize: 12, color: TEXT_DIM, marginTop: 4, textAlign: "right" }}>{q.progress}/{q.target}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   REVIEWS / TESTIMONIALS
-   ═══════════════════════════════════════════════════════ */
-function Reviews({ testimonials, setTestimonials }) {
-  const [name, setName] = useState("");
-  const [text, setText] = useState("");
-  const [rating, setRating] = useState(5);
-
-  const add = () => {
-    if (!name || !text) return;
-    setTestimonials(prev => [...prev, { name, text, rating }]);
-    setName(""); setText(""); setRating(5);
-  };
-
-  return (
-    <div className="fade-in">
-      <h2 style={{ fontSize: 28, color: BLUE, marginBottom: 20 }}>⭐ Testimonials</h2>
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h4 style={{ marginBottom: 12 }}>Add Review</h4>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Client name" style={{ flex: "1 1 200px" }} />
-          <select value={rating} onChange={e => setRating(Number(e.target.value))} style={{ width: 80 }}>
-            {[5,4,3,2,1].map(r => <option key={r} value={r}>{r}★</option>)}
-          </select>
-        </div>
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Review text..." style={{ width: "100%", marginTop: 10, height: 60 }} />
-        <button className="btn-blue" onClick={add} style={{ marginTop: 10 }}>Add Testimonial</button>
-      </div>
-      {testimonials.map((t, i) => (
-        <div key={i} className="card" style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontWeight: 600 }}>{t.name}</span>
-            <span style={{ color: "#ffcc00" }}>{"★".repeat(t.rating)}{"☆".repeat(5 - t.rating)}</span>
-          </div>
-          <p style={{ color: TEXT_DIM, fontSize: 14, marginTop: 6 }}>"{t.text}"</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   REFERRALS
-   ═══════════════════════════════════════════════════════ */
-function Referrals({ referrals, setReferrals }) {
-  const [name, setName] = useState("");
-  const [source, setSource] = useState("");
-  const [status, setStatus] = useState("pending");
-
-  const add = () => {
-    if (!name) return;
-    setReferrals(prev => [...prev, { id: Date.now(), name, source, status, date: new Date().toLocaleDateString() }]);
-    setName(""); setSource("");
-  };
-
-  return (
-    <div className="fade-in">
-      <h2 style={{ fontSize: 28, color: BLUE, marginBottom: 20 }}>🤝 Referrals</h2>
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h4 style={{ marginBottom: 12 }}>Add Referral</h4>
-        <div style={{ display: "flex", gap: 10 }}>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Referral name" style={{ flex: 1 }} />
-          <input value={source} onChange={e => setSource(e.target.value)} placeholder="Referred by" style={{ flex: 1 }} />
-          <button className="btn-blue" onClick={add}>Add</button>
-        </div>
-      </div>
-      {referrals.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: 30, color: TEXT_DIM }}>No referrals tracked yet.</div>
-      ) : referrals.map(r => (
-        <div key={r.id} className="card" style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontWeight: 600 }}>{r.name}</div>
-            <div style={{ fontSize: 13, color: TEXT_DIM }}>From: {r.source} · {r.date}</div>
-          </div>
-          <select value={r.status} onChange={e => setReferrals(prev => prev.map(ref => ref.id === r.id ? { ...ref, status: e.target.value } : ref))}
-            style={{ fontSize: 12, padding: "4px 10px" }}>
-            <option value="pending">Pending</option>
-            <option value="contacted">Contacted</option>
-            <option value="converted">Converted</option>
-          </select>
-        </div>
-      ))}
+    <div className="fi">
+      <h2 style={{fontSize:26,color:BLUE,marginBottom:20}}>🤝 Referrals ({referrals.length})</h2>
+      <div className="cd mb"><h4 style={{marginBottom:12}}>Add</h4><div className="row"><input value={n} onChange={e=>setN(e.target.value)} placeholder="Name" style={{flex:1}}/><input value={s} onChange={e=>setS(e.target.value)} placeholder="Referred by" style={{flex:1}}/><button className="bb" onClick={add}>Add</button></div></div>
+      {referrals.length===0?<div className="cd" style={{textAlign:"center",padding:30,color:DIM}}>None yet.</div>:referrals.map(r=><div key={r.id} className="cd mb" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontWeight:600}}>{r.name}</div><div style={{fontSize:13,color:DIM}}>From: {r.source} · {r.date}</div></div><select value={r.status} onChange={e=>setReferrals(p=>p.map(x=>x.id===r.id?{...x,status:e.target.value}:x))} style={{width:"auto",fontSize:12,padding:"4px 10px"}}><option value="pending">Pending</option><option value="contacted">Contacted</option><option value="converted">Converted</option></select></div>)}
     </div>
   );
 }
