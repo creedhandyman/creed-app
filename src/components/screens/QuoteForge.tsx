@@ -838,42 +838,164 @@ function GuideTab({
   darkMode: boolean;
 }) {
   const border = darkMode ? "#1e1e2e" : "#eee";
+  const [checkedTools, setCheckedTools] = useState<Set<string>>(() => new Set());
+  const [checkedShop, setCheckedShop] = useState<Set<number>>(() => new Set());
+  const [extraTools, setExtraTools] = useState<string[]>([]);
+  const [extraShop, setExtraShop] = useState<{ n: string; c: number; room: string }[]>([]);
+  const [newTool, setNewTool] = useState("");
+  const [newShopName, setNewShopName] = useState("");
+  const [newShopCost, setNewShopCost] = useState("");
+
+  const allTools = [...guide.tools, ...extraTools];
+  const allShop = [...guide.shop, ...extraShop];
+
+  const toggleTool = (t: string) =>
+    setCheckedTools((prev) => {
+      const next = new Set(prev);
+      next.has(t) ? next.delete(t) : next.add(t);
+      return next;
+    });
+
+  const toggleShop = (i: number) =>
+    setCheckedShop((prev) => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+
   return (
     <div>
       <div className="g2 mb">
         <div className="cd">
           <h4 style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 6 }}>
-            🧰 Tools ({guide.tools.length})
+            🧰 Tools ({allTools.length})
           </h4>
-          {guide.tools.map((t, i) => (
-            <div key={i} style={{ fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${border}` }}>
-              ☐ {t}
-            </div>
-          ))}
+          {allTools.map((t, i) => {
+            const done = checkedTools.has(t);
+            return (
+              <div
+                key={i}
+                onClick={() => toggleTool(t)}
+                style={{
+                  fontSize: 12,
+                  padding: "4px 0",
+                  borderBottom: `1px solid ${border}`,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  textDecoration: done ? "line-through" : "none",
+                  opacity: done ? 0.5 : 1,
+                }}
+              >
+                <span style={{
+                  width: 16, height: 16, borderRadius: 3,
+                  border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
+                  background: done ? "var(--color-success)" : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 10, color: "#fff", flexShrink: 0,
+                }}>
+                  {done && "✓"}
+                </span>
+                {t}
+              </div>
+            );
+          })}
+          {/* Add custom tool */}
+          <div className="row" style={{ marginTop: 6 }}>
+            <input
+              value={newTool}
+              onChange={(e) => setNewTool(e.target.value)}
+              placeholder="Add tool..."
+              style={{ flex: 1, fontSize: 11, padding: "4px 8px" }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newTool.trim()) {
+                  setExtraTools((prev) => [...prev, newTool.trim()]);
+                  setNewTool("");
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                if (newTool.trim()) {
+                  setExtraTools((prev) => [...prev, newTool.trim()]);
+                  setNewTool("");
+                }
+              }}
+              style={{ background: "none", color: "var(--color-primary)", fontSize: 14, padding: "0 4px" }}
+            >
+              +
+            </button>
+          </div>
         </div>
         <div className="cd">
           <h4 style={{ color: "var(--color-warning)", fontSize: 13, marginBottom: 6 }}>
             🛒 Shopping ($
-            {guide.shop.reduce((s, i) => s + (i.c || 0), 0)})
+            {allShop.reduce((s, i) => s + (i.c || 0), 0)})
           </h4>
           <div style={{ maxHeight: 300, overflowY: "auto" }}>
-            {guide.shop.map((s, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 11,
-                  padding: "2px 0",
-                  borderBottom: `1px solid ${border}`,
-                }}
-              >
-                <span>
-                  ☐ {s.n} <span className="dim">({s.room})</span>
-                </span>
-                <span style={{ color: "var(--color-success)" }}>${s.c}</span>
-              </div>
-            ))}
+            {allShop.map((s, i) => {
+              const done = checkedShop.has(i);
+              return (
+                <div
+                  key={i}
+                  onClick={() => toggleShop(i)}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: 11,
+                    padding: "3px 0",
+                    borderBottom: `1px solid ${border}`,
+                    cursor: "pointer",
+                    textDecoration: done ? "line-through" : "none",
+                    opacity: done ? 0.5 : 1,
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{
+                      width: 14, height: 14, borderRadius: 3,
+                      border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
+                      background: done ? "var(--color-success)" : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 9, color: "#fff", flexShrink: 0,
+                    }}>
+                      {done && "✓"}
+                    </span>
+                    {s.n} <span className="dim">({s.room})</span>
+                  </span>
+                  <span style={{ color: done ? "#555" : "var(--color-success)" }}>${s.c}</span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Add custom shop item */}
+          <div className="row" style={{ marginTop: 6 }}>
+            <input
+              value={newShopName}
+              onChange={(e) => setNewShopName(e.target.value)}
+              placeholder="Item name..."
+              style={{ flex: 1, fontSize: 11, padding: "4px 8px" }}
+            />
+            <input
+              type="number"
+              value={newShopCost}
+              onChange={(e) => setNewShopCost(e.target.value)}
+              placeholder="$"
+              style={{ width: 50, fontSize: 11, padding: "4px 6px" }}
+            />
+            <button
+              onClick={() => {
+                if (newShopName.trim()) {
+                  setExtraShop((prev) => [...prev, { n: newShopName.trim(), c: parseFloat(newShopCost) || 0, room: "Custom" }]);
+                  setNewShopName("");
+                  setNewShopCost("");
+                }
+              }}
+              style={{ background: "none", color: "var(--color-warning)", fontSize: 14, padding: "0 4px" }}
+            >
+              +
+            </button>
           </div>
         </div>
       </div>
