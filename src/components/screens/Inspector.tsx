@@ -75,7 +75,8 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   const [currentRoomIdx, setCurrentRoomIdx] = useState(0);
   const [roomData, setRoomData] = useState<InspectionRoom[]>([]);
   const [uploading, setUploading] = useState(false);
-  const photoRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [photoTarget, setPhotoTarget] = useState<{ room: number; item: number } | null>(null);
 
   const border = darkMode ? "#1e1e2e" : "#eee";
@@ -156,7 +157,8 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
     const file = e.target.files?.[0];
     if (!file || !photoTarget) return;
     uploadPhoto(file, photoTarget.room, photoTarget.item);
-    if (photoRef.current) photoRef.current.value = "";
+    if (cameraRef.current) cameraRef.current.value = "";
+    if (fileRef.current) fileRef.current.value = "";
   };
 
   const addItemToRoom = (roomIdx: number) => {
@@ -303,9 +305,17 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
 
     return (
       <div className="fi">
-        {/* Hidden file input */}
+        {/* Hidden file inputs — one for camera, one for gallery/files */}
         <input
-          ref={photoRef}
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={handlePhotoSelect}
+        />
+        <input
+          ref={fileRef}
           type="file"
           accept="image/*"
           style={{ display: "none" }}
@@ -362,22 +372,46 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                   flex: 1,
                 }}
               />
-              {/* Photo button */}
-              <button
-                onClick={() => {
-                  setPhotoTarget({ room: currentRoomIdx, item: itemIdx });
-                  photoRef.current?.click();
-                }}
-                disabled={uploading}
-                style={{
-                  background: "none",
-                  fontSize: 16,
-                  padding: "0 4px",
-                  color: item.photos.length ? "var(--color-success)" : "#888",
-                }}
-              >
-                📷{item.photos.length > 0 && <span style={{ fontSize: 9 }}> {item.photos.length}</span>}
-              </button>
+              {/* Photo buttons */}
+              <div style={{ display: "flex", gap: 2 }}>
+                <button
+                  onClick={() => {
+                    setPhotoTarget({ room: currentRoomIdx, item: itemIdx });
+                    cameraRef.current?.click();
+                  }}
+                  disabled={uploading}
+                  title="Take photo"
+                  style={{
+                    background: "none",
+                    fontSize: 14,
+                    padding: "0 2px",
+                    color: item.photos.length ? "var(--color-success)" : "#888",
+                  }}
+                >
+                  📷
+                </button>
+                <button
+                  onClick={() => {
+                    setPhotoTarget({ room: currentRoomIdx, item: itemIdx });
+                    fileRef.current?.click();
+                  }}
+                  disabled={uploading}
+                  title="Upload photo"
+                  style={{
+                    background: "none",
+                    fontSize: 14,
+                    padding: "0 2px",
+                    color: "#888",
+                  }}
+                >
+                  📁
+                </button>
+                {item.photos.length > 0 && (
+                  <span style={{ fontSize: 9, color: "var(--color-success)", alignSelf: "center" }}>
+                    {item.photos.length}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Condition buttons */}
