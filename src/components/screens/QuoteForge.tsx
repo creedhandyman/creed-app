@@ -8,11 +8,15 @@ import {
   renderPdfPages,
   parseZI,
   aiParsePdf,
+  aiParseInspection,
   classify,
   makeGuide,
   calculateCost,
 } from "@/lib/parser";
+import type { InspectionInput } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
+import Inspector from "./Inspector";
+import type { InspectionData } from "./Inspector";
 
 interface Props {
   setPage: (p: string) => void;
@@ -27,7 +31,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
-  const [mode, setMode] = useState<null | "paste" | "manual" | "edit">(null);
+  const [mode, setMode] = useState<null | "paste" | "manual" | "edit" | "inspect">(null);
   const [text, setText] = useState("");
   const [prop, setProp] = useState("");
   const [client, setClient] = useState("");
@@ -76,6 +80,53 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const rate = user.rate || 55;
 
   /* ── AI parse (vision + text) with regex fallback ── */
+  /* ── Inspection complete handler ── */
+  const handleInspectionComplete = async (data: InspectionData) => {
+    setParsing(true);
+    setParseStatus("Analyzing inspection with AI...");
+    setMode("edit"); // Switch to edit view with loading overlay
+
+    setProp(data.property);
+    setClient(data.client);
+
+    try {
+      const input: InspectionInput = {
+        rooms: data.rooms,
+        property: data.property,
+        client: data.client,
+      };
+      const result = await aiParseInspection(input);
+      if (result && result.rooms.length > 0) {
+        setRooms(result.rooms);
+        setParsing(false);
+        setParseStatus("");
+        return;
+      }
+    } catch (e) {
+      console.error("AI inspection parse failed:", e);
+    }
+
+    // Fallback: convert inspection directly to rooms without AI
+    setParseStatus("");
+    setParsing(false);
+    const fallbackRooms = data.rooms
+      .map((r) => ({
+        name: r.name,
+        items: r.items
+          .filter((it) => it.condition !== "S")
+          .map((it) => ({
+            id: crypto.randomUUID().slice(0, 8),
+            detail: it.name,
+            condition: it.condition,
+            comment: it.notes || "Needs attention",
+            laborHrs: 1,
+            materials: [{ n: "Materials", c: 0 }] as { n: string; c: number }[],
+          })),
+      }))
+      .filter((r) => r.items.length > 0);
+    setRooms(fallbackRooms);
+  };
+
   const doAiParse = async (rawText: string, file: File | null) => {
     setParsing(true);
     setParseStatus("Analyzing with AI...");
@@ -305,6 +356,30 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             </div>
           </div>
         )}
+        {/* Inspect CTA */}
+        <div
+          onClick={() => setMode("inspect")}
+          style={{
+            background: `linear-gradient(135deg, #1a4d8a, #2E75B6)`,
+            borderRadius: 12,
+            padding: "16px 20px",
+            textAlign: "center",
+            cursor: "pointer",
+            marginBottom: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 32 }}>🔍</div>
+          <div style={{ textAlign: "left" }}>
+            <h4 style={{ color: "#fff", fontSize: 14, margin: 0 }}>Run Inspection</h4>
+            <p style={{ color: "#ffffffaa", fontSize: 11, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: 0 }}>
+              Walk through rooms, set conditions, take photos → AI generates quote
+            </p>
+          </div>
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           <div
             className="cd"
@@ -345,6 +420,18 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           </div>
         </div>
       </div>
+    );
+
+  /* ══════════════════════════════════════════
+     INSPECT MODE
+     ══════════════════════════════════════════ */
+  if (mode === "inspect")
+    return (
+      <Inspector
+        darkMode={darkMode}
+        onCancel={() => setMode(null)}
+        onComplete={handleInspectionComplete}
+      />
     );
 
   /* ══════════════════════════════════════════

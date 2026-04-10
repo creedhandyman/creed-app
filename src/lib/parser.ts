@@ -277,6 +277,74 @@ export async function checkAiAvailable(): Promise<boolean> {
   }
 }
 
+/* ====== INSPECTION COMPILER ====== */
+
+export interface InspectionInput {
+  rooms: {
+    name: string;
+    items: {
+      name: string;
+      condition: string;
+      notes: string;
+      photos: string[];
+    }[];
+  }[];
+  property: string;
+  client: string;
+}
+
+export async function aiParseInspection(
+  inspection: InspectionInput
+): Promise<AiParseResult | null> {
+  // Compile inspection into structured text
+  let text = `PROPERTY INSPECTION REPORT\n`;
+  text += `Property: ${inspection.property}\n`;
+  text += `Client: ${inspection.client}\n`;
+  text += `Date: ${new Date().toLocaleDateString()}\n\n`;
+
+  const allPhotos: string[] = [];
+
+  inspection.rooms.forEach((room) => {
+    text += `=== ${room.name} ===\n`;
+    room.items.forEach((item) => {
+      const condLabel =
+        item.condition === "D" ? "Damaged" :
+        item.condition === "P" ? "Poor" :
+        item.condition === "F" ? "Fair" :
+        "Satisfactory";
+      text += `Detail: ${item.name}\n`;
+      text += `Condition: ${item.condition} (${condLabel})\n`;
+      text += `Actions: ${item.condition === "S" ? "None" : "Maintenance"}\n`;
+      text += `Comment: ${item.notes || (item.condition === "S" ? "No issues" : "Needs attention")}\n`;
+      if (item.photos.length) {
+        text += `Photos: ${item.photos.length} attached\n`;
+        allPhotos.push(...item.photos);
+      }
+      text += `\n`;
+    });
+    text += `\n`;
+  });
+
+  // Fetch photos as base64 for AI vision
+  const imageData: string[] = [];
+  for (const url of allPhotos.slice(0, 20)) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      imageData.push(base64);
+    } catch {
+      // skip failed photo fetches
+    }
+  }
+
+  return aiParsePdf(text, imageData);
+}
+
 /* ====== TEXT NORMALIZATION ====== */
 
 function norm(raw: string): string {
