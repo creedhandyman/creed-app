@@ -6,6 +6,10 @@ import Settings from "./Settings";
 import Dashboard from "./screens/Dashboard";
 import QuoteForge from "./screens/QuoteForge";
 import Jobs from "./screens/Jobs";
+import Schedule from "./screens/Schedule";
+import TimerScreen from "./screens/Timer";
+import Payroll from "./screens/Payroll";
+import Quests from "./screens/Quests";
 import ComingSoon from "./screens/ComingSoon";
 
 export default function AppShell() {
@@ -41,13 +45,13 @@ export default function AppShell() {
       case "jobs":
         return <Jobs setPage={goToPage} onEditJob={goToEditJob} />;
       case "sched":
-        return <ComingSoon title="📅 Schedule" label="Scheduling coming soon" />;
+        return <Schedule setPage={goToPage} />;
       case "time":
-        return <ComingSoon title="⏱ Timer" label="Time tracking coming soon" />;
+        return <TimerScreen setPage={goToPage} />;
       case "payroll":
-        return <ComingSoon title="💰 Payroll" label="Payroll coming soon" />;
+        return <Payroll />;
       case "quests":
-        return <ComingSoon title="🎯 Quest Hub" label="Quests, reviews & referrals coming soon" />;
+        return <Quests />;
       default:
         return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
     }

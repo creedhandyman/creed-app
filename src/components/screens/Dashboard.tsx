@@ -35,8 +35,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
   const stats = [
     { label: "Active Jobs", value: active, color: "var(--color-primary)" },
     { label: "Quoted", value: quoted, color: "var(--color-warning)" },
-    { label: "To Collect", value: "$" + toCollect.toLocaleString(), color: "var(--color-highlight)" },
     { label: "Earned This Week", value: "$" + earnedWeek.toLocaleString(), color: "var(--color-success)" },
+    { label: "To Collect", value: "$" + toCollect.toLocaleString(), color: "var(--color-highlight)" },
   ];
 
   return (
@@ -53,7 +53,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
       </div>
 
       {/* Stat cards */}
-      <div className="g4 mb">
+      <div className="g2 mb">
         {stats.map((s, i) => (
           <div key={i} className="cd" style={{ borderLeft: `3px solid ${s.color}` }}>
             <div className="sl">{s.label}</div>
