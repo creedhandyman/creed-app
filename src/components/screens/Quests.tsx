@@ -465,6 +465,11 @@ export default function Quests() {
                   {"☆".repeat(5 - (r.rating || 0))}
                 </span>
               </div>
+              {r.employee_names && (
+                <div style={{ fontSize: 10, color: "var(--color-primary)", marginTop: 2 }}>
+                  👷 {r.employee_names}
+                </div>
+              )}
               <p className="dim" style={{ fontSize: 12, marginTop: 3 }}>
                 &ldquo;{r.review_text}&rdquo;
               </p>

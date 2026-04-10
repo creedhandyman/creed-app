@@ -45,6 +45,7 @@ export interface Review {
   review_text: string;
   rating: number;
   created_at?: string;
+  employee_names?: string;
 }
 
 export interface Referral {

@@ -1,13 +1,31 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { db } from "@/lib/supabase";
+import type { Profile } from "@/lib/types";
 
 export default function ReviewPage() {
   const [name, setName] = useState("");
   const [rating, setRating] = useState(0);
   const [text, setText] = useState("");
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<Profile[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Fetch employee list on load
+  useEffect(() => {
+    db.get<Profile>("profiles").then((profiles) => {
+      setEmployees(profiles.filter((p) => p.name?.trim()));
+    });
+  }, []);
+
+  const toggleEmployee = (empName: string) => {
+    setSelectedEmployees((prev) =>
+      prev.includes(empName)
+        ? prev.filter((n) => n !== empName)
+        : [...prev, empName]
+    );
+  };
 
   const submit = async () => {
     if (!name || !rating || !text) return;
@@ -16,6 +34,7 @@ export default function ReviewPage() {
       client_name: name,
       review_text: text,
       rating,
+      employee_names: selectedEmployees.join(", "),
     });
     setSubmitting(false);
     setSubmitted(true);
@@ -65,7 +84,6 @@ export default function ReviewPage() {
         </div>
 
         {submitted ? (
-          /* Thank you */
           <div
             style={{
               background: "#12121a",
@@ -95,7 +113,6 @@ export default function ReviewPage() {
             </div>
           </div>
         ) : (
-          /* Review form */
           <div
             style={{
               background: "#12121a",
@@ -119,54 +136,51 @@ export default function ReviewPage() {
 
             {/* Name */}
             <div style={{ marginBottom: 12 }}>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: "#888",
-                  fontFamily: "Oswald, sans-serif",
-                  textTransform: "uppercase",
-                  letterSpacing: ".08em",
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                Your Name
-              </label>
+              <label style={labelStyle}>Your Name</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Enter your name"
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  background: "#1a1a28",
-                  border: "1px solid #1e1e2e",
-                  borderRadius: 8,
-                  color: "#e2e2e8",
-                  fontSize: 14,
-                  fontFamily: "Source Sans 3, sans-serif",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
+                style={inputStyle}
               />
             </div>
 
+            {/* Employee selection */}
+            {employees.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={labelStyle}>Who worked on your property?</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                  {employees.map((emp) => {
+                    const selected = selectedEmployees.includes(emp.name);
+                    return (
+                      <button
+                        key={emp.id}
+                        onClick={() => toggleEmployee(emp.name)}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: 20,
+                          fontSize: 13,
+                          fontFamily: "Source Sans 3, sans-serif",
+                          textTransform: "none",
+                          letterSpacing: "normal",
+                          background: selected ? "#2E75B622" : "transparent",
+                          color: selected ? "#2E75B6" : "#888",
+                          border: `1px solid ${selected ? "#2E75B6" : "#333"}`,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {selected ? "✓ " : ""}{emp.name.trim()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Star rating */}
             <div style={{ marginBottom: 12 }}>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: "#888",
-                  fontFamily: "Oswald, sans-serif",
-                  textTransform: "uppercase",
-                  letterSpacing: ".08em",
-                  display: "block",
-                  marginBottom: 8,
-                }}
-              >
-                Rating
-              </label>
-              <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+              <label style={labelStyle}>Rating</label>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 4 }}>
                 {[1, 2, 3, 4, 5].map((star) => (
                   <span
                     key={star}
@@ -187,36 +201,15 @@ export default function ReviewPage() {
 
             {/* Comment */}
             <div style={{ marginBottom: 16 }}>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: "#888",
-                  fontFamily: "Oswald, sans-serif",
-                  textTransform: "uppercase",
-                  letterSpacing: ".08em",
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                How was your experience?
-              </label>
+              <label style={labelStyle}>How was your experience?</label>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Tell us about the work we did..."
                 style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  background: "#1a1a28",
-                  border: "1px solid #1e1e2e",
-                  borderRadius: 8,
-                  color: "#e2e2e8",
-                  fontSize: 14,
-                  fontFamily: "Source Sans 3, sans-serif",
-                  outline: "none",
+                  ...inputStyle,
                   height: 100,
-                  resize: "vertical",
-                  boxSizing: "border-box",
+                  resize: "vertical" as const,
                 }}
               />
             </div>
@@ -244,7 +237,6 @@ export default function ReviewPage() {
           </div>
         )}
 
-        {/* Footer */}
         <div style={{ textAlign: "center", marginTop: 16, color: "#555", fontSize: 10 }}>
           Lic #8145054 · Wichita, KS · (316) 252-6335
         </div>
@@ -252,3 +244,26 @@ export default function ReviewPage() {
     </div>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "#888",
+  fontFamily: "Oswald, sans-serif",
+  textTransform: "uppercase",
+  letterSpacing: ".08em",
+  display: "block",
+  marginBottom: 4,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 12px",
+  background: "#1a1a28",
+  border: "1px solid #1e1e2e",
+  borderRadius: 8,
+  color: "#e2e2e8",
+  fontSize: 14,
+  fontFamily: "Source Sans 3, sans-serif",
+  outline: "none",
+  boxSizing: "border-box",
+};
