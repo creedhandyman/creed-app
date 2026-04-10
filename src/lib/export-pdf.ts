@@ -1,5 +1,5 @@
 import type { Room } from "./types";
-import { calculateCost } from "./parser";
+import { calculateCost, makeGuide } from "./parser";
 
 interface ExportOptions {
   property: string;
@@ -31,159 +31,189 @@ export function exportQuotePdf(opts: ExportOptions) {
     day: "numeric",
   });
 
-  // Build room rows
-  let roomsHtml = "";
-  rooms.forEach((rm) => {
-    roomsHtml += `<tr class="room-header"><td colspan="5">${rm.name}</td></tr>`;
-    rm.items.forEach((it) => {
-      const { lc, mc, tot } = calculateCost(it, rate);
-      roomsHtml += `
-        <tr>
-          <td class="item-detail">
-            <strong>${it.detail}</strong>
-            <div class="item-comment">${it.comment}</div>
-          </td>
-          <td class="num">${it.laborHrs}</td>
-          <td class="num">$${lc.toFixed(0)}</td>
-          <td class="num">$${mc.toFixed(0)}</td>
-          <td class="num total-col">$${tot.toFixed(2)}</td>
-        </tr>`;
-    });
+  const crewSize = Math.max(1, Math.ceil(totalHrs / 40));
+  const estDays = Math.ceil(totalHrs / (crewSize * 8));
+  const guide = makeGuide(rooms);
+
+  // Build summary rows by trade/room category
+  const summaryRows = rooms.map((rm) => {
+    const items = rm.items;
+    const hrs = items.reduce((s, it) => s + it.laborHrs, 0);
+    const labor = hrs * rate;
+    const mat = items.reduce((s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0), 0);
+    return { name: rm.name, hrs, labor, mat, total: labor + mat };
   });
 
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<title>Quote — ${property}</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap');
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Source Sans 3', sans-serif; color: #1a1a2a; padding: 0; }
+  // Build work schedule
+  const schedDays: string[] = [];
+  let dayNum = 1;
+  const stepsByPri = { HIGH: [] as string[], MED: [] as string[], LOW: [] as string[] };
+  guide.steps.forEach((s) => stepsByPri[s.pri].push(`${s.room} — ${s.detail}`));
 
-  .page { max-width: 800px; margin: 0 auto; padding: 40px; }
-
-  /* Header */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #2E75B6; }
-  .brand h1 { font-family: 'Oswald', sans-serif; font-size: 28px; color: #2E75B6; text-transform: uppercase; letter-spacing: .05em; }
-  .brand .llc { font-family: 'Oswald', sans-serif; font-size: 12px; color: #C00000; letter-spacing: .15em; }
-  .brand .info { font-size: 11px; color: #666; margin-top: 6px; line-height: 1.6; }
-  .quote-label { text-align: right; }
-  .quote-label h2 { font-family: 'Oswald', sans-serif; font-size: 22px; color: #2E75B6; text-transform: uppercase; }
-  .quote-label .date { font-size: 12px; color: #666; margin-top: 4px; }
-
-  /* Client block */
-  .client-block { display: flex; justify-content: space-between; margin-bottom: 24px; gap: 20px; }
-  .client-box { flex: 1; background: #f5f7fa; border-radius: 8px; padding: 14px 18px; }
-  .client-box .label { font-family: 'Oswald', sans-serif; font-size: 10px; text-transform: uppercase; color: #888; letter-spacing: .1em; margin-bottom: 4px; }
-  .client-box .value { font-size: 14px; font-weight: 600; }
-
-  /* Table */
-  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
-  th { font-family: 'Oswald', sans-serif; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; color: #fff; background: #2E75B6; padding: 8px 10px; text-align: left; }
-  th.num { text-align: right; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
-  td.num { text-align: right; font-family: 'Oswald', sans-serif; }
-  td.total-col { font-weight: 600; color: #2E75B6; }
-  .room-header td { font-family: 'Oswald', sans-serif; font-size: 13px; font-weight: 600; color: #2E75B6; background: #f0f4f8; padding: 8px 10px; text-transform: uppercase; letter-spacing: .04em; }
-  .item-detail { max-width: 320px; }
-  .item-comment { font-size: 11px; color: #888; margin-top: 2px; }
-
-  /* Totals */
-  .totals { display: flex; justify-content: flex-end; margin-bottom: 30px; }
-  .totals-box { background: #f5f7fa; border-radius: 8px; padding: 16px 24px; min-width: 260px; }
-  .totals-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-  .totals-row.grand { border-top: 2px solid #2E75B6; margin-top: 8px; padding-top: 10px; font-size: 18px; font-family: 'Oswald', sans-serif; font-weight: 700; color: #2E75B6; }
-
-  /* Footer */
-  .footer { border-top: 1px solid #ddd; padding-top: 16px; text-align: center; font-size: 10px; color: #888; }
-  .footer .sig { margin-top: 30px; display: flex; justify-content: space-between; gap: 40px; }
-  .footer .sig-line { flex: 1; border-top: 1px solid #999; padding-top: 6px; text-align: center; font-size: 11px; color: #666; }
-
-  @media print {
-    body { padding: 0; }
-    .page { padding: 20px; }
+  if (stepsByPri.HIGH.length) {
+    schedDays.push(`<tr><td>Day ${dayNum}</td><td>${crewSize}</td><td>Safety & critical items: ${stepsByPri.HIGH.slice(0, 5).join(" · ")}</td><td>Safety operational day one</td></tr>`);
+    dayNum++;
   }
-</style>
-</head>
-<body>
-<div class="page">
+  // Group remaining by category
+  rooms.forEach((rm) => {
+    if (rm.items.length === 0) return;
+    const hrs = rm.items.reduce((s, it) => s + it.laborHrs, 0);
+    const daysNeeded = Math.ceil(hrs / (crewSize * 8));
+    const dayLabel = daysNeeded > 1 ? `Day ${dayNum}–${dayNum + daysNeeded - 1}` : `Day ${dayNum}`;
+    const itemList = rm.items.slice(0, 6).map((it) => it.detail).join(" · ");
+    schedDays.push(`<tr><td>${dayLabel}</td><td>${crewSize}</td><td>${rm.name}: ${itemList}</td><td></td></tr>`);
+    dayNum += daysNeeded;
+  });
+  if (schedDays.length === 0) {
+    schedDays.push(`<tr><td>Day 1–${estDays}</td><td>${crewSize}</td><td>All work items</td><td></td></tr>`);
+  }
 
-  <!-- Header -->
-  <div class="header">
-    <div class="brand">
-      <h1>Creed Handyman</h1>
-      <div class="llc">LLC</div>
-      <div class="info">
-        Wichita, KS<br/>
-        (316) 252-6335<br/>
-        License #8145054
+  // Build detailed breakdown by trade
+  let breakdownHtml = "";
+  rooms.forEach((rm) => {
+    if (rm.items.length === 0) return;
+    const sectionHrs = rm.items.reduce((s, it) => s + it.laborHrs, 0);
+    const sectionLabor = sectionHrs * rate;
+    const sectionMat = rm.items.reduce((s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0), 0);
+
+    let matRows = "";
+    rm.items.forEach((it) => {
+      it.materials.forEach((m) => {
+        if (m.c > 0) {
+          matRows += `<tr><td>${m.n}</td><td style="text-align:center">1</td><td style="text-align:right">$${m.c.toFixed(2)}</td><td style="text-align:right">$${m.c.toFixed(2)}</td><td class="dim">${it.detail}</td></tr>`;
+        }
+      });
+    });
+
+    breakdownHtml += `
+    <div class="section-block">
+      <h3>◆ ${rm.name}</h3>
+      <table class="mat-table">
+        <thead><tr><th>Material</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Total</th><th>Notes</th></tr></thead>
+        <tbody>${matRows || '<tr><td colspan="5" class="dim">Labor only — no materials</td></tr>'}</tbody>
+      </table>
+      <div class="section-totals">
+        <div>Material Subtotal: <b>$${sectionMat.toFixed(2)}</b></div>
+        <div>Labor (${sectionHrs.toFixed(1)} man-hrs × $${rate}/hr): <b>$${sectionLabor.toFixed(2)}</b></div>
+        <div class="section-grand">Material: $${sectionMat.toFixed(2)} &nbsp; Labor: $${sectionLabor.toFixed(2)} &nbsp; <b>Section Total: $${(sectionLabor + sectionMat).toFixed(2)}</b></div>
       </div>
-    </div>
-    <div class="quote-label">
-      <h2>Quote</h2>
-      <div class="date">${today}</div>
-    </div>
+    </div>`;
+  });
+
+  // Build tools checklist
+  const toolsHtml = guide.tools.map((t) => `<span class="tool-item">☐ ${t}</span>`).join("");
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><title>Quote — ${property}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;padding:0;font-size:11px;line-height:1.5}
+.page{max-width:800px;margin:0 auto;padding:32px 40px}
+h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase;letter-spacing:.05em;margin:0}
+h2{font-family:Oswald;font-size:14px;color:#2E75B6;text-transform:uppercase;letter-spacing:.04em;margin:20px 0 8px;border-bottom:2px solid #2E75B6;padding-bottom:4px}
+h3{font-family:Oswald;font-size:12px;color:#2E75B6;text-transform:uppercase;margin:16px 0 6px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2E75B6}
+.brand .llc{font-family:Oswald;font-size:9px;color:#C00000;letter-spacing:.15em}
+.brand .info{font-size:10px;color:#666;margin-top:4px;line-height:1.6}
+.client-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.client-box{background:#f5f7fa;border-radius:6px;padding:8px 12px}
+.client-box .label{font-family:Oswald;font-size:9px;text-transform:uppercase;color:#888;letter-spacing:.08em}
+.client-box .value{font-size:12px;font-weight:600}
+table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10px}
+th{font-family:Oswald;text-transform:uppercase;font-size:9px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:5px 8px;text-align:left}
+td{padding:4px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
+.summary-table td{font-family:Oswald;font-size:10px}
+.summary-table tr:last-child{font-weight:700;background:#f0f4f8;border-top:2px solid #2E75B6}
+.summary-table td:nth-child(n+2){text-align:right}
+.sched-table td:first-child{font-family:Oswald;font-weight:600;color:#2E75B6;white-space:nowrap}
+.mat-table th:nth-child(2),.mat-table th:nth-child(3),.mat-table th:nth-child(4){text-align:right}
+.section-block{margin-bottom:16px;page-break-inside:avoid}
+.section-totals{background:#f5f7fa;border-radius:4px;padding:6px 10px;font-size:10px;margin-top:4px}
+.section-grand{font-size:11px;margin-top:4px;padding-top:4px;border-top:1px solid #ddd}
+.dim{color:#888}
+.tools-grid{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:10px;margin-bottom:16px}
+.tool-item{min-width:140px}
+.notes{font-size:10px;color:#444;line-height:1.6}
+.notes li{margin-bottom:4px}
+.sig-row{display:flex;gap:40px;margin-top:30px}
+.sig-line{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;font-size:10px;color:#666}
+.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:9px;color:#888;margin-top:24px}
+@media print{body{padding:0}.page{padding:16px 24px}h2{page-break-after:avoid}.section-block{page-break-inside:avoid}}
+</style></head><body><div class="page">
+
+<!-- HEADER -->
+<div class="header">
+  <div class="brand">
+    <h1>Creed Handyman</h1><div class="llc">LLC</div>
+    <div class="info">Professional Property Repair & Renovation<br/>☎ (316) 252-6335 · ✉ creedhandyman@gmail.com</div>
   </div>
-
-  <!-- Client info -->
-  <div class="client-block">
-    <div class="client-box">
-      <div class="label">Property</div>
-      <div class="value">${property || "—"}</div>
-    </div>
-    <div class="client-box">
-      <div class="label">Client</div>
-      <div class="value">${client || "—"}</div>
-    </div>
-    <div class="client-box">
-      <div class="label">Est. Duration</div>
-      <div class="value">${totalHrs.toFixed(1)} hrs (${(totalHrs / 8).toFixed(1)} days)</div>
-    </div>
+  <div style="text-align:right">
+    <div style="font-family:Oswald;font-size:13px;color:#2E75B6;text-transform:uppercase">Property Repair Estimate</div>
+    <div style="font-size:10px;color:#666;margin-top:2px">${today}</div>
+    <div style="font-size:9px;color:#888">License #8145054 · Valid 30 Days</div>
   </div>
-
-  <!-- Items table -->
-  <table>
-    <thead>
-      <tr>
-        <th>Description</th>
-        <th class="num">Hours</th>
-        <th class="num">Labor</th>
-        <th class="num">Materials</th>
-        <th class="num">Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${roomsHtml}
-    </tbody>
-  </table>
-
-  <!-- Totals -->
-  <div class="totals">
-    <div class="totals-box">
-      <div class="totals-row"><span>Labor (${totalHrs.toFixed(1)} hrs × $${rate}/hr)</span><span>$${totalLabor.toFixed(2)}</span></div>
-      <div class="totals-row"><span>Materials</span><span>$${totalMat.toFixed(2)}</span></div>
-      <div class="totals-row grand"><span>Total</span><span>$${grandTotal.toFixed(2)}</span></div>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <div class="footer">
-    <p>This quote is valid for 30 days from the date above. Prices may vary based on actual conditions found during work.</p>
-
-    <div class="sig">
-      <div class="sig-line">Client Signature / Date</div>
-      <div class="sig-line">Creed Handyman LLC / Date</div>
-    </div>
-
-    <p style="margin-top: 20px;">Creed Handyman LLC · Wichita, KS · (316) 252-6335 · Lic #8145054</p>
-  </div>
-
 </div>
-</body>
-</html>`;
 
-  // Open in new window and trigger print
+<!-- CLIENT INFO -->
+<div class="client-grid">
+  <div class="client-box"><div class="label">Property</div><div class="value">${property || "—"}</div></div>
+  <div class="client-box"><div class="label">Client</div><div class="value">${client || "—"}</div></div>
+  <div class="client-box"><div class="label">Est. Duration</div><div class="value">${estDays} working days (${crewSize}-man crew)</div></div>
+  <div class="client-box"><div class="label">Labor Rate</div><div class="value">$${rate}.00/man-hour</div></div>
+</div>
+
+<!-- ESTIMATE SUMMARY -->
+<h2>Estimate Summary</h2>
+<table class="summary-table">
+  <thead><tr><th>Category</th><th>Man-Hrs</th><th>Labor</th><th>Material</th><th>Section Total</th></tr></thead>
+  <tbody>
+    ${summaryRows.map((r) => `<tr><td>${r.name}</td><td style="text-align:right">${r.hrs.toFixed(1)}</td><td style="text-align:right">$${r.labor.toFixed(2)}</td><td style="text-align:right">$${r.mat.toFixed(2)}</td><td style="text-align:right">$${r.total.toFixed(2)}</td></tr>`).join("")}
+    <tr><td>GRAND TOTAL</td><td style="text-align:right">${totalHrs.toFixed(1)}</td><td style="text-align:right">$${totalLabor.toFixed(2)}</td><td style="text-align:right">$${totalMat.toFixed(2)}</td><td style="text-align:right">$${grandTotal.toFixed(2)}</td></tr>
+  </tbody>
+</table>
+
+<!-- WORK SCHEDULE -->
+<h2>${estDays}-Day Work Schedule</h2>
+<table class="sched-table">
+  <thead><tr><th>Day</th><th>Crew</th><th>Primary Work</th><th>Notes</th></tr></thead>
+  <tbody>${schedDays.join("")}</tbody>
+</table>
+
+<!-- PROJECT BREAKDOWN -->
+<h2>Project Breakdown & Costs</h2>
+${breakdownHtml}
+
+<!-- TOOLS NEEDED -->
+<h2>Tools Checklist</h2>
+<div class="tools-grid">${toolsHtml}</div>
+
+<!-- NOTES & EXCLUSIONS -->
+<h2>Notes & Exclusions</h2>
+<div class="notes">
+  <ul>
+    <li>Labor rate: <b>$${rate}.00/man-hour</b>. Man-hours = clock hours × crew size.</li>
+    <li>Materials priced at current Home Depot/Lowe's retail. All quantities and unit prices listed per line item above.</li>
+    <li>Quote valid <b>30 days</b> from issue date.</li>
+    <li><b>50% deposit</b> to begin; balance due on completion.</li>
+    <li>Any unforeseen conditions (mold, hidden water damage, structural issues) will be documented and quoted as a separate change order before proceeding.</li>
+    <li>Items requiring licensed professionals (electrical panel, major HVAC, roofing) are NOT included — flagged for subcontractor referral.</li>
+  </ul>
+</div>
+
+<!-- SIGNATURES -->
+<div class="sig-row">
+  <div class="sig-line">Authorized Signature / Date</div>
+  <div class="sig-line">Client Approval / Date</div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  Creed Handyman LLC · Wichita, KS · (316) 252-6335 · Lic #8145054 · creedhandyman@gmail.com
+</div>
+
+</div></body></html>`;
+
   const win = window.open("", "_blank");
   if (!win) {
     alert("Please allow popups to export PDF");
@@ -191,6 +221,5 @@ export function exportQuotePdf(opts: ExportOptions) {
   }
   win.document.write(html);
   win.document.close();
-  // Let fonts load before printing
   setTimeout(() => win.print(), 600);
 }
