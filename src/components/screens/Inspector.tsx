@@ -308,7 +308,6 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
           ref={photoRef}
           type="file"
           accept="image/*"
-          capture="environment"
           style={{ display: "none" }}
           onChange={handlePhotoSelect}
         />
