@@ -44,6 +44,7 @@ export default function Timer({ setPage }: Props) {
   const [mh, setMh] = useState("");
   const [mj, setMj] = useState("");
   const [mUser, setMUser] = useState(user.id);
+  const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
 
   const rate = user.rate || 55;
 
@@ -97,7 +98,7 @@ export default function Timer({ setPage }: Props) {
     const targetRate = targetUser.rate || 55;
     await db.post("time_entries", {
       job: mj || "General",
-      entry_date: new Date().toLocaleDateString(),
+      entry_date: mDate,
       hours: h,
       amount: Math.round(h * targetRate * 100) / 100,
       user_id: targetUser.id,
@@ -211,7 +212,13 @@ export default function Timer({ setPage }: Props) {
             </select>
           </div>
         )}
-        <div className="row">
+        <div className="row" style={{ marginBottom: 6 }}>
+          <input
+            type="date"
+            value={mDate}
+            onChange={(e) => setMDate(e.target.value)}
+            style={{ width: 140, color: "var(--color-accent-red)", fontWeight: 600 }}
+          />
           <select
             value={mj}
             onChange={(e) => setMj(e.target.value)}
@@ -224,6 +231,8 @@ export default function Timer({ setPage }: Props) {
               </option>
             ))}
           </select>
+        </div>
+        <div className="row">
           <input
             type="number"
             value={mh}
