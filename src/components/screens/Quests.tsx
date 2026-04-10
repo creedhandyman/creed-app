@@ -52,6 +52,32 @@ export default function Quests() {
   // Total hours logged
   const totalHours = timeEntries.reduce((s, e) => s + (e.hours || 0), 0);
 
+  // Skill Mastery: count completed jobs per trade
+  const jobsByTrade: Record<string, number> = {};
+  jobs.filter((j) => j.status === "complete" && j.trade).forEach((j) => {
+    jobsByTrade[j.trade] = (jobsByTrade[j.trade] || 0) + 1;
+  });
+  const tradesMastered = Object.values(jobsByTrade).filter((c) => c >= 10).length;
+  const bestTradeCount = Math.max(0, ...Object.values(jobsByTrade));
+
+  // Zero Callback: count consecutive completed jobs with no callback from the end
+  const completedJobsSorted = jobs
+    .filter((j) => j.status === "complete")
+    .sort((a, b) => (a.created_at > b.created_at ? -1 : 1));
+  let zeroCallbackStreak = 0;
+  for (const j of completedJobsSorted) {
+    if (j.callback) break;
+    zeroCallbackStreak++;
+  }
+
+  // Mr.Speed: count days where 5+ jobs were completed
+  const jobsByDate: Record<string, number> = {};
+  jobs.filter((j) => j.status === "complete").forEach((j) => {
+    const d = j.job_date || j.created_at?.split("T")[0] || "";
+    if (d) jobsByDate[d] = (jobsByDate[d] || 0) + 1;
+  });
+  const speedDays = Object.values(jobsByDate).filter((c) => c >= 5).length;
+
   // All quests by tier
   const tiers: { name: string; color: string; quests: Quest[] }[] = [
     {
@@ -142,11 +168,11 @@ export default function Quests() {
       quests: [
         {
           name: "Skill Mastery",
-          desc: "Complete 10 jobs in one trade (Plumbing, Electrical, Carpentry, HVAC)",
+          desc: `Complete 10 jobs in one trade — ${tradesMastered} trade${tradesMastered !== 1 ? "s" : ""} mastered${Object.keys(jobsByTrade).length ? " (" + Object.entries(jobsByTrade).map(([t, c]) => `${t}: ${c}`).join(", ") + ")" : ""}`,
           bonus: "$100/trade",
-          progress: 0,
+          progress: Math.min(bestTradeCount, 10),
           goal: 10,
-          unit: "jobs/trade",
+          unit: "best trade",
           tier: "T3",
           tierColor: "var(--color-warning)",
         },
@@ -162,21 +188,21 @@ export default function Quests() {
         },
         {
           name: "Zero Callback",
-          desc: "20 consecutive jobs with zero callbacks",
+          desc: "20 consecutive jobs with zero callbacks — resets on callback",
           bonus: "$150",
-          progress: 0,
+          progress: Math.min(zeroCallbackStreak, 20),
           goal: 20,
           unit: "streak",
           tier: "T3",
           tierColor: "var(--color-warning)",
         },
         {
-          name: "Speed Kills",
-          desc: "Complete 5 jobs under quoted time, no callbacks in 30 days",
-          bonus: "$75",
-          progress: 0,
-          goal: 5,
-          unit: "jobs",
+          name: "Mr.Speed",
+          desc: "Complete 5 work orders in one day",
+          bonus: "$25",
+          progress: Math.min(speedDays, 1),
+          goal: 1,
+          unit: "days",
           tier: "T3",
           tierColor: "var(--color-warning)",
         },

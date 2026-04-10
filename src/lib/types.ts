@@ -23,6 +23,8 @@ export interface Job {
   status: "quoted" | "active" | "complete";
   created_by: string;
   created_at: string;
+  trade: string;
+  callback: boolean;
 }
 
 export interface TimeEntry {

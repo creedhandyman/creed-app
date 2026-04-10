@@ -200,6 +200,53 @@ export default function Jobs({ setPage, onEditJob }: Props) {
                     </button>
                   </div>
 
+                  {/* Trade + Callback */}
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <span className="dim" style={{ fontSize: 11 }}>Trade:</span>
+                    <select
+                      value={j.trade || ""}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={async (e) => {
+                        e.stopPropagation();
+                        await db.patch("jobs", j.id, { trade: e.target.value });
+                        loadAll();
+                      }}
+                      style={{ width: "auto", fontSize: 10, padding: "3px 6px" }}
+                    >
+                      <option value="">None</option>
+                      <option value="Plumbing">Plumbing</option>
+                      <option value="Electrical">Electrical</option>
+                      <option value="Carpentry">Carpentry</option>
+                      <option value="HVAC">HVAC</option>
+                      <option value="Painting">Painting</option>
+                      <option value="Flooring">Flooring</option>
+                      <option value="General">General</option>
+                    </select>
+                    <label
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 11,
+                        cursor: "pointer",
+                        color: j.callback ? "var(--color-accent-red)" : "#888",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={j.callback || false}
+                        onChange={async (e) => {
+                          e.stopPropagation();
+                          await db.patch("jobs", j.id, { callback: e.target.checked });
+                          loadAll();
+                        }}
+                        style={{ width: "auto", accentColor: "var(--color-accent-red)" }}
+                      />
+                      Callback
+                    </label>
+                  </div>
+
                   {/* Existing Receipts */}
                   {receipts.filter((r) => r.job_id === j.id).length > 0 && (
                     <div className="mt">
