@@ -95,6 +95,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);
+        if (result.client && !client) setClient(result.client);
         setRooms(result.rooms);
         setParsing(false);
         setParseStatus("");

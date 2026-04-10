@@ -100,39 +100,75 @@ export async function renderPdfPages(
 
 /* ====== AI PARSE ====== */
 
-const AI_SYSTEM_PROMPT = `You are a construction/handyman inspection report parser. Extract maintenance items from inspection reports.
+const AI_SYSTEM_PROMPT = `You are the quoting engine for Creed Handyman LLC, Wichita KS. License #8145054. Labor rate: $55.00/hour.
 
-Return ONLY valid JSON in this exact format (no markdown, no explanation):
+You receive move-out inspection reports (typically from zInspector via Keyrenter Property Management) and produce accurate repair quotes.
+
+CRITICAL RULES:
+
+1. DEDUPLICATION: zInspector reports contain TWO sections describing the SAME items:
+   - Summary Table (early pages) — has an "Area" column. SKIP THIS ENTIRELY.
+   - Detailed Room Breakdowns (later pages) — room names as section headers. USE THIS ONE ONLY.
+   If you see duplicate findings, keep only one.
+
+2. ONE LINE ITEM PER FINDING: Each unique Area + Detail combination = exactly ONE line item.
+   DO NOT merge two different Detail categories into one line.
+   DO NOT split one Detail category into multiple lines.
+   DO NOT create line items for Condition: S (Satisfactory) or Actions: None.
+
+3. CLEAR DESCRIPTIONS: Rewrite garbled PDF text in plain professional English. Start with room name. Reconstruct meaning from context if text is fragmented.
+
+4. REALISTIC HOURS (DO NOT default to 1 hour):
+   Quick tasks: outlet cover=0.15h, bulb=0.15h, smoke alarm battery=0.15h, install smoke alarm=0.25h, doorstop=0.15h, toilet seat=0.25h, blind install=0.25h per blind, door knob=0.5h, towel bar=0.25h, small drywall patch=0.5h, caulk=0.5h
+   Medium tasks: closet pole=0.5h, vanity light=0.5-1h, doorbell=0.75-1h, screen door=1-1.5h, re-secure door=0.5-1h
+   Large tasks: touch-up paint one room=1.5-2h, full room repaint small=3-4h, full room repaint large=4-6h, pre-hung door+trim=2-3h, entry door=3-4h, LVP flooring small room=4-5h, LVP large room=5-7h, baseboard replacement=2-3h
+   Multi-item: multiply per unit (2 blinds=0.5h, 10 outlet covers=1.5h, 4 smoke alarms=1h)
+
+5. REALISTIC MATERIALS (DO NOT use flat $17 default):
+   Smoke alarm=$20-25, outlet cover=$1-3, door knob=$18-28, pre-hung door 30"=$90-115, blind 20-27"=$10-15, blind 36"=$14-18, ceiling fixture=$25-40, vanity light=$30-50, toilet seat=$18-25, shower rod=$12-18, towel bar=$12-20, paint 1gal=$28-35, primer 1gal=$18-25, caulk=$5-8, screen door=$85-120, doorbell=$18-30, LVP flooring=$1.50-3.00/sqft
+   If labor-only (unclog drain, re-secure faucet, haul junk), materials = $0.
+
+6. TRADE CATEGORIES: Group items by trade, not room:
+   Painting, Flooring, Carpentry, Plumbing, Electrical, Safety, Appliances, Exterior, Compliance, Cleaning/Hauling
+
+Return ONLY valid JSON (no markdown, no explanation):
 {
   "property": "address if found or empty string",
+  "client": "client/property manager name if found or empty string",
   "rooms": [
     {
-      "name": "Room Name",
+      "name": "Trade Category (e.g. Painting, Carpentry, Plumbing)",
       "items": [
         {
-          "detail": "Item name (e.g. Door, Walls, Flooring)",
-          "condition": "S|F|P|D (Satisfactory/Fair/Poor/Damaged) or - if unknown",
-          "comment": "Description of work needed",
-          "laborHrs": 1.0,
-          "materials": [{"n": "Material name", "c": 20}]
+          "detail": "Room — Brief item name",
+          "condition": "S|F|P|D or -",
+          "comment": "Clear professional description of work needed",
+          "laborHrs": 0.25,
+          "materials": [{"n": "Specific material name", "c": 15}]
         }
       ]
     }
-  ]
+  ],
+  "notes": ["Items flagged for licensed professionals or owner responsibility"],
+  "crewSize": 2,
+  "estDays": 5
 }
 
-Rules:
-- Only include items that need MAINTENANCE or REPAIR work
-- Skip items marked as "Satisfactory" or "None" with no issues
-- Group items by room (Kitchen, Bedroom 1, Bathroom, etc.)
-- Estimate laborHrs: bulb/battery=0.25h, touch-up=1.5h, replace=1h, repaint=5h, water damage=8h
-- Estimate material costs realistically: paint=$20-70, carpet=$255, tile=$160, blind=$18, door=$80, smoke alarm=$20
-- If you see photos showing damage, include those observations in the comments
-- Be thorough — capture every maintenance item mentioned or visible`;
+VERIFICATION before outputting:
+- No duplicates (count line items vs unique inspection findings)
+- No 1.0h defaults where reference table says otherwise
+- No $17 flat material defaults
+- Labor = Hours x $55 for every line
+- Descriptions are clear English, not garbled PDF fragments
+- Items with Condition S and Actions None are excluded`;
 
 export interface AiParseResult {
   property: string;
+  client: string;
   rooms: Room[];
+  notes: string[];
+  crewSize: number;
+  estDays: number;
 }
 
 export async function aiParsePdf(
@@ -166,7 +202,7 @@ export async function aiParsePdf(
 
     content.push({
       type: "text",
-      text: "Parse this inspection report and extract all maintenance items. Return ONLY the JSON.",
+      text: "Parse this inspection report following the quoting engine rules exactly. Process ONLY the detailed room breakdowns, skip the summary table. Return ONLY the JSON.",
     });
 
     const res = await fetch("/api/ai", {
@@ -174,7 +210,7 @@ export async function aiParsePdf(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
+        max_tokens: 16000,
         system: AI_SYSTEM_PROMPT,
         messages: [{ role: "user", content }],
       }),
@@ -200,17 +236,21 @@ export async function aiParsePdf(
         items: r.items.map((it) => ({
           ...it,
           id: crypto.randomUUID().slice(0, 8),
-          laborHrs: it.laborHrs || 1,
+          laborHrs: it.laborHrs || 0.5,
           materials: it.materials?.length
             ? it.materials
-            : [{ n: "Materials", c: 17 }],
+            : [{ n: "Materials", c: 0 }],
         })),
       })
     );
 
     return {
       property: parsed.property || "",
+      client: parsed.client || "",
       rooms: rooms.filter((r) => r.items.length > 0),
+      notes: parsed.notes || [],
+      crewSize: parsed.crewSize || 2,
+      estDays: parsed.estDays || 0,
     };
   } catch (e) {
     console.error("AI parse failed:", e);
