@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 
 /* ── Preset rooms and items ── */
@@ -67,17 +67,44 @@ interface Props {
 type Step = "rooms" | "inspect" | "review";
 
 export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
-  const [step, setStep] = useState<Step>("rooms");
-  const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
+  // Load saved state from localStorage
+  const loadSaved = <T,>(key: string, fallback: T): T => {
+    try {
+      const v = localStorage.getItem("c_inspect_" + key);
+      return v ? JSON.parse(v) : fallback;
+    } catch { return fallback; }
+  };
+
+  const [step, setStep] = useState<Step>(() => loadSaved("step", "rooms" as Step));
+  const [selectedRooms, setSelectedRooms] = useState<string[]>(() => loadSaved("rooms", []));
   const [customRoom, setCustomRoom] = useState("");
-  const [property, setProperty] = useState("");
-  const [client, setClient] = useState("");
-  const [currentRoomIdx, setCurrentRoomIdx] = useState(0);
-  const [roomData, setRoomData] = useState<InspectionRoom[]>([]);
+  const [property, setProperty] = useState(() => loadSaved("property", ""));
+  const [client, setClient] = useState(() => loadSaved("client", ""));
+  const [currentRoomIdx, setCurrentRoomIdx] = useState(() => loadSaved("roomIdx", 0));
+  const [roomData, setRoomData] = useState<InspectionRoom[]>(() => loadSaved("roomData", []));
   const [uploading, setUploading] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [photoTarget, setPhotoTarget] = useState<{ room: number; item: number } | null>(null);
+  const [showResume, setShowResume] = useState(() => !!localStorage.getItem("c_inspect_roomData"));
+
+  // Auto-save to localStorage on every change
+  const save = useCallback((key: string, value: unknown) => {
+    localStorage.setItem("c_inspect_" + key, JSON.stringify(value));
+  }, []);
+
+  useEffect(() => save("step", step), [step, save]);
+  useEffect(() => save("rooms", selectedRooms), [selectedRooms, save]);
+  useEffect(() => save("property", property), [property, save]);
+  useEffect(() => save("client", client), [client, save]);
+  useEffect(() => save("roomIdx", currentRoomIdx), [currentRoomIdx, save]);
+  useEffect(() => save("roomData", roomData), [roomData, save]);
+
+  const clearSaved = () => {
+    ["step", "rooms", "property", "client", "roomIdx", "roomData"].forEach(
+      (k) => localStorage.removeItem("c_inspect_" + k)
+    );
+  };
 
   const border = darkMode ? "#1e1e2e" : "#eee";
 
@@ -182,6 +209,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   );
 
   const handleGenerate = () => {
+    clearSaved();
     onComplete({ rooms: roomData, property, client });
   };
 
@@ -192,9 +220,53 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={onCancel}>←</button>
+          <button className="bo" onClick={() => { clearSaved(); onCancel(); }}>←</button>
           <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>🔍 New Inspection</h2>
         </div>
+
+        {/* Resume banner */}
+        {showResume && roomData.length > 0 && (
+          <div
+            className="cd mb"
+            style={{
+              borderLeft: "3px solid var(--color-warning)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <b style={{ fontSize: 13 }}>Resume inspection?</b>
+              <div className="dim" style={{ fontSize: 11 }}>
+                {property || "Untitled"} · {roomData.length} rooms
+              </div>
+            </div>
+            <div className="row">
+              <button
+                className="bb"
+                onClick={() => { setStep(roomData.length ? "inspect" : "rooms"); setShowResume(false); }}
+                style={{ fontSize: 10, padding: "5px 12px" }}
+              >
+                Resume
+              </button>
+              <button
+                className="bo"
+                onClick={() => {
+                  clearSaved();
+                  setRoomData([]);
+                  setSelectedRooms([]);
+                  setProperty("");
+                  setClient("");
+                  setCurrentRoomIdx(0);
+                  setShowResume(false);
+                }}
+                style={{ fontSize: 10, padding: "5px 10px", color: "var(--color-accent-red)" }}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Property + Client */}
         <div className="cd mb">

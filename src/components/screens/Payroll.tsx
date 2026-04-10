@@ -36,8 +36,74 @@ export default function Payroll() {
       amount: totalPay,
       entries: entries.length,
     });
-    alert(`Processed: ${selUser.name} — $${totalPay.toFixed(2)}`);
+    generatePayStub();
     loadAll();
+  };
+
+  const generatePayStub = () => {
+    const today = new Date().toLocaleDateString("en-US", {
+      year: "numeric", month: "long", day: "numeric",
+    });
+    const jobRows = Object.entries(byJob)
+      .map(([job, hrs]) =>
+        `<tr><td>${job}</td><td style="text-align:right">${hrs.toFixed(2)}</td><td style="text-align:right">$${(hrs * (selUser.rate || 55)).toFixed(2)}</td></tr>`
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Pay Stub — ${selUser.name}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;padding:0}
+.page{max-width:600px;margin:0 auto;padding:40px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #2E75B6}
+.brand h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase;letter-spacing:.05em}
+.brand .llc{font-family:Oswald;font-size:10px;color:#C00000;letter-spacing:.15em}
+.brand .info{font-size:10px;color:#666;margin-top:4px;line-height:1.6}
+.stub-label h2{font-family:Oswald;font-size:18px;color:#2E75B6;text-transform:uppercase}
+.stub-label .date{font-size:11px;color:#666;margin-top:2px}
+.emp-box{background:#f5f7fa;border-radius:8px;padding:14px 18px;margin-bottom:20px;display:flex;justify-content:space-between}
+.emp-box .label{font-family:Oswald;font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.08em}
+.emp-box .value{font-size:14px;font-weight:600;margin-top:2px}
+table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}
+th{font-family:Oswald;text-transform:uppercase;font-size:10px;letter-spacing:.08em;color:#fff;background:#2E75B6;padding:8px 12px;text-align:left}
+th:nth-child(2),th:nth-child(3){text-align:right}
+td{padding:6px 12px;border-bottom:1px solid #eee}
+td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
+.totals{background:#f5f7fa;border-radius:8px;padding:16px 20px;margin-bottom:24px}
+.totals-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.totals-row.grand{border-top:2px solid #2E75B6;margin-top:8px;padding-top:10px;font-size:20px;font-family:Oswald;font-weight:700;color:#2E75B6}
+.footer{border-top:1px solid #ddd;padding-top:12px;text-align:center;font-size:10px;color:#888}
+@media print{body{padding:0}.page{padding:20px}}
+</style></head><body><div class="page">
+<div class="header">
+  <div class="brand"><h1>Creed Handyman</h1><div class="llc">LLC</div>
+  <div class="info">Wichita, KS<br/>(316) 252-6335<br/>License #8145054</div></div>
+  <div class="stub-label"><h2>Pay Stub</h2><div class="date">${today}</div></div>
+</div>
+<div style="display:flex;gap:12px;margin-bottom:20px">
+  <div class="emp-box" style="flex:1"><div><div class="label">Employee</div><div class="value">${selUser.name}</div></div></div>
+  <div class="emp-box" style="flex:1"><div><div class="label">Employee #</div><div class="value">${selUser.emp_num || "—"}</div></div></div>
+  <div class="emp-box" style="flex:1"><div><div class="label">Rate</div><div class="value">$${selUser.rate || 55}/hr</div></div></div>
+</div>
+<table><thead><tr><th>Job</th><th>Hours</th><th>Amount</th></tr></thead><tbody>${jobRows}</tbody></table>
+<div class="totals">
+  <div class="totals-row"><span>Total Hours</span><span>${totalHrs.toFixed(2)}</span></div>
+  <div class="totals-row"><span>Rate</span><span>$${selUser.rate || 55}/hr</span></div>
+  <div class="totals-row"><span>Entries</span><span>${entries.length}</span></div>
+  <div class="totals-row grand"><span>Net Pay</span><span>$${totalPay.toFixed(2)}</span></div>
+</div>
+<div class="footer">
+  <p>Creed Handyman LLC · Wichita, KS · (316) 252-6335 · Lic #8145054</p>
+  <p style="margin-top:8px">This is not an official tax document. For tax purposes, refer to your W-2 or 1099.</p>
+</div>
+</div></body></html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) { alert(`Processed: ${selUser.name} — $${totalPay.toFixed(2)}`); return; }
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 600);
   };
 
   const userPayHistory = payHistory.filter((p) => p.user_id === sel);
