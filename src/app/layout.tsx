@@ -3,13 +3,13 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Creed Handyman LLC",
-  description: "Handyman business management app",
+  title: "Creed App",
+  description: "Field service management for handyman businesses",
   icons: { icon: "/CREED_LOGO.png", apple: "/CREED_LOGO.png" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Creed Handyman",
+    title: "Creed App",
   },
 };
 

@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 
 export default function Payroll() {
   const user = useStore((s) => s.user)!;
+  const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
   const timeEntries = useStore((s) => s.timeEntries);
   const payHistory = useStore((s) => s.payHistory);
@@ -129,8 +130,8 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
 @media print{body{padding:0}.page{padding:20px}}
 </style></head><body><div class="page">
 <div class="header">
-  <div class="brand"><h1>Creed Handyman</h1><div class="llc">LLC</div>
-  <div class="info">Wichita, KS<br/>(316) 252-6335<br/>License #8145054</div></div>
+  <div class="brand"><h1>${org?.name || "Handyman Service"}</h1>
+  <div class="info">${org?.address || ""}${org?.phone ? "<br/>" + org.phone : ""}${org?.license_num ? "<br/>License #" + org.license_num : ""}</div></div>
   <div class="stub-label"><h2>Pay Stub</h2><div class="date">${today}</div></div>
 </div>
 <div style="display:flex;gap:12px;margin-bottom:20px">
@@ -146,7 +147,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
   <div class="totals-row grand"><span>Net Pay</span><span>$${totalPay.toFixed(2)}</span></div>
 </div>
 <div class="footer">
-  <p>Creed Handyman LLC · Wichita, KS · (316) 252-6335 · Lic #8145054</p>
+  <p>${org?.name || "Handyman Service"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</p>
   <p style="margin-top:8px">This is not an official tax document. For tax purposes, refer to your W-2 or 1099.</p>
 </div>
 </div></body></html>`;

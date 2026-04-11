@@ -162,7 +162,7 @@ export default function Login() {
 
         {/* Footer */}
         <div style={{ textAlign: "center", marginTop: 14, color: "#888", fontSize: 10 }}>
-          Lic #8145054 · Wichita, KS · (316) 252-6335
+          Powered by Creed App
         </div>
       </div>
     </div>

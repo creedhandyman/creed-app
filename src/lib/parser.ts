@@ -100,7 +100,7 @@ export async function renderPdfPages(
 
 /* ====== AI PARSE ====== */
 
-const AI_SYSTEM_PROMPT = `You are the quoting engine for Creed Handyman LLC, Wichita KS. License #8145054. Labor rate: $55.00/hour.
+const AI_SYSTEM_PROMPT = `You are a professional handyman/contractor quoting engine. Labor rate: $55.00/hour (adjust if specified).
 
 You receive move-out inspection reports (typically from zInspector via Keyrenter Property Management) and produce accurate repair quotes.
 

@@ -11,6 +11,11 @@ interface ExportOptions {
   totalLabor: number;
   totalMat: number;
   totalHrs: number;
+  orgName?: string;
+  orgPhone?: string;
+  orgEmail?: string;
+  orgLicense?: string;
+  orgAddress?: string;
 }
 
 export function exportQuotePdf(opts: ExportOptions) {
@@ -24,6 +29,12 @@ export function exportQuotePdf(opts: ExportOptions) {
     totalMat,
     totalHrs,
   } = opts;
+
+  const orgName = opts.orgName || "Handyman Service";
+  const orgPhone = opts.orgPhone || "";
+  const orgEmail = opts.orgEmail || "";
+  const orgLicense = opts.orgLicense || "";
+  const orgAddress = opts.orgAddress || "";
 
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -173,13 +184,13 @@ td{padding:4px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 <!-- HEADER -->
 <div class="header">
   <div class="brand">
-    <h1>Creed Handyman</h1><div class="llc">LLC</div>
-    <div class="info">Professional Property Repair & Renovation<br/>☎ (316) 252-6335 · ✉ creedhandyman@gmail.com</div>
+    <h1>${orgName}</h1>
+    <div class="info">Professional Property Repair & Renovation${orgPhone ? "<br/>☎ " + orgPhone : ""}${orgEmail ? " · ✉ " + orgEmail : ""}</div>
   </div>
   <div style="text-align:right">
     <div style="font-family:Oswald;font-size:13px;color:#2E75B6;text-transform:uppercase">Property Repair Estimate</div>
     <div style="font-size:10px;color:#666;margin-top:2px">${today}</div>
-    <div style="font-size:9px;color:#888">License #8145054 · Valid 30 Days</div>
+    <div style="font-size:9px;color:#888">${orgLicense ? "License #" + orgLicense + " · " : ""}Valid 30 Days</div>
   </div>
 </div>
 
@@ -237,7 +248,7 @@ ${breakdownHtml}
 
 <!-- FOOTER -->
 <div class="footer">
-  Creed Handyman LLC · Wichita, KS · (316) 252-6335 · Lic #8145054 · creedhandyman@gmail.com
+  ${orgName}${orgAddress ? " · " + orgAddress : ""}${orgPhone ? " · " + orgPhone : ""}${orgLicense ? " · Lic #" + orgLicense : ""}${orgEmail ? " · " + orgEmail : ""}
 </div>
 
 </div></body></html>`;

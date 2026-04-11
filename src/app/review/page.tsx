@@ -238,7 +238,7 @@ export default function ReviewPage() {
         )}
 
         <div style={{ textAlign: "center", marginTop: 16, color: "#555", fontSize: 10 }}>
-          Lic #8145054 · Wichita, KS · (316) 252-6335
+          Powered by Creed App
         </div>
       </div>
     </div>

@@ -126,8 +126,8 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 @media print{.page{padding:20px}}
 </style></head><body><div class="page">
 <div class="header">
-  <div><h1>Creed Handyman</h1><div class="llc">LLC</div>
-  <div class="info">☎ (316) 252-6335<br/>✉ creedhandyman@gmail.com<br/>License #8145054</div></div>
+  <div><h1>${org?.name || "Handyman Service"}</h1>
+  <div class="info">${org?.phone ? "☎ " + org.phone + "<br/>" : ""}${org?.email ? "✉ " + org.email + "<br/>" : ""}${org?.license_num ? "License #" + org.license_num : ""}</div></div>
   <div class="inv-label"><h2>Invoice</h2><div class="date">${today}</div></div>
 </div>
 <div class="grid">
@@ -146,10 +146,10 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 <div class="amount-due"><div class="label">Total Amount Due</div><div class="value">$${(j.total || 0).toFixed(2)}</div></div>
 <div class="terms">
   <b>Payment Terms:</b> Due upon receipt.<br/>
-  Please make checks payable to <b>Creed Handyman LLC</b>.<br/>
-  For questions about this invoice, contact (316) 252-6335 or creedhandyman@gmail.com.
+  Please make checks payable to <b>${org?.name || "Handyman Service"}</b>.<br/>
+  For questions about this invoice, contact ${org?.phone || ""} ${org?.email ? "or " + org.email : ""}.
 </div>
-<div class="footer">Creed Handyman LLC · Wichita, KS · (316) 252-6335 · Lic #8145054</div>
+<div class="footer">${org?.name || "Handyman Service"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</div>
 </div></body></html>`;
     const win = window.open("", "_blank");
     if (!win) { alert("Allow popups to generate invoice"); return; }

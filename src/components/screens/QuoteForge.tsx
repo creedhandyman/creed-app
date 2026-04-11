@@ -838,20 +838,28 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         <button
           className="bo"
           onClick={() =>
-            exportQuotePdf({
-              property: prop,
-              client,
-              rooms,
-              rate,
-              workers: workers.map((wid) => {
-                const u = profiles.find((x) => x.id === wid);
-                return { id: wid, name: u?.name || "" };
-              }),
-              grandTotal: gt,
-              totalLabor: tl,
-              totalMat: tm,
-              totalHrs: th,
-            })
+            (() => {
+              const o = useStore.getState().org;
+              exportQuotePdf({
+                property: prop,
+                client,
+                rooms,
+                rate,
+                workers: workers.map((wid) => {
+                  const u = profiles.find((x) => x.id === wid);
+                  return { id: wid, name: u?.name || "" };
+                }),
+                grandTotal: gt,
+                totalLabor: tl,
+                totalMat: tm,
+                totalHrs: th,
+                orgName: o?.name,
+                orgPhone: o?.phone,
+                orgEmail: o?.email,
+                orgLicense: o?.license_num,
+                orgAddress: o?.address,
+              });
+            })()
           }
           style={{ fontSize: 12, padding: "6px 16px" }}
         >
