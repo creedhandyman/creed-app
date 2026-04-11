@@ -118,14 +118,37 @@ CRITICAL RULES:
 
 3. CLEAR DESCRIPTIONS: Rewrite garbled PDF text in plain professional English. Start with room name. Reconstruct meaning from context if text is fragmented.
 
-4. REALISTIC HOURS (DO NOT default to 1 hour):
+4. REALISTIC HOURS — ALL HOURS ARE MAN-HOURS (DO NOT default to 1 hour):
+   Man-hours = clock hours × crew size. A 2-man crew working 4 clock hours = 8 man-hours.
+
    Quick tasks: outlet cover=0.15h, bulb=0.15h, smoke alarm battery=0.15h, install smoke alarm=0.25h, doorstop=0.15h, toilet seat=0.25h, blind install=0.25h per blind, door knob=0.5h, towel bar=0.25h, small drywall patch=0.5h, caulk=0.5h
    Medium tasks: closet pole=0.5h, vanity light=0.5-1h, doorbell=0.75-1h, screen door=1-1.5h, re-secure door=0.5-1h
-   Large tasks: touch-up paint one room=1.5-2h, full room repaint small=3-4h, full room repaint large=4-6h, pre-hung door+trim=2-3h, entry door=3-4h, LVP flooring small room=4-5h, LVP large room=5-7h, baseboard replacement=2-3h
+
+   PAINTING (these are MAN-HOURS, not clock hours — a 2-man crew doing 8 man-hrs finishes in 4 clock hrs):
+   - Touch-up paint (spot repairs, one room): 2-3 man-hrs
+   - Full room repaint SMALL (bedroom, bathroom — walls+ceiling+trim, patch+prime+2 coats): 5-7 man-hrs
+   - Full room repaint MEDIUM (kitchen, living room — walls+ceiling+trim, patch+prime+2 coats): 7-9 man-hrs
+   - Full room repaint LARGE (open concept, great room): 9-12 man-hrs
+   - Hallway/stairs repaint: 4-6 man-hrs
+   - Full unit paint (6-8 rooms, spray+roll+trim): 40-55 man-hrs total
+   - Paint prep adds 20-30% to painting hours (patching, sanding, priming, taping, masking)
+   IMPORTANT: When a report says walls need paint in EVERY room, quote each room separately with the above hours. A 3-bedroom unit with kitchen, living room, 2 baths, hallway = approximately 45-55 total man-hours of painting.
+
+   Other large tasks: pre-hung door+trim=2-3h, entry door=3-4h, LVP flooring small room=4-5h, LVP large room=5-7h, baseboard replacement=2-3h, tile removal+reinstall per 30sqft=6-8h
    Multi-item: multiply per unit (2 blinds=0.5h, 10 outlet covers=1.5h, 4 smoke alarms=1h)
 
 5. REALISTIC MATERIALS (DO NOT use flat $17 default):
-   Smoke alarm=$20-25, outlet cover=$1-3, door knob=$18-28, pre-hung door 30"=$90-115, blind 20-27"=$10-15, blind 36"=$14-18, ceiling fixture=$25-40, vanity light=$30-50, toilet seat=$18-25, shower rod=$12-18, towel bar=$12-20, paint 1gal=$28-35, primer 1gal=$18-25, caulk=$5-8, screen door=$85-120, doorbell=$18-30, LVP flooring=$1.50-3.00/sqft
+   Smoke alarm=$20-25, outlet cover=$1-3, door knob=$18-28, pre-hung door 30"=$90-115, blind 20-27"=$10-15, blind 36"=$14-18, ceiling fixture=$25-40, vanity light=$30-50, toilet seat=$18-25, shower rod=$12-18, towel bar=$12-20, caulk=$5-8, screen door=$85-120, doorbell=$18-30, LVP flooring=$1.50-3.00/sqft
+
+   PAINT MATERIALS PER ROOM (include these for every room being painted):
+   - Paint 5-gal bucket (covers ~1 room with 2 coats): $35-42
+   - Paint 1-gal (small room or touch-up): $16-20
+   - Primer sealer quart: $10
+   - Spackling compound: $9
+   - Painter's tape (per room): $6
+   - Roller kit (frame+covers): $10 per 2-3 rooms
+   - Drop cloths/plastic sheeting: $8 per 2-3 rooms
+   For a full unit paint (6-8 rooms): ~7 five-gal buckets paint ($266), 4 primer quarts ($40), spackle ($18), tape ($24), roller kits ($20), drop cloths ($16) = ~$384-420 total materials
    If labor-only (unclog drain, re-secure faucet, haul junk), materials = $0.
 
 6. TRADE CATEGORIES: Group items by trade, not room:
@@ -381,10 +404,10 @@ function norm(raw: string): string {
 
 export function estimateLabor(t: string): number {
   const s = t.toLowerCase();
-  if (/full replace|full repaint|complete repaint/.test(s)) return 6;
+  if (/full replace|full repaint|complete repaint/.test(s)) return 7;
   if (s.includes("replace") && /floor|carpet|tile/.test(s)) return 5;
   if (s.includes("water damage")) return 8;
-  if (/repaint|full paint/.test(s)) return 5;
+  if (/repaint|full paint/.test(s)) return 7;
   if (s.includes("replace door")) return 2.5;
   if (/refinish|tile wall/.test(s)) return 10;
   if (/touch.?up/.test(s)) return 1.5;
