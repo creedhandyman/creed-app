@@ -8,6 +8,7 @@ interface Props {
 
 export default function Dashboard({ setPage, openSettings }: Props) {
   const user = useStore((s) => s.user)!;
+  const clients = useStore((s) => s.clients);
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
   const timeEntries = useStore((s) => s.timeEntries);
@@ -168,6 +169,32 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         >
           Upload a PDF, paste an inspection, or build from scratch
         </p>
+      </div>
+
+      {/* Quick links */}
+      <div className="row mb">
+        <div
+          className="cd"
+          onClick={() => setPage("clients")}
+          style={{ flex: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 12 }}
+        >
+          <span style={{ fontSize: 20 }}>👥</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Clients</div>
+            <div className="dim" style={{ fontSize: 10 }}>{clients.length} contacts</div>
+          </div>
+        </div>
+        <div
+          className="cd"
+          onClick={() => setPage("jobs")}
+          style={{ flex: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 12 }}
+        >
+          <span style={{ fontSize: 20 }}>📋</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Jobs</div>
+            <div className="dim" style={{ fontSize: 10 }}>{jobs.length} total</div>
+          </div>
+        </div>
       </div>
 
       {/* Pipeline */}

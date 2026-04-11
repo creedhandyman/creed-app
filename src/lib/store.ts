@@ -4,6 +4,7 @@ import { supabase, db } from "./supabase";
 import type {
   Organization,
   Profile,
+  Client,
   Job,
   TimeEntry,
   Review,
@@ -47,6 +48,7 @@ interface AppState {
   toggleDark: () => void;
 
   // data
+  clients: Client[];
   profiles: Profile[];
   jobs: Job[];
   timeEntries: TimeEntry[];
@@ -154,6 +156,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   /* ── Data ── */
+  clients: [],
   profiles: [],
   jobs: [],
   timeEntries: [],
@@ -167,8 +170,9 @@ export const useStore = create<AppState>((set, get) => ({
   loadAll: async () => {
     const orgId = get().user?.org_id;
     const orgFilter = orgId ? { org_id: orgId } : undefined;
-    const [profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts] =
+    const [clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts] =
       await Promise.all([
+        db.get<Client>("clients", orgFilter),
         db.get<Profile>("profiles", orgFilter),
         db.get<Job>("jobs", orgFilter),
         db.get<TimeEntry>("time_entries", orgFilter),
@@ -178,7 +182,7 @@ export const useStore = create<AppState>((set, get) => ({
         db.get<PayHistory>("pay_history", orgFilter),
         db.get<Receipt>("receipts", orgFilter),
       ]);
-    set({ profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, loading: false });
+    set({ clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, loading: false });
   },
 
   /* ── Auto-refresh ── */

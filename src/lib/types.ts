@@ -22,6 +22,17 @@ export interface Profile {
   created_at?: string;
 }
 
+export interface Client {
+  id: string;
+  org_id: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  notes: string;
+  created_at?: string;
+}
+
 export interface Job {
   id: string;
   property: string;

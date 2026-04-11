@@ -10,7 +10,7 @@ import Schedule from "./screens/Schedule";
 import TimerScreen from "./screens/Timer";
 import Payroll from "./screens/Payroll";
 import Quests from "./screens/Quests";
-import ComingSoon from "./screens/ComingSoon";
+import Clients from "./screens/Clients";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -52,6 +52,8 @@ export default function AppShell() {
         return <Payroll />;
       case "quests":
         return <Quests />;
+      case "clients":
+        return <Clients setPage={goToPage} />;
       default:
         return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
     }
