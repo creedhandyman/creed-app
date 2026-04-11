@@ -1057,7 +1057,7 @@ function GuideTab({
             🛒 Shopping ($
             {allShop.reduce((s, i) => s + (i.c || 0), 0)})
           </h4>
-          <div style={{ maxHeight: 300, overflowY: "auto" }}>
+          <div>
             {allShop.map((s, i) => {
               const done = checkedShop.has(i);
               return (
