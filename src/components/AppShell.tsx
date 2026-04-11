@@ -11,6 +11,7 @@ import TimerScreen from "./screens/Timer";
 import Payroll from "./screens/Payroll";
 import Quests from "./screens/Quests";
 import Clients from "./screens/Clients";
+import Mileage from "./screens/Mileage";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -54,6 +55,8 @@ export default function AppShell() {
         return <Quests />;
       case "clients":
         return <Clients setPage={goToPage} />;
+      case "mileage":
+        return <Mileage setPage={goToPage} />;
       default:
         return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
     }

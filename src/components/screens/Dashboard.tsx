@@ -186,13 +186,13 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
         <div
           className="cd"
-          onClick={() => setPage("jobs")}
+          onClick={() => setPage("mileage")}
           style={{ flex: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 12 }}
         >
-          <span style={{ fontSize: 20 }}>📋</span>
+          <span style={{ fontSize: 20 }}>🚗</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Jobs</div>
-            <div className="dim" style={{ fontSize: 10 }}>{jobs.length} total</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Mileage</div>
+            <div className="dim" style={{ fontSize: 10 }}>Track trips</div>
           </div>
         </div>
       </div>

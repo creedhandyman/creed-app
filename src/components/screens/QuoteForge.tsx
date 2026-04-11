@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { db } from "@/lib/supabase";
+import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material } from "@/lib/types";
 import {
   readPdf,
@@ -43,6 +43,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [parseStatus, setParseStatus] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
   // Pre-load job data when editing
   useEffect(() => {
@@ -630,6 +633,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           { id: "quote", l: "📄Quote" },
           { id: "guide", l: "🔧Guide" },
           { id: "issues", l: "⚠️Issues" },
+          { id: "photos", l: "📸Photos" },
           { id: "add", l: "➕Add" },
         ].map((x) => (
           <button
@@ -699,6 +703,131 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
       {/* ISSUES TAB */}
       {tab === "issues" && <IssuesTab issues={issues} darkMode={darkMode} />}
+
+      {/* PHOTOS TAB */}
+      {tab === "photos" && (
+        <div>
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={async (e) => {
+              const files = e.target.files;
+              if (!files?.length) return;
+              setUploadingPhoto(true);
+              for (const file of Array.from(files)) {
+                try {
+                  const ext = file.name.split(".").pop() || "jpg";
+                  const path = `gallery/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+                  const { error } = await supabase.storage.from("receipts").upload(path, file);
+                  if (error) { console.error(error); continue; }
+                  const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
+                  setJobPhotos((prev) => [...prev, { url: urlData.publicUrl, label: "", type: "work" }]);
+                } catch (err) { console.error(err); }
+              }
+              setUploadingPhoto(false);
+              if (galleryRef.current) galleryRef.current.value = "";
+            }}
+          />
+
+          {/* Upload buttons */}
+          <div className="row mb">
+            <button className="bb" onClick={() => galleryRef.current?.click()} disabled={uploadingPhoto} style={{ fontSize: 11, padding: "6px 12px" }}>
+              {uploadingPhoto ? "Uploading..." : "📷 Add Photos"}
+            </button>
+            <span className="dim" style={{ fontSize: 11 }}>{jobPhotos.length} photo{jobPhotos.length !== 1 ? "s" : ""}</span>
+          </div>
+
+          {/* Type filter */}
+          {jobPhotos.length > 0 && (
+            <>
+              <div className="row mb">
+                {["before", "work", "after"].map((t) => {
+                  const count = jobPhotos.filter((p) => p.type === t).length;
+                  return (
+                    <span key={t} style={{ fontSize: 10, color: "#888" }}>
+                      {t === "before" ? "📋" : t === "after" ? "✅" : "🔨"} {t}: {count}
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* Photo grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 8 }}>
+                {jobPhotos.map((photo, i) => (
+                  <div key={i} style={{ position: "relative" }}>
+                    <img
+                      src={photo.url}
+                      alt=""
+                      style={{
+                        width: "100%",
+                        height: 100,
+                        objectFit: "cover",
+                        borderRadius: 6,
+                        border: `2px solid ${photo.type === "before" ? "var(--color-warning)" : photo.type === "after" ? "var(--color-success)" : "var(--color-primary)"}`,
+                      }}
+                    />
+                    {/* Type selector */}
+                    <select
+                      value={photo.type}
+                      onChange={(e) => {
+                        setJobPhotos((prev) => prev.map((p, j) => j === i ? { ...p, type: e.target.value as "before" | "after" | "work" } : p));
+                      }}
+                      style={{
+                        position: "absolute",
+                        bottom: 2,
+                        left: 2,
+                        fontSize: 9,
+                        padding: "1px 4px",
+                        width: "auto",
+                        background: "rgba(0,0,0,0.7)",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 3,
+                      }}
+                    >
+                      <option value="before">Before</option>
+                      <option value="work">Work</option>
+                      <option value="after">After</option>
+                    </select>
+                    {/* Delete */}
+                    <button
+                      onClick={() => setJobPhotos((prev) => prev.filter((_, j) => j !== i))}
+                      style={{
+                        position: "absolute",
+                        top: 2,
+                        right: 2,
+                        background: "rgba(0,0,0,0.7)",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "50%",
+                        width: 18,
+                        height: 18,
+                        fontSize: 10,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {!jobPhotos.length && (
+            <div className="cd" style={{ textAlign: "center", padding: 24 }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>📸</div>
+              <p className="dim" style={{ fontSize: 12 }}>Add before, during, and after photos of the work</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ADD TAB */}
       {tab === "add" && (
