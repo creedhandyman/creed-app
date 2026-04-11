@@ -128,10 +128,22 @@ export default function Settings({ onClose }: Props) {
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <div>
                   <b>{u.name}</b>{" "}
-                  <span className="dim">({u.role}) #{u.emp_num}</span>
+                  <span className="dim">#{u.emp_num}</span>
                 </div>
                 {isOwner ? (
                   <div className="row">
+                    <select
+                      defaultValue={u.role}
+                      style={{ width: "auto", fontSize: 10, padding: "2px 4px" }}
+                      onChange={async (e) => {
+                        await db.patch("profiles", u.id, { role: e.target.value });
+                        loadAll();
+                      }}
+                    >
+                      <option value="tech">Tech</option>
+                      <option value="manager">Manager</option>
+                      <option value="owner">Owner</option>
+                    </select>
                     <span>$</span>
                     <input
                       type="number"
