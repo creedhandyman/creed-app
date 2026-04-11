@@ -85,7 +85,21 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [nm, setNm] = useState("20");
 
   const fileRef = useRef<HTMLInputElement>(null);
-  const rate = user.rate || 55;
+  const org = useStore((s) => s.org);
+  const defaultRate = user.rate || 55;
+
+  // Get trade-specific rate or fall back to user rate
+  const tradeRates: Record<string, number> = (() => {
+    try { return org?.trade_rates ? JSON.parse(org.trade_rates) : {}; } catch { return {}; }
+  })();
+  const getRateForRoom = (roomName: string): number => {
+    // Check if room name matches a trade
+    for (const [trade, r] of Object.entries(tradeRates)) {
+      if (roomName.toLowerCase().includes(trade.toLowerCase())) return r;
+    }
+    return defaultRate;
+  };
+  const rate = defaultRate; // fallback for non-trade-specific uses
 
   /* ── AI parse (vision + text) with regex fallback ── */
   /* ── Inspection complete handler ── */
@@ -288,10 +302,21 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     );
 
   /* ── Calculations ── */
+  const markupPct = org?.markup_pct || 0;
+  const taxPct = org?.tax_pct || 0;
   const all = rooms.flatMap((r) =>
-    r.items.map((i) => ({ room: r.name, ...i, ...calculateCost(i, rate) }))
+    r.items.map((i) => {
+      const roomRate = getRateForRoom(r.name);
+      const cost = calculateCost(i, roomRate);
+      // Apply markup to materials
+      if (markupPct > 0) cost.mc = Math.round(cost.mc * (1 + markupPct / 100) * 100) / 100;
+      cost.tot = Math.round((cost.lc + cost.mc) * 100) / 100;
+      return { room: r.name, ...i, ...cost };
+    })
   );
-  const gt = all.reduce((s, i) => s + i.tot, 0);
+  const subtotal = all.reduce((s, i) => s + i.tot, 0);
+  const taxAmount = taxPct > 0 ? Math.round(subtotal * (taxPct / 100) * 100) / 100 : 0;
+  const gt = Math.round((subtotal + taxAmount) * 100) / 100;
   const tl = all.reduce((s, i) => s + i.lc, 0);
   const tm = all.reduce((s, i) => s + i.mc, 0);
   const th = all.reduce((s, i) => s + i.laborHrs, 0);
@@ -751,9 +776,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       <div className="g4 mb">
         {[
           { l: "Labor", v: "$" + tl.toFixed(0), c: "var(--color-primary)" },
-          { l: "Materials", v: "$" + tm.toFixed(0), c: "var(--color-warning)" },
+          { l: markupPct > 0 ? `Mat +${markupPct}%` : "Materials", v: "$" + tm.toFixed(0), c: "var(--color-warning)" },
           { l: "Hours", v: th.toFixed(1), c: "var(--color-highlight)" },
-          { l: "Days", v: (th / 8).toFixed(1), c: "var(--color-success)" },
+          ...(taxPct > 0 ? [{ l: `Tax ${taxPct}%`, v: "$" + taxAmount.toFixed(0), c: "var(--color-accent-red)" }] : []),
         ].map((x, i) => (
           <div key={i} className="cd" style={{ textAlign: "center", padding: 8 }}>
             <div className="sl">{x.l}</div>
@@ -897,7 +922,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       </div>
 
       {/* QUOTE TAB */}
-      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} />}
+      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} />}
 
       {/* GUIDE TAB */}
       {tab === "guide" && <GuideTab guide={guide} th={th} darkMode={darkMode} />}
@@ -1052,12 +1077,14 @@ function QuoteTab({
   darkMode,
   upItem,
   rmItem,
+  getRateForRoom,
 }: {
   rooms: Room[];
   rate: number;
   darkMode: boolean;
   upItem: (rn: string, id: string, field: string, value: number | Material[]) => void;
   rmItem: (rn: string, id: string) => void;
+  getRateForRoom?: (roomName: string) => number;
 }) {
   return (
     <>
@@ -1075,7 +1102,8 @@ function QuoteTab({
             {rm.name}
           </h4>
           {rm.items.map((it) => {
-            const { lc: _lc, mc: _mc, tot } = calculateCost(it, rate);
+            const roomRate = getRateForRoom ? getRateForRoom(rm.name) : rate;
+            const { lc: _lc, mc: _mc, tot } = calculateCost(it, roomRate);
             void _lc; void _mc;
             return (
               <div key={it.id} className="cd" style={{ marginBottom: 4, padding: 10 }}>
