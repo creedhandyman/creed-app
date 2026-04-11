@@ -904,22 +904,46 @@ export function makeGuide(rooms: Room[]): Guide {
   const priOrder = { HIGH: 0, MED: 1, LOW: 2 };
   steps.sort((a, b) => priOrder[a.pri] - priOrder[b.pri]);
 
-  // Consolidate shopping list — combine identical items into quantities
-  const consolidated: (Material & { room: string; qty: number })[] = [];
+  // Smart consolidation — group similar materials by category
+  const grouped: Record<string, { name: string; totalCost: number; qty: number; rooms: Set<string> }> = {};
+
+  // Normalize material names for grouping
+  const getGroupKey = (name: string): string => {
+    const n = name.toLowerCase();
+    if (/paint.*primer|primer.*paint|paint.*gal|interior paint/.test(n)) return "Interior Paint (gal)";
+    if (/paint.*qt|paint \(qt\)/.test(n)) return "Paint (qt)";
+    if (/roller|brush|tape.*paint|drop cloth|paint tray|paint.*suppl/.test(n)) return "Paint Supplies";
+    if (/spackle|mesh|joint compound|mud/.test(n)) return "Patching Supplies";
+    if (/lvp|laminate|vinyl plank|flooring/.test(n)) return "LVP Flooring (sq ft)";
+    if (/underlayment/.test(n)) return "Underlayment";
+    if (/transition/.test(n)) return "Transition Strips";
+    if (/grout/.test(n)) return "Grout";
+    if (/tile.*mortar|mortar|adhesive.*tile|tile.*adhesive/.test(n)) return "Tile Mortar/Adhesive";
+    if (/floor tile|wall tile|ceramic.*tile/.test(n)) return "Tile (sq ft)";
+    if (/caulk|silicone/.test(n)) return "Caulk/Sealant";
+    if (/smoke alarm|smoke detector/.test(n)) return "Smoke Alarms";
+    if (/outlet.*plate|cover plate/.test(n)) return "Outlet/Switch Plates";
+    if (/blind/.test(n)) return "Window Blinds";
+    if (/bulb/.test(n)) return "LED Bulbs";
+    if (/9v|battery/.test(n)) return "Batteries";
+    return name; // keep as-is if no group match
+  };
+
   shop.forEach((item) => {
-    const existing = consolidated.find((c) => c.n === item.n && c.c === item.c);
-    if (existing) {
-      existing.qty += 1;
-      existing.room += existing.room.includes(item.room) ? "" : `, ${item.room}`;
+    const key = getGroupKey(item.n);
+    if (grouped[key]) {
+      grouped[key].qty += 1;
+      grouped[key].totalCost += item.c;
+      grouped[key].rooms.add(item.room);
     } else {
-      consolidated.push({ ...item, qty: 1 });
+      grouped[key] = { name: key, totalCost: item.c, qty: 1, rooms: new Set([item.room]) };
     }
   });
-  // Convert back to shop format with qty in the name
-  const consolidatedShop = consolidated.map((item) => ({
-    n: item.qty > 1 ? `${item.n} (×${item.qty})` : item.n,
-    c: item.c * item.qty,
-    room: item.room,
+
+  const consolidatedShop = Object.values(grouped).map((g) => ({
+    n: g.qty > 1 ? `${g.name} (×${g.qty})` : g.name,
+    c: g.totalCost,
+    room: [...g.rooms].join(", "),
   }));
 
   return { tools: [...tools].sort(), shop: consolidatedShop, steps };
