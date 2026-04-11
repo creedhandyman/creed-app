@@ -145,6 +145,8 @@ button {
 
 /* ── main content ── */
 .mc { margin-right: 52px; padding: 14px 10px; max-width: 900px; min-height: 100vh; }
+.nav-left .vnav { right: auto; left: 0; border-left: none; border-right: 1px solid var(--color-border-dark); }
+.nav-left .mc { margin-right: 0; margin-left: 52px; }
 
 /* ── print ── */
 @media print {

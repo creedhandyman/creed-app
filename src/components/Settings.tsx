@@ -16,6 +16,8 @@ export default function Settings({ onClose }: Props) {
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
   const toggleDark = useStore((s) => s.toggleDark);
+  const navLeft = useStore((s) => s.navLeft);
+  const toggleNavSide = useStore((s) => s.toggleNavSide);
 
   const [tab, setTab] = useState("account");
   const [newPassword, setNewPassword] = useState("");
@@ -262,6 +264,33 @@ export default function Settings({ onClose }: Props) {
                   position: "absolute",
                   top: 3,
                   left: darkMode ? 23 : 3,
+                  transition: "0.3s",
+                }}
+              />
+            </div>
+          </div>
+          <div className="sep row" style={{ justifyContent: "space-between" }}>
+            <span>Nav Bar: {navLeft ? "Left" : "Right"}</span>
+            <div
+              onClick={toggleNavSide}
+              style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                background: navLeft ? "var(--color-primary)" : "#ccc",
+                position: "relative",
+                cursor: "pointer",
+              }}
+            >
+              <div
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  background: "#fff",
+                  position: "absolute",
+                  top: 3,
+                  left: navLeft ? 23 : 3,
                   transition: "0.3s",
                 }}
               />

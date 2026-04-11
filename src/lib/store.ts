@@ -43,9 +43,11 @@ interface AppState {
   org: Organization | null;
   setOrg: (o: Organization | null) => void;
 
-  // dark mode
+  // ui preferences
   darkMode: boolean;
+  navLeft: boolean;
   toggleDark: () => void;
+  toggleNavSide: () => void;
 
   // data
   clients: Client[];
@@ -146,13 +148,20 @@ export const useStore = create<AppState>((set, get) => ({
     sv("org", o);
   },
 
-  /* ── Dark mode ── */
+  /* ── UI Preferences ── */
   darkMode: ld("dk", true),
+  navLeft: ld("navl", false),
 
   toggleDark: () => {
     const next = !get().darkMode;
     set({ darkMode: next });
     sv("dk", next);
+  },
+
+  toggleNavSide: () => {
+    const next = !get().navLeft;
+    set({ navLeft: next });
+    sv("navl", next);
   },
 
   /* ── Data ── */
