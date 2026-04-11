@@ -83,9 +83,77 @@ export default function Jobs({ setPage, onEditJob }: Props) {
   };
 
   const statusColor = (s: string) => {
-    if (s === "complete") return "var(--color-success)";
-    if (s === "active") return "var(--color-primary)";
+    if (s === "paid") return "var(--color-success)";
+    if (s === "invoiced" || s === "complete") return "#00cc66";
+    if (s === "active" || s === "scheduled") return "var(--color-primary)";
+    if (s === "accepted") return "var(--color-highlight)";
     return "var(--color-warning)";
+  };
+
+  const generateInvoice = (j: typeof jobs[0]) => {
+    const today = new Date().toLocaleDateString("en-US", {
+      year: "numeric", month: "long", day: "numeric",
+    });
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice — ${j.property}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;font-size:12px}
+.page{max-width:700px;margin:0 auto;padding:40px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #2E75B6}
+h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase;letter-spacing:.05em}
+.llc{font-family:Oswald;font-size:10px;color:#C00000;letter-spacing:.15em}
+.info{font-size:10px;color:#666;margin-top:4px;line-height:1.6}
+.inv-label{text-align:right}
+.inv-label h2{font-family:Oswald;font-size:20px;color:#2E75B6;text-transform:uppercase}
+.inv-label .date{font-size:11px;color:#666;margin-top:2px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.box{background:#f5f7fa;border-radius:6px;padding:10px 14px}
+.box .label{font-family:Oswald;font-size:9px;text-transform:uppercase;color:#888;letter-spacing:.08em}
+.box .value{font-size:13px;font-weight:600;margin-top:2px}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+th{font-family:Oswald;text-transform:uppercase;font-size:9px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:6px 10px;text-align:left}
+td{padding:5px 10px;border-bottom:1px solid #eee}
+.total-row{font-weight:700;background:#f0f4f8;border-top:2px solid #2E75B6}
+.total-row td{font-family:Oswald;font-size:14px}
+.amount-due{text-align:center;margin:24px 0;padding:20px;background:#f0f4f8;border-radius:8px}
+.amount-due .label{font-family:Oswald;font-size:11px;color:#888;text-transform:uppercase}
+.amount-due .value{font-family:Oswald;font-size:32px;color:#2E75B6;font-weight:700}
+.terms{font-size:10px;color:#666;line-height:1.6;margin-bottom:20px}
+.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:9px;color:#888}
+@media print{.page{padding:20px}}
+</style></head><body><div class="page">
+<div class="header">
+  <div><h1>Creed Handyman</h1><div class="llc">LLC</div>
+  <div class="info">☎ (316) 252-6335<br/>✉ creedhandyman@gmail.com<br/>License #8145054</div></div>
+  <div class="inv-label"><h2>Invoice</h2><div class="date">${today}</div></div>
+</div>
+<div class="grid">
+  <div class="box"><div class="label">Bill To</div><div class="value">${j.client || "Client"}</div></div>
+  <div class="box"><div class="label">Property</div><div class="value">${j.property}</div></div>
+  <div class="box"><div class="label">Job Date</div><div class="value">${j.job_date || "—"}</div></div>
+  <div class="box"><div class="label">Status</div><div class="value">Due Upon Receipt</div></div>
+</div>
+<table>
+  <thead><tr><th>Description</th><th style="text-align:right">Hours</th><th style="text-align:right">Labor</th><th style="text-align:right">Materials</th><th style="text-align:right">Total</th></tr></thead>
+  <tbody>
+    <tr><td>Property repairs at ${j.property}</td><td style="text-align:right">${(j.total_hrs || 0).toFixed(1)}</td><td style="text-align:right">$${(j.total_labor || 0).toFixed(2)}</td><td style="text-align:right">$${(j.total_mat || 0).toFixed(2)}</td><td style="text-align:right">$${(j.total || 0).toFixed(2)}</td></tr>
+    <tr class="total-row"><td colspan="4">Amount Due</td><td style="text-align:right">$${(j.total || 0).toFixed(2)}</td></tr>
+  </tbody>
+</table>
+<div class="amount-due"><div class="label">Total Amount Due</div><div class="value">$${(j.total || 0).toFixed(2)}</div></div>
+<div class="terms">
+  <b>Payment Terms:</b> Due upon receipt.<br/>
+  Please make checks payable to <b>Creed Handyman LLC</b>.<br/>
+  For questions about this invoice, contact (316) 252-6335 or creedhandyman@gmail.com.
+</div>
+<div class="footer">Creed Handyman LLC · Wichita, KS · (316) 252-6335 · Lic #8145054</div>
+</div></body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) { alert("Allow popups to generate invoice"); return; }
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 600);
   };
 
   return (
@@ -126,6 +194,17 @@ export default function Jobs({ setPage, onEditJob }: Props) {
                     {j.client} · {j.job_date}
                     {w.length > 0 && " · 👷 " + w.map((x) => x.name).join(", ")}
                   </div>
+                  {j.property && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.property)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ fontSize: 10, color: "var(--color-primary)", textDecoration: "none" }}
+                    >
+                      📍 View on Map
+                    </a>
+                  )}
                 </div>
                 <div className="row">
                   <div
@@ -152,8 +231,12 @@ export default function Jobs({ setPage, onEditJob }: Props) {
                     }}
                   >
                     <option value="quoted">Quoted</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="scheduled">Scheduled</option>
                     <option value="active">Active</option>
                     <option value="complete">Complete</option>
+                    <option value="invoiced">Invoiced</option>
+                    <option value="paid">Paid</option>
                   </select>
                 </div>
               </div>
@@ -201,6 +284,37 @@ export default function Jobs({ setPage, onEditJob }: Props) {
                       Delete
                     </button>
                   </div>
+
+                  {/* Invoice */}
+                  {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (
+                    <div className="row" style={{ marginTop: 8 }}>
+                      <button
+                        className="bb"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          generateInvoice(j);
+                          if (j.status === "complete") {
+                            setStatus(j.id, "invoiced");
+                          }
+                        }}
+                        style={{ fontSize: 10, padding: "5px 12px" }}
+                      >
+                        🧾 {j.status === "complete" ? "Generate Invoice" : "View Invoice"}
+                      </button>
+                      {j.status === "invoiced" && (
+                        <button
+                          className="bg"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setStatus(j.id, "paid");
+                          }}
+                          style={{ fontSize: 10, padding: "5px 12px" }}
+                        >
+                          ✅ Mark Paid
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Trade + Callback */}
                   <div className="row" style={{ marginTop: 8 }}>

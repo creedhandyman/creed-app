@@ -20,7 +20,7 @@ export interface Job {
   total_labor: number;
   total_mat: number;
   total_hrs: number;
-  status: "quoted" | "active" | "complete";
+  status: "quoted" | "accepted" | "scheduled" | "active" | "complete" | "invoiced" | "paid";
   created_by: string;
   created_at: string;
   trade: string;

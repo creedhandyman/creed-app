@@ -15,6 +15,7 @@ const MONTH_NAMES = [
 
 export default function Schedule({ setPage }: Props) {
   const jobs = useStore((s) => s.jobs);
+  const profiles = useStore((s) => s.profiles);
   const schedule = useStore((s) => s.schedule);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
@@ -22,6 +23,7 @@ export default function Schedule({ setPage }: Props) {
   const [sd, setSd] = useState("");
   const [sj, setSj] = useState("");
   const [sn, setSn] = useState("");
+  const [sTech, setSTech] = useState("");
   const [view, setView] = useState<"week" | "month">("week");
 
   const addSchedule = async () => {
@@ -29,7 +31,8 @@ export default function Schedule({ setPage }: Props) {
     if (!sj) { alert("Select a job"); return; }
     const today = new Date().toISOString().split("T")[0];
     if (sd < today && !confirm(`${sd} is in the past. Schedule anyway?`)) return;
-    await db.post("schedule", { sched_date: sd, job: sj, note: sn });
+    const noteWithTech = sTech ? (sn ? `${sn} · 👷 ${sTech}` : `👷 ${sTech}`) : sn;
+    await db.post("schedule", { sched_date: sd, job: sj, note: noteWithTech });
     setSd("");
     setSj("");
     setSn("");
@@ -168,12 +171,24 @@ export default function Schedule({ setPage }: Props) {
             Add
           </button>
         </div>
-        <input
-          value={sn}
-          onChange={(e) => setSn(e.target.value)}
-          placeholder="Notes (optional)"
-          style={{ marginTop: 6 }}
-        />
+        <div className="row" style={{ marginTop: 6 }}>
+          <select
+            value={sTech}
+            onChange={(e) => setSTech(e.target.value)}
+            style={{ width: 140 }}
+          >
+            <option value="">Assign tech</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.name}>{p.name}</option>
+            ))}
+          </select>
+          <input
+            value={sn}
+            onChange={(e) => setSn(e.target.value)}
+            placeholder="Notes (optional)"
+            style={{ flex: 1 }}
+          />
+        </div>
       </div>
 
       {/* View Toggle */}

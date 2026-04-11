@@ -11,10 +11,10 @@ export default function Dashboard({ setPage, openSettings }: Props) {
   const jobs = useStore((s) => s.jobs);
   const darkMode = useStore((s) => s.darkMode);
 
-  const active = jobs.filter((j) => j.status === "active").length;
-  const quoted = jobs.filter((j) => j.status === "quoted").length;
+  const active = jobs.filter((j) => j.status === "active" || j.status === "scheduled").length;
+  const quoted = jobs.filter((j) => j.status === "quoted" || j.status === "accepted").length;
   const toCollect = jobs
-    .filter((j) => j.status !== "complete")
+    .filter((j) => j.status === "complete" || j.status === "invoiced")
     .reduce((s, j) => s + (j.total || 0), 0);
 
   // Earned this week (Sunday start)
@@ -23,7 +23,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
   ws.setDate(now.getDate() - now.getDay());
   ws.setHours(0, 0, 0, 0);
   const weekJobs = jobs.filter((j) => {
-    if (j.status !== "complete") return false;
+    if (j.status !== "complete" && j.status !== "invoiced" && j.status !== "paid") return false;
     try {
       return new Date(j.job_date || j.created_at) >= ws;
     } catch {
