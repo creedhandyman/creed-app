@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 
@@ -26,18 +26,43 @@ export default function Payroll() {
     byJob[e.job || "General"] = (byJob[e.job || "General"] || 0) + (e.hours || 0);
   });
 
+  const [processing, setProcessing] = useState(false);
+  const processGuard = useRef(false);
+
   const processPay = async () => {
     if (!entries.length) return;
-    await db.post("pay_history", {
-      user_id: sel,
-      name: selUser.name,
-      pay_date: new Date().toLocaleDateString(),
-      hours: totalHrs,
-      amount: totalPay,
-      entries: entries.length,
-    });
-    generatePayStub();
-    loadAll();
+
+    // Confirmation step
+    const confirmed = confirm(
+      `Process payment for ${selUser.name}?\n\n` +
+      `Hours: ${totalHrs.toFixed(1)}\n` +
+      `Rate: $${selUser.rate || 55}/hr\n` +
+      `Total: $${totalPay.toFixed(2)}\n\n` +
+      `This will generate a pay stub.`
+    );
+    if (!confirmed) return;
+
+    // Double-submit guard
+    if (processGuard.current) return;
+    processGuard.current = true;
+    setProcessing(true);
+
+    try {
+      await db.post("pay_history", {
+        user_id: sel,
+        name: selUser.name,
+        pay_date: new Date().toLocaleDateString(),
+        hours: totalHrs,
+        amount: totalPay,
+        entries: entries.length,
+      });
+      generatePayStub();
+      await loadAll();
+    } finally {
+      setProcessing(false);
+      // Allow another submission after 3 seconds
+      setTimeout(() => { processGuard.current = false; }, 3000);
+    }
   };
 
   const generatePayStub = () => {
@@ -159,9 +184,14 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
             <button
               className="bg"
               onClick={processPay}
-              style={{ fontSize: 10, padding: "5px 12px" }}
+              disabled={processing || !entries.length}
+              style={{
+                fontSize: 10,
+                padding: "5px 12px",
+                opacity: processing || !entries.length ? 0.5 : 1,
+              }}
             >
-              Process Pay
+              {processing ? "Processing..." : "Process Pay"}
             </button>
           )}
         </div>
