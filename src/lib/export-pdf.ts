@@ -44,26 +44,54 @@ export function exportQuotePdf(opts: ExportOptions) {
     return { name: rm.name, hrs, labor, mat, total: labor + mat };
   });
 
-  // Build work schedule
+  // Build work schedule — fit all work into estDays
   const schedDays: string[] = [];
-  let dayNum = 1;
-  const stepsByPri = { HIGH: [] as string[], MED: [] as string[], LOW: [] as string[] };
-  guide.steps.forEach((s) => stepsByPri[s.pri].push(`${s.room} — ${s.detail}`));
+  const hrsPerDay = crewSize * 8;
 
-  if (stepsByPri.HIGH.length) {
-    schedDays.push(`<tr><td>Day ${dayNum}</td><td>${crewSize}</td><td>Safety & critical items: ${stepsByPri.HIGH.slice(0, 5).join(" · ")}</td><td>Safety operational day one</td></tr>`);
-    dayNum++;
-  }
-  // Group remaining by category
-  rooms.forEach((rm) => {
-    if (rm.items.length === 0) return;
-    const hrs = rm.items.reduce((s, it) => s + it.laborHrs, 0);
-    const daysNeeded = Math.ceil(hrs / (crewSize * 8));
-    const dayLabel = daysNeeded > 1 ? `Day ${dayNum}–${dayNum + daysNeeded - 1}` : `Day ${dayNum}`;
-    const itemList = rm.items.slice(0, 6).map((it) => it.detail).join(" · ");
-    schedDays.push(`<tr><td>${dayLabel}</td><td>${crewSize}</td><td>${rm.name}: ${itemList}</td><td></td></tr>`);
-    dayNum += daysNeeded;
+  // Sort categories by priority: safety/electrical first, painting mid, flooring last
+  const catOrder: Record<string, number> = {
+    "Safety": 0, "Safety & Electrical": 0, "Electrical": 1,
+    "Carpentry": 2, "Doors": 2, "Plumbing": 3,
+    "Painting": 4, "Painting & Wall Repairs": 4,
+    "Flooring": 6, "Exterior": 5, "Cleaning/Hauling": 7,
+  };
+  const sortedRooms = [...rooms].filter((r) => r.items.length > 0).sort((a, b) =>
+    (catOrder[a.name] ?? 3) - (catOrder[b.name] ?? 3)
+  );
+
+  let currentDay = 1;
+  let hrsLeft = hrsPerDay;
+
+  sortedRooms.forEach((rm) => {
+    const rmHrs = rm.items.reduce((s, it) => s + it.laborHrs, 0);
+    const itemList = rm.items.slice(0, 5).map((it) => it.detail).join(" · ");
+
+    if (rmHrs <= hrsLeft) {
+      // Fits in current day
+      const existing = schedDays[schedDays.length - 1];
+      if (existing && existing.includes(`Day ${currentDay}<`)) {
+        // Append to existing day row
+        schedDays[schedDays.length - 1] = existing.replace("</td><td></td></tr>", ` · <b>${rm.name}:</b> ${itemList}</td><td></td></tr>`);
+      } else {
+        schedDays.push(`<tr><td>Day ${currentDay}</td><td>${crewSize}</td><td><b>${rm.name}:</b> ${itemList}</td><td></td></tr>`);
+      }
+      hrsLeft -= rmHrs;
+    } else {
+      // Needs its own day(s)
+      if (hrsLeft < hrsPerDay) { currentDay++; hrsLeft = hrsPerDay; }
+      const daysNeeded = Math.max(1, Math.ceil(rmHrs / hrsPerDay));
+      const dayLabel = daysNeeded > 1 ? `Day ${currentDay}–${currentDay + daysNeeded - 1}` : `Day ${currentDay}`;
+      schedDays.push(`<tr><td>${dayLabel}</td><td>${crewSize}</td><td><b>${rm.name}:</b> ${itemList}</td><td></td></tr>`);
+      currentDay += daysNeeded;
+      hrsLeft = (daysNeeded * hrsPerDay) - rmHrs;
+    }
   });
+
+  // Add final day for punch list
+  if (currentDay <= estDays) {
+    schedDays.push(`<tr><td>Day ${estDays}</td><td>${Math.max(1, crewSize - 1)}</td><td><b>Punch list</b> · Final touch-ups · Clean · Walk-through</td><td></td></tr>`);
+  }
+
   if (schedDays.length === 0) {
     schedDays.push(`<tr><td>Day 1–${estDays}</td><td>${crewSize}</td><td>All work items</td><td></td></tr>`);
   }
