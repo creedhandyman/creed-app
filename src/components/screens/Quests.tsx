@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { QRCodeSVG } from "qrcode.react";
 
 interface Quest {
   name: string;
@@ -408,6 +409,32 @@ export default function Quests() {
       {/* REVIEWS TAB */}
       {tab === "reviews" && (
         <div>
+          {/* QR Code for client reviews */}
+          <div className="cd mb" style={{ textAlign: "center", padding: 16 }}>
+            <h4 style={{ fontSize: 13, marginBottom: 8 }}>📱 Client Review QR Code</h4>
+            <div style={{ background: "#fff", display: "inline-block", padding: 12, borderRadius: 8, marginBottom: 8 }}>
+              <QRCodeSVG
+                value={typeof window !== "undefined" ? `${window.location.origin}/review` : "/review"}
+                size={140}
+                level="M"
+              />
+            </div>
+            <p className="dim" style={{ fontSize: 11 }}>
+              Scan to leave a review — share with clients after a job
+            </p>
+            <button
+              className="bo"
+              onClick={() => {
+                const url = `${window.location.origin}/review`;
+                navigator.clipboard.writeText(url);
+                alert("Review link copied!");
+              }}
+              style={{ fontSize: 10, padding: "4px 12px", marginTop: 4 }}
+            >
+              📋 Copy Link
+            </button>
+          </div>
+
           <div className="cd mb">
             <h4 style={{ fontSize: 13, marginBottom: 8 }}>Add Review</h4>
             <div className="row mb">
