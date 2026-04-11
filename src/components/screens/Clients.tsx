@@ -26,16 +26,17 @@ export default function Clients({ setPage }: Props) {
 
   const addClient = async () => {
     if (!name.trim()) { alert("Enter client name"); return; }
-    await db.post("clients", {
+    const result = await db.post("clients", {
       name: name.trim(),
       phone,
       email,
       address,
       notes,
     });
+    if (!result) { alert("Failed to save client"); return; }
     setName(""); setPhone(""); setEmail(""); setAddress(""); setNotes("");
     setShowAdd(false);
-    loadAll();
+    await loadAll();
   };
 
   const deleteClient = async (id: string) => {

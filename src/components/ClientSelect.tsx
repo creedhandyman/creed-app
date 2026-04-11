@@ -18,18 +18,23 @@ export default function ClientSelect({ value, onChange, style }: Props) {
 
   const createClient = async () => {
     if (!newName.trim()) return;
-    await db.post("clients", {
+    const result = await db.post("clients", {
       name: newName.trim(),
       phone: newPhone,
       email: "",
       address: "",
       notes: "",
     });
-    onChange(newName.trim());
+    if (!result) {
+      alert("Failed to save client");
+      return;
+    }
+    const savedName = newName.trim();
     setNewName("");
     setNewPhone("");
     setShowNew(false);
-    loadAll();
+    await loadAll();
+    onChange(savedName);
   };
 
   return (
