@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
-function getStripe() { return new Stripe(process.env.STRIPE_SECRET_KEY!); }
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const accountId = req.nextUrl.searchParams.get("account_id");
@@ -18,11 +12,17 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Verify the account is set up
-    const account = await getStripe().accounts.retrieve(accountId);
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const account = await stripe.accounts.retrieve(accountId);
 
     if (account.charges_enabled) {
-      // Account is ready — save to org
       await supabase
         .from("organizations")
         .update({ stripe_account_id: accountId, stripe_connected: true })
@@ -30,7 +30,6 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.redirect(new URL("/?stripe=success", req.url));
     } else {
-      // Account setup incomplete — save ID but mark not connected
       await supabase
         .from("organizations")
         .update({ stripe_account_id: accountId, stripe_connected: false })

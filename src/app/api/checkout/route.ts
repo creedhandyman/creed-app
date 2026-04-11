@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 
-function getStripe() {
-  return new Stripe(process.env.STRIPE_SECRET_KEY!);
-}
+export const dynamic = "force-dynamic";
 
 const PLATFORM_FEE_PERCENT = 2; // 2% platform fee
 
@@ -19,7 +16,8 @@ export async function POST(req: NextRequest) {
     const amountCents = Math.round(amount * 100);
 
     // Build checkout session options
-    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sessionParams: any = {
       payment_method_types: ["card"],
       line_items: [
         {
@@ -55,7 +53,9 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const session = await getStripe().checkout.sessions.create(sessionParams);
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ url: session.url });
   } catch (error: unknown) {
