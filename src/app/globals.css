@@ -117,6 +117,31 @@ button {
 }
 .fi { animation: fi 0.25s ease forwards; }
 
+/* ── construction tape divider ── */
+.caution-tape {
+  width: 36px;
+  height: 6px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #ffcc00,
+    #ffcc00 4px,
+    #1a1a1a 4px,
+    #1a1a1a 8px
+  );
+  margin: 2px 0;
+  opacity: 0.6;
+}
+.light .caution-tape {
+  background: repeating-linear-gradient(
+    -45deg,
+    #ffcc00,
+    #ffcc00 4px,
+    #333 4px,
+    #333 8px
+  );
+}
+
 /* ── nav ── */
 .vnav {
   position: fixed; right: 0; top: 0; bottom: 0; width: 52px;

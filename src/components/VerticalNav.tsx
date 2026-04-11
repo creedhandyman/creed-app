@@ -8,11 +8,13 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-const NAV_ITEMS: (NavItem | "logo")[] = [
+const NAV_ITEMS: (NavItem | "logo" | "tape")[] = [
   { id: "quests", icon: "🎯", label: "Quest" },
   { id: "payroll", icon: "💰", label: "Pay", adminOnly: true },
   { id: "time", icon: "⏱", label: "Time" },
+  "tape",
   "logo",
+  "tape",
   { id: "sched", icon: "📅", label: "Sched" },
   { id: "jobs", icon: "📋", label: "Jobs" },
   { id: "qf", icon: "⚡", label: "Quote" },
@@ -30,6 +32,9 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
   return (
     <div className="vnav">
       {NAV_ITEMS.map((item, i) => {
+        if (item === "tape") {
+          return <div key={`tape-${i}`} className="caution-tape" />;
+        }
         if (item === "logo") {
           return (
             <img
