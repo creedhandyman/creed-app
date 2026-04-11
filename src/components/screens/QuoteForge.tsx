@@ -19,6 +19,67 @@ import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
 import ClientSelect from "../ClientSelect";
 
+function AiLoadingDisplay({ status }: { status: string }) {
+  const steps = [
+    { label: "Reading document", icon: "📄", match: /reading|rendering|upload/i },
+    { label: "Analyzing content", icon: "🔍", match: /analyzing|sending|text/i },
+    { label: "Identifying repairs", icon: "🔧", match: /identify|photo|vision/i },
+    { label: "Estimating costs", icon: "💰", match: /estimat|pric|cost/i },
+    { label: "Building quote", icon: "📋", match: /build|generat|compil/i },
+  ];
+  const activeIdx = steps.findIndex((s) => s.match.test(status));
+  const currentStep = activeIdx >= 0 ? activeIdx : status ? 1 : 0;
+
+  return (
+    <div style={{ padding: 20, textAlign: "center" }}>
+      <div style={{ fontSize: 40, marginBottom: 12, animation: "pulse 1.5s ease-in-out infinite" }}>🤖</div>
+      <style>{`@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } } @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
+      <div style={{ fontSize: 14, fontFamily: "Oswald", color: "var(--color-primary)", marginBottom: 16 }}>
+        AI is building your quote
+      </div>
+
+      {/* Progress steps */}
+      <div style={{ maxWidth: 260, margin: "0 auto", textAlign: "left" }}>
+        {steps.map((step, i) => {
+          const isDone = i < currentStep;
+          const isActive = i === currentStep;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, opacity: i > currentStep + 1 ? 0.3 : 1, transition: "opacity 0.3s" }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
+                background: isDone ? "var(--color-success)" : isActive ? "var(--color-primary)" : "transparent",
+                border: `2px solid ${isDone ? "var(--color-success)" : isActive ? "var(--color-primary)" : "#333"}`,
+                color: isDone || isActive ? "#fff" : "#555",
+              }}>
+                {isDone ? "✓" : step.icon}
+              </div>
+              <span style={{ fontSize: 12, color: isDone ? "var(--color-success)" : isActive ? "#fff" : "#555", fontWeight: isActive ? 600 : 400 }}>
+                {step.label}{isActive ? "..." : ""}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ marginTop: 16, height: 4, background: "#1e1e2e", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{
+          height: 4, borderRadius: 2,
+          background: "linear-gradient(90deg, var(--color-primary), var(--color-success), var(--color-primary))",
+          backgroundSize: "200% 100%",
+          animation: "shimmer 2s linear infinite",
+          width: `${Math.max(10, ((currentStep + 1) / steps.length) * 100)}%`,
+          transition: "width 0.5s",
+        }} />
+      </div>
+
+      <div className="dim" style={{ fontSize: 10, marginTop: 8 }}>
+        {status || "This usually takes 15-30 seconds"}
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   setPage: (p: string) => void;
   editJobId?: string | null;
@@ -385,18 +446,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           ⚡ QuoteForge Pro
         </h2>
         {parsing && (
-          <div className="cd mb" style={{ textAlign: "center", padding: 20 }}>
-            <h4 style={{ color: "var(--color-primary)" }}>
-              {parseStatus || "Processing..."}
-            </h4>
-            <div style={{ marginTop: 8 }}>
-              <div style={{
-                width: 40, height: 40, border: "3px solid #1e1e2e",
-                borderTopColor: "var(--color-primary)", borderRadius: "50%",
-                animation: "spin 0.8s linear infinite", margin: "0 auto",
-              }} />
-              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-            </div>
+          <div className="cd mb">
+            <AiLoadingDisplay status={parseStatus} />
           </div>
         )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -598,15 +649,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
         {/* Generate */}
         {parsing ? (
-          <div style={{ textAlign: "center", padding: 20 }}>
-            <div style={{
-              width: 36, height: 36, border: "3px solid #1e1e2e",
-              borderTopColor: "var(--color-primary)", borderRadius: "50%",
-              animation: "spin 0.8s linear infinite", margin: "0 auto 8px",
-            }} />
-            <div style={{ fontSize: 12, color: "var(--color-primary)" }}>
-              {parseStatus || "Generating quote..."}
-            </div>
+          <div className="cd">
+            <AiLoadingDisplay status={parseStatus} />
           </div>
         ) : (
           <button
@@ -667,16 +711,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             <ClientSelect value={client} onChange={setClient} />
           </div>
           {parsing ? (
-            <div style={{ textAlign: "center", padding: 16 }}>
-              <div style={{
-                width: 32, height: 32, border: "3px solid #1e1e2e",
-                borderTopColor: "var(--color-primary)", borderRadius: "50%",
-                animation: "spin 0.8s linear infinite", margin: "0 auto 8px",
-              }} />
-              <div style={{ fontSize: 12, color: "var(--color-primary)" }}>
-                {parseStatus || "Processing..."}
-              </div>
-            </div>
+            <AiLoadingDisplay status={parseStatus} />
           ) : (
             <div className="row mt">
               <button className="bb" onClick={doParse}>🤖 AI Parse →</button>
