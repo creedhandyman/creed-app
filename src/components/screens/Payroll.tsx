@@ -56,6 +56,10 @@ export default function Payroll() {
         amount: totalPay,
         entries: entries.length,
       });
+      // Clear time entries for this employee
+      for (const entry of entries) {
+        await db.del("time_entries", entry.id);
+      }
       generatePayStub();
       await loadAll();
     } finally {
