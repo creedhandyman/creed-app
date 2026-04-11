@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+function getStripe() { return new Stripe(process.env.STRIPE_SECRET_KEY!); }
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // Verify the account is set up
-    const account = await stripe.accounts.retrieve(accountId);
+    const account = await getStripe().accounts.retrieve(accountId);
 
     if (account.charges_enabled) {
       // Account is ready — save to org

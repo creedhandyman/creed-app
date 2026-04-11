@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!);
+}
 
 const PLATFORM_FEE_PERCENT = 2; // 2% platform fee
 
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    const session = await getStripe().checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ url: session.url });
   } catch (error: unknown) {

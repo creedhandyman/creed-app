@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+function getStripe() { return new Stripe(process.env.STRIPE_SECRET_KEY!); }
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create a Standard connected account
+    const stripe = getStripe();
     const account = await stripe.accounts.create({
       type: "standard",
       email: email || undefined,

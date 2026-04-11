@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+function getStripe() { return new Stripe(process.env.STRIPE_SECRET_KEY!); }
 
 // User needs to re-do onboarding (link expired)
 export async function GET(req: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const origin = req.headers.get("origin") || new URL(req.url).origin;
-    const accountLink = await stripe.accountLinks.create({
+    const accountLink = await getStripe().accountLinks.create({
       account: accountId,
       refresh_url: `${origin}/api/stripe/refresh?account_id=${accountId}&org_id=${orgId}`,
       return_url: `${origin}/api/stripe/callback?account_id=${accountId}&org_id=${orgId}`,
