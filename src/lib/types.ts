@@ -14,7 +14,7 @@ export interface Profile {
   id: string;
   email: string;
   name: string;
-  role: "owner" | "manager" | "tech";
+  role: "owner" | "manager" | "tech" | "apprentice";
   rate: number;
   start_date: string;
   emp_num: string;

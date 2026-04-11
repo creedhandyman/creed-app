@@ -140,6 +140,7 @@ export default function Settings({ onClose }: Props) {
                         loadAll();
                       }}
                     >
+                      <option value="apprentice">Apprentice</option>
                       <option value="tech">Tech</option>
                       <option value="manager">Manager</option>
                       <option value="owner">Owner</option>
