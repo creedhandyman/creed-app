@@ -73,6 +73,7 @@ export interface PayHistory {
   amount: number;
   entries: number;
   created_at?: string;
+  details?: string;
 }
 
 export interface Receipt {

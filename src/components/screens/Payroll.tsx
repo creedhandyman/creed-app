@@ -27,6 +27,7 @@ export default function Payroll() {
   });
 
   const [processing, setProcessing] = useState(false);
+  const [openPay, setOpenPay] = useState<string | number | null>(null);
   const processGuard = useRef(false);
 
   const processPay = async () => {
@@ -55,6 +56,13 @@ export default function Payroll() {
         hours: totalHrs,
         amount: totalPay,
         entries: entries.length,
+        details: JSON.stringify(
+          Object.entries(byJob).map(([job, hrs]) => ({
+            job,
+            hrs,
+            amount: parseFloat((hrs * (selUser.rate || 55)).toFixed(2)),
+          }))
+        ),
       });
       // Clear time entries for this employee
       for (const entry of entries) {
@@ -224,17 +232,60 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
       {userPayHistory.length > 0 && (
         <div className="cd">
           <h4 style={{ fontSize: 13, marginBottom: 6 }}>Payment History</h4>
-          {userPayHistory.map((p) => (
-            <div
-              key={p.id}
-              className="sep"
-              style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}
-            >
-              <span>{p.pay_date}</span>
-              <span>{(p.hours || 0).toFixed(1)}h</span>
-              <span style={{ color: "var(--color-success)" }}>${(p.amount || 0).toFixed(2)}</span>
-            </div>
-          ))}
+          {userPayHistory.map((p) => {
+            const isOpen = openPay === p.id;
+            let jobDetails: { job: string; hrs: number; amount: number }[] = [];
+            try {
+              if (p.details) jobDetails = JSON.parse(p.details);
+            } catch { /* ignore */ }
+
+            return (
+              <div key={p.id} style={{ marginBottom: 4 }}>
+                <div
+                  onClick={() => setOpenPay(isOpen ? null : p.id)}
+                  className="sep"
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    alignItems: "center",
+                  }}
+                >
+                  <span>{p.pay_date}</span>
+                  <span>{(p.hours || 0).toFixed(1)}h · {p.entries || 0} entries</span>
+                  <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
+                    ${(p.amount || 0).toFixed(2)}
+                  </span>
+                  <span style={{ fontSize: 10, color: "#888" }}>{isOpen ? "▲" : "▼"}</span>
+                </div>
+                {isOpen && (
+                  <div style={{ padding: "6px 0 6px 12px", borderLeft: "2px solid var(--color-primary)" }}>
+                    {jobDetails.length > 0 ? (
+                      jobDetails.map((d, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            fontSize: 11,
+                            padding: "2px 0",
+                          }}
+                        >
+                          <span style={{ color: "var(--color-primary)" }}>{d.job}</span>
+                          <span>
+                            {d.hrs.toFixed(1)}h → <span style={{ color: "var(--color-success)" }}>${d.amount.toFixed(2)}</span>
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="dim" style={{ fontSize: 11 }}>No job breakdown saved</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
