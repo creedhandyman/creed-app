@@ -31,7 +31,7 @@ export default function Settings({ onClose }: Props) {
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-        {["account", "team", "general"].map((t) => (
+        {["account", "team", "payments", "general"].map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -165,6 +165,74 @@ export default function Settings({ onClose }: Props) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Payments tab */}
+      {tab === "payments" && (
+        <div className="cd">
+          <h4 style={{ fontSize: 14, marginBottom: 8 }}>💳 Payment Processing</h4>
+          {org?.stripe_connected ? (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <span style={{ color: "var(--color-success)", fontSize: 18 }}>✅</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Stripe Connected</div>
+                  <div className="dim" style={{ fontSize: 11 }}>
+                    Account: {org.stripe_account_id?.slice(0, 12)}...
+                  </div>
+                </div>
+              </div>
+              <p className="dim" style={{ fontSize: 11 }}>
+                You can generate payment links from the Jobs screen. Clients pay online and the money goes directly to your Stripe account.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: 12, marginBottom: 12, color: darkMode ? "#ccc" : "#333" }}>
+                Connect your Stripe account to accept online payments from clients.
+                Money goes directly to your bank — we take a small 2% platform fee.
+              </p>
+              {isOwner ? (
+                <button
+                  className="bb"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/stripe/connect", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          orgId: user.org_id,
+                          orgName: org?.name,
+                          email: user.email,
+                          returnUrl: window.location.origin,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (data.url) {
+                        // Save account ID to org before redirecting
+                        await db.patch("organizations", user.org_id, {
+                          stripe_account_id: data.accountId,
+                        });
+                        window.location.href = data.url;
+                      } else {
+                        alert("Error: " + (data.error || "Could not start Stripe setup"));
+                      }
+                    } catch {
+                      alert("Failed to start Stripe setup");
+                    }
+                  }}
+                  style={{ fontSize: 13, padding: "10px 20px" }}
+                >
+                  🔗 Connect Stripe Account
+                </button>
+              ) : (
+                <p className="dim" style={{ fontSize: 11 }}>
+                  Ask your business owner to connect Stripe in Settings.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

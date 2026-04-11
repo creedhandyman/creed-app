@@ -10,6 +10,7 @@ interface Props {
 
 export default function Jobs({ setPage, onEditJob }: Props) {
   const user = useStore((s) => s.user)!;
+  const org = useStore((s) => s.org);
   const jobs = useStore((s) => s.jobs);
   const receipts = useStore((s) => s.receipts);
   const loadAll = useStore((s) => s.loadAll);
@@ -301,7 +302,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       >
                         🧾 {j.status === "complete" ? "Generate Invoice" : "View Invoice"}
                       </button>
-                      {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && (
+                      {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && org?.stripe_connected && (
                         <button
                           className="bb"
                           onClick={async (e) => {
@@ -315,7 +316,8 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                                   property: j.property,
                                   client: j.client,
                                   amount: j.total,
-                                  orgName: "Creed Handyman LLC",
+                                  orgName: org?.name || "Handyman Service",
+                                  stripeAccountId: org?.stripe_account_id || "",
                                 }),
                               });
                               const data = await res.json();

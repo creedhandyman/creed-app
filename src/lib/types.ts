@@ -7,6 +7,8 @@ export interface Organization {
   address: string;
   logo_url: string;
   default_rate: number;
+  stripe_account_id?: string;
+  stripe_connected?: boolean;
   created_at?: string;
 }
 
