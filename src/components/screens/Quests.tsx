@@ -81,6 +81,32 @@ export default function Quests() {
   });
   const speedDays = Object.values(jobsByDate).filter((c) => c >= 5).length;
 
+  // Deal Closer: count upsell jobs
+  const upsellCount = jobs.filter((j) => j.is_upsell).length;
+
+  // Repeat Machine: count unique techs requested by 3+ different clients
+  const requestsByTech: Record<string, Set<string>> = {};
+  jobs.filter((j) => j.requested_tech && j.client).forEach((j) => {
+    if (!requestsByTech[j.requested_tech]) requestsByTech[j.requested_tech] = new Set();
+    requestsByTech[j.requested_tech].add(j.client);
+  });
+  const techsRequestedByName = Object.values(requestsByTech).filter((clients) => clients.size >= 3).length;
+
+  // HandyKing: count how many of the other 11 quests are complete
+  const handyKingProgress = [
+    positiveReviews >= 15,
+    fiveStarReviews >= 10,
+    completedJobs >= 10,
+    convertedReferrals >= 1,
+    repeatClients >= 1,
+    upsellCount >= 1,
+    techsRequestedByName >= 1,
+    bestTradeCount >= 10,
+    bigJobs >= 7,
+    zeroCallbackStreak >= 20,
+    speedDays >= 1,
+  ].filter(Boolean).length;
+
   // All quests by tier
   const tiers: { name: string; color: string; quests: Quest[] }[] = [
     {
@@ -145,9 +171,9 @@ export default function Quests() {
         },
         {
           name: "Deal Closer",
-          desc: "Upsell or add scope to existing jobs on-site",
+          desc: `Upsell or add scope to existing jobs — ${upsellCount} upsell${upsellCount !== 1 ? "s" : ""} logged`,
           bonus: "$25/upsell",
-          progress: 0,
+          progress: Math.min(upsellCount, 1),
           goal: 1,
           unit: "upsells",
           tier: "T2",
@@ -155,11 +181,11 @@ export default function Quests() {
         },
         {
           name: "Repeat Machine",
-          desc: "Get 3 different clients to request you by name",
+          desc: `3 different clients request the same tech by name${Object.keys(requestsByTech).length ? " (" + Object.entries(requestsByTech).map(([t, c]) => `${t}: ${c.size}`).join(", ") + ")" : ""}`,
           bonus: "$100",
-          progress: 0,
-          goal: 3,
-          unit: "clients",
+          progress: Math.min(techsRequestedByName, 1),
+          goal: 1,
+          unit: "techs",
           tier: "T2",
           tierColor: "var(--color-success)",
         },
@@ -217,9 +243,9 @@ export default function Quests() {
       quests: [
         {
           name: "HandyKing 👑",
-          desc: "Complete ALL quests + 2 Skill Mastery trades — earns Senior Tech title",
+          desc: `Complete ALL quests + 2 Skill Mastery trades — ${handyKingProgress}/11 done${tradesMastered >= 2 ? " ✓ 2+ trades" : ""}`,
           bonus: "$750/yr",
-          progress: 0,
+          progress: handyKingProgress + (tradesMastered >= 2 ? 0 : 0),
           goal: 11,
           unit: "quests",
           tier: "T4",
@@ -239,9 +265,6 @@ export default function Quests() {
       return s + num;
     }, 0);
 
-  // Update HandyKing progress
-  const handyKing = tiers[3].quests[0];
-  handyKing.progress = completedCount - (handyKing.progress >= handyKing.goal ? 1 : 0);
 
   const addReview = async () => {
     if (!rn || !rt) return;

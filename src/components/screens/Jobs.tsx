@@ -11,6 +11,7 @@ interface Props {
 export default function Jobs({ setPage, onEditJob }: Props) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
+  const profiles = useStore((s) => s.profiles);
   const jobs = useStore((s) => s.jobs);
   const receipts = useStore((s) => s.receipts);
   const loadAll = useStore((s) => s.loadAll);
@@ -460,6 +461,48 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       />
                       Callback
                     </label>
+                    <label
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 11,
+                        cursor: "pointer",
+                        color: j.is_upsell ? "var(--color-success)" : "#888",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={j.is_upsell || false}
+                        onChange={async (e) => {
+                          e.stopPropagation();
+                          await db.patch("jobs", j.id, { is_upsell: e.target.checked });
+                          loadAll();
+                        }}
+                        style={{ width: "auto", accentColor: "var(--color-success)" }}
+                      />
+                      Upsell
+                    </label>
+                  </div>
+                  {/* Requested Tech */}
+                  <div className="row" style={{ marginTop: 4 }}>
+                    <span className="dim" style={{ fontSize: 11 }}>Client requested:</span>
+                    <select
+                      value={j.requested_tech || ""}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={async (e) => {
+                        e.stopPropagation();
+                        await db.patch("jobs", j.id, { requested_tech: e.target.value });
+                        loadAll();
+                      }}
+                      style={{ width: "auto", fontSize: 10, padding: "3px 6px" }}
+                    >
+                      <option value="">No one specific</option>
+                      {profiles.map((p) => (
+                        <option key={p.id} value={p.name}>{p.name}</option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Existing Receipts */}

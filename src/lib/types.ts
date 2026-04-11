@@ -54,6 +54,8 @@ export interface Job {
   created_at: string;
   trade: string;
   callback: boolean;
+  is_upsell: boolean;
+  requested_tech: string;
 }
 
 export interface TimeEntry {
