@@ -301,6 +301,38 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       >
                         🧾 {j.status === "complete" ? "Generate Invoice" : "View Invoice"}
                       </button>
+                      {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && (
+                        <button
+                          className="bb"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await fetch("/api/checkout", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  jobId: j.id,
+                                  property: j.property,
+                                  client: j.client,
+                                  amount: j.total,
+                                  orgName: "Creed Handyman LLC",
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.url) {
+                                navigator.clipboard.writeText(data.url);
+                                alert("Payment link copied! Send it to the client.\n\n" + data.url);
+                                if (j.status === "complete") setStatus(j.id, "invoiced");
+                              } else {
+                                alert("Error: " + (data.error || "Could not create payment link"));
+                              }
+                            } catch { alert("Failed to create payment link"); }
+                          }}
+                          style={{ fontSize: 10, padding: "5px 12px" }}
+                        >
+                          💳 Payment Link
+                        </button>
+                      )}
                       {j.status === "invoiced" && (
                         <button
                           className="bg"
