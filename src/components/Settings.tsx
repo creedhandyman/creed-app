@@ -398,6 +398,78 @@ export default function Settings({ onClose }: Props) {
         </div>
       )}
 
+      {/* Quest Config in Payments tab */}
+      {tab === "payments" && isOwner && (
+        <div className="cd" style={{ marginTop: 14 }}>
+          <h4 style={{ fontSize: 14, marginBottom: 10 }}>🎯 Quest Bonuses</h4>
+          <div className="dim" style={{ fontSize: 10, marginBottom: 10 }}>Toggle quests on/off and set custom bonus amounts for your team.</div>
+          {(() => {
+            const defaultQuests = [
+              { key: "review_favor", name: "Review Favor", desc: "15 positive reviews", defaultBonus: 75 },
+              { key: "five_star", name: "Five Star Tech", desc: "10 five-star reviews", defaultBonus: 100 },
+              { key: "super_handy", name: "Super Handy", desc: "10 work orders", defaultBonus: 50 },
+              { key: "network_scout", name: "Network Scout", desc: "Secure new job", defaultBonus: 50 },
+              { key: "critical_referral", name: "Critical Referral", desc: "1 client → 5 jobs", defaultBonus: 150 },
+              { key: "deal_closer", name: "Deal Closer", desc: "Upsell on-site", defaultBonus: 25 },
+              { key: "repeat_machine", name: "Repeat Machine", desc: "3 clients request by name", defaultBonus: 100 },
+              { key: "skill_mastery", name: "Skill Mastery", desc: "10 jobs in 1 trade", defaultBonus: 100 },
+              { key: "make_ready", name: "Make Ready Pro", desc: "7 unit turns (24+ hrs)", defaultBonus: 350 },
+              { key: "zero_callback", name: "Zero Callback", desc: "20 jobs, no callbacks", defaultBonus: 150 },
+              { key: "mr_speed", name: "Mr.Speed", desc: "5 jobs in one day", defaultBonus: 25 },
+              { key: "handy_king", name: "HandyKing", desc: "Complete all + 2 trades", defaultBonus: 750 },
+            ];
+            let config: Record<string, { enabled: boolean; bonus: number }> = {};
+            try { config = org?.quest_config ? JSON.parse(org.quest_config) : {}; } catch { /* */ }
+
+            const saveConfig = async (updated: typeof config) => {
+              if (org) await db.patch("organizations", org.id, { quest_config: JSON.stringify(updated) });
+              loadAll();
+              const orgs = await db.get("organizations", { id: org!.id });
+              if (orgs.length) useStore.getState().setOrg(orgs[0] as any);
+            };
+
+            return defaultQuests.map((q) => {
+              const c = config[q.key] || { enabled: true, bonus: q.defaultBonus };
+              return (
+                <div key={q.key} className="sep" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={c.enabled !== false}
+                      onChange={async () => {
+                        const updated = { ...config, [q.key]: { ...c, enabled: !c.enabled } };
+                        await saveConfig(updated);
+                      }}
+                      style={{ width: "auto", accentColor: "var(--color-primary)" }}
+                    />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, opacity: c.enabled === false ? 0.4 : 1 }}>{q.name}</div>
+                      <div className="dim" style={{ fontSize: 9 }}>{q.desc}</div>
+                    </div>
+                  </div>
+                  <div className="row" style={{ gap: 2 }}>
+                    <span style={{ fontSize: 11 }}>$</span>
+                    <input
+                      type="number"
+                      defaultValue={c.bonus}
+                      min="0"
+                      style={{ width: 55, fontSize: 11, padding: "2px 4px", textAlign: "center" }}
+                      onBlur={async (e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        if (val !== c.bonus) {
+                          const updated = { ...config, [q.key]: { ...c, bonus: val } };
+                          await saveConfig(updated);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
+
       {/* General tab */}
       {tab === "general" && (
         <div className="cd">
