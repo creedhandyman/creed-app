@@ -23,6 +23,7 @@ export default function Schedule({ setPage }: Props) {
   const [sd, setSd] = useState("");
   const [sj, setSj] = useState("");
   const [sn, setSn] = useState("");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [sTech, setSTech] = useState("");
   const [view, setView] = useState<"week" | "month">("week");
 
@@ -81,53 +82,43 @@ export default function Schedule({ setPage }: Props) {
     const items = schedule.filter((s) => s.sched_date === ds);
     const isToday = ds === todayStr;
 
+    const isSelected = ds === selectedDay;
     return (
       <div
         key={key}
+        onClick={() => setSelectedDay(isSelected ? null : ds)}
         style={{
-          background: isToday
+          background: isSelected
+            ? "var(--color-primary)" + "33"
+            : isToday
             ? "var(--color-primary)" + "22"
             : darkMode
             ? "#12121a"
             : "#fff",
-          border: `1px solid ${isToday ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
+          border: `1px solid ${isSelected ? "var(--color-primary)" : isToday ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
           borderRadius: 6,
           padding: 4,
           minHeight: view === "month" ? 50 : 70,
           overflow: "hidden",
+          cursor: "pointer",
         }}
       >
         <div
           style={{
             fontSize: view === "month" ? 10 : 12,
             textAlign: "center",
-            fontWeight: isToday ? 700 : 600,
-            color: isToday ? "var(--color-primary)" : undefined,
+            fontWeight: isToday || isSelected ? 700 : 600,
+            color: isToday || isSelected ? "var(--color-primary)" : undefined,
             marginBottom: 2,
           }}
         >
           {d.getDate()}
         </div>
-        {items.map((s) => (
-          <div
-            key={s.id}
-            onClick={() => setPage("time")}
-            style={{
-              fontSize: view === "month" ? 7 : 8,
-              background: "var(--color-primary)" + "22",
-              borderRadius: 2,
-              padding: "1px 3px",
-              marginBottom: 1,
-              color: "var(--color-primary)",
-              cursor: "pointer",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {s.job}
+        {items.length > 0 && (
+          <div style={{ fontSize: view === "month" ? 7 : 9, textAlign: "center", color: "var(--color-primary)" }}>
+            {items.length} job{items.length !== 1 ? "s" : ""}
           </div>
-        ))}
+        )}
       </div>
     );
   };
@@ -256,6 +247,40 @@ export default function Schedule({ setPage }: Props) {
             ? week.map((d, i) => renderDayCell(d, i))
             : monthCells.map((d, i) => renderDayCell(d, `m${i}`))}
         </div>
+
+        {/* Day detail panel */}
+        {selectedDay && (() => {
+          const dayItems = schedule.filter((s) => s.sched_date === selectedDay);
+          const dayDate = new Date(selectedDay + "T12:00:00");
+          const dayLabel = dayDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+          return (
+            <div style={{ marginTop: 10, padding: 10, borderTop: `2px solid var(--color-primary)` }}>
+              <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+                <h4 style={{ fontSize: 13, color: "var(--color-primary)" }}>{dayLabel}</h4>
+                <span className="dim" style={{ fontSize: 10 }}>{dayItems.length} job{dayItems.length !== 1 ? "s" : ""}</span>
+              </div>
+              {dayItems.length === 0 ? (
+                <p className="dim" style={{ fontSize: 11 }}>No jobs scheduled</p>
+              ) : (
+                dayItems.map((s) => (
+                  <div key={s.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+                    <div>
+                      <b style={{ color: "var(--color-primary)" }}>{s.job}</b>
+                      {s.note && <div className="dim" style={{ fontSize: 10 }}>{s.note}</div>}
+                    </div>
+                    <button
+                      className="bb"
+                      onClick={() => setPage("time")}
+                      style={{ fontSize: 9, padding: "3px 8px" }}
+                    >
+                      ⏱ Start
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        })()}
 
         <div className="row mt">
           <button

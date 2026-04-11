@@ -795,46 +795,81 @@ export function makeGuide(rooms: Room[]): Guide {
   if (/dust|sand|demo|tile|drywall|debris/.test(allText))
     tools.add("Shop vac");
 
-  // Job-specific tool sets
+  // Job-specific tool sets — POWER TOOLS + HAND TOOLS
   if (/paint|repaint|touch.?up|prime/.test(allText)) {
     ["Roller+covers", "Angled brush", "Drop cloths", "Painters tape", "Paint tray"].forEach((x) => tools.add(x));
     if (/patch|spackle|hole|nail pop|drywall/.test(allText))
       tools.add("Spackle knife");
-    if (/sand|smooth/.test(allText))
-      tools.add("Sanding block");
+    if (/sand|smooth|prep/.test(allText))
+      ["Sanding block", "Orbital sander"].forEach((x) => tools.add(x));
+    if (/spray|sprayer/.test(allText))
+      tools.add("Paint sprayer");
+    if (/scrape|peel/.test(allText))
+      tools.add("Paint scraper");
   }
   if (/tile|grout/.test(allText)) {
-    ["Tile cutter", "Notched trowel", "Grout float", "Tile spacers", "Sponge"].forEach((x) => tools.add(x));
+    ["Tile cutter", "Notched trowel", "Grout float", "Tile spacers", "Sponge", "Mixing bucket"].forEach((x) => tools.add(x));
+    if (/remove|demo|tear/.test(allText))
+      ["Oscillating multi-tool", "Cold chisel"].forEach((x) => tools.add(x));
   }
   if (/plumb|shower|toilet|faucet|sink|drain|pipe|valve|sprayer|supply line|water/.test(allText)) {
-    ["Adjustable wrench", "Plumbers tape", "Channel locks", "Basin wrench"].forEach((x) => tools.add(x));
-    if (/toilet/.test(allText)) tools.add("Wax ring");
+    ["Adjustable wrench", "Plumbers tape", "Channel locks", "Basin wrench", "Bucket"].forEach((x) => tools.add(x));
+    if (/toilet/.test(allText)) tools.add("Closet bolts wrench");
+    if (/pipe|cut/.test(allText)) tools.add("Pipe cutter");
+    if (/drain|clog/.test(allText)) tools.add("Drain snake/auger");
   }
   if (/electric|outlet|switch|wire|gfci|light|fan|fixture/.test(allText)) {
-    ["Voltage tester", "Wire strippers", "Wire nuts"].forEach((x) => tools.add(x));
+    ["Voltage tester", "Wire strippers", "Wire nuts", "Electrical tape"].forEach((x) => tools.add(x));
+    if (/fan|fixture|heavy/.test(allText)) tools.add("Stud finder");
+    if (/wire|run|fish/.test(allText)) tools.add("Fish tape");
   }
   if (/door|hinge|knob|deadbolt|strike|latch/.test(allText)) {
-    ["Chisel", "Hammer"].forEach((x) => tools.add(x));
+    ["Chisel", "Hammer", "Stud finder"].forEach((x) => tools.add(x));
+    if (/pre.?hung|replace|new|install/.test(allText))
+      ["Circular saw", "Shims", "Level (4ft)"].forEach((x) => tools.add(x));
   }
   if (/carpet|flooring|lvp|laminate|vinyl/.test(allText)) {
-    ["Knee kicker", "Seam roller"].forEach((x) => tools.add(x));
-    if (/lvp|laminate/.test(allText)) tools.add("Pull bar");
-    if (/transition/.test(allText)) tools.add("Miter saw");
+    ["Knee kicker", "Seam roller", "Tapping block", "Rubber mallet", "Pull bar", "Spacers"].forEach((x) => tools.add(x));
+    if (/transition|trim|baseboard|cut/.test(allText))
+      ["Miter saw", "Circular saw"].forEach((x) => tools.add(x));
+    if (/lvp|laminate|plank/.test(allText))
+      tools.add("Jigsaw");
+    if (/demo|remove|tear|rip/.test(allText))
+      ["Pry bar", "Floor scraper"].forEach((x) => tools.add(x));
   }
   if (/drywall|sheetrock/.test(allText)) {
-    ["Drywall saw", "Drywall knife (6\")", "Drywall knife (12\")", "Mud pan", "Sanding block"].forEach((x) => tools.add(x));
+    ["Drywall saw", "Drywall knife (6\")", "Drywall knife (12\")", "Mud pan", "Sanding block", "T-square"].forEach((x) => tools.add(x));
+    if (/large|sheet|hang/.test(allText))
+      ["Drywall lift", "Screw gun"].forEach((x) => tools.add(x));
+  }
+  if (/baseboard|trim|molding|crown/.test(allText)) {
+    ["Miter saw", "Brad nailer", "Nail set", "Wood filler"].forEach((x) => tools.add(x));
+  }
+  if (/cabinet|counter|shelf|shelving/.test(allText)) {
+    ["Stud finder", "Clamps"].forEach((x) => tools.add(x));
+    if (/cut|modify/.test(allText))
+      ["Circular saw", "Jigsaw"].forEach((x) => tools.add(x));
   }
   if (/caulk|seal|grout/.test(allText))
     tools.add("Caulk finishing tool");
   if (/screen|window screen/.test(allText))
     tools.add("Screen roller");
   if (/demo|remove|tear out|rip out/.test(allText)) {
-    ["Pry bar", "Hammer"].forEach((x) => tools.add(x));
+    ["Pry bar", "Hammer", "Reciprocating saw"].forEach((x) => tools.add(x));
   }
   if (/exterior|gutter|downspout|siding|fascia|soffit/.test(allText))
-    tools.add("Extension ladder");
+    ["Extension ladder", "Tin snips"].forEach((x) => tools.add(x));
   if (/mirror|glass/.test(allText))
     tools.add("Suction cups");
+  if (/fence|gate|deck|post/.test(allText))
+    ["Post level", "Circular saw", "Impact driver"].forEach((x) => tools.add(x));
+  if (/concrete|mortar|cement/.test(allText))
+    ["Mixing drill + paddle", "Trowel", "Float"].forEach((x) => tools.add(x));
+  // General power tools based on scope
+  if (/cut|saw|trim/.test(allText) && !tools.has("Circular saw") && !tools.has("Miter saw"))
+    tools.add("Oscillating multi-tool");
+  if (/screw|mount|install|secure/.test(allText))
+    tools.add("Impact driver");
 
   rooms.forEach((r) =>
     r.items.forEach((it) => {
@@ -869,7 +904,25 @@ export function makeGuide(rooms: Room[]): Guide {
   const priOrder = { HIGH: 0, MED: 1, LOW: 2 };
   steps.sort((a, b) => priOrder[a.pri] - priOrder[b.pri]);
 
-  return { tools: [...tools].sort(), shop, steps };
+  // Consolidate shopping list — combine identical items into quantities
+  const consolidated: (Material & { room: string; qty: number })[] = [];
+  shop.forEach((item) => {
+    const existing = consolidated.find((c) => c.n === item.n && c.c === item.c);
+    if (existing) {
+      existing.qty += 1;
+      existing.room += existing.room.includes(item.room) ? "" : `, ${item.room}`;
+    } else {
+      consolidated.push({ ...item, qty: 1 });
+    }
+  });
+  // Convert back to shop format with qty in the name
+  const consolidatedShop = consolidated.map((item) => ({
+    n: item.qty > 1 ? `${item.n} (×${item.qty})` : item.n,
+    c: item.c * item.qty,
+    room: item.room,
+  }));
+
+  return { tools: [...tools].sort(), shop: consolidatedShop, steps };
 }
 
 /* ====== COST CALCULATOR ====== */

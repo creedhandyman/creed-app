@@ -115,13 +115,25 @@ export function exportQuotePdf(opts: ExportOptions) {
     const sectionLabor = sectionHrs * rate;
     const sectionMat = rm.items.reduce((s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0), 0);
 
-    let matRows = "";
+    // Consolidate duplicate materials in this section
+    const matMap: Record<string, { n: string; unitCost: number; qty: number; notes: string[] }> = {};
     rm.items.forEach((it) => {
       it.materials.forEach((m) => {
         if (m.c > 0) {
-          matRows += `<tr><td>${m.n}</td><td style="text-align:center">1</td><td style="text-align:right">$${m.c.toFixed(2)}</td><td style="text-align:right">$${m.c.toFixed(2)}</td><td class="dim">${it.detail}</td></tr>`;
+          const key = `${m.n}|${m.c}`;
+          if (matMap[key]) {
+            matMap[key].qty += 1;
+            if (!matMap[key].notes.includes(it.detail)) matMap[key].notes.push(it.detail);
+          } else {
+            matMap[key] = { n: m.n, unitCost: m.c, qty: 1, notes: [it.detail] };
+          }
         }
       });
+    });
+    let matRows = "";
+    Object.values(matMap).forEach((m) => {
+      const total = m.unitCost * m.qty;
+      matRows += `<tr><td>${m.n}</td><td style="text-align:center">${m.qty}</td><td style="text-align:right">$${m.unitCost.toFixed(2)}</td><td style="text-align:right">$${total.toFixed(2)}</td><td class="dim">${m.notes.slice(0, 3).join(", ")}</td></tr>`;
     });
 
     breakdownHtml += `
