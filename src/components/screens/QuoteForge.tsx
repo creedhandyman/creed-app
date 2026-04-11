@@ -289,8 +289,15 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
   /* ── Save job ── */
   const saveJob = async () => {
-    if (!prop) {
-      alert("Enter address");
+    if (!prop.trim()) {
+      alert("Enter a property address");
+      return;
+    }
+    if (rooms.length === 0) {
+      alert("Add at least one item to the quote");
+      return;
+    }
+    if (gt <= 0 && !confirm("Quote total is $0. Save anyway?")) {
       return;
     }
     const data = {

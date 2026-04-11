@@ -13,12 +13,17 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false);
 
   const handleLogin = async () => {
-    const e = await login(email, password);
+    if (!email.trim()) { setErr("Enter your email"); return; }
+    if (!password) { setErr("Enter your password"); return; }
+    const e = await login(email.trim(), password);
     if (e) setErr(e);
   };
 
   const handleSignup = async () => {
-    const e = await signup(email, password, name);
+    if (!name.trim()) { setErr("Enter your name"); return; }
+    if (!email.trim()) { setErr("Enter your email"); return; }
+    if (password.length < 6) { setErr("Password must be at least 6 characters"); return; }
+    const e = await signup(email.trim(), password, name.trim());
     if (e) setErr(e);
   };
 

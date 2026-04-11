@@ -53,11 +53,40 @@ export default function Timer({ setPage }: Props) {
   useEffect(() => sv("t_st", st), [st]);
   useEffect(() => sv("t_sj", sj), [sj]);
 
-  // Tick
+  // Tick + auto-stop after 12 hours
+  const MAX_TIMER_MS = 12 * 60 * 60 * 1000; // 12 hours
   useEffect(() => {
     if (!on || !st) return;
-    setEl(Date.now() - st);
-    const iv = setInterval(() => setEl(Date.now() - st), 1000);
+    const elapsed = Date.now() - st;
+    if (elapsed >= MAX_TIMER_MS) {
+      // Auto-stop: log 12 hours and reset
+      alert("Timer auto-stopped after 12 hours. The time has been logged.");
+      (async () => {
+        await db.post("time_entries", {
+          job: sj || "General",
+          entry_date: new Date().toLocaleDateString(),
+          hours: 12,
+          amount: Math.round(12 * rate * 100) / 100,
+          user_id: user.id,
+          user_name: user.name,
+          start_time: fmtTime(st),
+          end_time: fmtTime(Date.now()),
+        });
+        await loadAll();
+      })();
+      setOn(false);
+      setSt(null);
+      setEl(0);
+      return;
+    }
+    setEl(elapsed);
+    const iv = setInterval(() => {
+      const now = Date.now() - st;
+      if (now >= MAX_TIMER_MS) {
+        clearInterval(iv);
+      }
+      setEl(now);
+    }, 1000);
     return () => clearInterval(iv);
   }, [on, st]);
 
@@ -93,7 +122,9 @@ export default function Timer({ setPage }: Props) {
 
   const addManual = async () => {
     const h = parseFloat(mh);
-    if (!h) return;
+    if (!h || h <= 0) { alert("Enter a valid number of hours"); return; }
+    if (h > 24) { alert("Cannot log more than 24 hours in a single entry"); return; }
+    if (!mDate) { alert("Select a date"); return; }
     const targetUser = profiles.find((p) => p.id === mUser) || user;
     const targetRate = targetUser.rate || 55;
     await db.post("time_entries", {

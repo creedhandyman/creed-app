@@ -25,7 +25,10 @@ export default function Schedule({ setPage }: Props) {
   const [view, setView] = useState<"week" | "month">("week");
 
   const addSchedule = async () => {
-    if (!sd || !sj) return;
+    if (!sd) { alert("Select a date"); return; }
+    if (!sj) { alert("Select a job"); return; }
+    const today = new Date().toISOString().split("T")[0];
+    if (sd < today && !confirm(`${sd} is in the past. Schedule anyway?`)) return;
     await db.post("schedule", { sched_date: sd, job: sj, note: sn });
     setSd("");
     setSj("");

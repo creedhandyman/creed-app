@@ -42,7 +42,9 @@ export default function Jobs({ setPage, onEditJob }: Props) {
   };
 
   const addReceipt = async (jobId: string) => {
-    if (!rn || !ra) return;
+    if (!rn.trim()) { alert("Enter a receipt note"); return; }
+    const amt = parseFloat(ra);
+    if (!amt || amt <= 0) { alert("Enter a valid amount"); return; }
     setUploading(true);
     try {
       let photo_url = "";
