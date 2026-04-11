@@ -16,6 +16,7 @@ interface Quest {
 }
 
 export default function Quests() {
+  const user = useStore((s) => s.user)!;
   const profiles = useStore((s) => s.profiles);
   const jobs = useStore((s) => s.jobs);
   const reviews = useStore((s) => s.reviews);
@@ -527,7 +528,7 @@ export default function Quests() {
             <h4 style={{ fontSize: 13, marginBottom: 8 }}>📱 Client Review QR Code</h4>
             <div style={{ background: "#fff", display: "inline-block", padding: 12, borderRadius: 8, marginBottom: 8 }}>
               <QRCodeSVG
-                value={typeof window !== "undefined" ? `${window.location.origin}/review` : "/review"}
+                value={typeof window !== "undefined" ? `${window.location.origin}/review${user.org_id ? "?org=" + user.org_id : ""}` : "/review"}
                 size={140}
                 level="M"
               />
@@ -538,7 +539,7 @@ export default function Quests() {
             <button
               className="bo"
               onClick={() => {
-                const url = `${window.location.origin}/review`;
+                const url = `${window.location.origin}/review${user.org_id ? "?org=" + user.org_id : ""}`;
                 navigator.clipboard.writeText(url);
                 alert("Review link copied!");
               }}

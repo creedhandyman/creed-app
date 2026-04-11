@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
 
 export default function Login() {
   const login = useStore((s) => s.login);
@@ -141,7 +142,7 @@ export default function Login() {
 
           {emailSent && (
             <div style={{ color: "#00cc66", fontSize: 12, marginBottom: 8, textAlign: "center", padding: 12, background: "#00cc6611", borderRadius: 6 }}>
-              ✉ Check your email to verify your account, then sign in.
+              ✉ Check your email to verify your account. After verifying, come back here and sign in with your email and password.
             </div>
           )}
 
@@ -152,12 +153,28 @@ export default function Login() {
           <div style={{ textAlign: "center", marginTop: 12, fontSize: 12, color: "#888" }}>
             {mode === "login" ? "No account? " : "Have account? "}
             <span
-              onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErr(""); }}
+              onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErr(""); setEmailSent(false); }}
               style={{ color: "#2E75B6", cursor: "pointer", textDecoration: "underline" }}
             >
               {mode === "login" ? "Sign Up" : "Sign In"}
             </span>
           </div>
+          {mode === "login" && (
+            <div style={{ textAlign: "center", marginTop: 6, fontSize: 11 }}>
+              <span
+                onClick={async () => {
+                  if (!email.trim()) { setErr("Enter your email first"); return; }
+                  const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+                  if (error) { setErr(error.message); return; }
+                  setErr("");
+                  setEmailSent(true);
+                }}
+                style={{ color: "#888", cursor: "pointer", textDecoration: "underline" }}
+              >
+                Forgot password?
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

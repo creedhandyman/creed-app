@@ -1,6 +1,5 @@
 "use client";
-
-const LOGO = "/CREED_LOGO.png";
+import { useStore } from "@/lib/store";
 
 interface NavItem {
   id: string;
@@ -26,6 +25,8 @@ interface Props {
 }
 
 export default function VerticalNav({ page, setPage, isAdmin }: Props) {
+  const org = useStore((s) => s.org);
+  const LOGO = org?.logo_url || "/CREED_LOGO.png";
   return (
     <div className="vnav">
       {NAV_ITEMS.map((item, i) => {

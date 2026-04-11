@@ -54,6 +54,44 @@ export default function Settings({ onClose }: Props) {
       {/* Account tab */}
       {tab === "account" && (
         <div>
+          {/* Logo upload */}
+          {isOwner && (
+            <div className="cd mb" style={{ textAlign: "center", padding: 16 }}>
+              <img
+                src={org?.logo_url || "/CREED_LOGO.png"}
+                alt="Logo"
+                style={{ height: 60, display: "block", margin: "0 auto 8px", borderRadius: 8 }}
+                onError={(e) => ((e.target as HTMLImageElement).src = "/CREED_LOGO.png")}
+              />
+              <input
+                type="file"
+                accept="image/*"
+                id="logo-upload"
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !org) return;
+                  const ext = file.name.split(".").pop() || "png";
+                  const path = `logos/${org.id}.${ext}`;
+                  const { error } = await supabase.storage.from("receipts").upload(path, file, { upsert: true });
+                  if (error) { alert("Upload failed: " + error.message); return; }
+                  const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
+                  await db.patch("organizations", org.id, { logo_url: urlData.publicUrl });
+                  loadAll();
+                  // Refresh org in store
+                  const orgs = await db.get("organizations", { id: org.id });
+                  if (orgs.length) { useStore.getState().setOrg(orgs[0] as any); }
+                }}
+              />
+              <button
+                className="bo"
+                onClick={() => document.getElementById("logo-upload")?.click()}
+                style={{ fontSize: 10, padding: "4px 12px" }}
+              >
+                📷 Change Logo
+              </button>
+            </div>
+          )}
           <div className="cd mb">
             {[
               ["Business", org?.name || "—"],
@@ -94,13 +132,28 @@ export default function Settings({ onClose }: Props) {
             </div>
           </div>
 
-          <div className="cd">
+          <div className="cd mb">
             <button
               className="br"
               onClick={() => { logout(); onClose(); }}
               style={{ width: "100%" }}
             >
               Sign Out
+            </button>
+          </div>
+          <div className="cd">
+            <button
+              className="bo"
+              onClick={async () => {
+                if (!confirm("Delete your account? This cannot be undone.")) return;
+                if (!confirm("Are you SURE? All your data will be lost.")) return;
+                await db.del("profiles", user.id);
+                logout();
+                onClose();
+              }}
+              style={{ width: "100%", fontSize: 10, color: "var(--color-accent-red)" }}
+            >
+              Delete My Account
             </button>
           </div>
         </div>
@@ -160,6 +213,18 @@ export default function Settings({ onClose }: Props) {
                       }}
                     />
                     <span style={{ fontSize: 11 }}>/hr</span>
+                    {u.id !== user.id && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Remove ${u.name} from the team?`)) return;
+                          await db.del("profiles", u.id);
+                          loadAll();
+                        }}
+                        style={{ background: "none", color: "var(--color-accent-red)", fontSize: 10, padding: "0 4px" }}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <span>${u.id === user.id ? user.rate : "—"}/hr</span>

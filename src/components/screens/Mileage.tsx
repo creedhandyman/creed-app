@@ -240,6 +240,7 @@ export default function Mileage({ setPage }: Props) {
               </span>
               <button
                 onClick={async () => {
+                  if (!confirm("Delete this trip?")) return;
                   await db.del("mileage", e.id);
                   setLoaded(false);
                 }}

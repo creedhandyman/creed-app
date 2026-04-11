@@ -1,23 +1,37 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { db } from "@/lib/supabase";
-import type { Profile } from "@/lib/types";
+import type { Profile, Organization } from "@/lib/types";
+import { Suspense } from "react";
 
-export default function ReviewPage() {
+function ReviewContent() {
+  const params = useSearchParams();
+  const orgId = params.get("org");
+
   const [name, setName] = useState("");
   const [rating, setRating] = useState(0);
   const [text, setText] = useState("");
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [employees, setEmployees] = useState<Profile[]>([]);
+  const [orgData, setOrgData] = useState<Organization | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch employee list on load
   useEffect(() => {
-    db.get<Profile>("profiles").then((profiles) => {
-      setEmployees(profiles.filter((p) => p.name?.trim()));
-    });
-  }, []);
+    if (orgId) {
+      db.get<Organization>("organizations", { id: orgId }).then((orgs) => {
+        if (orgs.length) setOrgData(orgs[0]);
+      });
+      db.get<Profile>("profiles", { org_id: orgId }).then((profiles) => {
+        setEmployees(profiles.filter((p) => p.name?.trim()));
+      });
+    } else {
+      db.get<Profile>("profiles").then((profiles) => {
+        setEmployees(profiles.filter((p) => p.name?.trim()));
+      });
+    }
+  }, [orgId]);
 
   const toggleEmployee = (empName: string) => {
     setSelectedEmployees((prev) =>
@@ -35,6 +49,7 @@ export default function ReviewPage() {
       review_text: text,
       rating,
       employee_names: selectedEmployees.join(", "),
+      ...(orgId ? { org_id: orgId } : {}),
     });
     setSubmitting(false);
     setSubmitted(true);
@@ -55,8 +70,8 @@ export default function ReviewPage() {
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <img
-            src="/CREED_LOGO.png"
-            alt="Creed Handyman"
+            src={orgData?.logo_url || "/CREED_LOGO.png"}
+            alt=""
             style={{ height: 64, marginBottom: 8 }}
             onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
           />
@@ -69,18 +84,11 @@ export default function ReviewPage() {
               letterSpacing: ".05em",
             }}
           >
-            Creed Handyman
+            {orgData?.name || "Leave a Review"}
           </h1>
-          <div
-            style={{
-              fontFamily: "Oswald, sans-serif",
-              fontSize: 10,
-              color: "#C00000",
-              letterSpacing: ".15em",
-            }}
-          >
-            LLC
-          </div>
+          {orgData?.phone && (
+            <div style={{ fontSize: 10, color: "#888", marginTop: 4 }}>{orgData.phone}</div>
+          )}
         </div>
 
         {submitted ? (
@@ -267,3 +275,12 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
   boxSizing: "border-box",
 };
+
+
+export default function ReviewPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0a0a0f" }} />}>
+      <ReviewContent />
+    </Suspense>
+  );
+}

@@ -329,6 +329,7 @@ export default function Timer({ setPage }: Props) {
               </span>
               <button
                 onClick={async () => {
+                  if (!confirm("Delete this time entry?")) return;
                   await db.del("time_entries", e.id);
                   loadAll();
                 }}

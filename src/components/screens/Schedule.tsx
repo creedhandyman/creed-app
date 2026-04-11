@@ -297,6 +297,7 @@ export default function Schedule({ setPage }: Props) {
               <span className="dim">{s.note}</span>
               <button
                 onClick={async () => {
+                  if (!confirm("Remove from schedule?")) return;
                   await db.del("schedule", s.id);
                   loadAll();
                 }}
