@@ -32,7 +32,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
-  const [mode, setMode] = useState<null | "paste" | "manual" | "edit" | "inspect">(null);
+  const [mode, setMode] = useState<null | "paste" | "manual" | "edit" | "inspect" | "quick">(null);
   const [text, setText] = useState("");
   const [prop, setProp] = useState("");
   const [client, setClient] = useState("");
@@ -43,6 +43,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [parseStatus, setParseStatus] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [quickPhotos, setQuickPhotos] = useState<string[]>([]);
+  const [quickDesc, setQuickDesc] = useState("");
+  const [quickUploading, setQuickUploading] = useState(false);
+  const quickPhotoRef = useRef<HTMLInputElement>(null);
   const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -136,12 +140,15 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setParseStatus("Analyzing with AI...");
 
     try {
-      // Get page images if we have a PDF
+      // Get page images if we have a PDF, or use paste photos
       let images: string[] = [];
       if (file && file.name.endsWith(".pdf")) {
         setParseStatus("Rendering PDF pages...");
         images = await renderPdfPages(file, 15);
         setParseStatus(`Sending ${images.length} pages to AI...`);
+      } else if (quickPhotos.length > 0) {
+        setParseStatus(`Sending text + ${quickPhotos.length} photos to AI...`);
+        images = quickPhotos;
       } else {
         setParseStatus("Sending text to AI...");
       }
@@ -391,7 +398,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
           <div
             className="cd"
             style={{ cursor: "pointer", textAlign: "center", padding: 18 }}
@@ -429,6 +436,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               Manual
             </h4>
           </div>
+          <div
+            className="cd"
+            style={{ cursor: "pointer", textAlign: "center", padding: 18 }}
+            onClick={() => setMode("quick")}
+          >
+            <div style={{ fontSize: 28 }}>📸</div>
+            <h4 style={{ color: "var(--color-accent-red)", fontSize: 12, marginTop: 4 }}>
+              Quick
+            </h4>
+          </div>
         </div>
       </div>
     );
@@ -443,6 +460,146 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         onCancel={() => setMode(null)}
         onComplete={handleInspectionComplete}
       />
+    );
+
+  /* ══════════════════════════════════════════
+     QUICK QUOTE MODE
+     ══════════════════════════════════════════ */
+  if (mode === "quick")
+    return (
+      <div className="fi">
+        <div className="row mb">
+          <button className="bo" onClick={() => { setMode(null); setQuickPhotos([]); setQuickDesc(""); }}>←</button>
+          <h2 style={{ fontSize: 18, color: "var(--color-accent-red)" }}>📸 Quick Quote</h2>
+        </div>
+
+        {/* Property + Client */}
+        <div className="cd mb">
+          <div className="g2">
+            <input value={prop} onChange={(e) => setProp(e.target.value)} placeholder="Property address *" />
+            <ClientSelect value={client} onChange={setClient} />
+          </div>
+        </div>
+
+        {/* Description */}
+        <div className="cd mb">
+          <label style={{ fontSize: 10, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            Describe the issue
+          </label>
+          <textarea
+            value={quickDesc}
+            onChange={(e) => setQuickDesc(e.target.value)}
+            placeholder="e.g. Kitchen faucet leaking from base, bathroom door won't close properly, 3 outlet covers missing..."
+            style={{ height: 100, marginTop: 4 }}
+          />
+        </div>
+
+        {/* Photos */}
+        <div className="cd mb">
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+            <label style={{ fontSize: 10, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+              Photos ({quickPhotos.length})
+            </label>
+            <div className="row" style={{ gap: 4 }}>
+              <button
+                className="bb"
+                onClick={() => quickPhotoRef.current?.click()}
+                disabled={quickUploading}
+                style={{ fontSize: 10, padding: "4px 10px" }}
+              >
+                {quickUploading ? "Uploading..." : "📷 Add Photos"}
+              </button>
+            </div>
+          </div>
+
+          <input
+            ref={quickPhotoRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={async (e) => {
+              const files = e.target.files;
+              if (!files?.length) return;
+              setQuickUploading(true);
+              for (const file of Array.from(files)) {
+                try {
+                  const reader = new FileReader();
+                  const base64 = await new Promise<string>((resolve) => {
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.readAsDataURL(file);
+                  });
+                  setQuickPhotos((prev) => [...prev, base64]);
+                } catch (err) { console.error(err); }
+              }
+              setQuickUploading(false);
+              if (quickPhotoRef.current) quickPhotoRef.current.value = "";
+            }}
+          />
+
+          {quickPhotos.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 6 }}>
+              {quickPhotos.map((photo, i) => (
+                <div key={i} style={{ position: "relative" }}>
+                  <img
+                    src={photo}
+                    alt=""
+                    style={{ width: "100%", height: 80, objectFit: "cover", borderRadius: 6, border: "1px solid #1e1e2e" }}
+                  />
+                  <button
+                    onClick={() => setQuickPhotos((prev) => prev.filter((_, j) => j !== i))}
+                    style={{
+                      position: "absolute", top: 2, right: 2,
+                      background: "rgba(0,0,0,0.7)", color: "#fff", border: "none",
+                      borderRadius: "50%", width: 16, height: 16, fontSize: 9,
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: 20, color: "#555" }}>
+              <div style={{ fontSize: 28, marginBottom: 4 }}>📷</div>
+              <div style={{ fontSize: 11 }}>Add photos of the issue for better accuracy</div>
+            </div>
+          )}
+        </div>
+
+        {/* Generate */}
+        {parsing ? (
+          <div style={{ textAlign: "center", padding: 20 }}>
+            <div style={{
+              width: 36, height: 36, border: "3px solid #1e1e2e",
+              borderTopColor: "var(--color-primary)", borderRadius: "50%",
+              animation: "spin 0.8s linear infinite", margin: "0 auto 8px",
+            }} />
+            <div style={{ fontSize: 12, color: "var(--color-primary)" }}>
+              {parseStatus || "Generating quote..."}
+            </div>
+          </div>
+        ) : (
+          <button
+            className="bb"
+            onClick={() => {
+              if (!quickDesc.trim() && !quickPhotos.length) {
+                alert("Add a description or photos");
+                return;
+              }
+              doAiParse(quickDesc || "Analyze these photos and quote all repairs needed.", null);
+            }}
+            disabled={!quickDesc.trim() && !quickPhotos.length}
+            style={{
+              width: "100%", padding: 14, fontSize: 16,
+              opacity: !quickDesc.trim() && !quickPhotos.length ? 0.5 : 1,
+            }}
+          >
+            🤖 Generate Quote
+          </button>
+        )}
+      </div>
     );
 
   /* ══════════════════════════════════════════
