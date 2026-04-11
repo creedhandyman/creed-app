@@ -1,7 +1,6 @@
 export interface Profile {
   id: string;
   email: string;
-  password: string;
   name: string;
   role: "owner" | "manager" | "tech";
   rate: number;

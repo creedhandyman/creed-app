@@ -19,11 +19,18 @@ export default function Login() {
     if (e) setErr(e);
   };
 
+  const [emailSent, setEmailSent] = useState(false);
+
   const handleSignup = async () => {
     if (!name.trim()) { setErr("Enter your name"); return; }
     if (!email.trim()) { setErr("Enter your email"); return; }
     if (password.length < 6) { setErr("Password must be at least 6 characters"); return; }
     const e = await signup(email.trim(), password, name.trim());
+    if (e === "CHECK_EMAIL") {
+      setEmailSent(true);
+      setErr("");
+      return;
+    }
     if (e) setErr(e);
   };
 
@@ -129,6 +136,12 @@ export default function Login() {
           {err && (
             <div style={{ color: "#C00000", fontSize: 12, marginBottom: 8, textAlign: "center" }}>
               {err}
+            </div>
+          )}
+
+          {emailSent && (
+            <div style={{ color: "#00cc66", fontSize: 12, marginBottom: 8, textAlign: "center", padding: 12, background: "#00cc6611", borderRadius: 6 }}>
+              ✉ Check your email to verify your account, then sign in.
             </div>
           )}
 

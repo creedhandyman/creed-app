@@ -10,8 +10,14 @@ export default function Home() {
   const loading = useStore((s) => s.loading);
   const startAutoRefresh = useStore((s) => s.startAutoRefresh);
   const stopAutoRefresh = useStore((s) => s.stopAutoRefresh);
+  const initAuth = useStore((s) => s.initAuth);
 
   useEffect(() => setMounted(true), []);
+
+  // Validate Supabase Auth session on mount
+  useEffect(() => {
+    initAuth();
+  }, [initAuth]);
 
   useEffect(() => {
     if (user) {

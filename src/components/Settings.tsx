@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { db } from "@/lib/supabase";
+import { supabase, db } from "@/lib/supabase";
 
 interface Props {
   onClose: () => void;
@@ -79,10 +79,10 @@ export default function Settings({ onClose }: Props) {
                 className="bb"
                 onClick={async () => {
                   if (newPassword.length < 6) { alert("Min 6"); return; }
-                  await db.patch("profiles", user.id, { password: newPassword });
-                  setUser({ ...user, password: newPassword });
+                  const { error } = await supabase.auth.updateUser({ password: newPassword });
+                  if (error) { alert(error.message); return; }
                   setNewPassword("");
-                  alert("Updated");
+                  alert("Password updated");
                 }}
               >
                 Save

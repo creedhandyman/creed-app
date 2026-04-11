@@ -1,6 +1,6 @@
 "use client";
 import { create } from "zustand";
-import { db } from "./supabase";
+import { supabase, db } from "./supabase";
 import type {
   Profile,
   Job,
@@ -35,6 +35,7 @@ interface AppState {
   signup: (email: string, password: string, name: string) => Promise<string | null>;
   logout: () => void;
   setUser: (u: Profile | null) => void;
+  initAuth: () => Promise<void>;
 
   // dark mode
   darkMode: boolean;
@@ -63,22 +64,43 @@ export const useStore = create<AppState>((set, get) => ({
   user: ld<Profile | null>("user", null),
 
   login: async (email, password) => {
-    const rows = await db.get<Profile>("profiles", { email, password });
-    if (rows.length) {
-      set({ user: rows[0] });
-      sv("user", rows[0]);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return error.message;
+    // Fetch profile by auth user ID
+    const profiles = await db.get<Profile>("profiles", { id: data.user.id });
+    if (profiles.length) {
+      set({ user: profiles[0] });
+      sv("user", profiles[0]);
       return null;
     }
-    return "Invalid credentials";
+    // Fallback: match by email
+    const byEmail = await db.get<Profile>("profiles", { email });
+    if (byEmail.length) {
+      set({ user: byEmail[0] });
+      sv("user", byEmail[0]);
+      return null;
+    }
+    return "Profile not found";
   },
 
   signup: async (email, password, name) => {
     if (!email || !password || !name) return "Fill all fields";
-    const existing = await db.get<Profile>("profiles", { email });
-    if (existing.length) return "Email exists";
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return error.message;
+    if (!data.user) return "Signup failed";
+
+    // Check if email confirmation is required
+    if (data.user.identities?.length === 0) {
+      return "Email already registered";
+    }
+    if (!data.session) {
+      return "CHECK_EMAIL";
+    }
+
+    // Create profile row linked to auth user
     const r = await db.post<Profile>("profiles", {
+      id: data.user.id,
       email,
-      password,
       name,
       role: "tech",
       rate: 35,
@@ -90,10 +112,11 @@ export const useStore = create<AppState>((set, get) => ({
       sv("user", r[0]);
       return null;
     }
-    return "Signup failed";
+    return "Profile creation failed";
   },
 
   logout: () => {
+    supabase.auth.signOut();
     set({ user: null });
     sv("user", null);
     get().stopAutoRefresh();
@@ -102,6 +125,28 @@ export const useStore = create<AppState>((set, get) => ({
   setUser: (u) => {
     set({ user: u });
     sv("user", u);
+  },
+
+  initAuth: async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const profiles = await db.get<Profile>("profiles", { id: session.user.id });
+        if (profiles.length) {
+          set({ user: profiles[0] });
+          sv("user", profiles[0]);
+          return;
+        }
+      }
+      // No valid session — clear stale cached user
+      const cached = ld<Profile | null>("user", null);
+      if (cached) {
+        set({ user: null });
+        sv("user", null);
+      }
+    } catch {
+      // Auth check failed, keep cached state
+    }
   },
 
   /* ── Dark mode ── */
@@ -155,3 +200,12 @@ export const useStore = create<AppState>((set, get) => ({
     set({ _interval: null });
   },
 }));
+
+// Auth state listener — handles sign-out and token refresh
+if (typeof window !== "undefined") {
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") {
+      useStore.getState().setUser(null);
+    }
+  });
+}

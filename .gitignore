@@ -13,6 +13,7 @@ dist-ssr
 *.local
 .next
 .env*.local
+scripts/migrate-auth.mjs
 
 # Editor directories and files
 .vscode/*
