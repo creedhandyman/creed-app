@@ -374,40 +374,73 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             </div>
           </div>
         )}
-        {/* Inspect CTA */}
-        <div
-          onClick={() => setMode("inspect")}
-          style={{
-            background: `linear-gradient(135deg, #1a4d8a, #2E75B6)`,
-            borderRadius: 12,
-            padding: "16px 20px",
-            textAlign: "center",
-            cursor: "pointer",
-            marginBottom: 12,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <div style={{ fontSize: 32 }}>🔍</div>
-          <div style={{ textAlign: "left" }}>
-            <h4 style={{ color: "#fff", fontSize: 14, margin: 0 }}>Run Inspection</h4>
-            <p style={{ color: "#ffffffaa", fontSize: 11, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: 0 }}>
-              Walk through rooms, set conditions, take photos → AI generates quote
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+          {/* Quick Quote */}
           <div
-            className="cd"
-            style={{ cursor: "pointer", textAlign: "center", padding: 18 }}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => setMode("quick")}
+            style={{
+              background: "linear-gradient(135deg, #2E75B6, #1a4d8a)",
+              borderRadius: 12,
+              padding: "20px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+            }}
           >
-            <div style={{ fontSize: 28 }}>📁</div>
-            <h4 style={{ color: "var(--color-warning)", fontSize: 12, marginTop: 4 }}>
-              Upload PDF
-            </h4>
+            <div style={{ fontSize: 36 }}>📸</div>
+            <div>
+              <h4 style={{ color: "#fff", fontSize: 16, margin: 0 }}>Quick Quote</h4>
+              <p style={{ color: "#ffffffaa", fontSize: 11, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
+                Describe the issue, add photos → AI generates a quote
+              </p>
+            </div>
+          </div>
+
+          {/* Inspect */}
+          <div
+            onClick={() => setMode("inspect")}
+            style={{
+              background: darkMode ? "#12121a" : "#fff",
+              border: `1px solid ${darkMode ? "#1e1e2e" : "#e0e0e0"}`,
+              borderRadius: 12,
+              padding: "20px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+            }}
+          >
+            <div style={{ fontSize: 36 }}>🔍</div>
+            <div>
+              <h4 style={{ color: "var(--color-success)", fontSize: 16, margin: 0 }}>Full Inspection</h4>
+              <p style={{ color: "#888", fontSize: 11, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
+                Room-by-room walkthrough with conditions and photos
+              </p>
+            </div>
+          </div>
+
+          {/* Upload PDF */}
+          <div
+            onClick={() => fileRef.current?.click()}
+            style={{
+              background: darkMode ? "#12121a" : "#fff",
+              border: `1px solid ${darkMode ? "#1e1e2e" : "#e0e0e0"}`,
+              borderRadius: 12,
+              padding: "20px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+            }}
+          >
+            <div style={{ fontSize: 36 }}>📁</div>
+            <div>
+              <h4 style={{ color: "var(--color-warning)", fontSize: 16, margin: 0 }}>Upload Report</h4>
+              <p style={{ color: "#888", fontSize: 11, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
+                Upload a PDF inspection report for AI analysis
+              </p>
+            </div>
             <input
               ref={fileRef}
               type="file"
@@ -415,36 +448,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               style={{ display: "none" }}
               onChange={handleFile}
             />
-          </div>
-          <div
-            className="cd"
-            style={{ cursor: "pointer", textAlign: "center", padding: 18 }}
-            onClick={() => setMode("paste")}
-          >
-            <div style={{ fontSize: 28 }}>📄</div>
-            <h4 style={{ color: "var(--color-primary)", fontSize: 12, marginTop: 4 }}>
-              Paste Text
-            </h4>
-          </div>
-          <div
-            className="cd"
-            style={{ cursor: "pointer", textAlign: "center", padding: 18 }}
-            onClick={() => setMode("manual")}
-          >
-            <div style={{ fontSize: 28 }}>✏️</div>
-            <h4 style={{ color: "var(--color-success)", fontSize: 12, marginTop: 4 }}>
-              Manual
-            </h4>
-          </div>
-          <div
-            className="cd"
-            style={{ cursor: "pointer", textAlign: "center", padding: 18 }}
-            onClick={() => setMode("quick")}
-          >
-            <div style={{ fontSize: 28 }}>📸</div>
-            <h4 style={{ color: "var(--color-accent-red)", fontSize: 12, marginTop: 4 }}>
-              Quick
-            </h4>
           </div>
         </div>
       </div>
@@ -599,6 +602,17 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             🤖 Generate Quote
           </button>
         )}
+
+        {/* Manual add option */}
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <button
+            className="bo"
+            onClick={() => { setMode("manual"); }}
+            style={{ fontSize: 11, padding: "6px 14px" }}
+          >
+            ✏️ Build manually instead
+          </button>
+        </div>
       </div>
     );
 
