@@ -16,6 +16,7 @@ interface Quest {
 }
 
 export default function Quests() {
+  const profiles = useStore((s) => s.profiles);
   const jobs = useStore((s) => s.jobs);
   const reviews = useStore((s) => s.reviews);
   const referrals = useStore((s) => s.referrals);
@@ -273,6 +274,7 @@ export default function Quests() {
       <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
         {[
           { id: "quests", l: "🎯Quests" },
+          { id: "team", l: "👷Team" },
           { id: "reviews", l: "⭐Reviews" },
           { id: "referrals", l: "🤝Referrals" },
         ].map((t) => (
@@ -403,6 +405,117 @@ export default function Quests() {
               Plus ongoing Network Scout commissions
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TEAM TAB */}
+      {tab === "team" && (
+        <div>
+          {profiles.map((p) => {
+            // Stats per tech
+            const techJobs = jobs.filter((j) => {
+              try {
+                const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+                return data?.workers?.some((w: { name: string }) => w.name === p.name);
+              } catch { return false; }
+            });
+            const completedJobs = techJobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
+            const totalRevenue = techJobs.reduce((s, j) => s + (j.total || 0), 0);
+            const techTime = timeEntries.filter((e) => e.user_id === p.id || e.user_name === p.name);
+            const totalHrs = techTime.reduce((s, e) => s + (e.hours || 0), 0);
+            const techReviews = reviews.filter((r) => r.employee_names?.includes(p.name));
+            const fiveStars = techReviews.filter((r) => r.rating === 5).length;
+            const avgRating = techReviews.length
+              ? (techReviews.reduce((s, r) => s + (r.rating || 0), 0) / techReviews.length).toFixed(1)
+              : "—";
+
+            // Trades worked
+            const trades: Record<string, number> = {};
+            techJobs.filter((j) => j.trade).forEach((j) => {
+              trades[j.trade] = (trades[j.trade] || 0) + 1;
+            });
+            const topTrade = Object.entries(trades).sort((a, b) => b[1] - a[1])[0];
+
+            // Callbacks
+            const callbacks = techJobs.filter((j) => j.callback).length;
+            const callbackRate = completedJobs > 0 ? ((callbacks / completedJobs) * 100).toFixed(0) : "0";
+
+            return (
+              <div
+                key={p.id}
+                className="cd mb"
+                style={{
+                  borderLeft: `3px solid ${p.role === "owner" ? "var(--color-highlight)" : p.role === "manager" ? "var(--color-primary)" : "var(--color-success)"}`,
+                  padding: 14,
+                }}
+              >
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div>
+                    <h4 style={{ fontSize: 16, margin: 0 }}>{p.name}</h4>
+                    <div style={{ fontSize: 10, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", color: p.role === "owner" ? "var(--color-highlight)" : p.role === "manager" ? "var(--color-primary)" : "var(--color-success)" }}>
+                      {p.role} · #{p.emp_num}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-highlight)" }}>
+                      {avgRating}
+                    </div>
+                    <div className="dim" style={{ fontSize: 9 }}>avg rating</div>
+                  </div>
+                </div>
+
+                {/* Stats grid */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
+                  <div style={{ textAlign: "center", padding: 6, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6 }}>
+                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-primary)" }}>{completedJobs}</div>
+                    <div className="dim" style={{ fontSize: 8 }}>Jobs</div>
+                  </div>
+                  <div style={{ textAlign: "center", padding: 6, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6 }}>
+                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-success)" }}>{totalHrs.toFixed(0)}</div>
+                    <div className="dim" style={{ fontSize: 8 }}>Hours</div>
+                  </div>
+                  <div style={{ textAlign: "center", padding: 6, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6 }}>
+                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-highlight)" }}>{fiveStars}</div>
+                    <div className="dim" style={{ fontSize: 8 }}>5-Star</div>
+                  </div>
+                  <div style={{ textAlign: "center", padding: 6, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6 }}>
+                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: callbacks > 0 ? "var(--color-accent-red)" : "var(--color-success)" }}>{callbackRate}%</div>
+                    <div className="dim" style={{ fontSize: 8 }}>Callback</div>
+                  </div>
+                </div>
+
+                {/* Details row */}
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, flexWrap: "wrap", gap: 4 }}>
+                  <span className="dim">💰 ${totalRevenue.toLocaleString()} revenue</span>
+                  <span className="dim">⭐ {techReviews.length} reviews</span>
+                  {topTrade && <span className="dim">🔧 {topTrade[0]} ({topTrade[1]})</span>}
+                  <span className="dim">💵 ${p.rate}/hr</span>
+                </div>
+
+                {/* Trade badges */}
+                {Object.keys(trades).length > 0 && (
+                  <div style={{ display: "flex", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
+                    {Object.entries(trades).sort((a, b) => b[1] - a[1]).map(([trade, count]) => (
+                      <span
+                        key={trade}
+                        style={{
+                          fontSize: 9,
+                          padding: "2px 8px",
+                          borderRadius: 10,
+                          background: count >= 10 ? "var(--color-success)" + "22" : "var(--color-primary)" + "22",
+                          color: count >= 10 ? "var(--color-success)" : "var(--color-primary)",
+                          border: `1px solid ${count >= 10 ? "var(--color-success)" : "var(--color-primary)"}`,
+                        }}
+                      >
+                        {trade}: {count} {count >= 10 && "✓"}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
