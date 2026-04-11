@@ -17,6 +17,7 @@ import type { InspectionInput } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
 import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
+import ClientSelect from "../ClientSelect";
 
 interface Props {
   setPage: (p: string) => void;
@@ -464,11 +465,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               onChange={(e) => setProp(e.target.value)}
               placeholder="Property address"
             />
-            <input
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              placeholder="Client"
-            />
+            <ClientSelect value={client} onChange={setClient} />
           </div>
           {parsing ? (
             <div style={{ textAlign: "center", padding: 16 }}>
@@ -518,11 +515,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               onChange={(e) => setProp(e.target.value)}
               placeholder="Property *"
             />
-            <input
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              placeholder="Client"
-            />
+            <ClientSelect value={client} onChange={setClient} />
           </div>
         </div>
         <AddItemForm
@@ -563,12 +556,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             placeholder="Property *"
             style={{ marginBottom: 4, fontSize: 13 }}
           />
-          <input
-            value={client}
-            onChange={(e) => setClient(e.target.value)}
-            placeholder="Client"
-            style={{ fontSize: 13 }}
-          />
+          <ClientSelect value={client} onChange={setClient} style={{ fontSize: 13 }} />
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="sl">Total</div>
