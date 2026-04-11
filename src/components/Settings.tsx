@@ -191,7 +191,14 @@ export default function Settings({ onClose }: Props) {
                       defaultValue={u.role}
                       style={{ width: "auto", fontSize: 10, padding: "2px 4px" }}
                       onChange={async (e) => {
+                        if (u.id === user.id && (e.target.value === "tech" || e.target.value === "apprentice")) {
+                          if (!confirm("WARNING: Demoting yourself will lock you out of admin settings. Are you sure?")) {
+                            e.target.value = u.role;
+                            return;
+                          }
+                        }
                         await db.patch("profiles", u.id, { role: e.target.value });
+                        if (u.id === user.id) setUser({ ...user, role: e.target.value as any });
                         loadAll();
                       }}
                     >
