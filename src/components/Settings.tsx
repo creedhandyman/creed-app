@@ -33,7 +33,7 @@ export default function Settings({ onClose }: Props) {
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-        {["account", "team", "payments", "general"].map((t) => (
+        {["account", "team", "operations", "payments", "general"].map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -167,6 +167,101 @@ export default function Settings({ onClose }: Props) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Operations tab */}
+      {tab === "operations" && isOwner && (
+        <div className="cd">
+          <h4 style={{ fontSize: 14, marginBottom: 12 }}>📊 Quote Settings</h4>
+
+          <div className="g2 mb">
+            <div>
+              <label className="sl">Markup %</label>
+              <input
+                type="number"
+                defaultValue={org?.markup_pct || 0}
+                min="0"
+                step="1"
+                placeholder="0"
+                style={{ marginTop: 4 }}
+                onBlur={async (e) => {
+                  if (org) await db.patch("organizations", org.id, { markup_pct: parseFloat(e.target.value) || 0 });
+                  loadAll();
+                }}
+              />
+              <div className="dim" style={{ fontSize: 9, marginTop: 2 }}>Applied to material costs</div>
+            </div>
+            <div>
+              <label className="sl">Tax %</label>
+              <input
+                type="number"
+                defaultValue={org?.tax_pct || 0}
+                min="0"
+                step="0.1"
+                placeholder="0"
+                style={{ marginTop: 4 }}
+                onBlur={async (e) => {
+                  if (org) await db.patch("organizations", org.id, { tax_pct: parseFloat(e.target.value) || 0 });
+                  loadAll();
+                }}
+              />
+              <div className="dim" style={{ fontSize: 9, marginTop: 2 }}>Applied to quote total</div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`, paddingTop: 12 }}>
+            <label className="sl">Default Labor Rate</label>
+            <div className="row" style={{ marginTop: 4 }}>
+              <span>$</span>
+              <input
+                type="number"
+                defaultValue={org?.default_rate || 55}
+                min="0"
+                step="1"
+                style={{ width: 80 }}
+                onBlur={async (e) => {
+                  if (org) await db.patch("organizations", org.id, { default_rate: parseFloat(e.target.value) || 55 });
+                  loadAll();
+                }}
+              />
+              <span style={{ fontSize: 11 }}>/hr</span>
+            </div>
+          </div>
+
+          <div style={{ borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`, paddingTop: 12 }}>
+            <label className="sl">Custom Rates by Trade</label>
+            <div className="dim" style={{ fontSize: 10, marginBottom: 8 }}>Override the default rate for specific trades. Leave blank to use default.</div>
+            {(() => {
+              const trades = ["Plumbing", "Electrical", "Carpentry", "HVAC", "Painting", "Flooring", "General"];
+              let tradeRates: Record<string, number> = {};
+              try { tradeRates = org?.trade_rates ? JSON.parse(org.trade_rates) : {}; } catch { /* */ }
+
+              return trades.map((trade) => (
+                <div key={trade} className="row" style={{ marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, width: 80 }}>{trade}</span>
+                  <span>$</span>
+                  <input
+                    type="number"
+                    defaultValue={tradeRates[trade] || ""}
+                    placeholder={String(org?.default_rate || 55)}
+                    min="0"
+                    step="1"
+                    style={{ width: 70, fontSize: 12 }}
+                    onBlur={async (e) => {
+                      const val = parseFloat(e.target.value);
+                      const updated = { ...tradeRates };
+                      if (val && val > 0) updated[trade] = val;
+                      else delete updated[trade];
+                      if (org) await db.patch("organizations", org.id, { trade_rates: JSON.stringify(updated) });
+                      loadAll();
+                    }}
+                  />
+                  <span style={{ fontSize: 11 }}>/hr</span>
+                </div>
+              ));
+            })()}
+          </div>
         </div>
       )}
 

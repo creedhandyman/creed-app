@@ -69,6 +69,21 @@ export default function Payroll() {
         await db.del("time_entries", entry.id);
       }
       generatePayStub();
+      // Prompt to email pay stub
+      const empEmail = selUser.email;
+      if (empEmail && confirm(`Email pay stub to ${selUser.name} (${empEmail})?`)) {
+        const subject = encodeURIComponent(`Pay Stub — ${new Date().toLocaleDateString()}`);
+        const body = encodeURIComponent(
+          `Hi ${selUser.name},\n\n` +
+          `Your pay has been processed.\n\n` +
+          `Hours: ${totalHrs.toFixed(1)}\n` +
+          `Rate: $${selUser.rate || 55}/hr\n` +
+          `Total: $${totalPay.toFixed(2)}\n\n` +
+          Object.entries(byJob).map(([job, hrs]) => `  ${job}: ${hrs.toFixed(1)}h → $${(hrs * (selUser.rate || 55)).toFixed(2)}`).join("\n") +
+          `\n\nThank you,\n${useStore.getState().org?.name || "Management"}\n`
+        );
+        window.open(`mailto:${empEmail}?subject=${subject}&body=${body}`, "_self");
+      }
       await loadAll();
     } finally {
       setProcessing(false);

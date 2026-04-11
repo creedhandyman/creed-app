@@ -7,6 +7,9 @@ export interface Organization {
   address: string;
   logo_url: string;
   default_rate: number;
+  markup_pct: number;
+  tax_pct: number;
+  trade_rates?: string; // JSON: { "Plumbing": 65, "Electrical": 70, ... }
   stripe_account_id?: string;
   stripe_connected?: boolean;
   created_at?: string;

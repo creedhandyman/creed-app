@@ -858,6 +858,28 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           📄 Export PDF
         </button>
         <button
+          className="bo"
+          onClick={() => {
+            const clientData = profiles.length ? useStore.getState().clients.find((c: { name: string }) => c.name === client) : null;
+            const email = clientData?.email || "";
+            const orgName = useStore.getState().org?.name || "Creed Handyman LLC";
+            const subject = encodeURIComponent(`Quote — ${prop}`);
+            const body = encodeURIComponent(
+              `Hi ${client || "there"},\n\n` +
+              `Please find your property repair quote for ${prop}.\n\n` +
+              `Total: $${gt.toFixed(2)}\n` +
+              `Labor: $${tl.toFixed(2)} (${th.toFixed(1)} hours)\n` +
+              `Materials: $${tm.toFixed(2)}\n\n` +
+              `This quote is valid for 30 days.\n\n` +
+              `Thank you,\n${orgName}\n`
+            );
+            window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_self");
+          }}
+          style={{ fontSize: 12, padding: "6px 16px" }}
+        >
+          ✉ Send Quote
+        </button>
+        <button
           className="bg"
           onClick={saveJob}
           style={{ fontSize: 12, padding: "6px 16px" }}

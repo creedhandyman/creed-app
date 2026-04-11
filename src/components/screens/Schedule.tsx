@@ -94,6 +94,7 @@ export default function Schedule({ setPage }: Props) {
           borderRadius: 6,
           padding: 4,
           minHeight: view === "month" ? 50 : 70,
+          overflow: "hidden",
         }}
       >
         <div
