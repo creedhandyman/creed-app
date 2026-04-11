@@ -6,11 +6,12 @@ interface NavItem {
   id: string;
   icon: string;
   label: string;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: (NavItem | "logo")[] = [
   { id: "quests", icon: "🎯", label: "Quest" },
-  { id: "payroll", icon: "💰", label: "Pay" },
+  { id: "payroll", icon: "💰", label: "Pay", adminOnly: true },
   { id: "time", icon: "⏱", label: "Time" },
   "logo",
   { id: "sched", icon: "📅", label: "Sched" },
@@ -21,9 +22,10 @@ const NAV_ITEMS: (NavItem | "logo")[] = [
 interface Props {
   page: string;
   setPage: (p: string) => void;
+  isAdmin?: boolean;
 }
 
-export default function VerticalNav({ page, setPage }: Props) {
+export default function VerticalNav({ page, setPage, isAdmin }: Props) {
   return (
     <div className="vnav">
       {NAV_ITEMS.map((item, i) => {
@@ -39,6 +41,8 @@ export default function VerticalNav({ page, setPage }: Props) {
             />
           );
         }
+        // Hide admin-only nav items from techs/apprentices
+        if (item.adminOnly && !isAdmin) return null;
         return (
           <button
             key={i}

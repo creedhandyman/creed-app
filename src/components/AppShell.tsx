@@ -17,7 +17,10 @@ export default function AppShell() {
   const [page, setPage] = useState("dash");
   const [showSettings, setShowSettings] = useState(false);
   const [editJobId, setEditJobId] = useState<string | null>(null);
+  const user = useStore((s) => s.user)!;
   const darkMode = useStore((s) => s.darkMode);
+
+  const isAdmin = user.role === "owner" || user.role === "manager";
 
   const goToEditJob = (jobId: string) => {
     setEditJobId(jobId);
@@ -25,6 +28,11 @@ export default function AppShell() {
   };
 
   const goToPage = (p: string) => {
+    // Block restricted pages for techs/apprentices
+    if (!isAdmin && ["payroll", "clients"].includes(p)) {
+      setPage("dash");
+      return;
+    }
     if (p !== "qf") setEditJobId(null);
     setPage(p);
   };
@@ -44,17 +52,17 @@ export default function AppShell() {
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
-        return <Jobs setPage={goToPage} onEditJob={goToEditJob} />;
+        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} />;
       case "sched":
         return <Schedule setPage={goToPage} />;
       case "time":
         return <TimerScreen setPage={goToPage} />;
       case "payroll":
-        return <Payroll />;
+        return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "quests":
         return <Quests />;
       case "clients":
-        return <Clients setPage={goToPage} />;
+        return isAdmin ? <Clients setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "mileage":
         return <Mileage setPage={goToPage} />;
       default:
@@ -64,7 +72,7 @@ export default function AppShell() {
 
   return (
     <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
-      <VerticalNav page={page} setPage={goToPage} />
+      <VerticalNav page={page} setPage={goToPage} isAdmin={isAdmin} />
       <div className="mc">{renderPage()}</div>
     </div>
   );

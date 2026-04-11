@@ -8,6 +8,7 @@ interface Props {
 
 export default function Dashboard({ setPage, openSettings }: Props) {
   const user = useStore((s) => s.user)!;
+  const isAdmin = user.role === "owner" || user.role === "manager";
   const clients = useStore((s) => s.clients);
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
@@ -173,17 +174,19 @@ export default function Dashboard({ setPage, openSettings }: Props) {
 
       {/* Quick links */}
       <div className="row mb">
-        <div
-          className="cd"
-          onClick={() => setPage("clients")}
-          style={{ flex: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 12 }}
-        >
-          <span style={{ fontSize: 20 }}>👥</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Clients</div>
-            <div className="dim" style={{ fontSize: 10 }}>{clients.length} contacts</div>
+        {isAdmin && (
+          <div
+            className="cd"
+            onClick={() => setPage("clients")}
+            style={{ flex: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 12 }}
+          >
+            <span style={{ fontSize: 20 }}>👥</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Clients</div>
+              <div className="dim" style={{ fontSize: 10 }}>{clients.length} contacts</div>
+            </div>
           </div>
-        </div>
+        )}
         <div
           className="cd"
           onClick={() => setPage("mileage")}
