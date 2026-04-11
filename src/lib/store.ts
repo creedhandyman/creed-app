@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { supabase, db } from "./supabase";
 import type {
+  Organization,
   Profile,
   Job,
   TimeEntry,
@@ -37,6 +38,10 @@ interface AppState {
   setUser: (u: Profile | null) => void;
   initAuth: () => Promise<void>;
 
+  // org
+  org: Organization | null;
+  setOrg: (o: Organization | null) => void;
+
   // dark mode
   darkMode: boolean;
   toggleDark: () => void;
@@ -68,19 +73,18 @@ export const useStore = create<AppState>((set, get) => ({
     if (error) return error.message;
     // Fetch profile by auth user ID
     const profiles = await db.get<Profile>("profiles", { id: data.user.id });
-    if (profiles.length) {
-      set({ user: profiles[0] });
-      sv("user", profiles[0]);
-      return null;
+    const profile = profiles[0];
+    if (!profile) return "Profile not found";
+
+    set({ user: profile });
+    sv("user", profile);
+
+    // Load org
+    if (profile.org_id) {
+      const orgs = await db.get<Organization>("organizations", { id: profile.org_id });
+      if (orgs.length) { set({ org: orgs[0] }); sv("org", orgs[0]); }
     }
-    // Fallback: match by email
-    const byEmail = await db.get<Profile>("profiles", { email });
-    if (byEmail.length) {
-      set({ user: byEmail[0] });
-      sv("user", byEmail[0]);
-      return null;
-    }
-    return "Profile not found";
+    return null;
   },
 
   signup: async (email, password, name) => {
@@ -89,36 +93,20 @@ export const useStore = create<AppState>((set, get) => ({
     if (error) return error.message;
     if (!data.user) return "Signup failed";
 
-    // Check if email confirmation is required
-    if (data.user.identities?.length === 0) {
-      return "Email already registered";
-    }
-    if (!data.session) {
-      return "CHECK_EMAIL";
-    }
+    if (data.user.identities?.length === 0) return "Email already registered";
+    if (!data.session) return "CHECK_EMAIL";
 
-    // Create profile row linked to auth user
-    const r = await db.post<Profile>("profiles", {
-      id: data.user.id,
-      email,
-      name,
-      role: "tech",
-      rate: 35,
-      start_date: new Date().toISOString().split("T")[0],
-      emp_num: String(Math.floor(Math.random() * 900) + 100),
-    });
-    if (r?.length) {
-      set({ user: r[0] });
-      sv("user", r[0]);
-      return null;
-    }
-    return "Profile creation failed";
+    // Profile created during onboarding (after org setup), not here
+    // Store auth user id temporarily
+    set({ user: { id: data.user.id, email, name, role: "tech", rate: 35, start_date: new Date().toISOString().split("T")[0], emp_num: "", org_id: "" } });
+    return "ONBOARD";
   },
 
   logout: () => {
     supabase.auth.signOut();
-    set({ user: null });
+    set({ user: null, org: null });
     sv("user", null);
+    sv("org", null);
     get().stopAutoRefresh();
   },
 
@@ -133,20 +121,27 @@ export const useStore = create<AppState>((set, get) => ({
       if (session?.user) {
         const profiles = await db.get<Profile>("profiles", { id: session.user.id });
         if (profiles.length) {
-          set({ user: profiles[0] });
-          sv("user", profiles[0]);
+          const profile = profiles[0];
+          set({ user: profile });
+          sv("user", profile);
+          if (profile.org_id) {
+            const orgs = await db.get<Organization>("organizations", { id: profile.org_id });
+            if (orgs.length) { set({ org: orgs[0] }); sv("org", orgs[0]); }
+          }
           return;
         }
       }
-      // No valid session — clear stale cached user
       const cached = ld<Profile | null>("user", null);
-      if (cached) {
-        set({ user: null });
-        sv("user", null);
-      }
-    } catch {
-      // Auth check failed, keep cached state
-    }
+      if (cached) { set({ user: null }); sv("user", null); }
+    } catch { /* keep cached state */ }
+  },
+
+  /* ── Org ── */
+  org: ld<Organization | null>("org", null),
+
+  setOrg: (o) => {
+    set({ org: o });
+    sv("org", o);
   },
 
   /* ── Dark mode ── */
@@ -170,16 +165,18 @@ export const useStore = create<AppState>((set, get) => ({
   loading: true,
 
   loadAll: async () => {
+    const orgId = get().user?.org_id;
+    const orgFilter = orgId ? { org_id: orgId } : undefined;
     const [profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts] =
       await Promise.all([
-        db.get<Profile>("profiles"),
-        db.get<Job>("jobs"),
-        db.get<TimeEntry>("time_entries"),
-        db.get<Review>("reviews"),
-        db.get<Referral>("referrals"),
-        db.get<ScheduleEntry>("schedule"),
-        db.get<PayHistory>("pay_history"),
-        db.get<Receipt>("receipts"),
+        db.get<Profile>("profiles", orgFilter),
+        db.get<Job>("jobs", orgFilter),
+        db.get<TimeEntry>("time_entries", orgFilter),
+        db.get<Review>("reviews", orgFilter),
+        db.get<Referral>("referrals", orgFilter),
+        db.get<ScheduleEntry>("schedule", orgFilter),
+        db.get<PayHistory>("pay_history", orgFilter),
+        db.get<Receipt>("receipts", orgFilter),
       ]);
     set({ profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, loading: false });
   },

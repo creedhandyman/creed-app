@@ -8,6 +8,20 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // Tables that don't have a created_at column
 const NO_CREATED_AT = new Set(["time_entries"]);
 
+// Tables that should NOT have org_id auto-injected
+const NO_ORG_ID = new Set(["organizations", "profiles"]);
+
+// Get current org_id from localStorage (avoids circular import with store)
+function getOrgId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const user = JSON.parse(localStorage.getItem("c_user") || "null");
+    return user?.org_id || null;
+  } catch {
+    return null;
+  }
+}
+
 export const db = {
   get: async <T = Record<string, unknown>>(
     table: string,
@@ -36,9 +50,15 @@ export const db = {
     row: Record<string, unknown>
   ): Promise<T[] | null> => {
     try {
-      const { data, error } = await supabase.from(table).insert(row as never).select();
+      // Auto-inject org_id if not already set
+      const data = { ...row };
+      if (!NO_ORG_ID.has(table) && !data.org_id) {
+        const orgId = getOrgId();
+        if (orgId) data.org_id = orgId;
+      }
+      const { data: result, error } = await supabase.from(table).insert(data as never).select();
       if (error) throw error;
-      return data as T[];
+      return result as T[];
     } catch {
       return null;
     }

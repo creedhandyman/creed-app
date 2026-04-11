@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import Login from "@/components/Login";
+import Onboarding from "@/components/Onboarding";
 import AppShell from "@/components/AppShell";
 
 export default function Home() {
@@ -44,6 +45,9 @@ export default function Home() {
   }
 
   if (!user) return <Login />;
+
+  // User exists but no org — needs onboarding
+  if (!user.org_id) return <Onboarding />;
 
   if (loading) {
     return (

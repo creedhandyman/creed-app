@@ -9,6 +9,7 @@ interface Props {
 
 export default function Settings({ onClose }: Props) {
   const user = useStore((s) => s.user)!;
+  const org = useStore((s) => s.org);
   const setUser = useStore((s) => s.setUser);
   const logout = useStore((s) => s.logout);
   const profiles = useStore((s) => s.profiles);
@@ -53,6 +54,7 @@ export default function Settings({ onClose }: Props) {
         <div>
           <div className="cd mb">
             {[
+              ["Business", org?.name || "—"],
               ["Name", user.name],
               ["Email", user.email],
               ["Role", user.role],
@@ -105,6 +107,21 @@ export default function Settings({ onClose }: Props) {
       {/* Team tab */}
       {tab === "team" && (
         <div className="cd">
+          {/* Invite code */}
+          {isOwner && user.org_id && (
+            <div style={{ marginBottom: 12, padding: 10, background: darkMode ? "#1a1a28" : "#f0f4f8", borderRadius: 8 }}>
+              <div className="sl" style={{ marginBottom: 4 }}>Invite Code (share with team)</div>
+              <div style={{ fontFamily: "monospace", fontSize: 11, color: "var(--color-primary)", wordBreak: "break-all" }}>
+                {user.org_id}
+              </div>
+              <button
+                onClick={() => { navigator.clipboard.writeText(user.org_id); alert("Copied!"); }}
+                style={{ fontSize: 10, marginTop: 4, background: "none", color: "var(--color-primary)", padding: 0, textDecoration: "underline" }}
+              >
+                Copy to clipboard
+              </button>
+            </div>
+          )}
           <h4 style={{ fontSize: 14, marginBottom: 8 }}>Team ({profiles.length})</h4>
           {profiles.map((u) => (
             <div key={u.id} className="sep" style={{ fontSize: 13 }}>

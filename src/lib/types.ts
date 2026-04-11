@@ -1,3 +1,15 @@
+export interface Organization {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  license_num: string;
+  address: string;
+  logo_url: string;
+  default_rate: number;
+  created_at?: string;
+}
+
 export interface Profile {
   id: string;
   email: string;
@@ -6,6 +18,7 @@ export interface Profile {
   rate: number;
   start_date: string;
   emp_num: string;
+  org_id: string;
   created_at?: string;
 }
 
