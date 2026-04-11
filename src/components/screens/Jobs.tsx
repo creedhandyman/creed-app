@@ -16,6 +16,7 @@ export default function Jobs({ setPage, onEditJob }: Props) {
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
+  const [jobTab, setJobTab] = useState<"active" | "billing" | "paid">("active");
   const [open, setOpen] = useState<string | null>(null);
   const [rn, setRn] = useState("");
   const [ra, setRa] = useState("");
@@ -159,19 +160,83 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        📋 Jobs ({jobs.length})
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10 }}>
+        📋 Jobs
       </h2>
 
-      {!jobs.length ? (
-        <div className="cd" style={{ textAlign: "center", padding: 24 }}>
-          <p className="dim">No jobs — create one in QuoteForge</p>
-          <button className="bb mt" onClick={() => setPage("qf")}>
-            ⚡ Start Quote
-          </button>
+      {/* Job tabs */}
+      {(() => {
+        const activeJobs = jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status));
+        const billingJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced");
+        const paidJobs = jobs.filter((j) => j.status === "paid");
+        const tabs = [
+          { id: "active" as const, l: `🔨 Active (${activeJobs.length})`, c: "var(--color-primary)" },
+          { id: "billing" as const, l: `🧾 Billing (${billingJobs.length})`, c: "var(--color-warning)" },
+          { id: "paid" as const, l: `✅ Paid (${paidJobs.length})`, c: "var(--color-success)" },
+        ];
+        return (
+          <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setJobTab(t.id)}
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  background: jobTab === t.id ? t.c : "transparent",
+                  color: jobTab === t.id ? "#fff" : "#888",
+                  fontFamily: "Oswald",
+                  border: `1px solid ${jobTab === t.id ? t.c : darkMode ? "#1e1e2e" : "#ddd"}`,
+                }}
+              >
+                {t.l}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Billing tab header */}
+      {jobTab === "billing" && jobs.some((j) => j.status === "complete" || j.status === "invoiced") && (
+        <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)", padding: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div className="sl">Ready to Invoice</div>
+              <div style={{ fontSize: 20, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-warning)" }}>
+                ${jobs.filter((j) => j.status === "complete" || j.status === "invoiced").reduce((s, j) => s + (j.total || 0), 0).toLocaleString()}
+              </div>
+            </div>
+            {!org?.stripe_connected && (
+              <button className="bb" onClick={() => setPage("dash")} style={{ fontSize: 10, padding: "5px 10px" }}>
+                Connect Stripe →
+              </button>
+            )}
+          </div>
         </div>
-      ) : (
-        jobs.map((j) => {
+      )}
+
+      {(() => {
+        const filtered = jobTab === "active"
+          ? jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status))
+          : jobTab === "billing"
+          ? jobs.filter((j) => j.status === "complete" || j.status === "invoiced")
+          : jobs.filter((j) => j.status === "paid");
+
+        if (!filtered.length) {
+          return (
+            <div className="cd" style={{ textAlign: "center", padding: 24 }}>
+              <p className="dim">
+                {jobTab === "active" ? "No active jobs — create one in QuoteForge" : jobTab === "billing" ? "No jobs ready for billing" : "No paid jobs yet"}
+              </p>
+              {jobTab === "active" && (
+                <button className="bb mt" onClick={() => setPage("qf")}>⚡ Start Quote</button>
+              )}
+            </div>
+          );
+        }
+
+        return filtered.map((j) => {
           const w = getWorkers(j);
           const isOpen = open === j.id;
 
@@ -530,12 +595,12 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
               )}
             </div>
           );
-        })
-      )}
+        });
+      })()}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <p className="dim" style={{ fontSize: 12 }}>
-          💡 Next step: Schedule a job → then start the Timer
+          {jobTab === "active" ? "💡 Next step: Schedule a job → then start the Timer" : jobTab === "billing" ? "💡 Send payment links to collect from clients" : "💡 All paid — great work!"}
         </p>
       </div>
 
