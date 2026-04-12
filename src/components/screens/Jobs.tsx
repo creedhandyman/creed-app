@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { exportJobReport } from "@/lib/export-job-report";
+import { QRCodeSVG } from "qrcode.react";
 
 interface Props {
   setPage: (p: string) => void;
@@ -25,6 +26,7 @@ export default function Jobs({ setPage, onEditJob }: Props) {
   const [rPhoto, setRPhoto] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
+  const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number } | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
 
   const getWorkers = (j: typeof jobs[0]): { id: string; name: string }[] => {
@@ -413,7 +415,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       >
                         🧾 {j.status === "complete" ? "Generate Invoice" : "View Invoice"}
                       </button>
-                      {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && org?.stripe_connected && (
+                      {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && org?.stripe_connected && (<>
                         <button
                           className="bb"
                           onClick={async (e) => {
@@ -443,9 +445,39 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                           }}
                           style={{ fontSize: 10, padding: "5px 12px" }}
                         >
-                          💳 Payment Link
+                          💳 Send Link
                         </button>
-                      )}
+                        <button
+                          className="bb"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await fetch("/api/checkout", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  jobId: j.id,
+                                  property: j.property,
+                                  client: j.client,
+                                  amount: j.total,
+                                  orgName: org?.name || "Handyman Service",
+                                  stripeAccountId: org?.stripe_account_id || "",
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.url) {
+                                setPayQR({ url: data.url, jobId: j.id, amount: j.total });
+                                if (j.status === "complete") setStatus(j.id, "invoiced");
+                              } else {
+                                alert("Error: " + (data.error || "Could not create payment"));
+                              }
+                            } catch { alert("Failed to create payment"); }
+                          }}
+                          style={{ fontSize: 10, padding: "5px 12px" }}
+                        >
+                          📱 Collect Now
+                        </button>
+                      </>)}
                       {j.status === "invoiced" && (
                         <button
                           className="bg"
@@ -757,6 +789,44 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
           {jobTab === "active" ? "💡 Next step: Schedule a job → then start the Timer" : jobTab === "billing" ? "💡 Send payment links to collect from clients" : "💡 All paid — great work!"}
         </p>
       </div>
+
+      {/* Payment QR overlay */}
+      {payQR && (
+        <div
+          onClick={() => setPayQR(null)}
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(0,0,0,0.9)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 999, cursor: "pointer",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ textAlign: "center", cursor: "default" }}
+          >
+            <div style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>
+              Scan to Pay
+            </div>
+            <div style={{ background: "#fff", display: "inline-block", padding: 16, borderRadius: 12, marginBottom: 12 }}>
+              <QRCodeSVG value={payQR.url} size={200} level="M" />
+            </div>
+            <div style={{ fontSize: 32, fontFamily: "Oswald", fontWeight: 700, color: "#00cc66", marginBottom: 4 }}>
+              ${payQR.amount.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>
+              Customer scans with phone camera → pays with Apple Pay, Google Pay, or card
+            </div>
+            <button
+              className="bo"
+              onClick={() => setPayQR(null)}
+              style={{ fontSize: 11, padding: "6px 16px", color: "#888" }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Photo viewer overlay */}
       {viewPhoto && (
