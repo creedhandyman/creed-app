@@ -381,13 +381,16 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       className="bo"
                       onClick={(e) => {
                         e.stopPropagation();
-                        const url = `${window.location.origin}/status?job=${j.id}`;
-                        navigator.clipboard.writeText(url);
-                        alert("Status link copied! Send to client.\n\n" + url);
+                        const url = `https://creedhm.com/status?job=${j.id}`;
+                        const msg = j.status === "quoted" || j.status === "accepted"
+                          ? `Hi! Here's your quote from ${org?.name || "us"} for ${j.property}:\n\nTotal: $${(j.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
+                          : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
+                        navigator.clipboard.writeText(msg);
+                        alert("Message copied! Paste it in a text or email to your client.");
                       }}
                       style={{ fontSize: 12, padding: "5px 10px" }}
                     >
-                      🔗 Share Status
+                      📤 Send to Client
                     </button>
                     <button
                       className="bo"
