@@ -188,10 +188,21 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const handleInspectionComplete = async (data: InspectionData) => {
     setParsing(true);
     setParseStatus("Analyzing inspection with AI...");
-    setMode("edit"); // Switch to edit view with loading overlay
+    setMode("edit");
 
     setProp(data.property);
     setClient(data.client);
+
+    // Collect all inspection photos and add to job gallery
+    const inspectionPhotos: { url: string; label: string; type: "before" | "after" | "work" }[] = [];
+    data.rooms.forEach((room) => {
+      room.items.forEach((item) => {
+        item.photos.forEach((url) => {
+          inspectionPhotos.push({ url, label: `${room.name} — ${item.name}`, type: "before" });
+        });
+      });
+    });
+    if (inspectionPhotos.length) setJobPhotos((prev) => [...prev, ...inspectionPhotos]);
 
     try {
       const input: InspectionInput = {
@@ -420,12 +431,17 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     if (gt <= 0 && !confirm("Quote total is $0. Save anyway?")) {
       return;
     }
+    const workOrder = guide.steps.map((s) => ({
+      room: s.room, detail: s.detail, action: s.action, pri: s.pri, hrs: s.hrs, done: false,
+    }));
     const data = {
       rooms: rooms,
       workers: workers.map((wid) => {
         const u = profiles.find((x) => x.id === wid);
         return { id: wid, name: u?.name || "" };
       }),
+      photos: jobPhotos,
+      workOrder,
     };
     const jobData = {
       property: prop,

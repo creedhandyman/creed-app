@@ -74,6 +74,20 @@ export default function Jobs({ setPage, onEditJob }: Props) {
   };
 
   const setStatus = async (id: string, status: string) => {
+    // Warn if completing with unchecked work order items
+    if (status === "complete") {
+      const job = jobs.find((j) => j.id === id);
+      if (job) {
+        try {
+          const jobData = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+          const workOrder = jobData?.workOrder || [];
+          const unchecked = workOrder.filter((w: { done: boolean }) => !w.done).length;
+          if (unchecked > 0) {
+            if (!confirm(`${unchecked} work order item${unchecked !== 1 ? "s" : ""} still unchecked. Mark complete anyway?`)) return;
+          }
+        } catch { /* no work order, proceed */ }
+      }
+    }
     await db.patch("jobs", id, { status });
     loadAll();
   };
@@ -504,6 +518,72 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       ))}
                     </select>
                   </div>
+
+                  {/* Work Order Checklist */}
+                  {(() => {
+                    try {
+                      const jobData = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+                      const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[] = jobData?.workOrder || [];
+                      if (!workOrder.length) return null;
+
+                      const completedCount = workOrder.filter((w) => w.done).length;
+                      const totalCount = workOrder.length;
+
+                      return (
+                        <div className="mt">
+                          <h5 style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
+                            <span>📋 Work Order</span>
+                            <span className="dim" style={{ fontSize: 10 }}>{completedCount}/{totalCount} done</span>
+                          </h5>
+                          {/* Progress bar */}
+                          <div style={{ height: 4, background: darkMode ? "#1e1e2e" : "#eee", borderRadius: 2, marginBottom: 6 }}>
+                            <div style={{ height: 4, background: completedCount === totalCount ? "var(--color-success)" : "var(--color-primary)", borderRadius: 2, width: `${(completedCount / totalCount) * 100}%`, transition: "width 0.3s" }} />
+                          </div>
+                          {workOrder.map((w, wi) => (
+                            <div
+                              key={wi}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const updated = [...workOrder];
+                                updated[wi] = { ...w, done: !w.done };
+                                const newData = { ...jobData, workOrder: updated };
+                                await db.patch("jobs", j.id, { rooms: JSON.stringify(newData) });
+                                loadAll();
+                              }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 6, padding: "3px 0",
+                                borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
+                                cursor: "pointer", opacity: w.done ? 0.5 : 1,
+                                textDecoration: w.done ? "line-through" : "none",
+                              }}
+                            >
+                              <span style={{
+                                width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                                border: `2px solid ${w.done ? "var(--color-success)" : "#555"}`,
+                                background: w.done ? "var(--color-success)" : "transparent",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: 10, color: "#fff",
+                              }}>
+                                {w.done && "✓"}
+                              </span>
+                              <div style={{ flex: 1, fontSize: 11 }}>
+                                <span style={{
+                                  fontSize: 9, padding: "1px 4px", borderRadius: 3, marginRight: 4,
+                                  background: w.pri === "HIGH" ? "#C0000033" : w.pri === "MED" ? "#ff880033" : "#00cc6633",
+                                  color: w.pri === "HIGH" ? "var(--color-accent-red)" : w.pri === "MED" ? "var(--color-warning)" : "var(--color-success)",
+                                }}>
+                                  {w.pri}
+                                </span>
+                                <b style={{ color: "var(--color-primary)" }}>{w.room}</b> — {w.detail}
+                                <div className="dim" style={{ fontSize: 10 }}>{w.action}</div>
+                              </div>
+                              <span className="dim" style={{ fontSize: 9 }}>{w.hrs}h</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    } catch { return null; }
+                  })()}
 
                   {/* Existing Receipts */}
                   {receipts.filter((r) => r.job_id === j.id).length > 0 && (
