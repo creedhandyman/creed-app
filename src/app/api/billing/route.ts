@@ -33,7 +33,12 @@ export async function POST(req: NextRequest) {
 
       // Price IDs — create these in Stripe Dashboard
       // For now, use dynamic pricing
-      const priceAmount = plan === "team" ? 9900 : 4900; // cents
+      const plans: Record<string, { name: string; amount: number; users: string }> = {
+        solo: { name: "Solo", amount: 4900, users: "1 user" },
+        team: { name: "Team", amount: 9900, users: "up to 5 users" },
+        business: { name: "Business", amount: 14900, users: "up to 10 users" },
+      };
+      const p = plans[plan] || plans.solo;
 
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
@@ -41,8 +46,8 @@ export async function POST(req: NextRequest) {
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: { name: `Creed App — ${plan === "team" ? "Team" : "Solo"} Plan` },
-            unit_amount: priceAmount,
+            product_data: { name: `Creed App — ${p.name} Plan (${p.users})` },
+            unit_amount: p.amount,
             recurring: { interval: "month" },
           },
           quantity: 1,

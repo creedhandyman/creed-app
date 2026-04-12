@@ -428,7 +428,7 @@ export default function Settings({ onClose }: Props) {
                     </span>
                   </div>
                   <span className="dim" style={{ fontSize: 10 }}>
-                    {plan === "team" ? "Team $99/mo" : "Solo $49/mo"}
+                    {plan === "business" ? "Business $149/mo" : plan === "team" ? "Team $99/mo" : "Solo $49/mo"}
                   </span>
                 </div>
 
@@ -496,8 +496,9 @@ export default function Settings({ onClose }: Props) {
                       }}
                       style={{ width: "auto", fontSize: 10, padding: "3px 6px" }}
                     >
-                      <option value="solo">Solo $49/mo</option>
-                      <option value="team">Team $99/mo</option>
+                      <option value="solo">Solo — $49/mo (1 user)</option>
+                      <option value="team">Team — $99/mo (up to 5)</option>
+                      <option value="business">Business — $149/mo (up to 10)</option>
                     </select>
                   )}
                 </div>
