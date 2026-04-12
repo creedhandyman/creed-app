@@ -1,4 +1,5 @@
 import type { Room, RoomItem, Material } from "./types";
+import { db } from "./supabase";
 
 /* ====== PDF LOADING ====== */
 
@@ -207,6 +208,46 @@ export async function aiParsePdf(
   licensedTrades?: string[]
 ): Promise<AiParseResult | null> {
   try {
+    // Load recent price corrections for AI learning
+    let correctionsPrompt = "";
+    try {
+      const corrections = await db.get<{
+        item_name: string; original_hours: number; corrected_hours: number;
+        original_mat_cost: number; corrected_mat_cost: number; trade: string;
+      }>("price_corrections");
+      if (corrections.length > 0) {
+        // Aggregate corrections by item type
+        const byItem: Record<string, { hrsAdj: number[]; matAdj: number[]; count: number }> = {};
+        corrections.slice(0, 100).forEach((c) => {
+          const key = c.item_name.toLowerCase().replace(/[^a-z\s]/g, "").trim();
+          if (!key) return;
+          if (!byItem[key]) byItem[key] = { hrsAdj: [], matAdj: [], count: 0 };
+          if (c.corrected_hours !== c.original_hours) byItem[key].hrsAdj.push(c.corrected_hours);
+          if (c.corrected_mat_cost !== c.original_mat_cost) byItem[key].matAdj.push(c.corrected_mat_cost);
+          byItem[key].count++;
+        });
+        const lessons = Object.entries(byItem)
+          .filter(([, v]) => v.count >= 2) // only use patterns with 2+ corrections
+          .slice(0, 20)
+          .map(([item, v]) => {
+            const parts = [];
+            if (v.hrsAdj.length) {
+              const avgHrs = v.hrsAdj.reduce((a, b) => a + b, 0) / v.hrsAdj.length;
+              parts.push(`typically ${avgHrs.toFixed(1)}h`);
+            }
+            if (v.matAdj.length) {
+              const avgMat = v.matAdj.reduce((a, b) => a + b, 0) / v.matAdj.length;
+              parts.push(`materials ~$${avgMat.toFixed(0)}`);
+            }
+            return parts.length ? `- ${item}: ${parts.join(", ")}` : null;
+          })
+          .filter(Boolean);
+        if (lessons.length) {
+          correctionsPrompt = `\nLEARNED PRICING (from past job corrections by this team — use these when applicable):\n${lessons.join("\n")}\n\n`;
+        }
+      }
+    } catch { /* corrections not available, continue without */ }
+
     // Build content array with text + images
     const content: Array<
       | { type: "text"; text: string }
@@ -246,6 +287,7 @@ export async function aiParsePdf(
           (licensedTrades?.length
             ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors. Include labor, materials, and hours for all ${licensedTrades.join("/")} work.\n\n`
             : "") +
+          correctionsPrompt +
           AI_SYSTEM_PROMPT_BASE,
         messages: [{ role: "user", content }],
       }),

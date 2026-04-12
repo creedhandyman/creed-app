@@ -364,6 +364,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     } else {
       setRooms([...rooms, { name: nr, items: [it] }]);
     }
+    // Track custom material for AI learning
+    db.post("price_corrections", {
+      item_name: nd,
+      original_hours: 0,
+      corrected_hours: parseFloat(nh) || 1,
+      original_mat_cost: 0,
+      corrected_mat_cost: parseFloat(nm) || 0,
+      material_name: "Custom item",
+      trade: nr,
+    });
     setNd("");
     setNc("");
     setNh("1");
@@ -381,7 +391,28 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         .filter((r) => r.items.length > 0)
     );
 
-  const upItem = (rn: string, id: string, field: string, value: number | Material[]) =>
+  const upItem = (rn: string, id: string, field: string, value: number | Material[]) => {
+    // Track corrections for AI learning
+    const room = rooms.find((r) => r.name === rn);
+    const item = room?.items.find((i) => i.id === id);
+    if (item && (field === "laborHrs" || field === "materials")) {
+      const origHrs = item.laborHrs;
+      const origMat = item.materials.reduce((s, m) => s + (m.c || 0), 0);
+      const newHrs = field === "laborHrs" ? (value as number) : origHrs;
+      const newMat = field === "materials" ? (value as Material[]).reduce((s, m) => s + (m.c || 0), 0) : origMat;
+      // Only log if there's a meaningful change
+      if (Math.abs(newHrs - origHrs) > 0.1 || Math.abs(newMat - origMat) > 2) {
+        db.post("price_corrections", {
+          item_name: item.detail,
+          original_hours: origHrs,
+          corrected_hours: newHrs,
+          original_mat_cost: origMat,
+          corrected_mat_cost: newMat,
+          material_name: field === "materials" ? (value as Material[]).map((m) => m.n).join(", ") : item.materials.map((m) => m.n).join(", "),
+          trade: rn,
+        });
+      }
+    }
     setRooms(
       rooms.map((r) =>
         r.name === rn
@@ -394,6 +425,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           : r
       )
     );
+  };
 
   const toggleWorker = (id: string) =>
     setWorkers((w) =>
