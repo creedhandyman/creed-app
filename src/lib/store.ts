@@ -12,6 +12,7 @@ import type {
   ScheduleEntry,
   PayHistory,
   Receipt,
+  QuestPayout,
 } from "./types";
 
 /* ── localStorage helpers ── */
@@ -59,6 +60,7 @@ interface AppState {
   schedule: ScheduleEntry[];
   payHistory: PayHistory[];
   receipts: Receipt[];
+  questPayouts: QuestPayout[];
   loading: boolean;
   loadAll: () => Promise<void>;
 
@@ -174,12 +176,13 @@ export const useStore = create<AppState>((set, get) => ({
   schedule: [],
   payHistory: [],
   receipts: [],
+  questPayouts: [],
   loading: true,
 
   loadAll: async () => {
     const orgId = get().user?.org_id;
     const orgFilter = orgId ? { org_id: orgId } : undefined;
-    const [clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts] =
+    const [clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, questPayouts] =
       await Promise.all([
         db.get<Client>("clients", orgFilter),
         db.get<Profile>("profiles", orgFilter),
@@ -190,8 +193,9 @@ export const useStore = create<AppState>((set, get) => ({
         db.get<ScheduleEntry>("schedule", orgFilter),
         db.get<PayHistory>("pay_history", orgFilter),
         db.get<Receipt>("receipts", orgFilter),
+        db.get<QuestPayout>("quest_payouts", orgFilter),
       ]);
-    set({ clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, loading: false });
+    set({ clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, questPayouts, loading: false });
   },
 
   /* ── Auto-refresh ── */

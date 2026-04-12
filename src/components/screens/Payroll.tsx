@@ -7,8 +7,12 @@ export default function Payroll() {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
+  const jobs = useStore((s) => s.jobs);
+  const reviews = useStore((s) => s.reviews);
+  const referrals = useStore((s) => s.referrals);
   const timeEntries = useStore((s) => s.timeEntries);
   const payHistory = useStore((s) => s.payHistory);
+  const questPayouts = useStore((s) => s.questPayouts);
   const loadAll = useStore((s) => s.loadAll);
 
   const isOwner = user.role === "owner" || user.role === "manager";
@@ -19,13 +23,54 @@ export default function Payroll() {
     (e) => e.user_id === sel || (sel === user.id && !e.user_id && e.user_name === user.name)
   );
   const totalHrs = entries.reduce((s, e) => s + (e.hours || 0), 0);
-  const totalPay = totalHrs * (selUser.rate || 55);
+  const laborPay = totalHrs * (selUser.rate || 55);
 
   // Group by job
   const byJob: Record<string, number> = {};
   entries.forEach((e) => {
     byJob[e.job || "General"] = (byJob[e.job || "General"] || 0) + (e.hours || 0);
   });
+
+  // Quest bonus detection — find completed quests not yet paid
+  const paidQuests = questPayouts.filter((qp) => qp.user_id === sel).map((qp) => qp.quest_key);
+
+  // Get quest config bonuses from org
+  let questConfig: Record<string, { enabled: boolean; bonus: number }> = {};
+  try { questConfig = org?.quest_config ? JSON.parse(org.quest_config) : {}; } catch { /* */ }
+
+  const defaultBonuses: Record<string, number> = {
+    review_favor: 75, five_star: 100, super_handy: 50, network_scout: 50,
+    critical_referral: 150, deal_closer: 25, repeat_machine: 100,
+    skill_mastery: 100, make_ready: 350, zero_callback: 150, mr_speed: 25, handy_king: 750,
+  };
+
+  const getBonus = (key: string) => questConfig[key]?.bonus ?? defaultBonuses[key] ?? 0;
+  const isEnabled = (key: string) => questConfig[key]?.enabled !== false;
+
+  // Check completions for selected user
+  const completedJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
+  const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3).length;
+  const fiveStarReviews = reviews.filter((r) => r.rating === 5).length;
+  const convertedReferrals = referrals.filter((r) => r.status === "converted").length;
+  const upsellJobs = jobs.filter((j) => j.is_upsell).length;
+  const bigJobs = jobs.filter((j) => (j.status === "complete" || j.status === "paid") && (j.total_hrs || 0) >= 24).length;
+
+  const earnedQuests: { key: string; name: string; bonus: number }[] = [];
+  if (isEnabled("review_favor") && positiveReviews >= 15 && !paidQuests.includes("review_favor"))
+    earnedQuests.push({ key: "review_favor", name: "Review Favor", bonus: getBonus("review_favor") });
+  if (isEnabled("five_star") && fiveStarReviews >= 10 && !paidQuests.includes("five_star"))
+    earnedQuests.push({ key: "five_star", name: "Five Star Tech", bonus: getBonus("five_star") });
+  if (isEnabled("super_handy") && completedJobs >= 10 && !paidQuests.includes("super_handy"))
+    earnedQuests.push({ key: "super_handy", name: "Super Handy", bonus: getBonus("super_handy") });
+  if (isEnabled("network_scout") && convertedReferrals >= 1 && !paidQuests.includes("network_scout"))
+    earnedQuests.push({ key: "network_scout", name: "Network Scout", bonus: getBonus("network_scout") });
+  if (isEnabled("deal_closer") && upsellJobs >= 1 && !paidQuests.includes("deal_closer"))
+    earnedQuests.push({ key: "deal_closer", name: "Deal Closer", bonus: getBonus("deal_closer") });
+  if (isEnabled("make_ready") && bigJobs >= 7 && !paidQuests.includes("make_ready"))
+    earnedQuests.push({ key: "make_ready", name: "Make Ready Pro", bonus: getBonus("make_ready") });
+
+  const totalBonus = earnedQuests.reduce((s, q) => s + q.bonus, 0);
+  const totalPay = laborPay + totalBonus;
 
   const [processing, setProcessing] = useState(false);
   const [openPay, setOpenPay] = useState<string | number | null>(null);
@@ -35,11 +80,16 @@ export default function Payroll() {
     if (!entries.length) return;
 
     // Confirmation step
+    const bonusText = earnedQuests.length
+      ? `\n\n🎯 Quest Bonuses:\n` + earnedQuests.map((q) => `  ${q.name}: $${q.bonus}`).join("\n") + `\n  Bonus Total: $${totalBonus}`
+      : "";
     const confirmed = confirm(
       `Process payment for ${selUser.name}?\n\n` +
       `Hours: ${totalHrs.toFixed(1)}\n` +
       `Rate: $${selUser.rate || 55}/hr\n` +
-      `Total: $${totalPay.toFixed(2)}\n\n` +
+      `Labor: $${laborPay.toFixed(2)}` +
+      bonusText +
+      `\n\nTotal Pay: $${totalPay.toFixed(2)}\n\n` +
       `This will generate a pay stub.`
     );
     if (!confirmed) return;
@@ -57,17 +107,27 @@ export default function Payroll() {
         hours: totalHrs,
         amount: totalPay,
         entries: entries.length,
-        details: JSON.stringify(
-          Object.entries(byJob).map(([job, hrs]) => ({
+        details: JSON.stringify({
+          jobs: Object.entries(byJob).map(([job, hrs]) => ({
             job,
             hrs,
             amount: parseFloat((hrs * (selUser.rate || 55)).toFixed(2)),
-          }))
-        ),
+          })),
+          bonuses: earnedQuests.map((q) => ({ name: q.name, amount: q.bonus })),
+        }),
       });
       // Clear time entries for this employee
       for (const entry of entries) {
         await db.del("time_entries", entry.id);
+      }
+      // Record quest payouts to prevent double-counting
+      for (const quest of earnedQuests) {
+        await db.post("quest_payouts", {
+          user_id: sel,
+          quest_key: quest.key,
+          bonus_amount: quest.bonus,
+          paid_date: new Date().toLocaleDateString(),
+        });
       }
       generatePayStub();
       // Prompt to email pay stub
@@ -101,6 +161,9 @@ export default function Payroll() {
       .map(([job, hrs]) =>
         `<tr><td>${job}</td><td style="text-align:right">${hrs.toFixed(2)}</td><td style="text-align:right">$${(hrs * (selUser.rate || 55)).toFixed(2)}</td></tr>`
       )
+      .join("");
+    const bonusRows = earnedQuests
+      .map((q) => `<tr><td>🎯 ${q.name}</td><td style="text-align:right">Bonus</td><td style="text-align:right">$${q.bonus.toFixed(2)}</td></tr>`)
       .join("");
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Pay Stub — ${selUser.name}</title>
@@ -139,11 +202,12 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
   <div class="emp-box" style="flex:1"><div><div class="label">Employee #</div><div class="value">${selUser.emp_num || "—"}</div></div></div>
   <div class="emp-box" style="flex:1"><div><div class="label">Rate</div><div class="value">$${selUser.rate || 55}/hr</div></div></div>
 </div>
-<table><thead><tr><th>Job</th><th>Hours</th><th>Amount</th></tr></thead><tbody>${jobRows}</tbody></table>
+<table><thead><tr><th>Job</th><th>Hours</th><th>Amount</th></tr></thead><tbody>${jobRows}${bonusRows}</tbody></table>
 <div class="totals">
   <div class="totals-row"><span>Total Hours</span><span>${totalHrs.toFixed(2)}</span></div>
   <div class="totals-row"><span>Rate</span><span>$${selUser.rate || 55}/hr</span></div>
-  <div class="totals-row"><span>Entries</span><span>${entries.length}</span></div>
+  <div class="totals-row"><span>Labor</span><span>$${laborPay.toFixed(2)}</span></div>
+  ${totalBonus > 0 ? `<div class="totals-row"><span>🎯 Quest Bonuses</span><span>$${totalBonus.toFixed(2)}</span></div>` : ""}
   <div class="totals-row grand"><span>Net Pay</span><span>$${totalPay.toFixed(2)}</span></div>
 </div>
 <div class="footer">
@@ -188,7 +252,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
       )}
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: totalBonus > 0 ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
         <div className="cd" style={{ textAlign: "center" }}>
           <div className="sl">Hours</div>
           <div className="sv" style={{ color: "var(--color-primary)" }}>{totalHrs.toFixed(1)}</div>
@@ -197,11 +261,31 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
           <div className="sl">Rate</div>
           <div className="sv">${selUser.rate || 55}/hr</div>
         </div>
+        {totalBonus > 0 && (
+          <div className="cd" style={{ textAlign: "center", borderLeft: "3px solid var(--color-warning)" }}>
+            <div className="sl">🎯 Bonus</div>
+            <div className="sv" style={{ color: "var(--color-warning)" }}>${totalBonus}</div>
+          </div>
+        )}
         <div className="cd" style={{ textAlign: "center" }}>
           <div className="sl">Total</div>
           <div className="sv" style={{ color: "var(--color-success)" }}>${totalPay.toFixed(2)}</div>
         </div>
       </div>
+
+      {/* Quest bonuses earned */}
+      {earnedQuests.length > 0 && (
+        <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)" }}>
+          <h4 style={{ fontSize: 13, marginBottom: 6, color: "var(--color-warning)" }}>🎯 Quest Bonuses Earned</h4>
+          {earnedQuests.map((q) => (
+            <div key={q.key} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span>{q.name}</span>
+              <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>${q.bonus}</span>
+            </div>
+          ))}
+          <div className="dim" style={{ fontSize: 10, marginTop: 4 }}>These bonuses will be included when you process pay.</div>
+        </div>
+      )}
 
       {/* By Job */}
       <div className="cd mb">
@@ -251,8 +335,14 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
           {userPayHistory.map((p) => {
             const isOpen = openPay === p.id;
             let jobDetails: { job: string; hrs: number; amount: number }[] = [];
+            let bonusDetails: { name: string; amount: number }[] = [];
             try {
-              if (p.details) jobDetails = JSON.parse(p.details);
+              if (p.details) {
+                const parsed = JSON.parse(p.details);
+                // Support both old format (array) and new format (object with jobs+bonuses)
+                if (Array.isArray(parsed)) jobDetails = parsed;
+                else { jobDetails = parsed.jobs || []; bonusDetails = parsed.bonuses || []; }
+              }
             } catch { /* ignore */ }
 
             return (
@@ -296,6 +386,17 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
                       ))
                     ) : (
                       <span className="dim" style={{ fontSize: 11 }}>No job breakdown saved</span>
+                    )}
+                    {bonusDetails.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 10, color: "var(--color-warning)", fontWeight: 600, marginTop: 6, marginBottom: 2 }}>🎯 Quest Bonuses</div>
+                        {bonusDetails.map((b, bi) => (
+                          <div key={bi} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "1px 0" }}>
+                            <span>{b.name}</span>
+                            <span style={{ color: "var(--color-success)" }}>${b.amount.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </>
                     )}
                   </div>
                 )}

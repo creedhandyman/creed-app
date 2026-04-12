@@ -116,6 +116,16 @@ export interface Receipt {
   photo_url: string;
 }
 
+export interface QuestPayout {
+  id: string;
+  org_id: string;
+  user_id: string;
+  quest_key: string;
+  bonus_amount: number;
+  paid_date: string;
+  created_at?: string;
+}
+
 export interface Material {
   n: string;
   c: number;
