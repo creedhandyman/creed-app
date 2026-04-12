@@ -554,10 +554,22 @@ export default function Quests() {
             <div key={r.id} className="cd mb">
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <b style={{ fontSize: 13 }}>{r.client_name}</b>
-                <span style={{ color: "var(--color-highlight)" }}>
-                  {"★".repeat(r.rating || 0)}
-                  {"☆".repeat(5 - (r.rating || 0))}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: "var(--color-highlight)" }}>
+                    {"★".repeat(r.rating || 0)}
+                    {"☆".repeat(5 - (r.rating || 0))}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Delete review from ${r.client_name}?`)) return;
+                      await db.del("reviews", r.id);
+                      loadAll();
+                    }}
+                    style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: "0 4px" }}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               {r.employee_names && (
                 <div style={{ fontSize: 10, color: "var(--color-primary)", marginTop: 2 }}>
