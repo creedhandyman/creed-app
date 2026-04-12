@@ -108,6 +108,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [quickDesc, setQuickDesc] = useState("");
   const [quickUploading, setQuickUploading] = useState(false);
   const quickPhotoRef = useRef<HTMLInputElement>(null);
+  const quickCameraRef = useRef<HTMLInputElement>(null);
   const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -582,15 +583,47 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             <div className="row" style={{ gap: 4 }}>
               <button
                 className="bb"
+                onClick={() => quickCameraRef.current?.click()}
+                disabled={quickUploading}
+                style={{ fontSize: 10, padding: "4px 10px" }}
+              >
+                📷 Take Photo
+              </button>
+              <button
+                className="bo"
                 onClick={() => quickPhotoRef.current?.click()}
                 disabled={quickUploading}
                 style={{ fontSize: 10, padding: "4px 10px" }}
               >
-                {quickUploading ? "Uploading..." : "📷 Add Photos"}
+                📁 Upload
               </button>
             </div>
           </div>
 
+          {quickUploading && <div className="dim" style={{ fontSize: 11, textAlign: "center", marginBottom: 6 }}>Processing photos...</div>}
+
+          <input
+            ref={quickCameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: "none" }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setQuickUploading(true);
+              try {
+                const reader = new FileReader();
+                const base64 = await new Promise<string>((resolve) => {
+                  reader.onload = () => resolve(reader.result as string);
+                  reader.readAsDataURL(file);
+                });
+                setQuickPhotos((prev) => [...prev, base64]);
+              } catch (err) { console.error(err); }
+              setQuickUploading(false);
+              if (quickCameraRef.current) quickCameraRef.current.value = "";
+            }}
+          />
           <input
             ref={quickPhotoRef}
             type="file"
