@@ -32,7 +32,15 @@ export default function Payroll() {
   });
 
   // Quest bonus detection — find completed quests not yet paid
-  const paidQuests = questPayouts.filter((qp) => qp.user_id === sel).map((qp) => qp.quest_key);
+  // 6-month quest cycle — only count payouts from current cycle
+  const now = new Date();
+  const cycleStart = new Date(now.getFullYear(), now.getMonth() < 6 ? 0 : 6, 1);
+  const paidQuests = questPayouts
+    .filter((qp) => {
+      if (qp.user_id !== sel) return false;
+      try { return new Date(qp.created_at || qp.paid_date) >= cycleStart; } catch { return false; }
+    })
+    .map((qp) => qp.quest_key);
 
   // Get quest config bonuses from org
   let questConfig: Record<string, { enabled: boolean; bonus: number }> = {};

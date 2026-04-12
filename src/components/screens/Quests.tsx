@@ -36,36 +36,46 @@ export default function Quests() {
   const [fn, setFn] = useState("");
   const [fs, setFs] = useState("");
 
-  // Computed stats
-  const completedJobs = jobs.filter((j) => j.status === "complete").length;
-  const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3).length;
-  const fiveStarReviews = reviews.filter((r) => r.rating === 5).length;
-  const convertedReferrals = referrals.filter((r) => r.status === "converted").length;
+  // 6-month quest cycle
+  const now = new Date();
+  const cycleStart = new Date(now.getFullYear(), now.getMonth() < 6 ? 0 : 6, 1);
+  const cycleLabel = `${cycleStart.toLocaleDateString("en-US", { month: "short" })} \u2013 ${new Date(cycleStart.getFullYear(), cycleStart.getMonth() + 6, 0).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`;
+  const inCycle = (dateStr?: string) => {
+    if (!dateStr) return false;
+    try { return new Date(dateStr) >= cycleStart; } catch { return false; }
+  };
 
-  // Group jobs by client to find repeat clients with 5+ jobs
+  // Computed stats — filtered to current 6-month cycle
+  const cycleJobs = jobs.filter((j) => inCycle(j.created_at));
+  const completedJobs = cycleJobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
+  const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3 && inCycle(r.created_at)).length;
+  const fiveStarReviews = reviews.filter((r) => r.rating === 5 && inCycle(r.created_at)).length;
+  const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at)).length;
+
+  // Group jobs by client to find repeat clients with 5+ jobs (cycle)
   const jobsByClient: Record<string, number> = {};
-  jobs.filter((j) => j.client).forEach((j) => {
+  cycleJobs.filter((j) => j.client).forEach((j) => {
     jobsByClient[j.client] = (jobsByClient[j.client] || 0) + 1;
   });
   const repeatClients = Object.values(jobsByClient).filter((c) => c >= 5).length;
 
-  // Big jobs (24+ hours)
-  const bigJobs = jobs.filter((j) => j.status === "complete" && (j.total_hrs || 0) >= 24).length;
+  // Big jobs (24+ hours, cycle)
+  const bigJobs = cycleJobs.filter((j) => (j.status === "complete" || j.status === "paid") && (j.total_hrs || 0) >= 24).length;
 
   // Total hours logged
   const totalHours = timeEntries.reduce((s, e) => s + (e.hours || 0), 0);
 
-  // Skill Mastery: count completed jobs per trade
+  // Skill Mastery: count completed jobs per trade (cycle)
   const jobsByTrade: Record<string, number> = {};
-  jobs.filter((j) => j.status === "complete" && j.trade).forEach((j) => {
+  cycleJobs.filter((j) => (j.status === "complete" || j.status === "paid") && j.trade).forEach((j) => {
     jobsByTrade[j.trade] = (jobsByTrade[j.trade] || 0) + 1;
   });
   const tradesMastered = Object.values(jobsByTrade).filter((c) => c >= 10).length;
   const bestTradeCount = Math.max(0, ...Object.values(jobsByTrade));
 
-  // Zero Callback: count consecutive completed jobs with no callback from the end
-  const completedJobsSorted = jobs
-    .filter((j) => j.status === "complete")
+  // Zero Callback: consecutive completed jobs with no callback (cycle)
+  const completedJobsSorted = cycleJobs
+    .filter((j) => j.status === "complete" || j.status === "paid")
     .sort((a, b) => (a.created_at > b.created_at ? -1 : 1));
   let zeroCallbackStreak = 0;
   for (const j of completedJobsSorted) {
@@ -73,20 +83,20 @@ export default function Quests() {
     zeroCallbackStreak++;
   }
 
-  // Mr.Speed: count days where 5+ jobs were completed
+  // Mr.Speed: days with 5+ completed jobs (cycle)
   const jobsByDate: Record<string, number> = {};
-  jobs.filter((j) => j.status === "complete").forEach((j) => {
+  cycleJobs.filter((j) => j.status === "complete" || j.status === "paid").forEach((j) => {
     const d = j.job_date || j.created_at?.split("T")[0] || "";
     if (d) jobsByDate[d] = (jobsByDate[d] || 0) + 1;
   });
   const speedDays = Object.values(jobsByDate).filter((c) => c >= 5).length;
 
-  // Deal Closer: count upsell jobs
-  const upsellCount = jobs.filter((j) => j.is_upsell).length;
+  // Deal Closer: upsell jobs (cycle)
+  const upsellCount = cycleJobs.filter((j) => j.is_upsell).length;
 
-  // Repeat Machine: count unique techs requested by 3+ different clients
+  // Repeat Machine: unique techs requested by 3+ different clients (cycle)
   const requestsByTech: Record<string, Set<string>> = {};
-  jobs.filter((j) => j.requested_tech && j.client).forEach((j) => {
+  cycleJobs.filter((j) => j.requested_tech && j.client).forEach((j) => {
     if (!requestsByTech[j.requested_tech]) requestsByTech[j.requested_tech] = new Set();
     requestsByTech[j.requested_tech].add(j.client);
   });
@@ -291,7 +301,7 @@ export default function Quests() {
   return (
     <div className="fi">
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        🎯 Quest Hub
+        🎯 Quest Hub <span className="dim" style={{ fontSize: 11, fontWeight: 400 }}>{cycleLabel}</span>
       </h2>
 
       {/* Sub-tabs */}
