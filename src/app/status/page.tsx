@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { db } from "@/lib/supabase";
 import type { Job, Organization } from "@/lib/types";
@@ -50,6 +50,66 @@ function StatusContent() {
 
   const currentIdx = job ? STATUS_STEPS.findIndex((s) => s.key === job.status) : -1;
   const completedCount = workOrder.filter((w) => w.done).length;
+
+  // Signature pad
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [signed, setSigned] = useState(false);
+  const [submittingSig, setSubmittingSig] = useState(false);
+
+  const getPos = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    if ("touches" in e) {
+      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+    }
+    return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top };
+  }, []);
+
+  const startDraw = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    setIsDrawing(true);
+    const { x, y } = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }, [getPos]);
+
+  const draw = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    if (!isDrawing) return;
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    const { x, y } = getPos(e);
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#fff";
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setSigned(true);
+  }, [isDrawing, getPos]);
+
+  const stopDraw = useCallback(() => setIsDrawing(false), []);
+
+  const clearSig = () => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx && canvasRef.current) {
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      setSigned(false);
+    }
+  };
+
+  const submitSignature = async () => {
+    if (!canvasRef.current || !job || !jobId) return;
+    setSubmittingSig(true);
+    const sigData = canvasRef.current.toDataURL("image/png");
+    await db.patch("jobs", jobId, {
+      client_signature: sigData,
+      signature_date: new Date().toLocaleDateString(),
+    });
+    setJob({ ...job, client_signature: sigData, signature_date: new Date().toLocaleDateString() });
+    setSubmittingSig(false);
+  };
 
   if (loading) {
     return (
@@ -183,6 +243,71 @@ function StatusContent() {
             </div>
           </div>
         )}
+
+        {/* Signature */}
+        <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <h3 style={{ fontFamily: "Oswald", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
+            Client Approval
+          </h3>
+
+          {job.client_signature ? (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "#00cc66", marginBottom: 6 }}>✅ Signed on {job.signature_date}</div>
+              <img
+                src={job.client_signature}
+                alt="Signature"
+                style={{ maxWidth: "100%", height: 60, border: "1px solid #1e1e2e", borderRadius: 6, background: "#0a0a0f" }}
+              />
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
+                Sign below to approve this work:
+              </div>
+              <canvas
+                ref={canvasRef}
+                width={340}
+                height={100}
+                onMouseDown={startDraw}
+                onMouseMove={draw}
+                onMouseUp={stopDraw}
+                onMouseLeave={stopDraw}
+                onTouchStart={startDraw}
+                onTouchMove={draw}
+                onTouchEnd={stopDraw}
+                style={{
+                  width: "100%",
+                  height: 100,
+                  border: "1px solid #333",
+                  borderRadius: 6,
+                  background: "#0a0a0f",
+                  cursor: "crosshair",
+                  touchAction: "none",
+                }}
+              />
+              <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
+                <button
+                  onClick={clearSig}
+                  style={{ background: "none", color: "#888", fontSize: 11, padding: 0, textDecoration: "underline" }}
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={submitSignature}
+                  disabled={!signed || submittingSig}
+                  style={{
+                    padding: "8px 20px", borderRadius: 8, fontSize: 13,
+                    fontFamily: "Oswald", textTransform: "uppercase",
+                    background: signed ? "#00cc66" : "#333",
+                    color: "#fff", opacity: signed ? 1 : 0.5,
+                  }}
+                >
+                  {submittingSig ? "Saving..." : "✍ Submit Signature"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Footer */}
         <div style={{ textAlign: "center", color: "#555", fontSize: 10, marginTop: 16 }}>

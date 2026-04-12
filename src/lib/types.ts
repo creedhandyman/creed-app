@@ -62,6 +62,8 @@ export interface Job {
   callback: boolean;
   is_upsell: boolean;
   requested_tech: string;
+  client_signature?: string;
+  signature_date?: string;
 }
 
 export interface TimeEntry {
