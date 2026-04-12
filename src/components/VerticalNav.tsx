@@ -28,10 +28,12 @@ interface Props {
 
 export default function VerticalNav({ page, setPage, isAdmin }: Props) {
   const org = useStore((s) => s.org);
+  const navBottom = useStore((s) => s.navBottom);
   const LOGO = org?.logo_url || "/CREED_LOGO.png";
+  const items = navBottom ? [...NAV_ITEMS].reverse() : NAV_ITEMS;
   return (
     <div className="vnav">
-      {NAV_ITEMS.map((item, i) => {
+      {items.map((item, i) => {
         if (item === "tape") {
           return <div key={`tape-${i}`} className="caution-tape" />;
         }
