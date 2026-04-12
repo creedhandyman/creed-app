@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 
 interface Props {
   setPage: (p: string) => void;
+  preSelectJob?: string | null;
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -13,7 +14,7 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-export default function Schedule({ setPage }: Props) {
+export default function Schedule({ setPage, preSelectJob }: Props) {
   const jobs = useStore((s) => s.jobs);
   const profiles = useStore((s) => s.profiles);
   const schedule = useStore((s) => s.schedule);
@@ -21,10 +22,12 @@ export default function Schedule({ setPage }: Props) {
   const darkMode = useStore((s) => s.darkMode);
 
   const [sd, setSd] = useState("");
-  const [sj, setSj] = useState("");
+  const [sj, setSj] = useState(preSelectJob || "");
   const [sn, setSn] = useState("");
+  const [sTime, setSTime] = useState("");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [sTech, setSTech] = useState("");
+  const [sWorkers, setSWorkers] = useState<string[]>([]);
   const [view, setView] = useState<"week" | "month">("week");
   const [suggestion, setSuggestion] = useState<{ date: string; reason: string } | null>(null);
 
@@ -70,11 +73,18 @@ export default function Schedule({ setPage }: Props) {
     if (!sj) { alert("Select a job"); return; }
     const today = new Date().toISOString().split("T")[0];
     if (sd < today && !confirm(`${sd} is in the past. Schedule anyway?`)) return;
-    const noteWithTech = sTech ? (sn ? `${sn} · 👷 ${sTech}` : `👷 ${sTech}`) : sn;
-    await db.post("schedule", { sched_date: sd, job: sj, note: noteWithTech });
+    const parts = [];
+    if (sTime) parts.push(`🕐 ${sTime}`);
+    if (sWorkers.length) parts.push(`👷 ${sWorkers.join(", ")}`);
+    else if (sTech) parts.push(`👷 ${sTech}`);
+    if (sn) parts.push(sn);
+    await db.post("schedule", { sched_date: sd, job: sj, note: parts.join(" · ") });
     setSd("");
     setSj("");
     setSn("");
+    setSTime("");
+    setSTech("");
+    setSWorkers([]);
     loadAll();
   };
 
@@ -201,23 +211,43 @@ export default function Schedule({ setPage }: Props) {
             Add
           </button>
         </div>
+        {/* Time + Notes */}
         <div className="row" style={{ marginTop: 6 }}>
-          <select
-            value={sTech}
-            onChange={(e) => setSTech(e.target.value)}
-            style={{ width: 140 }}
-          >
-            <option value="">Assign tech</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.name}>{p.name}</option>
-            ))}
-          </select>
+          <input
+            type="time"
+            value={sTime}
+            onChange={(e) => setSTime(e.target.value)}
+            style={{ width: 110, color: "var(--color-primary)", fontWeight: 600 }}
+          />
           <input
             value={sn}
             onChange={(e) => setSn(e.target.value)}
             placeholder="Notes (optional)"
             style={{ flex: 1 }}
           />
+        </div>
+        {/* Workers */}
+        <div style={{ marginTop: 6 }}>
+          <div className="dim" style={{ fontSize: 10, marginBottom: 4 }}>Assign workers:</div>
+          <div className="row">
+            {profiles.map((p) => {
+              const selected = sWorkers.includes(p.name);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSWorkers((prev) => selected ? prev.filter((n) => n !== p.name) : [...prev, p.name])}
+                  style={{
+                    padding: "3px 10px", borderRadius: 16, fontSize: 11,
+                    background: selected ? "var(--color-primary)" + "33" : "transparent",
+                    color: selected ? "var(--color-primary)" : "#888",
+                    border: `1px solid ${selected ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
+                  }}
+                >
+                  {selected ? "✓ " : ""}{p.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Scheduling suggestion */}

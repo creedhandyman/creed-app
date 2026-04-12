@@ -17,6 +17,7 @@ export default function AppShell() {
   const [page, setPage] = useState("dash");
   const [showSettings, setShowSettings] = useState(false);
   const [editJobId, setEditJobId] = useState<string | null>(null);
+  const [scheduleJobName, setScheduleJobName] = useState<string | null>(null);
   const user = useStore((s) => s.user)!;
   const darkMode = useStore((s) => s.darkMode);
 
@@ -34,6 +35,7 @@ export default function AppShell() {
       return;
     }
     if (p !== "qf") setEditJobId(null);
+    if (p !== "sched") setScheduleJobName(null);
     setPage(p);
   };
 
@@ -52,9 +54,9 @@ export default function AppShell() {
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
-        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} />;
+        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string) => { setScheduleJobName(name); goToPage("sched"); }} />;
       case "sched":
-        return <Schedule setPage={goToPage} />;
+        return <Schedule setPage={goToPage} preSelectJob={scheduleJobName} />;
       case "time":
         return <TimerScreen setPage={goToPage} />;
       case "payroll":

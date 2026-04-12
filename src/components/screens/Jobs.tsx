@@ -8,9 +8,10 @@ import { QRCodeSVG } from "qrcode.react";
 interface Props {
   setPage: (p: string) => void;
   onEditJob?: (jobId: string) => void;
+  onScheduleJob?: (jobName: string) => void;
 }
 
-export default function Jobs({ setPage, onEditJob }: Props) {
+export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
@@ -351,7 +352,8 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       className="bb"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setPage("sched");
+                        if (onScheduleJob) onScheduleJob(j.property);
+                        else setPage("sched");
                       }}
                       style={{ fontSize: 10, padding: "5px 12px" }}
                     >
