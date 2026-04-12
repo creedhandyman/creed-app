@@ -377,6 +377,18 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       className="bo"
                       onClick={(e) => {
                         e.stopPropagation();
+                        const url = `${window.location.origin}/status?job=${j.id}`;
+                        navigator.clipboard.writeText(url);
+                        alert("Status link copied! Send to client.\n\n" + url);
+                      }}
+                      style={{ fontSize: 10, padding: "5px 10px" }}
+                    >
+                      🔗 Share Status
+                    </button>
+                    <button
+                      className="bo"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         deleteJob(j.id);
                       }}
                       style={{ fontSize: 10, padding: "5px 10px", color: "var(--color-accent-red)" }}
