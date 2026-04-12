@@ -27,9 +27,8 @@ function ReviewContent() {
         setEmployees(profiles.filter((p) => p.name?.trim()));
       });
     } else {
-      db.get<Profile>("profiles").then((profiles) => {
-        setEmployees(profiles.filter((p) => p.name?.trim()));
-      });
+      // No org specified — don't load any employees to prevent cross-org data leak
+      setEmployees([]);
     }
   }, [orgId]);
 
