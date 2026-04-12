@@ -167,8 +167,8 @@ button {
 
 /* ── stat values ── */
 .sv { font-size: 24px; font-family: var(--font-heading); font-weight: 700; }
-.sl { font-size: 10px; color: #888; font-family: var(--font-heading); text-transform: uppercase; letter-spacing: 0.1em; }
-.dim { color: #888; }
+.sl { font-size: 12px; color: #999; font-family: var(--font-heading); text-transform: uppercase; letter-spacing: 0.1em; }
+.dim { color: #999; }
 
 /* ── animation ── */
 @keyframes fi {
@@ -218,7 +218,7 @@ button {
 .vnav button {
   width: 42px; height: 42px; border-radius: 10px;
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 1px; font-size: 8px;
+  justify-content: center; gap: 1px; font-size: 9px;
   letter-spacing: 0.04em; background: transparent; padding: 0;
   transition: all 0.2s ease;
 }
@@ -256,7 +256,7 @@ button {
 .nav-bottom .vnav button {
   width: auto; height: 40px;
   flex-direction: column; gap: 1px;
-  padding: 0 10px; font-size: 8px;
+  padding: 0 10px; font-size: 9px;
   min-width: 42px;
 }
 .nav-bottom .vnav img { width: 24px; height: 24px; }

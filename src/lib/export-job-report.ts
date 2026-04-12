@@ -61,38 +61,38 @@ export function exportJobReport(opts: ReportOptions) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;font-size:11px;line-height:1.5}
+body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;font-size:13px;line-height:1.5}
 .page{max-width:800px;margin:0 auto;padding:32px 40px}
 h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase;letter-spacing:.05em}
-h2{font-family:Oswald;font-size:14px;color:#2E75B6;text-transform:uppercase;letter-spacing:.04em;margin:16px 0 8px;border-bottom:2px solid #2E75B6;padding-bottom:4px}
-h3{font-family:Oswald;font-size:12px;color:#666;text-transform:uppercase;margin:10px 0 6px}
+h2{font-family:Oswald;font-size:15px;color:#2E75B6;text-transform:uppercase;letter-spacing:.04em;margin:16px 0 8px;border-bottom:2px solid #2E75B6;padding-bottom:4px}
+h3{font-family:Oswald;font-size:13px;color:#666;text-transform:uppercase;margin:10px 0 6px}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2E75B6}
-.brand .info{font-size:10px;color:#666;margin-top:4px;line-height:1.6}
+.brand .info{font-size:12px;color:#666;margin-top:4px;line-height:1.6}
 .report-label h2{font-family:Oswald;font-size:16px;color:#2E75B6;text-transform:uppercase;margin:0;border:none;padding:0}
-.report-label .date{font-size:11px;color:#666;margin-top:2px}
+.report-label .date{font-size:12px;color:#666;margin-top:2px}
 .info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
 .info-box{background:#f5f7fa;border-radius:6px;padding:8px 12px}
-.info-box .label{font-family:Oswald;font-size:9px;text-transform:uppercase;color:#888;letter-spacing:.08em}
-.info-box .value{font-size:12px;font-weight:600;margin-top:2px}
-table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10px}
-th{font-family:Oswald;text-transform:uppercase;font-size:9px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:5px 8px;text-align:left}
-td{padding:4px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
+.info-box .label{font-family:Oswald;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.08em}
+.info-box .value{font-size:13px;font-weight:600;margin-top:2px}
+table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}
+th{font-family:Oswald;text-transform:uppercase;font-size:11px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:6px 8px;text-align:left}
+td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 .dim{color:#888}
-.pri-high{font-size:8px;padding:1px 4px;border-radius:3;background:#C0000022;color:#C00000}
-.pri-med{font-size:8px;padding:1px 4px;border-radius:3;background:#ff880022;color:#ff8800}
-.pri-low{font-size:8px;padding:1px 4px;border-radius:3;background:#00cc6622;color:#00cc66}
+.pri-high{font-size:11px;padding:2px 6px;border-radius:3;background:#C0000022;color:#C00000}
+.pri-med{font-size:11px;padding:2px 6px;border-radius:3;background:#ff880022;color:#ff8800}
+.pri-low{font-size:11px;padding:2px 6px;border-radius:3;background:#00cc6622;color:#00cc66}
 .summary{display:flex;gap:16px;margin-bottom:16px}
 .summary-box{flex:1;background:#f5f7fa;border-radius:6px;padding:12px;text-align:center}
 .summary-box .num{font-family:Oswald;font-size:24px;font-weight:700}
-.summary-box .lbl{font-family:Oswald;font-size:9px;text-transform:uppercase;color:#888;letter-spacing:.08em}
+.summary-box .lbl{font-family:Oswald;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.08em}
 .green{color:#00cc66} .blue{color:#2E75B6} .orange{color:#ff8800}
 .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:12px}
 .photo img{width:100%;height:100px;object-fit:cover;border-radius:4px;border:1px solid #ddd}
-.photo-label{font-size:9px;color:#666;margin-top:2px;text-align:center}
+.photo-label{font-size:11px;color:#666;margin-top:2px;text-align:center}
 .sig-row{display:flex;gap:40px;margin-top:24px}
-.sig-line{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;font-size:10px;color:#666}
-.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:9px;color:#888;margin-top:20px}
-.checklist-note{background:#f0f8f0;border:1px solid #00cc66;border-radius:6px;padding:10px;margin-bottom:12px;font-size:11px}
+.sig-line{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;font-size:12px;color:#666}
+.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:20px}
+.checklist-note{background:#f0f8f0;border:1px solid #00cc66;border-radius:6px;padding:10px;margin-bottom:12px;font-size:13px}
 @media print{.page{padding:16px 24px}h2{page-break-after:avoid}}
 </style></head><body><div class="page">
 

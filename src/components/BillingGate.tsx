@@ -151,8 +151,8 @@ export default function BillingGate({ children }: { children: React.ReactNode })
                   <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#2E75B6", margin: "6px 0" }}>
                     {p.price}
                   </div>
-                  <div style={{ fontSize: 11, color: "#888" }}>/month</div>
-                  <div style={{ fontSize: 10, color: "#666", marginTop: 4 }}>{p.desc}</div>
+                  <div style={{ fontSize: 13, color: "#888" }}>/month</div>
+                  <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>{p.desc}</div>
                 </div>
               ))}
             </div>
@@ -201,7 +201,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
           </div>
         )}
 
-        <div style={{ marginTop: 20, fontSize: 10, color: "#555" }}>
+        <div style={{ marginTop: 20, fontSize: 12, color: "#555" }}>
           Powered by Creed App
         </div>
       </div>

@@ -42,7 +42,7 @@ export default function Settings({ onClose }: Props) {
             style={{
               padding: "5px 12px",
               borderRadius: 6,
-              fontSize: 11,
+              fontSize: 13,
               background: tab === t ? "var(--color-primary)" : "transparent",
               color: tab === t ? "#fff" : "#888",
               fontFamily: "Oswald",
@@ -88,7 +88,7 @@ export default function Settings({ onClose }: Props) {
               <button
                 className="bo"
                 onClick={() => document.getElementById("logo-upload")?.click()}
-                style={{ fontSize: 10, padding: "4px 12px" }}
+                style={{ fontSize: 12, padding: "4px 12px" }}
               >
                 📷 Change Logo
               </button>
@@ -153,7 +153,7 @@ export default function Settings({ onClose }: Props) {
                 logout();
                 onClose();
               }}
-              style={{ width: "100%", fontSize: 10, color: "var(--color-accent-red)" }}
+              style={{ width: "100%", fontSize: 12, color: "var(--color-accent-red)" }}
             >
               Delete My Account
             </button>
@@ -168,12 +168,12 @@ export default function Settings({ onClose }: Props) {
           {isOwner && user.org_id && (
             <div style={{ marginBottom: 12, padding: 10, background: darkMode ? "#1a1a28" : "#f0f4f8", borderRadius: 8 }}>
               <div className="sl" style={{ marginBottom: 4 }}>Invite Code (share with team)</div>
-              <div style={{ fontFamily: "monospace", fontSize: 11, color: "var(--color-primary)", wordBreak: "break-all" }}>
+              <div style={{ fontFamily: "monospace", fontSize: 13, color: "var(--color-primary)", wordBreak: "break-all" }}>
                 {user.org_id}
               </div>
               <button
                 onClick={() => { navigator.clipboard.writeText(user.org_id); alert("Copied!"); }}
-                style={{ fontSize: 10, marginTop: 4, background: "none", color: "var(--color-primary)", padding: 0, textDecoration: "underline" }}
+                style={{ fontSize: 12, marginTop: 4, background: "none", color: "var(--color-primary)", padding: 0, textDecoration: "underline" }}
               >
                 Copy to clipboard
               </button>
@@ -191,7 +191,7 @@ export default function Settings({ onClose }: Props) {
                   <div className="row">
                     <select
                       defaultValue={u.role}
-                      style={{ width: "auto", fontSize: 10, padding: "2px 4px" }}
+                      style={{ width: "auto", fontSize: 12, padding: "2px 4px" }}
                       onChange={async (e) => {
                         if (u.id === user.id && (e.target.value === "tech" || e.target.value === "apprentice")) {
                           if (!confirm("WARNING: Demoting yourself will lock you out of admin settings. Are you sure?")) {
@@ -232,7 +232,7 @@ export default function Settings({ onClose }: Props) {
                           await db.del("profiles", u.id);
                           loadAll();
                         }}
-                        style={{ background: "none", color: "var(--color-accent-red)", fontSize: 10, padding: "0 4px" }}
+                        style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, padding: "0 4px" }}
                       >
                         ✕
                       </button>
@@ -252,7 +252,7 @@ export default function Settings({ onClose }: Props) {
         <div className="cd">
           {/* Licensed Trades */}
           <h4 style={{ fontSize: 14, marginBottom: 8 }}>🔑 Licensed Trades</h4>
-          <div className="dim" style={{ fontSize: 10, marginBottom: 8 }}>Select trades your business is licensed for. AI will fully quote these instead of flagging for subcontractors.</div>
+          <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>Select trades your business is licensed for. AI will fully quote these instead of flagging for subcontractors.</div>
           {(() => {
             const allTrades = ["Electrical", "Plumbing", "HVAC", "Roofing", "Gas Fitting", "Fire Protection", "Structural", "Asbestos/Mold"];
             let licensed: string[] = [];
@@ -322,7 +322,7 @@ export default function Settings({ onClose }: Props) {
                         if (org) { await db.patch("organizations", org.id, { markup_pct: parseFloat(e.target.value) || 0 }); await refreshOrg(); }
                       }}
                     />
-                    <div className="dim" style={{ fontSize: 9, marginTop: 2 }}>Applied to material costs</div>
+                    <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>Applied to material costs</div>
                   </div>
                   <div>
                     <label className="sl">Tax %</label>
@@ -338,13 +338,13 @@ export default function Settings({ onClose }: Props) {
                         if (org) { await db.patch("organizations", org.id, { tax_pct: parseFloat(e.target.value) || 0 }); await refreshOrg(); }
                       }}
                     />
-                    <div className="dim" style={{ fontSize: 9, marginTop: 2 }}>Applied to quote total</div>
+                    <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>Applied to quote total</div>
                   </div>
                 </div>
 
                 <div style={{ borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`, paddingTop: 12 }}>
                   <label className="sl">Custom Rates by Trade</label>
-                  <div className="dim" style={{ fontSize: 10, marginBottom: 8 }}>Set hourly rates per trade. These are used in quotes.</div>
+                  <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>Set hourly rates per trade. These are used in quotes.</div>
                   {["Plumbing", "Electrical", "Carpentry", "HVAC", "Painting", "Flooring", "General"].map((trade) => (
                     <div key={trade} className="row" style={{ marginBottom: 4 }}>
                       <span style={{ fontSize: 12, width: 80 }}>{trade}</span>
@@ -367,7 +367,7 @@ export default function Settings({ onClose }: Props) {
                       />
                       <span style={{ fontSize: 11 }}>/hr</span>
                       {tradeRates[trade] && (
-                        <span style={{ fontSize: 9, color: "var(--color-success)" }}>✓ saved</span>
+                        <span style={{ fontSize: 13, color: "var(--color-success)" }}>✓ saved</span>
                       )}
                     </div>
                   ))}
@@ -472,7 +472,7 @@ export default function Settings({ onClose }: Props) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div>
                     <span style={{
-                      fontSize: 11, padding: "2px 8px", borderRadius: 10, fontFamily: "Oswald",
+                      fontSize: 13, padding: "2px 8px", borderRadius: 10, fontFamily: "Oswald",
                       background: status === "active" ? "var(--color-success)" + "22" : status === "trial" ? "var(--color-warning)" + "22" : "var(--color-accent-red)" + "22",
                       color: status === "active" ? "var(--color-success)" : status === "trial" ? "var(--color-warning)" : "var(--color-accent-red)",
                     }}>
@@ -485,7 +485,7 @@ export default function Settings({ onClose }: Props) {
                 </div>
 
                 {status === "trial" && (
-                  <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
+                  <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>
                     Your free trial {daysLeft > 0 ? `ends ${trialEnd.toLocaleDateString()}` : "has ended"}. Subscribe to keep all features.
                   </div>
                 )}
@@ -511,7 +511,7 @@ export default function Settings({ onClose }: Props) {
                         if (data.url) window.location.href = data.url;
                         else alert(data.error || "Failed to start checkout");
                       }}
-                      style={{ fontSize: 11, padding: "6px 14px" }}
+                      style={{ fontSize: 13, padding: "6px 14px" }}
                     >
                       💳 Subscribe Now
                     </button>
@@ -533,7 +533,7 @@ export default function Settings({ onClose }: Props) {
                         if (data.url) window.location.href = data.url;
                         else alert(data.error || "Failed to open billing portal");
                       }}
-                      style={{ fontSize: 11, padding: "6px 14px" }}
+                      style={{ fontSize: 13, padding: "6px 14px" }}
                     >
                       Manage Billing
                     </button>
@@ -546,7 +546,7 @@ export default function Settings({ onClose }: Props) {
                         const orgs = await db.get("organizations", { id: org!.id });
                         if (orgs.length) useStore.getState().setOrg(orgs[0] as any);
                       }}
-                      style={{ width: "auto", fontSize: 10, padding: "3px 6px" }}
+                      style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
                     >
                       <option value="solo">Solo — $49/mo (1 user)</option>
                       <option value="team">Team — $99/mo (up to 5)</option>
@@ -564,7 +564,7 @@ export default function Settings({ onClose }: Props) {
       {tab === "payments" && isOwner && (
         <div className="cd" style={{ marginTop: 14 }}>
           <h4 style={{ fontSize: 14, marginBottom: 10 }}>🎯 Quest Bonuses</h4>
-          <div className="dim" style={{ fontSize: 10, marginBottom: 10 }}>Toggle quests on/off and set custom bonus amounts for your team.</div>
+          <div className="dim" style={{ fontSize: 12, marginBottom: 10 }}>Toggle quests on/off and set custom bonus amounts for your team.</div>
           {(() => {
             const defaultQuests = [
               { key: "review_favor", name: "Review Favor", desc: "15 positive reviews", defaultBonus: 75 },
@@ -615,7 +615,7 @@ export default function Settings({ onClose }: Props) {
                       type="number"
                       defaultValue={c.bonus}
                       min="0"
-                      style={{ width: 55, fontSize: 11, padding: "2px 4px", textAlign: "center" }}
+                      style={{ width: 55, fontSize: 13, padding: "2px 4px", textAlign: "center" }}
                       onBlur={async (e) => {
                         const val = parseFloat(e.target.value) || 0;
                         if (val !== c.bonus) {
@@ -681,7 +681,7 @@ export default function Settings({ onClose }: Props) {
                       else { if (navBottom) toggleNavBottom(); if (navLeft) toggleNavSide(); }
                     }}
                     style={{
-                      padding: "4px 10px", fontSize: 10,
+                      padding: "4px 10px", fontSize: 12,
                       background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff",
                       color: isActive ? "#fff" : "#888",
                       border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,

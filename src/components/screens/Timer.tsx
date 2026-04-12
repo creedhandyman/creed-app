@@ -165,7 +165,7 @@ export default function Timer({ setPage }: Props) {
                 key={s.id}
                 onClick={() => setSj(s.job)}
                 className={sj === s.job ? "bb" : "bo"}
-                style={{ fontSize: 11, padding: "5px 12px" }}
+                style={{ fontSize: 13, padding: "5px 12px" }}
               >
                 {s.job}
               </button>
@@ -216,7 +216,7 @@ export default function Timer({ setPage }: Props) {
           </button>
         )}
         {on && (
-          <div style={{ marginTop: 6, fontSize: 11, color: "var(--color-success)" }}>
+          <div style={{ marginTop: 6, fontSize: 13, color: "var(--color-success)" }}>
             Running — persists across pages
           </div>
         )}
@@ -275,7 +275,7 @@ export default function Timer({ setPage }: Props) {
           <button
             className="bg"
             onClick={addManual}
-            style={{ fontSize: 11, padding: "7px 12px" }}
+            style={{ fontSize: 13, padding: "7px 12px" }}
           >
             Log
           </button>
@@ -304,7 +304,7 @@ export default function Timer({ setPage }: Props) {
               <span style={{ color: "var(--color-primary)", flex: 1 }}>
                 {e.job}
                 {(e.start_time || e.end_time) && (
-                  <span className="dim" style={{ fontSize: 10, marginLeft: 4 }}>
+                  <span className="dim" style={{ fontSize: 12, marginLeft: 4 }}>
                     {e.start_time || "?"} – {e.end_time || "?"}
                   </span>
                 )}

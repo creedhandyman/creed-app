@@ -65,7 +65,7 @@ export default function Clients({ setPage }: Props) {
         <button
           className="bb"
           onClick={() => setShowAdd(!showAdd)}
-          style={{ fontSize: 11, padding: "5px 12px" }}
+          style={{ fontSize: 13, padding: "5px 12px" }}
         >
           {showAdd ? "Cancel" : "+ Add Client"}
         </button>
@@ -187,7 +187,7 @@ export default function Clients({ setPage }: Props) {
                   {/* Job history */}
                   {clientJobs.length > 0 && (
                     <div style={{ marginBottom: 8 }}>
-                      <h5 style={{ fontSize: 11, marginBottom: 4, color: "var(--color-primary)" }}>Job History</h5>
+                      <h5 style={{ fontSize: 13, marginBottom: 4, color: "var(--color-primary)" }}>Job History</h5>
                       {clientJobs.slice(0, 10).map((j) => (
                         <div
                           key={j.id}
@@ -235,7 +235,7 @@ export default function Clients({ setPage }: Props) {
                   <input
                     defaultValue={c.notes}
                     placeholder="Notes"
-                    style={{ fontSize: 11, marginBottom: 6 }}
+                    style={{ fontSize: 13, marginBottom: 6 }}
                     onBlur={async (e) => {
                       if (e.target.value !== c.notes) {
                         await db.patch("clients", c.id, { notes: e.target.value });
@@ -247,7 +247,7 @@ export default function Clients({ setPage }: Props) {
                   <button
                     className="bo"
                     onClick={(e) => { e.stopPropagation(); deleteClient(c.id); }}
-                    style={{ fontSize: 10, padding: "4px 10px", color: "var(--color-accent-red)" }}
+                    style={{ fontSize: 12, padding: "4px 10px", color: "var(--color-accent-red)" }}
                   >
                     Delete Client
                   </button>

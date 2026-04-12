@@ -91,7 +91,7 @@ export default function WorkOrderForm({ orgId, primaryColor: pc }: Props) {
         >
           {submitting ? "Submitting..." : "📋 Submit Work Order"}
         </button>
-        <p style={{ textAlign: "center", color: "#555", fontSize: 10, marginTop: 8 }}>
+        <p style={{ textAlign: "center", color: "#555", fontSize: 12, marginTop: 8 }}>
           We&apos;ll review your request and send you a detailed quote
         </p>
       </div>

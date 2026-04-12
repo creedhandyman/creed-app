@@ -93,7 +93,7 @@ function AiLoadingDisplay({ status }: { status: string }) {
         }} />
       </div>
 
-      <div className="dim" style={{ fontSize: 10, marginTop: 8 }}>
+      <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
         {status || "This usually takes 15-30 seconds"}
       </div>
     </div>
@@ -542,7 +542,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             <div style={{ fontSize: 36 }}>📸</div>
             <div>
               <h4 style={{ color: "#fff", fontSize: 16, margin: 0 }}>Quick Quote</h4>
-              <p style={{ color: "#ffffffaa", fontSize: 11, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
+              <p style={{ color: "#ffffffaa", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
                 Describe the issue, add photos → AI generates a quote
               </p>
             </div>
@@ -565,7 +565,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             <div style={{ fontSize: 36 }}>🔍</div>
             <div>
               <h4 style={{ color: "var(--color-success)", fontSize: 16, margin: 0 }}>Full Inspection</h4>
-              <p style={{ color: "#888", fontSize: 11, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
+              <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
                 Room-by-room walkthrough with conditions and photos
               </p>
             </div>
@@ -588,7 +588,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             <div style={{ fontSize: 36 }}>📁</div>
             <div>
               <h4 style={{ color: "var(--color-warning)", fontSize: 16, margin: 0 }}>Upload Report</h4>
-              <p style={{ color: "#888", fontSize: 11, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
+              <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
                 Upload a PDF inspection report for AI analysis
               </p>
             </div>
@@ -637,7 +637,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
         {/* Description */}
         <div className="cd mb">
-          <label style={{ fontSize: 10, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+          <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
             Describe the issue
           </label>
           <textarea
@@ -651,7 +651,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         {/* Photos */}
         <div className="cd mb">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-            <label style={{ fontSize: 10, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
               Photos ({quickPhotos.length})
             </label>
             <div className="row" style={{ gap: 4 }}>
@@ -659,7 +659,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                 className="bb"
                 onClick={() => quickCameraRef.current?.click()}
                 disabled={quickUploading}
-                style={{ fontSize: 10, padding: "4px 10px" }}
+                style={{ fontSize: 12, padding: "4px 10px" }}
               >
                 📷 Take Photo
               </button>
@@ -667,14 +667,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                 className="bo"
                 onClick={() => quickPhotoRef.current?.click()}
                 disabled={quickUploading}
-                style={{ fontSize: 10, padding: "4px 10px" }}
+                style={{ fontSize: 12, padding: "4px 10px" }}
               >
                 📁 Upload
               </button>
             </div>
           </div>
 
-          {quickUploading && <div className="dim" style={{ fontSize: 11, textAlign: "center", marginBottom: 6 }}>Processing photos...</div>}
+          {quickUploading && <div className="dim" style={{ fontSize: 13, textAlign: "center", marginBottom: 6 }}>Processing photos...</div>}
 
           <input
             ref={quickCameraRef}
@@ -729,7 +729,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                     style={{
                       position: "absolute", top: 2, right: 2,
                       background: "rgba(0,0,0,0.7)", color: "#fff", border: "none",
-                      borderRadius: "50%", width: 16, height: 16, fontSize: 9,
+                      borderRadius: "50%", width: 16, height: 16, fontSize: 13,
                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                     }}
                   >
@@ -776,7 +776,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           <button
             className="bo"
             onClick={() => { setMode("manual"); }}
-            style={{ fontSize: 11, padding: "6px 14px" }}
+            style={{ fontSize: 13, padding: "6px 14px" }}
           >
             ✏️ Build manually instead
           </button>
@@ -987,7 +987,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               }`,
               borderRadius: "6px 6px 0 0",
               fontFamily: "Oswald",
-              fontSize: 11,
+              fontSize: 13,
             }}
           >
             {x.l}
@@ -1094,7 +1094,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
           {/* Upload buttons */}
           <div className="row mb">
-            <button className="bb" onClick={() => galleryRef.current?.click()} disabled={uploadingPhoto} style={{ fontSize: 11, padding: "6px 12px" }}>
+            <button className="bb" onClick={() => galleryRef.current?.click()} disabled={uploadingPhoto} style={{ fontSize: 13, padding: "6px 12px" }}>
               {uploadingPhoto ? "Uploading..." : "📷 Add Photos"}
             </button>
             <span className="dim" style={{ fontSize: 11 }}>{jobPhotos.length} photo{jobPhotos.length !== 1 ? "s" : ""}</span>
@@ -1107,7 +1107,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                 {["before", "work", "after"].map((t) => {
                   const count = jobPhotos.filter((p) => p.type === t).length;
                   return (
-                    <span key={t} style={{ fontSize: 10, color: "#888" }}>
+                    <span key={t} style={{ fontSize: 12, color: "#888" }}>
                       {t === "before" ? "📋" : t === "after" ? "✅" : "🔨"} {t}: {count}
                     </span>
                   );
@@ -1139,7 +1139,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                         position: "absolute",
                         bottom: 2,
                         left: 2,
-                        fontSize: 9,
+                        fontSize: 13,
                         padding: "1px 4px",
                         width: "auto",
                         background: "rgba(0,0,0,0.7)",
@@ -1165,7 +1165,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                         borderRadius: "50%",
                         width: 18,
                         height: 18,
-                        fontSize: 10,
+                        fontSize: 12,
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
@@ -1380,7 +1380,7 @@ function GuideTab({
                   border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
                   background: done ? "var(--color-success)" : "transparent",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 10, color: "#fff", flexShrink: 0,
+                  fontSize: 12, color: "#fff", flexShrink: 0,
                 }}>
                   {done && "✓"}
                 </span>
@@ -1394,7 +1394,7 @@ function GuideTab({
               value={newTool}
               onChange={(e) => setNewTool(e.target.value)}
               placeholder="Add tool..."
-              style={{ flex: 1, fontSize: 11, padding: "4px 8px" }}
+              style={{ flex: 1, fontSize: 13, padding: "4px 8px" }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && newTool.trim()) {
                   setExtraTools((prev) => [...prev, newTool.trim()]);
@@ -1431,7 +1431,7 @@ function GuideTab({
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    fontSize: 11,
+                    fontSize: 13,
                     padding: "3px 0",
                     borderBottom: `1px solid ${border}`,
                     cursor: "pointer",
@@ -1445,7 +1445,7 @@ function GuideTab({
                       border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
                       background: done ? "var(--color-success)" : "transparent",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 9, color: "#fff", flexShrink: 0,
+                      fontSize: 13, color: "#fff", flexShrink: 0,
                     }}>
                       {done && "✓"}
                     </span>
@@ -1462,14 +1462,14 @@ function GuideTab({
               value={newShopName}
               onChange={(e) => setNewShopName(e.target.value)}
               placeholder="Item name..."
-              style={{ flex: 1, fontSize: 11, padding: "4px 8px" }}
+              style={{ flex: 1, fontSize: 13, padding: "4px 8px" }}
             />
             <input
               type="number"
               value={newShopCost}
               onChange={(e) => setNewShopCost(e.target.value)}
               placeholder="$"
-              style={{ width: 50, fontSize: 11, padding: "4px 6px" }}
+              style={{ width: 50, fontSize: 13, padding: "4px 6px" }}
             />
             <button
               onClick={() => {
@@ -1502,7 +1502,7 @@ function GuideTab({
             <PriorityBadge pri={s.pri} />
             <b style={{ color: "var(--color-primary)" }}>{s.room}</b> → {s.detail}{" "}
             <span className="dim">({s.hrs}h)</span>
-            <div className="dim" style={{ fontSize: 11, paddingLeft: 4 }}>
+            <div className="dim" style={{ fontSize: 13, paddingLeft: 4 }}>
               {s.action}
             </div>
           </div>
@@ -1624,7 +1624,7 @@ function ConditionBadge({ condition }: { condition: string }) {
   return (
     <span
       style={{
-        fontSize: 9,
+        fontSize: 13,
         padding: "1px 5px",
         borderRadius: 3,
         background: d.bg,
@@ -1646,7 +1646,7 @@ function PriorityBadge({ pri }: { pri: "HIGH" | "MED" | "LOW" }) {
   return (
     <span
       style={{
-        fontSize: 9,
+        fontSize: 13,
         padding: "1px 5px",
         borderRadius: 3,
         marginRight: 6,

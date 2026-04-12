@@ -221,7 +221,7 @@ export default function Quests() {
   return (
     <div className="fi">
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        🎯 Quest Hub <span className="dim" style={{ fontSize: 11, fontWeight: 400 }}>{cycleLabel}</span>
+        🎯 Quest Hub <span className="dim" style={{ fontSize: 13, fontWeight: 400 }}>{cycleLabel}</span>
       </h2>
 
       {/* Sub-tabs */}
@@ -238,7 +238,7 @@ export default function Quests() {
             style={{
               padding: "5px 12px",
               borderRadius: 6,
-              fontSize: 11,
+              fontSize: 13,
               background: tab === t.id ? "var(--color-primary)" : "transparent",
               color: tab === t.id ? "#fff" : "#888",
               fontFamily: "Oswald",
@@ -274,7 +274,7 @@ export default function Quests() {
             <div key={tier.name} style={{ marginBottom: 16 }}>
               <h4
                 style={{
-                  fontSize: 11,
+                  fontSize: 13,
                   color: tier.color,
                   marginBottom: 8,
                   fontFamily: "Oswald",
@@ -305,7 +305,7 @@ export default function Quests() {
                         <span style={{ fontSize: 13, fontWeight: 600 }}>
                           {isDone ? "✅" : "⏳"} {q.name}
                         </span>
-                        <div className="dim" style={{ fontSize: 11, marginTop: 1 }}>{q.desc}</div>
+                        <div className="dim" style={{ fontSize: 13, marginTop: 1 }}>{q.desc}</div>
                       </div>
                       <span
                         style={{
@@ -339,7 +339,7 @@ export default function Quests() {
                           }}
                         />
                       </div>
-                      <span className="dim" style={{ fontSize: 10, minWidth: 50, textAlign: "right" }}>
+                      <span className="dim" style={{ fontSize: 12, minWidth: 50, textAlign: "right" }}>
                         {q.progress}/{q.goal} {q.unit}
                       </span>
                     </div>
@@ -407,7 +407,7 @@ export default function Quests() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                   <div>
                     <h4 style={{ fontSize: 16, margin: 0 }}>{p.name}</h4>
-                    <div style={{ fontSize: 10, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", color: p.role === "owner" ? "var(--color-highlight)" : p.role === "manager" ? "var(--color-primary)" : "var(--color-success)" }}>
+                    <div style={{ fontSize: 12, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", color: p.role === "owner" ? "var(--color-highlight)" : p.role === "manager" ? "var(--color-primary)" : "var(--color-success)" }}>
                       {p.role} · #{p.emp_num}
                     </div>
                   </div>
@@ -440,7 +440,7 @@ export default function Quests() {
                 </div>
 
                 {/* Details row */}
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, flexWrap: "wrap", gap: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, flexWrap: "wrap", gap: 4 }}>
                   <span className="dim">💰 ${totalRevenue.toLocaleString()} revenue</span>
                   <span className="dim">⭐ {techReviews.length} reviews</span>
                   {topTrade && <span className="dim">🔧 {topTrade[0]} ({topTrade[1]})</span>}
@@ -454,7 +454,7 @@ export default function Quests() {
                       <span
                         key={trade}
                         style={{
-                          fontSize: 9,
+                          fontSize: 13,
                           padding: "2px 8px",
                           borderRadius: 10,
                           background: count >= 10 ? "var(--color-success)" + "22" : "var(--color-primary)" + "22",
@@ -496,7 +496,7 @@ export default function Quests() {
                 navigator.clipboard.writeText(url);
                 alert("Review link copied!");
               }}
-              style={{ fontSize: 10, padding: "4px 12px", marginTop: 4 }}
+              style={{ fontSize: 12, padding: "4px 12px", marginTop: 4 }}
             >
               📋 Copy Link
             </button>
@@ -572,7 +572,7 @@ export default function Quests() {
                 </div>
               </div>
               {r.employee_names && (
-                <div style={{ fontSize: 10, color: "var(--color-primary)", marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: "var(--color-primary)", marginTop: 2 }}>
                   👷 {r.employee_names}
                 </div>
               )}
@@ -648,7 +648,7 @@ export default function Quests() {
                   await db.patch("referrals", r.id, { status: e.target.value });
                   loadAll();
                 }}
-                style={{ width: "auto", fontSize: 10, padding: "3px 6px" }}
+                style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
               >
                 <option value="pending">Pending</option>
                 <option value="contacted">Contacted</option>

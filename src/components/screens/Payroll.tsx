@@ -291,7 +291,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
               <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>${q.bonus}</span>
             </div>
           ))}
-          <div className="dim" style={{ fontSize: 10, marginTop: 4 }}>These bonuses will be included when you process pay.</div>
+          <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>These bonuses will be included when you process pay.</div>
         </div>
       )}
 
@@ -306,7 +306,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
               onClick={processPay}
               disabled={processing || !entries.length}
               style={{
-                fontSize: 10,
+                fontSize: 12,
                 padding: "5px 12px",
                 opacity: processing || !entries.length ? 0.5 : 1,
               }}
@@ -371,7 +371,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
                   <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
                     ${(p.amount || 0).toFixed(2)}
                   </span>
-                  <span style={{ fontSize: 10, color: "#888" }}>{isOpen ? "▲" : "▼"}</span>
+                  <span style={{ fontSize: 12, color: "#888" }}>{isOpen ? "▲" : "▼"}</span>
                 </div>
                 {isOpen && (
                   <div style={{ padding: "6px 0 6px 12px", borderLeft: "2px solid var(--color-primary)" }}>
@@ -382,7 +382,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
-                            fontSize: 11,
+                            fontSize: 13,
                             padding: "2px 0",
                           }}
                         >
@@ -397,9 +397,9 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
                     )}
                     {bonusDetails.length > 0 && (
                       <>
-                        <div style={{ fontSize: 10, color: "var(--color-warning)", fontWeight: 600, marginTop: 6, marginBottom: 2 }}>🎯 Quest Bonuses</div>
+                        <div style={{ fontSize: 12, color: "var(--color-warning)", fontWeight: 600, marginTop: 6, marginBottom: 2 }}>🎯 Quest Bonuses</div>
                         {bonusDetails.map((b, bi) => (
-                          <div key={bi} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "1px 0" }}>
+                          <div key={bi} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "1px 0" }}>
                             <span>{b.name}</span>
                             <span style={{ color: "var(--color-success)" }}>${b.amount.toFixed(2)}</span>
                           </div>

@@ -88,14 +88,14 @@ export default function ClientSelect({ value, onChange, style }: Props) {
             <button
               className="bg"
               onClick={createClient}
-              style={{ fontSize: 10, padding: "4px 10px" }}
+              style={{ fontSize: 12, padding: "4px 10px" }}
             >
               Create
             </button>
             <button
               className="bo"
               onClick={() => { setShowNew(false); setNewName(""); }}
-              style={{ fontSize: 10, padding: "4px 10px" }}
+              style={{ fontSize: 12, padding: "4px 10px" }}
             >
               Cancel
             </button>

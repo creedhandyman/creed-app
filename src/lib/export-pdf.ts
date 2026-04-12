@@ -105,37 +105,37 @@ export function exportQuotePdf(opts: ExportOptions) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;padding:0;font-size:11px;line-height:1.5}
+body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;padding:0;font-size:13px;line-height:1.5}
 .page{max-width:800px;margin:0 auto;padding:32px 40px}
 h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase;letter-spacing:.05em;margin:0}
 h2{font-family:Oswald;font-size:14px;color:#2E75B6;text-transform:uppercase;letter-spacing:.04em;margin:20px 0 8px;border-bottom:2px solid #2E75B6;padding-bottom:4px}
 h3{font-family:Oswald;font-size:12px;color:#2E75B6;text-transform:uppercase;margin:16px 0 6px}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2E75B6}
-.brand .llc{font-family:Oswald;font-size:9px;color:#C00000;letter-spacing:.15em}
-.brand .info{font-size:10px;color:#666;margin-top:4px;line-height:1.6}
+.brand .llc{font-family:Oswald;font-size:11px;color:#C00000;letter-spacing:.15em}
+.brand .info{font-size:12px;color:#666;margin-top:4px;line-height:1.6}
 .client-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
 .client-box{background:#f5f7fa;border-radius:6px;padding:8px 12px}
-.client-box .label{font-family:Oswald;font-size:9px;text-transform:uppercase;color:#888;letter-spacing:.08em}
+.client-box .label{font-family:Oswald;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.08em}
 .client-box .value{font-size:12px;font-weight:600}
-table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10px}
-th{font-family:Oswald;text-transform:uppercase;font-size:9px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:5px 8px;text-align:left}
-td{padding:4px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
-.summary-table td{font-family:Oswald;font-size:10px}
+table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}
+th{font-family:Oswald;text-transform:uppercase;font-size:11px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:6px 8px;text-align:left}
+td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
+.summary-table td{font-family:Oswald;font-size:12px}
 .summary-table tr:last-child{font-weight:700;background:#f0f4f8;border-top:2px solid #2E75B6;font-size:14px;color:#2E75B6}
 .summary-table td:nth-child(n+2){text-align:right}
 .sched-table td:first-child{font-family:Oswald;font-weight:600;color:#2E75B6;white-space:nowrap}
 .mat-table th:nth-child(2),.mat-table th:nth-child(3),.mat-table th:nth-child(4){text-align:right}
 .section-block{margin-bottom:16px;page-break-inside:avoid}
-.section-totals{background:#f5f7fa;border-radius:4px;padding:6px 10px;font-size:10px;margin-top:4px}
+.section-totals{background:#f5f7fa;border-radius:4px;padding:8px 10px;font-size:12px;margin-top:4px}
 .section-grand{font-size:12px;margin-top:4px;padding-top:4px;border-top:1px solid #ddd;color:#2E75B6}
 .dim{color:#888}
-.tools-grid{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:10px;margin-bottom:16px}
+.tools-grid{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;margin-bottom:16px}
 .tool-item{min-width:140px}
-.notes{font-size:10px;color:#444;line-height:1.6}
+.notes{font-size:12px;color:#444;line-height:1.6}
 .notes li{margin-bottom:4px}
 .sig-row{display:flex;gap:40px;margin-top:30px}
-.sig-line{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;font-size:10px;color:#666}
-.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:9px;color:#888;margin-top:24px}
+.sig-line{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;font-size:12px;color:#666}
+.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:24px}
 @media print{body{padding:0}.page{padding:16px 24px}h2{page-break-after:avoid}.section-block{page-break-inside:avoid}}
 </style></head><body><div class="page">
 
@@ -147,8 +147,8 @@ td{padding:4px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
   </div>
   <div style="text-align:right">
     <div style="font-family:Oswald;font-size:13px;color:#2E75B6;text-transform:uppercase">Property Repair Estimate</div>
-    <div style="font-size:10px;color:#666;margin-top:2px">${today}</div>
-    <div style="font-size:9px;color:#888">${orgLicense ? "License #" + orgLicense + " · " : ""}Valid 30 Days</div>
+    <div style="font-size:12px;color:#666;margin-top:2px">${today}</div>
+    <div style="font-size:11px;color:#888">${orgLicense ? "License #" + orgLicense + " · " : ""}Valid 30 Days</div>
   </div>
 </div>
 

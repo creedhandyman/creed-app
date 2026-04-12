@@ -206,7 +206,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           <button
             className="bg"
             onClick={addSchedule}
-            style={{ fontSize: 11, padding: "6px 12px" }}
+            style={{ fontSize: 13, padding: "6px 12px" }}
           >
             Add
           </button>
@@ -228,7 +228,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         </div>
         {/* Workers */}
         <div style={{ marginTop: 6 }}>
-          <div className="dim" style={{ fontSize: 10, marginBottom: 4 }}>Assign workers:</div>
+          <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Assign workers:</div>
           <div className="row">
             {profiles.map((p) => {
               const selected = sWorkers.includes(p.name);
@@ -237,7 +237,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   key={p.id}
                   onClick={() => setSWorkers((prev) => selected ? prev.filter((n) => n !== p.name) : [...prev, p.name])}
                   style={{
-                    padding: "3px 10px", borderRadius: 16, fontSize: 11,
+                    padding: "3px 10px", borderRadius: 16, fontSize: 13,
                     background: selected ? "var(--color-primary)" + "33" : "transparent",
                     color: selected ? "var(--color-primary)" : "#888",
                     border: `1px solid ${selected ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
@@ -268,12 +268,12 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           >
             <span style={{ fontSize: 14 }}>💡</span>
             <div>
-              <div style={{ fontSize: 11, color: "var(--color-success)", fontWeight: 600 }}>
+              <div style={{ fontSize: 13, color: "var(--color-success)", fontWeight: 600 }}>
                 Suggested: {suggestion.date}
               </div>
               <div className="dim" style={{ fontSize: 10 }}>{suggestion.reason}</div>
             </div>
-            <span style={{ fontSize: 9, color: "var(--color-success)", marginLeft: "auto" }}>Tap to use</span>
+            <span style={{ fontSize: 13, color: "var(--color-success)", marginLeft: "auto" }}>Tap to use</span>
           </div>
         )}
       </div>
@@ -290,7 +290,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             onClick={() => setView("week")}
             style={{
               padding: "4px 12px",
-              fontSize: 10,
+              fontSize: 12,
               background: view === "week" ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff",
               color: view === "week" ? "#fff" : "#888",
               border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
@@ -304,7 +304,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             onClick={() => setView("month")}
             style={{
               padding: "4px 12px",
-              fontSize: 10,
+              fontSize: 12,
               background: view === "month" ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff",
               color: view === "month" ? "#fff" : "#888",
               border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
@@ -325,7 +325,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             <div
               key={d}
               style={{
-                fontSize: 9,
+                fontSize: 13,
                 fontFamily: "Oswald",
                 color: "#888",
                 textAlign: "center",
@@ -366,7 +366,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                     <button
                       className="bb"
                       onClick={() => setPage("time")}
-                      style={{ fontSize: 9, padding: "3px 8px" }}
+                      style={{ fontSize: 13, padding: "3px 8px" }}
                     >
                       ⏱ Start
                     </button>
@@ -388,7 +388,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           <button
             className="bb"
             onClick={() => setPage("time")}
-            style={{ fontSize: 10, padding: "5px 14px" }}
+            style={{ fontSize: 12, padding: "5px 14px" }}
           >
             ⏱ Start Working →
           </button>

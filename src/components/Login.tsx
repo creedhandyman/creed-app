@@ -59,7 +59,7 @@ export default function Login() {
           <div
             style={{
               color: "#C00000",
-              fontSize: 11,
+              fontSize: 13,
               fontFamily: "Oswald",
               letterSpacing: ".15em",
             }}

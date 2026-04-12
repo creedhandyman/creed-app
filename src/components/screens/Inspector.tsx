@@ -246,7 +246,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
               <button
                 className="bb"
                 onClick={() => { setStep(roomData.length ? "inspect" : "rooms"); setShowResume(false); }}
-                style={{ fontSize: 10, padding: "5px 12px" }}
+                style={{ fontSize: 12, padding: "5px 12px" }}
               >
                 Resume
               </button>
@@ -261,7 +261,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                   setCurrentRoomIdx(0);
                   setShowResume(false);
                 }}
-                style={{ fontSize: 10, padding: "5px 10px", color: "var(--color-accent-red)" }}
+                style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}
               >
                 Discard
               </button>
@@ -317,7 +317,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
               style={{ flex: 1, fontSize: 12 }}
               onKeyDown={(e) => e.key === "Enter" && addCustomRoom()}
             />
-            <button className="bo" onClick={addCustomRoom} style={{ fontSize: 10, padding: "5px 10px" }}>
+            <button className="bo" onClick={addCustomRoom} style={{ fontSize: 12, padding: "5px 10px" }}>
               + Add
             </button>
           </div>
@@ -334,7 +334,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                   gap: 4,
                   padding: "3px 8px",
                   borderRadius: 12,
-                  fontSize: 11,
+                  fontSize: 13,
                   background: "var(--color-primary)" + "22",
                   color: "var(--color-primary)",
                   margin: "4px 4px 0 0",
@@ -398,10 +398,10 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         {/* Header */}
         <div className="row mb" style={{ justifyContent: "space-between" }}>
           <div className="row">
-            <button className="bo" onClick={() => setStep("rooms")} style={{ fontSize: 10, padding: "4px 8px" }}>←</button>
+            <button className="bo" onClick={() => setStep("rooms")} style={{ fontSize: 12, padding: "4px 8px" }}>←</button>
             <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>{room.name}</h2>
           </div>
-          <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald" }}>
+          <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald" }}>
             {currentRoomIdx + 1} / {roomData.length}
           </span>
         </div>
@@ -507,7 +507,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                   📁
                 </button>
                 {item.photos.length > 0 && (
-                  <span style={{ fontSize: 9, color: "var(--color-success)", alignSelf: "center" }}>
+                  <span style={{ fontSize: 13, color: "var(--color-success)", alignSelf: "center" }}>
                     {item.photos.length}
                   </span>
                 )}
@@ -524,7 +524,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                     flex: 1,
                     padding: "4px 0",
                     borderRadius: 4,
-                    fontSize: 10,
+                    fontSize: 12,
                     fontFamily: "Oswald",
                     background: item.condition === c.code ? c.bg : "transparent",
                     color: item.condition === c.code ? c.color : "#666",
@@ -577,7 +577,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                         borderRadius: "50%",
                         width: 14,
                         height: 14,
-                        fontSize: 9,
+                        fontSize: 13,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -597,7 +597,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         <button
           className="bo"
           onClick={() => addItemToRoom(currentRoomIdx)}
-          style={{ fontSize: 10, padding: "5px 12px", marginBottom: 12 }}
+          style={{ fontSize: 12, padding: "5px 12px", marginBottom: 12 }}
         >
           + Add Item
         </button>
@@ -641,7 +641,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   return (
     <div className="fi">
       <div className="row mb">
-        <button className="bo" onClick={() => setStep("inspect")} style={{ fontSize: 10, padding: "4px 8px" }}>← Edit</button>
+        <button className="bo" onClick={() => setStep("inspect")} style={{ fontSize: 12, padding: "4px 8px" }}>← Edit</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>🔍 Inspection Review</h2>
       </div>
 
@@ -723,7 +723,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         🤖 Generate Quote ({findingsCount} findings)
       </button>
       {findingsCount === 0 && (
-        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 6 }}>
+        <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 6 }}>
           Mark at least one item as Fair, Poor, or Damaged to generate a quote
         </p>
       )}

@@ -202,7 +202,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                 style={{
                   padding: "5px 12px",
                   borderRadius: 6,
-                  fontSize: 11,
+                  fontSize: 13,
                   background: jobTab === t.id ? t.c : "transparent",
                   color: jobTab === t.id ? "#fff" : "#888",
                   fontFamily: "Oswald",
@@ -227,7 +227,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
               </div>
             </div>
             {!org?.stripe_connected && (
-              <button className="bb" onClick={() => setPage("dash")} style={{ fontSize: 10, padding: "5px 10px" }}>
+              <button className="bb" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "5px 10px" }}>
                 Connect Stripe →
               </button>
             )}
@@ -285,7 +285,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      style={{ fontSize: 10, color: "var(--color-primary)", textDecoration: "none" }}
+                      style={{ fontSize: 12, color: "var(--color-primary)", textDecoration: "none" }}
                     >
                       📍 View on Map
                     </a>
@@ -309,7 +309,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       setStatus(j.id, e.target.value);
                     }}
                     style={{
-                      fontSize: 10,
+                      fontSize: 12,
                       padding: "2px 6px",
                       width: "auto",
                       background: statusColor(j.status) + "22",
@@ -343,7 +343,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                           e.stopPropagation();
                           onEditJob(j.id);
                         }}
-                        style={{ fontSize: 10, padding: "5px 12px" }}
+                        style={{ fontSize: 12, padding: "5px 12px" }}
                       >
                         ✏️ Edit Quote
                       </button>
@@ -355,7 +355,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         if (onScheduleJob) onScheduleJob(j.property);
                         else setPage("sched");
                       }}
-                      style={{ fontSize: 10, padding: "5px 12px" }}
+                      style={{ fontSize: 12, padding: "5px 12px" }}
                     >
                       📅 Schedule This
                     </button>
@@ -373,7 +373,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                           workerNames: w.map((x) => x.name),
                         });
                       }}
-                      style={{ fontSize: 10, padding: "5px 10px" }}
+                      style={{ fontSize: 12, padding: "5px 10px" }}
                     >
                       📋 Job Report
                     </button>
@@ -385,7 +385,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         navigator.clipboard.writeText(url);
                         alert("Status link copied! Send to client.\n\n" + url);
                       }}
-                      style={{ fontSize: 10, padding: "5px 10px" }}
+                      style={{ fontSize: 12, padding: "5px 10px" }}
                     >
                       🔗 Share Status
                     </button>
@@ -395,7 +395,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         e.stopPropagation();
                         deleteJob(j.id);
                       }}
-                      style={{ fontSize: 10, padding: "5px 10px", color: "var(--color-accent-red)" }}
+                      style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}
                     >
                       Delete
                     </button>
@@ -413,7 +413,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                             setStatus(j.id, "invoiced");
                           }
                         }}
-                        style={{ fontSize: 10, padding: "5px 12px" }}
+                        style={{ fontSize: 12, padding: "5px 12px" }}
                       >
                         🧾 {j.status === "complete" ? "Generate Invoice" : "View Invoice"}
                       </button>
@@ -445,7 +445,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                               }
                             } catch { alert("Failed to create payment link"); }
                           }}
-                          style={{ fontSize: 10, padding: "5px 12px" }}
+                          style={{ fontSize: 12, padding: "5px 12px" }}
                         >
                           💳 Send Link
                         </button>
@@ -475,7 +475,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                               }
                             } catch { alert("Failed to create payment"); }
                           }}
-                          style={{ fontSize: 10, padding: "5px 12px" }}
+                          style={{ fontSize: 12, padding: "5px 12px" }}
                         >
                           📱 Collect Now
                         </button>
@@ -487,7 +487,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                             e.stopPropagation();
                             setStatus(j.id, "paid");
                           }}
-                          style={{ fontSize: 10, padding: "5px 12px" }}
+                          style={{ fontSize: 12, padding: "5px 12px" }}
                         >
                           ✅ Mark Paid
                         </button>
@@ -506,7 +506,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         await db.patch("jobs", j.id, { trade: e.target.value });
                         loadAll();
                       }}
-                      style={{ width: "auto", fontSize: 10, padding: "3px 6px" }}
+                      style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
                     >
                       <option value="">None</option>
                       <option value="Plumbing">Plumbing</option>
@@ -523,7 +523,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         display: "flex",
                         alignItems: "center",
                         gap: 4,
-                        fontSize: 11,
+                        fontSize: 13,
                         cursor: "pointer",
                         color: j.callback ? "var(--color-accent-red)" : "#888",
                       }}
@@ -546,7 +546,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         display: "flex",
                         alignItems: "center",
                         gap: 4,
-                        fontSize: 11,
+                        fontSize: 13,
                         cursor: "pointer",
                         color: j.is_upsell ? "var(--color-success)" : "#888",
                       }}
@@ -575,7 +575,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         await db.patch("jobs", j.id, { requested_tech: e.target.value });
                         loadAll();
                       }}
-                      style={{ width: "auto", fontSize: 10, padding: "3px 6px" }}
+                      style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
                     >
                       <option value="">No one specific</option>
                       {profiles.map((p) => (
@@ -627,13 +627,13 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                                 border: `2px solid ${w.done ? "var(--color-success)" : "#555"}`,
                                 background: w.done ? "var(--color-success)" : "transparent",
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 10, color: "#fff",
+                                fontSize: 12, color: "#fff",
                               }}>
                                 {w.done && "✓"}
                               </span>
                               <div style={{ flex: 1, fontSize: 11 }}>
                                 <span style={{
-                                  fontSize: 9, padding: "1px 4px", borderRadius: 3, marginRight: 4,
+                                  fontSize: 13, padding: "1px 4px", borderRadius: 3, marginRight: 4,
                                   background: w.pri === "HIGH" ? "#C0000033" : w.pri === "MED" ? "#ff880033" : "#00cc6633",
                                   color: w.pri === "HIGH" ? "var(--color-accent-red)" : w.pri === "MED" ? "var(--color-warning)" : "var(--color-success)",
                                 }}>
@@ -733,7 +733,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                           e.stopPropagation();
                           addReceipt(j.id);
                         }}
-                        style={{ fontSize: 10, padding: "5px 10px" }}
+                        style={{ fontSize: 12, padding: "5px 10px" }}
                         disabled={uploading}
                       >
                         {uploading ? "..." : "Add"}
@@ -743,7 +743,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       <label
                         onClick={(e) => { e.stopPropagation(); photoRef.current?.click(); }}
                         style={{
-                          fontSize: 11,
+                          fontSize: 13,
                           color: "var(--color-primary)",
                           cursor: "pointer",
                           display: "flex",
@@ -772,7 +772,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                             setRPhoto(null);
                             if (photoRef.current) photoRef.current.value = "";
                           }}
-                          style={{ background: "none", color: "var(--color-accent-red)", fontSize: 11, padding: 0 }}
+                          style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: 0 }}
                         >
                           ✕ Remove
                         </button>
@@ -822,7 +822,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
             <button
               className="bo"
               onClick={() => setPayQR(null)}
-              style={{ fontSize: 11, padding: "6px 16px", color: "#888" }}
+              style={{ fontSize: 13, padding: "6px 16px", color: "#888" }}
             >
               Close
             </button>

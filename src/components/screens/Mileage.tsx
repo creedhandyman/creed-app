@@ -109,7 +109,7 @@ export default function Mileage({ setPage }: Props) {
     <div className="fi">
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>🚗 Mileage</h2>
-        <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 10, padding: "4px 10px" }}>← Dashboard</button>
+        <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Dashboard</button>
       </div>
 
       {/* Stats */}
@@ -210,7 +210,7 @@ export default function Mileage({ setPage }: Props) {
             placeholder="Miles"
             style={{ width: 80 }}
           />
-          <button className="bg" onClick={addManual} style={{ fontSize: 11, padding: "7px 12px" }}>
+          <button className="bg" onClick={addManual} style={{ fontSize: 13, padding: "7px 12px" }}>
             Log
           </button>
         </div>
@@ -231,7 +231,7 @@ export default function Mileage({ setPage }: Props) {
               <span style={{ minWidth: 70 }}>{e.trip_date}</span>
               <span style={{ color: "var(--color-primary)", flex: 1 }}>{e.job}</span>
               {e.start_miles > 0 && (
-                <span className="dim" style={{ fontSize: 10, marginRight: 6 }}>
+                <span className="dim" style={{ fontSize: 12, marginRight: 6 }}>
                   {e.start_miles}→{e.end_miles}
                 </span>
               )}

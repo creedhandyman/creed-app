@@ -219,30 +219,30 @@ Return this JSON format:
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <h4 style={{ fontSize: 14, color: "var(--color-success)" }}>🌐 Your Site is Live</h4>
-              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>Share this link with clients — it&apos;s your website</div>
+              <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>Share this link with clients — it&apos;s your website</div>
             </div>
-            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 10, background: "var(--color-success)" + "22", color: "var(--color-success)" }}>Published</span>
+            <span style={{ fontSize: 13, padding: "2px 8px", borderRadius: 10, background: "var(--color-success)" + "22", color: "var(--color-success)" }}>Published</span>
           </div>
-          <div style={{ marginTop: 8, padding: 8, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6, fontSize: 11, wordBreak: "break-all", color: "var(--color-primary)" }}>
+          <div style={{ marginTop: 8, padding: 8, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6, fontSize: 13, wordBreak: "break-all", color: "var(--color-primary)" }}>
             {siteUrl}
           </div>
           <div className="row" style={{ marginTop: 8 }}>
-            <button className="bb" onClick={() => { navigator.clipboard.writeText(siteUrl); alert("Site link copied!"); }} style={{ fontSize: 10, padding: "5px 12px" }}>
+            <button className="bb" onClick={() => { navigator.clipboard.writeText(siteUrl); alert("Site link copied!"); }} style={{ fontSize: 12, padding: "5px 12px" }}>
               📋 Copy Link
             </button>
-            <button className="bo" onClick={() => window.open(siteUrl, "_blank")} style={{ fontSize: 10, padding: "5px 12px" }}>
+            <button className="bo" onClick={() => window.open(siteUrl, "_blank")} style={{ fontSize: 12, padding: "5px 12px" }}>
               👁 Preview
             </button>
-            <button className="bo" onClick={() => setStep("survey")} style={{ fontSize: 10, padding: "5px 12px" }}>
+            <button className="bo" onClick={() => setStep("survey")} style={{ fontSize: 12, padding: "5px 12px" }}>
               ✏️ Regenerate
             </button>
           </div>
 
           {/* Custom slug */}
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}` }}>
-            <label className="sl" style={{ fontSize: 10, marginBottom: 4, display: "block" }}>Custom URL</label>
+            <label className="sl" style={{ fontSize: 12, marginBottom: 4, display: "block" }}>Custom URL</label>
             <div className="row">
-              <span className="dim" style={{ fontSize: 11, whiteSpace: "nowrap" }}>creedhm.com/s/</span>
+              <span className="dim" style={{ fontSize: 13, whiteSpace: "nowrap" }}>creedhm.com/s/</span>
               <input
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
@@ -253,7 +253,7 @@ Return this JSON format:
                 className="bb"
                 onClick={saveSlug}
                 disabled={slugSaving || !slug.trim()}
-                style={{ fontSize: 10, padding: "5px 12px" }}
+                style={{ fontSize: 12, padding: "5px 12px" }}
               >
                 {slugSaving ? "..." : org?.site_slug ? "Update" : "Save"}
               </button>
@@ -269,7 +269,7 @@ Return this JSON format:
               className="bb"
               onClick={() => galleryInput.current?.click()}
               disabled={uploading}
-              style={{ fontSize: 10, padding: "4px 12px" }}
+              style={{ fontSize: 12, padding: "4px 12px" }}
             >
               {uploading ? "Uploading..." : "+ Add Photos"}
             </button>
@@ -306,7 +306,7 @@ Return this JSON format:
                       position: "absolute", top: 4, right: 4,
                       background: "rgba(0,0,0,.7)", color: "#fff",
                       border: "none", borderRadius: "50%", width: 20, height: 20,
-                      fontSize: 11, cursor: "pointer", display: "flex",
+                      fontSize: 13, cursor: "pointer", display: "flex",
                       alignItems: "center", justifyContent: "center",
                     }}
                   >
@@ -319,20 +319,20 @@ Return this JSON format:
                         value={captionText}
                         onChange={(e) => setCaptionText(e.target.value)}
                         placeholder="Caption..."
-                        style={{ fontSize: 10, width: "100%", padding: 4 }}
+                        style={{ fontSize: 12, width: "100%", padding: 4 }}
                         onKeyDown={(e) => e.key === "Enter" && saveCaption(i)}
                         autoFocus
                       />
                       <div className="row" style={{ marginTop: 2 }}>
-                        <button className="bb" onClick={() => saveCaption(i)} style={{ fontSize: 9, padding: "2px 6px" }}>Save</button>
-                        <button className="bo" onClick={() => setEditingCaption(null)} style={{ fontSize: 9, padding: "2px 6px" }}>Cancel</button>
+                        <button className="bb" onClick={() => saveCaption(i)} style={{ fontSize: 13, padding: "2px 6px" }}>Save</button>
+                        <button className="bo" onClick={() => setEditingCaption(null)} style={{ fontSize: 13, padding: "2px 6px" }}>Cancel</button>
                       </div>
                     </div>
                   ) : (
                     <div
                       onClick={() => { setEditingCaption(i); setCaptionText(p.caption || ""); }}
                       style={{
-                        fontSize: 10, color: p.caption ? (darkMode ? "#aaa" : "#555") : "#888",
+                        fontSize: 12, color: p.caption ? (darkMode ? "#aaa" : "#555") : "#888",
                         marginTop: 3, cursor: "pointer", textAlign: "center",
                         fontStyle: p.caption ? "normal" : "italic",
                       }}
@@ -351,7 +351,7 @@ Return this JSON format:
           <h4 style={{ fontSize: 14, marginBottom: 12 }}>🎨 Customize Site</h4>
 
           {/* Color */}
-          <label className="sl" style={{ fontSize: 10, display: "block", marginBottom: 6 }}>Accent Color</label>
+          <label className="sl" style={{ fontSize: 12, display: "block", marginBottom: 6 }}>Accent Color</label>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14 }}>
             {COLOR_PRESETS.map((c) => (
               <button
@@ -378,7 +378,7 @@ Return this JSON format:
           </div>
 
           {/* Section toggles */}
-          <label className="sl" style={{ fontSize: 10, display: "block", marginBottom: 8 }}>Sections</label>
+          <label className="sl" style={{ fontSize: 12, display: "block", marginBottom: 8 }}>Sections</label>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
             {([
               ["showServices", "Services"],
@@ -400,7 +400,7 @@ Return this JSON format:
           </div>
 
           {themeDirty && (
-            <button className="bb" onClick={saveTheme} style={{ marginTop: 10, fontSize: 11, padding: "6px 16px", width: "100%" }}>
+            <button className="bb" onClick={saveTheme} style={{ marginTop: 10, fontSize: 13, padding: "6px 16px", width: "100%" }}>
               Save Changes
             </button>
           )}
@@ -455,7 +455,7 @@ Return this JSON format:
 
       <div className="cd mb">
         <h4 style={{ fontSize: 14, marginBottom: 4 }}>🌐 Build Your Website</h4>
-        <div className="dim" style={{ fontSize: 11, marginBottom: 12 }}>Answer a few questions and AI will create a professional landing page for your business.</div>
+        <div className="dim" style={{ fontSize: 13, marginBottom: 12 }}>Answer a few questions and AI will create a professional landing page for your business.</div>
 
         <div style={{ marginBottom: 10 }}>
           <label className="sl">What services do you offer? *</label>
