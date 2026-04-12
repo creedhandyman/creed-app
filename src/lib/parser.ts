@@ -100,7 +100,7 @@ export async function renderPdfPages(
 
 /* ====== AI PARSE ====== */
 
-const AI_SYSTEM_PROMPT_BASE = `You are a professional handyman/contractor quoting engine.
+const AI_SYSTEM_PROMPT_BASE = `You are a professional field service contractor quoting engine.
 
 You receive move-out inspection reports (typically from zInspector via Keyrenter Property Management) and produce accurate repair quotes.
 
@@ -203,7 +203,8 @@ export interface AiParseResult {
 export async function aiParsePdf(
   text: string,
   images: string[],
-  laborRate?: number
+  laborRate?: number,
+  licensedTrades?: string[]
 ): Promise<AiParseResult | null> {
   try {
     // Build content array with text + images
@@ -241,7 +242,11 @@ export async function aiParsePdf(
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 16000,
-        system: `Labor rate: $${laborRate || 55}.00/hour.\n\n` + AI_SYSTEM_PROMPT_BASE,
+        system: `Labor rate: $${laborRate || 55}.00/hour.\n\n` +
+          (licensedTrades?.length
+            ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors. Include labor, materials, and hours for all ${licensedTrades.join("/")} work.\n\n`
+            : "") +
+          AI_SYSTEM_PROMPT_BASE,
         messages: [{ role: "user", content }],
       }),
     });
@@ -326,7 +331,8 @@ export interface InspectionInput {
 
 export async function aiParseInspection(
   inspection: InspectionInput,
-  laborRate?: number
+  laborRate?: number,
+  licensedTrades?: string[]
 ): Promise<AiParseResult | null> {
   // Compile inspection into structured text
   let text = `PROPERTY INSPECTION REPORT\n`;
@@ -377,7 +383,7 @@ export async function aiParseInspection(
     }
   }
 
-  return aiParsePdf(text, imageData, laborRate);
+  return aiParsePdf(text, imageData, laborRate, licensedTrades);
 }
 
 /* ====== TEXT NORMALIZATION ====== */
@@ -533,6 +539,53 @@ export function estimateMaterials(t: string): Material[] {
   // Misc
   if (/anchor|drywall anchor|wall anchor/.test(s) && !m.some((x) => x.n.includes("anchor")))
     m.push({ n: "Wall anchors", c: 6 });
+
+  // ── Licensed trade materials ──
+
+  // Electrical (licensed)
+  if (/panel|breaker box|electrical panel/.test(s)) m.push({ n: "Breaker panel", c: 180 });
+  if (/breaker|circuit breaker/.test(s) && !s.includes("panel")) m.push({ n: "Circuit breaker", c: 12 });
+  if (/wire.*run|romex|14\/2|12\/2/.test(s)) m.push({ n: "Romex wire (50ft)", c: 35 });
+  if (/junction box/.test(s)) m.push({ n: "Junction box", c: 8 });
+  if (/conduit/.test(s)) m.push({ n: "Conduit (10ft)", c: 12 });
+  if (/dimmer/.test(s)) m.push({ n: "Dimmer switch", c: 22 });
+  if (/recessed|can light/.test(s)) m.push({ n: "Recessed light kit", c: 28 });
+  if (/sub.?panel/.test(s)) m.push({ n: "Sub-panel", c: 120 });
+
+  // Plumbing (licensed)
+  if (/water heater/.test(s)) m.push({ n: "Water heater", c: 450 });
+  if (/sump pump/.test(s)) m.push({ n: "Sump pump", c: 150 });
+  if (/water line|copper pipe|pex/.test(s)) m.push({ n: "PEX pipe (10ft)", c: 12 });
+  if (/shut.?off|shut off valve/.test(s)) m.push({ n: "Shut-off valve", c: 15 });
+  if (/backflow/.test(s)) m.push({ n: "Backflow preventer", c: 45 });
+  if (/water filter|whole house filter/.test(s)) m.push({ n: "Water filter", c: 65 });
+  if (/sewer|clean.?out/.test(s)) m.push({ n: "Cleanout plug", c: 8 });
+
+  // HVAC (licensed)
+  if (/thermostat/.test(s)) m.push({ n: "Thermostat", c: 35 });
+  if (/smart thermostat|nest|ecobee/.test(s)) m.push({ n: "Smart thermostat", c: 130 });
+  if (/condenser|compressor/.test(s)) m.push({ n: "Condenser unit", c: 1200 });
+  if (/evaporator|coil/.test(s)) m.push({ n: "Evaporator coil", c: 400 });
+  if (/furnace filter|hvac filter|air filter/.test(s) && !m.some((x) => x.n === "Filter"))
+    m.push({ n: "HVAC filter", c: 15 });
+  if (/ductwork|duct/.test(s)) m.push({ n: "Duct section", c: 25 });
+  if (/refrigerant|freon/.test(s)) m.push({ n: "Refrigerant (lb)", c: 75 });
+  if (/blower|fan motor/.test(s)) m.push({ n: "Blower motor", c: 200 });
+
+  // Roofing (licensed)
+  if (/shingle/.test(s)) m.push({ n: "Shingles (bundle)", c: 35 });
+  if (/roof.*felt|underlayment.*roof|tar paper/.test(s)) m.push({ n: "Roof underlayment (roll)", c: 25 });
+  if (/flashing/.test(s)) m.push({ n: "Flashing", c: 15 });
+  if (/ridge.*vent|roof.*vent/.test(s)) m.push({ n: "Ridge vent", c: 45 });
+  if (/drip.*edge/.test(s)) m.push({ n: "Drip edge (10ft)", c: 10 });
+  if (/roof.*cement|roof.*seal/.test(s)) m.push({ n: "Roof cement", c: 12 });
+  if (/soffit/.test(s)) m.push({ n: "Soffit panel", c: 18 });
+  if (/fascia/.test(s)) m.push({ n: "Fascia board", c: 22 });
+
+  // Gas (licensed)
+  if (/gas.*line|gas.*pipe|gas.*flex/.test(s)) m.push({ n: "Gas flex line", c: 25 });
+  if (/gas.*valve/.test(s)) m.push({ n: "Gas valve", c: 35 });
+  if (/gas.*connector/.test(s)) m.push({ n: "Gas connector", c: 20 });
 
   if (m.length === 0) m.push({ n: "Misc materials", c: 17 });
   return m;

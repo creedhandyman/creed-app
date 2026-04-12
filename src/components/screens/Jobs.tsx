@@ -144,7 +144,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 @media print{.page{padding:20px}}
 </style></head><body><div class="page">
 <div class="header">
-  <div><h1>${org?.name || "Handyman Service"}</h1>
+  <div><h1>${org?.name || "Service Provider"}</h1>
   <div class="info">${org?.phone ? "☎ " + org.phone + "<br/>" : ""}${org?.email ? "✉ " + org.email + "<br/>" : ""}${org?.license_num ? "License #" + org.license_num : ""}</div></div>
   <div class="inv-label"><h2>Invoice</h2><div class="date">${today}</div></div>
 </div>
@@ -164,10 +164,10 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 <div class="amount-due"><div class="label">Total Amount Due</div><div class="value">$${(j.total || 0).toFixed(2)}</div></div>
 <div class="terms">
   <b>Payment Terms:</b> Due upon receipt.<br/>
-  Please make checks payable to <b>${org?.name || "Handyman Service"}</b>.<br/>
+  Please make checks payable to <b>${org?.name || "Service Provider"}</b>.<br/>
   For questions about this invoice, contact ${org?.phone || ""} ${org?.email ? "or " + org.email : ""}.
 </div>
-<div class="footer">${org?.name || "Handyman Service"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</div>
+<div class="footer">${org?.name || "Service Provider"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</div>
 </div></body></html>`;
     const win = window.open("", "_blank");
     if (!win) { alert("Allow popups to generate invoice"); return; }
@@ -363,7 +363,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         e.stopPropagation();
                         exportJobReport({
                           job: j,
-                          orgName: org?.name || "Handyman Service",
+                          orgName: org?.name || "Service Provider",
                           orgPhone: org?.phone || "",
                           orgEmail: org?.email || "",
                           orgLicense: org?.license_num || "",
@@ -429,7 +429,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                                   property: j.property,
                                   client: j.client,
                                   amount: j.total,
-                                  orgName: org?.name || "Handyman Service",
+                                  orgName: org?.name || "Service Provider",
                                   stripeAccountId: org?.stripe_account_id || "",
                                 }),
                               });
@@ -460,7 +460,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                                   property: j.property,
                                   client: j.client,
                                   amount: j.total,
-                                  orgName: org?.name || "Handyman Service",
+                                  orgName: org?.name || "Service Provider",
                                   stripeAccountId: org?.stripe_account_id || "",
                                 }),
                               });

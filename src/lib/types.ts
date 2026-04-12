@@ -10,6 +10,7 @@ export interface Organization {
   markup_pct: number;
   tax_pct: number;
   trade_rates?: string; // JSON: { "Plumbing": 65, "Electrical": 70, ... }
+  licensed_trades?: string; // JSON array: ["Electrical","Plumbing","HVAC","Roofing"]
   quest_config?: string;
   stripe_account_id?: string;
   stripe_connected?: boolean;
@@ -64,6 +65,7 @@ export interface Job {
   requested_tech: string;
   client_signature?: string;
   signature_date?: string;
+  org_id?: string;
 }
 
 export interface TimeEntry {

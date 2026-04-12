@@ -4,7 +4,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "Creed App",
-  description: "Field service management for handyman businesses",
+  description: "AI-powered field service management for contractors and trade professionals",
   icons: { icon: "/CREED_LOGO.png", apple: "/CREED_LOGO.png" },
   appleWebApp: {
     capable: true,

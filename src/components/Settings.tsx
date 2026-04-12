@@ -250,6 +250,47 @@ export default function Settings({ onClose }: Props) {
       {/* Operations tab */}
       {tab === "operations" && isOwner && (
         <div className="cd">
+          {/* Licensed Trades */}
+          <h4 style={{ fontSize: 14, marginBottom: 8 }}>🔑 Licensed Trades</h4>
+          <div className="dim" style={{ fontSize: 10, marginBottom: 8 }}>Select trades your business is licensed for. AI will fully quote these instead of flagging for subcontractors.</div>
+          {(() => {
+            const allTrades = ["Electrical", "Plumbing", "HVAC", "Roofing", "Gas Fitting", "Fire Protection", "Structural", "Asbestos/Mold"];
+            let licensed: string[] = [];
+            try { licensed = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
+
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 16 }}>
+                {allTrades.map((trade) => {
+                  const isLicensed = licensed.includes(trade);
+                  return (
+                    <label
+                      key={trade}
+                      onClick={async () => {
+                        const updated = isLicensed ? licensed.filter((t) => t !== trade) : [...licensed, trade];
+                        if (org) {
+                          await db.patch("organizations", org.id, { licensed_trades: JSON.stringify(updated) });
+                          const orgs = await db.get("organizations", { id: org.id });
+                          if (orgs.length) useStore.getState().setOrg(orgs[0] as any);
+                        }
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6, padding: "5px 8px",
+                        borderRadius: 6, cursor: "pointer", fontSize: 12,
+                        background: isLicensed ? "var(--color-success)" + "15" : "transparent",
+                        border: `1px solid ${isLicensed ? "var(--color-success)" : darkMode ? "#1e1e2e" : "#ddd"}`,
+                      }}
+                    >
+                      <span style={{ fontSize: 14, color: isLicensed ? "var(--color-success)" : "#555" }}>
+                        {isLicensed ? "☑" : "☐"}
+                      </span>
+                      {trade}
+                    </label>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           <h4 style={{ fontSize: 14, marginBottom: 12 }}>📊 Quote Settings</h4>
 
           {(() => {

@@ -30,7 +30,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     totalHrs,
   } = opts;
 
-  const orgName = opts.orgName || "Handyman Service";
+  const orgName = opts.orgName || "Service Provider";
   const orgPhone = opts.orgPhone || "";
   const orgEmail = opts.orgEmail || "";
   const orgLicense = opts.orgLicense || "";

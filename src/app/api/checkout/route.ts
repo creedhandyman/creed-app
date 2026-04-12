@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
             currency: "usd",
             product_data: {
               name: `Property Repairs — ${property}`,
-              description: `${orgName || "Handyman Service"} · Invoice for ${client || "Client"}`,
+              description: `${orgName || "Service Provider"} · Invoice for ${client || "Client"}`,
             },
             unit_amount: amountCents,
           },

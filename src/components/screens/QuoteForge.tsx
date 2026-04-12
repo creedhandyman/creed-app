@@ -210,7 +210,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         property: data.property,
         client: data.client,
       };
-      const result = await aiParseInspection(input, rate);
+      let licensedTradesInsp: string[] = [];
+      try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
+      const result = await aiParseInspection(input, rate, licensedTradesInsp);
       if (result && result.rooms.length > 0) {
         setRooms(result.rooms);
         setParsing(false);
@@ -262,7 +264,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setParseStatus("Sending text to AI...");
       }
 
-      const result = await aiParsePdf(rawText, images, rate);
+      let licensedTrades: string[] = [];
+      try { licensedTrades = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
+      const result = await aiParsePdf(rawText, images, rate, licensedTrades);
 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);
@@ -993,7 +997,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           onClick={() => {
             const clientData = profiles.length ? useStore.getState().clients.find((c: { name: string }) => c.name === client) : null;
             const email = clientData?.email || "";
-            const orgName = useStore.getState().org?.name || "Creed Handyman LLC";
+            const orgName = useStore.getState().org?.name || "Service Provider";
             const subject = encodeURIComponent(`Quote — ${prop}`);
             const body = encodeURIComponent(
               `Hi ${client || "there"},\n\n` +

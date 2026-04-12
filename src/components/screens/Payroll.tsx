@@ -201,7 +201,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
 @media print{body{padding:0}.page{padding:20px}}
 </style></head><body><div class="page">
 <div class="header">
-  <div class="brand"><h1>${org?.name || "Handyman Service"}</h1>
+  <div class="brand"><h1>${org?.name || "Service Provider"}</h1>
   <div class="info">${org?.address || ""}${org?.phone ? "<br/>" + org.phone : ""}${org?.license_num ? "<br/>License #" + org.license_num : ""}</div></div>
   <div class="stub-label"><h2>Pay Stub</h2><div class="date">${today}</div></div>
 </div>
@@ -219,7 +219,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
   <div class="totals-row grand"><span>Net Pay</span><span>$${totalPay.toFixed(2)}</span></div>
 </div>
 <div class="footer">
-  <p>${org?.name || "Handyman Service"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</p>
+  <p>${org?.name || "Service Provider"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</p>
   <p style="margin-top:8px">This is not an official tax document. For tax purposes, refer to your W-2 or 1099.</p>
 </div>
 </div></body></html>`;

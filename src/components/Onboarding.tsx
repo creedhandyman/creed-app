@@ -154,7 +154,7 @@ export default function Onboarding() {
             <>
               <div style={{ marginBottom: 10 }}>
                 <label style={{ fontSize: 10, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Business Name *</label>
-                <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="e.g. Acme Handyman LLC" style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
+                <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="e.g. Acme Services LLC" style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
               </div>
               <div className="g2" style={{ marginBottom: 10 }}>
                 <div>

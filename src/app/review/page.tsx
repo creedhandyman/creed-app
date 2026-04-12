@@ -116,7 +116,7 @@ function ReviewContent() {
               Your review means a lot to us. We appreciate your business and look forward to serving you again.
             </p>
             <div style={{ marginTop: 16, color: "#555", fontSize: 11 }}>
-              — The Creed Handyman Team
+              — Thank you for choosing us
             </div>
           </div>
         ) : (
