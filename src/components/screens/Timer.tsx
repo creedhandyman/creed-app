@@ -194,7 +194,7 @@ export default function Timer({ setPage }: Props) {
           <option value="">General</option>
           {jobs.map((j) => (
             <option key={j.id} value={j.property}>
-              {j.property}
+              {j.property} ({j.status})
             </option>
           ))}
         </select>

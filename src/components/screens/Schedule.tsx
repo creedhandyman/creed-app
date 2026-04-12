@@ -199,7 +199,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             <option value="">Select job</option>
             {jobs.map((j) => (
               <option key={j.id} value={j.property}>
-                {j.property}
+                {j.property} ({j.status})
               </option>
             ))}
           </select>
