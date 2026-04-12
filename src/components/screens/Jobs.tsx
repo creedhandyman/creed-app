@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
+import { exportJobReport } from "@/lib/export-job-report";
 
 interface Props {
   setPage: (p: string) => void;
@@ -353,6 +354,24 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       style={{ fontSize: 10, padding: "5px 12px" }}
                     >
                       📅 Schedule This
+                    </button>
+                    <button
+                      className="bo"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        exportJobReport({
+                          job: j,
+                          orgName: org?.name || "Handyman Service",
+                          orgPhone: org?.phone || "",
+                          orgEmail: org?.email || "",
+                          orgLicense: org?.license_num || "",
+                          orgAddress: org?.address || "",
+                          workerNames: w.map((x) => x.name),
+                        });
+                      }}
+                      style={{ fontSize: 10, padding: "5px 10px" }}
+                    >
+                      📋 Job Report
                     </button>
                     <button
                       className="bo"
