@@ -1,7 +1,39 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
-import { db } from "@/lib/supabase";
+import { db, supabase } from "@/lib/supabase";
+
+interface GalleryPhoto {
+  url: string;
+  caption: string;
+}
+
+interface SiteTheme {
+  primaryColor: string;
+  showGallery: boolean;
+  showReviews: boolean;
+  showAbout: boolean;
+  showServices: boolean;
+  showWhyUs: boolean;
+}
+
+const DEFAULT_THEME: SiteTheme = {
+  primaryColor: "#2E75B6",
+  showGallery: true,
+  showReviews: true,
+  showAbout: true,
+  showServices: true,
+  showWhyUs: true,
+};
+
+const COLOR_PRESETS = [
+  { label: "Blue", value: "#2E75B6" },
+  { label: "Red", value: "#C00000" },
+  { label: "Green", value: "#1B8C3A" },
+  { label: "Orange", value: "#D4760A" },
+  { label: "Purple", value: "#7B3FAD" },
+  { label: "Teal", value: "#0E8585" },
+];
 
 export default function Marketing() {
   const user = useStore((s) => s.user)!;
@@ -9,7 +41,7 @@ export default function Marketing() {
   const reviews = useStore((s) => s.reviews);
   const darkMode = useStore((s) => s.darkMode);
 
-  const [step, setStep] = useState<"overview" | "survey" | "generating" | "preview">(
+  const [step, setStep] = useState<"overview" | "survey" | "generating">(
     org?.site_content ? "overview" : "survey"
   );
   const [generating, setGenerating] = useState(false);
@@ -26,6 +58,26 @@ export default function Marketing() {
   const [slug, setSlug] = useState(org?.site_slug || "");
   const [slugSaving, setSlugSaving] = useState(false);
 
+  // Gallery
+  const galleryInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const photos: GalleryPhoto[] = (() => {
+    try { return org?.gallery_photos ? JSON.parse(org.gallery_photos) : []; }
+    catch { return []; }
+  })();
+
+  // Theme
+  const theme: SiteTheme = (() => {
+    try { return org?.site_theme ? { ...DEFAULT_THEME, ...JSON.parse(org.site_theme) } : DEFAULT_THEME; }
+    catch { return DEFAULT_THEME; }
+  })();
+  const [localTheme, setLocalTheme] = useState(theme);
+  const [themeDirty, setThemeDirty] = useState(false);
+
+  // Editing captions
+  const [editingCaption, setEditingCaption] = useState<number | null>(null);
+  const [captionText, setCaptionText] = useState("");
+
   const siteUrl = typeof window !== "undefined"
     ? org?.site_slug
       ? `${window.location.origin}/s/${org.site_slug}`
@@ -33,11 +85,15 @@ export default function Marketing() {
     : "";
   const reviewUrl = typeof window !== "undefined" ? `${window.location.origin}/review?org=${org?.id}` : "";
 
+  const refreshOrg = async () => {
+    const orgs = await db.get("organizations", { id: org!.id });
+    if (orgs.length) useStore.getState().setOrg(orgs[0] as never);
+  };
+
   const saveSlug = async () => {
     const clean = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
     if (!clean) { alert("Enter a valid slug"); return; }
     setSlugSaving(true);
-    // Check uniqueness
     const existing = await db.get("organizations", { site_slug: clean });
     if (existing.length && existing[0].id !== org!.id) {
       alert(`"${clean}" is already taken — try another`);
@@ -46,9 +102,53 @@ export default function Marketing() {
     }
     await db.patch("organizations", org!.id, { site_slug: clean });
     setSlug(clean);
-    const orgs = await db.get("organizations", { id: org!.id });
-    if (orgs.length) useStore.getState().setOrg(orgs[0] as never);
+    await refreshOrg();
     setSlugSaving(false);
+  };
+
+  // Gallery upload
+  const uploadPhotos = async (files: FileList) => {
+    setUploading(true);
+    const updated = [...photos];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `gallery/${org!.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+      const { error } = await supabase.storage.from("receipts").upload(path, file);
+      if (error) { console.error(error); continue; }
+      const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+      if (data?.publicUrl) updated.push({ url: data.publicUrl, caption: "" });
+    }
+    await db.patch("organizations", org!.id, { gallery_photos: JSON.stringify(updated) });
+    await refreshOrg();
+    setUploading(false);
+  };
+
+  const deletePhoto = async (idx: number) => {
+    if (!confirm("Remove this photo?")) return;
+    const updated = photos.filter((_, i) => i !== idx);
+    await db.patch("organizations", org!.id, { gallery_photos: JSON.stringify(updated) });
+    await refreshOrg();
+  };
+
+  const saveCaption = async (idx: number) => {
+    const updated = [...photos];
+    updated[idx] = { ...updated[idx], caption: captionText };
+    await db.patch("organizations", org!.id, { gallery_photos: JSON.stringify(updated) });
+    await refreshOrg();
+    setEditingCaption(null);
+  };
+
+  // Theme save
+  const saveTheme = async () => {
+    await db.patch("organizations", org!.id, { site_theme: JSON.stringify(localTheme) });
+    await refreshOrg();
+    setThemeDirty(false);
+  };
+
+  const updateTheme = (key: keyof SiteTheme, value: string | boolean) => {
+    setLocalTheme((t) => ({ ...t, [key]: value }));
+    setThemeDirty(true);
   };
 
   const generateSite = async () => {
@@ -95,9 +195,7 @@ Return this JSON format:
       if (jsonMatch) {
         const content = jsonMatch[0];
         await db.patch("organizations", org!.id, { site_content: content, site_published: true });
-        // Refresh org
-        const orgs = await db.get("organizations", { id: org!.id });
-        if (orgs.length) useStore.getState().setOrg(orgs[0] as never);
+        await refreshOrg();
         setStep("overview");
       } else {
         alert("AI generation failed — try again");
@@ -111,7 +209,7 @@ Return this JSON format:
     setGenerating(false);
   };
 
-  // Overview — site is live
+  // ── OVERVIEW ──
   if (step === "overview" && org?.site_content) {
     return (
       <div className="fi">
@@ -164,6 +262,149 @@ Return this JSON format:
           </div>
         </div>
 
+        {/* ── GALLERY ── */}
+        <div className="cd mb">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <h4 style={{ fontSize: 14 }}>📸 Work Gallery</h4>
+            <button
+              className="bb"
+              onClick={() => galleryInput.current?.click()}
+              disabled={uploading}
+              style={{ fontSize: 10, padding: "4px 12px" }}
+            >
+              {uploading ? "Uploading..." : "+ Add Photos"}
+            </button>
+            <input
+              ref={galleryInput}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => e.target.files?.length && uploadPhotos(e.target.files)}
+            />
+          </div>
+
+          {photos.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20, color: "#888", fontSize: 12 }}>
+              No photos yet — upload completed work to show on your site
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {photos.map((p, i) => (
+                <div key={i} style={{ position: "relative" }}>
+                  <img
+                    src={p.url}
+                    alt={p.caption || ""}
+                    style={{
+                      width: "100%", aspectRatio: "1", objectFit: "cover",
+                      borderRadius: 8, border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
+                    }}
+                  />
+                  {/* Delete */}
+                  <button
+                    onClick={() => deletePhoto(i)}
+                    style={{
+                      position: "absolute", top: 4, right: 4,
+                      background: "rgba(0,0,0,.7)", color: "#fff",
+                      border: "none", borderRadius: "50%", width: 20, height: 20,
+                      fontSize: 11, cursor: "pointer", display: "flex",
+                      alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    ✕
+                  </button>
+                  {/* Caption */}
+                  {editingCaption === i ? (
+                    <div style={{ marginTop: 4 }}>
+                      <input
+                        value={captionText}
+                        onChange={(e) => setCaptionText(e.target.value)}
+                        placeholder="Caption..."
+                        style={{ fontSize: 10, width: "100%", padding: 4 }}
+                        onKeyDown={(e) => e.key === "Enter" && saveCaption(i)}
+                        autoFocus
+                      />
+                      <div className="row" style={{ marginTop: 2 }}>
+                        <button className="bb" onClick={() => saveCaption(i)} style={{ fontSize: 9, padding: "2px 6px" }}>Save</button>
+                        <button className="bo" onClick={() => setEditingCaption(null)} style={{ fontSize: 9, padding: "2px 6px" }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => { setEditingCaption(i); setCaptionText(p.caption || ""); }}
+                      style={{
+                        fontSize: 10, color: p.caption ? (darkMode ? "#aaa" : "#555") : "#888",
+                        marginTop: 3, cursor: "pointer", textAlign: "center",
+                        fontStyle: p.caption ? "normal" : "italic",
+                      }}
+                    >
+                      {p.caption || "Add caption"}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── CUSTOMIZE SITE ── */}
+        <div className="cd mb">
+          <h4 style={{ fontSize: 14, marginBottom: 10 }}>🎨 Customize Site</h4>
+
+          {/* Color */}
+          <div style={{ marginBottom: 12 }}>
+            <label className="sl" style={{ fontSize: 10, display: "block", marginBottom: 6 }}>Accent Color</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {COLOR_PRESETS.map((c) => (
+                <button
+                  key={c.value}
+                  onClick={() => updateTheme("primaryColor", c.value)}
+                  style={{
+                    width: 32, height: 32, borderRadius: "50%",
+                    background: c.value, border: localTheme.primaryColor === c.value ? "3px solid #fff" : "2px solid transparent",
+                    cursor: "pointer", boxShadow: localTheme.primaryColor === c.value ? `0 0 0 2px ${c.value}` : "none",
+                  }}
+                  title={c.label}
+                />
+              ))}
+              <div style={{ position: "relative" }}>
+                <input
+                  type="color"
+                  value={localTheme.primaryColor}
+                  onChange={(e) => updateTheme("primaryColor", e.target.value)}
+                  style={{ width: 32, height: 32, borderRadius: "50%", cursor: "pointer", border: "none", padding: 0 }}
+                  title="Custom color"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section toggles */}
+          <label className="sl" style={{ fontSize: 10, display: "block", marginBottom: 6 }}>Show / Hide Sections</label>
+          {([
+            ["showServices", "Services"],
+            ["showWhyUs", "Why Choose Us"],
+            ["showAbout", "About Us"],
+            ["showGallery", "Photo Gallery"],
+            ["showReviews", "Client Reviews"],
+          ] as [keyof SiteTheme, string][]).map(([key, label]) => (
+            <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 6, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={localTheme[key] as boolean}
+                onChange={(e) => updateTheme(key, e.target.checked)}
+              />
+              {label}
+            </label>
+          ))}
+
+          {themeDirty && (
+            <button className="bb" onClick={saveTheme} style={{ marginTop: 8, fontSize: 11, padding: "6px 16px" }}>
+              Save Changes
+            </button>
+          )}
+        </div>
+
         {/* Quick links */}
         <div className="g2 mb">
           <div className="cd" style={{ cursor: "pointer" }} onClick={() => { navigator.clipboard.writeText(reviewUrl); alert("Review link copied!"); }}>
@@ -191,7 +432,7 @@ Return this JSON format:
     );
   }
 
-  // Generating
+  // ── GENERATING ──
   if (step === "generating") {
     return (
       <div className="fi">
@@ -206,7 +447,7 @@ Return this JSON format:
     );
   }
 
-  // Survey
+  // ── SURVEY ──
   return (
     <div className="fi">
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>📣 Marketing</h2>
