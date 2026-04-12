@@ -26,6 +26,44 @@ export default function Schedule({ setPage }: Props) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [sTech, setSTech] = useState("");
   const [view, setView] = useState<"week" | "month">("week");
+  const [suggestion, setSuggestion] = useState<{ date: string; reason: string } | null>(null);
+
+  // Suggest a day based on nearby scheduled jobs
+  const suggestDay = (jobProperty: string) => {
+    if (!jobProperty) { setSuggestion(null); return; }
+
+    // Extract street name for matching
+    const getStreet = (addr: string) => {
+      const parts = addr.toLowerCase().replace(/[,]/g, "").split(/\s+/);
+      // Skip house number, get street name words
+      const words = parts.filter((w) => !/^\d+$/.test(w) && w.length > 1);
+      return words.slice(0, 3).join(" ");
+    };
+
+    const selectedStreet = getStreet(jobProperty);
+    if (!selectedStreet) { setSuggestion(null); return; }
+
+    // Find scheduled jobs on streets that match
+    const today = new Date().toISOString().split("T")[0];
+    const upcoming = schedule.filter((s) => s.sched_date >= today);
+
+    for (const entry of upcoming) {
+      const entryStreet = getStreet(entry.job);
+      // Check if streets share words (same area)
+      const selectedWords = selectedStreet.split(" ");
+      const entryWords = entryStreet.split(" ");
+      const shared = selectedWords.filter((w) => entryWords.includes(w) && w.length > 2);
+
+      if (shared.length >= 1) {
+        setSuggestion({
+          date: entry.sched_date,
+          reason: `${entry.job} is nearby — schedule same day to save drive time`,
+        });
+        return;
+      }
+    }
+    setSuggestion(null);
+  };
 
   const addSchedule = async () => {
     if (!sd) { alert("Select a date"); return; }
@@ -145,7 +183,7 @@ export default function Schedule({ setPage }: Props) {
           />
           <select
             value={sj}
-            onChange={(e) => setSj(e.target.value)}
+            onChange={(e) => { setSj(e.target.value); suggestDay(e.target.value); }}
             style={{ flex: 1 }}
           >
             <option value="">Select job</option>
@@ -181,6 +219,33 @@ export default function Schedule({ setPage }: Props) {
             style={{ flex: 1 }}
           />
         </div>
+
+        {/* Scheduling suggestion */}
+        {suggestion && (
+          <div
+            onClick={() => { setSd(suggestion.date); setSuggestion(null); }}
+            style={{
+              marginTop: 6,
+              padding: "6px 10px",
+              borderRadius: 6,
+              background: "var(--color-success)" + "15",
+              border: "1px solid var(--color-success)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span style={{ fontSize: 14 }}>💡</span>
+            <div>
+              <div style={{ fontSize: 11, color: "var(--color-success)", fontWeight: 600 }}>
+                Suggested: {suggestion.date}
+              </div>
+              <div className="dim" style={{ fontSize: 10 }}>{suggestion.reason}</div>
+            </div>
+            <span style={{ fontSize: 9, color: "var(--color-success)", marginLeft: "auto" }}>Tap to use</span>
+          </div>
+        )}
       </div>
 
       {/* View Toggle */}
