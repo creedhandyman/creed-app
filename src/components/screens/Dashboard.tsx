@@ -65,12 +65,13 @@ export default function Dashboard({ setPage, openSettings }: Props) {
   const incomplete = quests.filter((q) => q.p < q.g);
   const closest = incomplete.sort((a, b) => (b.p / b.g) - (a.p / a.g))[0];
 
-  // ── Earned This Week ──
-  const weekJobs = jobs.filter((j) => {
+  // ── Earned This Month ──
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthJobs = jobs.filter((j) => {
     if (j.status !== "complete" && j.status !== "invoiced" && j.status !== "paid") return false;
-    try { return new Date(j.job_date || j.created_at) >= ws; } catch { return false; }
+    try { return new Date(j.job_date || j.created_at) >= monthStart; } catch { return false; }
   });
-  const earnedWeek = weekJobs.reduce((s, j) => s + (j.total || 0), 0);
+  const earnedMonth = monthJobs.reduce((s, j) => s + (j.total || 0), 0);
 
   return (
     <div className="fi">
@@ -129,8 +130,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
 
         {/* Earned This Week */}
         <div className="cd" style={{ borderLeft: "3px solid var(--color-success)" }}>
-          <div className="sl">Earned This Week</div>
-          <div className="sv" style={{ color: "var(--color-success)" }}>${earnedWeek.toLocaleString()}</div>
+          <div className="sl">Earned This Month</div>
+          <div className="sv" style={{ color: "var(--color-success)" }}>${earnedMonth.toLocaleString()}</div>
         </div>
 
         {/* Max Net Pay */}
