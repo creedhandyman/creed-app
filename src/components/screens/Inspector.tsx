@@ -49,6 +49,7 @@ export interface InspectionItem {
 
 export interface InspectionRoom {
   name: string;
+  sqft: number;
   items: InspectionItem[];
 }
 
@@ -129,7 +130,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
       const items = (presetKey ? ROOM_PRESETS[presetKey] : ["General"]).map(
         (name) => ({ name, condition: "S", notes: "", photos: [] })
       );
-      return { name: room, items };
+      return { name: room, sqft: 0, items };
     });
     setRoomData(data);
     setCurrentRoomIdx(0);
@@ -418,6 +419,33 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
           />
         </div>
 
+        {/* Room size */}
+        <div className="cd" style={{ marginBottom: 8, padding: 10, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12 }}>📐</span>
+          <div style={{ flex: 1 }}>
+            <label className="sl">Room Size (sq ft)</label>
+            <input
+              type="number"
+              value={room.sqft || ""}
+              placeholder="e.g. 120"
+              min="0"
+              style={{ marginTop: 2, fontSize: 13 }}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                setRoomData((prev) =>
+                  prev.map((r, ri) => ri === currentRoomIdx ? { ...r, sqft: val } : r)
+                );
+              }}
+            />
+          </div>
+          {room.sqft > 0 && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 16, fontFamily: "Oswald", color: "var(--color-primary)" }}>{room.sqft}</div>
+              <div className="dim" style={{ fontSize: 8 }}>sq ft</div>
+            </div>
+          )}
+        </div>
+
         {/* Items */}
         {room.items.map((item, itemIdx) => (
           <div
@@ -657,6 +685,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                 <b style={{ fontSize: 13 }}>{room.name}</b>
                 <div className="dim" style={{ fontSize: 11 }}>
                   {issues.length} issue{issues.length !== 1 ? "s" : ""}
+                  {room.sqft > 0 && ` · ${room.sqft} sqft`}
                   {roomPhotos > 0 && ` · ${roomPhotos} photo${roomPhotos !== 1 ? "s" : ""}`}
                 </div>
               </div>

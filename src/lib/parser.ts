@@ -151,7 +151,13 @@ CRITICAL RULES:
    For a full unit paint (6-8 rooms): ~7 five-gal buckets paint ($266), 4 primer quarts ($40), spackle ($18), tape ($24), roller kits ($20), drop cloths ($16) = ~$384-420 total materials
    If labor-only (unclog drain, re-secure faucet, haul junk), materials = $0.
 
-6. TRADE CATEGORIES: Group items by trade, not room:
+6. SQUARE FOOTAGE: When a room specifies its square footage, USE IT to calculate:
+   - Flooring: sqft × $2.25/sqft for LVP + 10% waste = material cost. Also add underlayment at $0.30/sqft.
+   - Paint: 1 gallon covers ~350 sqft. A 120 sqft room needs ~1.5 gal walls + ceiling.
+   - Tile: sqft × $2-4/sqft depending on type + mortar + grout.
+   - Include exact quantities in materials: "LVP 132 sqft" not just "LVP flooring".
+
+7. TRADE CATEGORIES: Group items by trade, not room:
    Painting, Flooring, Carpentry, Plumbing, Electrical, Safety, Appliances, Exterior, Compliance, Cleaning/Hauling
 
 Return ONLY valid JSON (no markdown, no explanation):
@@ -306,6 +312,7 @@ export async function checkAiAvailable(): Promise<boolean> {
 export interface InspectionInput {
   rooms: {
     name: string;
+    sqft?: number;
     items: {
       name: string;
       condition: string;
@@ -331,6 +338,9 @@ export async function aiParseInspection(
 
   inspection.rooms.forEach((room) => {
     text += `=== ${room.name} ===\n`;
+    if (room.sqft && room.sqft > 0) {
+      text += `Room Size: ${room.sqft} square feet\n`;
+    }
     room.items.forEach((item) => {
       const condLabel =
         item.condition === "D" ? "Damaged" :
