@@ -19,6 +19,26 @@ import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
 import ClientSelect from "../ClientSelect";
 
+// Compress image to max 1200px and JPEG 0.6 quality for AI processing
+async function compressImage(file: File, maxSize = 1200): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let w = img.width, h = img.height;
+      if (w > maxSize || h > maxSize) {
+        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else { w = Math.round(w * maxSize / h); h = maxSize; }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.6));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 function AiLoadingDisplay({ status }: { status: string }) {
   const steps = [
     { label: "Reading document", icon: "📄", match: /reading|rendering|upload/i },
@@ -223,8 +243,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         images = await renderPdfPages(file, 15);
         setParseStatus(`Sending ${images.length} pages to AI...`);
       } else if (quickPhotos.length > 0) {
-        setParseStatus(`Sending text + ${quickPhotos.length} photos to AI...`);
-        images = quickPhotos;
+        // Limit to 10 photos max for API
+        const photosToSend = quickPhotos.slice(0, 10);
+        setParseStatus(`Sending text + ${photosToSend.length} photos to AI...`);
+        images = photosToSend;
       } else {
         setParseStatus("Sending text to AI...");
       }
@@ -613,12 +635,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               if (!file) return;
               setQuickUploading(true);
               try {
-                const reader = new FileReader();
-                const base64 = await new Promise<string>((resolve) => {
-                  reader.onload = () => resolve(reader.result as string);
-                  reader.readAsDataURL(file);
-                });
-                setQuickPhotos((prev) => [...prev, base64]);
+                const compressed = await compressImage(file);
+                setQuickPhotos((prev) => [...prev, compressed]);
               } catch (err) { console.error(err); }
               setQuickUploading(false);
               if (quickCameraRef.current) quickCameraRef.current.value = "";
@@ -636,12 +654,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               setQuickUploading(true);
               for (const file of Array.from(files)) {
                 try {
-                  const reader = new FileReader();
-                  const base64 = await new Promise<string>((resolve) => {
-                    reader.onload = () => resolve(reader.result as string);
-                    reader.readAsDataURL(file);
-                  });
-                  setQuickPhotos((prev) => [...prev, base64]);
+                  const compressed = await compressImage(file);
+                  setQuickPhotos((prev) => [...prev, compressed]);
                 } catch (err) { console.error(err); }
               }
               setQuickUploading(false);
