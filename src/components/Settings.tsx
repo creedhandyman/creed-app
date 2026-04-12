@@ -407,6 +407,8 @@ export default function Settings({ onClose }: Props) {
                 <button
                   className="bb"
                   onClick={async () => {
+                    const btn = document.activeElement as HTMLButtonElement;
+                    if (btn) btn.textContent = "Connecting...";
                     try {
                       const res = await fetch("/api/stripe/connect", {
                         method: "POST",
@@ -418,18 +420,25 @@ export default function Settings({ onClose }: Props) {
                           returnUrl: window.location.origin,
                         }),
                       });
+                      if (!res.ok) {
+                        const text = await res.text();
+                        alert("Stripe error (" + res.status + "): " + text);
+                        if (btn) btn.textContent = "🔗 Connect Stripe Account";
+                        return;
+                      }
                       const data = await res.json();
                       if (data.url) {
-                        // Save account ID to org before redirecting
                         await db.patch("organizations", user.org_id, {
                           stripe_account_id: data.accountId,
                         });
                         window.location.href = data.url;
                       } else {
                         alert("Error: " + (data.error || "Could not start Stripe setup"));
+                        if (btn) btn.textContent = "🔗 Connect Stripe Account";
                       }
-                    } catch {
-                      alert("Failed to start Stripe setup");
+                    } catch (e) {
+                      alert("Failed to start Stripe setup: " + (e instanceof Error ? e.message : "Network error"));
+                      if (btn) btn.textContent = "🔗 Connect Stripe Account";
                     }
                   }}
                   style={{ fontSize: 13, padding: "10px 20px" }}

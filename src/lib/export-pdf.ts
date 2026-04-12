@@ -121,13 +121,13 @@ table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10px}
 th{font-family:Oswald;text-transform:uppercase;font-size:9px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:5px 8px;text-align:left}
 td{padding:4px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 .summary-table td{font-family:Oswald;font-size:10px}
-.summary-table tr:last-child{font-weight:700;background:#f0f4f8;border-top:2px solid #2E75B6}
+.summary-table tr:last-child{font-weight:700;background:#f0f4f8;border-top:2px solid #2E75B6;font-size:14px;color:#2E75B6}
 .summary-table td:nth-child(n+2){text-align:right}
 .sched-table td:first-child{font-family:Oswald;font-weight:600;color:#2E75B6;white-space:nowrap}
 .mat-table th:nth-child(2),.mat-table th:nth-child(3),.mat-table th:nth-child(4){text-align:right}
 .section-block{margin-bottom:16px;page-break-inside:avoid}
 .section-totals{background:#f5f7fa;border-radius:4px;padding:6px 10px;font-size:10px;margin-top:4px}
-.section-grand{font-size:11px;margin-top:4px;padding-top:4px;border-top:1px solid #ddd}
+.section-grand{font-size:12px;margin-top:4px;padding-top:4px;border-top:1px solid #ddd;color:#2E75B6}
 .dim{color:#888}
 .tools-grid{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:10px;margin-bottom:16px}
 .tool-item{min-width:140px}

@@ -97,15 +97,20 @@ export const useStore = create<AppState>((set, get) => ({
 
   signup: async (email, password, name) => {
     if (!email || !password || !name) return "Fill all fields";
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
     if (error) return error.message;
     if (!data.user) return "Signup failed";
 
     if (data.user.identities?.length === 0) return "Email already registered";
+
+    // If email confirmation is required in Supabase, session will be null
     if (!data.session) return "CHECK_EMAIL";
 
-    // Profile created during onboarding (after org setup), not here
-    // Store auth user id temporarily
+    // Auto-proceed to onboarding — no invite or authorization needed
     set({ user: { id: data.user.id, email, name, role: "tech", rate: 35, start_date: new Date().toISOString().split("T")[0], emp_num: "", org_id: "" } });
     return "ONBOARD";
   },

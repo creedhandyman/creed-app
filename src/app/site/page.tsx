@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { db } from "@/lib/supabase";
 import type { Organization, Review } from "@/lib/types";
+import WorkOrderForm from "@/components/WorkOrderForm";
 import { Suspense } from "react";
 
 interface SiteContent {
@@ -188,6 +189,9 @@ function SitePageContent() {
             </div>
           </div>
         )}
+
+        {/* Work Order Form */}
+        {orgId && <WorkOrderForm orgId={orgId} primaryColor={pc} />}
 
         {/* Contact */}
         <div style={{ padding: "40px 0", borderTop: "1px solid #1e1e2e", textAlign: "center" }}>
