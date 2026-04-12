@@ -256,8 +256,8 @@ button {
 .nav-bottom .vnav button {
   width: auto; height: 40px;
   flex-direction: column; gap: 1px;
-  padding: 0 6px; font-size: 7px;
-  min-width: 36px;
+  padding: 0 10px; font-size: 8px;
+  min-width: 42px;
 }
 .nav-bottom .vnav img { width: 24px; height: 24px; }
 .nav-bottom .caution-tape {
