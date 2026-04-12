@@ -34,6 +34,8 @@ export default function Onboarding() {
         license_num: license,
         address,
         default_rate: parseFloat(rate) || 55,
+        trial_start: new Date().toISOString(),
+        subscription_status: "trial",
       });
 
       if (!orgResult?.length) { setErr("Failed to create business"); setSaving(false); return; }

@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import Login from "@/components/Login";
 import Onboarding from "@/components/Onboarding";
 import AppShell from "@/components/AppShell";
+import BillingGate from "@/components/BillingGate";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -65,5 +66,5 @@ export default function Home() {
     );
   }
 
-  return <AppShell />;
+  return <BillingGate><AppShell /></BillingGate>;
 }
