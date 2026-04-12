@@ -1,0 +1,217 @@
+"use client";
+import { useState } from "react";
+import { useStore } from "@/lib/store";
+import { db } from "@/lib/supabase";
+
+export default function Marketing() {
+  const user = useStore((s) => s.user)!;
+  const org = useStore((s) => s.org);
+  const reviews = useStore((s) => s.reviews);
+  const darkMode = useStore((s) => s.darkMode);
+
+  const [step, setStep] = useState<"overview" | "survey" | "generating" | "preview">(
+    org?.site_content ? "overview" : "survey"
+  );
+  const [generating, setGenerating] = useState(false);
+
+  // Survey fields
+  const [svcDesc, setSvcDesc] = useState("");
+  const [serviceArea, setServiceArea] = useState(org?.address || "");
+  const [specialties, setSpecialties] = useState("");
+  const [yearsExp, setYearsExp] = useState("");
+  const [targetClient, setTargetClient] = useState("");
+  const [uniqueSell, setUniqueSell] = useState("");
+
+  const siteUrl = typeof window !== "undefined" ? `${window.location.origin}/site?org=${org?.id}` : "";
+  const reviewUrl = typeof window !== "undefined" ? `${window.location.origin}/review?org=${org?.id}` : "";
+
+  const generateSite = async () => {
+    if (!svcDesc.trim()) { alert("Describe your services"); return; }
+    setGenerating(true);
+    setStep("generating");
+
+    try {
+      const prompt = `Generate website copy for a field service business. Return ONLY valid JSON.
+
+Business: ${org?.name || "Service Business"}
+Location: ${serviceArea || org?.address || ""}
+Services: ${svcDesc}
+Specialties: ${specialties || "General services"}
+Experience: ${yearsExp || "Experienced"} years
+Target clients: ${targetClient || "Homeowners and property managers"}
+What makes them different: ${uniqueSell || "Quality work at fair prices"}
+Phone: ${org?.phone || ""}
+${reviews.length > 0 ? `They have ${reviews.length} reviews, avg ${(reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length).toFixed(1)} stars.` : ""}
+
+Return this JSON format:
+{
+  "headline": "Bold, compelling headline (8-12 words)",
+  "subheadline": "Supporting text that builds trust (15-25 words)",
+  "services": ["Service 1", "Service 2", "Service 3", "Service 4", "Service 5", "Service 6"],
+  "whyUs": ["Reason 1 (short sentence)", "Reason 2", "Reason 3", "Reason 4", "Reason 5", "Reason 6"],
+  "cta": "Why Choose Us section title",
+  "about": "2-3 sentence about paragraph that builds trust and credibility"
+}`;
+
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+        }),
+      });
+
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "";
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const content = jsonMatch[0];
+        await db.patch("organizations", org!.id, { site_content: content, site_published: true });
+        // Refresh org
+        const orgs = await db.get("organizations", { id: org!.id });
+        if (orgs.length) useStore.getState().setOrg(orgs[0] as never);
+        setStep("overview");
+      } else {
+        alert("AI generation failed — try again");
+        setStep("survey");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate site content");
+      setStep("survey");
+    }
+    setGenerating(false);
+  };
+
+  // Overview — site is live
+  if (step === "overview" && org?.site_content) {
+    return (
+      <div className="fi">
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>📣 Marketing</h2>
+
+        {/* Site status */}
+        <div className="cd mb" style={{ borderLeft: "3px solid var(--color-success)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h4 style={{ fontSize: 14, color: "var(--color-success)" }}>🌐 Your Site is Live</h4>
+              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>Share this link with clients — it&apos;s your website</div>
+            </div>
+            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 10, background: "var(--color-success)" + "22", color: "var(--color-success)" }}>Published</span>
+          </div>
+          <div style={{ marginTop: 8, padding: 8, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6, fontSize: 11, wordBreak: "break-all", color: "var(--color-primary)" }}>
+            {siteUrl}
+          </div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="bb" onClick={() => { navigator.clipboard.writeText(siteUrl); alert("Site link copied!"); }} style={{ fontSize: 10, padding: "5px 12px" }}>
+              📋 Copy Link
+            </button>
+            <button className="bo" onClick={() => window.open(siteUrl, "_blank")} style={{ fontSize: 10, padding: "5px 12px" }}>
+              👁 Preview
+            </button>
+            <button className="bo" onClick={() => setStep("survey")} style={{ fontSize: 10, padding: "5px 12px" }}>
+              ✏️ Regenerate
+            </button>
+          </div>
+        </div>
+
+        {/* Quick links */}
+        <div className="g2 mb">
+          <div className="cd" style={{ cursor: "pointer" }} onClick={() => { navigator.clipboard.writeText(reviewUrl); alert("Review link copied!"); }}>
+            <h4 style={{ fontSize: 13, color: "var(--color-highlight)" }}>⭐ Review Link</h4>
+            <div className="dim" style={{ fontSize: 10 }}>Send to clients after jobs</div>
+          </div>
+          <div className="cd">
+            <h4 style={{ fontSize: 13 }}>📊 Stats</h4>
+            <div className="dim" style={{ fontSize: 10 }}>{reviews.length} reviews · {reviews.filter((r) => r.rating === 5).length} five-star</div>
+          </div>
+        </div>
+
+        {/* Tips */}
+        <div className="cd">
+          <h4 style={{ fontSize: 13, marginBottom: 8 }}>💡 Marketing Tips</h4>
+          <div style={{ fontSize: 12, lineHeight: 1.8 }}>
+            <div>📱 Add your site link to your social media bios</div>
+            <div>💬 Text the link to leads instead of explaining your services</div>
+            <div>📧 Include it in your email signature</div>
+            <div>🏷️ Put it on your business cards and truck</div>
+            <div>⭐ Send the review link after every completed job</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Generating
+  if (step === "generating") {
+    return (
+      <div className="fi">
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>📣 Marketing</h2>
+        <div className="cd" style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 48, marginBottom: 12, animation: "pulse 1.5s ease-in-out infinite" }}>🤖</div>
+          <style>{`@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }`}</style>
+          <h3 style={{ color: "var(--color-primary)", fontSize: 16, marginBottom: 8 }}>Building Your Website</h3>
+          <div className="dim" style={{ fontSize: 12 }}>AI is writing your headline, services, and marketing copy...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Survey
+  return (
+    <div className="fi">
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>📣 Marketing</h2>
+
+      <div className="cd mb">
+        <h4 style={{ fontSize: 14, marginBottom: 4 }}>🌐 Build Your Website</h4>
+        <div className="dim" style={{ fontSize: 11, marginBottom: 12 }}>Answer a few questions and AI will create a professional landing page for your business.</div>
+
+        <div style={{ marginBottom: 10 }}>
+          <label className="sl">What services do you offer? *</label>
+          <textarea
+            value={svcDesc}
+            onChange={(e) => setSvcDesc(e.target.value)}
+            placeholder="e.g. General repairs, plumbing, electrical, painting, flooring installation, property maintenance..."
+            style={{ height: 70, marginTop: 4 }}
+          />
+        </div>
+
+        <div className="g2" style={{ marginBottom: 10 }}>
+          <div>
+            <label className="sl">Service area</label>
+            <input value={serviceArea} onChange={(e) => setServiceArea(e.target.value)} placeholder="e.g. Wichita, KS and surrounding" style={{ marginTop: 4 }} />
+          </div>
+          <div>
+            <label className="sl">Years of experience</label>
+            <input value={yearsExp} onChange={(e) => setYearsExp(e.target.value)} placeholder="e.g. 10" style={{ marginTop: 4 }} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <label className="sl">Specialties</label>
+          <input value={specialties} onChange={(e) => setSpecialties(e.target.value)} placeholder="e.g. Make-ready turns, kitchen remodels, property management" style={{ marginTop: 4 }} />
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <label className="sl">Who are your ideal clients?</label>
+          <input value={targetClient} onChange={(e) => setTargetClient(e.target.value)} placeholder="e.g. Property managers, landlords, homeowners" style={{ marginTop: 4 }} />
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label className="sl">What makes you different?</label>
+          <input value={uniqueSell} onChange={(e) => setUniqueSell(e.target.value)} placeholder="e.g. Same-day response, licensed and insured, no job too small" style={{ marginTop: 4 }} />
+        </div>
+
+        <button
+          className="bb"
+          onClick={generateSite}
+          disabled={generating || !svcDesc.trim()}
+          style={{ width: "100%", padding: 14, fontSize: 16, opacity: svcDesc.trim() ? 1 : 0.5 }}
+        >
+          🤖 Generate My Website
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -9,6 +9,7 @@ interface Props {
 export default function Dashboard({ setPage, openSettings }: Props) {
   const user = useStore((s) => s.user)!;
   const isAdmin = user.role === "owner" || user.role === "manager";
+  const org = useStore((s) => s.org);
   const clients = useStore((s) => s.clients);
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
@@ -201,30 +202,23 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
       </div>
 
-      {/* Pipeline */}
-      {jobs.length > 0 && (
-        <div className="cd">
-          <h4 style={{ fontSize: 14, marginBottom: 8 }}>Pipeline</h4>
-          {jobs.slice(0, 6).map((j) => (
-            <div
-              key={j.id}
-              className="sep"
-              style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}
-            >
-              <span style={{ flex: 1 }}>{j.property}</span>
-              <span className="dim" style={{ width: 65 }}>{j.status}</span>
-              <span
-                style={{
-                  color: j.status === "paid" ? "var(--color-success)" : j.status === "complete" || j.status === "invoiced" ? "#00cc66" : "var(--color-warning)",
-                  fontFamily: "Oswald",
-                  width: 65,
-                  textAlign: "right",
-                }}
-              >
-                ${(j.total || 0).toFixed(0)}
-              </span>
+      {/* Marketing */}
+      {isAdmin && (
+        <div
+          className="cd"
+          onClick={() => setPage("marketing")}
+          style={{ cursor: "pointer", borderLeft: "3px solid var(--color-highlight)" }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 24 }}>📣</span>
+            <div>
+              <h4 style={{ fontSize: 14, marginBottom: 2 }}>Marketing &amp; Website</h4>
+              <div className="dim" style={{ fontSize: 11 }}>
+                {org?.site_content ? "Your site is live — manage links & reviews" : "Build a free website with AI in 60 seconds"}
+              </div>
             </div>
-          ))}
+            <span style={{ marginLeft: "auto", fontSize: 16, color: "#888" }}>→</span>
+          </div>
         </div>
       )}
     </div>

@@ -9,6 +9,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: (NavItem | "logo" | "tape")[] = [
+  { id: "marketing", icon: "📣", label: "Site", adminOnly: true },
   { id: "quests", icon: "🎯", label: "Quest" },
   { id: "payroll", icon: "💰", label: "Pay", adminOnly: true },
   { id: "time", icon: "⏱", label: "Time" },

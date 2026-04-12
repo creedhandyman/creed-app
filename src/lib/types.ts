@@ -20,6 +20,8 @@ export interface Organization {
   stripe_subscription_id?: string;
   plan?: string; // solo | team
   billing_enforced?: boolean;
+  site_content?: string;
+  site_published?: boolean;
   created_at?: string;
 }
 
