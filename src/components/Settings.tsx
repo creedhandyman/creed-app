@@ -17,7 +17,9 @@ export default function Settings({ onClose }: Props) {
   const darkMode = useStore((s) => s.darkMode);
   const toggleDark = useStore((s) => s.toggleDark);
   const navLeft = useStore((s) => s.navLeft);
+  const navBottom = useStore((s) => s.navBottom);
   const toggleNavSide = useStore((s) => s.toggleNavSide);
+  const toggleNavBottom = useStore((s) => s.toggleNavBottom);
 
   const [tab, setTab] = useState("account");
   const [newPassword, setNewPassword] = useState("");
@@ -612,30 +614,34 @@ export default function Settings({ onClose }: Props) {
             </div>
           </div>
           <div className="sep row" style={{ justifyContent: "space-between" }}>
-            <span>Nav Bar: {navLeft ? "Left" : "Right"}</span>
-            <div
-              onClick={toggleNavSide}
-              style={{
-                width: 44,
-                height: 24,
-                borderRadius: 12,
-                background: navLeft ? "var(--color-primary)" : "#ccc",
-                position: "relative",
-                cursor: "pointer",
-              }}
-            >
-              <div
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 9,
-                  background: "#fff",
-                  position: "absolute",
-                  top: 3,
-                  left: navLeft ? 23 : 3,
-                  transition: "0.3s",
-                }}
-              />
+            <span>Navigation</span>
+            <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
+              {[
+                { key: "right", label: "Right" },
+                { key: "left", label: "Left" },
+                { key: "bottom", label: "Bottom" },
+              ].map((opt) => {
+                const isActive = opt.key === "bottom" ? navBottom : opt.key === "left" ? navLeft && !navBottom : !navLeft && !navBottom;
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => {
+                      if (opt.key === "bottom") toggleNavBottom();
+                      else if (opt.key === "left") { if (navBottom) toggleNavBottom(); toggleNavSide(); }
+                      else { if (navBottom) toggleNavBottom(); if (navLeft) toggleNavSide(); }
+                    }}
+                    style={{
+                      padding: "4px 10px", fontSize: 10,
+                      background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff",
+                      color: isActive ? "#fff" : "#888",
+                      border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
+                      fontFamily: "Oswald",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

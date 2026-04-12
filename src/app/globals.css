@@ -241,18 +241,45 @@ button {
 .vnav img:hover { transform: scale(1.1); }
 
 /* ── main content ── */
-.mc { margin-right: 52px; padding: 14px 10px; max-width: 900px; min-height: 100vh; }
+.mc { margin-right: 52px; padding: 14px 16px; max-width: 1200px; min-height: 100vh; }
 .nav-left .vnav { right: auto; left: 0; border-left: none; border-right: 1px solid var(--color-border-dark); }
 .nav-left .mc { margin-right: 0; margin-left: 52px; }
+
+/* ── bottom nav (desktop mode) ── */
+.nav-bottom .vnav {
+  top: auto; bottom: 0; left: 0; right: 0;
+  width: 100%; height: 52px;
+  flex-direction: row; justify-content: center;
+  padding: 0 10px; gap: 4px;
+  border-left: none; border-top: 1px solid var(--color-border-dark);
+}
+.nav-bottom .vnav button {
+  width: auto; height: 44px;
+  flex-direction: row; gap: 4px;
+  padding: 0 10px; font-size: 9px;
+}
+.nav-bottom .vnav img { width: 28px; height: 28px; }
+.nav-bottom .caution-tape {
+  width: 6px; height: 28px; margin: 0 2px;
+}
+.nav-bottom .mc {
+  margin-right: 0; margin-bottom: 52px;
+  max-width: 1200px; margin-left: auto; margin-right: auto;
+}
 
 /* ── print ── */
 @media print {
   .vnav, .no-print { display: none !important; }
-  .mc { margin-right: 0 !important; }
+  .mc { margin-right: 0 !important; margin-bottom: 0 !important; }
 }
 
 /* ── mobile responsive ── */
 @media (max-width: 480px) {
   .g2 { grid-template-columns: 1fr; }
   .mc { padding: 10px 6px; }
+}
+
+/* ── desktop widescreen ── */
+@media (min-width: 1200px) {
+  .mc { padding: 20px 24px; }
 }

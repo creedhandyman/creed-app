@@ -47,8 +47,10 @@ interface AppState {
   // ui preferences
   darkMode: boolean;
   navLeft: boolean;
+  navBottom: boolean;
   toggleDark: () => void;
   toggleNavSide: () => void;
+  toggleNavBottom: () => void;
 
   // data
   clients: Client[];
@@ -153,11 +155,19 @@ export const useStore = create<AppState>((set, get) => ({
   /* ── UI Preferences ── */
   darkMode: ld("dk", true),
   navLeft: ld("navl", false),
+  navBottom: ld("navb", false),
 
   toggleDark: () => {
     const next = !get().darkMode;
     set({ darkMode: next });
     sv("dk", next);
+  },
+
+  toggleNavBottom: () => {
+    const next = !get().navBottom;
+    set({ navBottom: next, navLeft: false });
+    sv("navb", next);
+    if (next) sv("navl", false);
   },
 
   toggleNavSide: () => {
