@@ -9,15 +9,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: (NavItem | "logo" | "tape")[] = [
-  { id: "qf", icon: "⚡", label: "Quote" },
-  { id: "jobs", icon: "📋", label: "Jobs" },
-  { id: "sched", icon: "📅", label: "Sched" },
+  { id: "quests", icon: "🎯", label: "Quest" },
+  { id: "payroll", icon: "💰", label: "Pay", adminOnly: true },
+  { id: "time", icon: "⏱", label: "Time" },
   "tape",
   "logo",
   "tape",
-  { id: "time", icon: "⏱", label: "Time" },
-  { id: "payroll", icon: "💰", label: "Pay", adminOnly: true },
-  { id: "quests", icon: "🎯", label: "Quest" },
+  { id: "sched", icon: "📅", label: "Sched" },
+  { id: "jobs", icon: "📋", label: "Jobs" },
+  { id: "qf", icon: "⚡", label: "Quote" },
 ];
 
 interface Props {
