@@ -10,9 +10,15 @@ export interface Organization {
   markup_pct: number;
   tax_pct: number;
   trade_rates?: string; // JSON: { "Plumbing": 65, "Electrical": 70, ... }
-  quest_config?: string; // JSON: { "quest_name": { enabled: true, bonus: 75 }, ... }
+  quest_config?: string;
   stripe_account_id?: string;
   stripe_connected?: boolean;
+  trial_start?: string;
+  subscription_status?: string; // trial | active | past_due | canceled
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
+  plan?: string; // solo | team
+  billing_enforced?: boolean;
   created_at?: string;
 }
 

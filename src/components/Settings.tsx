@@ -403,6 +403,110 @@ export default function Settings({ onClose }: Props) {
         </div>
       )}
 
+      {/* Subscription / Billing */}
+      {tab === "payments" && isOwner && (
+        <div className="cd" style={{ marginTop: 14 }}>
+          <h4 style={{ fontSize: 14, marginBottom: 10 }}>📊 Subscription</h4>
+          {(() => {
+            const status = org?.subscription_status || "trial";
+            const trialStart = org?.trial_start ? new Date(org.trial_start) : new Date();
+            const trialEnd = new Date(trialStart);
+            trialEnd.setDate(trialEnd.getDate() + 30);
+            const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+            const plan = org?.plan || "solo";
+
+            return (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div>
+                    <span style={{
+                      fontSize: 11, padding: "2px 8px", borderRadius: 10, fontFamily: "Oswald",
+                      background: status === "active" ? "var(--color-success)" + "22" : status === "trial" ? "var(--color-warning)" + "22" : "var(--color-accent-red)" + "22",
+                      color: status === "active" ? "var(--color-success)" : status === "trial" ? "var(--color-warning)" : "var(--color-accent-red)",
+                    }}>
+                      {status === "active" ? "Active" : status === "trial" ? `Trial — ${daysLeft} days left` : status}
+                    </span>
+                  </div>
+                  <span className="dim" style={{ fontSize: 10 }}>
+                    {plan === "team" ? "Team $99/mo" : "Solo $49/mo"}
+                  </span>
+                </div>
+
+                {status === "trial" && (
+                  <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
+                    Your free trial {daysLeft > 0 ? `ends ${trialEnd.toLocaleDateString()}` : "has ended"}. Subscribe to keep all features.
+                  </div>
+                )}
+
+                <div className="row">
+                  {status !== "active" && (
+                    <button
+                      className="bb"
+                      onClick={async () => {
+                        const res = await fetch("/api/billing", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            action: "create-checkout",
+                            orgId: org?.id,
+                            orgName: org?.name,
+                            email: user.email,
+                            plan,
+                            returnUrl: window.location.origin,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (data.url) window.location.href = data.url;
+                        else alert(data.error || "Failed to start checkout");
+                      }}
+                      style={{ fontSize: 11, padding: "6px 14px" }}
+                    >
+                      💳 Subscribe Now
+                    </button>
+                  )}
+                  {org?.stripe_customer_id && (
+                    <button
+                      className="bo"
+                      onClick={async () => {
+                        const res = await fetch("/api/billing", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            action: "create-portal",
+                            orgId: org?.id,
+                            returnUrl: window.location.origin,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (data.url) window.location.href = data.url;
+                        else alert(data.error || "Failed to open billing portal");
+                      }}
+                      style={{ fontSize: 11, padding: "6px 14px" }}
+                    >
+                      Manage Billing
+                    </button>
+                  )}
+                  {status === "trial" && (
+                    <select
+                      value={plan}
+                      onChange={async (e) => {
+                        if (org) await db.patch("organizations", org.id, { plan: e.target.value });
+                        const orgs = await db.get("organizations", { id: org!.id });
+                        if (orgs.length) useStore.getState().setOrg(orgs[0] as any);
+                      }}
+                      style={{ width: "auto", fontSize: 10, padding: "3px 6px" }}
+                    >
+                      <option value="solo">Solo $49/mo</option>
+                      <option value="team">Team $99/mo</option>
+                    </select>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Quest Config in Payments tab */}
       {tab === "payments" && isOwner && (
         <div className="cd" style={{ marginTop: 14 }}>
