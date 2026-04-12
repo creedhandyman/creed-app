@@ -91,6 +91,7 @@ export interface Referral {
   source: string;
   status: "pending" | "contacted" | "converted";
   ref_date: string;
+  created_at?: string;
 }
 
 export interface ScheduleEntry {

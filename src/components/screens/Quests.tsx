@@ -17,6 +17,7 @@ interface Quest {
 
 export default function Quests() {
   const user = useStore((s) => s.user)!;
+  const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
   const jobs = useStore((s) => s.jobs);
   const reviews = useStore((s) => s.reviews);
@@ -117,153 +118,72 @@ export default function Quests() {
     speedDays >= 1,
   ].filter(Boolean).length;
 
+  // Read quest config from org
+  let questConfig: Record<string, { enabled: boolean; bonus: number }> = {};
+  try { questConfig = org?.quest_config ? JSON.parse(org.quest_config) : {}; } catch { /* */ }
+  const defaults: Record<string, number> = {
+    review_favor: 75, five_star: 100, super_handy: 50, network_scout: 50,
+    critical_referral: 150, deal_closer: 25, repeat_machine: 100,
+    skill_mastery: 100, make_ready: 350, zero_callback: 150, mr_speed: 25, handy_king: 750,
+  };
+  const qBonus = (key: string) => questConfig[key]?.bonus ?? defaults[key] ?? 0;
+  const qEnabled = (key: string) => questConfig[key]?.enabled !== false;
+
   // All quests by tier
   const tiers: { name: string; color: string; quests: Quest[] }[] = [
     {
       name: "TIER 1: FOUNDATION",
       color: "var(--color-primary)",
       quests: [
-        {
-          name: "Review Favor",
-          desc: "Collect 15 positive testimonials (3+ stars)",
-          bonus: "$75",
-          progress: Math.min(positiveReviews, 15),
-          goal: 15,
-          unit: "reviews",
-          tier: "T1",
-          tierColor: "var(--color-primary)",
-        },
-        {
-          name: "Five Star Tech",
-          desc: "Collect 10 five-star reviews",
-          bonus: "$100",
-          progress: Math.min(fiveStarReviews, 10),
-          goal: 10,
-          unit: "5★",
-          tier: "T1",
-          tierColor: "var(--color-primary)",
-        },
-        {
-          name: "Super Handy",
-          desc: "Complete 10 work orders",
-          bonus: "$50",
-          progress: Math.min(completedJobs, 10),
-          goal: 10,
-          unit: "jobs",
-          tier: "T1",
-          tierColor: "var(--color-primary)",
-        },
-      ],
+        qEnabled("review_favor") && { name: "Review Favor", desc: "Collect 15 positive testimonials (3+ stars)", bonus: "$" + qBonus("review_favor"), progress: Math.min(positiveReviews, 15), goal: 15, unit: "reviews", tier: "T1", tierColor: "var(--color-primary)" },
+        qEnabled("five_star") && { name: "Five Star Tech", desc: "Collect 10 five-star reviews", bonus: "$" + qBonus("five_star"), progress: Math.min(fiveStarReviews, 10), goal: 10, unit: "5★", tier: "T1", tierColor: "var(--color-primary)" },
+        qEnabled("super_handy") && { name: "Super Handy", desc: "Complete 10 work orders", bonus: "$" + qBonus("super_handy"), progress: Math.min(completedJobs, 10), goal: 10, unit: "jobs", tier: "T1", tierColor: "var(--color-primary)" },
+      ].filter(Boolean) as Quest[],
     },
     {
       name: "TIER 2: GROWTH",
       color: "var(--color-success)",
       quests: [
-        {
-          name: "Network Scout",
-          desc: "Secure new jobs from clients — $50 per job or 3% of value",
-          bonus: "$50+/job",
-          progress: convertedReferrals,
-          goal: 1,
-          unit: "secured",
-          tier: "T2",
-          tierColor: "var(--color-success)",
-        },
-        {
-          name: "Critical Referral",
-          desc: "Turn 1 client into 5 jobs",
-          bonus: "$150",
-          progress: Math.min(repeatClients, 1),
-          goal: 1,
-          unit: "client",
-          tier: "T2",
-          tierColor: "var(--color-success)",
-        },
-        {
-          name: "Deal Closer",
-          desc: `Upsell or add scope to existing jobs — ${upsellCount} upsell${upsellCount !== 1 ? "s" : ""} logged`,
-          bonus: "$25/upsell",
-          progress: Math.min(upsellCount, 1),
-          goal: 1,
-          unit: "upsells",
-          tier: "T2",
-          tierColor: "var(--color-success)",
-        },
-        {
-          name: "Repeat Machine",
-          desc: `3 different clients request the same tech by name${Object.keys(requestsByTech).length ? " (" + Object.entries(requestsByTech).map(([t, c]) => `${t}: ${c.size}`).join(", ") + ")" : ""}`,
-          bonus: "$100",
-          progress: Math.min(techsRequestedByName, 1),
-          goal: 1,
-          unit: "techs",
-          tier: "T2",
-          tierColor: "var(--color-success)",
-        },
-      ],
+        qEnabled("network_scout") && { name: "Network Scout", desc: "Secure new jobs from clients", bonus: "$" + qBonus("network_scout"), progress: convertedReferrals, goal: 1, unit: "secured", tier: "T2", tierColor: "var(--color-success)" },
+        qEnabled("critical_referral") && { name: "Critical Referral", desc: "Turn 1 client into 5 jobs", bonus: "$" + qBonus("critical_referral"), progress: Math.min(repeatClients, 1), goal: 1, unit: "client", tier: "T2", tierColor: "var(--color-success)" },
+        qEnabled("deal_closer") && { name: "Deal Closer", desc: `Upsell on existing jobs — ${upsellCount} logged`, bonus: "$" + qBonus("deal_closer"), progress: Math.min(upsellCount, 1), goal: 1, unit: "upsells", tier: "T2", tierColor: "var(--color-success)" },
+        qEnabled("repeat_machine") && { name: "Repeat Machine", desc: `3 clients request tech by name${Object.keys(requestsByTech).length ? " (" + Object.entries(requestsByTech).map(([t, c]) => `${t}: ${c.size}`).join(", ") + ")" : ""}`, bonus: "$" + qBonus("repeat_machine"), progress: Math.min(techsRequestedByName, 1), goal: 1, unit: "techs", tier: "T2", tierColor: "var(--color-success)" },
+      ].filter(Boolean) as Quest[],
     },
     {
       name: "TIER 3: MASTERY",
       color: "var(--color-warning)",
       quests: [
-        {
-          name: "Skill Mastery",
-          desc: `Complete 10 jobs in one trade — ${tradesMastered} trade${tradesMastered !== 1 ? "s" : ""} mastered${Object.keys(jobsByTrade).length ? " (" + Object.entries(jobsByTrade).map(([t, c]) => `${t}: ${c}`).join(", ") + ")" : ""}`,
-          bonus: "$100/trade",
-          progress: Math.min(bestTradeCount, 10),
-          goal: 10,
-          unit: "best trade",
-          tier: "T3",
-          tierColor: "var(--color-warning)",
-        },
-        {
-          name: "Make Ready Pro",
-          desc: "Complete 7 vacant unit remodels (24+ hours each)",
-          bonus: "$350",
-          progress: Math.min(bigJobs, 7),
-          goal: 7,
-          unit: "turns",
-          tier: "T3",
-          tierColor: "var(--color-warning)",
-        },
-        {
-          name: "Zero Callback",
-          desc: "20 consecutive jobs with zero callbacks — resets on callback",
-          bonus: "$150",
-          progress: Math.min(zeroCallbackStreak, 20),
-          goal: 20,
-          unit: "streak",
-          tier: "T3",
-          tierColor: "var(--color-warning)",
-        },
-        {
-          name: "Mr.Speed",
-          desc: "Complete 5 work orders in one day",
-          bonus: "$25",
-          progress: Math.min(speedDays, 1),
-          goal: 1,
-          unit: "days",
-          tier: "T3",
-          tierColor: "var(--color-warning)",
-        },
-      ],
+        qEnabled("skill_mastery") && { name: "Skill Mastery", desc: `10 jobs in one trade${Object.keys(jobsByTrade).length ? " (" + Object.entries(jobsByTrade).map(([t, c]) => `${t}: ${c}`).join(", ") + ")" : ""}`, bonus: "$" + qBonus("skill_mastery"), progress: Math.min(bestTradeCount, 10), goal: 10, unit: "best trade", tier: "T3", tierColor: "var(--color-warning)" },
+        qEnabled("make_ready") && { name: "Make Ready Pro", desc: "7 unit turns (24+ hrs each)", bonus: "$" + qBonus("make_ready"), progress: Math.min(bigJobs, 7), goal: 7, unit: "turns", tier: "T3", tierColor: "var(--color-warning)" },
+        qEnabled("zero_callback") && { name: "Zero Callback", desc: "20 consecutive jobs, no callbacks", bonus: "$" + qBonus("zero_callback"), progress: Math.min(zeroCallbackStreak, 20), goal: 20, unit: "streak", tier: "T3", tierColor: "var(--color-warning)" },
+        qEnabled("mr_speed") && { name: "Mr.Speed", desc: "5 work orders in one day", bonus: "$" + qBonus("mr_speed"), progress: Math.min(speedDays, 1), goal: 1, unit: "days", tier: "T3", tierColor: "var(--color-warning)" },
+      ].filter(Boolean) as Quest[],
     },
     {
       name: "TIER 4: LEGEND",
       color: "var(--color-accent-red)",
       quests: [
-        {
+        qEnabled("handy_king") && {
           name: "HandyKing 👑",
           desc: `Complete ALL quests + 2 Skill Mastery trades — ${handyKingProgress}/11 done${tradesMastered >= 2 ? " ✓ 2+ trades" : ""}`,
-          bonus: "$750/yr",
+          bonus: "$" + qBonus("handy_king"),
           progress: handyKingProgress + (tradesMastered >= 2 ? 0 : 0),
           goal: 11,
           unit: "quests",
           tier: "T4",
           tierColor: "var(--color-accent-red)",
         },
-      ],
+      ].filter(Boolean) as Quest[],
     },
   ];
+
+  // Remove empty tiers
+  const activeTiers = tiers.filter((t) => t.quests.length > 0);
+
+  // Calculate total max bonus
+  const allQuests2 = activeTiers.flatMap((t) => t.quests);
+  const maxPayout = allQuests2.reduce((s, q) => s + (parseInt(q.bonus.replace(/[^0-9]/g, "")) || 0), 0);
 
   // Calculate total bonus earned
   const allQuests = tiers.flatMap((t) => t.quests);
@@ -350,7 +270,7 @@ export default function Quests() {
           </div>
 
           {/* Tiers */}
-          {tiers.map((tier) => (
+          {activeTiers.map((tier) => (
             <div key={tier.name} style={{ marginBottom: 16 }}>
               <h4
                 style={{
@@ -433,7 +353,7 @@ export default function Quests() {
           <div className="cd" style={{ textAlign: "center", padding: 12, borderLeft: "3px solid var(--color-accent-red)" }}>
             <div className="sl">Max Annual Payout</div>
             <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-success)" }}>
-              $2,225+
+              ${maxPayout.toLocaleString()}+
             </div>
             <div className="dim" style={{ fontSize: 10 }}>
               Plus ongoing Network Scout commissions
