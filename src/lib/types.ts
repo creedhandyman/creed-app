@@ -22,6 +22,7 @@ export interface Organization {
   billing_enforced?: boolean;
   site_content?: string;
   site_published?: boolean;
+  site_slug?: string;
   created_at?: string;
 }
 

@@ -22,8 +22,34 @@ export default function Marketing() {
   const [targetClient, setTargetClient] = useState("");
   const [uniqueSell, setUniqueSell] = useState("");
 
-  const siteUrl = typeof window !== "undefined" ? `${window.location.origin}/site?org=${org?.id}` : "";
+  // Slug
+  const [slug, setSlug] = useState(org?.site_slug || "");
+  const [slugSaving, setSlugSaving] = useState(false);
+
+  const siteUrl = typeof window !== "undefined"
+    ? org?.site_slug
+      ? `${window.location.origin}/s/${org.site_slug}`
+      : `${window.location.origin}/site?org=${org?.id}`
+    : "";
   const reviewUrl = typeof window !== "undefined" ? `${window.location.origin}/review?org=${org?.id}` : "";
+
+  const saveSlug = async () => {
+    const clean = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    if (!clean) { alert("Enter a valid slug"); return; }
+    setSlugSaving(true);
+    // Check uniqueness
+    const existing = await db.get("organizations", { site_slug: clean });
+    if (existing.length && existing[0].id !== org!.id) {
+      alert(`"${clean}" is already taken — try another`);
+      setSlugSaving(false);
+      return;
+    }
+    await db.patch("organizations", org!.id, { site_slug: clean });
+    setSlug(clean);
+    const orgs = await db.get("organizations", { id: org!.id });
+    if (orgs.length) useStore.getState().setOrg(orgs[0] as never);
+    setSlugSaving(false);
+  };
 
   const generateSite = async () => {
     if (!svcDesc.trim()) { alert("Describe your services"); return; }
@@ -113,6 +139,28 @@ Return this JSON format:
             <button className="bo" onClick={() => setStep("survey")} style={{ fontSize: 10, padding: "5px 12px" }}>
               ✏️ Regenerate
             </button>
+          </div>
+
+          {/* Custom slug */}
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}` }}>
+            <label className="sl" style={{ fontSize: 10, marginBottom: 4, display: "block" }}>Custom URL</label>
+            <div className="row">
+              <span className="dim" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{typeof window !== "undefined" ? window.location.origin : ""}/s/</span>
+              <input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
+                placeholder="your-business-name"
+                style={{ flex: 1, fontSize: 12 }}
+              />
+              <button
+                className="bb"
+                onClick={saveSlug}
+                disabled={slugSaving || !slug.trim()}
+                style={{ fontSize: 10, padding: "5px 12px" }}
+              >
+                {slugSaving ? "..." : org?.site_slug ? "Update" : "Save"}
+              </button>
+            </div>
           </div>
         </div>
 
