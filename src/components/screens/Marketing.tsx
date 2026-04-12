@@ -78,12 +78,11 @@ export default function Marketing() {
   const [editingCaption, setEditingCaption] = useState<number | null>(null);
   const [captionText, setCaptionText] = useState("");
 
-  const siteUrl = typeof window !== "undefined"
-    ? org?.site_slug
-      ? `${window.location.origin}/s/${org.site_slug}`
-      : `${window.location.origin}/site?org=${org?.id}`
-    : "";
-  const reviewUrl = typeof window !== "undefined" ? `${window.location.origin}/review?org=${org?.id}` : "";
+  const baseUrl = "https://creedhm.com";
+  const siteUrl = org?.site_slug
+    ? `${baseUrl}/s/${org.site_slug}`
+    : `${baseUrl}/site?org=${org?.id}`;
+  const reviewUrl = `${baseUrl}/review?org=${org?.id}`;
 
   const refreshOrg = async () => {
     const orgs = await db.get("organizations", { id: org!.id });
@@ -243,7 +242,7 @@ Return this JSON format:
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}` }}>
             <label className="sl" style={{ fontSize: 10, marginBottom: 4, display: "block" }}>Custom URL</label>
             <div className="row">
-              <span className="dim" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{typeof window !== "undefined" ? window.location.origin : ""}/s/</span>
+              <span className="dim" style={{ fontSize: 11, whiteSpace: "nowrap" }}>creedhm.com/s/</span>
               <input
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
@@ -349,57 +348,59 @@ Return this JSON format:
 
         {/* ── CUSTOMIZE SITE ── */}
         <div className="cd mb">
-          <h4 style={{ fontSize: 14, marginBottom: 10 }}>🎨 Customize Site</h4>
+          <h4 style={{ fontSize: 14, marginBottom: 12 }}>🎨 Customize Site</h4>
 
           {/* Color */}
-          <div style={{ marginBottom: 12 }}>
-            <label className="sl" style={{ fontSize: 10, display: "block", marginBottom: 6 }}>Accent Color</label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {COLOR_PRESETS.map((c) => (
-                <button
-                  key={c.value}
-                  onClick={() => updateTheme("primaryColor", c.value)}
-                  style={{
-                    width: 32, height: 32, borderRadius: "50%",
-                    background: c.value, border: localTheme.primaryColor === c.value ? "3px solid #fff" : "2px solid transparent",
-                    cursor: "pointer", boxShadow: localTheme.primaryColor === c.value ? `0 0 0 2px ${c.value}` : "none",
-                  }}
-                  title={c.label}
-                />
-              ))}
-              <div style={{ position: "relative" }}>
-                <input
-                  type="color"
-                  value={localTheme.primaryColor}
-                  onChange={(e) => updateTheme("primaryColor", e.target.value)}
-                  style={{ width: 32, height: 32, borderRadius: "50%", cursor: "pointer", border: "none", padding: 0 }}
-                  title="Custom color"
-                />
-              </div>
-            </div>
+          <label className="sl" style={{ fontSize: 10, display: "block", marginBottom: 6 }}>Accent Color</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14 }}>
+            {COLOR_PRESETS.map((c) => (
+              <button
+                key={c.value}
+                onClick={() => updateTheme("primaryColor", c.value)}
+                style={{
+                  width: 28, height: 28, borderRadius: "50%",
+                  background: c.value,
+                  border: localTheme.primaryColor === c.value ? "2px solid #fff" : "2px solid transparent",
+                  cursor: "pointer",
+                  boxShadow: localTheme.primaryColor === c.value ? `0 0 0 2px ${c.value}` : "none",
+                  flexShrink: 0,
+                }}
+                title={c.label}
+              />
+            ))}
+            <input
+              type="color"
+              value={localTheme.primaryColor}
+              onChange={(e) => updateTheme("primaryColor", e.target.value)}
+              style={{ width: 28, height: 28, borderRadius: "50%", cursor: "pointer", border: "none", padding: 0, flexShrink: 0 }}
+              title="Custom color"
+            />
           </div>
 
           {/* Section toggles */}
-          <label className="sl" style={{ fontSize: 10, display: "block", marginBottom: 6 }}>Show / Hide Sections</label>
-          {([
-            ["showServices", "Services"],
-            ["showWhyUs", "Why Choose Us"],
-            ["showAbout", "About Us"],
-            ["showGallery", "Photo Gallery"],
-            ["showReviews", "Client Reviews"],
-          ] as [keyof SiteTheme, string][]).map(([key, label]) => (
-            <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 6, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={localTheme[key] as boolean}
-                onChange={(e) => updateTheme(key, e.target.checked)}
-              />
-              {label}
-            </label>
-          ))}
+          <label className="sl" style={{ fontSize: 10, display: "block", marginBottom: 8 }}>Sections</label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+            {([
+              ["showServices", "Services"],
+              ["showWhyUs", "Why Choose Us"],
+              ["showAbout", "About Us"],
+              ["showGallery", "Photo Gallery"],
+              ["showReviews", "Client Reviews"],
+            ] as [keyof SiteTheme, string][]).map(([key, label]) => (
+              <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={localTheme[key] as boolean}
+                  onChange={(e) => updateTheme(key, e.target.checked)}
+                  style={{ accentColor: localTheme.primaryColor }}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
 
           {themeDirty && (
-            <button className="bb" onClick={saveTheme} style={{ marginTop: 8, fontSize: 11, padding: "6px 16px" }}>
+            <button className="bb" onClick={saveTheme} style={{ marginTop: 10, fontSize: 11, padding: "6px 16px", width: "100%" }}>
               Save Changes
             </button>
           )}
