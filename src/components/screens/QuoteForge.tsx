@@ -199,7 +199,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         property: data.property,
         client: data.client,
       };
-      const result = await aiParseInspection(input);
+      const result = await aiParseInspection(input, rate);
       if (result && result.rooms.length > 0) {
         setRooms(result.rooms);
         setParsing(false);
@@ -251,7 +251,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setParseStatus("Sending text to AI...");
       }
 
-      const result = await aiParsePdf(rawText, images);
+      const result = await aiParsePdf(rawText, images, rate);
 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);

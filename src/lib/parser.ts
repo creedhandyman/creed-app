@@ -100,7 +100,7 @@ export async function renderPdfPages(
 
 /* ====== AI PARSE ====== */
 
-const AI_SYSTEM_PROMPT = `You are a professional handyman/contractor quoting engine. Labor rate: $55.00/hour (adjust if specified).
+const AI_SYSTEM_PROMPT_BASE = `You are a professional handyman/contractor quoting engine.
 
 You receive move-out inspection reports (typically from zInspector via Keyrenter Property Management) and produce accurate repair quotes.
 
@@ -196,7 +196,8 @@ export interface AiParseResult {
 
 export async function aiParsePdf(
   text: string,
-  images: string[]
+  images: string[],
+  laborRate?: number
 ): Promise<AiParseResult | null> {
   try {
     // Build content array with text + images
@@ -234,7 +235,7 @@ export async function aiParsePdf(
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 16000,
-        system: AI_SYSTEM_PROMPT,
+        system: `Labor rate: $${laborRate || 55}.00/hour.\n\n` + AI_SYSTEM_PROMPT_BASE,
         messages: [{ role: "user", content }],
       }),
     });
@@ -317,7 +318,8 @@ export interface InspectionInput {
 }
 
 export async function aiParseInspection(
-  inspection: InspectionInput
+  inspection: InspectionInput,
+  laborRate?: number
 ): Promise<AiParseResult | null> {
   // Compile inspection into structured text
   let text = `PROPERTY INSPECTION REPORT\n`;
@@ -365,7 +367,7 @@ export async function aiParseInspection(
     }
   }
 
-  return aiParsePdf(text, imageData);
+  return aiParsePdf(text, imageData, laborRate);
 }
 
 /* ====== TEXT NORMALIZATION ====== */
