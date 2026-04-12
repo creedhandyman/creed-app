@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 
@@ -78,6 +78,10 @@ export default function Marketing() {
   const [editingCaption, setEditingCaption] = useState<number | null>(null);
   const [captionText, setCaptionText] = useState("");
 
+  // AI tips
+  const [tips, setTips] = useState<string[]>([]);
+  const [tipsLoading, setTipsLoading] = useState(false);
+
   const baseUrl = "https://creedhm.com";
   const siteUrl = org?.site_slug
     ? `${baseUrl}/s/${org.site_slug}`
@@ -149,6 +153,59 @@ export default function Marketing() {
     setLocalTheme((t) => ({ ...t, [key]: value }));
     setThemeDirty(true);
   };
+
+  const jobs = useStore((s) => s.jobs);
+
+  const loadTips = async () => {
+    setTipsLoading(true);
+    try {
+      const completedJobs = jobs.filter((j) => ["complete", "invoiced", "paid"].includes(j.status)).length;
+      const totalJobs = jobs.length;
+      const avgRating = reviews.length ? (reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length).toFixed(1) : "none";
+      const hasWebsite = !!org?.site_content;
+      const hasGallery = photos.length > 0;
+      const hasSlug = !!org?.site_slug;
+
+      const prompt = `You are a marketing coach for a small field service contractor. Give exactly 5 short, specific, actionable marketing tips. Each tip should be 1-2 sentences max. Use an emoji at the start of each tip.
+
+Business context:
+- Business: ${org?.name || "Service business"} in ${org?.address || "unknown area"}
+- Website: ${hasWebsite ? (hasSlug ? `Live at creedhm.com/s/${org?.site_slug}` : "Live but no custom URL") : "Not created yet"}
+- Reviews: ${reviews.length} total, average ${avgRating} stars
+- Jobs: ${totalJobs} total, ${completedJobs} completed
+- Gallery photos: ${photos.length}
+- Phone: ${org?.phone ? "Yes" : "No"}
+
+Give tips they haven't heard before. Be specific to their situation — if they have few reviews, focus on getting more. If they have no gallery photos, suggest adding some. If they have a website, suggest ways to promote it. Mix digital and offline tactics. Make each tip feel like advice from a friend who knows marketing, not a textbook.
+
+Return ONLY the 5 tips, one per line. No numbering, no headers.`;
+
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+        }),
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "";
+      const lines = text.split("\n").filter((l: string) => l.trim().length > 5).slice(0, 5);
+      if (lines.length) setTips(lines);
+    } catch (e) {
+      console.error(e);
+    }
+    setTipsLoading(false);
+  };
+
+  // Auto-load tips on first visit to overview
+  useEffect(() => {
+    if (step === "overview" && org?.site_content && tips.length === 0 && !tipsLoading) {
+      loadTips();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const generateSite = async () => {
     if (!svcDesc.trim()) { alert("Describe your services"); return; }
@@ -418,16 +475,34 @@ Return this JSON format:
           </div>
         </div>
 
-        {/* Tips */}
+        {/* AI Tips */}
         <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>💡 Marketing Tips</h4>
-          <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-            <div>📱 Add your site link to your social media bios</div>
-            <div>💬 Text the link to leads instead of explaining your services</div>
-            <div>📧 Include it in your email signature</div>
-            <div>🏷️ Put it on your business cards and truck</div>
-            <div>⭐ Send the review link after every completed job</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h4 style={{ fontSize: 13 }}>💡 AI Marketing Coach</h4>
+            <button
+              className="bo"
+              onClick={loadTips}
+              disabled={tipsLoading}
+              style={{ fontSize: 12, padding: "3px 10px" }}
+            >
+              {tipsLoading ? "Thinking..." : "🔄 New Tips"}
+            </button>
           </div>
+          {tips.length > 0 ? (
+            <div style={{ fontSize: 13, lineHeight: 1.9 }}>
+              {tips.map((tip, i) => (
+                <div key={i} style={{ marginBottom: 6 }}>{tip}</div>
+              ))}
+            </div>
+          ) : tipsLoading ? (
+            <div className="dim" style={{ textAlign: "center", padding: 16, fontSize: 13 }}>
+              Analyzing your business and generating personalized tips...
+            </div>
+          ) : (
+            <div className="dim" style={{ textAlign: "center", padding: 12, fontSize: 13 }}>
+              Tap &quot;New Tips&quot; for AI-powered marketing advice tailored to your business
+            </div>
+          )}
         </div>
       </div>
     );
