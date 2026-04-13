@@ -267,12 +267,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setParseStatus("Analyzing with AI...");
 
     try {
-      // Get page images if we have a PDF, or use paste photos
+      // Get page images if we have a small PDF, or use paste photos
+      // Skip images for large PDFs (>2MB) — text-only avoids Vercel 4.5MB body limit
       let images: string[] = [];
       if (file && file.name.endsWith(".pdf")) {
-        setParseStatus("Rendering PDF pages...");
-        images = await renderPdfPages(file, 15);
-        setParseStatus(`Sending ${images.length} pages to AI...`);
+        if (file.size < 2 * 1024 * 1024) {
+          // Small PDF — send images + text for best accuracy
+          setParseStatus("Rendering PDF pages...");
+          images = await renderPdfPages(file, 5);
+          setParseStatus(`Sending ${images.length} pages + text to AI...`);
+        } else {
+          // Large PDF — text only, skip images
+          setParseStatus(`Large PDF (${(file.size / 1024 / 1024).toFixed(1)}MB) — sending text to AI...`);
+        }
       } else if (quickPhotos.length > 0) {
         // Limit to 10 photos max for API
         const photosToSend = quickPhotos.slice(0, 10);
