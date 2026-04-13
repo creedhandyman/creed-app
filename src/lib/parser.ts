@@ -147,11 +147,21 @@ Every line item MUST include:
 
 7. ONLY QUOTE MAINTENANCE ITEMS. Condition "S" with Action "None" = skip.
 
-## LABOR HOURS — CONSERVATIVE ESTIMATES (clock hours, single worker)
-Quick tasks: outlet cover=0.1h, bulb=0.1h, smoke alarm=0.2h, doorstop=0.1h, toilet seat=0.2h, blind=0.2h, door knob=0.3h, towel bar=0.2h, caulk=0.25h, door stop=0.1h, light fixture swap=0.5h
+## LABOR HOURS — clock hours, single worker. Use DECIMALS (0.1, 0.25, 0.5, etc.)
+Hours CAN and SHOULD be less than 1.0 for quick tasks. Never round up to 1h.
+Quick tasks: outlet cover=0.1h, bulb=0.1h, smoke alarm=0.2h, doorstop=0.1h, toilet seat=0.2h, blind=0.2h, door knob=0.3h, towel bar=0.2h, caulk=0.25h, door stop=0.1h, light fixture swap=0.5h, hinge tighten=0.15h, strike plate=0.15h
 Medium tasks: vanity light=0.5h, screen door=1h, re-secure door=0.5h, drywall patch=0.3h, faucet=1h, shower head=0.3h
-Painting (prep INCLUDED — do NOT add extra): touch-up=1h, small room full=2-3h, medium room=3-4h, large room=4-5h, hallway=2h
-Flooring: LVP small room=3-4h, large room=4-5h, baseboard per room=1-2h, tile per 30sqft=4-5h
+
+PAINTING — these are REALISTIC hours for experienced painters (prep INCLUDED):
+- Touch-up paint (spot repairs, one room): 1-1.5h
+- Full room repaint SMALL (bathroom, small bedroom — walls+ceiling+trim): 3-4h
+- Full room repaint MEDIUM (bedroom, kitchen — walls+ceiling+trim): 4-5h
+- Full room repaint LARGE (living room, open concept): 5-7h
+- Hallway/stairs repaint: 3-4h
+- Full unit paint (3-bed house, all rooms, spray+roll+trim): 35-45h total
+IMPORTANT: A full-house repaint of a 3-bedroom home = 35-45 total paint hours. Add up each room and verify the total is in this range. If it's under 30h for a full house paint, increase individual room hours.
+
+Flooring: LVP small room=3-4h, large room=4-5h, baseboard per room=1-2h, tile per 30sqft=4-5h, carpet removal=1-2h per room
 Doors: pre-hung door=1.5h, bifold=1h, entry door=2h
 
 ## MATERIALS — LOW-END RETAIL PRICES
@@ -185,7 +195,7 @@ Capture from report: paint colors, hardware finishes (brushed nickel, oil-rubbed
 }
 
 ## VERIFY BEFORE OUTPUT
-- Total hours: 20-50 for typical 3-bed make-ready. Over 60 = re-check for duplicates.
+- Total hours: 40-70 for typical 3-bed full make-ready (including full paint). Under 30 for a full paint job = too low.
 - Total cost: $3,000-$6,000 typical. Over $8,000 = re-check.
 - No item appears in more than 2 rooms (if it does, it's a duplicate).
 - Every line item traces to a specific inspection finding.
@@ -251,13 +261,13 @@ export function validateQuote(rooms: Room[]): Room[] {
     }),
   }));
 
-  // 4. Cap unreasonable hours (no single item should exceed 8h for most tasks)
+  // 4. Cap unreasonable hours (no single item should exceed 10h)
   rooms = rooms.map((r) => ({
     ...r,
     items: r.items.map((it) => {
-      if (it.laborHrs > 8) {
-        console.warn(`VALIDATION: Capped hours for "${it.detail}" from ${it.laborHrs}h to 6h`);
-        return { ...it, laborHrs: 6 };
+      if (it.laborHrs > 10) {
+        console.warn(`VALIDATION: Capped hours for "${it.detail}" from ${it.laborHrs}h to 8h`);
+        return { ...it, laborHrs: 8 };
       }
       return it;
     }),
