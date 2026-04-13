@@ -20,14 +20,14 @@ export default function Dashboard({ setPage, openSettings }: Props) {
   const darkMode = useStore((s) => s.darkMode);
 
   // ── Next Job on Schedule ──
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const upcoming = schedule
     .filter((s) => s.sched_date >= today)
     .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
   const nextJob = upcoming[0];
 
   // ── Max Net Pay This Week ──
-  const now = new Date();
   const ws = new Date(now);
   ws.setDate(now.getDate() - now.getDay());
   ws.setHours(0, 0, 0, 0);
