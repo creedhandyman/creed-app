@@ -12,6 +12,7 @@ import {
   classify,
   makeGuide,
   calculateCost,
+  validateQuote,
 } from "@/lib/parser";
 import type { InspectionInput } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
@@ -214,7 +215,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
       const result = await aiParseInspection(input, rate, licensedTradesInsp);
       if (result && result.rooms.length > 0) {
-        setRooms(result.rooms);
+        setRooms(validateQuote(result.rooms));
         setParsing(false);
         setParseStatus("");
         return;
@@ -241,7 +242,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           })),
       }))
       .filter((r) => r.items.length > 0);
-    setRooms(fallbackRooms);
+    setRooms(validateQuote(fallbackRooms));
   };
 
   const doAiParse = async (rawText: string, file: File | null) => {
@@ -278,7 +279,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);
         if (result.client && !client) setClient(result.client);
-        setRooms(result.rooms);
+        setRooms(validateQuote(result.rooms));
         setParsing(false);
         setParseStatus("");
         setMode("edit");
@@ -311,7 +312,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       /([\d]+\s+[\w\s]+(?:Ave|St|Blvd|Ln|Dr|Rd|Ct|Way|Circle|Place))/i
     );
     if (pm && !prop) setProp(pm[1].trim());
-    setRooms(p);
+    // Validate and re-group by trade
+    setRooms(validateQuote(p));
     setMode("edit");
   };
 

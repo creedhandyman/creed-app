@@ -203,7 +203,7 @@ export interface AiParseResult {
 }
 
 /* ====== POST-PARSE VALIDATION ====== */
-function validateQuote(rooms: Room[]): Room[] {
+export function validateQuote(rooms: Room[]): Room[] {
   // 1. Detect phantom materials — same high-cost item in 3+ rooms = likely a bug
   const materialCount: Record<string, { count: number; totalCost: number }> = {};
   rooms.forEach((r) => r.items.forEach((it) => it.materials.forEach((m) => {
