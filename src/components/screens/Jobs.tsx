@@ -227,7 +227,9 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
               </div>
             </div>
             {!org?.stripe_connected && (
-              <button className="bb" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "5px 10px" }}>
+              <button className="bb" onClick={() => {
+                useStore.getState().showToast("Go to Settings → Payments to connect Stripe", "info");
+              }} style={{ fontSize: 12, padding: "5px 10px" }}>
                 Connect Stripe →
               </button>
             )}

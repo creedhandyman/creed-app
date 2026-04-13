@@ -560,8 +560,8 @@ export default function Settings({ onClose }: Props) {
         </div>
       )}
 
-      {/* Quest Config in Payments tab */}
-      {tab === "payments" && isOwner && (
+      {/* Quest Config — moved to General tab */}
+      {tab === "general" && isOwner && (
         <div className="cd" style={{ marginTop: 14 }}>
           <h4 style={{ fontSize: 14, marginBottom: 10 }}>🎯 Quest Bonuses</h4>
           <div className="dim" style={{ fontSize: 12, marginBottom: 10 }}>Toggle quests on/off and set custom bonus amounts for your team.</div>

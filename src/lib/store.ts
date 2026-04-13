@@ -238,6 +238,11 @@ export const useStore = create<AppState>((set, get) => ({
         db.get<QuestPayout>("quest_payouts", orgFilter),
       ]);
     set({ clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, questPayouts, loading: false });
+    // Also refresh org data (picks up Stripe changes, site updates, etc.)
+    if (orgId) {
+      const orgs = await db.get<Organization>("organizations", { id: get().org?.id });
+      if (orgs.length) { set({ org: orgs[0] }); sv("org", orgs[0]); }
+    }
   },
 
   /* ── Auto-refresh ── */
