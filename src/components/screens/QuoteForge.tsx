@@ -147,7 +147,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     try {
       const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
       if (data?.rooms?.length) {
-        setRooms(data.rooms);
+        setRooms(validateQuote(data.rooms));
       }
       if (data?.workers?.length) {
         setWorkers(data.workers.map((w: { id: string }) => w.id));
@@ -990,7 +990,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                         merged.push(newRoom);
                       }
                     });
-                    setRooms(merged);
+                    setRooms(validateQuote(merged));
                     useStore.getState().showToast("AI added items to your quote", "success");
                   }
                 }
