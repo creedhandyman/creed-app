@@ -293,8 +293,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setParseStatus("");
     if (!p.length) {
       const c = (rawText.match(/Maintenance/gi) || []).length;
-      alert(
-        `Found ${c} "Maintenance" refs but couldn't parse. Try Upload PDF or Manual.`
+      useStore.getState().showToast(
+        `Found ${c} "Maintenance" refs but couldn't parse. Try Upload PDF or Manual.`,
+        "info"
       );
       return;
     }
@@ -336,7 +337,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       }
     } catch (err) {
       console.error(err);
-      alert("Error reading file");
+      useStore.getState().showToast("Error reading file", "error");
       setParsing(false);
       setParseStatus("");
       setMode("paste");
@@ -457,14 +458,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   /* ── Save job ── */
   const saveJob = async () => {
     if (!prop.trim()) {
-      alert("Enter a property address");
+      useStore.getState().showToast("Enter a property address", "warning");
       return;
     }
     if (rooms.length === 0) {
-      alert("Add at least one item to the quote");
+      useStore.getState().showToast("Add at least one item to the quote", "warning");
       return;
     }
-    if (gt <= 0 && !confirm("Quote total is $0. Save anyway?")) {
+    if (gt <= 0 && !await useStore.getState().showConfirm("Empty Quote", "Quote total is $0. Save anyway?")) {
       return;
     }
     const workOrder = guide.steps.map((s) => ({
@@ -494,10 +495,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
     if (editingId) {
       await db.patch("jobs", editingId, jobData);
-      alert("Job updated: " + prop);
+      useStore.getState().showToast("Job updated: " + prop, "success");
     } else {
       await db.post("jobs", jobData);
-      alert("Job created: " + prop);
+      useStore.getState().showToast("Job created: " + prop, "success");
     }
 
     await loadAll();
@@ -756,7 +757,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             className="bb"
             onClick={() => {
               if (!quickDesc.trim() && !quickPhotos.length) {
-                alert("Add a description or photos");
+                useStore.getState().showToast("Add a description or photos", "warning");
                 return;
               }
               doAiParse(quickDesc || "Analyze these photos and quote all repairs needed.", null);

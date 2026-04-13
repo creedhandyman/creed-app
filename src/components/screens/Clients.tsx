@@ -25,7 +25,7 @@ export default function Clients({ setPage }: Props) {
   const [notes, setNotes] = useState("");
 
   const addClient = async () => {
-    if (!name.trim()) { alert("Enter client name"); return; }
+    if (!name.trim()) { useStore.getState().showToast("Enter client name", "warning"); return; }
     const result = await db.post("clients", {
       name: name.trim(),
       phone,
@@ -33,14 +33,14 @@ export default function Clients({ setPage }: Props) {
       address,
       notes,
     });
-    if (!result) { alert("Failed to save client"); return; }
+    if (!result) { useStore.getState().showToast("Failed to save client", "error"); return; }
     setName(""); setPhone(""); setEmail(""); setAddress(""); setNotes("");
     setShowAdd(false);
     await loadAll();
   };
 
   const deleteClient = async (id: string) => {
-    if (confirm("Delete this client?")) {
+    if (await useStore.getState().showConfirm("Delete Client", "Delete this client?")) {
       await db.del("clients", id);
       loadAll();
     }

@@ -49,9 +49,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   };
 
   const addReceipt = async (jobId: string) => {
-    if (!rn.trim()) { alert("Enter a receipt note"); return; }
+    if (!rn.trim()) { useStore.getState().showToast("Enter a receipt note", "warning"); return; }
     const amt = parseFloat(ra);
-    if (!amt || amt <= 0) { alert("Enter a valid amount"); return; }
+    if (!amt || amt <= 0) { useStore.getState().showToast("Enter a valid amount", "warning"); return; }
     setUploading(true);
     try {
       let photo_url = "";
@@ -72,12 +72,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       loadAll();
     } catch (err) {
       console.error(err);
-      alert("Error saving receipt");
+      useStore.getState().showToast("Error saving receipt", "error");
     }
     setUploading(false);
   };
 
-  const setStatus = async (id: string, status: string) => {
+  const setStatus = async (id: string, status: string): Promise<void> => {
     // Warn if completing with unchecked work order items
     if (status === "complete") {
       const job = jobs.find((j) => j.id === id);
@@ -87,7 +87,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
           const workOrder = jobData?.workOrder || [];
           const unchecked = workOrder.filter((w: { done: boolean }) => !w.done).length;
           if (unchecked > 0) {
-            if (!confirm(`${unchecked} work order item${unchecked !== 1 ? "s" : ""} still unchecked. Mark complete anyway?`)) return;
+            if (!await useStore.getState().showConfirm("Incomplete Items", `${unchecked} work order item${unchecked !== 1 ? "s" : ""} still unchecked. Mark complete anyway?`)) return;
           }
         } catch { /* no work order, proceed */ }
       }
@@ -97,7 +97,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   };
 
   const deleteJob = async (id: string) => {
-    if (confirm("Delete this job?")) {
+    if (await useStore.getState().showConfirm("Delete Job", "Delete this job?")) {
       await db.del("jobs", id);
       loadAll();
     }
@@ -171,7 +171,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 <div class="footer">${org?.name || "Service Provider"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</div>
 </div></body></html>`;
     const win = window.open("", "_blank");
-    if (!win) { alert("Allow popups to generate invoice"); return; }
+    if (!win) { useStore.getState().showToast("Allow popups to generate invoice", "error"); return; }
     win.document.write(html);
     win.document.close();
     setTimeout(() => win.print(), 600);
@@ -386,7 +386,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                           ? `Hi! Here's your quote from ${org?.name || "us"} for ${j.property}:\n\nTotal: $${(j.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
                           : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
                         navigator.clipboard.writeText(msg);
-                        alert("Message copied! Paste it in a text or email to your client.");
+                        useStore.getState().showToast("Message copied! Paste it in a text or email to your client.", "success");
                       }}
                       style={{ fontSize: 12, padding: "5px 10px" }}
                     >
@@ -441,12 +441,12 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                               const data = await res.json();
                               if (data.url) {
                                 navigator.clipboard.writeText(data.url);
-                                alert("Payment link copied! Send it to the client.\n\n" + data.url);
+                                useStore.getState().showToast("Payment link copied! Send it to the client.", "success");
                                 if (j.status === "complete") setStatus(j.id, "invoiced");
                               } else {
-                                alert("Error: " + (data.error || "Could not create payment link"));
+                                useStore.getState().showToast("Error: " + (data.error || "Could not create payment link"), "error");
                               }
-                            } catch { alert("Failed to create payment link"); }
+                            } catch { useStore.getState().showToast("Failed to create payment link", "error"); }
                           }}
                           style={{ fontSize: 12, padding: "5px 12px" }}
                         >
@@ -474,9 +474,9 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                                 setPayQR({ url: data.url, jobId: j.id, amount: j.total });
                                 if (j.status === "complete") setStatus(j.id, "invoiced");
                               } else {
-                                alert("Error: " + (data.error || "Could not create payment"));
+                                useStore.getState().showToast("Error: " + (data.error || "Could not create payment"), "error");
                               }
-                            } catch { alert("Failed to create payment"); }
+                            } catch { useStore.getState().showToast("Failed to create payment", "error"); }
                           }}
                           style={{ fontSize: 12, padding: "5px 12px" }}
                         >
@@ -699,7 +699,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                             <button
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                if (confirm("Delete receipt?")) {
+                                if (await useStore.getState().showConfirm("Delete Receipt", "Delete receipt?")) {
                                   await db.del("receipts", r.id);
                                   loadAll();
                                 }

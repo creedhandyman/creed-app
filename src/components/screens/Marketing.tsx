@@ -95,11 +95,11 @@ export default function Marketing() {
 
   const saveSlug = async () => {
     const clean = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-    if (!clean) { alert("Enter a valid slug"); return; }
+    if (!clean) { useStore.getState().showToast("Enter a valid slug", "warning"); return; }
     setSlugSaving(true);
     const existing = await db.get("organizations", { site_slug: clean });
     if (existing.length && existing[0].id !== org!.id) {
-      alert(`"${clean}" is already taken — try another`);
+      useStore.getState().showToast(`"${clean}" is already taken — try another`, "warning");
       setSlugSaving(false);
       return;
     }
@@ -128,7 +128,7 @@ export default function Marketing() {
   };
 
   const deletePhoto = async (idx: number) => {
-    if (!confirm("Remove this photo?")) return;
+    if (!await useStore.getState().showConfirm("Remove Photo", "Remove this photo?")) return;
     const updated = photos.filter((_, i) => i !== idx);
     await db.patch("organizations", org!.id, { gallery_photos: JSON.stringify(updated) });
     await refreshOrg();
@@ -208,7 +208,7 @@ Return ONLY the 5 tips, one per line. No numbering, no headers.`;
   }, [step]);
 
   const generateSite = async () => {
-    if (!svcDesc.trim()) { alert("Describe your services"); return; }
+    if (!svcDesc.trim()) { useStore.getState().showToast("Describe your services", "warning"); return; }
     setGenerating(true);
     setStep("generating");
 
@@ -254,12 +254,12 @@ Return this JSON format:
         await refreshOrg();
         setStep("overview");
       } else {
-        alert("AI generation failed — try again");
+        useStore.getState().showToast("AI generation failed — try again", "error");
         setStep("survey");
       }
     } catch (e) {
       console.error(e);
-      alert("Failed to generate site content");
+      useStore.getState().showToast("Failed to generate site content", "error");
       setStep("survey");
     }
     setGenerating(false);
@@ -284,7 +284,7 @@ Return this JSON format:
             {siteUrl}
           </div>
           <div className="row" style={{ marginTop: 8 }}>
-            <button className="bb" onClick={() => { navigator.clipboard.writeText(siteUrl); alert("Site link copied!"); }} style={{ fontSize: 12, padding: "5px 12px" }}>
+            <button className="bb" onClick={() => { navigator.clipboard.writeText(siteUrl); useStore.getState().showToast("Site link copied!", "success"); }} style={{ fontSize: 12, padding: "5px 12px" }}>
               📋 Copy Link
             </button>
             <button className="bo" onClick={() => window.open(siteUrl, "_blank")} style={{ fontSize: 12, padding: "5px 12px" }}>
@@ -465,7 +465,7 @@ Return this JSON format:
 
         {/* Quick links */}
         <div className="g2 mb">
-          <div className="cd" style={{ cursor: "pointer" }} onClick={() => { navigator.clipboard.writeText(reviewUrl); alert("Review link copied!"); }}>
+          <div className="cd" style={{ cursor: "pointer" }} onClick={() => { navigator.clipboard.writeText(reviewUrl); useStore.getState().showToast("Review link copied!", "success"); }}>
             <h4 style={{ fontSize: 13, color: "var(--color-highlight)" }}>⭐ Review Link</h4>
             <div className="dim" style={{ fontSize: 10 }}>Send to clients after jobs</div>
           </div>

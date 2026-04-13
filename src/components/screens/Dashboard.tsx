@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 
 interface Props {
@@ -74,6 +75,37 @@ export default function Dashboard({ setPage, openSettings }: Props) {
   });
   const earnedMonth = monthJobs.reduce((s, j) => s + (j.total || 0), 0);
 
+  // Getting Started guide
+  const [guideDismissed, setGuideDismissed] = useState(true);
+  const [guideOpen, setGuideOpen] = useState(true);
+  useEffect(() => {
+    const d = localStorage.getItem("c_guide_dismissed");
+    if (!d) setGuideDismissed(false);
+  }, []);
+
+  const dismissGuide = () => {
+    localStorage.setItem("c_guide_dismissed", "1");
+    setGuideDismissed(true);
+  };
+
+  const hasJobs = jobs.length > 0;
+  const hasSchedule = schedule.length > 0;
+  const hasTime = timeEntries.length > 0;
+  const hasPaid = jobs.some((j) => j.status === "paid");
+  const hasSite = !!org?.site_content;
+  const hasQuests = reviews.length > 0;
+
+  const steps = [
+    { icon: "⚡", label: "Create Your First Quote", desc: "Upload a PDF or describe the job — AI does the rest", done: hasJobs, page: "qf" },
+    { icon: "📅", label: "Schedule a Job", desc: "Add it to your calendar and assign workers", done: hasSchedule, page: "sched" },
+    { icon: "⏱", label: "Track Time", desc: "Clock in when you start, clock out when done", done: hasTime, page: "time" },
+    { icon: "💰", label: "Get Paid", desc: "Send invoice, collect via Stripe or QR code", done: hasPaid, page: "jobs" },
+    { icon: "📣", label: "Build Your Website", desc: "AI creates a professional site in 60 seconds", done: hasSite, page: "marketing" },
+    { icon: "🎯", label: "Earn Quest Bonuses", desc: "Complete quests to unlock bonus payouts", done: hasQuests, page: "quests" },
+  ];
+
+  const completedSteps = steps.filter((s) => s.done).length;
+
   return (
     <div className="fi">
       {/* Header */}
@@ -86,6 +118,83 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           ⚙️
         </button>
       </div>
+
+      {/* Getting Started Guide */}
+      {!guideDismissed && (
+        <div className="cd mb" style={{ borderLeft: "3px solid var(--color-primary)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: guideOpen ? 10 : 0 }}>
+            <div
+              onClick={() => setGuideOpen(!guideOpen)}
+              style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+            >
+              <span style={{ fontSize: 18 }}>🚀</span>
+              <div>
+                <h4 style={{ fontSize: 14, color: "var(--color-primary)" }}>Getting Started</h4>
+                <div className="dim" style={{ fontSize: 12 }}>{completedSteps}/{steps.length} complete</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                onClick={() => setGuideOpen(!guideOpen)}
+                style={{ background: "none", fontSize: 14, color: "#888" }}
+              >
+                {guideOpen ? "▲" : "▼"}
+              </button>
+              <button
+                onClick={dismissGuide}
+                style={{ background: "none", fontSize: 13, color: "#555" }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          {guideOpen && (
+            <>
+              <div style={{
+                height: 4, borderRadius: 2, background: darkMode ? "#1e1e2e" : "#ddd", marginBottom: 12,
+              }}>
+                <div style={{
+                  height: "100%", borderRadius: 2, background: "var(--color-primary)",
+                  width: `${(completedSteps / steps.length) * 100}%`, transition: "width 0.3s",
+                }} />
+              </div>
+
+              {steps.map((s, i) => (
+                <div
+                  key={i}
+                  onClick={() => !s.done && setPage(s.page)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "8px 6px",
+                    borderRadius: 8, cursor: s.done ? "default" : "pointer",
+                    opacity: s.done ? 0.6 : 1,
+                    background: !s.done ? (darkMode ? "#1a1a2811" : "#f5f5f811") : "transparent",
+                    marginBottom: 2,
+                  }}
+                >
+                  <span style={{ fontSize: 16, width: 24, textAlign: "center" }}>
+                    {s.done ? "✅" : s.icon}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      fontSize: 13, fontWeight: 600,
+                      textDecoration: s.done ? "line-through" : "none",
+                      color: s.done ? "#666" : (darkMode ? "#e2e2e8" : "#1a1a2a"),
+                    }}>
+                      {s.label}
+                    </div>
+                    <div className="dim" style={{ fontSize: 12 }}>{s.desc}</div>
+                  </div>
+                  {!s.done && (
+                    <span style={{ fontSize: 12, color: "var(--color-primary)" }}>→</span>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Stat cards */}
       <div className="g2 mb">

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { db } from "@/lib/supabase";
+import { useStore } from "@/lib/store";
 
 interface Props {
   orgId: string;
@@ -29,7 +30,7 @@ export default function WorkOrderForm({ orgId, primaryColor: pc }: Props) {
       setSubmitted(true);
     } catch (e) {
       console.error(e);
-      alert("Failed to submit — please call us directly");
+      useStore.getState().showToast("Failed to submit — please call us directly", "error");
     }
     setSubmitting(false);
   };

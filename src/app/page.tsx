@@ -5,6 +5,8 @@ import Login from "@/components/Login";
 import Onboarding from "@/components/Onboarding";
 import AppShell from "@/components/AppShell";
 import BillingGate from "@/components/BillingGate";
+import Toast from "@/components/Toast";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -66,5 +68,5 @@ export default function Home() {
     );
   }
 
-  return <BillingGate><AppShell /></BillingGate>;
+  return <><Toast /><ConfirmModal /><BillingGate><AppShell /></BillingGate></>;
 }

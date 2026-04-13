@@ -494,7 +494,7 @@ export default function Quests() {
               onClick={() => {
                 const url = `${window.location.origin}/review${user.org_id ? "?org=" + user.org_id : ""}`;
                 navigator.clipboard.writeText(url);
-                alert("Review link copied!");
+                useStore.getState().showToast("Review link copied!", "success");
               }}
               style={{ fontSize: 12, padding: "4px 12px", marginTop: 4 }}
             >
@@ -561,7 +561,7 @@ export default function Quests() {
                   </span>
                   <button
                     onClick={async () => {
-                      if (!confirm(`Delete review from ${r.client_name}?`)) return;
+                      if (!await useStore.getState().showConfirm("Delete Review", `Delete review from ${r.client_name}?`)) return;
                       await db.del("reviews", r.id);
                       loadAll();
                     }}

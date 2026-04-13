@@ -102,10 +102,10 @@ export default function BillingGate({ children }: { children: React.ReactNode })
       if (data.url) {
         window.location.href = data.url;
       } else {
-        alert("Error: " + (data.error || "Could not start checkout"));
+        useStore.getState().showToast("Error: " + (data.error || "Could not start checkout"), "error");
       }
     } catch (e) {
-      alert("Failed to start checkout: " + (e instanceof Error ? e.message : ""));
+      useStore.getState().showToast("Failed to start checkout", "error");
     }
     setLoading(false);
   };

@@ -69,10 +69,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   };
 
   const addSchedule = async () => {
-    if (!sd) { alert("Select a date"); return; }
-    if (!sj) { alert("Select a job"); return; }
+    if (!sd) { useStore.getState().showToast("Select a date", "warning"); return; }
+    if (!sj) { useStore.getState().showToast("Select a job", "warning"); return; }
     const today = new Date().toISOString().split("T")[0];
-    if (sd < today && !confirm(`${sd} is in the past. Schedule anyway?`)) return;
+    if (sd < today && !await useStore.getState().showConfirm("Past Date", `${sd} is in the past. Schedule anyway?`)) return;
     const parts = [];
     if (sTime) parts.push(`🕐 ${sTime}`);
     if (sWorkers.length) parts.push(`👷 ${sWorkers.join(", ")}`);
@@ -422,7 +422,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               <span className="dim">{s.note}</span>
               <button
                 onClick={async () => {
-                  if (!confirm("Remove from schedule?")) return;
+                  if (!await useStore.getState().showConfirm("Remove Entry", "Remove from schedule?")) return;
                   await db.del("schedule", s.id);
                   loadAll();
                 }}

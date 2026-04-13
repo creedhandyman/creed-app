@@ -58,15 +58,15 @@ export default function Mileage({ setPage }: Props) {
   })();
 
   const startTrip = () => {
-    if (!startMiles) { alert("Enter starting odometer"); return; }
+    if (!startMiles) { useStore.getState().showToast("Enter starting odometer", "warning"); return; }
     setTripActive(true);
   };
 
   const endTrip = async () => {
-    if (!endMiles) { alert("Enter ending odometer"); return; }
+    if (!endMiles) { useStore.getState().showToast("Enter ending odometer", "warning"); return; }
     const start = parseFloat(startMiles);
     const end = parseFloat(endMiles);
-    if (end <= start) { alert("End miles must be greater than start"); return; }
+    if (end <= start) { useStore.getState().showToast("End miles must be greater than start", "warning"); return; }
     const total = end - start;
 
     await db.post("mileage", {
@@ -88,7 +88,7 @@ export default function Mileage({ setPage }: Props) {
 
   const addManual = async () => {
     const miles = parseFloat(mMiles);
-    if (!miles || miles <= 0) { alert("Enter valid miles"); return; }
+    if (!miles || miles <= 0) { useStore.getState().showToast("Enter valid miles", "warning"); return; }
     await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
@@ -240,7 +240,7 @@ export default function Mileage({ setPage }: Props) {
               </span>
               <button
                 onClick={async () => {
-                  if (!confirm("Delete this trip?")) return;
+                  if (!await useStore.getState().showConfirm("Delete Trip", "Delete this trip?")) return;
                   await db.del("mileage", e.id);
                   setLoaded(false);
                 }}

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { useStore } from "@/lib/store";
 
 /* ── Preset rooms and items ── */
 const ROOM_PRESETS: Record<string, string[]> = {
@@ -176,7 +177,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
       );
     } catch (err) {
       console.error("Photo upload failed:", err);
-      alert("Photo upload failed");
+      useStore.getState().showToast("Photo upload failed", "error");
     }
     setUploading(false);
   };

@@ -76,7 +76,7 @@ export default function Settings({ onClose }: Props) {
                   const ext = file.name.split(".").pop() || "png";
                   const path = `logos/${org.id}.${ext}`;
                   const { error } = await supabase.storage.from("receipts").upload(path, file, { upsert: true });
-                  if (error) { alert("Upload failed: " + error.message); return; }
+                  if (error) { useStore.getState().showToast("Upload failed: " + error.message, "error"); return; }
                   const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
                   await db.patch("organizations", org.id, { logo_url: urlData.publicUrl });
                   loadAll();
@@ -122,11 +122,11 @@ export default function Settings({ onClose }: Props) {
               <button
                 className="bb"
                 onClick={async () => {
-                  if (newPassword.length < 6) { alert("Min 6"); return; }
+                  if (newPassword.length < 6) { useStore.getState().showToast("Min 6 characters", "warning"); return; }
                   const { error } = await supabase.auth.updateUser({ password: newPassword });
-                  if (error) { alert(error.message); return; }
+                  if (error) { useStore.getState().showToast(error.message, "error"); return; }
                   setNewPassword("");
-                  alert("Password updated");
+                  useStore.getState().showToast("Password updated", "success");
                 }}
               >
                 Save
@@ -147,8 +147,8 @@ export default function Settings({ onClose }: Props) {
             <button
               className="bo"
               onClick={async () => {
-                if (!confirm("Delete your account? This cannot be undone.")) return;
-                if (!confirm("Are you SURE? All your data will be lost.")) return;
+                if (!await useStore.getState().showConfirm("Delete Account", "Delete your account? This cannot be undone.")) return;
+                if (!await useStore.getState().showConfirm("Are You Sure?", "All your data will be lost.")) return;
                 await db.del("profiles", user.id);
                 logout();
                 onClose();
@@ -172,7 +172,7 @@ export default function Settings({ onClose }: Props) {
                 {user.org_id}
               </div>
               <button
-                onClick={() => { navigator.clipboard.writeText(user.org_id); alert("Copied!"); }}
+                onClick={() => { navigator.clipboard.writeText(user.org_id); useStore.getState().showToast("Copied!", "success"); }}
                 style={{ fontSize: 12, marginTop: 4, background: "none", color: "var(--color-primary)", padding: 0, textDecoration: "underline" }}
               >
                 Copy to clipboard
@@ -194,7 +194,7 @@ export default function Settings({ onClose }: Props) {
                       style={{ width: "auto", fontSize: 12, padding: "2px 4px" }}
                       onChange={async (e) => {
                         if (u.id === user.id && (e.target.value === "tech" || e.target.value === "apprentice")) {
-                          if (!confirm("WARNING: Demoting yourself will lock you out of admin settings. Are you sure?")) {
+                          if (!await useStore.getState().showConfirm("Warning", "Demoting yourself will lock you out of admin settings. Are you sure?")) {
                             e.target.value = u.role;
                             return;
                           }
@@ -228,7 +228,7 @@ export default function Settings({ onClose }: Props) {
                     {u.id !== user.id && (
                       <button
                         onClick={async () => {
-                          if (!confirm(`Remove ${u.name} from the team?`)) return;
+                          if (!await useStore.getState().showConfirm("Remove Team Member", `Remove ${u.name} from the team?`)) return;
                           await db.del("profiles", u.id);
                           loadAll();
                         }}
@@ -422,7 +422,7 @@ export default function Settings({ onClose }: Props) {
                       });
                       if (!res.ok) {
                         const text = await res.text();
-                        alert("Stripe error (" + res.status + "): " + text);
+                        useStore.getState().showToast("Stripe error (" + res.status + "): " + text, "error");
                         if (btn) btn.textContent = "🔗 Connect Stripe Account";
                         return;
                       }
@@ -433,11 +433,11 @@ export default function Settings({ onClose }: Props) {
                         });
                         window.location.href = data.url;
                       } else {
-                        alert("Error: " + (data.error || "Could not start Stripe setup"));
+                        useStore.getState().showToast("Error: " + (data.error || "Could not start Stripe setup"), "error");
                         if (btn) btn.textContent = "🔗 Connect Stripe Account";
                       }
                     } catch (e) {
-                      alert("Failed to start Stripe setup: " + (e instanceof Error ? e.message : "Network error"));
+                      useStore.getState().showToast("Failed to start Stripe setup: " + (e instanceof Error ? e.message : "Network error"), "error");
                       if (btn) btn.textContent = "🔗 Connect Stripe Account";
                     }
                   }}
@@ -509,7 +509,7 @@ export default function Settings({ onClose }: Props) {
                         });
                         const data = await res.json();
                         if (data.url) window.location.href = data.url;
-                        else alert(data.error || "Failed to start checkout");
+                        else useStore.getState().showToast(data.error || "Failed to start checkout", "error");
                       }}
                       style={{ fontSize: 13, padding: "6px 14px" }}
                     >
@@ -531,7 +531,7 @@ export default function Settings({ onClose }: Props) {
                         });
                         const data = await res.json();
                         if (data.url) window.location.href = data.url;
-                        else alert(data.error || "Failed to open billing portal");
+                        else useStore.getState().showToast(data.error || "Failed to open billing portal", "error");
                       }}
                       style={{ fontSize: 13, padding: "6px 14px" }}
                     >

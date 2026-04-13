@@ -26,7 +26,7 @@ export default function ClientSelect({ value, onChange, style }: Props) {
       notes: "",
     });
     if (!result) {
-      alert("Failed to save client");
+      useStore.getState().showToast("Failed to save client", "error");
       return;
     }
     const savedName = newName.trim();

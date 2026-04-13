@@ -91,14 +91,9 @@ export default function Payroll() {
     const bonusText = earnedQuests.length
       ? `\n\n🎯 Quest Bonuses:\n` + earnedQuests.map((q) => `  ${q.name}: $${q.bonus}`).join("\n") + `\n  Bonus Total: $${totalBonus}`
       : "";
-    const confirmed = confirm(
-      `Process payment for ${selUser.name}?\n\n` +
-      `Hours: ${totalHrs.toFixed(1)}\n` +
-      `Rate: $${selUser.rate || 55}/hr\n` +
-      `Labor: $${laborPay.toFixed(2)}` +
-      bonusText +
-      `\n\nTotal Pay: $${totalPay.toFixed(2)}\n\n` +
-      `This will generate a pay stub.`
+    const confirmed = await useStore.getState().showConfirm(
+      "Process Payment",
+      `${selUser.name} — ${totalHrs.toFixed(1)} hrs × $${selUser.rate || 55}/hr = $${totalPay.toFixed(2)}${earnedQuests.length ? ` (includes $${totalBonus} bonus)` : ""}. Generate pay stub?`
     );
     if (!confirmed) return;
 
@@ -140,7 +135,7 @@ export default function Payroll() {
       generatePayStub();
       // Prompt to email pay stub
       const empEmail = selUser.email;
-      if (empEmail && confirm(`Email pay stub to ${selUser.name} (${empEmail})?`)) {
+      if (empEmail && await useStore.getState().showConfirm("Email Pay Stub", `Email pay stub to ${selUser.name} (${empEmail})?`)) {
         const subject = encodeURIComponent(`Pay Stub — ${new Date().toLocaleDateString()}`);
         const body = encodeURIComponent(
           `Hi ${selUser.name},\n\n` +
@@ -225,7 +220,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
 </div></body></html>`;
 
     const win = window.open("", "_blank");
-    if (!win) { alert(`Processed: ${selUser.name} — $${totalPay.toFixed(2)}`); return; }
+    if (!win) { useStore.getState().showToast(`Processed: ${selUser.name} — $${totalPay.toFixed(2)}`, "success"); return; }
     win.document.write(html);
     win.document.close();
     setTimeout(() => win.print(), 600);

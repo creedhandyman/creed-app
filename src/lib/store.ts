@@ -52,6 +52,14 @@ interface AppState {
   toggleNavSide: () => void;
   toggleNavBottom: () => void;
 
+  // toast + confirm
+  toast: { message: string; type: "success" | "error" | "info" | "warning"; visible: boolean };
+  showToast: (message: string, type?: "success" | "error" | "info" | "warning") => void;
+  hideToast: () => void;
+  confirmState: { title: string; message: string; visible: boolean; resolve: ((v: boolean) => void) | null };
+  showConfirm: (title: string, message: string) => Promise<boolean>;
+  resolveConfirm: (v: boolean) => void;
+
   // data
   clients: Client[];
   profiles: Profile[];
@@ -179,6 +187,25 @@ export const useStore = create<AppState>((set, get) => ({
     const next = !get().navLeft;
     set({ navLeft: next });
     sv("navl", next);
+  },
+
+  /* ── Toast + Confirm ── */
+  toast: { message: "", type: "info" as const, visible: false },
+  showToast: (message, type = "success") => {
+    set({ toast: { message, type, visible: true } });
+    setTimeout(() => get().hideToast(), 3000);
+  },
+  hideToast: () => set({ toast: { ...get().toast, visible: false } }),
+  confirmState: { title: "", message: "", visible: false, resolve: null },
+  showConfirm: (title, message) => {
+    return new Promise<boolean>((resolve) => {
+      set({ confirmState: { title, message, visible: true, resolve } });
+    });
+  },
+  resolveConfirm: (v) => {
+    const { confirmState } = get();
+    if (confirmState.resolve) confirmState.resolve(v);
+    set({ confirmState: { title: "", message: "", visible: false, resolve: null } });
   },
 
   /* ── Data ── */

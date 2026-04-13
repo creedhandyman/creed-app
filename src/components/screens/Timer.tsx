@@ -60,7 +60,7 @@ export default function Timer({ setPage }: Props) {
     const elapsed = Date.now() - st;
     if (elapsed >= MAX_TIMER_MS) {
       // Auto-stop: log 12 hours and reset
-      alert("Timer auto-stopped after 12 hours. The time has been logged.");
+      useStore.getState().showToast("Timer auto-stopped after 12 hours. The time has been logged.", "info");
       (async () => {
         await db.post("time_entries", {
           job: sj || "General",
@@ -122,9 +122,9 @@ export default function Timer({ setPage }: Props) {
 
   const addManual = async () => {
     const h = parseFloat(mh);
-    if (!h || h <= 0) { alert("Enter a valid number of hours"); return; }
-    if (h > 24) { alert("Cannot log more than 24 hours in a single entry"); return; }
-    if (!mDate) { alert("Select a date"); return; }
+    if (!h || h <= 0) { useStore.getState().showToast("Enter a valid number of hours", "warning"); return; }
+    if (h > 24) { useStore.getState().showToast("Cannot log more than 24 hours in a single entry", "warning"); return; }
+    if (!mDate) { useStore.getState().showToast("Select a date", "warning"); return; }
     const targetUser = profiles.find((p) => p.id === mUser) || user;
     const targetRate = targetUser.rate || 55;
     await db.post("time_entries", {
@@ -329,7 +329,7 @@ export default function Timer({ setPage }: Props) {
               </span>
               <button
                 onClick={async () => {
-                  if (!confirm("Delete this time entry?")) return;
+                  if (!await useStore.getState().showConfirm("Delete Entry", "Delete this time entry?")) return;
                   await db.del("time_entries", e.id);
                   loadAll();
                 }}
