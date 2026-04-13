@@ -23,6 +23,28 @@ export default function Home() {
     initAuth();
   }, [initAuth]);
 
+  // Handle Stripe redirect — refresh org data when returning from Stripe
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const stripeStatus = params.get("stripe");
+    if (stripeStatus) {
+      // Clean URL
+      window.history.replaceState({}, "", "/");
+      // Refresh org data
+      const { loadAll, showToast } = useStore.getState();
+      loadAll();
+      if (stripeStatus === "success") {
+        showToast("Stripe connected successfully!", "success");
+      } else if (stripeStatus === "pending") {
+        showToast("Stripe setup started — finish onboarding in your Stripe dashboard", "info");
+      } else if (stripeStatus === "error") {
+        const reason = params.get("reason") || "unknown";
+        showToast(`Stripe connection failed (${reason}). Check Vercel env vars.`, "error");
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (user) {
       startAutoRefresh();
