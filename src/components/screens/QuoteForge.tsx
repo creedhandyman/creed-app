@@ -255,13 +255,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       let images: string[] = [];
       if (file && file.name.endsWith(".pdf")) {
         if (file.size < 2 * 1024 * 1024) {
-          // Small PDF — send images + text for best accuracy
+          // Small PDF — send up to 5 pages as images + text
           setParseStatus("Rendering PDF pages...");
           images = await renderPdfPages(file, 5);
           setParseStatus(`Sending ${images.length} pages + text to AI...`);
         } else {
-          // Large PDF — text only, skip images
-          setParseStatus(`Large PDF (${(file.size / 1024 / 1024).toFixed(1)}MB) — sending text to AI...`);
+          // Large PDF — send first 3 key pages as images + all text
+          setParseStatus(`Large PDF (${(file.size / 1024 / 1024).toFixed(1)}MB) — rendering key pages...`);
+          try {
+            images = await renderPdfPages(file, 3);
+            setParseStatus(`Sending ${images.length} key pages + text to AI...`);
+          } catch (e) {
+            console.warn("Failed to render pages for large PDF:", e);
+            setParseStatus("Sending text only to AI...");
+          }
         }
       } else if (quickPhotos.length > 0) {
         // Limit to 10 photos max for API
