@@ -316,25 +316,29 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
           <div className="row" style={{ marginTop: 8, marginBottom: 4 }}>
             <span className="dim" style={{ fontSize: 12 }}>Send ${totalPay.toFixed(0)} via:</span>
             {[
-              { label: "Zelle", icon: "💸", color: "#6D1ED4" },
-              { label: "Venmo", icon: "💙", color: "#3D95CE" },
-              { label: "Cash App", icon: "💚", color: "#00C853" },
+              { label: "Venmo", icon: "💙", color: "#3D95CE",
+                url: `venmo://paycharge?txn=pay&amount=${totalPay.toFixed(2)}&note=${encodeURIComponent(`Pay — ${selUser.name} — ${new Date().toLocaleDateString()}`)}` },
+              { label: "Cash App", icon: "💚", color: "#00C853",
+                url: `https://cash.app/$pay/${totalPay.toFixed(2)}` },
+              { label: "Zelle", icon: "💸", color: "#6D1ED4",
+                url: "" },
             ].map((app) => (
               <button
                 key={app.label}
                 className="bo"
                 onClick={() => {
                   const orgName = useStore.getState().org?.name || "Management";
-                  const msg = `${orgName} — Pay Stub\n\n` +
-                    `Employee: ${selUser.name}\n` +
-                    `Period: ${new Date().toLocaleDateString()}\n` +
-                    `Hours: ${totalHrs.toFixed(1)}\n` +
-                    `Rate: $${selUser.rate || 55}/hr\n` +
-                    Object.entries(byJob).map(([job, hrs]) => `  ${job}: ${hrs.toFixed(1)}h → $${(hrs * (selUser.rate || 55)).toFixed(2)}`).join("\n") +
-                    (earnedQuests.length ? `\nBonuses: $${totalBonus}` : "") +
-                    `\n\nTotal: $${totalPay.toFixed(2)}`;
-                  navigator.clipboard.writeText(msg);
-                  useStore.getState().showToast(`Pay summary copied! Open ${app.label} and send $${totalPay.toFixed(2)} to ${selUser.name}`, "success");
+                  const note = `${orgName} — ${selUser.name} — ${totalHrs.toFixed(1)}h — $${totalPay.toFixed(2)}`;
+                  navigator.clipboard.writeText(note);
+
+                  if (app.url) {
+                    // Try opening the app deep link
+                    window.open(app.url, "_blank");
+                    useStore.getState().showToast(`Opening ${app.label} — pay note copied to clipboard`, "success");
+                  } else {
+                    // Zelle has no universal deep link — copy and instruct
+                    useStore.getState().showToast(`Pay note copied! Open your Zelle app and send $${totalPay.toFixed(2)} to ${selUser.name}`, "success");
+                  }
                 }}
                 style={{ fontSize: 12, padding: "4px 10px", borderColor: app.color, color: app.color }}
               >
