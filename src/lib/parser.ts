@@ -1629,22 +1629,16 @@ export function makeGuide(rooms: Room[]): Guide {
 
   rooms.forEach((r) =>
     r.items.forEach((it) => {
-      // Re-derive specific materials from item text instead of using stored generics
-      const itemText = (it.comment + " " + it.detail).toLowerCase();
-      const specificMats = estimateMaterials(itemText);
-      const storedTotal = it.materials.reduce((s, x) => s + (x.c || 0), 0);
-      const specificTotal = specificMats.reduce((s, x) => s + (x.c || 0), 0);
+      // Use actual stored materials — no re-derivation, no scaling
+      it.materials.forEach((mat) => {
+        if (mat.c > 0 && mat.n !== "Materials" && mat.n !== "Mat") {
+          shop.push({ n: mat.n, c: mat.c, room: r.name });
+        } else if (mat.c > 0) {
+          // Generic "Materials" entry — use item detail as name
+          shop.push({ n: it.detail || "Materials", c: mat.c, room: r.name });
+        }
+      });
 
-      if (specificMats.length === 1 && specificMats[0].n === "Misc materials" && storedTotal > 0) {
-        // No specific materials detected — use stored but with the item detail as the name
-        shop.push({ n: it.detail || "Materials", c: storedTotal, room: r.name });
-      } else {
-        // Scale specific materials to match the stored total if user adjusted it
-        const scale = storedTotal > 0 && specificTotal > 0 ? storedTotal / specificTotal : 1;
-        specificMats.forEach((mat) =>
-          shop.push({ n: mat.n, c: Math.round(mat.c * scale), room: r.name })
-        );
-      }
       const pri: "HIGH" | "MED" | "LOW" =
         it.condition === "D" ? "HIGH" : it.condition === "P" ? "MED" : "LOW";
       steps.push({
@@ -1696,18 +1690,38 @@ export function makeGuide(rooms: Room[]): Guide {
     }
   });
 
-  // Classify each grouped material into a shopping trade category
-  const classifyShopTrade = (name: string): string => {
+  // Total up room names for trade fallback
+  const roomTradeMap: Record<string, string> = {};
+  shop.forEach((item) => { roomTradeMap[getGroupKey(item.n)] = item.room; });
+
+  // Classify each material into a shopping aisle/trade
+  const classifyShopTrade = (name: string, roomTrade: string): string => {
     const n = name.toLowerCase();
-    if (/paint|primer|roller|brush|tape.*paint|drop cloth|spackle|patch|texture|stain|poly/.test(n)) return "🎨 Paint & Supplies";
-    if (/floor|carpet|lvp|laminate|vinyl|transition|underlayment|baseboard|quarter.*round/.test(n)) return "🪵 Flooring";
+    // Specific material matches first
+    if (/faucet|toilet|shower|tub|drain|p.?trap|disposal|supply.*line|valve|pipe|sprayer|stopper|wax.*ring|aerator|bidet|sump|pex|copper|pvc|shut.?off/.test(n)) return "🔧 Plumbing";
+    if (/paint|primer|roller|brush|drop cloth|stain|poly|texture/.test(n)) return "🎨 Paint & Supplies";
+    if (/spackle|patch|joint.*compound|mesh.*tape|drywall.*tape|putty/.test(n)) return "🎨 Paint & Supplies";
+    if (/painter.*tape/.test(n)) return "🎨 Paint & Supplies";
+    if (/carpet|lvp|laminate|vinyl.*floor|flooring|underlayment|transition|baseboard|quarter.*round|seam.*tape|tack.*strip/.test(n)) return "🪵 Flooring";
     if (/tile|grout|mortar|thinset|spacer/.test(n)) return "🔲 Tile";
-    if (/faucet|toilet|shower|tub|drain|p.?trap|disposal|supply.*line|valve|pipe|sprayer|stopper|wax.*ring/.test(n)) return "🔧 Plumbing";
-    if (/outlet|switch|wire|breaker|gfci|bulb|fixture|fan|dimmer|conduit/.test(n)) return "⚡ Electrical";
-    if (/smoke|co.*detect|fire.*ext|battery|detector|alarm/.test(n)) return "🛡 Safety";
-    if (/door|knob|hinge|lock|deadbolt|bifold|blind|screen|mirror|shelf|rod|towel|tp.*holder|latch|strike|cabinet/.test(n)) return "🔨 Carpentry & Hardware";
-    if (/caulk|silicone|adhesive|glue|foam/.test(n)) return "🧴 Caulk & Adhesive";
-    if (/exterior|fence|gate|gutter|downspout|deck|siding|landscape/.test(n)) return "🏠 Exterior";
+    if (/outlet|switch|wire|breaker|gfci|bulb|dimmer|conduit/.test(n)) return "⚡ Electrical";
+    if (/light.*fixture|fixture|ceiling.*fan|vanity.*light|pendant|flush.*mount|flood.*light|outdoor.*light|wall.*light/.test(n)) return "⚡ Electrical";
+    if (/smoke|co.*detect|fire.*ext|alarm|detector/.test(n)) return "🛡 Safety";
+    if (/battery|9v/.test(n)) return "🛡 Safety";
+    if (/door|knob|hinge|lock|deadbolt|bifold|pocket|barn|strike|latch|sweep|closer|kick.*plate/.test(n)) return "🔨 Doors & Hardware";
+    if (/blind|screen|window.*lock|window.*film|shade|curtain/.test(n)) return "🔨 Doors & Hardware";
+    if (/mirror|medicine.*cabinet|towel|tp.*holder|grab.*bar|soap|shower.*rod/.test(n)) return "🔨 Doors & Hardware";
+    if (/shelf|bracket|rod|closet|cabinet.*pull|cabinet.*hinge|drawer.*slide|cabinet.*door|refinish/.test(n)) return "🔨 Doors & Hardware";
+    if (/handrail|baluster|newel/.test(n)) return "🔨 Doors & Hardware";
+    if (/caulk|silicone|adhesive|glue|foam|sealant/.test(n)) return "🧴 Caulk & Adhesive";
+    if (/fence|gate|gutter|downspout|deck|siding|landscape|mailbox|paver|porch/.test(n)) return "🏠 Exterior";
+    if (/window(?!.*blind|.*screen|.*lock|.*film).*/.test(n) && /vinyl|replace|double/.test(n)) return "🏠 Exterior";
+    if (/filter|hvac|thermostat/.test(n)) return "🔧 Plumbing";
+    // Fall back to the item's trade category
+    if (roomTrade.includes("Paint")) return "🎨 Paint & Supplies";
+    if (roomTrade.includes("Plumb")) return "🔧 Plumbing";
+    if (roomTrade.includes("Floor")) return "🪵 Flooring";
+    if (roomTrade.includes("Electric")) return "⚡ Electrical";
     return "📦 General";
   };
 
@@ -1715,7 +1729,7 @@ export function makeGuide(rooms: Room[]): Guide {
     n: g.qty > 1 ? `${g.name} (×${g.qty})` : g.name,
     c: g.totalCost,
     room: [...g.rooms].join(", "),
-    trade: classifyShopTrade(g.name),
+    trade: classifyShopTrade(g.name, [...g.rooms].join(", ")),
   }));
 
   // Sort by trade category for organized shopping
