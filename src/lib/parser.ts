@@ -271,6 +271,48 @@ function validateQuote(rooms: Room[]): Room[] {
     })),
   }));
 
+  // 6. RE-GROUP BY TRADE — if AI returned room-based groups, convert to trade-based
+  const TRADE_CATEGORIES = ["Painting", "Flooring", "Carpentry", "Plumbing", "Electrical", "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling"];
+  const isAlreadyTradeGrouped = rooms.every((r) => TRADE_CATEGORIES.some((t) => r.name.toLowerCase().includes(t.toLowerCase())));
+
+  if (!isAlreadyTradeGrouped && rooms.length > 0) {
+    console.warn("VALIDATION: Rooms are not trade-grouped. Re-grouping by trade.");
+    const tradeMap: Record<string, RoomItem[]> = {};
+
+    const classifyTrade = (item: RoomItem, roomName: string): string => {
+      const s = (item.detail + " " + item.comment + " " + roomName + " " + item.materials.map((m) => m.n).join(" ")).toLowerCase();
+      if (/paint|primer|spackle|patch.*wall|wall.*patch|repaint|touch.?up|texture|ceiling.*paint/.test(s)) return "Painting";
+      if (/floor|carpet|lvp|laminate|tile.*floor|vinyl|transition|baseboard|quarter.*round|threshold/.test(s)) return "Flooring";
+      if (/plumb|faucet|toilet|sink|shower|tub|drain|p.?trap|disposal|water.*heater|supply.*line|shut.*off|sprayer|stopper|caulk.*tub|caulk.*shower/.test(s)) return "Plumbing";
+      if (/outlet|switch|wire|breaker|panel|gfci|light.*fixture|bulb|ceiling.*fan|recessed|dimmer|electrical/.test(s)) return "Electrical";
+      if (/smoke.*alarm|co.*detect|fire.*ext|carbon.*monoxide|battery.*alarm|detector/.test(s)) return "Safety";
+      if (/door|knob|hinge|lock|deadbolt|bifold|pocket|barn|blind|window|screen|mirror|cabinet|shelf|closet|rod|towel.*bar|tp.*holder|handle|latch|strike/.test(s)) return "Carpentry";
+      if (/oven|stove|dishwasher|fridge|refrigerator|washer|dryer|appliance|microwave|range.*hood/.test(s)) return "Appliances";
+      if (/exterior|fence|gate|gutter|downspout|porch|deck|siding|landscape|mailbox|stair.*rail/.test(s)) return "Exterior";
+      if (/filter|compliance|hvac.*filter|code/.test(s)) return "Compliance";
+      if (/clean|haul|trash|debris|junk/.test(s)) return "Cleaning/Hauling";
+      return "Carpentry"; // default
+    };
+
+    rooms.forEach((r) => {
+      r.items.forEach((it) => {
+        const trade = classifyTrade(it, r.name);
+        // Prepend room name to detail if not already there
+        const roomPrefix = r.name.replace(/\s*[:\/].*/g, "").trim();
+        const alreadyHasRoom = TRADE_CATEGORIES.some((t) => it.detail.toLowerCase().startsWith(t.toLowerCase()));
+        if (!alreadyHasRoom && !it.detail.includes(" — ") && !it.detail.includes(" - ") && roomPrefix) {
+          it.detail = `${roomPrefix} — ${it.detail}`;
+        }
+        if (!tradeMap[trade]) tradeMap[trade] = [];
+        tradeMap[trade].push(it);
+      });
+    });
+
+    rooms = TRADE_CATEGORIES
+      .filter((t) => tradeMap[t]?.length)
+      .map((t) => ({ name: t, items: tradeMap[t] }));
+  }
+
   return rooms;
 }
 
