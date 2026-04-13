@@ -40,7 +40,13 @@ export default function Quests() {
   // 6-month quest cycle
   const now = new Date();
   const cycleStart = new Date(now.getFullYear(), now.getMonth() < 6 ? 0 : 6, 1);
+  const cycleEnd = new Date(cycleStart.getFullYear(), cycleStart.getMonth() + 6, 1);
   const cycleLabel = `${cycleStart.toLocaleDateString("en-US", { month: "short" })} \u2013 ${new Date(cycleStart.getFullYear(), cycleStart.getMonth() + 6, 0).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`;
+
+  // Countdown to reset
+  const msLeft = cycleEnd.getTime() - now.getTime();
+  const daysLeft = Math.floor(msLeft / (1000 * 60 * 60 * 24));
+  const hoursLeft = Math.floor((msLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const inCycle = (dateStr?: string) => {
     if (!dateStr) return false;
     try { return new Date(dateStr) >= cycleStart; } catch { return false; }
@@ -252,20 +258,40 @@ export default function Quests() {
       {/* QUESTS TAB */}
       {tab === "quests" && (
         <div>
+          {/* Countdown to reset */}
+          <div className="cd mb" style={{ textAlign: "center", padding: 12, borderLeft: "3px solid var(--color-highlight)" }}>
+            <div className="row" style={{ justifyContent: "center", gap: 20 }}>
+              <div>
+                <div style={{ fontFamily: "Oswald", fontSize: 28, fontWeight: 700, color: daysLeft <= 14 ? "var(--color-accent-red)" : "var(--color-highlight)" }}>{daysLeft}</div>
+                <div className="sl" style={{ fontSize: 12 }}>Days</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: "Oswald", fontSize: 28, fontWeight: 700, color: daysLeft <= 14 ? "var(--color-accent-red)" : "var(--color-highlight)" }}>{hoursLeft}</div>
+                <div className="sl" style={{ fontSize: 12 }}>Hours</div>
+              </div>
+            </div>
+            <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>until quest reset \u00B7 {cycleLabel}</div>
+          </div>
+
           {/* Summary stats */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div className="cd" style={{ textAlign: "center", padding: 12 }}>
-              <div className="sl">Quests Done</div>
-              <div className="sv" style={{ color: "var(--color-primary)" }}>{completedCount}</div>
-              <div className="dim" style={{ fontSize: 10 }}>of {allQuests.length}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
+            <div className="cd" style={{ textAlign: "center", padding: 10 }}>
+              <div className="sl">Done</div>
+              <div className="sv" style={{ color: "var(--color-primary)", fontSize: 20 }}>{completedCount}</div>
+              <div className="dim" style={{ fontSize: 12 }}>of {allQuests.length}</div>
             </div>
-            <div className="cd" style={{ textAlign: "center", padding: 12 }}>
-              <div className="sl">Bonus Earned</div>
-              <div className="sv" style={{ color: "var(--color-success)" }}>${bonusEarned}</div>
+            <div className="cd" style={{ textAlign: "center", padding: 10 }}>
+              <div className="sl">Earned</div>
+              <div className="sv" style={{ color: "var(--color-success)", fontSize: 20 }}>${bonusEarned}</div>
             </div>
-            <div className="cd" style={{ textAlign: "center", padding: 12 }}>
-              <div className="sl">Hours Logged</div>
-              <div className="sv" style={{ color: "var(--color-warning)" }}>{totalHours.toFixed(0)}</div>
+            <div className="cd" style={{ textAlign: "center", padding: 10 }}>
+              <div className="sl">Max Payout</div>
+              <div className="sv" style={{ color: "var(--color-warning)", fontSize: 20 }}>${maxPayout}</div>
+              <div className="dim" style={{ fontSize: 12 }}>this cycle</div>
+            </div>
+            <div className="cd" style={{ textAlign: "center", padding: 10 }}>
+              <div className="sl">Hours</div>
+              <div className="sv" style={{ color: "var(--color-highlight)", fontSize: 20 }}>{totalHours.toFixed(0)}</div>
             </div>
           </div>
 
