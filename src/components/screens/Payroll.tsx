@@ -310,6 +310,40 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
             </button>
           )}
         </div>
+
+        {/* Quick Pay buttons */}
+        {isOwner && entries.length > 0 && (
+          <div className="row" style={{ marginTop: 8, marginBottom: 4 }}>
+            <span className="dim" style={{ fontSize: 12 }}>Send ${totalPay.toFixed(0)} via:</span>
+            {[
+              { label: "Zelle", icon: "💸", color: "#6D1ED4" },
+              { label: "Venmo", icon: "💙", color: "#3D95CE" },
+              { label: "Cash App", icon: "💚", color: "#00C853" },
+            ].map((app) => (
+              <button
+                key={app.label}
+                className="bo"
+                onClick={() => {
+                  const orgName = useStore.getState().org?.name || "Management";
+                  const msg = `${orgName} — Pay Stub\n\n` +
+                    `Employee: ${selUser.name}\n` +
+                    `Period: ${new Date().toLocaleDateString()}\n` +
+                    `Hours: ${totalHrs.toFixed(1)}\n` +
+                    `Rate: $${selUser.rate || 55}/hr\n` +
+                    Object.entries(byJob).map(([job, hrs]) => `  ${job}: ${hrs.toFixed(1)}h → $${(hrs * (selUser.rate || 55)).toFixed(2)}`).join("\n") +
+                    (earnedQuests.length ? `\nBonuses: $${totalBonus}` : "") +
+                    `\n\nTotal: $${totalPay.toFixed(2)}`;
+                  navigator.clipboard.writeText(msg);
+                  useStore.getState().showToast(`Pay summary copied! Open ${app.label} and send $${totalPay.toFixed(2)} to ${selUser.name}`, "success");
+                }}
+                style={{ fontSize: 12, padding: "4px 10px", borderColor: app.color, color: app.color }}
+              >
+                {app.icon} {app.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {Object.keys(byJob).length === 0 ? (
           <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>No time entries</p>
         ) : (
