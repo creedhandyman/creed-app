@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
+import ClientSelect from "../ClientSelect";
 
 /* ── Preset rooms and items ── */
 const ROOM_PRESETS: Record<string, string[]> = {
@@ -92,7 +93,16 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
 
   // Auto-save to localStorage on every change
   const save = useCallback((key: string, value: unknown) => {
-    localStorage.setItem("c_inspect_" + key, JSON.stringify(value));
+    try {
+      localStorage.setItem("c_inspect_" + key, JSON.stringify(value));
+    } catch (e) {
+      // localStorage full — clear old data and try again
+      console.warn("localStorage save failed, clearing old inspection data:", e);
+      try {
+        localStorage.removeItem("c_inspect_roomData");
+        if (key !== "roomData") localStorage.setItem("c_inspect_" + key, JSON.stringify(value));
+      } catch { /* give up */ }
+    }
   }, []);
 
   useEffect(() => save("step", step), [step, save]);
@@ -100,7 +110,19 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   useEffect(() => save("property", property), [property, save]);
   useEffect(() => save("client", client), [client, save]);
   useEffect(() => save("roomIdx", currentRoomIdx), [currentRoomIdx, save]);
-  useEffect(() => save("roomData", roomData), [roomData, save]);
+  // Save roomData but limit photo URLs to prevent localStorage overflow
+  useEffect(() => {
+    try {
+      const compact = roomData.map((r) => ({
+        ...r,
+        items: r.items.map((it) => ({
+          ...it,
+          photos: it.photos.slice(0, 20), // Cap at 20 photos per item for storage
+        })),
+      }));
+      save("roomData", compact);
+    } catch { /* */ }
+  }, [roomData, save]);
 
   const clearSaved = () => {
     ["step", "rooms", "property", "client", "roomIdx", "roomData"].forEach(
@@ -154,12 +176,34 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
     );
   };
 
+  // Compress image before upload
+  const compressFile = async (file: File, maxSize = 1200): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.width, h = img.height;
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+          else { w = Math.round(w * maxSize / h); h = maxSize; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.7);
+      };
+      img.onerror = () => resolve(file);
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
   const uploadPhoto = async (file: File, roomIdx: number, itemIdx: number) => {
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `inspections/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-      const { error } = await supabase.storage.from("receipts").upload(path, file);
+      // Compress before upload
+      const compressed = await compressFile(file);
+      const path = `inspections/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+      const { error } = await supabase.storage.from("receipts").upload(path, compressed);
       if (error) throw error;
       const { data } = supabase.storage.from("receipts").getPublicUrl(path);
       const url = data.publicUrl;
@@ -274,7 +318,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         <div className="cd mb">
           <div className="g2">
             <input value={property} onChange={(e) => setProperty(e.target.value)} placeholder="Property address *" />
-            <input value={client} onChange={(e) => setClient(e.target.value)} placeholder="Client name" />
+            <ClientSelect value={client} onChange={setClient} />
           </div>
         </div>
 
