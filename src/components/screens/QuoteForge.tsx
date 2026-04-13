@@ -348,11 +348,21 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     try {
       if (f.name.endsWith(".pdf")) {
         setPdfFile(f);
+        setParseStatus(`Reading PDF (${(f.size / 1024 / 1024).toFixed(1)}MB)...`);
         const t = await readPdf(f);
+        if (!t.trim()) {
+          useStore.getState().showToast("PDF appears empty — try pasting text instead", "warning");
+          setParsing(false);
+          setParseStatus("");
+          setMode("paste");
+          return;
+        }
         setText(t);
+        // Auto-parse with AI immediately
+        setMode("paste");
         setParsing(false);
         setParseStatus("");
-        setMode("paste");
+        setTimeout(() => doAiParse(t, f), 100);
       } else {
         setPdfFile(null);
         const t = await f.text();
@@ -362,8 +372,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setMode("paste");
       }
     } catch (err) {
-      console.error(err);
-      useStore.getState().showToast("Error reading file", "error");
+      console.error("File read error:", err);
+      useStore.getState().showToast("Error reading file: " + (err instanceof Error ? err.message : "unknown"), "error");
       setParsing(false);
       setParseStatus("");
       setMode("paste");

@@ -30,7 +30,7 @@ interface PDFPage {
 
 export async function loadPdf(): Promise<typeof window.pdfjsLib> {
   if (window.pdfjsLib) return window.pdfjsLib;
-  return new Promise((res) => {
+  return new Promise((res, rej) => {
     const s = document.createElement("script");
     s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
     s.onload = () => {
@@ -38,7 +38,10 @@ export async function loadPdf(): Promise<typeof window.pdfjsLib> {
         "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
       res(window.pdfjsLib);
     };
+    s.onerror = () => rej(new Error("Failed to load PDF library"));
     document.head.appendChild(s);
+    // Timeout after 15 seconds
+    setTimeout(() => rej(new Error("PDF library load timed out")), 15000);
   });
 }
 
