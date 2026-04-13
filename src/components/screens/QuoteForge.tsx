@@ -159,24 +159,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     clearEditJob?.();
   }, [editJobId, jobs, clearEditJob]);
 
-  // Reset all state when entering a fresh quote mode (not edit)
-  const prevMode = useRef<string | null>(null);
-  useEffect(() => {
-    if (mode && mode !== "edit" && prevMode.current === null) {
-      // Entering a new quote — ensure clean slate
-      setRooms([]);
-      setProp("");
-      setClient("");
-      setText("");
-      setWorkers([]);
-      setEditingId(null);
-      setJobPhotos([]);
-      setQuickPhotos([]);
-      setQuickDesc("");
-    }
-    prevMode.current = mode;
-  }, [mode]);
-
   // Add-item form state
   const [nr, setNr] = useState("");
   const [nd, setNd] = useState("");
