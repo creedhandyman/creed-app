@@ -23,6 +23,7 @@ export interface Organization {
   site_content?: string;
   site_published?: boolean;
   site_slug?: string;
+  trip_fee?: number;
   gallery_photos?: string; // JSON: [{url, caption}]
   site_theme?: string; // JSON: {primaryColor, showGallery, showReviews, showAbout, showServices, showWhyUs}
   created_at?: string;

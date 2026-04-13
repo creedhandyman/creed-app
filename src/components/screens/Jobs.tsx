@@ -406,6 +406,24 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                     </button>
                   </div>
 
+                  {/* Job Notes */}
+                  <div style={{ marginTop: 8 }}>
+                    <textarea
+                      placeholder="Add job notes..."
+                      defaultValue={(() => { try { const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms; return d?.jobNotes || ""; } catch { return ""; } })()}
+                      onBlur={async (e) => {
+                        const note = e.target.value;
+                        try {
+                          const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : (j.rooms || {});
+                          d.jobNotes = note;
+                          await db.patch("jobs", j.id, { rooms: JSON.stringify(d) });
+                        } catch { /* */ }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ fontSize: 12, height: 50, resize: "vertical" }}
+                    />
+                  </div>
+
                   {/* Invoice */}
                   {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (
                     <div className="row" style={{ marginTop: 8 }}>

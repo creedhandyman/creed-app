@@ -23,6 +23,10 @@ interface ExportOptions {
   orgLogo?: string;
   statusUrl?: string;
   photos?: { url: string; label: string; type: string }[];
+  markupPct?: number;
+  taxPct?: number;
+  taxAmount?: number;
+  tripFee?: number;
 }
 
 export function exportQuotePdf(opts: ExportOptions) {
@@ -49,6 +53,10 @@ export function exportQuotePdf(opts: ExportOptions) {
   const jobId = opts.jobId || "";
   const statusUrl = opts.statusUrl || "";
   const photos = opts.photos || [];
+  const markupPct = opts.markupPct || 0;
+  const taxPct = opts.taxPct || 0;
+  const taxAmount = opts.taxAmount || 0;
+  const tripFee = opts.tripFee || 0;
 
   // Generate quote number from job ID or timestamp
   const quoteNum = jobId
@@ -213,7 +221,11 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
   <thead><tr><th>Category</th><th>Man-Hrs</th><th>Labor</th><th>Material</th><th>Section Total</th></tr></thead>
   <tbody>
     ${summaryRows.map((r) => `<tr><td>${r.name}</td><td style="text-align:right">${r.hrs.toFixed(1)}</td><td style="text-align:right">$${r.labor.toFixed(2)}</td><td style="text-align:right">$${r.mat.toFixed(2)}</td><td style="text-align:right">$${r.total.toFixed(2)}</td></tr>`).join("")}
-    <tr><td>GRAND TOTAL</td><td style="text-align:right">${totalHrs.toFixed(1)}</td><td style="text-align:right">$${totalLabor.toFixed(2)}</td><td style="text-align:right">$${totalMat.toFixed(2)}</td><td style="text-align:right">$${grandTotal.toFixed(2)}</td></tr>
+    <tr><td>SUBTOTAL</td><td style="text-align:right">${totalHrs.toFixed(1)}</td><td style="text-align:right">$${totalLabor.toFixed(2)}</td><td style="text-align:right">$${totalMat.toFixed(2)}</td><td style="text-align:right">$${(totalLabor + totalMat).toFixed(2)}</td></tr>
+    ${markupPct > 0 ? `<tr><td>Material Markup (${markupPct}%)</td><td></td><td></td><td></td><td style="text-align:right">Included</td></tr>` : ""}
+    ${tripFee > 0 ? `<tr><td>Trip Fee</td><td></td><td></td><td></td><td style="text-align:right">$${tripFee.toFixed(2)}</td></tr>` : ""}
+    ${taxPct > 0 ? `<tr><td>Tax (${taxPct}%)</td><td></td><td></td><td></td><td style="text-align:right">$${taxAmount.toFixed(2)}</td></tr>` : ""}
+    <tr><td>GRAND TOTAL</td><td style="text-align:right">${totalHrs.toFixed(1)}</td><td></td><td></td><td style="text-align:right;font-size:16px">$${grandTotal.toFixed(2)}</td></tr>
   </tbody>
 </table>
 

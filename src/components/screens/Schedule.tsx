@@ -365,7 +365,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 dayItems.map((s) => (
                   <div key={s.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
                     <div>
-                      <b style={{ color: "var(--color-primary)" }}>{s.job}</b>
+                      <b
+                        onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
+                        style={{ color: "var(--color-primary)", cursor: "pointer" }}
+                        title="Open in Google Maps"
+                      >📍 {s.job}</b>
                       {s.note && <div className="dim" style={{ fontSize: 10 }}>{s.note}</div>}
                     </div>
                     <button
@@ -416,8 +420,12 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               }}
             >
               <span style={{ minWidth: 80 }}>{s.sched_date}</span>
-              <span style={{ color: "var(--color-primary)", flex: 1, marginLeft: 8 }}>
-                {s.job}
+              <span
+                onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
+                style={{ color: "var(--color-primary)", flex: 1, marginLeft: 8, cursor: "pointer", textDecoration: "underline" }}
+                title="Open in Google Maps"
+              >
+                📍 {s.job}
               </span>
               <span className="dim">{s.note}</span>
               <button

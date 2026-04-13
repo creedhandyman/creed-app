@@ -342,7 +342,26 @@ export default function Settings({ onClose }: Props) {
                   </div>
                 </div>
 
-                <div style={{ borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`, paddingTop: 12 }}>
+                <div className="g2" style={{ marginTop: 8 }}>
+                  <div>
+                    <label className="sl">Trip Fee ($)</label>
+                    <input
+                      type="number"
+                      key={`trip-${org?.trip_fee}`}
+                      defaultValue={org?.trip_fee || 0}
+                      min="0"
+                      step="5"
+                      placeholder="0"
+                      style={{ marginTop: 4 }}
+                      onBlur={async (e) => {
+                        if (org) { await db.patch("organizations", org.id, { trip_fee: parseFloat(e.target.value) || 0 }); await refreshOrg(); }
+                      }}
+                    />
+                    <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>Charged once per day on-site</div>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`, paddingTop: 12, marginTop: 12 }}>
                   <label className="sl">Custom Rates by Trade</label>
                   <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>Set hourly rates per trade. These are used in quotes.</div>
                   {["Plumbing", "Electrical", "Carpentry", "HVAC", "Painting", "Flooring", "General"].map((trade) => (

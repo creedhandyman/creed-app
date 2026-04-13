@@ -1108,6 +1108,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                 orgAddress: o?.address,
                 orgLogo: o?.logo_url,
                 photos: jobPhotos,
+                markupPct,
+                taxPct,
+                taxAmount,
               });
             })()
           }
@@ -1311,6 +1314,7 @@ function QuoteTab({
   rmItem: (rn: string, id: string) => void;
   getRateForRoom?: (roomName: string) => number;
 }) {
+  const [expandedMat, setExpandedMat] = useState<string | null>(null);
   return (
     <>
       {rooms.map((rm) => (
@@ -1362,20 +1366,65 @@ function QuoteTab({
                         style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 11 }}
                       />
                     </div>
-                    <div style={{ textAlign: "center" }}>
+                    <div style={{ textAlign: "center", position: "relative" }}>
                       <div style={{ fontSize: 8 }} className="dim">MAT</div>
-                      <input
-                        type="number"
-                        value={it.materials.reduce((s, m) => s + (m.c || 0), 0)}
-                        step="1"
-                        min="0"
-                        onChange={(e) =>
-                          upItem(rm.name, it.id, "materials", [
-                            { n: "Mat", c: parseFloat(e.target.value) || 0 },
-                          ])
-                        }
-                        style={{ width: 50, textAlign: "center", padding: "2px", fontSize: 11 }}
-                      />
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedMat(expandedMat === it.id ? null : it.id);
+                        }}
+                        style={{ width: 50, textAlign: "center", padding: "2px", fontSize: 11, cursor: "pointer", color: "var(--color-warning)", fontFamily: "Oswald", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, borderRadius: 4 }}
+                      >
+                        ${it.materials.reduce((s, m) => s + (m.c || 0), 0).toFixed(0)}
+                      </div>
+                      {expandedMat === it.id && (
+                        <div onClick={(e) => e.stopPropagation()} style={{
+                          position: "absolute", top: "100%", right: 0, zIndex: 100,
+                          background: darkMode ? "#12121a" : "#fff", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
+                          borderRadius: 8, padding: 8, minWidth: 220, boxShadow: "0 4px 12px rgba(0,0,0,.3)",
+                        }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Materials</div>
+                          {it.materials.map((mat, mi) => (
+                            <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 12 }}>
+                              <input
+                                value={mat.n}
+                                onChange={(e) => {
+                                  const mats = [...it.materials];
+                                  mats[mi] = { ...mats[mi], n: e.target.value };
+                                  upItem(rm.name, it.id, "materials", mats);
+                                }}
+                                style={{ flex: 1, fontSize: 11, padding: 2 }}
+                              />
+                              <span style={{ fontSize: 11 }}>$</span>
+                              <input
+                                type="number"
+                                value={mat.c}
+                                min="0"
+                                step="1"
+                                onChange={(e) => {
+                                  const mats = [...it.materials];
+                                  mats[mi] = { ...mats[mi], c: parseFloat(e.target.value) || 0 };
+                                  upItem(rm.name, it.id, "materials", mats);
+                                }}
+                                style={{ width: 50, fontSize: 11, padding: 2, textAlign: "right" }}
+                              />
+                              <button
+                                onClick={() => {
+                                  const mats = it.materials.filter((_, i) => i !== mi);
+                                  upItem(rm.name, it.id, "materials", mats.length ? mats : [{ n: "Materials", c: 0 }]);
+                                }}
+                                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 11, padding: 0 }}
+                              >✕</button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => {
+                              upItem(rm.name, it.id, "materials", [...it.materials, { n: "New material", c: 0 }]);
+                            }}
+                            style={{ fontSize: 11, background: "none", color: "var(--color-primary)", padding: "2px 0", width: "100%", textAlign: "center", marginTop: 4 }}
+                          >+ Add Material</button>
+                        </div>
+                      )}
                     </div>
                     <div style={{ minWidth: 50, textAlign: "right" }}>
                       <div style={{ fontSize: 8 }} className="dim">TOT</div>
