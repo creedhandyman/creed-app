@@ -118,15 +118,17 @@ You receive move-out inspection reports (typically from zInspector via Keyrenter
 
 CRITICAL RULES:
 
-1. DEDUPLICATION: zInspector reports contain TWO sections describing the SAME items:
-   - Summary Table (early pages) — has an "Area" column. SKIP THIS ENTIRELY.
-   - Detailed Room Breakdowns (later pages) — room names as section headers. USE THIS ONE ONLY.
-   If you see duplicate findings, keep only one.
+1. DEDUPLICATION — THIS IS THE MOST IMPORTANT RULE:
+   zInspector reports repeat EVERYTHING twice:
+   - Pages 1-7: Summary Table with "Area" + "Detail" + "Condition" columns. IGNORE ALL OF THIS.
+   - Pages 8+: Detailed Room Breakdowns with room names as headers. USE ONLY THIS SECTION.
+   SKIP any page that looks like a summary table. Only process the detailed room-by-room breakdowns.
+   The final quote should have roughly 20-50 line items for a typical property, NOT 70-100+.
 
-2. ONE LINE ITEM PER FINDING: Each unique Area + Detail combination = exactly ONE line item.
-   DO NOT merge two different Detail categories into one line.
-   DO NOT split one Detail category into multiple lines.
+2. ONE LINE ITEM PER FINDING: Each unique Room + Detail = exactly ONE line item.
+   DO NOT create duplicate items. If "Kitchen Wall/Ceiling/Paint" appears in both summary and detail, count it ONCE.
    DO NOT create line items for Condition: S (Satisfactory) or Actions: None.
+   COMBINE related items in the same room (e.g. "touch up paint on wall and trim" = one paint line item, not two).
 
 3. CLEAR DESCRIPTIONS: Rewrite garbled PDF text in plain professional English. Start with room name. Reconstruct meaning from context if text is fragmented.
 
@@ -166,8 +168,11 @@ CRITICAL RULES:
    - Tile: sqft × $2-4/sqft depending on type + mortar + grout.
    - Include exact quantities in materials: "LVP 132 sqft" not just "LVP flooring".
 
-7. TRADE CATEGORIES: Group items by trade, not room:
-   Painting, Flooring, Carpentry, Plumbing, Electrical, Safety, Appliances, Exterior, Compliance, Cleaning/Hauling
+7. TRADE CATEGORIES — GROUP BY TRADE, NOT BY ROOM:
+   Create ONE room entry per trade. All painting from all rooms goes under "Painting".
+   All plumbing items go under "Plumbing". Do NOT create "Kitchen", "Bedroom North" etc as categories.
+   Valid trade categories: Painting, Flooring, Carpentry, Plumbing, Electrical, Safety, Appliances, Exterior, Compliance, Cleaning/Hauling
+   Each item's "detail" field should start with the room name (e.g. "Kitchen — Touch up wall paint")
 
 8. SPECIFIC DETAILS: When the report mentions specific details, ALWAYS capture them:
    - Paint colors (e.g. "SW 7015 Repose Gray", "Benjamin Moore White Dove", "eggshell finish")
@@ -202,12 +207,13 @@ Return ONLY valid JSON (no markdown, no explanation):
 }
 
 VERIFICATION before outputting:
-- No duplicates (count line items vs unique inspection findings)
-- No 1.0h defaults where reference table says otherwise
-- No $17 flat material defaults
-- Labor = Hours x $55 for every line
+- TOTAL HOURS should be 20-60 for a typical make-ready property. If over 80, you have duplicates or inflated hours — go back and fix.
+- No duplicates (each unique room+detail appears ONCE)
+- No 1.0h defaults — use the reference table (outlet=0.1h, blind=0.2h, knob=0.3h, etc.)
+- Trade categories only (Painting, Plumbing, etc.) — NOT room names as categories
 - Descriptions are clear English, not garbled PDF fragments
-- Items with Condition S and Actions None are excluded`;
+- Items with Condition S and Actions None are excluded
+- If total exceeds $8,000 for a standard 3-bed property, re-check for duplicates`;
 
 export interface AiParseResult {
   property: string;
