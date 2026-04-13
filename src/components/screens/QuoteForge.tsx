@@ -1563,35 +1563,45 @@ function GuideTab({
           <div>
             {allShop.map((s, i) => {
               const done = checkedShop.has(i);
+              // Show trade header when trade changes
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const prevTrade = i > 0 ? (allShop[i - 1] as any).trade : null;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const curTrade = (s as any).trade || "";
+              const showHeader = curTrade && curTrade !== prevTrade;
               return (
-                <div
-                  key={i}
-                  onClick={() => toggleShop(i)}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    fontSize: 13,
-                    padding: "3px 0",
-                    borderBottom: `1px solid ${border}`,
-                    cursor: "pointer",
-                    textDecoration: done ? "line-through" : "none",
-                    opacity: done ? 0.5 : 1,
-                  }}
-                >
-                  <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <span style={{
-                      width: 14, height: 14, borderRadius: 3,
-                      border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
-                      background: done ? "var(--color-success)" : "transparent",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 13, color: "#fff", flexShrink: 0,
-                    }}>
-                      {done && "✓"}
+                <div key={i}>
+                  {showHeader && (
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-primary)", marginTop: i > 0 ? 10 : 0, marginBottom: 4 }}>{curTrade}</div>
+                  )}
+                  <div
+                    onClick={() => toggleShop(i)}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      fontSize: 13,
+                      padding: "3px 0 3px 12px",
+                      borderBottom: `1px solid ${border}`,
+                      cursor: "pointer",
+                      textDecoration: done ? "line-through" : "none",
+                      opacity: done ? 0.5 : 1,
+                    }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{
+                        width: 14, height: 14, borderRadius: 3,
+                        border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
+                        background: done ? "var(--color-success)" : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 13, color: "#fff", flexShrink: 0,
+                      }}>
+                        {done && "✓"}
+                      </span>
+                      {s.n}
                     </span>
-                    {s.n} <span className="dim">({s.room})</span>
-                  </span>
-                  <span style={{ color: done ? "#555" : "var(--color-success)" }}>${s.c}</span>
+                    <span style={{ color: done ? "#555" : "var(--color-success)" }}>${s.c}</span>
+                  </div>
                 </div>
               );
             })}

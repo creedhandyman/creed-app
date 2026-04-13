@@ -181,7 +181,7 @@ Capture from report: paint colors, hardware finishes (brushed nickel, oil-rubbed
       "items": [
         {
           "detail": "Room — Task description",
-          "condition": "F|P|D|-",
+          "condition": "D (damaged/urgent) | P (poor/needed) | F (fair/minor) | - (general)",
           "comment": "Clear work description referencing inspection finding",
           "laborHrs": 0.25,
           "materials": [{"n": "Specific material", "c": 15}]
@@ -291,18 +291,57 @@ export function validateQuote(rooms: Room[]): Room[] {
     const tradeMap: Record<string, RoomItem[]> = {};
 
     const classifyTrade = (item: RoomItem, roomName: string): string => {
-      const s = (item.detail + " " + item.comment + " " + roomName + " " + item.materials.map((m) => m.n).join(" ")).toLowerCase();
-      if (/paint|primer|spackle|patch.*wall|wall.*patch|repaint|touch.?up|texture|ceiling.*paint/.test(s)) return "Painting";
-      if (/floor|carpet|lvp|laminate|tile.*floor|vinyl|transition|baseboard|quarter.*round|threshold/.test(s)) return "Flooring";
-      if (/plumb|faucet|toilet|sink|shower|tub|drain|p.?trap|disposal|water.*heater|supply.*line|shut.*off|sprayer|stopper|caulk.*tub|caulk.*shower/.test(s)) return "Plumbing";
-      if (/outlet|switch|wire|breaker|panel|gfci|light.*fixture|bulb|ceiling.*fan|recessed|dimmer|electrical/.test(s)) return "Electrical";
-      if (/smoke.*alarm|co.*detect|fire.*ext|carbon.*monoxide|battery.*alarm|detector/.test(s)) return "Safety";
-      if (/door|knob|hinge|lock|deadbolt|bifold|pocket|barn|blind|window|screen|mirror|cabinet|shelf|closet|rod|towel.*bar|tp.*holder|handle|latch|strike/.test(s)) return "Carpentry";
-      if (/oven|stove|dishwasher|fridge|refrigerator|washer|dryer|appliance|microwave|range.*hood/.test(s)) return "Appliances";
-      if (/exterior|fence|gate|gutter|downspout|porch|deck|siding|landscape|mailbox|stair.*rail/.test(s)) return "Exterior";
-      if (/filter|compliance|hvac.*filter|code/.test(s)) return "Compliance";
-      if (/clean|haul|trash|debris|junk/.test(s)) return "Cleaning/Hauling";
-      return "Carpentry"; // default
+      // Use detail + comment for classification (NOT materials — they can be misleading)
+      const s = (item.detail + " " + item.comment).toLowerCase();
+      const matNames = item.materials.map((m) => m.n).join(" ").toLowerCase();
+
+      // Score each trade — highest score wins
+      const scores: Record<string, number> = {};
+      const add = (trade: string, pts: number) => { scores[trade] = (scores[trade] || 0) + pts; };
+
+      // Plumbing — check FIRST with strong keywords (prevents paint from stealing plumbing items)
+      if (/faucet|toilet|sink|shower|tub|drain|p.?trap|disposal|water.*heater|supply.*line|shut.*off|sprayer|stopper|sump|sewage|valve|pipe/.test(s)) add("Plumbing", 10);
+      if (/caulk.*(tub|shower|sink|bath)|re.?caulk/.test(s)) add("Plumbing", 8);
+      if (/faucet|toilet|shower|p.?trap|disposal/.test(matNames)) add("Plumbing", 5);
+
+      // Painting — only if paint/repaint is the PRIMARY task
+      if (/\bpaint\b|repaint|prime|primer|touch.?up.*paint|paint.*touch|wall.*ceiling.*paint|paint.*wall|full.*paint/.test(s)) add("Painting", 10);
+      if (/spackle|patch.*wall|wall.*patch|texture.*wall|ceiling.*paint/.test(s)) add("Painting", 6);
+      if (/paint|primer|spackle|roller/.test(matNames) && !scores["Plumbing"]) add("Painting", 3);
+
+      // Flooring
+      if (/floor|carpet|lvp|laminate|tile.*floor|vinyl.*floor|transition.*strip|baseboard|quarter.*round|threshold|subfloor/.test(s)) add("Flooring", 10);
+      if (/carpet|lvp|laminate|flooring|baseboard|underlayment/.test(matNames)) add("Flooring", 5);
+
+      // Electrical
+      if (/outlet|switch|wire|breaker|panel|gfci|light.*fixture|bulb|ceiling.*fan|recessed|dimmer|electrical|wiring/.test(s)) add("Electrical", 10);
+      if (/outlet|switch|bulb|fixture|wire|breaker|gfci/.test(matNames)) add("Electrical", 5);
+
+      // Safety
+      if (/smoke.*alarm|co.*detect|fire.*ext|carbon.*monoxide|detector|fire.*alarm/.test(s)) add("Safety", 12);
+      if (/smoke.*alarm|co.*detect|fire.*ext|battery/.test(matNames)) add("Safety", 5);
+
+      // Carpentry — doors, windows, hardware, trim
+      if (/\bdoor\b|knob|hinge|lock|deadbolt|bifold|pocket.*door|barn.*door|blind|window|screen|mirror|closet|shelf|shelving/.test(s)) add("Carpentry", 10);
+      if (/towel.*bar|tp.*holder|rod|handle|latch|strike|cabinet/.test(s)) add("Carpentry", 8);
+      if (/door|knob|hinge|blind|screen|mirror|shelf/.test(matNames)) add("Carpentry", 5);
+
+      // Appliances
+      if (/oven|stove|dishwasher|fridge|refrigerator|washer|dryer|appliance|microwave|range.*hood|garbage.*disposal/.test(s)) add("Appliances", 10);
+
+      // Exterior
+      if (/exterior|fence|gate|gutter|downspout|porch|deck|siding|landscape|mailbox|stair.*rail|roof/.test(s)) add("Exterior", 10);
+
+      // Compliance
+      if (/filter|compliance|hvac.*filter|code|thermostat|heater.*filter/.test(s)) add("Compliance", 10);
+
+      // Cleaning
+      if (/clean|haul|trash|debris|junk|removal/.test(s)) add("Cleaning/Hauling", 10);
+
+      // Return highest scoring trade
+      const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+      if (sorted.length > 0 && sorted[0][1] > 0) return sorted[0][0];
+      return "Carpentry"; // default fallback
     };
 
     rooms.forEach((r) => {
@@ -1657,11 +1696,31 @@ export function makeGuide(rooms: Room[]): Guide {
     }
   });
 
+  // Classify each grouped material into a shopping trade category
+  const classifyShopTrade = (name: string): string => {
+    const n = name.toLowerCase();
+    if (/paint|primer|roller|brush|tape.*paint|drop cloth|spackle|patch|texture|stain|poly/.test(n)) return "🎨 Paint & Supplies";
+    if (/floor|carpet|lvp|laminate|vinyl|transition|underlayment|baseboard|quarter.*round/.test(n)) return "🪵 Flooring";
+    if (/tile|grout|mortar|thinset|spacer/.test(n)) return "🔲 Tile";
+    if (/faucet|toilet|shower|tub|drain|p.?trap|disposal|supply.*line|valve|pipe|sprayer|stopper|wax.*ring/.test(n)) return "🔧 Plumbing";
+    if (/outlet|switch|wire|breaker|gfci|bulb|fixture|fan|dimmer|conduit/.test(n)) return "⚡ Electrical";
+    if (/smoke|co.*detect|fire.*ext|battery|detector|alarm/.test(n)) return "🛡 Safety";
+    if (/door|knob|hinge|lock|deadbolt|bifold|blind|screen|mirror|shelf|rod|towel|tp.*holder|latch|strike|cabinet/.test(n)) return "🔨 Carpentry & Hardware";
+    if (/caulk|silicone|adhesive|glue|foam/.test(n)) return "🧴 Caulk & Adhesive";
+    if (/exterior|fence|gate|gutter|downspout|deck|siding|landscape/.test(n)) return "🏠 Exterior";
+    return "📦 General";
+  };
+
   const consolidatedShop = Object.values(grouped).map((g) => ({
     n: g.qty > 1 ? `${g.name} (×${g.qty})` : g.name,
     c: g.totalCost,
     room: [...g.rooms].join(", "),
+    trade: classifyShopTrade(g.name),
   }));
+
+  // Sort by trade category for organized shopping
+  const tradeOrder = ["🎨 Paint & Supplies", "🪵 Flooring", "🔲 Tile", "🔧 Plumbing", "⚡ Electrical", "🛡 Safety", "🔨 Carpentry & Hardware", "🧴 Caulk & Adhesive", "🏠 Exterior", "📦 General"];
+  consolidatedShop.sort((a, b) => tradeOrder.indexOf(a.trade) - tradeOrder.indexOf(b.trade));
 
   return { tools: [...tools].sort(), shop: consolidatedShop, steps };
 }
