@@ -259,18 +259,18 @@ export default function Quests() {
       {tab === "quests" && (
         <div>
           {/* Countdown to reset */}
-          <div className="cd mb" style={{ textAlign: "center", padding: 12, borderLeft: "3px solid var(--color-highlight)" }}>
-            <div className="row" style={{ justifyContent: "center", gap: 20 }}>
+          <div className="cd mb" style={{ textAlign: "center", padding: 8, borderLeft: "3px solid var(--color-highlight)" }}>
+            <div className="row" style={{ justifyContent: "center", gap: 12 }}>
               <div>
-                <div style={{ fontFamily: "Oswald", fontSize: 28, fontWeight: 700, color: daysLeft <= 14 ? "var(--color-accent-red)" : "var(--color-highlight)" }}>{daysLeft}</div>
-                <div className="sl" style={{ fontSize: 12 }}>Days</div>
+                <span style={{ fontFamily: "Oswald", fontSize: 16, fontWeight: 700, color: daysLeft <= 14 ? "var(--color-accent-red)" : "var(--color-highlight)" }}>{daysLeft}</span>
+                <span className="dim" style={{ fontSize: 12, marginLeft: 3 }}>days</span>
               </div>
               <div>
-                <div style={{ fontFamily: "Oswald", fontSize: 28, fontWeight: 700, color: daysLeft <= 14 ? "var(--color-accent-red)" : "var(--color-highlight)" }}>{hoursLeft}</div>
-                <div className="sl" style={{ fontSize: 12 }}>Hours</div>
+                <span style={{ fontFamily: "Oswald", fontSize: 16, fontWeight: 700, color: daysLeft <= 14 ? "var(--color-accent-red)" : "var(--color-highlight)" }}>{hoursLeft}</span>
+                <span className="dim" style={{ fontSize: 12, marginLeft: 3 }}>hrs</span>
               </div>
+              <span className="dim" style={{ fontSize: 12 }}>until reset \u00B7 {cycleLabel}</span>
             </div>
-            <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>until quest reset \u00B7 {cycleLabel}</div>
           </div>
 
           {/* Summary stats */}
@@ -379,10 +379,10 @@ export default function Quests() {
           <div className="cd" style={{ textAlign: "center", padding: 12, borderLeft: "3px solid var(--color-accent-red)" }}>
             <div className="sl">Max Annual Payout</div>
             <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-success)" }}>
-              ${maxPayout.toLocaleString()}+
+              ${(maxPayout * 2).toLocaleString()}+
             </div>
-            <div className="dim" style={{ fontSize: 10 }}>
-              Plus ongoing Network Scout commissions
+            <div className="dim" style={{ fontSize: 12 }}>
+              ${maxPayout.toLocaleString()} per cycle × 2 cycles/year
             </div>
           </div>
         </div>
