@@ -297,6 +297,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       }
     } catch (e) {
       console.error("AI parse error:", e);
+      useStore.getState().showToast("AI parsing failed — trying built-in parser", "warning");
     }
 
     // Fallback to regex parser

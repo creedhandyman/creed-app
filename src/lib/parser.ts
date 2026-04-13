@@ -76,24 +76,32 @@ export async function readPdf(file: File): Promise<string> {
 
 export async function renderPdfPages(
   file: File,
-  maxPages = 20,
-  scale = 1.5
+  maxPages = 15,
+  scale = 1.0
 ): Promise<string[]> {
   const lib = await loadPdf();
   const buf = await file.arrayBuffer();
   const pdf = await lib.getDocument({ data: buf }).promise;
   const images: string[] = [];
   const count = Math.min(pdf.numPages, maxPages);
+  const MAX_DIM = 1200; // cap page dimensions for API size limits
 
   for (let i = 1; i <= count; i++) {
     const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale });
+    let viewport = page.getViewport({ scale });
+
+    // Downscale if page is too large
+    if (viewport.width > MAX_DIM || viewport.height > MAX_DIM) {
+      const ratio = Math.min(MAX_DIM / viewport.width, MAX_DIM / viewport.height);
+      viewport = page.getViewport({ scale: scale * ratio });
+    }
+
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     const ctx = canvas.getContext("2d")!;
     await page.render({ canvasContext: ctx, viewport }).promise;
-    images.push(canvas.toDataURL("image/jpeg", 0.7));
+    images.push(canvas.toDataURL("image/jpeg", 0.5));
     canvas.remove();
   }
   return images;
@@ -302,9 +310,22 @@ export async function aiParsePdf(
       }),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error("AI API error:", res.status, await res.text().catch(() => ""));
+      // If payload too large, retry with fewer images
+      if (res.status === 413 || res.status === 400) {
+        if (images.length > 5) {
+          console.log("Retrying with fewer pages...");
+          return aiParsePdf(text, images.slice(0, 5), laborRate, licensedTrades);
+        }
+      }
+      return null;
+    }
     const data = await res.json();
-    if (data.error) return null;
+    if (data.error) {
+      console.error("AI response error:", data.error);
+      return null;
+    }
 
     // Extract JSON from response
     const responseText =
