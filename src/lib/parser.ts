@@ -112,108 +112,86 @@ export async function renderPdfPages(
 
 /* ====== AI PARSE ====== */
 
-const AI_SYSTEM_PROMPT_BASE = `You are a professional field service contractor quoting engine.
+const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You take property inspection reports as input and produce accurate, client-ready service estimates.
 
-You receive move-out inspection reports (typically from zInspector via Keyrenter Property Management) and produce accurate repair quotes.
+## INPUT FORMAT
+Property inspection reports contain room-by-room findings with condition ratings (S=Satisfactory, F=Fair, P=Poor, D=Damaged) and action items marked "Maintenance".
 
-CRITICAL RULES:
+## CRITICAL RULE — DEDUPLICATION
+zInspector reports contain the SAME data TWICE:
+- SUMMARY TABLE (early pages): Has "Area" + "Detail" + "Condition" columns in a table. SKIP THIS ENTIRELY.
+- DETAILED BREAKDOWNS (later pages): Room names as section headers with expanded descriptions. USE ONLY THIS.
+If you process both, every item will be doubled. The final quote should have 20-40 line items, NOT 60-100+.
 
-1. DEDUPLICATION — THIS IS THE MOST IMPORTANT RULE:
-   zInspector reports repeat EVERYTHING twice:
-   - Pages 1-7: Summary Table with "Area" + "Detail" + "Condition" columns. IGNORE ALL OF THIS.
-   - Pages 8+: Detailed Room Breakdowns with room names as headers. USE ONLY THIS SECTION.
-   SKIP any page that looks like a summary table. Only process the detailed room-by-room breakdowns.
-   The final quote should have roughly 20-50 line items for a typical property, NOT 70-100+.
+## LINE ITEM FORMAT
+Every line item MUST include:
+- "detail": "Room Name — Brief task description" (e.g. "Kitchen — Replace sprayer and re-caulk sink")
+- "comment": Clear 1-2 sentence work description referencing the inspection finding. The client must understand WHAT will be done.
+- "laborHrs": Conservative clock hours for one worker
+- "materials": Only materials that directly correspond to a specific inspection finding
 
-2. ONE LINE ITEM PER FINDING: Each unique Room + Detail = exactly ONE line item.
-   DO NOT create duplicate items. If "Kitchen Wall/Ceiling/Paint" appears in both summary and detail, count it ONCE.
-   DO NOT create line items for Condition: S (Satisfactory) or Actions: None.
-   COMBINE related items in the same room (e.g. "touch up paint on wall and trim" = one paint line item, not two).
+## RULES
 
-3. CLEAR DESCRIPTIONS: Rewrite garbled PDF text in plain professional English. Start with room name. Reconstruct meaning from context if text is fragmented.
+1. NEVER INSERT PLACEHOLDER ITEMS. Every material must map to a specific inspection finding. If you cannot trace a material back to the report, do not include it. Watch especially for high-cost items appearing in multiple rooms — that is always a bug.
 
-4. REALISTIC HOURS — USE CONSERVATIVE ESTIMATES. These are CLOCK HOURS for a single worker:
-   IMPORTANT: Always use the LOW end of ranges. Contractors are efficient — don't over-estimate.
+2. NO DUPLICATES. Each repair appears exactly ONCE. Do NOT create both granular items and consolidated room summaries.
 
-   Quick tasks (under 30 min): outlet cover=0.1h, bulb=0.1h, smoke alarm battery=0.1h, install smoke alarm=0.2h, doorstop=0.1h, toilet seat=0.2h, blind install=0.2h, door knob=0.3h, towel bar=0.2h, caulk line=0.25h, door stop=0.1h
-   Medium tasks: closet pole=0.4h, vanity light=0.5h, doorbell=0.5h, screen door=1h, re-secure door=0.5h, small drywall patch=0.3h
+3. CONSISTENT ROOM NAMES. Use title case. Normalize names from the inspection (e.g. "Bathroom 2 : Master bathroom" → "Bathroom 2 (Master)").
 
-   PAINTING (clock hours for a single painter — prep is INCLUDED, do NOT add extra):
-   - Touch-up paint (spot repairs, one room): 1-1.5h
-   - Full room repaint SMALL (bedroom, bathroom): 2-3h
-   - Full room repaint MEDIUM (kitchen, living room): 3-4h
-   - Full room repaint LARGE (open concept): 4-6h
-   - Hallway/stairs repaint: 2-3h
-   - Full unit paint (6-8 rooms, spray+roll+trim): 20-30h total
-   Do NOT add separate "prep" hours — prep time is already included above.
+4. GROUP BY TRADE, NOT BY ROOM. Valid categories:
+   Painting, Flooring, Carpentry, Plumbing, Electrical, Safety, Appliances, Exterior, Compliance, Cleaning/Hauling
 
-   Other tasks: pre-hung door+trim=1.5-2h, entry door=2-3h, LVP flooring small room=3-4h, LVP large room=4-5h, baseboard replacement=1.5-2h, tile per 30sqft=4-5h
-   Multi-item: multiply per unit (2 blinds=0.4h, 10 outlet covers=1h, 4 smoke alarms=0.8h)
+5. COMBINE RELATED ITEMS in the same room. "Replace outlet cover" + "replace switch plate" in Kitchen = one Electrical line item. "Touch up wall paint" + "patch holes" = one Painting line item.
 
-5. REALISTIC MATERIALS — use LOW-END retail prices:
-   Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung door=$85, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, doorbell=$18, LVP flooring=$1.50/sqft
+6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "General Supplies" item under Painting, NOT duplicated per room.
 
-   PAINT MATERIALS PER ROOM:
-   - Paint 1-gal (covers a small room with 2 coats): $16
-   - Paint 5-gal bucket (covers 2-3 rooms): $35
-   - Primer (qt): $10
-   - Spackle: $8
-   - Tape+supplies per room: $5
-   For a full unit paint (6-8 rooms): ~3 five-gal buckets ($105), primer ($20), supplies ($30) = ~$155 total
-   If labor-only (unclog drain, re-secure faucet, haul junk), materials = $0.
+7. ONLY QUOTE MAINTENANCE ITEMS. Condition "S" with Action "None" = skip.
 
-6. SQUARE FOOTAGE: When a room specifies its square footage, USE IT to calculate:
-   - Flooring: sqft × $2.25/sqft for LVP + 10% waste = material cost. Also add underlayment at $0.30/sqft.
-   - Paint: 1 gallon covers ~350 sqft. A 120 sqft room needs ~1.5 gal walls + ceiling.
-   - Tile: sqft × $2-4/sqft depending on type + mortar + grout.
-   - Include exact quantities in materials: "LVP 132 sqft" not just "LVP flooring".
+## LABOR HOURS — CONSERVATIVE ESTIMATES (clock hours, single worker)
+Quick tasks: outlet cover=0.1h, bulb=0.1h, smoke alarm=0.2h, doorstop=0.1h, toilet seat=0.2h, blind=0.2h, door knob=0.3h, towel bar=0.2h, caulk=0.25h, door stop=0.1h, light fixture swap=0.5h
+Medium tasks: vanity light=0.5h, screen door=1h, re-secure door=0.5h, drywall patch=0.3h, faucet=1h, shower head=0.3h
+Painting (prep INCLUDED — do NOT add extra): touch-up=1h, small room full=2-3h, medium room=3-4h, large room=4-5h, hallway=2h
+Flooring: LVP small room=3-4h, large room=4-5h, baseboard per room=1-2h, tile per 30sqft=4-5h
+Doors: pre-hung door=1.5h, bifold=1h, entry door=2h
 
-7. TRADE CATEGORIES — GROUP BY TRADE, NOT BY ROOM:
-   Create ONE room entry per trade. All painting from all rooms goes under "Painting".
-   All plumbing items go under "Plumbing". Do NOT create "Kitchen", "Bedroom North" etc as categories.
-   Valid trade categories: Painting, Flooring, Carpentry, Plumbing, Electrical, Safety, Appliances, Exterior, Compliance, Cleaning/Hauling
-   Each item's "detail" field should start with the room name (e.g. "Kitchen — Touch up wall paint")
+## MATERIALS — LOW-END RETAIL PRICES
+Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung door=$85, bifold door=$50, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower head=$22, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, faucet=$55, toilet repair kit=$15, LVP=$1.50/sqft
+Paint: 1-gal=$16, 5-gal=$35, primer qt=$10. Full unit supplies (tape, spackle, rollers, cloths)=$30 total — list ONCE.
 
-8. SPECIFIC DETAILS: When the report mentions specific details, ALWAYS capture them:
-   - Paint colors (e.g. "SW 7015 Repose Gray", "Benjamin Moore White Dove", "eggshell finish")
-   - Hardware finishes (e.g. "brushed nickel", "oil-rubbed bronze", "satin chrome", "matte black")
-   - Material brands/types (e.g. "LifeProof LVP", "Moen faucet", "Kwikset deadbolt", "Delta shower")
-   - Sizes/dimensions (e.g. "30-inch door", "36-inch blind", "4x8 sheet", "1/2-inch PEX")
-   - Model numbers or specific product references from the report
-   Include these in the "comment" field so the installer knows exactly what to buy.
-   Materials list should also reflect specific products when named (e.g. "Moen kitchen faucet $85" not just "Faucet $65").
+## SPECIFIC DETAILS
+Capture from report: paint colors, hardware finishes (brushed nickel, oil-rubbed bronze), brands, sizes/dimensions, model numbers. Put in "comment" field AND material names.
 
-Return ONLY valid JSON (no markdown, no explanation):
+## OUTPUT FORMAT — Return ONLY valid JSON:
 {
-  "property": "address if found or empty string",
-  "client": "client/property manager name if found or empty string",
+  "property": "address or empty string",
+  "client": "client name or empty string",
   "rooms": [
     {
-      "name": "Trade Category (e.g. Painting, Carpentry, Plumbing)",
+      "name": "Trade Category",
       "items": [
         {
-          "detail": "Room — Brief item name",
-          "condition": "S|F|P|D or -",
-          "comment": "Clear professional description of work needed",
+          "detail": "Room — Task description",
+          "condition": "F|P|D|-",
+          "comment": "Clear work description referencing inspection finding",
           "laborHrs": 0.25,
-          "materials": [{"n": "Specific material name", "c": 15}]
+          "materials": [{"n": "Specific material", "c": 15}]
         }
       ]
     }
   ],
-  "notes": ["Items flagged for licensed professionals or owner responsibility"],
+  "notes": ["Items flagged for subcontractors or owner"],
   "crewSize": 2,
-  "estDays": 5
+  "estDays": 3
 }
 
-VERIFICATION before outputting:
-- TOTAL HOURS should be 20-60 for a typical make-ready property. If over 80, you have duplicates or inflated hours — go back and fix.
-- No duplicates (each unique room+detail appears ONCE)
-- No 1.0h defaults — use the reference table (outlet=0.1h, blind=0.2h, knob=0.3h, etc.)
-- Trade categories only (Painting, Plumbing, etc.) — NOT room names as categories
-- Descriptions are clear English, not garbled PDF fragments
-- Items with Condition S and Actions None are excluded
-- If total exceeds $8,000 for a standard 3-bed property, re-check for duplicates`;
+## VERIFY BEFORE OUTPUT
+- Total hours: 20-50 for typical 3-bed make-ready. Over 60 = re-check for duplicates.
+- Total cost: $3,000-$6,000 typical. Over $8,000 = re-check.
+- No item appears in more than 2 rooms (if it does, it's a duplicate).
+- Every line item traces to a specific inspection finding.
+- No 1.0h defaults — use the reference table above.
+- Room names are trade categories, not room names.
+- Shared supplies listed once, not per room.`;
 
 export interface AiParseResult {
   property: string;
@@ -222,6 +200,78 @@ export interface AiParseResult {
   notes: string[];
   crewSize: number;
   estDays: number;
+}
+
+/* ====== POST-PARSE VALIDATION ====== */
+function validateQuote(rooms: Room[]): Room[] {
+  // 1. Detect phantom materials — same high-cost item in 3+ rooms = likely a bug
+  const materialCount: Record<string, { count: number; totalCost: number }> = {};
+  rooms.forEach((r) => r.items.forEach((it) => it.materials.forEach((m) => {
+    const key = m.n.toLowerCase();
+    if (!materialCount[key]) materialCount[key] = { count: 0, totalCost: 0 };
+    materialCount[key].count++;
+    materialCount[key].totalCost += m.c;
+  })));
+
+  const phantomMaterials = new Set<string>();
+  Object.entries(materialCount).forEach(([key, v]) => {
+    // Flag if same item appears 3+ times AND costs $50+ each
+    if (v.count >= 3 && v.totalCost / v.count >= 50) {
+      phantomMaterials.add(key);
+      console.warn(`VALIDATION: Phantom material detected — "${key}" appears ${v.count} times ($${v.totalCost} total). Removing.`);
+    }
+  });
+
+  // 2. Remove phantom materials from items
+  if (phantomMaterials.size > 0) {
+    rooms = rooms.map((r) => ({
+      ...r,
+      items: r.items.map((it) => ({
+        ...it,
+        materials: it.materials.filter((m) => !phantomMaterials.has(m.n.toLowerCase())),
+      })),
+    }));
+  }
+
+  // 3. Deduplicate items with identical details within same room
+  rooms = rooms.map((r) => {
+    const seen = new Set<string>();
+    return {
+      ...r,
+      items: r.items.filter((it) => {
+        const key = (it.detail + "|" + it.comment).toLowerCase().slice(0, 80);
+        if (seen.has(key)) {
+          console.warn(`VALIDATION: Duplicate item removed — "${it.detail}"`);
+          return false;
+        }
+        seen.add(key);
+        return true;
+      }),
+    };
+  });
+
+  // 4. Cap unreasonable hours (no single item should exceed 8h for most tasks)
+  rooms = rooms.map((r) => ({
+    ...r,
+    items: r.items.map((it) => {
+      if (it.laborHrs > 8) {
+        console.warn(`VALIDATION: Capped hours for "${it.detail}" from ${it.laborHrs}h to 6h`);
+        return { ...it, laborHrs: 6 };
+      }
+      return it;
+    }),
+  }));
+
+  // 5. Ensure materials have $0 fallback removed (no empty "Materials $0" entries)
+  rooms = rooms.map((r) => ({
+    ...r,
+    items: r.items.map((it) => ({
+      ...it,
+      materials: it.materials.filter((m) => m.c > 0 || it.materials.length === 1),
+    })),
+  }));
+
+  return rooms;
 }
 
 export async function aiParsePdf(
@@ -357,10 +407,13 @@ export async function aiParsePdf(
       })
     );
 
+    // ── POST-PARSE VALIDATION ──
+    const validatedRooms = validateQuote(rooms);
+
     return {
       property: parsed.property || "",
       client: parsed.client || "",
-      rooms: rooms.filter((r) => r.items.length > 0),
+      rooms: validatedRooms.filter((r) => r.items.length > 0),
       notes: parsed.notes || [],
       crewSize: parsed.crewSize || 2,
       estDays: parsed.estDays || 0,
@@ -750,8 +803,8 @@ export function estimateMaterials(t: string): Material[] {
   if (/conduit/.test(s)) m.push({ n: "EMT conduit (10ft)", c: 12 });
   if (/outlet.*box|switch.*box|electrical.*box/.test(s)) m.push({ n: "Electrical box", c: 4 });
   if (/surge.*protect|whole.*house.*surge/.test(s)) m.push({ n: "Surge protector (WH)", c: 80 });
-  if (/door.*bell|doorbell/.test(s)) m.push({ n: "Doorbell", c: 25 });
-  if (/video.*doorbell|ring/.test(s)) m.push({ n: "Video doorbell", c: 150 });
+  if (/doorbell/.test(s) && !s.includes("video")) m.push({ n: "Doorbell", c: 25 });
+  if (/video.*doorbell|smart.*doorbell/.test(s)) m.push({ n: "Video doorbell", c: 150 });
   if (/electric.*meter|meter.*base/.test(s)) m.push({ n: "Meter base", c: 85 });
   if (/ground.*rod/.test(s)) m.push({ n: "Ground rod (8ft)", c: 15 });
   if (/transfer.*switch|generator.*switch/.test(s)) m.push({ n: "Transfer switch", c: 250 });
