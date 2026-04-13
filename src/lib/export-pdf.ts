@@ -22,6 +22,7 @@ interface ExportOptions {
   orgAddress?: string;
   orgLogo?: string;
   statusUrl?: string;
+  photos?: { url: string; label: string; type: string }[];
 }
 
 export function exportQuotePdf(opts: ExportOptions) {
@@ -47,6 +48,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   const trade = opts.trade || "";
   const jobId = opts.jobId || "";
   const statusUrl = opts.statusUrl || "";
+  const photos = opts.photos || [];
 
   // Generate quote number from job ID or timestamp
   const quoteNum = jobId
@@ -222,6 +224,14 @@ ${breakdownHtml}
 <!-- TOOLS NEEDED -->
 <h2>Tools Checklist</h2>
 <div class="tools-grid">${toolsHtml}</div>
+
+${photos.length > 0 ? `
+<!-- PROJECT PHOTOS -->
+<h2>Project Photos</h2>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;page-break-inside:avoid">
+  ${photos.map((p) => `<div style="text-align:center"><img src="${p.url}" style="width:100%;height:120px;object-fit:cover;border-radius:6px;border:1px solid #ddd" /><div style="font-size:11px;color:#666;margin-top:3px">${p.label || p.type || ""}</div></div>`).join("")}
+</div>
+` : ""}
 
 <!-- NOTES & EXCLUSIONS -->
 <h2>Notes & Exclusions</h2>

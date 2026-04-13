@@ -159,6 +159,24 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     clearEditJob?.();
   }, [editJobId, jobs, clearEditJob]);
 
+  // Reset all state when entering a fresh quote mode (not edit)
+  const prevMode = useRef<string | null>(null);
+  useEffect(() => {
+    if (mode && mode !== "edit" && prevMode.current === null) {
+      // Entering a new quote — ensure clean slate
+      setRooms([]);
+      setProp("");
+      setClient("");
+      setText("");
+      setWorkers([]);
+      setEditingId(null);
+      setJobPhotos([]);
+      setQuickPhotos([]);
+      setQuickDesc("");
+    }
+    prevMode.current = mode;
+  }, [mode]);
+
   // Add-item form state
   const [nr, setNr] = useState("");
   const [nd, setNd] = useState("");
@@ -922,6 +940,71 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         ))}
       </div>
 
+      {/* AI Re-quote */}
+      <div className="cd mb">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <h4 style={{ fontSize: 13 }}>🤖 AI Assist</h4>
+        </div>
+        <div className="row">
+          <input
+            value={quickDesc}
+            onChange={(e) => setQuickDesc(e.target.value)}
+            placeholder="Describe additional work to add..."
+            style={{ flex: 1, fontSize: 13 }}
+          />
+          <button
+            className="bb"
+            disabled={parsing || !quickDesc.trim()}
+            onClick={async () => {
+              if (!quickDesc.trim()) return;
+              setParsing(true);
+              setParseStatus("AI is analyzing...");
+              try {
+                const o = useStore.getState().org;
+                const licensedTrades = (() => { try { return o?.licensed_trades ? JSON.parse(o.licensed_trades) : []; } catch { return []; } })();
+                const res = await fetch("/api/ai", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    model: "claude-sonnet-4-20250514",
+                    max_tokens: 4000,
+                    messages: [{ role: "user", content: [{ type: "text", text: `Additional work for ${prop || "property"}: ${quickDesc}\n\nReturn JSON with rooms array only. Same format as before. Group by trade category.` }] }],
+                    system: `You are a field service quoting engine. Return ONLY valid JSON: {"rooms":[{"name":"Trade Category","items":[{"detail":"Brief description","condition":"-","comment":"Work description","laborHrs":1,"materials":[{"n":"Material","c":10}]}]}]}. Use realistic hours and material prices. Licensed trades: ${licensedTrades.join(", ") || "none"}.`,
+                  }),
+                });
+                const data = await res.json();
+                const text = data.content?.[0]?.text || "";
+                const match = text.match(/\{[\s\S]*\}/);
+                if (match) {
+                  const parsed = JSON.parse(match[0]);
+                  if (parsed.rooms?.length) {
+                    // Merge new rooms into existing
+                    const merged = [...rooms];
+                    parsed.rooms.forEach((newRoom: Room) => {
+                      const existing = merged.find((r) => r.name === newRoom.name);
+                      if (existing) {
+                        existing.items.push(...newRoom.items);
+                      } else {
+                        merged.push(newRoom);
+                      }
+                    });
+                    setRooms(merged);
+                    useStore.getState().showToast("AI added items to your quote", "success");
+                  }
+                }
+              } catch (e) { console.error(e); useStore.getState().showToast("AI failed — try again", "error"); }
+              setParsing(false);
+              setParseStatus("");
+              setQuickDesc("");
+            }}
+            style={{ fontSize: 12, padding: "6px 12px" }}
+          >
+            {parsing ? "..." : "+ Add"}
+          </button>
+        </div>
+        {parseStatus && <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>{parseStatus}</div>}
+      </div>
+
       {/* Assign Workers */}
       <div className="cd mb">
         <h4 style={{ fontSize: 13, marginBottom: 6 }}>👷 Assign Workers</h4>
@@ -1022,6 +1105,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                 orgLicense: o?.license_num,
                 orgAddress: o?.address,
                 orgLogo: o?.logo_url,
+                photos: jobPhotos,
               });
             })()
           }

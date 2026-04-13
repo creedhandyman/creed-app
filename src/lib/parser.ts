@@ -161,6 +161,15 @@ CRITICAL RULES:
 7. TRADE CATEGORIES: Group items by trade, not room:
    Painting, Flooring, Carpentry, Plumbing, Electrical, Safety, Appliances, Exterior, Compliance, Cleaning/Hauling
 
+8. SPECIFIC DETAILS: When the report mentions specific details, ALWAYS capture them:
+   - Paint colors (e.g. "SW 7015 Repose Gray", "Benjamin Moore White Dove", "eggshell finish")
+   - Hardware finishes (e.g. "brushed nickel", "oil-rubbed bronze", "satin chrome", "matte black")
+   - Material brands/types (e.g. "LifeProof LVP", "Moen faucet", "Kwikset deadbolt", "Delta shower")
+   - Sizes/dimensions (e.g. "30-inch door", "36-inch blind", "4x8 sheet", "1/2-inch PEX")
+   - Model numbers or specific product references from the report
+   Include these in the "comment" field so the installer knows exactly what to buy.
+   Materials list should also reflect specific products when named (e.g. "Moen kitchen faucet $85" not just "Faucet $65").
+
 Return ONLY valid JSON (no markdown, no explanation):
 {
   "property": "address if found or empty string",

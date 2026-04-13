@@ -210,7 +210,21 @@ export default function Dashboard({ setPage, openSettings }: Props) {
               <div className="sv" style={{ color: "var(--color-primary)", fontSize: 18 }}>
                 {nextJob.job}
               </div>
-              <div className="dim" style={{ fontSize: 10 }}>{nextJob.sched_date}{nextJob.note ? ` · ${nextJob.note}` : ""}</div>
+              <div className="dim" style={{ fontSize: 12 }}>
+                {(() => {
+                  // Format date nicely
+                  const d = new Date(nextJob.sched_date + "T12:00:00");
+                  const dayStr = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                  // Extract time from note (stored as 🕐 HH:MM)
+                  const timeMatch = nextJob.note?.match(/🕐\s*(\d{1,2}:\d{2})/);
+                  const timeStr = timeMatch ? (() => {
+                    const [h, m] = timeMatch[1].split(":").map(Number);
+                    const ampm = h >= 12 ? "PM" : "AM";
+                    return `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+                  })() : "";
+                  return `${dayStr}${timeStr ? ` · ${timeStr}` : ""}`;
+                })()}
+              </div>
             </>
           ) : (
             <div className="sv" style={{ color: "var(--color-primary)" }}>—</div>
