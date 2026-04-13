@@ -160,7 +160,7 @@ export default function Quests() {
       name: "TIER 3: MASTERY",
       color: "var(--color-warning)",
       quests: [
-        qEnabled("skill_mastery") && { name: "Skill Mastery", desc: `10 jobs in one trade${Object.keys(jobsByTrade).length ? " (" + Object.entries(jobsByTrade).map(([t, c]) => `${t}: ${c}`).join(", ") + ")" : ""}`, bonus: "$" + qBonus("skill_mastery"), progress: Math.min(bestTradeCount, 10), goal: 10, unit: "best trade", tier: "T3", tierColor: "var(--color-warning)" },
+        qEnabled("skill_mastery") && { name: "Skill Mastery", desc: `Master 2 trades (10+ jobs each)${Object.keys(jobsByTrade).length ? " \u2014 " + Object.entries(jobsByTrade).map(([t, c]) => `${t}: ${c}`).join(", ") : ""}`, bonus: "$" + qBonus("skill_mastery"), progress: Math.min(tradesMastered, 2), goal: 2, unit: "trades", tier: "T3", tierColor: "var(--color-warning)" },
         qEnabled("make_ready") && { name: "Make Ready Pro", desc: "7 unit turns (24+ hrs each)", bonus: "$" + qBonus("make_ready"), progress: Math.min(bigJobs, 7), goal: 7, unit: "turns", tier: "T3", tierColor: "var(--color-warning)" },
         qEnabled("zero_callback") && { name: "Zero Callback", desc: "20 consecutive jobs, no callbacks", bonus: "$" + qBonus("zero_callback"), progress: Math.min(zeroCallbackStreak, 20), goal: 20, unit: "streak", tier: "T3", tierColor: "var(--color-warning)" },
         qEnabled("mr_speed") && { name: "Mr.Speed", desc: "5 work orders in one day", bonus: "$" + qBonus("mr_speed"), progress: Math.min(speedDays, 1), goal: 1, unit: "days", tier: "T3", tierColor: "var(--color-warning)" },
