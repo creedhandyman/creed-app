@@ -79,6 +79,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     else if (sTech) parts.push(`👷 ${sTech}`);
     if (sn) parts.push(sn);
     await db.post("schedule", { sched_date: sd, job: sj, note: parts.join(" · ") });
+    // Auto-update job status to "scheduled" if currently quoted or accepted
+    const matchedJob = jobs.find((j) => j.property === sj && (j.status === "quoted" || j.status === "accepted"));
+    if (matchedJob) {
+      await db.patch("jobs", matchedJob.id, { status: "scheduled" });
+    }
     setSd("");
     setSj("");
     setSn("");

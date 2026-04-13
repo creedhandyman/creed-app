@@ -480,154 +480,544 @@ export function estimateLabor(t: string): number {
   return 1;
 }
 
-/* ====== AUTO-MATERIALS ESTIMATOR ====== */
+/* ====== AUTO-MATERIALS ESTIMATOR — 500+ items ====== */
 
 export function estimateMaterials(t: string): Material[] {
   const s = t.toLowerCase();
   const m: Material[] = [];
+  const has = (n: string) => m.some((x) => x.n === n);
 
-  // Paint
-  if (s.includes("paint") && /full|repaint|complete/.test(s))
-    m.push({ n: "Paint+primer (gal)", c: 70 }, { n: "Roller+brush+tape", c: 22 });
+  // ═══════════════════════════════════════════
+  // PAINT & FINISHES (~45 items)
+  // ═══════════════════════════════════════════
+  if (s.includes("paint") && /full|repaint|complete|entire/.test(s))
+    m.push({ n: "Interior paint+primer (gal)", c: 70 }, { n: "Roller kit (9in frame+covers)", c: 14 }, { n: "Angle brush 2.5in", c: 9 }, { n: "Painter's tape (60yd)", c: 7 }, { n: "Drop cloth 9x12", c: 12 });
   else if (/paint|touch.?up/.test(s)) m.push({ n: "Paint (qt)", c: 20 });
+  if (/exterior.*paint|paint.*exterior/.test(s)) m.push({ n: "Exterior paint (gal)", c: 75 });
+  if (/primer|prime/.test(s) && !has("Interior paint+primer (gal)")) m.push({ n: "Primer (gal)", c: 30 });
+  if (/stain|wood stain/.test(s)) m.push({ n: "Wood stain (qt)", c: 18 });
+  if (/polyurethane|poly|clear coat/.test(s)) m.push({ n: "Polyurethane (qt)", c: 22 });
+  if (/deck.*stain|stain.*deck/.test(s)) m.push({ n: "Deck stain (gal)", c: 45 });
+  if (/spray.*paint|rattle can/.test(s)) m.push({ n: "Spray paint", c: 8 });
+  if (/texture|orange peel|knockdown/.test(s)) m.push({ n: "Wall texture spray", c: 14 });
+  if (/ceiling.*paint|paint.*ceiling/.test(s)) m.push({ n: "Ceiling paint (gal)", c: 35 });
+  if (/cabinet.*paint|paint.*cabinet/.test(s)) m.push({ n: "Cabinet paint (qt)", c: 28 });
+  if (/epoxy.*paint|garage.*floor.*paint/.test(s)) m.push({ n: "Epoxy floor kit", c: 85 });
+  if (/concrete.*stain|stain.*concrete/.test(s)) m.push({ n: "Concrete stain (gal)", c: 40 });
+  if (/chalk.*paint/.test(s)) m.push({ n: "Chalk paint (qt)", c: 24 });
+  if (/paint.*strip|strip.*paint|remover/.test(s)) m.push({ n: "Paint stripper", c: 16 });
+  if (/tray|paint tray/.test(s) && !has("Roller kit (9in frame+covers)")) m.push({ n: "Paint tray+liner", c: 6 });
+  if (/roller|paint roller/.test(s) && !has("Roller kit (9in frame+covers)")) m.push({ n: "Roller cover (3pk)", c: 12 });
+  if (/masking|tape/.test(s) && s.includes("paint") && !has("Painter's tape (60yd)")) m.push({ n: "Painter's tape (60yd)", c: 7 });
   if (/patch|spackle|nail pop|hole/.test(s) && !s.includes("tire"))
-    m.push({ n: "Spackle+mesh", c: 8 });
+    m.push({ n: "Spackle tub", c: 8 }, { n: "Mesh tape (roll)", c: 5 });
+  if (/putty|wood putty|wood filler/.test(s)) m.push({ n: "Wood filler", c: 9 });
+  if (/caulk.*paint|paintable.*caulk/.test(s)) m.push({ n: "Paintable caulk", c: 6 });
+  if (/sand.*paper|sandpaper|sanding/.test(s)) m.push({ n: "Sandpaper variety pk", c: 10 });
+  if (/tsp|degreaser|clean.*wall/.test(s)) m.push({ n: "TSP cleaner", c: 8 });
+  if (/wallpaper/.test(s)) m.push({ n: "Wallpaper (roll)", c: 35 });
+  if (/wallpaper.*remov|strip.*wallpaper/.test(s)) m.push({ n: "Wallpaper remover", c: 12 });
 
-  // Flooring
-  if (s.includes("carpet")) m.push({ n: "Carpet+pad", c: 255 });
+  // ═══════════════════════════════════════════
+  // FLOORING (~40 items)
+  // ═══════════════════════════════════════════
+  if (s.includes("carpet") && /replace|new|install/.test(s)) m.push({ n: "Carpet (sq yd)", c: 28 }, { n: "Carpet pad (sq yd)", c: 8 }, { n: "Carpet tack strip (4ft)", c: 3 }, { n: "Seam tape", c: 8 });
+  else if (s.includes("carpet") && /patch|repair/.test(s)) m.push({ n: "Carpet patch kit", c: 15 });
+  else if (s.includes("carpet")) m.push({ n: "Carpet+pad", c: 255 });
   if (s.includes("tile") && s.includes("floor"))
-    m.push({ n: "Floor tile+mortar", c: 160 }, { n: "Grout", c: 12 });
+    m.push({ n: "Floor tile (sq ft)", c: 4 }, { n: "Thinset mortar (50lb)", c: 18 }, { n: "Tile spacers", c: 5 }, { n: "Grout (25lb)", c: 16 });
   if (s.includes("tile") && s.includes("wall"))
-    m.push({ n: "Wall tile+mortar", c: 190 }, { n: "Grout", c: 12 });
+    m.push({ n: "Wall tile (sq ft)", c: 5 }, { n: "Thinset mortar (50lb)", c: 18 }, { n: "Grout (25lb)", c: 16 });
   if (/flooring|lvp|laminate|vinyl plank/.test(s))
-    m.push({ n: "LVP flooring", c: 145 }, { n: "Underlayment", c: 25 });
+    m.push({ n: "LVP/laminate flooring (box)", c: 55 }, { n: "Underlayment (roll)", c: 25 });
+  if (/hardwood|oak floor|wood floor/.test(s) && !s.includes("laminate"))
+    m.push({ n: "Hardwood flooring (sq ft)", c: 8 }, { n: "Floor nails/staples", c: 12 });
+  if (/engineered.*wood|engineered.*floor/.test(s))
+    m.push({ n: "Engineered hardwood (sq ft)", c: 6 }, { n: "Underlayment (roll)", c: 25 });
+  if (/vinyl.*sheet|sheet.*vinyl/.test(s)) m.push({ n: "Sheet vinyl (sq yd)", c: 18 });
+  if (/linoleum/.test(s)) m.push({ n: "Linoleum (sq yd)", c: 22 });
   if (s.includes("transition")) m.push({ n: "Transition strip", c: 14 });
-  if (/grout/.test(s) && !s.includes("tile")) m.push({ n: "Grout", c: 12 });
+  if (s.includes("threshold")) m.push({ n: "Door threshold", c: 18 });
+  if (/reducer/.test(s)) m.push({ n: "Floor reducer strip", c: 12 });
+  if (/t.?mold/.test(s)) m.push({ n: "T-molding", c: 10 });
+  if (/quarter.*round|shoe.*mold/.test(s)) m.push({ n: "Quarter round (8ft)", c: 5 });
+  if (/grout/.test(s) && !has("Grout (25lb)")) m.push({ n: "Grout (25lb)", c: 16 });
+  if (/grout.*seal|seal.*grout/.test(s)) m.push({ n: "Grout sealer", c: 14 });
+  if (/floor.*level|self.?level|leveling/.test(s)) m.push({ n: "Self-leveling compound (50lb)", c: 35 });
+  if (/subfloor|sub.?floor/.test(s)) m.push({ n: "Subfloor panel (4x8)", c: 32 });
+  if (/floor.*adhesive|flooring.*glue/.test(s)) m.push({ n: "Floor adhesive (gal)", c: 28 });
+  if (/stair.*nose|stair.*tread/.test(s)) m.push({ n: "Stair nosing", c: 16 });
+  if (/rubber.*floor|gym.*floor/.test(s)) m.push({ n: "Rubber flooring tile", c: 6 });
+  if (/peel.*stick|peel.?and.?stick/.test(s)) m.push({ n: "Peel & stick tile (box)", c: 28 });
+  if (/floor.*sand|sand.*floor|refinish.*floor/.test(s)) m.push({ n: "Floor sanding discs", c: 15 });
 
-  // Doors & hardware
-  if (s.includes("door") && /replace|new|install/.test(s))
-    m.push({ n: "Door+hardware", c: 80 });
+  // ═══════════════════════════════════════════
+  // DOORS & HARDWARE (~35 items)
+  // ═══════════════════════════════════════════
+  if (/interior.*door|door.*replace|new.*door/.test(s) && !s.includes("exterior") && !s.includes("garage") && !s.includes("storm"))
+    m.push({ n: "Interior prehung door", c: 120 });
+  if (/exterior.*door/.test(s)) m.push({ n: "Exterior door", c: 350 });
+  if (/storm.*door/.test(s)) m.push({ n: "Storm door", c: 180 });
+  if (/sliding.*door|patio.*door/.test(s)) m.push({ n: "Sliding patio door", c: 550 });
+  if (/french.*door/.test(s)) m.push({ n: "French door", c: 450 });
+  if (/pocket.*door/.test(s)) m.push({ n: "Pocket door kit", c: 175 });
+  if (/barn.*door/.test(s)) m.push({ n: "Barn door+hardware", c: 220 });
+  if (/garage.*door/.test(s) && !s.includes("opener")) m.push({ n: "Garage door", c: 800 });
+  if (/garage.*door.*open|door.*opener/.test(s)) m.push({ n: "Garage door opener", c: 250 });
   if (s.includes("bifold")) m.push({ n: "Bifold door", c: 70 });
-  if (/knob|doorknob|handle/.test(s)) m.push({ n: "Door knob", c: 16 });
+  if (/pet.*door|doggy.*door/.test(s)) m.push({ n: "Pet door", c: 45 });
+  if (/door.*jamb|jamb/.test(s)) m.push({ n: "Door jamb kit", c: 35 });
+  if (/door.*frame/.test(s)) m.push({ n: "Door frame", c: 30 });
+  if (/knob|doorknob/.test(s)) m.push({ n: "Door knob", c: 16 });
+  if (/lever.*handle|door.*lever/.test(s)) m.push({ n: "Lever handle set", c: 28 });
   if (s.includes("deadbolt")) m.push({ n: "Deadbolt", c: 35 });
+  if (/smart.*lock|keypad.*lock|keyless/.test(s)) m.push({ n: "Smart lock", c: 160 });
+  if (/lock.*set|entry.*lock/.test(s) && !has("Deadbolt") && !has("Smart lock")) m.push({ n: "Entry lock set", c: 40 });
   if (s.includes("hinge")) m.push({ n: "Hinges (3pk)", c: 14 });
-  if (/latch|strike plate/.test(s)) m.push({ n: "Latch/strike", c: 14 });
-  if (/weatherstrip|door seal/.test(s)) m.push({ n: "Weatherstrip", c: 10 });
-  if (/door stop|door bumper/.test(s)) m.push({ n: "Door stop", c: 4 });
+  if (/latch|strike plate/.test(s)) m.push({ n: "Latch/strike plate", c: 14 });
+  if (/weatherstrip|door seal/.test(s)) m.push({ n: "Weatherstrip kit", c: 12 });
+  if (/door.*sweep|sweep/.test(s)) m.push({ n: "Door sweep", c: 10 });
+  if (/door.*stop|door.*bumper/.test(s)) m.push({ n: "Door stop", c: 4 });
+  if (/door.*closer|closer/.test(s)) m.push({ n: "Door closer", c: 25 });
+  if (/peep.*hole|peephole|door.*viewer/.test(s)) m.push({ n: "Peephole", c: 12 });
+  if (/kick.*plate/.test(s)) m.push({ n: "Kick plate", c: 18 });
+  if (/door.*knocker/.test(s)) m.push({ n: "Door knocker", c: 22 });
+  if (/mail.*slot/.test(s)) m.push({ n: "Mail slot", c: 25 });
+  if (/shim/.test(s)) m.push({ n: "Wood shims (pk)", c: 5 });
 
-  // Windows & blinds
-  if (s.includes("blind")) m.push({ n: "Blind", c: 18 });
-  if (s.includes("screen")) m.push({ n: "Screen kit", c: 14 });
+  // ═══════════════════════════════════════════
+  // WINDOWS & BLINDS (~25 items)
+  // ═══════════════════════════════════════════
+  if (/window.*replace|replace.*window|new.*window/.test(s)) m.push({ n: "Vinyl window", c: 250 });
+  if (/double.?hung/.test(s) && !has("Vinyl window")) m.push({ n: "Double-hung window", c: 280 });
+  if (/casement/.test(s)) m.push({ n: "Casement window", c: 320 });
+  if (/basement.*window|egress/.test(s)) m.push({ n: "Egress window", c: 350 });
+  if (/skylight/.test(s)) m.push({ n: "Skylight", c: 400 });
+  if (/window.*well/.test(s)) m.push({ n: "Window well", c: 65 });
+  if (/storm.*window/.test(s)) m.push({ n: "Storm window", c: 85 });
+  if (s.includes("blind") && /faux.*wood|wood.*blind/.test(s)) m.push({ n: "Faux wood blind", c: 35 });
+  else if (s.includes("blind")) m.push({ n: "Mini blind", c: 18 });
+  if (/cellular.*shade|honeycomb/.test(s)) m.push({ n: "Cellular shade", c: 45 });
+  if (/roller.*shade/.test(s)) m.push({ n: "Roller shade", c: 28 });
+  if (/curtain.*rod/.test(s)) m.push({ n: "Curtain rod", c: 18 });
+  if (/curtain|drape/.test(s) && !s.includes("rod") && !s.includes("shower")) m.push({ n: "Curtain panel", c: 25 });
+  if (/window.*film|tint.*window|privacy.*film/.test(s)) m.push({ n: "Window film", c: 14 });
+  if (s.includes("screen") && /replace|repair|new/.test(s)) m.push({ n: "Window screen kit", c: 14 });
+  else if (s.includes("screen")) m.push({ n: "Screen mesh (roll)", c: 10 });
   if (/window.*(seal|caulk)|caulk.*window/.test(s)) m.push({ n: "Window caulk", c: 9 });
-  if (s.includes("glass")) m.push({ n: "Glass pane", c: 40 });
+  if (/window.*trim|trim.*window/.test(s)) m.push({ n: "Window casing (7ft)", c: 12 });
+  if (s.includes("glass") && /replace|broken|crack/.test(s)) m.push({ n: "Glass pane", c: 40 });
+  if (/glazing.*compound|glazing.*point/.test(s)) m.push({ n: "Glazing compound", c: 8 });
+  if (/window.*lock|sash.*lock/.test(s)) m.push({ n: "Window lock", c: 8 });
 
-  // Plumbing
-  if (s.includes("shower head")) m.push({ n: "Shower head", c: 22 });
-  if (/faucet/.test(s)) m.push({ n: "Faucet", c: 65 });
+  // ═══════════════════════════════════════════
+  // PLUMBING (~55 items)
+  // ═══════════════════════════════════════════
+  if (/kitchen.*faucet/.test(s)) m.push({ n: "Kitchen faucet", c: 85 });
+  else if (/bath.*faucet|lav.*faucet/.test(s)) m.push({ n: "Bathroom faucet", c: 55 });
+  else if (/faucet/.test(s)) m.push({ n: "Faucet", c: 65 });
+  if (/faucet.*cartridge|cartridge/.test(s) && !has("Faucet")) m.push({ n: "Faucet cartridge", c: 18 });
+  if (/faucet.*aerator|aerator/.test(s)) m.push({ n: "Faucet aerator", c: 6 });
+  if (/shower head|showerhead/.test(s)) m.push({ n: "Shower head", c: 28 });
+  if (/hand.*held.*shower|handheld/.test(s)) m.push({ n: "Handheld shower", c: 35 });
+  if (/shower.*valve|shower.*mixer/.test(s)) m.push({ n: "Shower valve", c: 55 });
+  if (/shower.*door/.test(s)) m.push({ n: "Shower door", c: 200 });
+  if (/shower.*pan|shower.*base/.test(s)) m.push({ n: "Shower pan", c: 180 });
+  if (/shower.*curtain/.test(s) && !s.includes("rod")) m.push({ n: "Shower curtain+liner", c: 20 });
+  if (/shower.*rod|curtain.*rod.*shower/.test(s)) m.push({ n: "Shower rod", c: 15 });
+  if (/tub.*spout|bathtub.*spout/.test(s)) m.push({ n: "Tub spout", c: 22 });
+  if (/tub.*drain|bathtub.*drain/.test(s)) m.push({ n: "Tub drain assembly", c: 25 });
+  if (/tub.*surround|shower.*surround/.test(s)) m.push({ n: "Tub surround kit", c: 250 });
+  if (/toilet.*replace|new.*toilet|install.*toilet/.test(s)) m.push({ n: "Toilet", c: 200 });
   if (/flapper|fill valve|toilet.*run/.test(s)) m.push({ n: "Toilet repair kit", c: 17 });
   if (/wax ring|toilet.*seal/.test(s)) m.push({ n: "Wax ring+bolts", c: 12 });
   if (/toilet seat/.test(s)) m.push({ n: "Toilet seat", c: 25 });
-  if (s.includes("sprayer")) m.push({ n: "Kitchen sprayer", c: 17 });
+  if (/bidet/.test(s)) m.push({ n: "Bidet seat", c: 80 });
+  if (/toilet.*flange/.test(s)) m.push({ n: "Toilet flange", c: 14 });
+  if (s.includes("sprayer") && s.includes("kitchen")) m.push({ n: "Kitchen sprayer", c: 17 });
   if (s.includes("stopper")) m.push({ n: "Drain stopper", c: 9 });
   if (/supply line|supply hose/.test(s)) m.push({ n: "Supply line", c: 10 });
-  if (/p.?trap|drain/.test(s) && !s.includes("stopper")) m.push({ n: "P-trap", c: 12 });
-  if (/garbage disposal|disposal/.test(s)) m.push({ n: "Disposal", c: 90 });
-
-  // Electrical
-  if (/outlet|receptacle/.test(s)) m.push({ n: "Outlet+plate", c: 8 });
-  if (/switch/.test(s) && !s.includes("switchplate")) m.push({ n: "Switch+plate", c: 6 });
-  if (/gfci/.test(s)) m.push({ n: "GFCI outlet", c: 18 });
-  if (s.includes("bulb")) m.push({ n: "Bulbs", c: 10 });
-  if (/light.*fixture|fixture.*light|chandelier|vanity light/.test(s)) m.push({ n: "Light fixture", c: 33 });
-  else if (s.includes("fixture") && !m.some((x) => x.n.includes("fixture"))) m.push({ n: "Fixture", c: 33 });
-  if (/ceiling fan/.test(s)) m.push({ n: "Ceiling fan", c: 75 });
-
-  // Safety
-  if (/smoke alarm|smoke detector/.test(s)) m.push({ n: "Smoke alarm", c: 20 });
-  if (/carbon monoxide|co detector|co alarm/.test(s)) m.push({ n: "CO detector", c: 25 });
-  if (s.includes("fire ext")) m.push({ n: "Fire extinguisher", c: 28 });
-  if (s.includes("battery") && !m.some((x) => x.n.includes("alarm"))) m.push({ n: "9V battery", c: 5 });
-
-  // Bath accessories
-  if (/towel bar|towel rack/.test(s)) m.push({ n: "Towel bar+anchors", c: 16 });
-  if (/tp holder|toilet paper hold/.test(s)) m.push({ n: "TP holder", c: 12 });
-  if (s.includes("mirror")) m.push({ n: "Mirror+clips", c: 33 });
-  if (/shower rod|curtain rod/.test(s)) m.push({ n: "Shower rod", c: 15 });
-  if (/medicine cabinet/.test(s)) m.push({ n: "Medicine cabinet", c: 45 });
-
-  // Caulk & sealant
-  if (s.includes("caulk") && !m.some((x) => x.n.includes("caulk")))
-    m.push({ n: "Caulk tube", c: 9 });
-  if (/seal|silicone/.test(s) && !m.some((x) => x.n.includes("caulk") || x.n.includes("seal")))
-    m.push({ n: "Silicone sealant", c: 9 });
-
-  // Drywall
-  if (/drywall|sheetrock/.test(s))
-    m.push({ n: "Drywall patch kit", c: 15 }, { n: "Joint compound", c: 12 });
-
-  // Exterior
-  if (s.includes("downspout")) m.push({ n: "Downspout", c: 22 });
-  if (/gutter/.test(s) && !s.includes("downspout")) m.push({ n: "Gutter section", c: 18 });
-  if (/house number|address/.test(s)) m.push({ n: "House numbers", c: 12 });
-  if (/mailbox/.test(s)) m.push({ n: "Mailbox", c: 30 });
-  if (/gate/.test(s)) m.push({ n: "Gate hardware", c: 20 });
-
-  // Appliance parts
-  if (/filter|furnace filter|hvac filter/.test(s)) m.push({ n: "Filter", c: 12 });
-  if (/shelf|shelving/.test(s)) m.push({ n: "Shelf+brackets", c: 20 });
-  if (/cabinet.*hardware|cabinet.*pull/.test(s)) m.push({ n: "Cabinet pulls", c: 24 });
-  if (s.includes("refinish")) m.push({ n: "Refinish kit", c: 55 });
-
-  // Misc
-  if (/anchor|drywall anchor|wall anchor/.test(s) && !m.some((x) => x.n.includes("anchor")))
-    m.push({ n: "Wall anchors", c: 6 });
-
-  // ── Licensed trade materials ──
-
-  // Electrical (licensed)
-  if (/panel|breaker box|electrical panel/.test(s)) m.push({ n: "Breaker panel", c: 180 });
-  if (/breaker|circuit breaker/.test(s) && !s.includes("panel")) m.push({ n: "Circuit breaker", c: 12 });
-  if (/wire.*run|romex|14\/2|12\/2/.test(s)) m.push({ n: "Romex wire (50ft)", c: 35 });
-  if (/junction box/.test(s)) m.push({ n: "Junction box", c: 8 });
-  if (/conduit/.test(s)) m.push({ n: "Conduit (10ft)", c: 12 });
-  if (/dimmer/.test(s)) m.push({ n: "Dimmer switch", c: 22 });
-  if (/recessed|can light/.test(s)) m.push({ n: "Recessed light kit", c: 28 });
-  if (/sub.?panel/.test(s)) m.push({ n: "Sub-panel", c: 120 });
-
-  // Plumbing (licensed)
-  if (/water heater/.test(s)) m.push({ n: "Water heater", c: 450 });
+  if (/p.?trap/.test(s)) m.push({ n: "P-trap", c: 12 });
+  if (/garbage disposal|disposal/.test(s)) m.push({ n: "Disposal 1/2HP", c: 90 });
+  if (/sink.*strainer|basket.*strainer/.test(s)) m.push({ n: "Sink strainer", c: 12 });
+  if (/kitchen.*sink/.test(s)) m.push({ n: "Kitchen sink (SS)", c: 180 });
+  if (/bath.*sink|vanity.*sink|lav.*sink/.test(s)) m.push({ n: "Bathroom sink", c: 75 });
+  if (/pedestal.*sink/.test(s)) m.push({ n: "Pedestal sink", c: 140 });
+  if (/utility.*sink|laundry.*sink/.test(s)) m.push({ n: "Utility sink", c: 85 });
+  if (/drain.*clean|snake|clog|auger/.test(s)) m.push({ n: "Drain snake/auger", c: 15 });
+  if (/teflon|thread.*tape|pipe.*tape/.test(s)) m.push({ n: "Teflon tape", c: 3 });
+  if (/pipe.*dope|joint.*compound/.test(s)) m.push({ n: "Pipe joint compound", c: 6 });
+  if (/pipe.*clamp/.test(s)) m.push({ n: "Pipe clamp", c: 5 });
+  if (/shark.?bite|push.?fit/.test(s)) m.push({ n: "SharkBite fitting", c: 10 });
+  if (/expansion.*tank/.test(s)) m.push({ n: "Expansion tank", c: 45 });
+  if (/hose.*bib|spigot|outdoor.*faucet/.test(s)) m.push({ n: "Hose bib", c: 18 });
+  if (/water heater/.test(s) && /tank/.test(s)) m.push({ n: "Tank water heater (50gal)", c: 500 });
+  else if (/tankless/.test(s)) m.push({ n: "Tankless water heater", c: 800 });
+  else if (/water heater/.test(s)) m.push({ n: "Water heater", c: 450 });
+  if (/water heater.*element|element.*heater/.test(s)) m.push({ n: "WH heating element", c: 18 });
+  if (/anode.*rod/.test(s)) m.push({ n: "Anode rod", c: 25 });
   if (/sump pump/.test(s)) m.push({ n: "Sump pump", c: 150 });
-  if (/water line|copper pipe|pex/.test(s)) m.push({ n: "PEX pipe (10ft)", c: 12 });
+  if (/ejector pump/.test(s)) m.push({ n: "Ejector pump", c: 250 });
+  if (/pex/.test(s)) m.push({ n: "PEX pipe (10ft)", c: 12 });
+  if (/copper.*pipe/.test(s)) m.push({ n: "Copper pipe (10ft)", c: 28 });
+  if (/pvc.*pipe/.test(s)) m.push({ n: "PVC pipe (10ft)", c: 8 });
+  if (/abs.*pipe/.test(s)) m.push({ n: "ABS pipe (10ft)", c: 10 });
+  if (/cpvc/.test(s)) m.push({ n: "CPVC pipe (10ft)", c: 10 });
   if (/shut.?off|shut off valve/.test(s)) m.push({ n: "Shut-off valve", c: 15 });
+  if (/ball.*valve/.test(s)) m.push({ n: "Ball valve", c: 12 });
+  if (/check.*valve/.test(s)) m.push({ n: "Check valve", c: 18 });
+  if (/pressure.*regulator|prv/.test(s)) m.push({ n: "Pressure regulator", c: 55 });
   if (/backflow/.test(s)) m.push({ n: "Backflow preventer", c: 45 });
-  if (/water filter|whole house filter/.test(s)) m.push({ n: "Water filter", c: 65 });
+  if (/water.*filter|whole.*house.*filter/.test(s)) m.push({ n: "Water filter system", c: 65 });
+  if (/water.*softener/.test(s)) m.push({ n: "Water softener", c: 400 });
   if (/sewer|clean.?out/.test(s)) m.push({ n: "Cleanout plug", c: 8 });
+  if (/septic/.test(s)) m.push({ n: "Septic treatment", c: 20 });
 
-  // HVAC (licensed)
-  if (/thermostat/.test(s)) m.push({ n: "Thermostat", c: 35 });
-  if (/smart thermostat|nest|ecobee/.test(s)) m.push({ n: "Smart thermostat", c: 130 });
-  if (/condenser|compressor/.test(s)) m.push({ n: "Condenser unit", c: 1200 });
-  if (/evaporator|coil/.test(s)) m.push({ n: "Evaporator coil", c: 400 });
-  if (/furnace filter|hvac filter|air filter/.test(s) && !m.some((x) => x.n === "Filter"))
-    m.push({ n: "HVAC filter", c: 15 });
-  if (/ductwork|duct/.test(s)) m.push({ n: "Duct section", c: 25 });
-  if (/refrigerant|freon/.test(s)) m.push({ n: "Refrigerant (lb)", c: 75 });
-  if (/blower|fan motor/.test(s)) m.push({ n: "Blower motor", c: 200 });
+  // ═══════════════════════════════════════════
+  // ELECTRICAL (~50 items)
+  // ═══════════════════════════════════════════
+  if (/outlet|receptacle/.test(s) && !s.includes("gfci") && !s.includes("usb")) m.push({ n: "Outlet+plate", c: 8 });
+  if (/gfci/.test(s)) m.push({ n: "GFCI outlet", c: 18 });
+  if (/afci/.test(s)) m.push({ n: "AFCI outlet", c: 28 });
+  if (/usb.*outlet/.test(s)) m.push({ n: "USB outlet", c: 22 });
+  if (/outdoor.*outlet|exterior.*outlet|wp.*outlet/.test(s)) m.push({ n: "Outdoor outlet+cover (WP)", c: 22 });
+  if (/switch/.test(s) && !/dimmer|switch.*plate|plate/.test(s)) m.push({ n: "Switch+plate", c: 6 });
+  if (/3.?way.*switch|three.*way/.test(s)) m.push({ n: "3-way switch", c: 10 });
+  if (/dimmer/.test(s)) m.push({ n: "Dimmer switch", c: 22 });
+  if (/smart.*switch|wifi.*switch/.test(s)) m.push({ n: "Smart switch", c: 35 });
+  if (/timer.*switch|switch.*timer/.test(s)) m.push({ n: "Timer switch", c: 18 });
+  if (/motion.*sensor|sensor.*light/.test(s) && !s.includes("outdoor")) m.push({ n: "Motion sensor switch", c: 20 });
+  if (/switch.*plate|plate.*cover|wall.*plate/.test(s)) m.push({ n: "Wall plate", c: 3 });
+  if (/bulb|lamp/.test(s) && !s.includes("fixture")) m.push({ n: "LED bulbs (4pk)", c: 12 });
+  if (/light.*fixture|fixture.*light|chandelier/.test(s)) m.push({ n: "Light fixture", c: 45 });
+  if (/vanity.*light/.test(s)) m.push({ n: "Vanity light bar", c: 55 });
+  if (/pendant.*light/.test(s)) m.push({ n: "Pendant light", c: 50 });
+  if (/flush.*mount|ceiling.*light/.test(s) && !s.includes("fan")) m.push({ n: "Flush mount light", c: 30 });
+  if (/track.*light/.test(s)) m.push({ n: "Track light kit", c: 65 });
+  if (/under.*cabinet.*light/.test(s)) m.push({ n: "Under-cabinet LED strip", c: 25 });
+  if (/ceiling.*fan/.test(s)) m.push({ n: "Ceiling fan", c: 85 });
+  if (/recessed|can light/.test(s)) m.push({ n: "Recessed light kit", c: 28 });
+  if (/flood.*light|security.*light/.test(s)) m.push({ n: "LED flood light", c: 30 });
+  if (/outdoor.*light|porch.*light|exterior.*light/.test(s)) m.push({ n: "Outdoor wall light", c: 35 });
+  if (/landscape.*light|path.*light/.test(s)) m.push({ n: "Path light (solar)", c: 8 });
+  if (/motion.*light|motion.*flood/.test(s)) m.push({ n: "Motion flood light", c: 35 });
+  if (/panel|breaker.*box|electrical.*panel/.test(s)) m.push({ n: "Breaker panel (200A)", c: 220 });
+  if (/breaker|circuit.*breaker/.test(s) && !s.includes("panel")) m.push({ n: "Circuit breaker", c: 12 });
+  if (/gfci.*breaker/.test(s)) m.push({ n: "GFCI breaker", c: 45 });
+  if (/sub.?panel/.test(s)) m.push({ n: "Sub-panel (60A)", c: 120 });
+  if (/romex|14\/2|12\/2|wire.*run/.test(s)) m.push({ n: "Romex wire (50ft)", c: 35 });
+  if (/14\/3|12\/3/.test(s)) m.push({ n: "3-conductor wire (50ft)", c: 48 });
+  if (/10\/2|10.*gauge/.test(s)) m.push({ n: "10/2 wire (50ft)", c: 55 });
+  if (/thhn|individual.*wire/.test(s)) m.push({ n: "THHN wire (50ft)", c: 20 });
+  if (/wire.*nut|connector/.test(s)) m.push({ n: "Wire nuts (bag)", c: 5 });
+  if (/junction.*box/.test(s)) m.push({ n: "Junction box", c: 8 });
+  if (/conduit/.test(s)) m.push({ n: "EMT conduit (10ft)", c: 12 });
+  if (/outlet.*box|switch.*box|electrical.*box/.test(s)) m.push({ n: "Electrical box", c: 4 });
+  if (/surge.*protect|whole.*house.*surge/.test(s)) m.push({ n: "Surge protector (WH)", c: 80 });
+  if (/door.*bell|doorbell/.test(s)) m.push({ n: "Doorbell", c: 25 });
+  if (/video.*doorbell|ring/.test(s)) m.push({ n: "Video doorbell", c: 150 });
+  if (/electric.*meter|meter.*base/.test(s)) m.push({ n: "Meter base", c: 85 });
+  if (/ground.*rod/.test(s)) m.push({ n: "Ground rod (8ft)", c: 15 });
+  if (/transfer.*switch|generator.*switch/.test(s)) m.push({ n: "Transfer switch", c: 250 });
+  if (/ev.*charger|car.*charger/.test(s)) m.push({ n: "EV charger (Level 2)", c: 450 });
 
-  // Roofing (licensed)
-  if (/shingle/.test(s)) m.push({ n: "Shingles (bundle)", c: 35 });
-  if (/roof.*felt|underlayment.*roof|tar paper/.test(s)) m.push({ n: "Roof underlayment (roll)", c: 25 });
-  if (/flashing/.test(s)) m.push({ n: "Flashing", c: 15 });
-  if (/ridge.*vent|roof.*vent/.test(s)) m.push({ n: "Ridge vent", c: 45 });
+  // ═══════════════════════════════════════════
+  // SAFETY & DETECTION (~15 items)
+  // ═══════════════════════════════════════════
+  if (/smoke.*alarm|smoke.*detect/.test(s)) m.push({ n: "Smoke alarm", c: 22 });
+  if (/carbon.*monoxide|co.*detect|co.*alarm/.test(s)) m.push({ n: "CO detector", c: 28 });
+  if (/combo.*alarm|smoke.*co/.test(s)) m.push({ n: "Smoke/CO combo alarm", c: 35 });
+  if (/fire.*ext/.test(s)) m.push({ n: "Fire extinguisher", c: 28 });
+  if (/radon/.test(s)) m.push({ n: "Radon detector", c: 30 });
+  if (/security.*camera/.test(s)) m.push({ n: "Security camera", c: 60 });
+  if (/motion.*detect/.test(s) && !has("Motion flood light") && !has("Motion sensor switch")) m.push({ n: "Motion detector", c: 25 });
+  if (/battery.*backup/.test(s)) m.push({ n: "Battery backup (UPS)", c: 65 });
+  if (s.includes("battery") && !m.some((x) => x.n.includes("alarm") || x.n.includes("battery"))) m.push({ n: "9V batteries (4pk)", c: 8 });
+  if (/gfi.*tester|outlet.*tester/.test(s)) m.push({ n: "Outlet tester", c: 10 });
+  if (/child.*proof|child.*safe|tamper.*resist/.test(s)) m.push({ n: "Child safety outlet covers (12pk)", c: 8 });
+
+  // ═══════════════════════════════════════════
+  // BATH ACCESSORIES (~20 items)
+  // ═══════════════════════════════════════════
+  if (/towel.*bar|towel.*rack/.test(s)) m.push({ n: "Towel bar", c: 18 });
+  if (/towel.*ring/.test(s)) m.push({ n: "Towel ring", c: 14 });
+  if (/towel.*hook|robe.*hook/.test(s)) m.push({ n: "Robe/towel hook", c: 10 });
+  if (/tp.*holder|toilet.*paper.*hold/.test(s)) m.push({ n: "TP holder", c: 14 });
+  if (s.includes("mirror") && /vanity|bath/.test(s)) m.push({ n: "Vanity mirror", c: 65 });
+  else if (s.includes("mirror")) m.push({ n: "Mirror+clips", c: 35 });
+  if (/medicine.*cabinet/.test(s)) m.push({ n: "Medicine cabinet", c: 55 });
+  if (/bath.*fan|exhaust.*fan|vent.*fan/.test(s)) m.push({ n: "Bath exhaust fan", c: 45 });
+  if (/vanity|bath.*cabinet/.test(s) && !s.includes("light") && !s.includes("mirror") && !s.includes("sink"))
+    m.push({ n: "Bathroom vanity", c: 300 });
+  if (/grab.*bar|safety.*bar/.test(s)) m.push({ n: "Grab bar (18in)", c: 22 });
+  if (/soap.*dish/.test(s)) m.push({ n: "Soap dish", c: 10 });
+  if (/bath.*accessory.*set/.test(s)) m.push({ n: "Bath accessory set (5pc)", c: 40 });
+  if (/heated.*floor|floor.*heat/.test(s)) m.push({ n: "Floor heating mat (kit)", c: 200 });
+
+  // ═══════════════════════════════════════════
+  // CAULK, SEALANT & ADHESIVE (~15 items)
+  // ═══════════════════════════════════════════
+  if (/silicone.*caulk|bath.*caulk/.test(s)) m.push({ n: "Silicone caulk", c: 9 });
+  else if (s.includes("caulk") && !has("Silicone caulk") && !has("Paintable caulk") && !has("Window caulk"))
+    m.push({ n: "Caulk tube", c: 7 });
+  if (/seal|silicone/.test(s) && !m.some((x) => x.n.includes("caulk") || x.n.includes("seal") || x.n.includes("Grout")))
+    m.push({ n: "Silicone sealant", c: 9 });
+  if (/construction.*adhesive|liquid.*nails/.test(s)) m.push({ n: "Construction adhesive", c: 7 });
+  if (/wood.*glue/.test(s)) m.push({ n: "Wood glue", c: 8 });
+  if (/epoxy.*adhesive|epoxy.*glue|2.?part.*epoxy/.test(s)) m.push({ n: "Epoxy (2-part)", c: 12 });
+  if (/super.*glue|instant.*glue/.test(s)) m.push({ n: "Super glue", c: 5 });
+  if (/spray.*adhesive/.test(s)) m.push({ n: "Spray adhesive", c: 10 });
+  if (/foam.*sealant|great.*stuff|expanding.*foam/.test(s)) m.push({ n: "Expanding foam sealant", c: 8 });
+  if (/butyl.*tape|flashing.*tape/.test(s)) m.push({ n: "Butyl flashing tape", c: 18 });
+
+  // ═══════════════════════════════════════════
+  // DRYWALL & FRAMING (~25 items)
+  // ═══════════════════════════════════════════
+  if (/drywall.*sheet|sheetrock|hang.*drywall/.test(s)) m.push({ n: "Drywall sheet (4x8)", c: 14 });
+  else if (/drywall|sheetrock/.test(s) && /patch|repair|hole/.test(s))
+    m.push({ n: "Drywall patch kit", c: 15 });
+  if (/moisture.*resist.*drywall|green.*board/.test(s)) m.push({ n: "Moisture-resist drywall (4x8)", c: 18 });
+  if (/cement.*board|hardi.*backer/.test(s)) m.push({ n: "Cement board (3x5)", c: 14 });
+  if (/joint.*compound|mud/.test(s)) m.push({ n: "Joint compound (4.5gal)", c: 16 });
+  if (/drywall.*tape|paper.*tape/.test(s)) m.push({ n: "Drywall tape (roll)", c: 5 });
+  if (/mesh.*tape/.test(s) && !has("Mesh tape (roll)")) m.push({ n: "Mesh tape (roll)", c: 6 });
+  if (/drywall.*screw/.test(s)) m.push({ n: "Drywall screws (1lb)", c: 8 });
+  if (/corner.*bead/.test(s)) m.push({ n: "Corner bead (8ft)", c: 5 });
+  if (/stud|framing.*lumber|2x4/.test(s)) m.push({ n: "2x4 stud (8ft)", c: 5 });
+  if (/2x6/.test(s)) m.push({ n: "2x6 (8ft)", c: 8 });
+  if (/2x8/.test(s)) m.push({ n: "2x8 (8ft)", c: 12 });
+  if (/2x10/.test(s)) m.push({ n: "2x10 (8ft)", c: 16 });
+  if (/2x12/.test(s)) m.push({ n: "2x12 (8ft)", c: 20 });
+  if (/header|lvl.*beam/.test(s)) m.push({ n: "LVL beam (12ft)", c: 65 });
+  if (/plywood|ply/.test(s)) m.push({ n: "Plywood (4x8 3/4in)", c: 55 });
+  if (/osb/.test(s)) m.push({ n: "OSB sheathing (4x8)", c: 28 });
+  if (/furring.*strip/.test(s)) m.push({ n: "Furring strip 1x2 (8ft)", c: 3 });
+  if (/metal.*stud|steel.*stud/.test(s)) m.push({ n: "Metal stud (8ft)", c: 6 });
+  if (/metal.*track|steel.*track/.test(s)) m.push({ n: "Metal track (10ft)", c: 7 });
+  if (/joist.*hanger/.test(s)) m.push({ n: "Joist hanger", c: 4 });
+  if (/hurricane.*strap|tie.*down/.test(s)) m.push({ n: "Hurricane strap", c: 3 });
+  if (/simpson|structural.*bracket/.test(s)) m.push({ n: "Structural bracket", c: 8 });
+
+  // ═══════════════════════════════════════════
+  // TRIM & MOLDING (~20 items)
+  // ═══════════════════════════════════════════
+  if (/baseboard|base.*board/.test(s)) m.push({ n: "Baseboard (8ft)", c: 10 });
+  if (/crown.*mold/.test(s)) m.push({ n: "Crown molding (8ft)", c: 12 });
+  if (/chair.*rail/.test(s)) m.push({ n: "Chair rail (8ft)", c: 10 });
+  if (/casing|door.*trim|window.*casing/.test(s) && !has("Window casing (7ft)")) m.push({ n: "Casing (7ft)", c: 8 });
+  if (/quarter.*round/.test(s) && !has("Quarter round (8ft)")) m.push({ n: "Quarter round (8ft)", c: 5 });
+  if (/shoe.*mold/.test(s)) m.push({ n: "Shoe molding (8ft)", c: 4 });
+  if (/wainscot/.test(s)) m.push({ n: "Wainscoting panel (4x8)", c: 35 });
+  if (/beadboard/.test(s)) m.push({ n: "Beadboard panel", c: 28 });
+  if (/picture.*rail|picture.*mold/.test(s)) m.push({ n: "Picture rail (8ft)", c: 8 });
+  if (/rosette/.test(s)) m.push({ n: "Corner rosette", c: 5 });
+  if (/plinth.*block/.test(s)) m.push({ n: "Plinth block", c: 6 });
+  if (/stair.*railing|hand.*rail|banister/.test(s)) m.push({ n: "Handrail (8ft)", c: 25 });
+  if (/baluster|spindle/.test(s)) m.push({ n: "Baluster (each)", c: 8 });
+  if (/newel.*post/.test(s)) m.push({ n: "Newel post", c: 45 });
+  if (/finish.*nail|brad.*nail/.test(s)) m.push({ n: "Finish nails (pk)", c: 8 });
+
+  // ═══════════════════════════════════════════
+  // KITCHEN & COUNTERTOP (~25 items)
+  // ═══════════════════════════════════════════
+  if (/laminate.*counter/.test(s)) m.push({ n: "Laminate countertop (8ft)", c: 120 });
+  if (/granite.*counter/.test(s)) m.push({ n: "Granite countertop (sq ft)", c: 55 });
+  if (/quartz.*counter/.test(s)) m.push({ n: "Quartz countertop (sq ft)", c: 65 });
+  if (/butcher.*block/.test(s)) m.push({ n: "Butcher block counter (6ft)", c: 180 });
+  if (/backsplash|back.*splash/.test(s)) m.push({ n: "Backsplash tile (sq ft)", c: 6 });
+  if (/peel.*stick.*back/.test(s)) m.push({ n: "Peel & stick backsplash", c: 35 });
+  if (/range.*hood|vent.*hood/.test(s)) m.push({ n: "Range hood", c: 180 });
+  if (/cabinet.*door/.test(s)) m.push({ n: "Cabinet door (each)", c: 25 });
+  if (/cabinet.*hardware|cabinet.*pull|cabinet.*knob/.test(s)) m.push({ n: "Cabinet pulls (10pk)", c: 28 });
+  if (/cabinet.*hinge|soft.*close/.test(s)) m.push({ n: "Soft-close hinges (pk)", c: 18 });
+  if (/drawer.*slide|drawer.*glide/.test(s)) m.push({ n: "Drawer slides (pair)", c: 18 });
+  if (/lazy.*susan/.test(s)) m.push({ n: "Lazy Susan", c: 35 });
+  if (/shelf.*liner/.test(s)) m.push({ n: "Shelf liner (roll)", c: 10 });
+  if (/under.?mount.*sink/.test(s)) m.push({ n: "Undermount sink", c: 200 });
+  if (/pot.*filler/.test(s)) m.push({ n: "Pot filler faucet", c: 150 });
+  if (/ice.*maker.*line/.test(s)) m.push({ n: "Ice maker line", c: 12 });
+  if (/dishwasher.*line|dishwasher.*hose/.test(s)) m.push({ n: "Dishwasher supply line", c: 15 });
+  if (/appliance.*cord|range.*cord/.test(s)) m.push({ n: "Appliance power cord", c: 22 });
+  if (s.includes("refinish") && !has("Refinish kit")) m.push({ n: "Cabinet refinish kit", c: 55 });
+
+  // ═══════════════════════════════════════════
+  // EXTERIOR & SIDING (~30 items)
+  // ═══════════════════════════════════════════
+  if (/vinyl.*siding/.test(s)) m.push({ n: "Vinyl siding (sq)", c: 95 });
+  if (/hardie|fiber.*cement|cement.*siding/.test(s)) m.push({ n: "Fiber cement siding (sq)", c: 140 });
+  if (/wood.*siding|lap.*siding/.test(s)) m.push({ n: "Wood lap siding (8ft)", c: 12 });
+  if (/t1-?11|t-111/.test(s)) m.push({ n: "T1-11 siding (4x8)", c: 45 });
+  if (s.includes("downspout")) m.push({ n: "Downspout (10ft)", c: 22 });
+  if (/gutter/.test(s) && !s.includes("downspout")) m.push({ n: "Gutter section (10ft)", c: 18 });
+  if (/gutter.*guard|leaf.*guard/.test(s)) m.push({ n: "Gutter guard (4ft)", c: 8 });
+  if (/house.*number|address.*number/.test(s)) m.push({ n: "House numbers", c: 12 });
+  if (/mailbox/.test(s)) m.push({ n: "Mailbox+post", c: 45 });
+  if (/fence.*board|picket/.test(s)) m.push({ n: "Fence picket (6ft)", c: 5 });
+  if (/fence.*post/.test(s)) m.push({ n: "Fence post (4x4 8ft)", c: 14 });
+  if (/fence.*panel|privacy.*fence/.test(s)) m.push({ n: "Privacy fence panel (6x8)", c: 65 });
+  if (/chain.*link/.test(s)) m.push({ n: "Chain link fence (50ft roll)", c: 80 });
+  if (/gate/.test(s) && !s.includes("billing")) m.push({ n: "Gate hardware kit", c: 22 });
+  if (/deck.*board|composite.*deck/.test(s)) m.push({ n: "Composite deck board (12ft)", c: 30 });
+  if (/pressure.*treat|pt.*lumber/.test(s)) m.push({ n: "PT lumber 2x6 (8ft)", c: 10 });
+  if (/deck.*screw/.test(s)) m.push({ n: "Deck screws (5lb)", c: 28 });
+  if (/joist.*tape/.test(s)) m.push({ n: "Joist tape (roll)", c: 22 });
+  if (/post.*cap/.test(s)) m.push({ n: "Post cap", c: 8 });
+  if (/lattice/.test(s)) m.push({ n: "Lattice panel (4x8)", c: 25 });
+  if (/concrete.*step|precast.*step/.test(s)) m.push({ n: "Precast step", c: 60 });
+  if (/paver/.test(s)) m.push({ n: "Pavers (sq ft)", c: 4 });
+  if (/retaining.*wall.*block/.test(s)) m.push({ n: "Retaining wall block", c: 5 });
+  if (/landscape.*timber/.test(s)) m.push({ n: "Landscape timber (8ft)", c: 8 });
+  if (/french.*drain/.test(s)) m.push({ n: "French drain pipe (10ft)", c: 15 });
+  if (/sod/.test(s)) m.push({ n: "Sod (pallet)", c: 250 });
+  if (/mulch/.test(s)) m.push({ n: "Mulch (bag)", c: 5 });
+  if (/power.*wash|pressure.*wash/.test(s)) m.push({ n: "Pressure washer detergent", c: 12 });
+
+  // ═══════════════════════════════════════════
+  // CONCRETE & MASONRY (~20 items)
+  // ═══════════════════════════════════════════
+  if (/concrete.*mix|bag.*concrete|quikrete/.test(s)) m.push({ n: "Concrete mix (80lb bag)", c: 7 });
+  if (/concrete.*patch|patch.*concrete/.test(s)) m.push({ n: "Concrete patch (qt)", c: 12 });
+  if (/concrete.*crack|crack.*fill/.test(s)) m.push({ n: "Concrete crack filler", c: 8 });
+  if (/concrete.*seal|seal.*concrete/.test(s)) m.push({ n: "Concrete sealer (gal)", c: 35 });
+  if (/rebar/.test(s)) m.push({ n: "Rebar #4 (10ft)", c: 8 });
+  if (/wire.*mesh|welded.*wire/.test(s)) m.push({ n: "Wire mesh (5x10 sheet)", c: 12 });
+  if (/anchor.*bolt/.test(s)) m.push({ n: "Anchor bolts (10pk)", c: 10 });
+  if (/mortar.*mix/.test(s)) m.push({ n: "Mortar mix (60lb)", c: 8 });
+  if (/concrete.*block|cmu|cinder.*block/.test(s)) m.push({ n: "Concrete block (8x8x16)", c: 3 });
+  if (/brick/.test(s)) m.push({ n: "Brick (each)", c: 1 });
+  if (/tuck.?point|repoint/.test(s)) m.push({ n: "Tuckpointing mortar", c: 12 });
+  if (/stone.*veneer/.test(s)) m.push({ n: "Stone veneer (sq ft)", c: 12 });
+  if (/form.*tube|sono.*tube/.test(s)) m.push({ n: "Sonotube (12in x 4ft)", c: 15 });
+  if (/post.*hole|post.*mix/.test(s)) m.push({ n: "Fast-set post mix (50lb)", c: 8 });
+
+  // ═══════════════════════════════════════════
+  // INSULATION (~15 items)
+  // ═══════════════════════════════════════════
+  if (/batt.*insul|fiberglass.*insul|r.?13|r.?19/.test(s)) m.push({ n: "Fiberglass batt insulation (roll)", c: 40 });
+  if (/blown.*insul|cellulose/.test(s)) m.push({ n: "Blown-in insulation (bag)", c: 18 });
+  if (/foam.*board|rigid.*foam|xps/.test(s)) m.push({ n: "Foam board insulation (4x8)", c: 22 });
+  if (/spray.*foam.*insul/.test(s)) m.push({ n: "Spray foam insulation kit", c: 450 });
+  if (/pipe.*insul|pipe.*wrap/.test(s)) m.push({ n: "Pipe insulation (6ft)", c: 4 });
+  if (/duct.*insul|duct.*wrap/.test(s)) m.push({ n: "Duct insulation wrap", c: 22 });
+  if (/attic.*insul/.test(s) && !m.some((x) => x.n.includes("insulation"))) m.push({ n: "Attic insulation (roll R-30)", c: 55 });
+  if (/radiant.*barrier/.test(s)) m.push({ n: "Radiant barrier (roll)", c: 65 });
+  if (/weather.*seal|foam.*tape/.test(s)) m.push({ n: "Foam weatherseal tape", c: 6 });
+  if (/vapor.*barrier|plastic.*sheet|visqueen/.test(s)) m.push({ n: "Vapor barrier (roll)", c: 30 });
+  if (/house.*wrap|tyvek/.test(s)) m.push({ n: "House wrap (roll)", c: 120 });
+
+  // ═══════════════════════════════════════════
+  // HVAC (~25 items)
+  // ═══════════════════════════════════════════
+  if (/thermostat/.test(s) && /smart|wifi|nest|ecobee/.test(s)) m.push({ n: "Smart thermostat", c: 140 });
+  else if (/thermostat/.test(s) && !has("Smart thermostat")) m.push({ n: "Thermostat (digital)", c: 35 });
+  if (/condenser|ac.*unit|outside.*unit/.test(s)) m.push({ n: "Condenser unit", c: 1400 });
+  if (/evaporator.*coil|a.?coil/.test(s)) m.push({ n: "Evaporator coil", c: 450 });
+  if (/furnace.*filter|hvac.*filter|air.*filter/.test(s)) m.push({ n: "HVAC filter (4pk)", c: 22 });
+  else if (/filter/.test(s) && !m.some((x) => x.n.includes("Filter") || x.n.includes("filter"))) m.push({ n: "Filter", c: 12 });
+  if (/ductwork|duct.*run/.test(s)) m.push({ n: "Duct section (4ft)", c: 25 });
+  if (/flex.*duct/.test(s)) m.push({ n: "Flex duct (25ft)", c: 35 });
+  if (/duct.*tape|foil.*tape/.test(s)) m.push({ n: "Foil duct tape", c: 10 });
+  if (/duct.*mastic|duct.*seal/.test(s)) m.push({ n: "Duct mastic (gal)", c: 15 });
+  if (/register|vent.*cover|air.*vent/.test(s)) m.push({ n: "Vent register", c: 8 });
+  if (/return.*grille|return.*air/.test(s)) m.push({ n: "Return air grille", c: 14 });
+  if (/refrigerant|freon|r.?410/.test(s)) m.push({ n: "Refrigerant (lb)", c: 75 });
+  if (/blower.*motor|fan.*motor/.test(s)) m.push({ n: "Blower motor", c: 200 });
+  if (/capacitor/.test(s)) m.push({ n: "Capacitor", c: 18 });
+  if (/contactor/.test(s)) m.push({ n: "Contactor", c: 25 });
+  if (/mini.?split|ductless/.test(s)) m.push({ n: "Mini-split system", c: 900 });
+  if (/window.*ac|window.*unit/.test(s)) m.push({ n: "Window AC unit", c: 250 });
+  if (/portable.*ac/.test(s)) m.push({ n: "Portable AC", c: 350 });
+  if (/humidifier.*whole/.test(s)) m.push({ n: "Whole-house humidifier", c: 180 });
+  if (/dehumidifier/.test(s)) m.push({ n: "Dehumidifier", c: 200 });
+  if (/line.*set|refrigerant.*line/.test(s)) m.push({ n: "Line set (25ft)", c: 65 });
+  if (/condensate.*pump|condensate.*drain/.test(s)) m.push({ n: "Condensate pump", c: 45 });
+  if (/uv.*light.*hvac|uv.*purif/.test(s)) m.push({ n: "UV air purifier", c: 120 });
+
+  // ═══════════════════════════════════════════
+  // ROOFING (~20 items)
+  // ═══════════════════════════════════════════
+  if (/3.?tab.*shingle/.test(s)) m.push({ n: "3-tab shingles (bundle)", c: 30 });
+  else if (/architect.*shingle|dimensional/.test(s)) m.push({ n: "Architectural shingles (bundle)", c: 40 });
+  else if (/shingle/.test(s) && !has("3-tab shingles (bundle)") && !has("Architectural shingles (bundle)")) m.push({ n: "Shingles (bundle)", c: 35 });
+  if (/metal.*roof|standing.*seam/.test(s)) m.push({ n: "Metal roofing panel (3x12)", c: 35 });
+  if (/rubber.*roof|epdm|membrane/.test(s)) m.push({ n: "EPDM membrane (sq ft)", c: 3 });
+  if (/roof.*felt|tar.*paper/.test(s)) m.push({ n: "Roof felt (roll)", c: 25 });
+  if (/ice.*water.*shield|ice.*barrier/.test(s)) m.push({ n: "Ice & water shield (roll)", c: 55 });
+  if (/synthetic.*underlayment/.test(s)) m.push({ n: "Synthetic underlayment (roll)", c: 65 });
+  if (/flashing/.test(s)) m.push({ n: "Flashing (10ft)", c: 15 });
+  if (/step.*flashing/.test(s)) m.push({ n: "Step flashing (pk)", c: 18 });
+  if (/ridge.*vent|roof.*vent/.test(s)) m.push({ n: "Ridge vent (4ft)", c: 18 });
+  if (/roof.*vent|turbine/.test(s) && !has("Ridge vent (4ft)")) m.push({ n: "Roof turbine vent", c: 35 });
   if (/drip.*edge/.test(s)) m.push({ n: "Drip edge (10ft)", c: 10 });
-  if (/roof.*cement|roof.*seal/.test(s)) m.push({ n: "Roof cement", c: 12 });
-  if (/soffit/.test(s)) m.push({ n: "Soffit panel", c: 18 });
-  if (/fascia/.test(s)) m.push({ n: "Fascia board", c: 22 });
+  if (/roof.*cement|roof.*sealant|henry/.test(s)) m.push({ n: "Roof cement (gal)", c: 14 });
+  if (/soffit/.test(s)) m.push({ n: "Soffit panel (12ft)", c: 22 });
+  if (/fascia/.test(s)) m.push({ n: "Fascia board (12ft)", c: 25 });
+  if (/roof.*nail|coil.*nail/.test(s)) m.push({ n: "Roofing nails (5lb)", c: 12 });
+  if (/boot|pipe.*boot|roof.*boot/.test(s)) m.push({ n: "Pipe boot", c: 12 });
+  if (/skylight.*flash/.test(s)) m.push({ n: "Skylight flashing kit", c: 55 });
+  if (/gutter.*spike|gutter.*screw/.test(s)) m.push({ n: "Gutter screws (pk)", c: 8 });
 
-  // Gas (licensed)
+  // ═══════════════════════════════════════════
+  // GAS (~8 items)
+  // ═══════════════════════════════════════════
   if (/gas.*line|gas.*pipe|gas.*flex/.test(s)) m.push({ n: "Gas flex line", c: 25 });
   if (/gas.*valve/.test(s)) m.push({ n: "Gas valve", c: 35 });
   if (/gas.*connector/.test(s)) m.push({ n: "Gas connector", c: 20 });
+  if (/gas.*shutoff/.test(s) && !has("Gas valve")) m.push({ n: "Gas shut-off valve", c: 22 });
+  if (/black.*pipe|gas.*pipe.*iron/.test(s)) m.push({ n: "Black iron pipe (10ft)", c: 18 });
+  if (/gas.*fitting|black.*fitting/.test(s)) m.push({ n: "Black iron fitting", c: 6 });
+  if (/gas.*leak.*detect/.test(s)) m.push({ n: "Gas leak detector spray", c: 8 });
+  if (/csst|corrugated.*gas/.test(s)) m.push({ n: "CSST gas line (per ft)", c: 5 });
+
+  // ═══════════════════════════════════════════
+  // FASTENERS & HARDWARE (~30 items)
+  // ═══════════════════════════════════════════
+  if (/wood.*screw/.test(s)) m.push({ n: "Wood screws (1lb box)", c: 10 });
+  if (/sheet.*metal.*screw|self.*tap/.test(s)) m.push({ n: "Sheet metal screws (pk)", c: 8 });
+  if (/lag.*bolt|lag.*screw/.test(s)) m.push({ n: "Lag bolts (10pk)", c: 10 });
+  if (/carriage.*bolt/.test(s)) m.push({ n: "Carriage bolts (10pk)", c: 8 });
+  if (/machine.*screw/.test(s)) m.push({ n: "Machine screws (pk)", c: 6 });
+  if (/concrete.*screw|tapcon/.test(s)) m.push({ n: "Tapcon screws (pk)", c: 12 });
+  if (/toggle.*bolt/.test(s)) m.push({ n: "Toggle bolts (pk)", c: 8 });
+  if (/anchor|drywall.*anchor|wall.*anchor/.test(s) && !m.some((x) => x.n.includes("anchor")))
+    m.push({ n: "Wall anchors (pk)", c: 6 });
+  if (/nail|common.*nail|framing.*nail/.test(s) && !m.some((x) => x.n.includes("nail")))
+    m.push({ n: "Framing nails (5lb)", c: 12 });
+  if (/washer/.test(s) && !s.includes("power") && !s.includes("pressure") && !s.includes("dish")) m.push({ n: "Washers (pk)", c: 4 });
+  if (/nut.*bolt|hex.*nut/.test(s)) m.push({ n: "Hex nut assortment", c: 8 });
+  if (/eye.*bolt|eye.*hook/.test(s)) m.push({ n: "Eye bolts (pk)", c: 6 });
+  if (/spring|extension.*spring/.test(s) && !s.includes("door")) m.push({ n: "Springs assortment", c: 8 });
+  if (/chain|jack.*chain/.test(s) && !s.includes("link")) m.push({ n: "Chain (per ft)", c: 3 });
+  if (/s.?hook/.test(s)) m.push({ n: "S-hooks (pk)", c: 5 });
+  if (/carabiner|snap.*hook/.test(s)) m.push({ n: "Snap hooks (pk)", c: 6 });
+  if (/cable.*tie|zip.*tie/.test(s)) m.push({ n: "Cable ties (100pk)", c: 8 });
+  if (/nail.*plate|protect.*plate/.test(s)) m.push({ n: "Nail plates (pk)", c: 6 });
+  if (/strap.*tie|metal.*strap/.test(s)) m.push({ n: "Metal strap tie", c: 5 });
+  if (/shelf.*bracket|bracket/.test(s) && !m.some((x) => x.n.includes("bracket"))) m.push({ n: "Shelf brackets (pair)", c: 10 });
+  if (/shelf|shelving/.test(s) && !has("Shelf brackets (pair)")) m.push({ n: "Shelf+brackets", c: 22 });
+  if (/hook|coat.*hook|wall.*hook/.test(s) && !m.some((x) => x.n.includes("hook"))) m.push({ n: "Wall hooks (pk)", c: 8 });
+
+  // ═══════════════════════════════════════════
+  // APPLIANCE PARTS & MISC (~20 items)
+  // ═══════════════════════════════════════════
+  if (/dryer.*vent|dryer.*duct/.test(s)) m.push({ n: "Dryer vent kit", c: 22 });
+  if (/dryer.*cord/.test(s)) m.push({ n: "Dryer power cord", c: 25 });
+  if (/washer.*hose|washing.*machine.*hose/.test(s)) m.push({ n: "Washer hoses (pair)", c: 20 });
+  if (/washer.*box|washing.*machine.*box/.test(s)) m.push({ n: "Washer outlet box", c: 28 });
+  if (/range.*cord|stove.*cord/.test(s) && !has("Appliance power cord")) m.push({ n: "Range power cord", c: 22 });
+  if (/refrigerator.*line|fridge.*line/.test(s)) m.push({ n: "Refrigerator water line", c: 15 });
+  if (/garbage.*disposal|disposal/.test(s) && !has("Disposal 1/2HP")) m.push({ n: "Disposal 1/3HP", c: 75 });
+  if (/water.*line.*connect/.test(s)) m.push({ n: "Water line connector kit", c: 12 });
+  if (/attic.*ladder|pull.?down.*stair/.test(s)) m.push({ n: "Attic ladder", c: 200 });
+  if (/closet.*rod/.test(s)) m.push({ n: "Closet rod+sockets", c: 12 });
+  if (/closet.*organizer|closet.*system/.test(s)) m.push({ n: "Closet organizer kit", c: 85 });
+  if (/wire.*shelving/.test(s)) m.push({ n: "Wire shelf (4ft)", c: 15 });
+  if (/garage.*storage|wall.*organizer/.test(s)) m.push({ n: "Garage wall organizer", c: 35 });
+  if (/ceiling.*hook|plant.*hook/.test(s)) m.push({ n: "Ceiling hooks (pk)", c: 6 });
+  if (/picture.*hang|picture.*hook/.test(s)) m.push({ n: "Picture hanging kit", c: 8 });
+  if (/tv.*mount|wall.*mount.*tv/.test(s)) m.push({ n: "TV wall mount", c: 35 });
+  if (/weather.*vane/.test(s)) m.push({ n: "Weather vane", c: 45 });
+  if (/house.*wrap.*tape|zip.*system.*tape/.test(s)) m.push({ n: "Zip system tape", c: 22 });
 
   if (m.length === 0) m.push({ n: "Misc materials", c: 17 });
   return m;
