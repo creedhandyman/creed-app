@@ -130,37 +130,34 @@ CRITICAL RULES:
 
 3. CLEAR DESCRIPTIONS: Rewrite garbled PDF text in plain professional English. Start with room name. Reconstruct meaning from context if text is fragmented.
 
-4. REALISTIC HOURS — ALL HOURS ARE MAN-HOURS (DO NOT default to 1 hour):
-   Man-hours = clock hours × crew size. A 2-man crew working 4 clock hours = 8 man-hours.
+4. REALISTIC HOURS — USE CONSERVATIVE ESTIMATES. These are CLOCK HOURS for a single worker:
+   IMPORTANT: Always use the LOW end of ranges. Contractors are efficient — don't over-estimate.
 
-   Quick tasks: outlet cover=0.15h, bulb=0.15h, smoke alarm battery=0.15h, install smoke alarm=0.25h, doorstop=0.15h, toilet seat=0.25h, blind install=0.25h per blind, door knob=0.5h, towel bar=0.25h, small drywall patch=0.5h, caulk=0.5h
-   Medium tasks: closet pole=0.5h, vanity light=0.5-1h, doorbell=0.75-1h, screen door=1-1.5h, re-secure door=0.5-1h
+   Quick tasks (under 30 min): outlet cover=0.1h, bulb=0.1h, smoke alarm battery=0.1h, install smoke alarm=0.2h, doorstop=0.1h, toilet seat=0.2h, blind install=0.2h, door knob=0.3h, towel bar=0.2h, caulk line=0.25h, door stop=0.1h
+   Medium tasks: closet pole=0.4h, vanity light=0.5h, doorbell=0.5h, screen door=1h, re-secure door=0.5h, small drywall patch=0.3h
 
-   PAINTING (these are MAN-HOURS, not clock hours — a 2-man crew doing 8 man-hrs finishes in 4 clock hrs):
-   - Touch-up paint (spot repairs, one room): 2-3 man-hrs
-   - Full room repaint SMALL (bedroom, bathroom — walls+ceiling+trim, patch+prime+2 coats): 5-7 man-hrs
-   - Full room repaint MEDIUM (kitchen, living room — walls+ceiling+trim, patch+prime+2 coats): 7-9 man-hrs
-   - Full room repaint LARGE (open concept, great room): 9-12 man-hrs
-   - Hallway/stairs repaint: 4-6 man-hrs
-   - Full unit paint (6-8 rooms, spray+roll+trim): 40-55 man-hrs total
-   - Paint prep adds 20-30% to painting hours (patching, sanding, priming, taping, masking)
-   IMPORTANT: When a report says walls need paint in EVERY room, quote each room separately with the above hours. A 3-bedroom unit with kitchen, living room, 2 baths, hallway = approximately 45-55 total man-hours of painting.
+   PAINTING (clock hours for a single painter — prep is INCLUDED, do NOT add extra):
+   - Touch-up paint (spot repairs, one room): 1-1.5h
+   - Full room repaint SMALL (bedroom, bathroom): 2-3h
+   - Full room repaint MEDIUM (kitchen, living room): 3-4h
+   - Full room repaint LARGE (open concept): 4-6h
+   - Hallway/stairs repaint: 2-3h
+   - Full unit paint (6-8 rooms, spray+roll+trim): 20-30h total
+   Do NOT add separate "prep" hours — prep time is already included above.
 
-   Other large tasks: pre-hung door+trim=2-3h, entry door=3-4h, LVP flooring small room=4-5h, LVP large room=5-7h, baseboard replacement=2-3h, tile removal+reinstall per 30sqft=6-8h
-   Multi-item: multiply per unit (2 blinds=0.5h, 10 outlet covers=1.5h, 4 smoke alarms=1h)
+   Other tasks: pre-hung door+trim=1.5-2h, entry door=2-3h, LVP flooring small room=3-4h, LVP large room=4-5h, baseboard replacement=1.5-2h, tile per 30sqft=4-5h
+   Multi-item: multiply per unit (2 blinds=0.4h, 10 outlet covers=1h, 4 smoke alarms=0.8h)
 
-5. REALISTIC MATERIALS (DO NOT use flat $17 default):
-   Smoke alarm=$20-25, outlet cover=$1-3, door knob=$18-28, pre-hung door 30"=$90-115, blind 20-27"=$10-15, blind 36"=$14-18, ceiling fixture=$25-40, vanity light=$30-50, toilet seat=$18-25, shower rod=$12-18, towel bar=$12-20, caulk=$5-8, screen door=$85-120, doorbell=$18-30, LVP flooring=$1.50-3.00/sqft
+5. REALISTIC MATERIALS — use LOW-END retail prices:
+   Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung door=$85, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, doorbell=$18, LVP flooring=$1.50/sqft
 
-   PAINT MATERIALS PER ROOM (include these for every room being painted):
-   - Paint 5-gal bucket (covers ~1 room with 2 coats): $35-42
-   - Paint 1-gal (small room or touch-up): $16-20
-   - Primer sealer quart: $10
-   - Spackling compound: $9
-   - Painter's tape (per room): $6
-   - Roller kit (frame+covers): $10 per 2-3 rooms
-   - Drop cloths/plastic sheeting: $8 per 2-3 rooms
-   For a full unit paint (6-8 rooms): ~7 five-gal buckets paint ($266), 4 primer quarts ($40), spackle ($18), tape ($24), roller kits ($20), drop cloths ($16) = ~$384-420 total materials
+   PAINT MATERIALS PER ROOM:
+   - Paint 1-gal (covers a small room with 2 coats): $16
+   - Paint 5-gal bucket (covers 2-3 rooms): $35
+   - Primer (qt): $10
+   - Spackle: $8
+   - Tape+supplies per room: $5
+   For a full unit paint (6-8 rooms): ~3 five-gal buckets ($105), primer ($20), supplies ($30) = ~$155 total
    If labor-only (unclog drain, re-secure faucet, haul junk), materials = $0.
 
 6. SQUARE FOOTAGE: When a room specifies its square footage, USE IT to calculate:
