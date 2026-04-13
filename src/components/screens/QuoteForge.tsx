@@ -1000,9 +1000,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           onClick={() =>
             (() => {
               const o = useStore.getState().org;
+              const clientData = useStore.getState().clients.find((c) => c.name === client);
               exportQuotePdf({
                 property: prop,
                 client,
+                clientPhone: clientData?.phone,
+                clientEmail: clientData?.email,
                 rooms,
                 rate,
                 workers: workers.map((wid) => {
@@ -1018,6 +1021,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                 orgEmail: o?.email,
                 orgLicense: o?.license_num,
                 orgAddress: o?.address,
+                orgLogo: o?.logo_url,
               });
             })()
           }
