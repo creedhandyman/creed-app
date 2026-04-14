@@ -147,22 +147,22 @@ Every line item MUST include:
 
 7. ONLY QUOTE MAINTENANCE ITEMS. Condition "S" with Action "None" = skip.
 
-## LABOR HOURS — clock hours, single worker. Use DECIMALS (0.1, 0.25, 0.5, etc.)
-Hours CAN and SHOULD be less than 1.0 for quick tasks. Never round up to 1h.
-Quick tasks: outlet cover=0.1h, bulb=0.1h, smoke alarm=0.2h, doorstop=0.1h, toilet seat=0.2h, blind=0.2h, door knob=0.3h, towel bar=0.2h, caulk=0.25h, door stop=0.1h, light fixture swap=0.5h, hinge tighten=0.15h, strike plate=0.15h
-Medium tasks: vanity light=0.5h, screen door=1h, re-secure door=0.5h, drywall patch=0.3h, faucet=1h, shower head=0.3h
+## LABOR HOURS — clock hours, single worker. Use DECIMALS. Include travel between rooms, setup, cleanup.
+These hours include: getting tools/materials ready, doing the work, cleaning up, and moving to the next task.
+Quick tasks: outlet cover=0.15h, bulb=0.15h, smoke alarm=0.25h, doorstop=0.15h, toilet seat=0.3h, blind=0.3h, door knob=0.4h, towel bar=0.3h, caulk line=0.3h, door stop=0.15h, light fixture swap=0.75h, hinge tighten=0.2h, strike plate=0.2h, mirror mount=0.5h, towel bar/TP holder=0.3h
+Medium tasks: vanity light=0.75h, screen door=1.25h, re-secure door=0.75h, drywall patch=0.5h, faucet=1.25h, shower head=0.4h, drawer slide=0.5h, cabinet door=0.75h, closet door/track=1h, screen repair=0.75h
 
-PAINTING — these are REALISTIC hours for experienced painters (prep INCLUDED):
-- Touch-up paint (spot repairs, one room): 1-1.5h
-- Full room repaint SMALL (bathroom, small bedroom — walls+ceiling+trim): 3-4h
-- Full room repaint MEDIUM (bedroom, kitchen — walls+ceiling+trim): 4-5h
-- Full room repaint LARGE (living room, open concept): 5-7h
-- Hallway/stairs repaint: 3-4h
-- Full unit paint (3-bed house, all rooms, spray+roll+trim): 35-45h total
-IMPORTANT: A full-house repaint of a 3-bedroom home = 35-45 total paint hours. Add up each room and verify the total is in this range. If it's under 30h for a full house paint, increase individual room hours.
+PAINTING — hours for experienced painters (prep, patch, prime, 2 coats, cleanup ALL included):
+- Touch-up paint (spot repairs, one room): 1.5-2h
+- Full room repaint SMALL (bathroom, small bedroom — walls+ceiling+trim): 4-5h
+- Full room repaint MEDIUM (bedroom, kitchen — walls+ceiling+trim): 5-6h
+- Full room repaint LARGE (living room, open concept): 6-8h
+- Hallway/stairs repaint: 3-5h
+- Full unit paint (3-bed house, all rooms, spray+roll+trim): 40-50h total
+IMPORTANT: A full-house repaint of a 3-bedroom home = 40-50 total paint hours. If your paint hours add up to less than 35h for a full house, increase them.
 
-Flooring: LVP small room=3-4h, large room=4-5h, baseboard per room=1-2h, tile per 30sqft=4-5h, carpet removal=1-2h per room
-Doors: pre-hung door=1.5h, bifold=1h, entry door=2h
+Flooring: LVP small room=4-5h, large room=5-7h, baseboard per room=1.5-2.5h, tile per 30sqft=5-6h, carpet removal=1.5-2h per room
+Doors: pre-hung door=2-2.5h, bifold=1.25h, entry door=2.5-3h
 
 ## MATERIALS — LOW-END RETAIL PRICES
 Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung door=$85, bifold door=$50, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower head=$22, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, faucet=$55, toilet repair kit=$15, LVP=$1.50/sqft
