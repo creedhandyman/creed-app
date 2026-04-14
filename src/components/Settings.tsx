@@ -94,18 +94,51 @@ export default function Settings({ onClose }: Props) {
               </button>
             </div>
           )}
+          {/* Editable business info */}
+          {isOwner && org && (
+            <div className="cd mb">
+              <h4 style={{ fontSize: 14, marginBottom: 8 }}>Business Info</h4>
+              {[
+                { label: "Business Name", field: "name", value: org.name, table: "organizations" },
+                { label: "Phone", field: "phone", value: org.phone, table: "organizations" },
+                { label: "Email", field: "email", value: org.email, table: "organizations" },
+                { label: "Address", field: "address", value: org.address, table: "organizations" },
+                { label: "License #", field: "license_num", value: org.license_num, table: "organizations" },
+              ].map((f) => (
+                <div key={f.field} style={{ marginBottom: 6 }}>
+                  <label className="sl" style={{ fontSize: 12 }}>{f.label}</label>
+                  <input
+                    key={`${f.field}-${f.value}`}
+                    defaultValue={f.value || ""}
+                    onBlur={async (e) => {
+                      const val = e.target.value.trim();
+                      if (val !== (f.value || "")) {
+                        await db.patch("organizations", org.id, { [f.field]: val });
+                        const orgs = await db.get("organizations", { id: org.id });
+                        if (orgs.length) useStore.getState().setOrg(orgs[0] as any);
+                        useStore.getState().showToast(`${f.label} updated`, "success");
+                      }
+                    }}
+                    style={{ fontSize: 13 }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* User info */}
           <div className="cd mb">
+            <h4 style={{ fontSize: 14, marginBottom: 8 }}>Your Profile</h4>
             {[
-              ["Business", org?.name || "—"],
-              ["Name", user.name],
-              ["Email", user.email],
-              ["Role", user.role],
-              ["#", user.emp_num],
-              ["Rate", "$" + (user.rate || 55) + "/hr"],
-              ["Start", user.start_date],
-            ].map(([label, value], i) => (
+              { label: "Name", value: user.name, field: "name" },
+              { label: "Email", value: user.email, field: "" },
+              { label: "Role", value: user.role, field: "" },
+              { label: "Employee #", value: user.emp_num, field: "" },
+              { label: "Rate", value: "$" + (user.rate || 55) + "/hr", field: "" },
+              { label: "Start Date", value: user.start_date, field: "" },
+            ].map((f, i) => (
               <div key={i} className="sep" style={{ fontSize: 13 }}>
-                <span className="dim">{label}:</span> {value || "—"}
+                <span className="dim">{f.label}:</span> {f.value || "—"}
               </div>
             ))}
           </div>
