@@ -1399,11 +1399,13 @@ function QuoteTab({
                       >
                         ${it.materials.reduce((s, m) => s + (m.c || 0), 0).toFixed(0)}
                       </div>
-                      {expandedMat === it.id && (
+                      {expandedMat === it.id && (<>
+                        <div onClick={() => setExpandedMat(null)} style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.4)" }} />
                         <div onClick={(e) => e.stopPropagation()} style={{
-                          position: "absolute", top: "100%", right: 0, zIndex: 100,
+                          position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+                          zIndex: 200, width: "90%", maxWidth: 360, maxHeight: "70vh", overflowY: "auto",
                           background: darkMode ? "#12121a" : "#fff", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-                          borderRadius: 8, padding: 8, minWidth: 220, boxShadow: "0 4px 12px rgba(0,0,0,.3)",
+                          borderRadius: 12, padding: 14, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
                         }}>
                           <div style={{ display: "flex", gap: 4, marginBottom: 6, fontSize: 11, fontWeight: 600 }}>
                             <span style={{ flex: 1 }}>Material</span>
@@ -1468,8 +1470,13 @@ function QuoteTab({
                             }}
                             style={{ fontSize: 11, background: "none", color: "var(--color-primary)", padding: "2px 0", width: "100%", textAlign: "center", marginTop: 4 }}
                           >+ Add Material</button>
+                          <button
+                            onClick={() => setExpandedMat(null)}
+                            className="bo"
+                            style={{ fontSize: 12, padding: "4px 0", width: "100%", marginTop: 8 }}
+                          >Done</button>
                         </div>
-                      )}
+                      </>)}
                     </div>
                     <div style={{ minWidth: 50, textAlign: "right" }}>
                       <div style={{ fontSize: 8 }} className="dim">TOT</div>

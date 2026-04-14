@@ -389,7 +389,68 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         <div className="row mt">
           <button
             className="bo"
-            onClick={() => window.print()}
+            onClick={() => {
+              const org = useStore.getState().org;
+              const orgName = org?.name || "Service Provider";
+              const orgPhone = org?.phone || "";
+              const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+              // Get current view range
+              const viewStart = new Date(year, month, 1);
+              const viewEnd = new Date(year, month + 1, 0);
+              const monthName = viewStart.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+              // Filter schedule to this month
+              const monthEntries = schedule
+                .filter((s) => {
+                  const d = s.sched_date;
+                  return d >= viewStart.toISOString().split("T")[0] && d <= viewEnd.toISOString().split("T")[0];
+                })
+                .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
+
+              const rows = monthEntries.map((s) => {
+                const d = new Date(s.sched_date + "T12:00:00");
+                const dayName = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                const timeMatch = s.note?.match(/🕐\s*(\d{1,2}:\d{2})/);
+                const time = timeMatch ? timeMatch[1] : "—";
+                const workers = s.note?.match(/👷\s*(.+?)(?:\s*·|$)/)?.[1] || "—";
+                const notes = s.note?.replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/g, "").replace(/👷\s*.+?(?:\s*·|$)/g, "").trim() || "";
+                return `<tr><td style="white-space:nowrap;font-weight:600">${dayName}</td><td>${time}</td><td style="color:#2E75B6">${s.job}</td><td>${workers}</td><td class="dim">${notes}</td></tr>`;
+              }).join("");
+
+              const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Schedule — ${monthName}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;font-size:13px}
+.page{max-width:800px;margin:0 auto;padding:32px 40px}
+h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase;letter-spacing:.05em}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2E75B6}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-family:Oswald;text-transform:uppercase;font-size:11px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:8px;text-align:left}
+td{padding:8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
+.dim{color:#888}
+.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:24px}
+@media print{body{padding:0}.page{padding:16px 24px}}
+</style></head><body><div class="page">
+<div class="header">
+  <div><h1>${orgName}</h1><div style="font-size:12px;color:#666;margin-top:4px">${orgPhone}</div></div>
+  <div style="text-align:right"><div style="font-family:Oswald;font-size:16px;color:#2E75B6;text-transform:uppercase">Work Schedule</div><div style="font-size:12px;color:#666">${monthName}</div><div style="font-size:12px;color:#666">Printed ${today}</div></div>
+</div>
+<table>
+  <thead><tr><th>Date</th><th>Time</th><th>Job / Property</th><th>Workers</th><th>Notes</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="5" class="dim" style="text-align:center;padding:20px">No jobs scheduled this month</td></tr>'}</tbody>
+</table>
+<div style="margin-top:16px;font-size:12px;color:#666">${monthEntries.length} job${monthEntries.length !== 1 ? "s" : ""} scheduled</div>
+<div class="footer">${orgName}${orgPhone ? " · " + orgPhone : ""}</div>
+</div></body></html>`;
+
+              const win = window.open("", "_blank");
+              if (!win) { useStore.getState().showToast("Allow popups to print schedule", "error"); return; }
+              win.document.write(html);
+              win.document.close();
+              setTimeout(() => win.print(), 600);
+            }}
             style={{ fontSize: 10 }}
           >
             🖨 Print Schedule

@@ -342,6 +342,48 @@ export default function Timer({ setPage }: Props) {
         )}
       </div>
 
+      {/* Crew Activity — owners/managers only */}
+      {isOwner && profiles.length > 1 && (
+        <div className="cd" style={{ marginTop: 14 }}>
+          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)" }}>👷 Crew Activity — Today</h4>
+          {(() => {
+            const todayStr = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+            const todayISO = new Date().toISOString().split("T")[0];
+            return profiles.map((p) => {
+              const todayEntries = timeEntries.filter((e) =>
+                (e.user_id === p.id || e.user_name === p.name) &&
+                (e.entry_date === todayStr || e.entry_date === todayISO || e.entry_date === todayStr.replace(/^0/, ""))
+              );
+              const todayHrs = todayEntries.reduce((s, e) => s + (e.hours || 0), 0);
+              const todayPay = todayHrs * (p.rate || 55);
+              const lastEntry = todayEntries[0];
+              return (
+                <div key={p.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+                  <div>
+                    <span style={{ fontWeight: 600 }}>{p.name}</span>
+                    {lastEntry && (
+                      <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>
+                        {lastEntry.job}{lastEntry.start_time ? ` · ${lastEntry.start_time}–${lastEntry.end_time || "now"}` : ""}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    {todayHrs > 0 ? (
+                      <>
+                        <span style={{ color: "var(--color-primary)", fontFamily: "Oswald" }}>{todayHrs.toFixed(1)}h</span>
+                        <span className="dim" style={{ marginLeft: 6 }}>${todayPay.toFixed(0)}</span>
+                      </>
+                    ) : (
+                      <span className="dim">—</span>
+                    )}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
+
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <p className="dim" style={{ fontSize: 12 }}>
           💡 Next: Review hours in Payroll
