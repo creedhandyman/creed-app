@@ -1361,6 +1361,21 @@ function QuoteTab({
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 8 }} className="dim">SQFT</div>
+                      <input
+                        type="number"
+                        defaultValue={(it as unknown as Record<string, unknown>).sqft as number || ""}
+                        min="0"
+                        placeholder="—"
+                        onBlur={(e) => {
+                          const sqft = parseFloat(e.target.value) || 0;
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          upItem(rm.name, it.id, "sqft" as any, sqft as any);
+                        }}
+                        style={{ width: 40, textAlign: "center", padding: "2px", fontSize: 11 }}
+                      />
+                    </div>
+                    <div style={{ textAlign: "center" }}>
                       <div style={{ fontSize: 8 }} className="dim">HRS</div>
                       <input
                         type="number"
