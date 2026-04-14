@@ -161,7 +161,20 @@ PAINTING — hours for experienced painters (prep, patch, prime, 2 coats, cleanu
 - Full unit paint (3-bed house, all rooms, spray+roll+trim): 40-50h total
 IMPORTANT: A full-house repaint of a 3-bedroom home = 40-50 total paint hours. If your paint hours add up to less than 35h for a full house, increase them.
 
-Flooring: LVP small room=4-5h, large room=5-7h, baseboard per room=1.5-2.5h, tile per 30sqft=5-6h, carpet removal=1.5-2h per room
+FLOORING — create ONE line item per room. Do NOT split into separate demo/prep/install items.
+Hours INCLUDE old floor removal, subfloor prep, AND new floor installation:
+- LVP/Laminate: 1 hour per 40-50 sqft (example: 450 sqft = 10h total, NOT 24h split across 3 items)
+- Carpet: 1 hour per 60 sqft (includes pad)
+- Tile: 1 hour per 15-20 sqft
+- Baseboard per room: 1.5-2.5h
+FLOORING MATERIALS — calculate from sqft:
+- LVP/Laminate: $2.00/sqft + 10% waste. Example: 450 sqft = 495 sqft × $2 = $990
+- Underlayment: $0.30/sqft. Example: 450 sqft = $135
+- Transition strips: $15 each × 2-4 per job = $30-60
+- Self-leveling compound: ONLY if report says "uneven subfloor". $35 per 50sqft.
+- Disposal/cleanup: $15 flat
+EXAMPLE: 450 sqft LVP = ONE item: 10h labor + $1,170 materials. NOT three separate items totaling $10,000.
+
 Doors: pre-hung door=2-2.5h, bifold=1.25h, entry door=2.5-3h
 
 ## MATERIALS — LOW-END RETAIL PRICES
