@@ -1405,7 +1405,12 @@ function QuoteTab({
                           background: darkMode ? "#12121a" : "#fff", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
                           borderRadius: 8, padding: 8, minWidth: 220, boxShadow: "0 4px 12px rgba(0,0,0,.3)",
                         }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Materials</div>
+                          <div style={{ display: "flex", gap: 4, marginBottom: 6, fontSize: 11, fontWeight: 600 }}>
+                            <span style={{ flex: 1 }}>Material</span>
+                            <span style={{ width: 32, textAlign: "center" }}>Qty</span>
+                            <span style={{ width: 55, textAlign: "right" }}>Price</span>
+                            <span style={{ width: 16 }}></span>
+                          </div>
                           {it.materials.map((mat, mi) => (
                             <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 12 }}>
                               <input
@@ -1416,6 +1421,24 @@ function QuoteTab({
                                   upItem(rm.name, it.id, "materials", mats);
                                 }}
                                 style={{ flex: 1, fontSize: 11, padding: 2 }}
+                              />
+                              <input
+                                type="number"
+                                value={(mat as unknown as Record<string, unknown>).qty as number || 1}
+                                min="1"
+                                step="1"
+                                onChange={(e) => {
+                                  const qty = parseInt(e.target.value) || 1;
+                                  const mats = [...it.materials];
+                                  (mats[mi] as unknown as Record<string, unknown>).qty = qty;
+                                  // Recalc total: unit price × qty
+                                  const unitPrice = (mats[mi] as unknown as Record<string, unknown>).unitPrice as number || mats[mi].c;
+                                  mats[mi] = { ...mats[mi], c: Math.round(unitPrice * qty * 100) / 100 };
+                                  (mats[mi] as unknown as Record<string, unknown>).qty = qty;
+                                  (mats[mi] as unknown as Record<string, unknown>).unitPrice = unitPrice;
+                                  upItem(rm.name, it.id, "materials", mats);
+                                }}
+                                style={{ width: 32, fontSize: 11, padding: 2, textAlign: "center" }}
                               />
                               <span style={{ fontSize: 11 }}>$</span>
                               <input
