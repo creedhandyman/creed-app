@@ -323,6 +323,17 @@ export default function Dashboard({ setPage, openSettings }: Props) {
             <div className="dim" style={{ fontSize: 10 }}>Track trips</div>
           </div>
         </div>
+        <div
+          className="cd"
+          onClick={() => setPage("troubleshoot")}
+          style={{ flex: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 12 }}
+        >
+          <span style={{ fontSize: 20 }}>🔧</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Troubleshoot</div>
+            <div className="dim" style={{ fontSize: 10 }}>AI diagnosis</div>
+          </div>
+        </div>
       </div>
 
       {/* Marketing */}

@@ -13,6 +13,7 @@ import Quests from "./screens/Quests";
 import Clients from "./screens/Clients";
 import Mileage from "./screens/Mileage";
 import Marketing from "./screens/Marketing";
+import Troubleshoot from "./screens/Troubleshoot";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -70,6 +71,8 @@ export default function AppShell() {
         return <Mileage setPage={goToPage} />;
       case "marketing":
         return isAdmin ? <Marketing /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+      case "troubleshoot":
+        return <Troubleshoot setPage={goToPage} />;
       default:
         return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
     }
