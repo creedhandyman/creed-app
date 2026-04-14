@@ -268,7 +268,25 @@ export function validateQuote(rooms: Room[]): Room[] {
     }),
   }));
 
-  // 4. Cap unreasonable hours (no single item should exceed 10h)
+  // 4. Cap unreasonable material costs per item (no single item > $500 unless it's a major fixture)
+  const EXPENSIVE_KEYWORDS = /water heater|condenser|furnace|ac unit|mini.?split|garage door|countertop|tub|vanity|window|appliance|flooring|carpet/i;
+  rooms = rooms.map((r) => ({
+    ...r,
+    items: r.items.map((it) => {
+      const matTotal = it.materials.reduce((s, m) => s + (m.c || 0), 0);
+      const isExpensive = EXPENSIVE_KEYWORDS.test(it.detail + " " + it.comment);
+      const cap = isExpensive ? 2000 : 500;
+      if (matTotal > cap) {
+        console.warn(`VALIDATION: Material cost for "${it.detail}" is $${matTotal} (cap $${cap}). Resetting.`);
+        // Scale materials down proportionally to cap
+        const scale = cap / matTotal;
+        return { ...it, materials: it.materials.map((m) => ({ ...m, c: Math.round(m.c * scale) })) };
+      }
+      return it;
+    }),
+  }));
+
+  // 5. Cap unreasonable hours (no single item should exceed 10h)
   rooms = rooms.map((r) => ({
     ...r,
     items: r.items.map((it) => {
