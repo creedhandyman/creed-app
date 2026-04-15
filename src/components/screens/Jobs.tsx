@@ -153,8 +153,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     const job = jobs.find((j) => j.id === id);
     if (job?.client) {
       const orgName = org?.name || "Service Provider";
-      const statusUrl = `https://creedhm.com/status?job=${id}`;
-      const reviewUrl = `https://creedhm.com/review?org=${user.org_id}`;
+      const statusUrl = `${window.location.origin}/status?job=${id}`;
+      const reviewUrl = `${window.location.origin}/review?org=${user.org_id}`;
       let msg = "";
 
       if (status === "scheduled") {
@@ -429,7 +429,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                     </button>
                     <button className="bo" onClick={(e) => {
                       e.stopPropagation();
-                      const url = `https://creedhm.com/status?job=${j.id}`;
+                      const url = `${window.location.origin}/status?job=${j.id}`;
                       const msg = j.status === "quoted" || j.status === "accepted"
                         ? `Hi! Here's your quote from ${org?.name || "us"} for ${j.property}:\n\nTotal: $${(j.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
                         : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
