@@ -607,6 +607,97 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                     </select>
                   </div>
 
+                  {/* Before/After Photos */}
+                  {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (() => {
+                    const jobData = (() => { try { return typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms; } catch { return {}; } })();
+                    const photos: { url: string; label: string; type: string }[] = jobData?.photos || [];
+                    const beforePhotos = photos.filter((p) => p.type === "before");
+                    const afterPhotos = photos.filter((p) => p.type === "after");
+
+                    return (
+                      <div style={{ marginTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`, paddingTop: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>📸 Completion Photos</span>
+                          <div className="row" style={{ gap: 4 }}>
+                            <button
+                              className="bo"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const input = document.createElement("input");
+                                input.type = "file";
+                                input.accept = "image/*";
+                                input.multiple = true;
+                                input.onchange = async () => {
+                                  if (!input.files?.length) return;
+                                  const updated = { ...jobData };
+                                  if (!updated.photos) updated.photos = [];
+                                  for (let i = 0; i < input.files.length; i++) {
+                                    const file = input.files[i];
+                                    const ext = file.name.split(".").pop() || "jpg";
+                                    const path = `gallery/${j.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+                                    const { error } = await supabase.storage.from("receipts").upload(path, file);
+                                    if (!error) {
+                                      const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+                                      if (data?.publicUrl) updated.photos.push({ url: data.publicUrl, label: "", type: "after" });
+                                    }
+                                  }
+                                  await db.patch("jobs", j.id, { rooms: JSON.stringify(updated) });
+                                  loadAll();
+                                  useStore.getState().showToast("After photos uploaded", "success");
+                                };
+                                input.click();
+                              }}
+                              style={{ fontSize: 12, padding: "3px 8px" }}
+                            >
+                              + After Photos
+                            </button>
+                            {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
+                              <button
+                                className="bo"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Generate before/after report PDF
+                                  const orgName = org?.name || "Service Provider";
+                                  const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+                                  const photoRows = [...new Set([...beforePhotos.map(p => p.label), ...afterPhotos.map(p => p.label)])].filter(Boolean).map((label) => {
+                                    const before = beforePhotos.find(p => p.label === label);
+                                    const after = afterPhotos.find(p => p.label === label);
+                                    return `<tr><td style="font-weight:600;font-size:12px">${label}</td><td style="text-align:center">${before ? `<img src="${before.url}" style="width:200px;height:130px;object-fit:cover;border-radius:6px" />` : '<span style="color:#888">—</span>'}</td><td style="text-align:center">${after ? `<img src="${after.url}" style="width:200px;height:130px;object-fit:cover;border-radius:6px" />` : '<span style="color:#888">—</span>'}</td></tr>`;
+                                  }).join("");
+                                  // Also show unlabeled photos
+                                  const unlabeledBefore = beforePhotos.filter(p => !p.label);
+                                  const unlabeledAfter = afterPhotos.filter(p => !p.label);
+                                  let extraHtml = "";
+                                  if (unlabeledBefore.length || unlabeledAfter.length) {
+                                    extraHtml = `<h3 style="font-family:Oswald;font-size:14px;color:#2E75B6;margin:16px 0 8px">Additional Photos</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">${[...unlabeledBefore, ...unlabeledAfter].map(p => `<div style="text-align:center"><img src="${p.url}" style="width:100%;height:100px;object-fit:cover;border-radius:6px" /><div style="font-size:10px;color:#666;margin-top:2px">${p.type}</div></div>`).join("")}</div>`;
+                                  }
+                                  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Photo Report — ${j.property}</title><style>@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;font-size:13px}.page{max-width:800px;margin:0 auto;padding:32px 40px}h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase}h2{font-family:Oswald;font-size:15px;color:#2E75B6;text-transform:uppercase;margin:20px 0 8px;border-bottom:2px solid #2E75B6;padding-bottom:4px}table{width:100%;border-collapse:collapse}th{font-family:Oswald;font-size:12px;color:#fff;background:#2E75B6;padding:8px;text-align:center}td{padding:8px;border-bottom:1px solid #e8e8e8;vertical-align:middle}.header{display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2E75B6}.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:24px}@media print{.page{padding:16px 24px}}</style></head><body><div class="page"><div class="header"><div><h1>${orgName}</h1><div style="font-size:12px;color:#666;margin-top:4px">Before & After Photo Report</div></div><div style="text-align:right"><div style="font-size:14px;font-family:Oswald;color:#2E75B6">PHOTO REPORT</div><div style="font-size:12px;color:#666">${today}</div><div style="font-size:12px;color:#666">${j.property}</div></div></div><h2>Before & After Comparison</h2><table><thead><tr><th style="text-align:left;width:30%">Location</th><th>Before</th><th>After</th></tr></thead><tbody>${photoRows || '<tr><td colspan="3" style="text-align:center;color:#888;padding:20px">Upload before and after photos to generate comparison</td></tr>'}</tbody></table>${extraHtml}<div style="margin-top:20px;font-size:12px;color:#666"><b>Before photos:</b> ${beforePhotos.length} · <b>After photos:</b> ${afterPhotos.length}</div><div class="footer">${orgName}</div></div></body></html>`;
+                                  const win = window.open("", "_blank");
+                                  if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+                                }}
+                                style={{ fontSize: 12, padding: "3px 8px" }}
+                              >
+                                📸 Photo Report
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {photos.filter(p => p.type === "before" || p.type === "after").slice(0, 8).map((p, i) => (
+                              <div key={i} style={{ position: "relative" }}>
+                                <img src={p.url} alt="" style={{ width: 50, height: 50, objectFit: "cover", borderRadius: 4, border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}` }} />
+                                <span style={{ position: "absolute", bottom: 1, left: 1, fontSize: 8, background: p.type === "before" ? "#ff8800" : "#00cc66", color: "#fff", padding: "0 3px", borderRadius: 2 }}>
+                                  {p.type === "before" ? "B" : "A"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Work Order Checklist */}
                   {(() => {
                     try {
