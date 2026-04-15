@@ -436,10 +436,10 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       navigator.clipboard.writeText(msg);
                       useStore.getState().showToast("Message copied! Paste & send to client.", "success");
                     }} style={{ fontSize: 12, padding: "6px 14px" }}>
-                      📤 {t("jobs.sendClient")}
+                      📤 Send Job to Client
                     </button>
                     <button className="bo" onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }} style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-accent-red)" }}>
-                      ✕
+                      🗑 {t("jobs.delete")}
                     </button>
                   </div>
 
