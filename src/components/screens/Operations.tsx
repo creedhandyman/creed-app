@@ -2,9 +2,10 @@
 import { useState } from "react";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
+import Clients from "./Clients";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
-  const [tab, setTab] = useState<"payroll" | "financials" | "troubleshoot">("payroll");
+  const [tab, setTab] = useState<"payroll" | "financials" | "clients">("payroll");
 
   return (
     <div className="fi">
@@ -13,7 +14,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
         {[
           { id: "payroll" as const, label: "💰 Payroll" },
           { id: "financials" as const, label: "📊 Financials" },
-          { id: "troubleshoot" as const, label: "🔧 Diagnose" },
+          { id: "clients" as const, label: "👥 Clients" },
         ].map((t) => (
           <button
             key={t.id}
@@ -31,13 +32,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
 
       {tab === "payroll" && <Payroll />}
       {tab === "financials" && <Financials setPage={setPage} />}
-      {tab === "troubleshoot" && (
-        <div>
-          <button className="bb" onClick={() => setPage("troubleshoot")} style={{ width: "100%", padding: 14, fontSize: 15 }}>
-            🔧 Open AI Troubleshooter
-          </button>
-        </div>
-      )}
+      {tab === "clients" && <Clients setPage={setPage} />}
     </div>
   );
 }

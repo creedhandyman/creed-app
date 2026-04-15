@@ -18,7 +18,6 @@ const NAV_ITEMS: (NavItem | "logo" | "tape")[] = [
   "tape",
   { id: "sched", icon: "📅", labelKey: "nav.sched" },
   { id: "jobs", icon: "📋", labelKey: "nav.jobs" },
-  { id: "clients", icon: "👥", labelKey: "nav.clients", adminOnly: true },
   { id: "qf", icon: "⚡", labelKey: "nav.quote" },
 ];
 
