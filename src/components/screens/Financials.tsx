@@ -46,10 +46,6 @@ export default function Financials({ setPage }: { setPage: (p: string) => void }
   const outstandingInvoices = invoiced.reduce((s, j) => s + (j.total || 0), 0);
   const totalLaborCharged = completed.reduce((s, j) => s + (j.total_labor || 0), 0);
   const totalMaterials = completed.reduce((s, j) => s + (j.total_mat || 0), 0);
-  // Crew cost = actual hours worked × worker rates (from time entries)
-  const crewCost = rangeEntries.reduce((s, e) => s + (e.amount || 0), 0);
-  // Profit = Revenue - Materials - What you pay your crew
-  const profit = completedRevenue - totalMaterials - crewCost;
 
   // Conversion funnel
   const closeRate = rangeJobs.length > 0 ? Math.round((accepted.length / rangeJobs.length) * 100) : 0;
@@ -84,6 +80,8 @@ export default function Financials({ setPage }: { setPage: (p: string) => void }
     byTech[name].hours += e.hours || 0;
     byTech[name].pay += e.amount || 0;
   });
+  const crewCost = rangeEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  const profit = completedRevenue - totalMaterials - crewCost;
   const techEntries = Object.entries(byTech).sort((a, b) => b[1].hours - a[1].hours);
 
   // Top clients

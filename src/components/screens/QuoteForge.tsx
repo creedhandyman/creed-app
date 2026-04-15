@@ -131,6 +131,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const quickPhotoRef = useRef<HTMLInputElement>(null);
   const quickCameraRef = useRef<HTMLInputElement>(null);
   const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
+  const [inspectionData, setInspectionData] = useState<InspectionData | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -193,6 +194,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
     setProp(data.property);
     setClient(data.client);
+    setInspectionData(data); // Save raw inspection for later access
 
     // Collect all inspection photos and add to job gallery
     const inspectionPhotos: { url: string; label: string; type: "before" | "after" | "work" }[] = [];
@@ -506,6 +508,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       }),
       photos: jobPhotos,
       workOrder,
+      inspection: inspectionData ? {
+        rooms: inspectionData.rooms.map((r) => ({
+          name: r.name,
+          items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
+        })),
+        property: inspectionData.property,
+        client: inspectionData.client,
+      } : undefined,
     };
     const jobData = {
       property: prop,

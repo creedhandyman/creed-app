@@ -417,74 +417,121 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                     borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
                   }}
                 >
-                  <div className="row">
+                  {/* Quick action buttons — clean row */}
+                  <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
                     {onEditJob && (
-                      <button
-                        className="bb"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditJob(j.id);
-                        }}
-                        style={{ fontSize: 12, padding: "5px 12px" }}
-                      >
+                      <button className="bb" onClick={(e) => { e.stopPropagation(); onEditJob(j.id); }} style={{ fontSize: 12, padding: "6px 14px" }}>
                         ✏️ {t("jobs.editQuote")}
                       </button>
                     )}
-                    <button
-                      className="bb"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (onScheduleJob) onScheduleJob(j.property);
-                        else setPage("sched");
-                      }}
-                      style={{ fontSize: 12, padding: "5px 12px" }}
-                    >
+                    <button className="bb" onClick={(e) => { e.stopPropagation(); if (onScheduleJob) onScheduleJob(j.property); else setPage("sched"); }} style={{ fontSize: 12, padding: "6px 14px" }}>
                       📅 {t("jobs.scheduleThis")}
                     </button>
-                    <button
-                      className="bo"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        exportJobReport({
-                          job: j,
-                          orgName: org?.name || "Service Provider",
-                          orgPhone: org?.phone || "",
-                          orgEmail: org?.email || "",
-                          orgLicense: org?.license_num || "",
-                          orgAddress: org?.address || "",
-                          workerNames: w.map((x) => x.name),
-                        });
-                      }}
-                      style={{ fontSize: 12, padding: "5px 10px" }}
-                    >
-                      📋 {t("jobs.jobReport")}
-                    </button>
-                    <button
-                      className="bo"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const url = `https://creedhm.com/status?job=${j.id}`;
-                        const msg = j.status === "quoted" || j.status === "accepted"
-                          ? `Hi! Here's your quote from ${org?.name || "us"} for ${j.property}:\n\nTotal: $${(j.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
-                          : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
-                        navigator.clipboard.writeText(msg);
-                        useStore.getState().showToast("Message copied! Paste it in a text or email to your client.", "success");
-                      }}
-                      style={{ fontSize: 12, padding: "5px 10px" }}
-                    >
+                    <button className="bo" onClick={(e) => {
+                      e.stopPropagation();
+                      const url = `https://creedhm.com/status?job=${j.id}`;
+                      const msg = j.status === "quoted" || j.status === "accepted"
+                        ? `Hi! Here's your quote from ${org?.name || "us"} for ${j.property}:\n\nTotal: $${(j.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
+                        : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
+                      navigator.clipboard.writeText(msg);
+                      useStore.getState().showToast("Message copied! Paste & send to client.", "success");
+                    }} style={{ fontSize: 12, padding: "6px 14px" }}>
                       📤 {t("jobs.sendClient")}
                     </button>
-                    <button
-                      className="bo"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteJob(j.id);
-                      }}
-                      style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}
-                    >
-                      {t("jobs.delete")}
+                    <button className="bo" onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }} style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-accent-red)" }}>
+                      ✕
                     </button>
                   </div>
+
+                  {/* Job info cards */}
+                  <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                    <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                      <div className="sl">Labor</div>
+                      <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 14 }}>${(j.total_labor || 0).toFixed(0)}</div>
+                    </div>
+                    <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                      <div className="sl">Materials</div>
+                      <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 14 }}>${(j.total_mat || 0).toFixed(0)}</div>
+                    </div>
+                    <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                      <div className="sl">Hours</div>
+                      <div style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 14 }}>{(j.total_hrs || 0).toFixed(1)}</div>
+                    </div>
+                  </div>
+
+                  {/* Guide — Tools + Shopping inline */}
+                  {(() => {
+                    try {
+                      const jobData = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+                      const roomsArr = jobData?.rooms || [];
+                      if (!roomsArr.length) return null;
+                      const { makeGuide } = require("@/lib/parser");
+                      const guide = makeGuide(roomsArr);
+                      return (
+                        <div style={{ marginBottom: 10 }}>
+                          {guide.tools.length > 0 && (
+                            <div style={{ marginBottom: 6 }}>
+                              <div className="sl" style={{ marginBottom: 4 }}>🔨 Tools</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {guide.tools.slice(0, 12).map((tool: string, ti: number) => (
+                                  <span key={ti} style={{ fontSize: 12, padding: "2px 6px", borderRadius: 4, background: darkMode ? "#1a1a28" : "#f0f0f5", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}` }}>{tool}</span>
+                                ))}
+                                {guide.tools.length > 12 && <span className="dim" style={{ fontSize: 12 }}>+{guide.tools.length - 12} more</span>}
+                              </div>
+                            </div>
+                          )}
+                          {guide.shop.length > 0 && (
+                            <div>
+                              <div className="sl" style={{ marginBottom: 4 }}>🛒 Materials (${guide.shop.reduce((s: number, i: { c: number }) => s + (i.c || 0), 0)})</div>
+                              {guide.shop.slice(0, 8).map((item: { n: string; c: number }, si: number) => (
+                                <div key={si} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "2px 0", borderBottom: `1px solid ${darkMode ? "#1e1e2e11" : "#eee"}` }}>
+                                  <span>{item.n}</span>
+                                  <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>${item.c}</span>
+                                </div>
+                              ))}
+                              {guide.shop.length > 8 && <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>+{guide.shop.length - 8} more items</div>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    } catch { return null; }
+                  })()}
+
+                  {/* Saved Inspection */}
+                  {(() => {
+                    try {
+                      const jd = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+                      if (!jd?.inspection?.rooms?.length) return null;
+                      return (
+                        <div style={{ marginBottom: 10 }}>
+                          <div className="sl" style={{ marginBottom: 4 }}>📋 Inspection Report</div>
+                          {jd.inspection.rooms.map((r: { name: string; items: { name: string; condition: string; comment: string; photos?: string[] }[] }, ri: number) => (
+                            <div key={ri} style={{ marginBottom: 6 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>{r.name}</div>
+                              {r.items.map((it: { name: string; condition: string; comment: string; photos?: string[] }, ii: number) => (
+                                <div key={ii} style={{ fontSize: 12, padding: "3px 0 3px 12px", borderBottom: `1px solid ${darkMode ? "#1e1e2e11" : "#eee"}` }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                    <span>{it.name}</span>
+                                    <span style={{ fontSize: 11, padding: "0 4px", borderRadius: 3, background: it.condition === "D" ? "#C0000022" : it.condition === "P" ? "#ff880022" : it.condition === "F" ? "#ffcc0022" : "#00cc6622", color: it.condition === "D" ? "#C00000" : it.condition === "P" ? "#ff8800" : it.condition === "F" ? "#ffcc00" : "#00cc66" }}>
+                                      {it.condition || "S"}
+                                    </span>
+                                  </div>
+                                  {it.comment && <div className="dim" style={{ fontSize: 12 }}>{it.comment}</div>}
+                                  {it.photos && it.photos.length > 0 && (
+                                    <div style={{ display: "flex", gap: 3, marginTop: 3 }}>
+                                      {it.photos.slice(0, 4).map((url: string, pi: number) => (
+                                        <img key={pi} src={url} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 4 }} />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    } catch { return null; }
+                  })()}
 
                   {/* Job Notes */}
                   <div style={{ marginTop: 8 }}>
