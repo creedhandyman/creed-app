@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+import { t } from "@/lib/i18n";
 
 export default function Login() {
   const login = useStore((s) => s.login);
@@ -85,7 +86,7 @@ export default function Login() {
               fontSize: 16,
             }}
           >
-            {mode === "login" ? "Sign In" : "Create Account"}
+            {mode === "login" ? t("login.signIn") : t("login.signUp")}
           </h3>
 
           {mode === "signup" && (
@@ -147,16 +148,16 @@ export default function Login() {
           )}
 
           <button className="bb" onClick={submit} style={{ width: "100%", padding: 11, fontSize: 15 }}>
-            {mode === "login" ? "Sign In" : "Sign Up"}
+            {mode === "login" ? t("login.signIn") : t("login.signUp")}
           </button>
 
           <div style={{ textAlign: "center", marginTop: 12, fontSize: 12, color: "#888" }}>
-            {mode === "login" ? "No account? " : "Have account? "}
+            {mode === "login" ? t("login.noAccount") + " " : t("login.haveAccount") + " "}
             <span
               onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErr(""); setEmailSent(false); }}
               style={{ color: "#2E75B6", cursor: "pointer", textDecoration: "underline" }}
             >
-              {mode === "login" ? "Sign Up" : "Sign In"}
+              {mode === "login" ? t("login.signUp") : t("login.signIn")}
             </span>
           </div>
           {mode === "login" && (

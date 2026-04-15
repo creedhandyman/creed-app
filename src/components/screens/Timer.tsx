@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { t } from "@/lib/i18n";
 
 interface Props {
   setPage?: (p: string) => void;
@@ -152,7 +153,7 @@ export default function Timer({ setPage }: Props) {
   return (
     <div className="fi">
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        ⏱ Timer
+        ⏱ {t("timer.title")}
       </h2>
 
       {/* Today's Jobs */}
@@ -191,7 +192,7 @@ export default function Timer({ setPage }: Props) {
           onChange={(e) => setSj(e.target.value)}
           style={{ maxWidth: 300, margin: "10px auto", display: "block" }}
         >
-          <option value="">General</option>
+          <option value="">{t("timer.general")}</option>
           {jobs.map((j) => (
             <option key={j.id} value={j.property}>
               {j.property} ({j.status})
@@ -204,7 +205,7 @@ export default function Timer({ setPage }: Props) {
             onClick={start}
             style={{ fontSize: 16, padding: "10px 36px" }}
           >
-            ▶ Start
+            ▶ {t("timer.start")}
           </button>
         ) : (
           <button
@@ -212,7 +213,7 @@ export default function Timer({ setPage }: Props) {
             onClick={stop}
             style={{ fontSize: 16, padding: "10px 36px" }}
           >
-            ⏹ Stop & Log
+            ⏹ {t("timer.stop")}
           </button>
         )}
         {on && (
@@ -225,7 +226,7 @@ export default function Timer({ setPage }: Props) {
       {/* Manual Entry */}
       <div className="cd mb">
         <h4 style={{ fontSize: 13, marginBottom: 6 }}>
-          {isOwner ? "Log Time" : "Manual Entry"}
+          {isOwner ? t("timer.log") : t("timer.manualEntry")}
         </h4>
         {isOwner && (
           <div className="row" style={{ marginBottom: 6 }}>
@@ -255,7 +256,7 @@ export default function Timer({ setPage }: Props) {
             onChange={(e) => setMj(e.target.value)}
             style={{ flex: 1 }}
           >
-            <option value="">General</option>
+            <option value="">{t("timer.general")}</option>
             {jobs.map((j) => (
               <option key={j.id} value={j.property}>
                 {j.property}
@@ -277,14 +278,14 @@ export default function Timer({ setPage }: Props) {
             onClick={addManual}
             style={{ fontSize: 13, padding: "7px 12px" }}
           >
-            Log
+            {t("timer.log")}
           </button>
         </div>
       </div>
 
       {/* My Log */}
       <div className="cd">
-        <h4 style={{ fontSize: 13, marginBottom: 6 }}>My Log ({myTime.length})</h4>
+        <h4 style={{ fontSize: 13, marginBottom: 6 }}>{t("timer.myLog")} ({myTime.length})</h4>
         {!myTime.length ? (
           <p className="dim" style={{ fontSize: 12 }}>No entries</p>
         ) : (
@@ -345,7 +346,7 @@ export default function Timer({ setPage }: Props) {
       {/* Crew Activity — owners/managers only */}
       {isOwner && profiles.length > 1 && (
         <div className="cd" style={{ marginTop: 14 }}>
-          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)" }}>👷 Crew Activity — Today</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)" }}>👷 {t("timer.crewActivity")}</h4>
           {(() => {
             const todayStr = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
             const todayISO = new Date().toISOString().split("T")[0];

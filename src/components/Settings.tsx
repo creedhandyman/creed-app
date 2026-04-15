@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
+import { t } from "@/lib/i18n";
 
 interface Props {
   onClose: () => void;
@@ -30,25 +31,25 @@ export default function Settings({ onClose }: Props) {
     <div className="fi" style={{ maxWidth: 500, margin: "0 auto", padding: "16px 12px" }}>
       <div className="row mb">
         <button className="bo" onClick={onClose}>← Back</button>
-        <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚙️ Settings</h2>
+        <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚙️ {t("settings.title")}</h2>
       </div>
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-        {["account", "team", "operations", "payments", "general"].map((t) => (
+        {["account", "team", "operations", "payments", "general"].map((tb) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tb}
+            onClick={() => setTab(tb)}
             style={{
               padding: "5px 12px",
               borderRadius: 6,
               fontSize: 13,
-              background: tab === t ? "var(--color-primary)" : "transparent",
-              color: tab === t ? "#fff" : "#888",
+              background: tab === tb ? "var(--color-primary)" : "transparent",
+              color: tab === tb ? "#fff" : "#888",
               fontFamily: "Oswald",
             }}
           >
-            {t}
+            {t(`settings.${tb}`)}
           </button>
         ))}
       </div>
@@ -97,7 +98,7 @@ export default function Settings({ onClose }: Props) {
           {/* Editable business info */}
           {isOwner && org && (
             <div className="cd mb">
-              <h4 style={{ fontSize: 14, marginBottom: 8 }}>Business Info</h4>
+              <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.businessInfo")}</h4>
               {[
                 { label: "Business Name", field: "name", value: org.name, table: "organizations" },
                 { label: "Phone", field: "phone", value: org.phone, table: "organizations" },
@@ -128,7 +129,7 @@ export default function Settings({ onClose }: Props) {
 
           {/* User info */}
           <div className="cd mb">
-            <h4 style={{ fontSize: 14, marginBottom: 8 }}>Your Profile</h4>
+            <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.yourProfile")}</h4>
             {[
               { label: "Name", value: user.name, field: "name" },
               { label: "Email", value: user.email, field: "" },
@@ -144,7 +145,7 @@ export default function Settings({ onClose }: Props) {
           </div>
 
           <div className="cd mb">
-            <h4 style={{ fontSize: 14, marginBottom: 8 }}>Change Password</h4>
+            <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.changePassword")}</h4>
             <div className="row">
               <input
                 type="password"
@@ -162,7 +163,7 @@ export default function Settings({ onClose }: Props) {
                   useStore.getState().showToast("Password updated", "success");
                 }}
               >
-                Save
+                {t("settings.save")}
               </button>
             </div>
           </div>
@@ -173,7 +174,7 @@ export default function Settings({ onClose }: Props) {
               onClick={() => { logout(); onClose(); }}
               style={{ width: "100%" }}
             >
-              Sign Out
+              {t("settings.logout")}
             </button>
           </div>
           <div className="cd">
@@ -188,7 +189,7 @@ export default function Settings({ onClose }: Props) {
               }}
               style={{ width: "100%", fontSize: 12, color: "var(--color-accent-red)" }}
             >
-              Delete My Account
+              {t("settings.deleteAccount")}
             </button>
           </div>
         </div>
@@ -687,9 +688,9 @@ export default function Settings({ onClose }: Props) {
       {/* General tab */}
       {tab === "general" && (
         <div className="cd">
-          <h4 style={{ fontSize: 14, marginBottom: 8 }}>Appearance</h4>
+          <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.appearance")}</h4>
           <div className="sep row" style={{ justifyContent: "space-between" }}>
-            <span>Dark Mode</span>
+            <span>{t("settings.darkMode")}</span>
             <div
               onClick={toggleDark}
               style={{
@@ -716,7 +717,7 @@ export default function Settings({ onClose }: Props) {
             </div>
           </div>
           <div className="sep row" style={{ justifyContent: "space-between" }}>
-            <span>Navigation</span>
+            <span>{t("settings.navigation")}</span>
             <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
               {[
                 { key: "right", label: "Right" },
@@ -747,7 +748,7 @@ export default function Settings({ onClose }: Props) {
             </div>
           </div>
           <div className="sep row" style={{ justifyContent: "space-between" }}>
-            <span>Language / Idioma</span>
+            <span>{t("settings.language")} / Idioma</span>
             <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
               {[
                 { key: "en", label: "English" },

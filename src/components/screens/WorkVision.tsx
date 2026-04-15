@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
+import { t } from "@/lib/i18n";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -130,20 +131,20 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return (
       <div className="fi">
         <div className="row mb" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>👷 Work Vision</h2>
+          <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>👷 {t("wv.title")}</h2>
           <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Dashboard</button>
         </div>
 
         <div className="cd mb" style={{ textAlign: "center", padding: 24 }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}>👷</div>
-          <h3 style={{ fontSize: 16, color: "var(--color-primary)", marginBottom: 8 }}>Ready to Work?</h3>
-          <p className="dim" style={{ fontSize: 13, marginBottom: 16 }}>Select a job to clock in and enter Work Vision mode</p>
+          <h3 style={{ fontSize: 16, color: "var(--color-primary)", marginBottom: 8 }}>{t("wv.readyToWork")}</h3>
+          <p className="dim" style={{ fontSize: 13, marginBottom: 16 }}>{t("wv.selectJob")}</p>
         </div>
 
         {/* Today's Schedule */}
         {todaySchedule.length > 0 && (
           <div className="cd mb">
-            <h4 style={{ fontSize: 13, marginBottom: 8 }}>Today&apos;s Schedule</h4>
+            <h4 style={{ fontSize: 13, marginBottom: 8 }}>{t("wv.todaySchedule")}</h4>
             {todaySchedule.map((s) => (
               <div key={s.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
                 <div>
@@ -160,9 +161,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
         {/* All Jobs */}
         <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>All Active Jobs</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 8 }}>{t("wv.allActive")}</h4>
           {jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status)).length === 0 ? (
-            <p className="dim" style={{ fontSize: 12 }}>No active jobs</p>
+            <p className="dim" style={{ fontSize: 12 }}>{t("wv.noActive")}</p>
           ) : (
             jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status)).map((j) => (
               <div key={j.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
@@ -187,7 +188,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* Timer header */}
       <div className="cd mb" style={{ textAlign: "center", padding: 16, borderLeft: "3px solid var(--color-success)", background: darkMode ? "#0a1a0a" : "#f0fff0" }}>
         <div style={{ fontSize: 12, color: "var(--color-success)", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 4 }}>
-          🟢 Clocked In
+          🟢 {t("wv.clockedIn")}
         </div>
         <div style={{ fontSize: 36, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-success)" }}>
           {fmt(el)}
@@ -197,15 +198,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           <div className="dim" style={{ fontSize: 12 }}>{activeJob.client} · ${(activeJob.total || 0).toFixed(0)}</div>
         )}
         <div className="row" style={{ justifyContent: "center", gap: 8, marginTop: 10 }}>
-          <button className="br" onClick={clockOut} style={{ fontSize: 13, padding: "6px 16px" }}>⏹ Clock Out</button>
-          <button className="bg" onClick={completeJob} style={{ fontSize: 13, padding: "6px 16px" }}>✅ Complete Job</button>
+          <button className="br" onClick={clockOut} style={{ fontSize: 13, padding: "6px 16px" }}>⏹ {t("wv.clockOut")}</button>
+          <button className="bg" onClick={completeJob} style={{ fontSize: 13, padding: "6px 16px" }}>✅ {t("wv.completeJob")}</button>
         </div>
       </div>
 
       {/* Job Details */}
       {activeJob && (
         <div className="cd mb">
-          <h4 style={{ fontSize: 13, marginBottom: 6 }}>📋 Job Details</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 6 }}>📋 {t("wv.jobDetails")}</h4>
           <div style={{ fontSize: 13, lineHeight: 1.8 }}>
             <div><span className="dim">Property:</span> {activeJob.property}</div>
             <div><span className="dim">Client:</span> {activeJob.client || "—"}</div>
@@ -224,7 +225,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {workOrder.length > 0 && (
         <div className="cd mb">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <h4 style={{ fontSize: 13 }}>✅ Work Order</h4>
+            <h4 style={{ fontSize: 13 }}>✅ {t("wv.workOrder")}</h4>
             <span className="dim" style={{ fontSize: 12 }}>{workOrder.filter((w) => w.done).length}/{workOrder.length}</span>
           </div>
           {/* Progress bar */}
@@ -277,11 +278,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
       {/* Job Notes */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 13, marginBottom: 6 }}>📝 Job Report Notes</h4>
+        <h4 style={{ fontSize: 13, marginBottom: 6 }}>📝 {t("wv.jobNotes")}</h4>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Note any issues, observations, or details for the job report..."
+          placeholder={t("wv.notesPlaceholder")}
           style={{ height: 70, fontSize: 13, resize: "vertical" }}
         />
         {jobData?.jobNotes && (

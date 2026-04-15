@@ -133,6 +133,34 @@ const translations: Record<Lang, Record<string, string>> = {
     "settings.logout": "Logout",
     "settings.deleteAccount": "Delete Account",
 
+    // Work Vision
+    "wv.title": "Work Vision",
+    "wv.clockIn": "Clock In",
+    "wv.clockOut": "Clock Out",
+    "wv.completeJob": "Complete Job",
+    "wv.readyToWork": "Ready to Work?",
+    "wv.selectJob": "Select a job to clock in and enter Work Vision mode",
+    "wv.todaySchedule": "Today's Schedule",
+    "wv.allActive": "All Active Jobs",
+    "wv.noActive": "No active jobs",
+    "wv.clockedIn": "Clocked In",
+    "wv.jobDetails": "Job Details",
+    "wv.workOrder": "Work Order",
+    "wv.jobNotes": "Job Report Notes",
+    "wv.notesPlaceholder": "Note any issues, observations, or details for the job report...",
+    "wv.workMode": "Work Mode",
+    "wv.startDay": "Start your day",
+
+    // Login
+    "login.signIn": "Sign In",
+    "login.signUp": "Create Account",
+    "login.noAccount": "No account?",
+    "login.haveAccount": "Have account?",
+    "login.forgotPassword": "Forgot password?",
+    "login.email": "Email",
+    "login.password": "Password",
+    "login.name": "Your name",
+
     // Common
     "common.cancel": "Cancel",
     "common.confirm": "Confirm",
@@ -273,6 +301,34 @@ const translations: Record<Lang, Record<string, string>> = {
     "settings.language": "Idioma",
     "settings.logout": "Cerrar Sesi\u00f3n",
     "settings.deleteAccount": "Eliminar Cuenta",
+
+    // Work Vision
+    "wv.title": "Modo Trabajo",
+    "wv.clockIn": "Fichar Entrada",
+    "wv.clockOut": "Fichar Salida",
+    "wv.completeJob": "Completar Trabajo",
+    "wv.readyToWork": "\u00bfListo para trabajar?",
+    "wv.selectJob": "Selecciona un trabajo para fichar y entrar en Modo Trabajo",
+    "wv.todaySchedule": "Agenda de Hoy",
+    "wv.allActive": "Todos los Trabajos Activos",
+    "wv.noActive": "Sin trabajos activos",
+    "wv.clockedIn": "Fichado",
+    "wv.jobDetails": "Detalles del Trabajo",
+    "wv.workOrder": "Orden de Trabajo",
+    "wv.jobNotes": "Notas del Reporte",
+    "wv.notesPlaceholder": "Anota problemas, observaciones o detalles para el reporte...",
+    "wv.workMode": "Modo Trabajo",
+    "wv.startDay": "Comienza tu d\u00eda",
+
+    // Login
+    "login.signIn": "Iniciar Sesi\u00f3n",
+    "login.signUp": "Crear Cuenta",
+    "login.noAccount": "\u00bfSin cuenta?",
+    "login.haveAccount": "\u00bfYa tienes cuenta?",
+    "login.forgotPassword": "\u00bfOlvidaste tu contrase\u00f1a?",
+    "login.email": "Correo electr\u00f3nico",
+    "login.password": "Contrase\u00f1a",
+    "login.name": "Tu nombre",
 
     // Common
     "common.cancel": "Cancelar",

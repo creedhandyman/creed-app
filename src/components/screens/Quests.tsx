@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { t } from "@/lib/i18n";
 import { QRCodeSVG } from "qrcode.react";
 
 interface Quest {
@@ -227,16 +228,16 @@ export default function Quests() {
   return (
     <div className="fi">
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        🎯 Quest Hub <span className="dim" style={{ fontSize: 13, fontWeight: 400 }}>{cycleLabel}</span>
+        🎯 {t("quest.title")} <span className="dim" style={{ fontSize: 13, fontWeight: 400 }}>{cycleLabel}</span>
       </h2>
 
       {/* Sub-tabs */}
       <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
         {[
-          { id: "quests", l: "🎯Quests" },
-          { id: "team", l: "👷Team" },
-          { id: "reviews", l: "⭐Reviews" },
-          { id: "referrals", l: "🤝Referrals" },
+          { id: "quests", l: `🎯${t("quest.quests")}` },
+          { id: "team", l: `👷${t("quest.team")}` },
+          { id: "reviews", l: `⭐${t("quest.reviews")}` },
+          { id: "referrals", l: `🤝${t("quest.referrals")}` },
         ].map((t) => (
           <button
             key={t.id}
@@ -269,28 +270,28 @@ export default function Quests() {
                 <span style={{ fontFamily: "Oswald", fontSize: 16, fontWeight: 700, color: daysLeft <= 14 ? "var(--color-accent-red)" : "var(--color-highlight)" }}>{hoursLeft}</span>
                 <span className="dim" style={{ fontSize: 12, marginLeft: 3 }}>hrs</span>
               </div>
-              <span className="dim" style={{ fontSize: 12 }}>until reset \u00B7 {cycleLabel}</span>
+              <span className="dim" style={{ fontSize: 12 }}>{t("quest.untilReset")} · {cycleLabel}</span>
             </div>
           </div>
 
           {/* Summary stats */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
             <div className="cd" style={{ textAlign: "center", padding: 10 }}>
-              <div className="sl">Done</div>
+              <div className="sl">{t("quest.done")}</div>
               <div className="sv" style={{ color: "var(--color-primary)", fontSize: 20 }}>{completedCount}</div>
               <div className="dim" style={{ fontSize: 12 }}>of {allQuests.length}</div>
             </div>
             <div className="cd" style={{ textAlign: "center", padding: 10 }}>
-              <div className="sl">Earned</div>
+              <div className="sl">{t("quest.earned")}</div>
               <div className="sv" style={{ color: "var(--color-success)", fontSize: 20 }}>${bonusEarned}</div>
             </div>
             <div className="cd" style={{ textAlign: "center", padding: 10 }}>
-              <div className="sl">Max Payout</div>
+              <div className="sl">{t("quest.maxPayout")}</div>
               <div className="sv" style={{ color: "var(--color-warning)", fontSize: 20 }}>${maxPayout}</div>
               <div className="dim" style={{ fontSize: 12 }}>this cycle</div>
             </div>
             <div className="cd" style={{ textAlign: "center", padding: 10 }}>
-              <div className="sl">Hours</div>
+              <div className="sl">{t("quest.hours")}</div>
               <div className="sv" style={{ color: "var(--color-highlight)", fontSize: 20 }}>{totalHours.toFixed(0)}</div>
             </div>
           </div>
@@ -377,12 +378,12 @@ export default function Quests() {
 
           {/* Max payout note */}
           <div className="cd" style={{ textAlign: "center", padding: 12, borderLeft: "3px solid var(--color-accent-red)" }}>
-            <div className="sl">Max Annual Payout</div>
+            <div className="sl">{t("quest.maxAnnual")}</div>
             <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-success)" }}>
               ${(maxPayout * 2).toLocaleString()}+
             </div>
             <div className="dim" style={{ fontSize: 12 }}>
-              ${maxPayout.toLocaleString()} per cycle × 2 cycles/year
+              ${maxPayout.toLocaleString()} {t("quest.perCycle")} × 2 {t("quest.cyclesYear")}
             </div>
           </div>
         </div>
@@ -524,12 +525,12 @@ export default function Quests() {
               }}
               style={{ fontSize: 12, padding: "4px 12px", marginTop: 4 }}
             >
-              📋 Copy Link
+              📋 {t("quest.copyLink")}
             </button>
           </div>
 
           <div className="cd mb">
-            <h4 style={{ fontSize: 13, marginBottom: 8 }}>Add Review</h4>
+            <h4 style={{ fontSize: 13, marginBottom: 8 }}>{t("quest.addReview")}</h4>
             <div className="row mb">
               <input
                 value={rn}
@@ -614,7 +615,7 @@ export default function Quests() {
       {tab === "referrals" && (
         <div>
           <div className="cd mb">
-            <h4 style={{ fontSize: 13, marginBottom: 8 }}>Add Referral</h4>
+            <h4 style={{ fontSize: 13, marginBottom: 8 }}>{t("quest.addReferral")}</h4>
             <div className="row">
               <input
                 value={fn}

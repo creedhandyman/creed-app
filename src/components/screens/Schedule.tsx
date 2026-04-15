@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { t } from "@/lib/i18n";
 
 interface Props {
   setPage: (p: string) => void;
@@ -179,7 +180,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   return (
     <div className="fi">
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        📅 Schedule
+        📅 {t("sched.title")}
       </h2>
 
       {/* Add to Schedule */}
@@ -201,7 +202,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             onChange={(e) => { setSj(e.target.value); suggestDay(e.target.value); }}
             style={{ flex: 1 }}
           >
-            <option value="">Select job</option>
+            <option value="">{t("sched.selectJob")}</option>
             {jobs.map((j) => (
               <option key={j.id} value={j.property}>
                 {j.property} ({j.status})
@@ -213,7 +214,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             onClick={addSchedule}
             style={{ fontSize: 13, padding: "6px 12px" }}
           >
-            Add
+            {t("sched.add")}
           </button>
         </div>
         {/* Time + Notes */}
@@ -360,7 +361,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 <span className="dim" style={{ fontSize: 10 }}>{dayItems.length} job{dayItems.length !== 1 ? "s" : ""}</span>
               </div>
               {dayItems.length === 0 ? (
-                <p className="dim" style={{ fontSize: 11 }}>No jobs scheduled</p>
+                <p className="dim" style={{ fontSize: 11 }}>{t("sched.noJobs")}</p>
               ) : (
                 dayItems.map((s) => (
                   <div key={s.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
@@ -453,7 +454,7 @@ td{padding:8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
             }}
             style={{ fontSize: 10 }}
           >
-            🖨 Print Schedule
+            🖨 {t("sched.printSchedule")}
           </button>
           <button
             className="bb"

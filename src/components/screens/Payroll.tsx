@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { t } from "@/lib/i18n";
 
 export default function Payroll() {
   const user = useStore((s) => s.user)!;
@@ -231,7 +232,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
   return (
     <div className="fi">
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        💰 Payroll
+        💰 {t("pay.title")}
       </h2>
 
       {/* Employee selector */}
@@ -293,7 +294,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
       {/* By Job */}
       <div className="cd mb">
         <div className="row">
-          <h4 style={{ fontSize: 13 }}>By Job</h4>
+          <h4 style={{ fontSize: 13 }}>{t("pay.byJob")}</h4>
           <div style={{ flex: 1 }} />
           {isOwner && (
             <button
@@ -306,13 +307,13 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
                 opacity: processing || !entries.length ? 0.5 : 1,
               }}
             >
-              {processing ? "Processing..." : "Process Pay"}
+              {processing ? "Processing..." : t("pay.processPay")}
             </button>
           )}
         </div>
 
         {Object.keys(byJob).length === 0 ? (
-          <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>No time entries</p>
+          <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>{t("pay.noEntries")}</p>
         ) : (
           Object.entries(byJob).map(([job, hrs]) => (
             <div
@@ -335,7 +336,7 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
       {/* Payment History */}
       {userPayHistory.length > 0 && (
         <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 6 }}>Payment History</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 6 }}>{t("pay.history")}</h4>
           {userPayHistory.map((p) => {
             const isOpen = openPay === p.id;
             let jobDetails: { job: string; hrs: number; amount: number }[] = [];

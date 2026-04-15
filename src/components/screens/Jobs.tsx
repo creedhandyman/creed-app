@@ -5,6 +5,7 @@ import { db, supabase } from "@/lib/supabase";
 import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
+import { t } from "@/lib/i18n";
 
 interface Props {
   setPage: (p: string) => void;
@@ -268,9 +269,9 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
         const billingJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced");
         const paidJobs = jobs.filter((j) => j.status === "paid");
         const tabs = [
-          { id: "active" as const, l: `🔨 Active (${activeJobs.length})`, c: "var(--color-primary)" },
-          { id: "billing" as const, l: `🧾 Billing (${billingJobs.length})`, c: "var(--color-warning)" },
-          { id: "paid" as const, l: `✅ Paid (${paidJobs.length})`, c: "var(--color-success)" },
+          { id: "active" as const, l: `🔨 ${t("jobs.active")} (${activeJobs.length})`, c: "var(--color-primary)" },
+          { id: "billing" as const, l: `🧾 ${t("jobs.billing")} (${billingJobs.length})`, c: "var(--color-warning)" },
+          { id: "paid" as const, l: `✅ ${t("jobs.paid")} (${paidJobs.length})`, c: "var(--color-success)" },
         ];
         return (
           <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
@@ -309,7 +310,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
               <button className="bb" onClick={() => {
                 useStore.getState().showToast("Go to Settings → Payments to connect Stripe", "info");
               }} style={{ fontSize: 12, padding: "5px 10px" }}>
-                Connect Stripe →
+                {t("jobs.connectStripe")} →
               </button>
             )}
           </div>
@@ -327,7 +328,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
           return (
             <div className="cd" style={{ textAlign: "center", padding: 24 }}>
               <p className="dim">
-                {jobTab === "active" ? "No active jobs — create one in QuoteForge" : jobTab === "billing" ? "No jobs ready for billing" : "No paid jobs yet"}
+                {jobTab === "active" ? t("jobs.noActive") : jobTab === "billing" ? t("jobs.noBilling") : t("jobs.noPaid")}
               </p>
               {jobTab === "active" && (
                 <button className="bb mt" onClick={() => setPage("qf")}>⚡ Start Quote</button>
@@ -426,7 +427,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         }}
                         style={{ fontSize: 12, padding: "5px 12px" }}
                       >
-                        ✏️ Edit Quote
+                        ✏️ {t("jobs.editQuote")}
                       </button>
                     )}
                     <button
@@ -438,7 +439,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       }}
                       style={{ fontSize: 12, padding: "5px 12px" }}
                     >
-                      📅 Schedule This
+                      📅 {t("jobs.scheduleThis")}
                     </button>
                     <button
                       className="bo"
@@ -456,7 +457,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       }}
                       style={{ fontSize: 12, padding: "5px 10px" }}
                     >
-                      📋 Job Report
+                      📋 {t("jobs.jobReport")}
                     </button>
                     <button
                       className="bo"
@@ -471,7 +472,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       }}
                       style={{ fontSize: 12, padding: "5px 10px" }}
                     >
-                      📤 Send to Client
+                      📤 {t("jobs.sendClient")}
                     </button>
                     <button
                       className="bo"
@@ -481,14 +482,14 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       }}
                       style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}
                     >
-                      Delete
+                      {t("jobs.delete")}
                     </button>
                   </div>
 
                   {/* Job Notes */}
                   <div style={{ marginTop: 8 }}>
                     <textarea
-                      placeholder="Add job notes..."
+                      placeholder={t("jobs.jobNotes")}
                       defaultValue={(() => { try { const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms; return d?.jobNotes || ""; } catch { return ""; } })()}
                       onBlur={async (e) => {
                         const note = e.target.value;
@@ -517,7 +518,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         }}
                         style={{ fontSize: 12, padding: "5px 12px" }}
                       >
-                        🧾 {j.status === "complete" ? "Generate Invoice" : "View Invoice"}
+                        🧾 {j.status === "complete" ? t("jobs.generateInvoice") : t("jobs.viewInvoice")}
                       </button>
                       {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && org?.stripe_connected && (<>
                         <button
