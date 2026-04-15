@@ -103,8 +103,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
       )}
 
-      {/* 4 Stat Cards — 2x2 */}
-      <div className="g2 mb">
+      {/* 4 Stat Cards — forced 2x2 */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
         <div className="cd" style={{ borderLeft: "3px solid var(--color-primary)", cursor: nextJob ? "pointer" : undefined }} onClick={() => nextJob && setPage("sched")}>
           <div className="sl">{t("dash.nextJob")}</div>
           {nextJob ? (
