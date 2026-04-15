@@ -105,12 +105,38 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     loadAll();
   };
 
+  // Upload work photo
+  const uploadWorkPhoto = async (file: File) => {
+    if (!activeJob) return;
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `gallery/${activeJob.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+    const { error } = await supabase.storage.from("receipts").upload(path, file);
+    if (error) { useStore.getState().showToast("Photo upload failed", "error"); return; }
+    const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
+    if (urlData?.publicUrl) {
+      const updated = { ...jobData };
+      if (!updated.photos) updated.photos = [];
+      updated.photos.push({ url: urlData.publicUrl, label: "", type: "work" });
+      await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(updated) });
+      loadAll();
+      useStore.getState().showToast("Photo added", "success");
+    }
+  };
+
   // Complete job
   const completeJob = async () => {
     if (!activeJob) return;
     const unchecked = workOrder.filter((w) => !w.done).length;
     if (unchecked > 0) {
       if (!await useStore.getState().showConfirm("Incomplete Items", `${unchecked} item${unchecked !== 1 ? "s" : ""} unchecked. Complete anyway?`)) return;
+    }
+    // Remind to take after photos
+    const photoCount = jobData?.photos?.filter((p: { type: string }) => p.type === "after").length || 0;
+    if (photoCount === 0) {
+      if (!await useStore.getState().showConfirm("No Completion Photos", "You haven't uploaded any after photos. Take photos of your completed work before finishing?")) {
+        setSection("photos");
+        return;
+      }
     }
     // Save notes if any
     if (notes.trim()) {
@@ -385,7 +411,46 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* ── PHOTOS TAB ── */}
       {section === "photos" && (
         <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>📸 Job Photos</h4>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <h4 style={{ fontSize: 13 }}>📸 Job Photos</h4>
+            <div className="row" style={{ gap: 4 }}>
+              <button
+                className="bb"
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file"; input.accept = "image/*"; input.capture = "environment";
+                  input.onchange = () => { if (input.files?.[0]) uploadWorkPhoto(input.files[0]); };
+                  input.click();
+                }}
+                style={{ fontSize: 12, padding: "5px 10px" }}
+              >
+                📷 Take Photo
+              </button>
+              <button
+                className="bo"
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file"; input.accept = "image/*"; input.multiple = true;
+                  input.onchange = async () => {
+                    if (!input.files?.length) return;
+                    for (const file of Array.from(input.files)) {
+                      await uploadWorkPhoto(file);
+                    }
+                  };
+                  input.click();
+                }}
+                style={{ fontSize: 12, padding: "5px 10px" }}
+              >
+                📁 Upload
+              </button>
+            </div>
+          </div>
+
+          {/* After photos prompt */}
+          <div style={{ marginBottom: 10, padding: 8, borderRadius: 6, background: darkMode ? "#1a1a0a" : "#fffbe6", border: "1px solid var(--color-warning)", fontSize: 12 }}>
+            💡 Take before, during, and after photos for your job report
+          </div>
+
           {jobData?.photos?.length > 0 ? (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
               {jobData.photos.map((p: { url: string; label: string; type: string }, i: number) => (
@@ -400,7 +465,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               ))}
             </div>
           ) : (
-            <p className="dim" style={{ textAlign: "center", padding: 16 }}>No photos attached to this job</p>
+            <p className="dim" style={{ textAlign: "center", padding: 16 }}>No photos yet — take some during the job</p>
           )}
         </div>
       )}

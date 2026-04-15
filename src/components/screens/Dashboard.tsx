@@ -163,7 +163,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           <div style={{ fontSize: 28, marginBottom: 4 }}>⚡</div>
           <h3 style={{ color: "#fff", fontSize: 16, marginBottom: 2, fontFamily: "Oswald", textTransform: "uppercase" }}>{t("dash.startQuote")}</h3>
           <p style={{ color: "#ffffffaa", fontSize: 12, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal" }}>
-            PDF, inspection, or manual
+            Quick quote, inspection, or upload
           </p>
         </div>
 
