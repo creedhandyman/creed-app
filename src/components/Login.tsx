@@ -54,7 +54,7 @@ export default function Login() {
           <img
             src="/CREED_LOGO.png"
             alt=""
-            style={{ height: 120, display: "block", margin: "0 auto 12px" }}
+            style={{ height: 156, display: "block", margin: "0 auto 12px" }}
             onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
           />
         </div>
