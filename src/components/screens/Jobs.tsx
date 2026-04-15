@@ -1,9 +1,10 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
+import type { Job } from "@/lib/types";
 
 interface Props {
   setPage: (p: string) => void;
@@ -29,6 +30,58 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
   const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number } | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
+
+  // Auto-create recurring jobs that are due
+  useEffect(() => {
+    const createDueRecurring = async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const recurring = jobs.filter((j) => j.is_recurring && j.next_due && j.next_due <= today && j.status === "paid");
+      for (const template of recurring) {
+        // Clone the job
+        await db.post("jobs", {
+          property: template.property,
+          client: template.client,
+          job_date: today,
+          rooms: template.rooms,
+          total: template.total,
+          total_labor: template.total_labor,
+          total_mat: template.total_mat,
+          total_hrs: template.total_hrs,
+          status: "quoted",
+          created_by: user.name,
+          trade: template.trade,
+          parent_job_id: template.id,
+        });
+        // Calculate next due date
+        const nextDue = new Date(template.next_due!);
+        if (template.recurrence_rule === "weekly") nextDue.setDate(nextDue.getDate() + 7);
+        else if (template.recurrence_rule === "biweekly") nextDue.setDate(nextDue.getDate() + 14);
+        else if (template.recurrence_rule === "monthly") nextDue.setMonth(nextDue.getMonth() + 1);
+        else if (template.recurrence_rule === "quarterly") nextDue.setMonth(nextDue.getMonth() + 3);
+        await db.patch("jobs", template.id, { next_due: nextDue.toISOString().split("T")[0] });
+      }
+      if (recurring.length > 0) {
+        loadAll();
+        useStore.getState().showToast(`${recurring.length} recurring job${recurring.length > 1 ? "s" : ""} created`, "info");
+      }
+    };
+    createDueRecurring();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleRecurring = async (job: Job, rule: string) => {
+    if (!rule) {
+      await db.patch("jobs", job.id, { is_recurring: false, recurrence_rule: "", next_due: "" });
+    } else {
+      const nextDue = new Date();
+      if (rule === "weekly") nextDue.setDate(nextDue.getDate() + 7);
+      else if (rule === "biweekly") nextDue.setDate(nextDue.getDate() + 14);
+      else if (rule === "monthly") nextDue.setMonth(nextDue.getMonth() + 1);
+      else if (rule === "quarterly") nextDue.setMonth(nextDue.getMonth() + 3);
+      await db.patch("jobs", job.id, { is_recurring: true, recurrence_rule: rule, next_due: nextDue.toISOString().split("T")[0] });
+    }
+    loadAll();
+  };
 
   const getWorkers = (j: typeof jobs[0]): { id: string; name: string }[] => {
     try {
@@ -631,6 +684,26 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         <option key={p.id} value={p.name}>{p.name}</option>
                       ))}
                     </select>
+                  </div>
+
+                  {/* Recurring */}
+                  <div className="row" style={{ marginTop: 6 }}>
+                    <span className="dim" style={{ fontSize: 12 }}>🔄 Recurring:</span>
+                    <select
+                      value={j.recurrence_rule || ""}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { e.stopPropagation(); toggleRecurring(j, e.target.value); }}
+                      style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
+                    >
+                      <option value="">Off</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Biweekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="quarterly">Quarterly</option>
+                    </select>
+                    {j.is_recurring && j.next_due && (
+                      <span className="dim" style={{ fontSize: 12 }}>Next: {j.next_due}</span>
+                    )}
                   </div>
 
                   {/* Before/After Photos */}

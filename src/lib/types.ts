@@ -72,6 +72,10 @@ export interface Job {
   client_signature?: string;
   signature_date?: string;
   org_id?: string;
+  is_recurring?: boolean;
+  recurrence_rule?: string; // weekly | biweekly | monthly | quarterly
+  next_due?: string;
+  parent_job_id?: string;
 }
 
 export interface TimeEntry {
