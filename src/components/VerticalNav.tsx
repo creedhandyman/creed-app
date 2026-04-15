@@ -11,13 +11,14 @@ interface NavItem {
 
 const NAV_ITEMS: (NavItem | "logo" | "tape")[] = [
   { id: "quests", icon: "🎯", labelKey: "nav.quest" },
-  { id: "payroll", icon: "💰", labelKey: "nav.pay", adminOnly: true },
+  { id: "ops", icon: "⚙️", labelKey: "nav.ops", adminOnly: true },
   { id: "time", icon: "⏱", labelKey: "nav.time" },
   "tape",
   "logo",
   "tape",
   { id: "sched", icon: "📅", labelKey: "nav.sched" },
   { id: "jobs", icon: "📋", labelKey: "nav.jobs" },
+  { id: "clients", icon: "👥", labelKey: "nav.clients", adminOnly: true },
   { id: "qf", icon: "⚡", labelKey: "nav.quote" },
 ];
 

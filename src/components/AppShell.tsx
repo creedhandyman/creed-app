@@ -15,6 +15,8 @@ import Mileage from "./screens/Mileage";
 import Marketing from "./screens/Marketing";
 import Troubleshoot from "./screens/Troubleshoot";
 import Financials from "./screens/Financials";
+import Operations from "./screens/Operations";
+import WorkVision from "./screens/WorkVision";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -33,7 +35,7 @@ export default function AppShell() {
 
   const goToPage = (p: string) => {
     // Block restricted pages for techs/apprentices
-    if (!isAdmin && ["payroll", "clients", "marketing"].includes(p)) {
+    if (!isAdmin && ["payroll", "clients", "marketing", "ops", "financials"].includes(p)) {
       setPage("dash");
       return;
     }
@@ -64,6 +66,10 @@ export default function AppShell() {
         return <TimerScreen setPage={goToPage} />;
       case "payroll":
         return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+      case "ops":
+        return isAdmin ? <Operations setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+      case "workvision":
+        return <WorkVision setPage={goToPage} />;
       case "quests":
         return <Quests />;
       case "clients":
