@@ -746,6 +746,35 @@ export default function Settings({ onClose }: Props) {
               })}
             </div>
           </div>
+          <div className="sep row" style={{ justifyContent: "space-between" }}>
+            <span>Language / Idioma</span>
+            <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
+              {[
+                { key: "en", label: "English" },
+                { key: "es", label: "Espa\u00f1ol" },
+              ].map((opt) => {
+                const isActive = (typeof window !== "undefined" ? localStorage.getItem("c_lang") : "en") === opt.key || (!localStorage.getItem("c_lang") && opt.key === "en");
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => {
+                      localStorage.setItem("c_lang", opt.key);
+                      window.location.reload();
+                    }}
+                    style={{
+                      padding: "4px 12px", fontSize: 12,
+                      background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff",
+                      color: isActive ? "#fff" : "#888",
+                      border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
+                      fontFamily: "Oswald",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>

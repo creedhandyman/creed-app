@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
+import { t } from "@/lib/i18n";
 
 interface Props {
   setPage: (p: string) => void;
@@ -110,7 +111,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
     <div className="fi">
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>Welcome, {user.name}</h2>
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>{t("dash.welcome")}, {user.name}</h2>
         <button
           onClick={openSettings}
           style={{ background: "none", fontSize: 20, color: darkMode ? "#888" : "#666" }}
@@ -204,7 +205,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           style={{ borderLeft: "3px solid var(--color-primary)", cursor: nextJob ? "pointer" : undefined }}
           onClick={() => nextJob && setPage("sched")}
         >
-          <div className="sl">Next Job</div>
+          <div className="sl">{t("dash.nextJob")}</div>
           {nextJob ? (
             <>
               <div className="sv" style={{ color: "var(--color-primary)", fontSize: 18 }}>
@@ -237,7 +238,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           style={{ borderLeft: "3px solid var(--color-warning)", cursor: "pointer" }}
           onClick={() => setPage("quests")}
         >
-          <div className="sl">Closest Quest</div>
+          <div className="sl">{t("dash.closestQuest")}</div>
           {closest ? (
             <>
               <div className="sv" style={{ color: "var(--color-warning)", fontSize: 16 }}>
@@ -254,7 +255,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
 
         {/* Earned This Week */}
         <div className="cd" style={{ borderLeft: "3px solid var(--color-success)" }}>
-          <div className="sl">Earned This Month</div>
+          <div className="sl">{t("dash.earnedMonth")}</div>
           <div className="sv" style={{ color: "var(--color-success)" }}>${earnedMonth.toLocaleString()}</div>
         </div>
 
@@ -264,7 +265,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           style={{ borderLeft: "3px solid var(--color-highlight)", cursor: "pointer" }}
           onClick={() => setPage("payroll")}
         >
-          <div className="sl">Net Pay This Week</div>
+          <div className="sl">{t("dash.netPay")}</div>
           <div className="sv" style={{ color: "var(--color-highlight)" }}>${weekPay.toFixed(0)}</div>
           <div className="dim" style={{ fontSize: 10 }}>{weekHrs.toFixed(1)} hrs × ${user.rate || 55}/hr</div>
         </div>
@@ -283,7 +284,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         }}
       >
         <div style={{ fontSize: 36, marginBottom: 4 }}>⚡</div>
-        <h2 style={{ color: "#fff", fontSize: 22, marginBottom: 4 }}>Start a Quote</h2>
+        <h2 style={{ color: "#fff", fontSize: 22, marginBottom: 4 }}>{t("dash.startQuote")}</h2>
         <p
           style={{
             color: "#ffffffaa",
@@ -293,7 +294,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
             letterSpacing: "normal",
           }}
         >
-          Upload a PDF, paste an inspection, or build from scratch
+          {t("dash.startQuoteDesc")}
         </p>
       </div>
 
@@ -307,8 +308,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           >
             <span style={{ fontSize: 20 }}>👥</span>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>Clients</div>
-              <div className="dim" style={{ fontSize: 10 }}>{clients.length} contacts</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{t("dash.clients")}</div>
+              <div className="dim" style={{ fontSize: 10 }}>{clients.length} {t("dash.contacts")}</div>
             </div>
           </div>
         )}
@@ -319,8 +320,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         >
           <span style={{ fontSize: 20 }}>🚗</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Mileage</div>
-            <div className="dim" style={{ fontSize: 10 }}>Track trips</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{t("dash.mileage")}</div>
+            <div className="dim" style={{ fontSize: 10 }}>{t("dash.trackTrips")}</div>
           </div>
         </div>
         <div
@@ -330,8 +331,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         >
           <span style={{ fontSize: 20 }}>🔧</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Troubleshoot</div>
-            <div className="dim" style={{ fontSize: 10 }}>AI diagnosis</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{t("dash.troubleshoot")}</div>
+            <div className="dim" style={{ fontSize: 10 }}>{t("dash.aiDiagnosis")}</div>
           </div>
         </div>
       </div>
@@ -346,7 +347,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 24 }}>📣</span>
             <div>
-              <h4 style={{ fontSize: 14, marginBottom: 2 }}>Marketing &amp; Website</h4>
+              <h4 style={{ fontSize: 14, marginBottom: 2 }}>{t("dash.marketing")}</h4>
               <div className="dim" style={{ fontSize: 11 }}>
                 {org?.site_content ? "Your site is live — manage links & reviews" : "Build a free website with AI in 60 seconds"}
               </div>

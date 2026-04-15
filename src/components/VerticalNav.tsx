@@ -1,23 +1,24 @@
 "use client";
 import { useStore } from "@/lib/store";
+import { t } from "@/lib/i18n";
 
 interface NavItem {
   id: string;
   icon: string;
-  label: string;
+  labelKey: string;
   adminOnly?: boolean;
 }
 
 const NAV_ITEMS: (NavItem | "logo" | "tape")[] = [
-  { id: "quests", icon: "🎯", label: "Quest" },
-  { id: "payroll", icon: "💰", label: "Pay", adminOnly: true },
-  { id: "time", icon: "⏱", label: "Time" },
+  { id: "quests", icon: "🎯", labelKey: "nav.quest" },
+  { id: "payroll", icon: "💰", labelKey: "nav.pay", adminOnly: true },
+  { id: "time", icon: "⏱", labelKey: "nav.time" },
   "tape",
   "logo",
   "tape",
-  { id: "sched", icon: "📅", label: "Sched" },
-  { id: "jobs", icon: "📋", label: "Jobs" },
-  { id: "qf", icon: "⚡", label: "Quote" },
+  { id: "sched", icon: "📅", labelKey: "nav.sched" },
+  { id: "jobs", icon: "📋", labelKey: "nav.jobs" },
+  { id: "qf", icon: "⚡", labelKey: "nav.quote" },
 ];
 
 interface Props {
@@ -58,7 +59,7 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
             onClick={() => setPage(item.id)}
           >
             <span style={{ fontSize: 15 }}>{item.icon}</span>
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
           </button>
         );
       })}
