@@ -103,8 +103,21 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
       )}
 
-      {/* 4 Stat Cards — forced 2x2 */}
+      {/* 4 Stat Cards — forced 2x2: money row + job row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        {/* Row 1: Money */}
+        <div className="cd" style={{ borderLeft: "3px solid var(--color-success)" }}>
+          <div className="sl">{t("dash.earnedMonth")}</div>
+          <div className="sv" style={{ color: "var(--color-success)" }}>${earnedMonth.toLocaleString()}</div>
+        </div>
+
+        <div className="cd" style={{ borderLeft: "3px solid var(--color-highlight)", cursor: "pointer" }} onClick={() => setPage("ops")}>
+          <div className="sl">{t("dash.netPay")}</div>
+          <div className="sv" style={{ color: "var(--color-highlight)" }}>${weekPay.toFixed(0)}</div>
+          <div className="dim" style={{ fontSize: 12 }}>{weekHrs.toFixed(1)} hrs × ${user.rate || 55}/hr</div>
+        </div>
+
+        {/* Row 2: Job + Quest */}
         <div className="cd" style={{ borderLeft: "3px solid var(--color-primary)", cursor: nextJob ? "pointer" : undefined }} onClick={() => nextJob && setPage("sched")}>
           <div className="sl">{t("dash.nextJob")}</div>
           {nextJob ? (
@@ -123,17 +136,6 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           ) : (
             <div className="sv" style={{ color: "var(--color-primary)" }}>—</div>
           )}
-        </div>
-
-        <div className="cd" style={{ borderLeft: "3px solid var(--color-success)" }}>
-          <div className="sl">{t("dash.earnedMonth")}</div>
-          <div className="sv" style={{ color: "var(--color-success)" }}>${earnedMonth.toLocaleString()}</div>
-        </div>
-
-        <div className="cd" style={{ borderLeft: "3px solid var(--color-highlight)", cursor: "pointer" }} onClick={() => setPage("ops")}>
-          <div className="sl">{t("dash.netPay")}</div>
-          <div className="sv" style={{ color: "var(--color-highlight)" }}>${weekPay.toFixed(0)}</div>
-          <div className="dim" style={{ fontSize: 12 }}>{weekHrs.toFixed(1)} hrs × ${user.rate || 55}/hr</div>
         </div>
 
         <div className="cd" style={{ borderLeft: "3px solid var(--color-warning)", cursor: "pointer" }} onClick={() => setPage("quests")}>
