@@ -77,15 +77,27 @@ export function exportQuotePdf(opts: ExportOptions) {
     const sectionLabor = sectionHrs * rate;
     const sectionMat = rm.items.reduce((s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0), 0);
 
-    // Build material rows from all items in this section
-    let matRows = "";
+    // Build material rows — consolidate duplicates within section
+    const matMap: Record<string, { n: string; unitPrice: number; qty: number; total: number; notes: string[] }> = {};
     rm.items.forEach((it) => {
       it.materials.forEach((m) => {
         if (m.c > 0) {
-          const note = it.detail || "";
-          matRows += `<tr><td>${m.n}</td><td class="r">1</td><td class="r">$${m.c.toFixed(2)}</td><td class="r">$${m.c.toFixed(2)}</td><td class="dim">${note}</td></tr>`;
+          const matQty = (m as unknown as Record<string, unknown>).qty as number || 1;
+          const matUnit = (m as unknown as Record<string, unknown>).unitPrice as number || m.c;
+          const key = m.n + "|" + matUnit;
+          if (matMap[key]) {
+            matMap[key].qty += matQty;
+            matMap[key].total += m.c;
+            if (it.detail && !matMap[key].notes.includes(it.detail)) matMap[key].notes.push(it.detail);
+          } else {
+            matMap[key] = { n: m.n, unitPrice: matUnit, qty: matQty, total: m.c, notes: it.detail ? [it.detail] : [] };
+          }
         }
       });
+    });
+    let matRows = "";
+    Object.values(matMap).forEach((m) => {
+      matRows += `<tr><td>${m.n}</td><td class="r">${m.qty}</td><td class="r">$${m.unitPrice.toFixed(2)}</td><td class="r">$${m.total.toFixed(2)}</td><td class="dim">${m.notes.slice(0, 3).join(", ")}</td></tr>`;
     });
 
     const crewSize = sectionHrs > 8 ? 2 : 1;

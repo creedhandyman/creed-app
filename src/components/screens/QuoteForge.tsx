@@ -272,7 +272,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         }
       } else if (quickPhotos.length > 0) {
         // Limit to 10 photos max for API
-        const photosToSend = quickPhotos.slice(0, 10);
+        const photosToSend = quickPhotos.slice(0, 15);
         setParseStatus(`Sending text + ${photosToSend.length} photos to AI...`);
         images = photosToSend;
       } else {
