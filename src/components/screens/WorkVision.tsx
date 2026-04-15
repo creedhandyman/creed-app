@@ -111,14 +111,17 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     const ext = file.name.split(".").pop() || "jpg";
     const path = `gallery/${activeJob.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
     const { error } = await supabase.storage.from("receipts").upload(path, file);
-    if (error) { useStore.getState().showToast("Photo upload failed", "error"); return; }
+    if (error) { useStore.getState().showToast("Photo upload failed: " + error.message, "error"); return; }
     const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
     if (urlData?.publicUrl) {
-      const updated = { ...jobData };
-      if (!updated.photos) updated.photos = [];
-      updated.photos.push({ url: urlData.publicUrl, label: "", type: "work" });
-      await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(updated) });
-      loadAll();
+      // Re-read fresh job data from store to avoid stale snapshot
+      const freshJob = useStore.getState().jobs.find((j) => j.id === activeJob.id);
+      let freshData: Record<string, unknown> = {};
+      try { freshData = freshJob ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {} : {}; } catch { /* */ }
+      if (!freshData.photos) freshData.photos = [];
+      (freshData.photos as Array<{ url: string; label: string; type: string }>).push({ url: urlData.publicUrl, label: "", type: "work" });
+      await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(freshData) });
+      await loadAll();
       useStore.getState().showToast("Photo added", "success");
     }
   };
@@ -153,6 +156,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
   const border = darkMode ? "#1e1e2e" : "#eee";
   const [section, setSection] = useState<"tasks" | "guide" | "notes" | "photos">("tasks");
+
+  // Swipe between tabs
+  const sections: ("tasks" | "guide" | "notes" | "photos")[] = ["tasks", "guide", "notes", "photos"];
+  const touchStart = useRef<number>(0);
+  const swipeTab = (dir: number) => {
+    const idx = sections.indexOf(section);
+    const next = idx + dir;
+    if (next >= 0 && next < sections.length) setSection(sections[next]);
+  };
 
   // Sort work orders: HIGH first, then MED, then LOW, completed at bottom
   const priOrder: Record<string, number> = { HIGH: 0, MED: 1, LOW: 2 };
@@ -293,6 +305,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           </button>
         ))}
       </div>
+
+      {/* Swipeable content area */}
+      <div
+        onTouchStart={(e) => { touchStart.current = e.touches[0].clientX; }}
+        onTouchEnd={(e) => {
+          const diff = e.changedTouches[0].clientX - touchStart.current;
+          if (Math.abs(diff) > 60) swipeTab(diff < 0 ? 1 : -1);
+        }}
+      >
 
       {/* ── TASKS TAB ── */}
       {section === "tasks" && (
@@ -469,6 +490,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           )}
         </div>
       )}
+      </div>{/* end swipeable */}
     </div>
   );
 }
