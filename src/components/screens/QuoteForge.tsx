@@ -20,8 +20,8 @@ import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
 import ClientSelect from "../ClientSelect";
 
-// Compress image to max 1200px and JPEG 0.6 quality for AI processing
-async function compressImage(file: File, maxSize = 1200): Promise<string> {
+// Compress image for AI processing — aggressive for mobile (S23 Ultra = 200MP)
+async function compressImage(file: File, maxSize = 800): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -34,7 +34,7 @@ async function compressImage(file: File, maxSize = 1200): Promise<string> {
       canvas.width = w;
       canvas.height = h;
       canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", 0.6));
+      resolve(canvas.toDataURL("image/jpeg", 0.5));
     };
     img.src = URL.createObjectURL(file);
   });
