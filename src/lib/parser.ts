@@ -1,5 +1,6 @@
 import type { Room, RoomItem, Material } from "./types";
 import { db } from "./supabase";
+import { MATERIALS_DB } from "./materials-db";
 
 /* ====== PDF LOADING ====== */
 
@@ -784,8 +785,21 @@ export function estimateMaterials(t: string): Material[] {
   const m: Material[] = [];
   const has = (n: string) => m.some((x) => x.n === n);
 
+  // ── Check curated database first ──
+  for (const item of MATERIALS_DB) {
+    let matched = false;
+    for (const kw of item.keywords) {
+      if (kw.length >= 4 && s.includes(kw)) { matched = true; break; }
+    }
+    if (matched && !has(item.name)) {
+      m.push({ n: item.name, c: item.price });
+    }
+  }
+  // If curated DB found matches, return those (skip legacy matching)
+  if (m.length > 0) return m;
+
   // ═══════════════════════════════════════════
-  // PAINT & FINISHES (~45 items)
+  // LEGACY FALLBACK — PAINT & FINISHES (~45 items)
   // ═══════════════════════════════════════════
   if (s.includes("paint") && /full|repaint|complete|entire/.test(s))
     m.push({ n: "Interior paint+primer (gal)", c: 70 }, { n: "Roller kit (9in frame+covers)", c: 14 }, { n: "Angle brush 2.5in", c: 9 }, { n: "Painter's tape (60yd)", c: 7 }, { n: "Drop cloth 9x12", c: 12 });
