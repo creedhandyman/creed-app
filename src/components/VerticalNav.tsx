@@ -11,7 +11,7 @@ interface NavItem {
 
 const NAV_ITEMS: (NavItem | "logo" | "tape")[] = [
   { id: "quests", icon: "🎯", labelKey: "nav.quest" },
-  { id: "ops", icon: "⚙️", labelKey: "nav.ops", adminOnly: true },
+  { id: "ops", icon: "🏢", labelKey: "nav.ops", adminOnly: true },
   { id: "time", icon: "⏱", labelKey: "nav.time" },
   "tape",
   "logo",
