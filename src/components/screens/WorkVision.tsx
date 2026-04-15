@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import { makeGuide } from "@/lib/parser";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -125,6 +126,19 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   };
 
   const border = darkMode ? "#1e1e2e" : "#eee";
+  const [section, setSection] = useState<"tasks" | "guide" | "notes" | "photos">("tasks");
+
+  // Sort work orders: HIGH first, then MED, then LOW, completed at bottom
+  const priOrder: Record<string, number> = { HIGH: 0, MED: 1, LOW: 2 };
+  const sortedWO = [...workOrder]
+    .map((w, i) => ({ ...w, _idx: i }))
+    .sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      return (priOrder[a.pri] || 2) - (priOrder[b.pri] || 2);
+    });
+
+  const priColor = (pri: string) => pri === "HIGH" ? "var(--color-accent-red)" : pri === "MED" ? "var(--color-warning)" : "var(--color-success)";
+  const priLabel = (pri: string) => pri === "HIGH" ? "URGENT" : pri === "MED" ? "NEEDED" : "MINOR";
 
   // ── NOT CLOCKED IN ──
   if (!on) {
@@ -181,20 +195,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       </div>
     );
   }
-
-  // Sort work orders: HIGH first, then MED, then LOW, completed at bottom
-  const priOrder: Record<string, number> = { HIGH: 0, MED: 1, LOW: 2 };
-  const sortedWO = [...workOrder]
-    .map((w, i) => ({ ...w, _idx: i }))
-    .sort((a, b) => {
-      if (a.done !== b.done) return a.done ? 1 : -1; // unchecked first
-      return (priOrder[a.pri] || 2) - (priOrder[b.pri] || 2);
-    });
-
-  const priColor = (pri: string) => pri === "HIGH" ? "var(--color-accent-red)" : pri === "MED" ? "var(--color-warning)" : "var(--color-success)";
-  const priLabel = (pri: string) => pri === "HIGH" ? "URGENT" : pri === "MED" ? "NEEDED" : "MINOR";
-
-  const [section, setSection] = useState<"tasks" | "guide" | "notes" | "photos">("tasks");
 
   // ── CLOCKED IN — WORK MODE ──
   return (
@@ -335,7 +335,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* ── GUIDE TAB — Tools + Shopping ── */}
       {section === "guide" && activeJob && (() => {
         try {
-          const { makeGuide } = require("@/lib/parser");
           const roomsData = jobData?.rooms || [];
           const guide = makeGuide(roomsData);
           return (
