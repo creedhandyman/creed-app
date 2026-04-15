@@ -14,6 +14,7 @@ import Clients from "./screens/Clients";
 import Mileage from "./screens/Mileage";
 import Marketing from "./screens/Marketing";
 import Troubleshoot from "./screens/Troubleshoot";
+import Financials from "./screens/Financials";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -73,6 +74,8 @@ export default function AppShell() {
         return isAdmin ? <Marketing /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "troubleshoot":
         return <Troubleshoot setPage={goToPage} />;
+      case "financials":
+        return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       default:
         return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
     }

@@ -336,6 +336,21 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           </div>
         </div>
       </div>
+      {isAdmin && (
+        <div className="row mb">
+          <div
+            className="cd"
+            onClick={() => setPage("financials")}
+            style={{ flex: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 12 }}
+          >
+            <span style={{ fontSize: 20 }}>📊</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Financials</div>
+              <div className="dim" style={{ fontSize: 10 }}>Revenue, profit, trends</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Marketing */}
       {isAdmin && (
