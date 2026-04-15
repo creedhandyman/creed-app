@@ -57,16 +57,6 @@ export default function Login() {
             style={{ height: 120, display: "block", margin: "0 auto 12px" }}
             onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
           />
-          <div
-            style={{
-              color: "#C00000",
-              fontSize: 13,
-              fontFamily: "Oswald",
-              letterSpacing: ".15em",
-            }}
-          >
-            LLC
-          </div>
         </div>
 
         {/* Card */}
@@ -180,7 +170,7 @@ export default function Login() {
 
         {/* Footer */}
         <div style={{ textAlign: "center", marginTop: 14, color: "#888", fontSize: 10 }}>
-          Powered by Creed App
+          Powered by Creedhm
         </div>
       </div>
     </div>
