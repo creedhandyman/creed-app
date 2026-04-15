@@ -459,44 +459,6 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                     </div>
                   </div>
 
-                  {/* Guide — Tools + Shopping inline */}
-                  {(() => {
-                    try {
-                      const jobData = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-                      const roomsArr = jobData?.rooms || [];
-                      if (!roomsArr.length) return null;
-                      const { makeGuide } = require("@/lib/parser");
-                      const guide = makeGuide(roomsArr);
-                      return (
-                        <div style={{ marginBottom: 10 }}>
-                          {guide.tools.length > 0 && (
-                            <div style={{ marginBottom: 6 }}>
-                              <div className="sl" style={{ marginBottom: 4 }}>🔨 Tools</div>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                                {guide.tools.slice(0, 12).map((tool: string, ti: number) => (
-                                  <span key={ti} style={{ fontSize: 12, padding: "2px 6px", borderRadius: 4, background: darkMode ? "#1a1a28" : "#f0f0f5", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}` }}>{tool}</span>
-                                ))}
-                                {guide.tools.length > 12 && <span className="dim" style={{ fontSize: 12 }}>+{guide.tools.length - 12} more</span>}
-                              </div>
-                            </div>
-                          )}
-                          {guide.shop.length > 0 && (
-                            <div>
-                              <div className="sl" style={{ marginBottom: 4 }}>🛒 Materials (${guide.shop.reduce((s: number, i: { c: number }) => s + (i.c || 0), 0)})</div>
-                              {guide.shop.slice(0, 8).map((item: { n: string; c: number }, si: number) => (
-                                <div key={si} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "2px 0", borderBottom: `1px solid ${darkMode ? "#1e1e2e11" : "#eee"}` }}>
-                                  <span>{item.n}</span>
-                                  <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>${item.c}</span>
-                                </div>
-                              ))}
-                              {guide.shop.length > 8 && <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>+{guide.shop.length - 8} more items</div>}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    } catch { return null; }
-                  })()}
-
                   {/* Saved Inspection */}
                   {(() => {
                     try {
