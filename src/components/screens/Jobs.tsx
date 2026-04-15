@@ -94,6 +94,32 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     }
     await db.patch("jobs", id, { status });
     loadAll();
+
+    // Auto-generate client message on key status changes
+    const job = jobs.find((j) => j.id === id);
+    if (job?.client) {
+      const orgName = org?.name || "Service Provider";
+      const statusUrl = `https://creedhm.com/status?job=${id}`;
+      const reviewUrl = `https://creedhm.com/review?org=${user.org_id}`;
+      let msg = "";
+
+      if (status === "scheduled") {
+        msg = `Hi ${job.client}! Your job at ${job.property} has been scheduled. View details: ${statusUrl}`;
+      } else if (status === "active") {
+        msg = `Hi ${job.client}! We're on our way to ${job.property}. Track progress: ${statusUrl}`;
+      } else if (status === "complete") {
+        msg = `Hi ${job.client}! Work is complete at ${job.property}. View details and sign off: ${statusUrl}`;
+      } else if (status === "invoiced") {
+        msg = `Hi ${job.client}! Invoice for ${job.property}: $${(job.total || 0).toFixed(2)}. View & pay: ${statusUrl}`;
+      } else if (status === "paid") {
+        msg = `Thank you ${job.client}! Payment received for ${job.property}. We'd love a review: ${reviewUrl}\n\n— ${orgName}`;
+      }
+
+      if (msg) {
+        navigator.clipboard.writeText(msg);
+        useStore.getState().showToast("Client message copied — paste & send to " + job.client, "success");
+      }
+    }
   };
 
   const deleteJob = async (id: string) => {
