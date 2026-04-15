@@ -170,7 +170,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           style={{
             background: isClocked
               ? "linear-gradient(135deg, #00cc66, #009944)"
-              : "linear-gradient(135deg, #ff8800, #cc6600)",
+              : "linear-gradient(135deg, #C00000, #8a0000)",
             borderRadius: 14, padding: "20px 16px", textAlign: "center", cursor: "pointer",
           }}
         >
