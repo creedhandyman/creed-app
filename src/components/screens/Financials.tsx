@@ -44,9 +44,12 @@ export default function Financials({ setPage }: { setPage: (p: string) => void }
   const completedRevenue = completed.reduce((s, j) => s + (j.total || 0), 0);
   const paidRevenue = paid.reduce((s, j) => s + (j.total || 0), 0);
   const outstandingInvoices = invoiced.reduce((s, j) => s + (j.total || 0), 0);
-  const totalLabor = completed.reduce((s, j) => s + (j.total_labor || 0), 0);
+  const totalLaborCharged = completed.reduce((s, j) => s + (j.total_labor || 0), 0);
   const totalMaterials = completed.reduce((s, j) => s + (j.total_mat || 0), 0);
-  const profit = completedRevenue - totalMaterials; // Revenue minus materials (labor is your cost)
+  // Crew cost = actual hours worked × worker rates (from time entries)
+  const crewCost = rangeEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  // Profit = Revenue - Materials - What you pay your crew
+  const profit = completedRevenue - totalMaterials - crewCost;
 
   // Conversion funnel
   const closeRate = rangeJobs.length > 0 ? Math.round((accepted.length / rangeJobs.length) * 100) : 0;
@@ -195,20 +198,28 @@ export default function Financials({ setPage }: { setPage: (p: string) => void }
           <h4 style={{ fontSize: 13, color: "var(--color-success)", marginBottom: 10 }}>Profit Breakdown</h4>
           <div style={{ fontSize: 13, lineHeight: 2 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>Revenue</span>
+              <span>Revenue (jobs completed)</span>
               <span style={{ fontFamily: "Oswald", color: "var(--color-success)" }}>${completedRevenue.toLocaleString()}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span className="dim">Materials</span>
+              <span className="dim">&nbsp;&nbsp;Labor charged</span>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)" }}>${totalLaborCharged.toLocaleString()}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span className="dim">&nbsp;&nbsp;Materials charged</span>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-warning)" }}>${totalMaterials.toLocaleString()}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${border}`, paddingTop: 4, marginTop: 4 }}>
+              <span className="dim">Materials cost</span>
               <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${totalMaterials.toLocaleString()}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span className="dim">Labor Cost</span>
-              <span style={{ fontFamily: "Oswald", color: "var(--color-warning)" }}>-${totalLabor.toLocaleString()}</span>
+              <span className="dim">Crew pay (actual hours)</span>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${crewCost.toLocaleString()}</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${border}`, paddingTop: 4, marginTop: 4 }}>
-              <span style={{ fontWeight: 600 }}>Gross Profit</span>
-              <span style={{ fontFamily: "Oswald", fontSize: 16, color: profit > 0 ? "var(--color-success)" : "var(--color-accent-red)" }}>${profit.toLocaleString()}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", borderTop: `2px solid var(--color-primary)`, paddingTop: 6, marginTop: 6 }}>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Net Profit</span>
+              <span style={{ fontFamily: "Oswald", fontSize: 18, color: profit > 0 ? "var(--color-success)" : "var(--color-accent-red)" }}>${profit.toLocaleString()}</span>
             </div>
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>Margin: <b>{completedRevenue > 0 ? Math.round((profit / completedRevenue) * 100) : 0}%</b></div>
