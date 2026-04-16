@@ -17,8 +17,8 @@ export const MATERIALS_DB: MaterialItem[] = [
 
   // Toilet
   { name: "Toilet (complete)", price: 180, category: "Plumbing", keywords: ["toilet", "commode", "replace toilet"] },
-  { name: "Fill valve", price: 10, category: "Plumbing", keywords: ["fill valve", "toilet running", "tank fill"] },
-  { name: "Flapper", price: 5, category: "Plumbing", keywords: ["flapper", "toilet leak", "running toilet"] },
+  { name: "Fill valve", price: 9, sku: "147966", category: "Plumbing", keywords: ["fill valve", "toilet running", "tank fill"] },
+  { name: "Flapper", price: 7, sku: "420456", category: "Plumbing", keywords: ["flapper", "toilet leak", "running toilet"] },
   { name: "Tank lever", price: 8, category: "Plumbing", keywords: ["tank lever", "flush handle", "toilet handle"] },
   { name: "Toilet floor bolts", price: 4, category: "Plumbing", keywords: ["floor bolt", "closet bolt", "toilet bolt"] },
   { name: "Tank to bowl bolts", price: 6, category: "Plumbing", keywords: ["tank bolt", "tank to bowl"] },
@@ -31,7 +31,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Rubber toilet seal (wax-free)", price: 8, category: "Plumbing", keywords: ["wax ring", "toilet seal", "rubber seal"] },
   { name: "Toilet gasket", price: 5, category: "Plumbing", keywords: ["tank gasket", "toilet gasket"] },
   { name: "Toilet lid", price: 12, category: "Plumbing", keywords: ["toilet lid", "tank lid", "tank cover"] },
-  { name: "Toilet seat", price: 18, category: "Plumbing", keywords: ["toilet seat"] },
+  { name: "Toilet seat", price: 13, sku: "634072", category: "Plumbing", keywords: ["toilet seat"] },
 
   // Tub/Shower
   { name: "Tub surround kit", price: 250, category: "Plumbing", keywords: ["tub surround", "shower surround"] },
@@ -47,7 +47,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Tub face plate", price: 8, category: "Plumbing", keywords: ["tub face plate", "overflow plate"] },
   { name: "Tub rubber stopper", price: 5, category: "Plumbing", keywords: ["tub stopper", "drain stopper", "rubber stopper"] },
   { name: "Shower arm", price: 8, category: "Plumbing", keywords: ["shower arm"] },
-  { name: "Shower head", price: 22, category: "Plumbing", keywords: ["shower head", "showerhead"] },
+  { name: "Shower head", price: 10, sku: "1002847992", category: "Plumbing", keywords: ["shower head", "showerhead"] },
   { name: "Shower rod", price: 15, category: "Plumbing", keywords: ["shower rod", "curtain rod"] },
   { name: "Tub spout", price: 18, category: "Plumbing", keywords: ["tub spout", "bathtub spout"] },
   { name: "Shower escutcheon 1/2\"", price: 6, category: "Plumbing", keywords: ["shower escutcheon"] },
@@ -56,8 +56,8 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Tub strainer", price: 8, category: "Plumbing", keywords: ["tub strainer", "tub drain"] },
 
   // Faucets & Sink
-  { name: "Kitchen faucet (2-handle w/ sprayer)", price: 85, category: "Plumbing", keywords: ["kitchen faucet", "faucet with sprayer"] },
-  { name: "Bathroom faucet", price: 55, category: "Plumbing", sku: "1233227", keywords: ["bath faucet", "bathroom faucet", "lav faucet"] },
+  { name: "Kitchen faucet (2-handle w/ sprayer)", price: 79, sku: "1008028130", category: "Plumbing", keywords: ["kitchen faucet", "faucet with sprayer"] },
+  { name: "Bathroom faucet", price: 27, sku: "217251", category: "Plumbing", keywords: ["bath faucet", "bathroom faucet", "lav faucet"] },
   { name: "Faucet supply line 20\"", price: 8, category: "Plumbing", keywords: ["faucet supply", "supply line"] },
   { name: "Kitchen sprayer hose", price: 15, category: "Plumbing", keywords: ["sprayer hose", "kitchen sprayer", "sprayer"] },
   { name: "Faucet sprayer holder", price: 5, category: "Plumbing", keywords: ["sprayer holder"] },
@@ -107,7 +107,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Light switch (single pole)", price: 2, category: "Electrical", keywords: ["light switch", "switch", "single pole"] },
   { name: "Outlet/switch combo", price: 5, category: "Electrical", keywords: ["combo", "outlet switch"] },
   { name: "Double switch single pole", price: 5, category: "Electrical", keywords: ["double switch"] },
-  { name: "GFCI outlet", price: 18, category: "Electrical", keywords: ["gfci", "gfi", "ground fault"] },
+  { name: "GFCI outlet", price: 38, sku: "1001370834", category: "Electrical", keywords: ["gfci", "gfi", "ground fault"] },
   { name: "Outlet box", price: 2, category: "Electrical", keywords: ["outlet box", "junction box", "electrical box"] },
 
   // Bulbs & Lighting
@@ -118,7 +118,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "18\" fluorescent tube", price: 8, category: "Electrical", keywords: ["fluorescent", "tube light", "t8"] },
 
   // Fixtures
-  { name: "Flush mount ceiling light", price: 25, category: "Electrical", sku: "055549", keywords: ["flush mount", "ceiling light", "light fixture"] },
+  { name: "Flush mount ceiling light", price: 33, sku: "1004160609", category: "Electrical", keywords: ["flush mount", "ceiling light", "light fixture"] },
   { name: "18\" LED under-cabinet light", price: 20, category: "Electrical", keywords: ["under cabinet", "led strip", "sink light"] },
   { name: "4-bulb vanity light fixture", price: 45, category: "Electrical", keywords: ["vanity light", "bathroom light", "4 bulb"] },
   { name: "Mini flush mount light", price: 18, category: "Electrical", sku: "805306", keywords: ["mini flush", "small ceiling light", "closet light"] },
@@ -129,7 +129,7 @@ export const MATERIALS_DB: MaterialItem[] = [
 
   // Safety
   { name: "Smoke alarm (10yr sealed)", price: 18, category: "Electrical", keywords: ["smoke alarm", "smoke detector"] },
-  { name: "Smoke & CO combo alarm", price: 35, category: "Electrical", keywords: ["smoke co", "carbon monoxide", "combo alarm"] },
+  { name: "Smoke & CO combo alarm", price: 20, sku: "1005173566", category: "Electrical", keywords: ["smoke co", "carbon monoxide", "combo alarm"] },
   { name: "Batteries AA (8-pack)", price: 6, category: "Electrical", keywords: ["aa battery", "batteries"] },
   { name: "Batteries AAA (8-pack)", price: 6, category: "Electrical", keywords: ["aaa battery"] },
   { name: "9V battery (2-pack)", price: 6, category: "Electrical", keywords: ["9v battery", "9 volt"] },
@@ -230,8 +230,8 @@ export const MATERIALS_DB: MaterialItem[] = [
   // ═══════════════════════════════════════════
   // PAINT
   // ═══════════════════════════════════════════
-  { name: "Interior paint 5-gal (semi-gloss)", price: 38, category: "Paint", keywords: ["5 gallon", "5-gal", "interior paint", "semi gloss"] },
-  { name: "Interior paint 1-gal", price: 16, category: "Paint", keywords: ["1 gallon", "1-gal", "paint gallon"] },
+  { name: "Interior paint 5-gal (semi-gloss)", price: 127, sku: "654396", category: "Paint", keywords: ["5 gallon", "5-gal", "interior paint", "semi gloss"] },
+  { name: "Interior paint 1-gal", price: 28, sku: "654973", category: "Paint", keywords: ["1 gallon", "1-gal", "paint gallon"] },
   { name: "Kilz spray primer", price: 8, category: "Paint", keywords: ["kilz", "spray primer", "primer spray"] },
   { name: "White semi-gloss spray paint", price: 6, category: "Paint", keywords: ["spray paint", "white spray"] },
   { name: "Primer (gallon)", price: 16, category: "Paint", keywords: ["primer", "prime"] },
@@ -277,7 +277,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   // ═══════════════════════════════════════════
   // SAFETY
   // ═══════════════════════════════════════════
-  { name: "Fire extinguisher (2.5lb ABC)", price: 28, category: "Safety", keywords: ["fire extinguisher"] },
+  { name: "Fire extinguisher (2.5lb ABC)", price: 20, sku: "1002763584", category: "Safety", keywords: ["fire extinguisher"] },
 ];
 
 // Lookup function — find best matching material from database
