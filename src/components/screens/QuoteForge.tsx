@@ -194,7 +194,33 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
     setProp(data.property);
     setClient(data.client);
-    setInspectionData(data); // Save raw inspection for later access
+    setInspectionData(data);
+
+    // Save inspection as standalone record
+    try {
+      await db.post("jobs", {
+        property: data.property,
+        client: data.client,
+        job_date: new Date().toISOString().split("T")[0],
+        rooms: JSON.stringify({
+          inspection: {
+            rooms: data.rooms.map((r) => ({
+              name: r.name,
+              sqft: r.sqft,
+              items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
+            })),
+            property: data.property,
+            client: data.client,
+          },
+        }),
+        total: 0,
+        total_labor: 0,
+        total_mat: 0,
+        total_hrs: 0,
+        status: "inspection",
+        created_by: user.name,
+      });
+    } catch { /* non-critical */ }
 
     // Collect all inspection photos and add to job gallery
     const inspectionPhotos: { url: string; label: string; type: "before" | "after" | "work" }[] = [];
@@ -552,7 +578,27 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   /* ══════════════════════════════════════════
      START SCREEN
      ══════════════════════════════════════════ */
-  if (!mode)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const printInspection = (insp: any, inspData: any, roomCount: number, findingsCount: number) => {
+    const orgN = org?.name || "Service Provider";
+    const d = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const rms = inspData?.inspection?.rooms || [];
+    let rHtml = "";
+    rms.forEach((r: any) => {
+      const rows = r.items.map((it: any) => {
+        const cc = it.condition === "D" ? "#C00000" : it.condition === "P" ? "#ff8800" : it.condition === "F" ? "#ffcc00" : "#00cc66";
+        const cl = it.condition === "D" ? "DMG" : it.condition === "P" ? "POOR" : it.condition === "F" ? "FAIR" : "OK";
+        const photos = it.photos?.length ? it.photos.slice(0, 3).map((u: string) => '<img src="' + u + '" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin:1px" />').join("") : "";
+        return '<tr><td>' + it.name + '</td><td style="text-align:center"><span style="padding:2px 6px;border-radius:3px;background:' + cc + '22;color:' + cc + ';font-size:11px">' + cl + '</span></td><td>' + (it.comment || "") + '</td><td>' + (photos || "") + '</td></tr>';
+      }).join("");
+      rHtml += '<h3 style="font-family:Oswald;font-size:14px;color:#2E75B6;margin:16px 0 6px">' + r.name + '</h3><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#2E75B6;color:#fff"><th style="padding:6px 8px;text-align:left;font-family:Oswald;font-size:11px">Item</th><th style="padding:6px 8px;text-align:center;font-family:Oswald;font-size:11px">Condition</th><th style="padding:6px 8px;text-align:left;font-family:Oswald;font-size:11px">Notes</th><th style="padding:6px 8px;font-family:Oswald;font-size:11px">Photos</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    });
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Inspection</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;color:#1a1a2a;font-size:13px}.page{max-width:800px;margin:0 auto;padding:32px 40px}td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}@media print{.page{padding:16px 24px}}</style></head><body><div class="page"><div style="display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2E75B6"><div><h1 style="font-family:Oswald,sans-serif;font-size:22px;color:#2E75B6;text-transform:uppercase">' + orgN + '</h1><div style="font-size:12px;color:#666;margin-top:4px">Property Inspection Report</div></div><div style="text-align:right"><div style="font-family:Oswald,sans-serif;font-size:14px;color:#2E75B6">INSPECTION REPORT</div><div style="font-size:12px;color:#666">' + insp.job_date + '</div><div style="font-size:12px;color:#666">' + insp.property + '</div>' + (insp.client ? '<div style="font-size:12px;color:#666">Client: ' + insp.client + '</div>' : '') + '</div></div><div style="display:flex;gap:12px;margin-bottom:16px"><div style="flex:1;background:#f5f7fa;border-radius:8px;padding:12px;text-align:center"><div style="font-family:Oswald;font-size:11px;color:#888;text-transform:uppercase">Rooms</div><div style="font-family:Oswald;font-size:24px;color:#2E75B6">' + roomCount + '</div></div><div style="flex:1;background:#f5f7fa;border-radius:8px;padding:12px;text-align:center"><div style="font-family:Oswald;font-size:11px;color:#888;text-transform:uppercase">Findings</div><div style="font-family:Oswald;font-size:24px;color:#ff8800">' + findingsCount + '</div></div></div>' + rHtml + '<div style="border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:24px">' + orgN + ' - ' + d + '</div></div></body></html>';
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+  };
+
+  if (!mode) {
     return (
       <div className="fi">
         <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
@@ -645,8 +691,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             />
           </div>
         </div>
-      </div>
+
+      <SavedInspections jobs={jobs} onQuote={handleInspectionComplete} onPrint={printInspection} onDelete={async (id) => { await db.del("jobs", id); loadAll(); }} />
+    </div>
     );
+  }
 
   /* ══════════════════════════════════════════
      INSPECT MODE
@@ -1874,5 +1923,51 @@ function PriorityBadge({ pri }: { pri: "HIGH" | "MED" | "LOW" }) {
     >
       {pri}
     </span>
+  );
+}
+
+/* ── Saved Inspections List ── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; onQuote: (data: any) => void; onPrint: (insp: any, data: any, rooms: number, findings: number) => void; onDelete: (id: string) => void }) {
+  const inspections = jobs.filter((j) => j.status === "inspection");
+  if (!inspections.length) return null;
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <h4 style={{ fontSize: 14, color: "var(--color-primary)", marginBottom: 8 }}>Saved Inspections</h4>
+      {inspections.map((insp) => {
+        let inspData: Record<string, unknown> = {};
+        try { inspData = typeof insp.rooms === "string" ? JSON.parse(insp.rooms) : insp.rooms || {}; } catch { inspData = {}; }
+        const inspection = inspData.inspection as { rooms?: { name: string; items: { name: string; condition: string; comment: string; photos?: string[] }[] }[] } | undefined;
+        const roomCount = inspection?.rooms?.length || 0;
+        const findingsCount = inspection?.rooms?.reduce((s, r) => s + r.items.filter((it) => it.condition !== "S").length, 0) || 0;
+
+        return (
+          <div key={insp.id} className="cd mb" style={{ padding: 12 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{insp.property || "Untitled"}</div>
+              <div className="dim" style={{ fontSize: 12 }}>
+                {insp.client || "No client"} · {insp.job_date} · {roomCount} rooms · {findingsCount} findings
+              </div>
+            </div>
+            <div className="row" style={{ marginTop: 8, gap: 6 }}>
+              <button className="bb" onClick={() => { if (inspection) onQuote(inspection); }} style={{ fontSize: 12, padding: "5px 10px" }}>
+                Quote This
+              </button>
+              <button className="bo" onClick={() => onPrint(insp, inspData, roomCount, findingsCount)} style={{ fontSize: 12, padding: "5px 10px" }}>
+                Print
+              </button>
+              <button className="bo" onClick={async () => {
+                if (await useStore.getState().showConfirm("Delete Inspection", "Delete this saved inspection?")) {
+                  onDelete(insp.id);
+                }
+              }} style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
