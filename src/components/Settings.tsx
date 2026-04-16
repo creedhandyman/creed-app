@@ -36,7 +36,7 @@ export default function Settings({ onClose }: Props) {
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-        {["account", "team", "operations", "payments", "general"].map((tb) => (
+        {["account", "team", "payments", "general"].map((tb) => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
@@ -282,9 +282,9 @@ export default function Settings({ onClose }: Props) {
       )}
 
       {/* Operations tab */}
-      {tab === "operations" && isOwner && (
+      {/* Operations settings moved to Ops tab */}
+      {tab === "operations-removed" && isOwner && (
         <div className="cd">
-          {/* Licensed Trades */}
           <h4 style={{ fontSize: 14, marginBottom: 8 }}>🔑 Licensed Trades</h4>
           <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>Select trades your business is licensed for. AI will fully quote these instead of flagging for subcontractors.</div>
           {(() => {
@@ -613,7 +613,38 @@ export default function Settings({ onClose }: Props) {
         </div>
       )}
 
-      {/* Quest Config — moved to General tab */}
+      {/* Appearance — renders first in General tab */}
+      {tab === "general" && (
+        <div className="cd mb">
+          <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.appearance")}</h4>
+          <div className="sep row" style={{ justifyContent: "space-between" }}>
+            <span>{t("settings.darkMode")}</span>
+            <div onClick={toggleDark} style={{ width: 44, height: 24, borderRadius: 12, background: darkMode ? "var(--color-primary)" : "#ccc", position: "relative", cursor: "pointer" }}>
+              <div style={{ width: 18, height: 18, borderRadius: 9, background: "#fff", position: "absolute", top: 3, left: darkMode ? 23 : 3, transition: "0.3s" }} />
+            </div>
+          </div>
+          <div className="sep row" style={{ justifyContent: "space-between" }}>
+            <span>{t("settings.navigation")}</span>
+            <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
+              {[{ key: "right", label: "Right" }, { key: "left", label: "Left" }, { key: "bottom", label: "Bottom" }].map((opt) => {
+                const isActive = opt.key === "bottom" ? navBottom : opt.key === "left" ? navLeft && !navBottom : !navLeft && !navBottom;
+                return (<button key={opt.key} onClick={() => { if (opt.key === "bottom") toggleNavBottom(); else if (opt.key === "left") { if (navBottom) toggleNavBottom(); toggleNavSide(); } else { if (navBottom) toggleNavBottom(); if (navLeft) toggleNavSide(); } }} style={{ padding: "4px 10px", fontSize: 12, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
+              })}
+            </div>
+          </div>
+          <div className="sep row" style={{ justifyContent: "space-between" }}>
+            <span>{t("settings.language")} / Idioma</span>
+            <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
+              {[{ key: "en", label: "English" }, { key: "es", label: "Español" }].map((opt) => {
+                const isActive = (typeof window !== "undefined" ? localStorage.getItem("c_lang") : "en") === opt.key || (!localStorage.getItem("c_lang") && opt.key === "en");
+                return (<button key={opt.key} onClick={() => { localStorage.setItem("c_lang", opt.key); window.location.reload(); }} style={{ padding: "4px 12px", fontSize: 12, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quest Config — after appearance */}
       {tab === "general" && isOwner && (
         <div className="cd" style={{ marginTop: 14 }}>
           <h4 style={{ fontSize: 14, marginBottom: 10 }}>🎯 Quest Bonuses</h4>
@@ -685,8 +716,8 @@ export default function Settings({ onClose }: Props) {
         </div>
       )}
 
-      {/* General tab */}
-      {tab === "general" && (
+      {/* Old appearance block — removed, now above quest config */}
+      {false && (
         <div className="cd">
           <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.appearance")}</h4>
           <div className="sep row" style={{ justifyContent: "space-between" }}>
