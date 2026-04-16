@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
 import VerticalNav from "./VerticalNav";
 import Settings from "./Settings";
@@ -40,6 +40,8 @@ export default function AppShell() {
       return;
     }
     if (p !== "qf") setEditJobId(null);
+    // Scroll to top when switching screens
+    window.scrollTo(0, 0);
     if (p !== "sched") setScheduleJobName(null);
     setPage(p);
   };
@@ -90,7 +92,21 @@ export default function AppShell() {
   return (
     <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
       <VerticalNav page={page} setPage={goToPage} isAdmin={isAdmin} />
-      <div className="mc">{renderPage()}</div>
+      <div
+        className="mc"
+        onTouchStart={(e) => { (window as any).__swipeX = e.touches[0].clientX; }}
+        onTouchEnd={(e) => {
+          const startX = (window as any).__swipeX;
+          if (!startX) return;
+          const diff = e.changedTouches[0].clientX - startX;
+          if (Math.abs(diff) < 80) return; // min swipe distance
+          const navOrder = ["qf", "jobs", "sched", "time", isAdmin ? "ops" : "", "quests"].filter(Boolean);
+          const idx = navOrder.indexOf(page);
+          if (idx === -1) return;
+          const next = diff < 0 ? idx + 1 : idx - 1;
+          if (next >= 0 && next < navOrder.length) goToPage(navOrder[next]);
+        }}
+      >{renderPage()}</div>
     </div>
   );
 }

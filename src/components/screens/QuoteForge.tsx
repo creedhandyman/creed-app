@@ -575,8 +575,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               display: "flex",
               alignItems: "center",
               gap: 14,
+              position: "relative",
             }}
           >
+            <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "#C00000", fontFamily: "Oswald" }}>Small jobs</span>
             <div style={{ fontSize: 36 }}>📸</div>
             <div>
               <h4 style={{ color: "#fff", fontSize: 16, margin: 0 }}>Quick Quote</h4>
@@ -591,15 +593,17 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             onClick={() => setMode("inspect")}
             style={{
               background: darkMode ? "#12121a" : "#fff",
-              border: `1px solid ${darkMode ? "#1e1e2e" : "#e0e0e0"}`,
+              border: `2px solid var(--color-success)`,
               borderRadius: 12,
               padding: "20px",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               gap: 14,
+              position: "relative",
             }}
           >
+            <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-success)", fontFamily: "Oswald" }}>Most accurate</span>
             <div style={{ fontSize: 36 }}>🔍</div>
             <div>
               <h4 style={{ color: "var(--color-success)", fontSize: 16, margin: 0 }}>Full Inspection</h4>
@@ -621,8 +625,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               display: "flex",
               alignItems: "center",
               gap: 14,
+              position: "relative",
             }}
           >
+            <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-warning)", fontFamily: "Oswald" }}>PDF reports</span>
             <div style={{ fontSize: 36 }}>📁</div>
             <div>
               <h4 style={{ color: "var(--color-warning)", fontSize: 16, margin: 0 }}>Upload Report</h4>

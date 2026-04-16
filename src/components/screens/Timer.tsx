@@ -350,33 +350,64 @@ export default function Timer({ setPage }: Props) {
           {(() => {
             const todayStr = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
             const todayISO = new Date().toISOString().split("T")[0];
+            // Week totals
+            const weekStart = new Date();
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+            weekStart.setHours(0, 0, 0, 0);
+
             return profiles.map((p) => {
-              const todayEntries = timeEntries.filter((e) =>
-                (e.user_id === p.id || e.user_name === p.name) &&
-                (e.entry_date === todayStr || e.entry_date === todayISO || e.entry_date === todayStr.replace(/^0/, ""))
+              const allEntries = timeEntries.filter((e) => e.user_id === p.id || e.user_name === p.name);
+              const todayEntries = allEntries.filter((e) =>
+                e.entry_date === todayStr || e.entry_date === todayISO || e.entry_date === todayStr.replace(/^0/, "")
               );
+              const weekEntries = allEntries.filter((e) => {
+                try {
+                  const parts = e.entry_date?.split("/");
+                  if (parts?.length === 3) return new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1])) >= weekStart;
+                  return new Date(e.entry_date) >= weekStart;
+                } catch { return false; }
+              });
               const todayHrs = todayEntries.reduce((s, e) => s + (e.hours || 0), 0);
+              const weekHrs = weekEntries.reduce((s, e) => s + (e.hours || 0), 0);
               const todayPay = todayHrs * (p.rate || 55);
+              const weekPay = weekHrs * (p.rate || 55);
               const lastEntry = todayEntries[0];
+              // Jobs worked today
+              const todayJobs = [...new Set(todayEntries.map((e) => e.job).filter(Boolean))];
+
               return (
-                <div key={p.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
-                  <div>
-                    <span style={{ fontWeight: 600 }}>{p.name}</span>
-                    {lastEntry && (
-                      <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>
-                        {lastEntry.job}{lastEntry.start_time ? ` · ${lastEntry.start_time}–${lastEntry.end_time || "now"}` : ""}
-                      </span>
-                    )}
+                <div key={p.id} style={{ padding: "8px 0", borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
+                      <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>{p.role} · ${p.rate || 55}/hr</span>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      {todayHrs > 0 ? (
+                        <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 15 }}>{todayHrs.toFixed(1)}h today</span>
+                      ) : (
+                        <span className="dim" style={{ fontSize: 13 }}>Not clocked in</span>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    {todayHrs > 0 ? (
-                      <>
-                        <span style={{ color: "var(--color-primary)", fontFamily: "Oswald" }}>{todayHrs.toFixed(1)}h</span>
-                        <span className="dim" style={{ marginLeft: 6 }}>${todayPay.toFixed(0)}</span>
-                      </>
-                    ) : (
-                      <span className="dim">—</span>
-                    )}
+                  {/* Detail row */}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 12 }}>
+                    <div>
+                      {lastEntry && (
+                        <span className="dim">
+                          Last: {lastEntry.job}{lastEntry.start_time ? ` ${lastEntry.start_time}–${lastEntry.end_time || "now"}` : ""}
+                        </span>
+                      )}
+                      {todayJobs.length > 0 && (
+                        <div style={{ color: "var(--color-primary)", fontSize: 12, marginTop: 2 }}>
+                          Jobs: {todayJobs.join(", ")}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div className="dim">Today: ${todayPay.toFixed(0)}</div>
+                      <div className="dim">Week: {weekHrs.toFixed(1)}h · ${weekPay.toFixed(0)}</div>
+                    </div>
                   </div>
                 </div>
               );
