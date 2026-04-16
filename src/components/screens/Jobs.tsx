@@ -30,6 +30,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const [uploading, setUploading] = useState(false);
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
   const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number } | null>(null);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
 
   // Auto-create recurring jobs that are due
@@ -459,14 +460,50 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                     </div>
                   </div>
 
-                  {/* Saved Inspection */}
+                  {/* Inspection + Work Order — collapsible side by side */}
                   {(() => {
+                    try {
+                      const jd = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+                      const hasInspection = jd?.inspection?.rooms?.length > 0;
+                      const hasWorkOrder = jd?.workOrder?.length > 0;
+                      if (!hasInspection && !hasWorkOrder) return null;
+
+                      const findingsCount = jd?.inspection?.rooms?.reduce((s: number, r: { items: { condition: string }[] }) => s + r.items.filter((it) => it.condition !== "S").length, 0) || 0;
+                      const woTotal = jd?.workOrder?.length || 0;
+                      const woDone = jd?.workOrder?.filter((w: { done: boolean }) => w.done).length || 0;
+
+                      return (
+                        <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+                          {hasInspection && (
+                            <button
+                              className="bo"
+                              onClick={(e) => { e.stopPropagation(); setExpandedSection(expandedSection === `insp-${j.id}` ? null : `insp-${j.id}`); }}
+                              style={{ flex: 1, fontSize: 12, padding: "6px 10px", textAlign: "left" }}
+                            >
+                              📋 Inspection ({findingsCount} findings) {expandedSection === `insp-${j.id}` ? "▲" : "▼"}
+                            </button>
+                          )}
+                          {hasWorkOrder && (
+                            <button
+                              className="bo"
+                              onClick={(e) => { e.stopPropagation(); setExpandedSection(expandedSection === `wo-${j.id}` ? null : `wo-${j.id}`); }}
+                              style={{ flex: 1, fontSize: 12, padding: "6px 10px", textAlign: "left" }}
+                            >
+                              ✅ Work Order ({woDone}/{woTotal}) {expandedSection === `wo-${j.id}` ? "▲" : "▼"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    } catch { return null; }
+                  })()}
+
+                  {/* Expanded Inspection */}
+                  {expandedSection === `insp-${j.id}` && (() => {
                     try {
                       const jd = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
                       if (!jd?.inspection?.rooms?.length) return null;
                       return (
                         <div style={{ marginBottom: 10 }}>
-                          <div className="sl" style={{ marginBottom: 4 }}>📋 Inspection Report</div>
                           {jd.inspection.rooms.map((r: { name: string; items: { name: string; condition: string; comment: string; photos?: string[] }[] }, ri: number) => (
                             <div key={ri} style={{ marginBottom: 6 }}>
                               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>{r.name}</div>
@@ -807,8 +844,8 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                     );
                   })()}
 
-                  {/* Work Order Checklist */}
-                  {(() => {
+                  {/* Work Order Checklist — expanded via button above */}
+                  {expandedSection === `wo-${j.id}` && (() => {
                     try {
                       const jobData = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
                       const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[] = jobData?.workOrder || [];
@@ -819,10 +856,6 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 
                       return (
                         <div className="mt">
-                          <h5 style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
-                            <span>📋 Work Order</span>
-                            <span className="dim" style={{ fontSize: 10 }}>{completedCount}/{totalCount} done</span>
-                          </h5>
                           {/* Progress bar */}
                           <div style={{ height: 4, background: darkMode ? "#1e1e2e" : "#eee", borderRadius: 2, marginBottom: 6 }}>
                             <div style={{ height: 4, background: completedCount === totalCount ? "var(--color-success)" : "var(--color-primary)", borderRadius: 2, width: `${(completedCount / totalCount) * 100}%`, transition: "width 0.3s" }} />
