@@ -299,10 +299,23 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           }
         }
       } else if (quickPhotos.length > 0) {
-        // Limit to 10 photos max for API
-        const photosToSend = quickPhotos.slice(0, 15);
-        setParseStatus(`Sending text + ${photosToSend.length} photos to AI...`);
-        images = photosToSend;
+        // Photos are now URLs — fetch and convert to base64 for AI
+        const urlsToSend = quickPhotos.slice(0, 15);
+        setParseStatus(`Loading ${urlsToSend.length} photos for AI...`);
+        for (const url of urlsToSend) {
+          try {
+            if (url.startsWith("data:")) { images.push(url); continue; }
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            const b64 = await new Promise<string>((res) => {
+              const reader = new FileReader();
+              reader.onloadend = () => res(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+            images.push(b64);
+          } catch { /* skip failed fetches */ }
+        }
+        setParseStatus(`Sending text + ${images.length} photos to AI...`);
       } else {
         setParseStatus("Sending text to AI...");
       }
@@ -780,8 +793,22 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               if (!file) return;
               setQuickUploading(true);
               try {
-                const compressed = await compressImage(file);
-                setQuickPhotos((prev) => [...prev, compressed]);
+                // Upload to Supabase, store only URL (not base64)
+                const canvas = document.createElement("canvas");
+                const img = new Image();
+                await new Promise<void>((res) => { img.onload = () => res(); img.src = URL.createObjectURL(file); });
+                let w = img.width, h = img.height;
+                const max = 800;
+                if (w > max || h > max) { if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
+                canvas.width = w; canvas.height = h;
+                canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+                const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b || file), "image/jpeg", 0.5));
+                const path = `quickquote/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+                const { error } = await supabase.storage.from("receipts").upload(path, blob);
+                if (!error) {
+                  const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+                  if (data?.publicUrl) setQuickPhotos((prev) => [...prev, data.publicUrl]);
+                }
               } catch (err) { console.error(err); }
               setQuickUploading(false);
               if (quickCameraRef.current) quickCameraRef.current.value = "";
@@ -799,8 +826,21 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               setQuickUploading(true);
               for (const file of Array.from(files)) {
                 try {
-                  const compressed = await compressImage(file);
-                  setQuickPhotos((prev) => [...prev, compressed]);
+                  const canvas = document.createElement("canvas");
+                  const img = new Image();
+                  await new Promise<void>((res) => { img.onload = () => res(); img.src = URL.createObjectURL(file); });
+                  let w = img.width, h = img.height;
+                  const max = 800;
+                  if (w > max || h > max) { if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
+                  canvas.width = w; canvas.height = h;
+                  canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+                  const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b || file), "image/jpeg", 0.5));
+                  const path = `quickquote/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+                  const { error } = await supabase.storage.from("receipts").upload(path, blob);
+                  if (!error) {
+                    const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+                    if (data?.publicUrl) setQuickPhotos((prev) => [...prev, data.publicUrl]);
+                  }
                 } catch (err) { console.error(err); }
               }
               setQuickUploading(false);
