@@ -85,7 +85,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   const [client, setClient] = useState(() => loadSaved("client", ""));
   const [currentRoomIdx, setCurrentRoomIdx] = useState(() => loadSaved("roomIdx", 0));
   const [roomData, setRoomData] = useState<InspectionRoom[]>(() => loadSaved("roomData", []));
-  const [uploading, setUploading] = useState(false);
+  // uploading state replaced by uploadCount for non-blocking batch uploads
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [photoTarget, setPhotoTarget] = useState<{ room: number; item: number } | null>(null);
@@ -197,10 +197,11 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
     });
   };
 
+  const [uploadCount, setUploadCount] = useState(0);
+
   const uploadPhoto = async (file: File, roomIdx: number, itemIdx: number) => {
-    setUploading(true);
+    setUploadCount((c) => c + 1);
     try {
-      // Compress before upload
       const compressed = await compressFile(file);
       const path = `inspections/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
       const { error } = await supabase.storage.from("receipts").upload(path, compressed);
@@ -210,12 +211,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
       setRoomData((prev) =>
         prev.map((r, ri) =>
           ri === roomIdx
-            ? {
-                ...r,
-                items: r.items.map((it, ii) =>
-                  ii === itemIdx ? { ...it, photos: [...it.photos, url] } : it
-                ),
-              }
+            ? { ...r, items: r.items.map((it, ii) => ii === itemIdx ? { ...it, photos: [...it.photos, url] } : it) }
             : r
         )
       );
@@ -223,13 +219,17 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
       console.error("Photo upload failed:", err);
       useStore.getState().showToast("Photo upload failed", "error");
     }
-    setUploading(false);
+    setUploadCount((c) => c - 1);
   };
 
+  // Batch upload — multiple files at once, non-blocking
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !photoTarget) return;
-    uploadPhoto(file, photoTarget.room, photoTarget.item);
+    const files = e.target.files;
+    if (!files?.length || !photoTarget) return;
+    // Upload all files concurrently
+    Array.from(files).forEach((file) => {
+      uploadPhoto(file, photoTarget.room, photoTarget.item);
+    });
     if (cameraRef.current) cameraRef.current.value = "";
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -436,6 +436,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
           ref={fileRef}
           type="file"
           accept="image/*"
+          multiple
           style={{ display: "none" }}
           onChange={handlePhotoSelect}
         />
@@ -451,17 +452,40 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
           </span>
         </div>
 
+        {/* Upload indicator */}
+        {uploadCount > 0 && (
+          <div style={{ fontSize: 12, color: "var(--color-primary)", textAlign: "center", marginBottom: 6 }}>
+            📤 Uploading {uploadCount} photo{uploadCount > 1 ? "s" : ""}...
+          </div>
+        )}
+
+        {/* Room jump — tap any room to jump to it */}
+        <div style={{ display: "flex", gap: 3, marginBottom: 10, overflowX: "auto", paddingBottom: 4 }}>
+          {roomData.map((r, ri) => {
+            const hasFindings = r.items.some((it) => it.condition !== "S");
+            const hasPhotos = r.items.some((it) => it.photos.length > 0);
+            return (
+              <button
+                key={ri}
+                onClick={() => setCurrentRoomIdx(ri)}
+                style={{
+                  padding: "4px 8px", borderRadius: 6, fontSize: 11, whiteSpace: "nowrap",
+                  background: ri === currentRoomIdx ? "var(--color-primary)" : "transparent",
+                  color: ri === currentRoomIdx ? "#fff" : hasFindings ? "var(--color-warning)" : "#888",
+                  border: `1px solid ${ri === currentRoomIdx ? "var(--color-primary)" : border}`,
+                  fontFamily: "Oswald", flexShrink: 0,
+                }}
+              >
+                {r.name.length > 10 ? r.name.slice(0, 10) + "…" : r.name}
+                {hasPhotos && " 📷"}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Progress bar */}
-        <div style={{ height: 3, background: border, borderRadius: 2, marginBottom: 12 }}>
-          <div
-            style={{
-              height: 3,
-              background: "var(--color-primary)",
-              borderRadius: 2,
-              width: `${((currentRoomIdx + 1) / roomData.length) * 100}%`,
-              transition: "width 0.3s",
-            }}
-          />
+        <div style={{ height: 3, background: border, borderRadius: 2, marginBottom: 10 }}>
+          <div style={{ height: 3, background: "var(--color-primary)", borderRadius: 2, width: `${((currentRoomIdx + 1) / roomData.length) * 100}%`, transition: "width 0.3s" }} />
         </div>
 
         {/* Room size */}
@@ -524,7 +548,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                     setPhotoTarget({ room: currentRoomIdx, item: itemIdx });
                     cameraRef.current?.click();
                   }}
-                  disabled={uploading}
+                  disabled={uploadCount > 0}
                   title="Take photo"
                   style={{
                     background: "none",
@@ -540,7 +564,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                     setPhotoTarget({ room: currentRoomIdx, item: itemIdx });
                     fileRef.current?.click();
                   }}
-                  disabled={uploading}
+                  disabled={uploadCount > 0}
                   title="Upload photo"
                   style={{
                     background: "none",
@@ -582,15 +606,36 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
               ))}
             </div>
 
-            {/* Notes (show when not S) */}
-            {item.condition !== "S" && (
+            {/* Notes + quick presets (show when not S) */}
+            {item.condition !== "S" && (<>
+              {/* Quick note presets */}
+              <div style={{ display: "flex", gap: 3, marginBottom: 4, flexWrap: "wrap" }}>
+                {["Replace", "Repair needed", "Missing", "Damaged", "Broken", "Loose", "Stained", "Full repaint", "Touch-up paint", "Clean", "Install new"].map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => {
+                      const current = item.notes;
+                      const updated = current ? `${current}. ${preset}` : preset;
+                      updateItem(currentRoomIdx, itemIdx, "notes", updated);
+                    }}
+                    style={{
+                      fontSize: 11, padding: "2px 6px", borderRadius: 4,
+                      background: "transparent", border: `1px solid ${border}`,
+                      color: item.notes?.includes(preset) ? "var(--color-primary)" : "#888",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
               <input
                 value={item.notes}
                 onChange={(e) => updateItem(currentRoomIdx, itemIdx, "notes", e.target.value)}
                 placeholder="Describe the issue..."
                 style={{ fontSize: 12 }}
               />
-            )}
+            </>)}
 
             {/* Photo thumbnails */}
             {item.photos.length > 0 && (
