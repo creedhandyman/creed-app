@@ -351,7 +351,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
             <div>
               <b style={{ fontSize: 13 }}>Resume inspection?</b>
               <div className="dim" style={{ fontSize: 11 }}>
-                {property || "Untitled"} · {roomData.length} rooms
+                {property || "Untitled"} · {roomData.length} areas
               </div>
             </div>
             <div className="row">
@@ -391,7 +391,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
 
         {/* Room checklist */}
         <div className="cd mb">
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>Select Rooms to Inspect</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 8 }}>Select Areas to Inspect</h4>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
             {ROOM_ORDER.map((room) => {
               const checked = selectedRooms.includes(room);
@@ -425,7 +425,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
             <input
               value={customRoom}
               onChange={(e) => setCustomRoom(e.target.value)}
-              placeholder="Add custom room"
+              placeholder="Add custom area"
               style={{ flex: 1, fontSize: 12 }}
               onKeyDown={(e) => e.key === "Enter" && addCustomRoom()}
             />
@@ -475,7 +475,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
             opacity: !selectedRooms.length || !property ? 0.5 : 1,
           }}
         >
-          Start Inspection ({selectedRooms.length} rooms) →
+          Start Inspection ({selectedRooms.length} areas) →
         </button>
       </div>
     );
@@ -559,7 +559,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         <div className="cd" style={{ marginBottom: 8, padding: 10, display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 12 }}>📐</span>
           <div style={{ flex: 1 }}>
-            <label className="sl">Room Size (sq ft)</label>
+            <label className="sl">Area Size (sq ft)</label>
             <input
               type="number"
               value={room.sqft || ""}
@@ -813,7 +813,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
       {/* Summary stats */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
         <div className="cd" style={{ textAlign: "center" }}>
-          <div className="sl">Rooms</div>
+          <div className="sl">Areas</div>
           <div className="sv" style={{ color: "var(--color-primary)" }}>{roomData.length}</div>
         </div>
         <div className="cd" style={{ textAlign: "center" }}>
