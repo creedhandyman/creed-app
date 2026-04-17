@@ -21,7 +21,74 @@ const ROOM_PRESETS: Record<string, string[]> = {
   "Bathroom 3": ["Toilet", "Sink/Vanity", "Tub/Shower", "Flooring", "Walls/Ceiling", "Mirror/Medicine Cabinet", "Towel Bar/TP Holder", "Exhaust Fan", "Caulking", "Electrical/Lights"],
   Garage: ["Door/Opener", "Flooring", "Walls", "Electrical/Lights", "Exterior Door"],
   Exterior: ["Siding", "Gutters/Downspouts", "Porch/Deck", "Landscaping", "Exterior Lights", "Fencing", "HVAC Unit"],
+  Compliance: ["Water Heater", "HVAC System", "Air Filter", "Condenser Unit", "Breaker Panel", "Smoke/CO Detectors", "Fire Extinguisher", "Thermostat", "GFCI Outlets"],
 };
+
+/* Context-specific quick actions per item type */
+function getPresets(itemName: string): string[] {
+  const n = itemName.toLowerCase();
+  if (/sink|faucet|vanity|toilet|tub|shower|connect/.test(n))
+    return ["Fix leak", "Replace fixture", "Unclog", "Re-caulk", "Tighten", "Replace supply line"];
+  if (/wall|ceiling/.test(n))
+    return ["Patch", "Touch-up paint", "Full repaint", "Drywall repair", "Texture match"];
+  if (/breaker|panel/.test(n))
+    return ["Label breakers", "Replace breaker", "Tighten connections", "Cover plate"];
+  if (/gfci|outlet|switch/.test(n))
+    return ["Replace outlet", "Replace cover plate", "Replace switch", "Tighten"];
+  if (/electric|light/.test(n))
+    return ["Replace bulb", "Replace cover plate", "Replace fixture", "Replace switch", "Re-secure"];
+  if (/floor/.test(n))
+    return ["Patch", "Replace plank", "Re-grout", "Refinish", "Deep clean"];
+  if (/door|lock/.test(n) && !/window/.test(n))
+    return ["Adjust", "Replace hardware", "Replace door", "Re-key", "Weatherstrip"];
+  if (/window|blind/.test(n))
+    return ["Replace blinds", "Re-caulk", "Replace screen", "Repair sash"];
+  if (/cabinet/.test(n) && !/medicine/.test(n))
+    return ["Adjust hinges", "Replace handle", "Repaint", "Replace shelf"];
+  if (/exhaust|vent/.test(n))
+    return ["Clean", "Replace", "Replace cover"];
+  if (/appliance/.test(n))
+    return ["Replace", "Repair", "Clean", "Check connections"];
+  if (/caulk/.test(n))
+    return ["Re-caulk", "Remove mildew"];
+  if (/baseboard|trim|railing/.test(n))
+    return ["Replace section", "Touch-up paint", "Re-nail", "Re-secure"];
+  if (/counter/.test(n))
+    return ["Re-seal", "Polish", "Replace section"];
+  if (/mirror|medicine/.test(n))
+    return ["Replace", "Re-secure", "Replace hardware"];
+  if (/towel|tp|paper holder/.test(n))
+    return ["Re-secure", "Replace"];
+  if (/siding|stucco/.test(n))
+    return ["Patch", "Repaint", "Replace section"];
+  if (/gutter|downspout/.test(n))
+    return ["Clean", "Re-secure", "Replace section"];
+  if (/porch|deck/.test(n))
+    return ["Re-seal", "Re-stain", "Replace boards"];
+  if (/landscape|yard/.test(n))
+    return ["Trim", "Remove debris", "Mulch"];
+  if (/fenc/.test(n))
+    return ["Replace section", "Repaint", "Re-secure"];
+  if (/hvac|condenser|furnace/.test(n))
+    return ["Service", "Replace filter", "Repair", "Clean coils"];
+  if (/filter/.test(n))
+    return ["Replace filter", "Clean"];
+  if (/water heater|tankless/.test(n))
+    return ["Flush tank", "Replace anode", "Replace unit", "Check relief valve"];
+  if (/smoke|co detect|carbon/.test(n))
+    return ["Replace battery", "Replace unit", "Test"];
+  if (/fire ext|extinguisher/.test(n))
+    return ["Inspect charge", "Replace", "Mount"];
+  if (/thermostat/.test(n))
+    return ["Replace", "Calibrate", "Check wiring"];
+  if (/garage|opener/.test(n))
+    return ["Lubricate tracks", "Replace spring", "Replace opener"];
+  if (/closet/.test(n))
+    return ["Adjust door", "Replace rod", "Replace shelf"];
+  if (/doorbell/.test(n))
+    return ["Replace", "Repair wiring"];
+  return ["Replace", "Repair needed", "Missing", "Broken", "Clean"];
+}
 
 // Display order for the room selection grid
 const ROOM_ORDER = [
@@ -32,7 +99,7 @@ const ROOM_ORDER = [
   "Bedroom 3", "Bedroom 4",
   "Bathroom 1", "Bathroom 2",
   "Bathroom 3", "Garage",
-  "Exterior",
+  "Exterior", "Compliance",
 ];
 
 const CONDITIONS = [
@@ -608,9 +675,9 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
 
             {/* Notes + quick presets (show when not S) */}
             {item.condition !== "S" && (<>
-              {/* Quick note presets */}
+              {/* Quick note presets — tailored to this item type */}
               <div style={{ display: "flex", gap: 3, marginBottom: 4, flexWrap: "wrap" }}>
-                {["Replace", "Repair needed", "Missing", "Damaged", "Broken", "Loose", "Stained", "Full repaint", "Touch-up paint", "Clean", "Install new"].map((preset) => (
+                {getPresets(item.name).map((preset) => (
                   <button
                     key={preset}
                     onClick={() => {
