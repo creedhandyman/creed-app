@@ -534,20 +534,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 
                   {/* Job Notes */}
                   <div style={{ marginTop: 8 }}>
-                    <textarea
-                      placeholder={t("jobs.jobNotes")}
-                      defaultValue={(() => { try { const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms; return d?.jobNotes || ""; } catch { return ""; } })()}
-                      onBlur={async (e) => {
-                        const note = e.target.value;
-                        try {
-                          const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : (j.rooms || {});
-                          d.jobNotes = note;
-                          await db.patch("jobs", j.id, { rooms: JSON.stringify(d) });
-                        } catch { /* */ }
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ fontSize: 12, height: 50, resize: "vertical" }}
-                    />
+                    <JobNotesInput job={j} />
                   </div>
 
                   {/* Invoice */}
@@ -1109,5 +1096,59 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
         </div>
       )}
     </div>
+  );
+}
+
+function JobNotesInput({ job }: { job: Job }) {
+  const initial = (() => {
+    try {
+      const d = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+      return d?.jobNotes || "";
+    } catch { return ""; }
+  })();
+  const [value, setValue] = useState(initial);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSaved = useRef(initial);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  const save = async (note: string) => {
+    if (note === lastSaved.current) return;
+    lastSaved.current = note;
+    try {
+      const fresh = useStore.getState().jobs.find((x) => x.id === job.id) || job;
+      const d = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
+      d.jobNotes = note;
+      await db.patch("jobs", job.id, { rooms: JSON.stringify(d) });
+    } catch { /* */ }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) {
+        clearTimeout(timer.current);
+        save(valueRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <textarea
+      placeholder={t("jobs.jobNotes")}
+      value={value}
+      onChange={(e) => {
+        const v = e.target.value;
+        setValue(v);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => save(v), 500);
+      }}
+      onBlur={() => {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+        save(valueRef.current);
+      }}
+      onClick={(e) => e.stopPropagation()}
+      style={{ fontSize: 12, height: 50, resize: "vertical" }}
+    />
   );
 }

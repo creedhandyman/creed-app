@@ -46,6 +46,7 @@ export default function Timer({ setPage }: Props) {
   const [mj, setMj] = useState("");
   const [mUser, setMUser] = useState(user.id);
   const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
+  const [expandedCrew, setExpandedCrew] = useState<string | null>(null);
 
   const rate = user.rate || 55;
 
@@ -223,12 +224,10 @@ export default function Timer({ setPage }: Props) {
         )}
       </div>
 
-      {/* Manual Entry */}
-      <div className="cd mb">
-        <h4 style={{ fontSize: 13, marginBottom: 6 }}>
-          {isOwner ? t("timer.log") : t("timer.manualEntry")}
-        </h4>
-        {isOwner && (
+      {/* Manual Entry — admin only */}
+      {isOwner && (
+        <div className="cd mb">
+          <h4 style={{ fontSize: 13, marginBottom: 6 }}>{t("timer.log")}</h4>
           <div className="row" style={{ marginBottom: 6 }}>
             <span className="dim" style={{ fontSize: 11 }}>For:</span>
             <select
@@ -243,45 +242,45 @@ export default function Timer({ setPage }: Props) {
               ))}
             </select>
           </div>
-        )}
-        <div className="row" style={{ marginBottom: 6 }}>
-          <input
-            type="date"
-            value={mDate}
-            onChange={(e) => setMDate(e.target.value)}
-            style={{ width: 140, color: "var(--color-accent-red)", fontWeight: 600 }}
-          />
-          <select
-            value={mj}
-            onChange={(e) => setMj(e.target.value)}
-            style={{ flex: 1 }}
-          >
-            <option value="">{t("timer.general")}</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.property}>
-                {j.property}
-              </option>
-            ))}
-          </select>
+          <div className="row" style={{ marginBottom: 6 }}>
+            <input
+              type="date"
+              value={mDate}
+              onChange={(e) => setMDate(e.target.value)}
+              style={{ width: 140, color: "var(--color-accent-red)", fontWeight: 600 }}
+            />
+            <select
+              value={mj}
+              onChange={(e) => setMj(e.target.value)}
+              style={{ flex: 1 }}
+            >
+              <option value="">{t("timer.general")}</option>
+              {jobs.map((j) => (
+                <option key={j.id} value={j.property}>
+                  {j.property}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="row">
+            <input
+              type="number"
+              value={mh}
+              onChange={(e) => setMh(e.target.value)}
+              placeholder="Hrs"
+              step=".25"
+              style={{ width: 70 }}
+            />
+            <button
+              className="bg"
+              onClick={addManual}
+              style={{ fontSize: 13, padding: "7px 12px" }}
+            >
+              {t("timer.log")}
+            </button>
+          </div>
         </div>
-        <div className="row">
-          <input
-            type="number"
-            value={mh}
-            onChange={(e) => setMh(e.target.value)}
-            placeholder="Hrs"
-            step=".25"
-            style={{ width: 70 }}
-          />
-          <button
-            className="bg"
-            onClick={addManual}
-            style={{ fontSize: 13, padding: "7px 12px" }}
-          >
-            {t("timer.log")}
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* My Log */}
       <div className="cd">
@@ -375,12 +374,18 @@ export default function Timer({ setPage }: Props) {
               // Jobs worked today
               const todayJobs = [...new Set(todayEntries.map((e) => e.job).filter(Boolean))];
 
+              const isExpanded = expandedCrew === p.id;
+              const rRate = p.rate || 55;
               return (
                 <div key={p.id} style={{ padding: "8px 0", borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div
+                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                    onClick={() => setExpandedCrew(isExpanded ? null : p.id)}
+                  >
                     <div>
+                      <span style={{ fontSize: 11, marginRight: 4 }}>{isExpanded ? "▼" : "▶"}</span>
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
-                      <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>{p.role} · ${p.rate || 55}/hr</span>
+                      <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>{p.role} · ${rRate}/hr</span>
                     </div>
                     <div style={{ textAlign: "right" }}>
                       {todayHrs > 0 ? (
@@ -409,6 +414,66 @@ export default function Timer({ setPage }: Props) {
                       <div className="dim">Week: {weekHrs.toFixed(1)}h · ${weekPay.toFixed(0)}</div>
                     </div>
                   </div>
+                  {isExpanded && (
+                    <div style={{ marginTop: 8, padding: 8, background: darkMode ? "#0f0f18" : "#f7f7fa", borderRadius: 6 }}>
+                      <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>
+                        All entries ({allEntries.length})
+                      </div>
+                      {!allEntries.length ? (
+                        <p className="dim" style={{ fontSize: 12 }}>No entries</p>
+                      ) : (
+                        allEntries.map((en) => (
+                          <div
+                            key={en.id}
+                            style={{
+                              display: "flex", gap: 4, alignItems: "center",
+                              fontSize: 12, padding: "3px 0",
+                              borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
+                            }}
+                          >
+                            <span style={{ minWidth: 65 }}>{en.entry_date}</span>
+                            <span style={{ color: "var(--color-primary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {en.job}
+                              {(en.start_time || en.end_time) && (
+                                <span className="dim" style={{ marginLeft: 4 }}>
+                                  {en.start_time || "?"}–{en.end_time || "?"}
+                                </span>
+                              )}
+                            </span>
+                            <input
+                              type="number"
+                              defaultValue={en.hours}
+                              step=".25"
+                              min="0"
+                              style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 11 }}
+                              onBlur={async (ev) => {
+                                const newHrs = parseFloat(ev.target.value) || 0;
+                                if (newHrs === en.hours) return;
+                                await db.patch("time_entries", en.id, {
+                                  hours: newHrs,
+                                  amount: Math.round(newHrs * rRate * 100) / 100,
+                                });
+                                loadAll();
+                              }}
+                            />
+                            <span style={{ color: "var(--color-success)", minWidth: 45 }}>
+                              ${(en.amount || 0).toFixed(2)}
+                            </span>
+                            <button
+                              onClick={async () => {
+                                if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return;
+                                await db.del("time_entries", en.id);
+                                loadAll();
+                              }}
+                              style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12 }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             });

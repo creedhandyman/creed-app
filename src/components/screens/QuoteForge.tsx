@@ -189,7 +189,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   /* ── Inspection complete handler ── */
   const handleInspectionComplete = async (data: InspectionData) => {
     setParsing(true);
-    setParseStatus("Analyzing inspection with AI...");
+    setParseStatus("Reading inspection report...");
     setMode("edit");
 
     setProp(data.property);
@@ -241,8 +241,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       };
       let licensedTradesInsp: string[] = [];
       try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
+      setParseStatus("Identifying repairs from findings...");
       const result = await aiParseInspection(input, rate, licensedTradesInsp);
       if (result && result.rooms.length > 0) {
+        setParseStatus("Building quote...");
         setRooms(validateQuote(result.rooms));
         setParsing(false);
         setParseStatus("");
@@ -995,6 +997,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   /* ══════════════════════════════════════════
      EDIT MODE
      ══════════════════════════════════════════ */
+  if (parsing && rooms.length === 0) {
+    return (
+      <div className="fi">
+        <div className="row mb">
+          <button className="bo" onClick={() => { setMode(null); setParsing(false); setParseStatus(""); }}>←</button>
+          <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>⚡ Building Quote</h2>
+        </div>
+        <div className="cd">
+          <AiLoadingDisplay status={parseStatus || "Processing inspection..."} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fi">
       {/* Header */}
