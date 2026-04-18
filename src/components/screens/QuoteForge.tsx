@@ -2162,48 +2162,76 @@ function PriorityBadge({ pri }: { pri: "HIGH" | "MED" | "LOW" }) {
   );
 }
 
-/* ── Saved Inspections List ── */
+/* ── Saved Inspections File Cabinet ── */
+// Collapsed into a single toggle so saved inspections don't clutter the Start
+// screen; tap to expand and browse/quote/print/delete each one.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; onQuote: (data: any) => void; onPrint: (insp: any, data: any, rooms: number, findings: number) => void; onDelete: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
   const inspections = jobs.filter((j) => j.status === "inspection");
   if (!inspections.length) return null;
 
   return (
     <div style={{ marginTop: 14 }}>
-      <h4 style={{ fontSize: 14, color: "var(--color-primary)", marginBottom: 8 }}>Saved Inspections</h4>
-      {inspections.map((insp) => {
-        let inspData: Record<string, unknown> = {};
-        try { inspData = typeof insp.rooms === "string" ? JSON.parse(insp.rooms) : insp.rooms || {}; } catch { inspData = {}; }
-        const inspection = inspData.inspection as { rooms?: { name: string; items: { name: string; condition: string; comment: string; photos?: string[] }[] }[] } | undefined;
-        const roomCount = inspection?.rooms?.length || 0;
-        const findingsCount = inspection?.rooms?.reduce((s, r) => s + r.items.filter((it) => it.condition !== "S").length, 0) || 0;
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 14px",
+          borderRadius: 8,
+          fontSize: 13,
+          fontFamily: "Oswald",
+          textTransform: "uppercase",
+          letterSpacing: ".05em",
+          border: "1px solid var(--color-primary)",
+          background: open ? "var(--color-primary)22" : "transparent",
+          color: "var(--color-primary)",
+          cursor: "pointer",
+        }}
+      >
+        <span>🗂 Saved Inspections ({inspections.length})</span>
+        <span style={{ fontSize: 12 }}>{open ? "▼" : "▶"}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 8 }}>
+          {inspections.map((insp) => {
+            let inspData: Record<string, unknown> = {};
+            try { inspData = typeof insp.rooms === "string" ? JSON.parse(insp.rooms) : insp.rooms || {}; } catch { inspData = {}; }
+            const inspection = inspData.inspection as { rooms?: { name: string; items: { name: string; condition: string; comment: string; photos?: string[] }[] }[] } | undefined;
+            const roomCount = inspection?.rooms?.length || 0;
+            const findingsCount = inspection?.rooms?.reduce((s, r) => s + r.items.filter((it) => it.condition !== "S").length, 0) || 0;
 
-        return (
-          <div key={insp.id} className="cd mb" style={{ padding: 12 }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{insp.property || "Untitled"}</div>
-              <div className="dim" style={{ fontSize: 12 }}>
-                {insp.client || "No client"} · {insp.job_date} · {roomCount} rooms · {findingsCount} findings
+            return (
+              <div key={insp.id} className="cd mb" style={{ padding: 12 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{insp.property || "Untitled"}</div>
+                  <div className="dim" style={{ fontSize: 12 }}>
+                    {insp.client || "No client"} · {insp.job_date} · {roomCount} areas · {findingsCount} findings
+                  </div>
+                </div>
+                <div className="row" style={{ marginTop: 8, gap: 6 }}>
+                  <button className="bb" onClick={() => { if (inspection) onQuote(inspection); }} style={{ fontSize: 12, padding: "5px 10px" }}>
+                    Quote This
+                  </button>
+                  <button className="bo" onClick={() => onPrint(insp, inspData, roomCount, findingsCount)} style={{ fontSize: 12, padding: "5px 10px" }}>
+                    Print
+                  </button>
+                  <button className="bo" onClick={async () => {
+                    if (await useStore.getState().showConfirm("Delete Inspection", "Delete this saved inspection?")) {
+                      onDelete(insp.id);
+                    }
+                  }} style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}>
+                    Delete
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="row" style={{ marginTop: 8, gap: 6 }}>
-              <button className="bb" onClick={() => { if (inspection) onQuote(inspection); }} style={{ fontSize: 12, padding: "5px 10px" }}>
-                Quote This
-              </button>
-              <button className="bo" onClick={() => onPrint(insp, inspData, roomCount, findingsCount)} style={{ fontSize: 12, padding: "5px 10px" }}>
-                Print
-              </button>
-              <button className="bo" onClick={async () => {
-                if (await useStore.getState().showConfirm("Delete Inspection", "Delete this saved inspection?")) {
-                  onDelete(insp.id);
-                }
-              }} style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}>
-                Delete
-              </button>
-            </div>
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

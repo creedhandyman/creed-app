@@ -273,7 +273,8 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 
       {/* Job tabs */}
       {(() => {
-        const activeJobs = jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status));
+        // Inspections live in QuoteForge's "Saved Inspections" cabinet, not here
+        const activeJobs = jobs.filter((j) => j.status !== "inspection" && !["complete", "invoiced", "paid"].includes(j.status));
         const billingJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced");
         const paidJobs = jobs.filter((j) => j.status === "paid");
         const tabs = [
@@ -327,7 +328,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 
       {(() => {
         const filtered = jobTab === "active"
-          ? jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status))
+          ? jobs.filter((j) => j.status !== "inspection" && !["complete", "invoiced", "paid"].includes(j.status))
           : jobTab === "billing"
           ? jobs.filter((j) => j.status === "complete" || j.status === "invoiced")
           : jobs.filter((j) => j.status === "paid");
