@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
@@ -78,7 +78,13 @@ export default function Payroll() {
   if (isEnabled("make_ready") && bigJobs >= 7 && !paidQuests.includes("make_ready"))
     earnedQuests.push({ key: "make_ready", name: "Make Ready Pro", bonus: getBonus("make_ready") });
 
-  const totalBonus = earnedQuests.reduce((s, q) => s + q.bonus, 0);
+  // Admins must explicitly approve each earned bonus before it's added to pay.
+  // Quests start as "pending" and aren't paid until checked.
+  const [approvedBonusKeys, setApprovedBonusKeys] = useState<Set<string>>(() => new Set());
+  // Reset approvals when admin switches to a different employee — bonuses are per-person
+  useEffect(() => { setApprovedBonusKeys(new Set()); }, [sel]);
+  const approvedQuests = earnedQuests.filter((q) => approvedBonusKeys.has(q.key));
+  const totalBonus = approvedQuests.reduce((s, q) => s + q.bonus, 0);
   const totalPay = laborPay + totalBonus;
 
   const [processing, setProcessing] = useState(false);
@@ -88,22 +94,20 @@ export default function Payroll() {
   const processPay = async () => {
     if (!entries.length) return;
 
-    // Confirmation step
-    const bonusText = earnedQuests.length
-      ? `\n\n🎯 Quest Bonuses:\n` + earnedQuests.map((q) => `  ${q.name}: $${q.bonus}`).join("\n") + `\n  Bonus Total: $${totalBonus}`
-      : "";
-    const confirmed = await useStore.getState().showConfirm(
-      "Process Payment",
-      `${selUser.name} — ${totalHrs.toFixed(1)} hrs × $${selUser.rate || 55}/hr = $${totalPay.toFixed(2)}${earnedQuests.length ? ` (includes $${totalBonus} bonus)` : ""}. Generate pay stub?`
-    );
-    if (!confirmed) return;
-
-    // Double-submit guard
+    // Double-submit guard — lock BEFORE the await so rapid double-clicks don't both pass
     if (processGuard.current) return;
     processGuard.current = true;
-    setProcessing(true);
 
     try {
+      // Confirmation step
+      const confirmed = await useStore.getState().showConfirm(
+        "Process Payment",
+        `${selUser.name} — ${totalHrs.toFixed(1)} hrs × $${selUser.rate || 55}/hr = $${totalPay.toFixed(2)}${approvedQuests.length ? ` (includes $${totalBonus} approved bonus)` : ""}. Generate pay stub?`
+      );
+      if (!confirmed) return;
+
+      setProcessing(true);
+
       await db.post("pay_history", {
         user_id: sel,
         name: selUser.name,
@@ -117,15 +121,16 @@ export default function Payroll() {
             hrs,
             amount: parseFloat((hrs * (selUser.rate || 55)).toFixed(2)),
           })),
-          bonuses: earnedQuests.map((q) => ({ name: q.name, amount: q.bonus })),
+          bonuses: approvedQuests.map((q) => ({ name: q.name, amount: q.bonus })),
         }),
       });
       // Clear time entries for this employee
       for (const entry of entries) {
         await db.del("time_entries", entry.id);
       }
-      // Record quest payouts to prevent double-counting
-      for (const quest of earnedQuests) {
+      // Record only the admin-approved quest payouts so the others remain pending
+      // (still showing as "pending review" next cycle).
+      for (const quest of approvedQuests) {
         await db.post("quest_payouts", {
           user_id: sel,
           quest_key: quest.key,
@@ -133,6 +138,7 @@ export default function Payroll() {
           paid_date: new Date().toLocaleDateString(),
         });
       }
+      setApprovedBonusKeys(new Set());
       generatePayStub();
       // Prompt to email pay stub
       const empEmail = selUser.email;
@@ -166,7 +172,7 @@ export default function Payroll() {
         `<tr><td>${job}</td><td style="text-align:right">${hrs.toFixed(2)}</td><td style="text-align:right">$${(hrs * (selUser.rate || 55)).toFixed(2)}</td></tr>`
       )
       .join("");
-    const bonusRows = earnedQuests
+    const bonusRows = approvedQuests
       .map((q) => `<tr><td>🎯 ${q.name}</td><td style="text-align:right">Bonus</td><td style="text-align:right">$${q.bonus.toFixed(2)}</td></tr>`)
       .join("");
 
@@ -277,17 +283,54 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
         </div>
       </div>
 
-      {/* Quest bonuses earned */}
+      {/* Quest bonuses earned — admin must approve before they're added to pay */}
       {earnedQuests.length > 0 && (
         <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)" }}>
-          <h4 style={{ fontSize: 13, marginBottom: 6, color: "var(--color-warning)" }}>🎯 Quest Bonuses Earned</h4>
-          {earnedQuests.map((q) => (
-            <div key={q.key} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-              <span>{q.name}</span>
-              <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>${q.bonus}</span>
-            </div>
-          ))}
-          <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>These bonuses will be included when you process pay.</div>
+          <h4 style={{ fontSize: 13, marginBottom: 6, color: "var(--color-warning)" }}>
+            🎯 Quest Bonuses — Pending Review ({earnedQuests.length})
+          </h4>
+          {earnedQuests.map((q) => {
+            const approved = approvedBonusKeys.has(q.key);
+            return (
+              <div
+                key={q.key}
+                className="sep"
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, gap: 8 }}
+              >
+                {isOwner ? (
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", flex: 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={approved}
+                      onChange={(e) => {
+                        setApprovedBonusKeys((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(q.key);
+                          else next.delete(q.key);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span style={{ color: approved ? "var(--color-success)" : undefined }}>
+                      {q.name}
+                    </span>
+                    {approved && <span style={{ fontSize: 10, color: "var(--color-success)", fontFamily: "Oswald" }}>APPROVED</span>}
+                  </label>
+                ) : (
+                  <span style={{ flex: 1 }}>
+                    {q.name}
+                    <span className="dim" style={{ marginLeft: 6, fontSize: 10, fontFamily: "Oswald" }}>PENDING</span>
+                  </span>
+                )}
+                <span style={{ color: approved ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}>${q.bonus}</span>
+              </div>
+            );
+          })}
+          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+            {isOwner
+              ? "Check each bonus to approve it for this pay cycle. Unchecked bonuses stay pending and can be reviewed again later."
+              : "Bonuses are reviewed by management before payout."}
+          </div>
         </div>
       )}
 
