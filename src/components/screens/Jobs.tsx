@@ -185,11 +185,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   };
 
   const statusColor = (s: string) => {
-    if (s === "paid") return "var(--color-success)";
-    if (s === "invoiced" || s === "complete") return "#00cc66";
-    if (s === "active" || s === "scheduled") return "var(--color-primary)";
-    if (s === "accepted") return "var(--color-highlight)";
-    return "var(--color-warning)";
+    // ROYGBIV progression from quoted → paid
+    switch (s) {
+      case "quoted":     return "#C00000"; // red
+      case "accepted":   return "#ff8800"; // orange
+      case "scheduled":  return "#ffcc00"; // yellow
+      case "active":     return "#00cc66"; // green
+      case "complete":   return "#2E75B6"; // blue
+      case "invoiced":   return "#6a3de8"; // indigo
+      case "paid":       return "#9d4edd"; // violet
+      case "inspection": return "#888";    // neutral
+      default:           return "#888";
+    }
   };
 
   const generateInvoice = (j: typeof jobs[0]) => {
@@ -343,7 +350,7 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
           const isOpen = open === j.id;
 
           return (
-            <div key={j.id} className="cd mb">
+            <div key={j.id} className="cd mb" style={{ borderLeft: `4px solid ${statusColor(j.status)}` }}>
               {/* Collapsed header */}
               <div
                 style={{

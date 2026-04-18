@@ -14,7 +14,7 @@ import {
   calculateCost,
   validateQuote,
 } from "@/lib/parser";
-import type { InspectionInput } from "@/lib/parser";
+import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
 import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
@@ -132,6 +132,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const quickCameraRef = useRef<HTMLInputElement>(null);
   const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
   const [inspectionData, setInspectionData] = useState<InspectionData | null>(null);
+  // Editable work order — null means "use auto-generated from guide.steps"
+  const [customWorkOrder, setCustomWorkOrder] = useState<GuideStep[] | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +154,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       }
       if (data?.workers?.length) {
         setWorkers(data.workers.map((w: { id: string }) => w.id));
+      }
+      if (data?.workOrder?.length) {
+        // Preserve any prior edits (incl. `done` checkboxes from Jobs/WorkVision)
+        setCustomWorkOrder(data.workOrder.map((s: GuideStep) => ({
+          room: s.room, detail: s.detail, action: s.action, pri: s.pri, hrs: s.hrs,
+        })));
       }
     } catch {
       // rooms parse failed, start empty
@@ -538,7 +546,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     if (gt <= 0 && !await useStore.getState().showConfirm("Empty Quote", "Quote total is $0. Save anyway?")) {
       return;
     }
-    const workOrder = guide.steps.map((s) => ({
+    // Use custom work order if user edited it, otherwise auto-generate from guide
+    const sourceSteps = customWorkOrder ?? guide.steps;
+    const workOrder = sourceSteps.map((s) => ({
       room: s.room, detail: s.detail, action: s.action, pri: s.pri, hrs: s.hrs, done: false,
     }));
     const data = {
@@ -586,6 +596,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setProp("");
     setClient("");
     setWorkers([]);
+    setCustomWorkOrder(null);
     setEditingId(null);
     setPage("jobs");
   };
@@ -1281,7 +1292,33 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} />}
 
       {/* GUIDE TAB */}
-      {tab === "guide" && <GuideTab guide={guide} th={th} darkMode={darkMode} />}
+      {tab === "guide" && (
+        <GuideTab
+          guide={guide}
+          workOrder={customWorkOrder ?? guide.steps}
+          isCustomized={customWorkOrder !== null}
+          onEditStep={(i, patch) => {
+            setCustomWorkOrder((curr) => {
+              const base = curr ?? guide.steps.map((s) => ({ ...s }));
+              return base.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
+            });
+          }}
+          onRemoveStep={(i) => {
+            setCustomWorkOrder((curr) => {
+              const base = curr ?? guide.steps.map((s) => ({ ...s }));
+              return base.filter((_, idx) => idx !== i);
+            });
+          }}
+          onAddStep={(step) => {
+            setCustomWorkOrder((curr) => {
+              const base = curr ?? guide.steps.map((s) => ({ ...s }));
+              return [...base, step];
+            });
+          }}
+          onReset={() => setCustomWorkOrder(null)}
+          darkMode={darkMode}
+        />
+      )}
 
       {/* ISSUES TAB */}
       {tab === "issues" && <IssuesTab issues={issues} darkMode={darkMode} />}
@@ -1630,11 +1667,21 @@ function QuoteTab({
 
 function GuideTab({
   guide,
-  th,
+  workOrder,
+  isCustomized,
+  onEditStep,
+  onRemoveStep,
+  onAddStep,
+  onReset,
   darkMode,
 }: {
   guide: ReturnType<typeof makeGuide>;
-  th: number;
+  workOrder: GuideStep[];
+  isCustomized: boolean;
+  onEditStep: (i: number, patch: Partial<GuideStep>) => void;
+  onRemoveStep: (i: number) => void;
+  onAddStep: (step: GuideStep) => void;
+  onReset: () => void;
   darkMode: boolean;
 }) {
   const border = darkMode ? "#1e1e2e" : "#eee";
@@ -1644,6 +1691,13 @@ function GuideTab({
   const [extraShop, setExtraShop] = useState<{ n: string; c: number; room: string }[]>([]);
   const [newTool, setNewTool] = useState("");
   const [newShopName, setNewShopName] = useState("");
+  // New-task form state
+  const [taskRoom, setTaskRoom] = useState("");
+  const [taskDetail, setTaskDetail] = useState("");
+  const [taskAction, setTaskAction] = useState("");
+  const [taskPri, setTaskPri] = useState<"HIGH" | "MED" | "LOW">("MED");
+  const [taskHrs, setTaskHrs] = useState("1");
+  const workOrderHrs = workOrder.reduce((s, x) => s + (x.hrs || 0), 0);
   const [newShopCost, setNewShopCost] = useState("");
 
   const allTools = [...guide.tools, ...extraTools];
@@ -1810,26 +1864,152 @@ function GuideTab({
         </div>
       </div>
       <div className="cd">
-        <h4 style={{ color: "var(--color-success)", fontSize: 13, marginBottom: 6 }}>
-          📋 Work Order ({guide.steps.length} tasks · {th.toFixed(1)}h)
-        </h4>
-        {guide.steps.map((s, i) => (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <h4 style={{ color: "var(--color-success)", fontSize: 13, margin: 0 }}>
+            📋 Work Order ({workOrder.length} tasks · {workOrderHrs.toFixed(1)}h)
+          </h4>
+          {isCustomized && (
+            <button
+              onClick={onReset}
+              title="Discard edits and rebuild from quote items"
+              style={{ background: "none", color: "var(--color-primary)", fontSize: 11, padding: "2px 6px" }}
+            >
+              ↺ Regenerate
+            </button>
+          )}
+        </div>
+        {workOrder.length === 0 && (
+          <div className="dim" style={{ fontSize: 11, padding: "4px 0" }}>
+            No tasks yet. Add items to the quote or create one below.
+          </div>
+        )}
+        {workOrder.map((s, i) => (
           <div
             key={i}
             style={{
               padding: "4px 0",
               borderBottom: `1px solid ${border}`,
               fontSize: 12,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 4,
             }}
           >
-            <PriorityBadge pri={s.pri} />
-            <b style={{ color: "var(--color-primary)" }}>{s.room}</b> → {s.detail}{" "}
-            <span className="dim">({s.hrs}h)</span>
-            <div className="dim" style={{ fontSize: 13, paddingLeft: 4 }}>
-              {s.action}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                <select
+                  value={s.pri}
+                  onChange={(e) => onEditStep(i, { pri: e.target.value as "HIGH" | "MED" | "LOW" })}
+                  style={{ fontSize: 10, padding: "1px 4px", width: "auto", fontFamily: "Oswald" }}
+                >
+                  <option value="HIGH">HIGH</option>
+                  <option value="MED">MED</option>
+                  <option value="LOW">LOW</option>
+                </select>
+                <input
+                  value={s.room}
+                  onChange={(e) => onEditStep(i, { room: e.target.value })}
+                  style={{ fontSize: 12, padding: "1px 4px", width: 100, color: "var(--color-primary)", fontWeight: 600 }}
+                />
+                <span>→</span>
+                <input
+                  value={s.detail}
+                  onChange={(e) => onEditStep(i, { detail: e.target.value })}
+                  style={{ fontSize: 12, padding: "1px 4px", flex: 1, minWidth: 80 }}
+                />
+                <input
+                  type="number"
+                  value={s.hrs}
+                  onChange={(e) => onEditStep(i, { hrs: parseFloat(e.target.value) || 0 })}
+                  step=".25"
+                  min="0"
+                  style={{ fontSize: 11, padding: "1px 4px", width: 50, textAlign: "center" }}
+                />
+                <span className="dim" style={{ fontSize: 11 }}>h</span>
+              </div>
+              <input
+                value={s.action}
+                onChange={(e) => onEditStep(i, { action: e.target.value })}
+                placeholder="Action / method"
+                style={{ fontSize: 12, padding: "1px 4px", marginTop: 2, width: "100%", color: "#aaa" }}
+              />
             </div>
+            <button
+              onClick={() => onRemoveStep(i)}
+              title="Remove task"
+              style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, padding: "0 4px" }}
+            >
+              ✕
+            </button>
           </div>
         ))}
+
+        {/* Add new task */}
+        <div style={{ marginTop: 8, padding: 6, border: `1px dashed ${border}`, borderRadius: 4 }}>
+          <div className="dim" style={{ fontSize: 10, marginBottom: 4, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            + Add task
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 4 }}>
+            <select
+              value={taskPri}
+              onChange={(e) => setTaskPri(e.target.value as "HIGH" | "MED" | "LOW")}
+              style={{ fontSize: 10, padding: "2px 4px", width: "auto" }}
+            >
+              <option value="HIGH">HIGH</option>
+              <option value="MED">MED</option>
+              <option value="LOW">LOW</option>
+            </select>
+            <input
+              value={taskRoom}
+              onChange={(e) => setTaskRoom(e.target.value)}
+              placeholder="Trade / area"
+              style={{ fontSize: 12, padding: "2px 4px", width: 110 }}
+            />
+            <input
+              value={taskDetail}
+              onChange={(e) => setTaskDetail(e.target.value)}
+              placeholder="Task"
+              style={{ fontSize: 12, padding: "2px 4px", flex: 1, minWidth: 90 }}
+            />
+            <input
+              type="number"
+              value={taskHrs}
+              onChange={(e) => setTaskHrs(e.target.value)}
+              step=".25"
+              min="0"
+              style={{ fontSize: 11, padding: "2px 4px", width: 50, textAlign: "center" }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            <input
+              value={taskAction}
+              onChange={(e) => setTaskAction(e.target.value)}
+              placeholder="Action / method (optional)"
+              style={{ fontSize: 12, padding: "2px 4px", flex: 1 }}
+            />
+            <button
+              onClick={() => {
+                if (!taskDetail.trim()) return;
+                onAddStep({
+                  room: taskRoom.trim() || "General",
+                  detail: taskDetail.trim(),
+                  action: taskAction.trim(),
+                  pri: taskPri,
+                  hrs: parseFloat(taskHrs) || 1,
+                });
+                setTaskRoom("");
+                setTaskDetail("");
+                setTaskAction("");
+                setTaskPri("MED");
+                setTaskHrs("1");
+              }}
+              disabled={!taskDetail.trim()}
+              style={{ background: "var(--color-primary)", color: "#fff", padding: "2px 10px", fontSize: 12, borderRadius: 4, opacity: taskDetail.trim() ? 1 : 0.5 }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
