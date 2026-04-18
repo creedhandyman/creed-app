@@ -113,21 +113,34 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       if (rPhoto) {
         photo_url = await uploadPhoto(rPhoto, jobId);
       }
-      await db.post("receipts", {
+      // Pass org_id explicitly rather than relying on db.post's localStorage
+      // auto-inject — if org_id is missing the receipt is there but hidden by
+      // the org-scoped filter on the next refresh.
+      const result = await db.post("receipts", {
         job_id: jobId,
+        org_id: user.org_id,
         note: rn,
         amount: parseFloat(ra),
         receipt_date: new Date().toLocaleDateString(),
         photo_url,
       });
+      if (!result) {
+        // db.post already toasted the underlying Supabase error; bail before
+        // clearing the form so the user can retry.
+        return;
+      }
       setRn("");
       setRa("");
       setRPhoto(null);
       if (photoRef.current) photoRef.current.value = "";
-      loadAll();
+      await loadAll();
+      useStore.getState().showToast("Receipt added", "success");
     } catch (err) {
       console.error(err);
-      useStore.getState().showToast("Error saving receipt", "error");
+      useStore.getState().showToast(
+        "Error saving receipt: " + (err instanceof Error ? err.message : String(err)),
+        "error",
+      );
     }
     setUploading(false);
   };
