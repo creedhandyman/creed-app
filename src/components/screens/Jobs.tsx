@@ -116,7 +116,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       // Pass org_id explicitly rather than relying on db.post's localStorage
       // auto-inject — if org_id is missing the receipt is there but hidden by
       // the org-scoped filter on the next refresh.
-      const result = await db.post("receipts", {
+      const result = await db.post<{ id: string }>("receipts", {
         job_id: jobId,
         org_id: user.org_id,
         note: rn,
@@ -129,12 +129,24 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         // clearing the form so the user can retry.
         return;
       }
+      const newReceiptId = result[0]?.id;
       setRn("");
       setRa("");
       setRPhoto(null);
       if (photoRef.current) photoRef.current.value = "";
       await loadAll();
       useStore.getState().showToast("Receipt added", "success");
+
+      // Auto-scan the receipt image in the background so we can enrich the
+      // note with vendor + line items and feed material prices into
+      // price_corrections for future quote accuracy. Fires after the initial
+      // loadAll so the UI has already updated; errors here don't block the
+      // receipt save.
+      if (photo_url && newReceiptId) {
+        scanAndLearn(newReceiptId, photo_url, jobId).catch((err) => {
+          console.error("receipt scan failed:", err);
+        });
+      }
     } catch (err) {
       console.error(err);
       useStore.getState().showToast(
@@ -143,6 +155,63 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       );
     }
     setUploading(false);
+  };
+
+  // Scan a receipt photo with AI and write material prices into
+  // price_corrections so the quoting engine learns actual supply costs.
+  const scanAndLearn = async (receiptId: string, photoUrl: string, jobId: string) => {
+    useStore.getState().showToast("Scanning receipt...", "info");
+    const res = await fetch("/api/ai/receipt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrl: photoUrl }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      useStore.getState().showToast("Receipt scan failed: " + (err?.error || res.statusText), "warning");
+      return;
+    }
+    const { data } = await res.json();
+    if (!data || !Array.isArray(data.items) || data.items.length === 0) return;
+
+    const vendor = (data.vendor as string | undefined)?.trim() || "";
+    const items = data.items as { name?: string; qty?: number; price?: number }[];
+
+    // Enrich the receipt note so the user sees what was scanned at a glance.
+    const itemSummary = items
+      .filter((it) => it?.name)
+      .slice(0, 5)
+      .map((it) => `${it.name}${it.price ? ` $${Number(it.price).toFixed(2)}` : ""}`)
+      .join(", ");
+    const more = items.length > 5 ? ` (+${items.length - 5} more)` : "";
+    const newNote = vendor
+      ? `${rn || "Receipt"} — ${vendor}: ${itemSummary}${more}`
+      : `${rn || "Receipt"}: ${itemSummary}${more}`;
+    await db.patch("receipts", receiptId, { note: newNote });
+
+    // Feed each line item into price_corrections so the quote AI picks up
+    // actual supply costs. Trade is inferred from the job when available.
+    const job = jobs.find((j) => j.id === jobId);
+    const trade = job?.trade || "General";
+    const logs = items
+      .filter((it) => it?.name && typeof it.price === "number" && it.price > 0)
+      .map((it) => ({
+        item_name: it.name!.slice(0, 120),
+        material_name: vendor ? `${vendor}: ${it.name}`.slice(0, 160) : it.name!.slice(0, 160),
+        original_mat_cost: 0,
+        corrected_mat_cost: Number(it.price),
+        original_hours: 0,
+        corrected_hours: 0,
+        trade,
+      }));
+    for (const entry of logs) {
+      await db.post("price_corrections", entry);
+    }
+    await loadAll();
+    useStore.getState().showToast(
+      `Scanned: ${logs.length} item${logs.length !== 1 ? "s" : ""} logged for AI learning`,
+      "success",
+    );
   };
 
   const setStatus = async (id: string, status: string): Promise<void> => {
