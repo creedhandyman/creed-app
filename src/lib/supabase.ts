@@ -17,7 +17,11 @@ function getOrgId(): string | null {
   try {
     const user = JSON.parse(localStorage.getItem("c_user") || "null");
     return user?.org_id || null;
-  } catch {
+  } catch (err) {
+    // Corrupted c_user entry — wipe it so login can rehydrate fresh.
+    // eslint-disable-next-line no-console
+    console.warn("[supabase] c_user localStorage corrupted, clearing:", err);
+    try { localStorage.removeItem("c_user"); } catch { /* */ }
     return null;
   }
 }

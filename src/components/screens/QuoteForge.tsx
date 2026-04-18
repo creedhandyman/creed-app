@@ -224,9 +224,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
     // Collect all inspection photos and add to job gallery
     const inspectionPhotos: { url: string; label: string; type: "before" | "after" | "work" }[] = [];
-    data.rooms.forEach((room) => {
-      room.items.forEach((item) => {
-        item.photos.forEach((url) => {
+    (data.rooms || []).forEach((room) => {
+      (room.items || []).forEach((item) => {
+        (item.photos || []).forEach((url) => {
           inspectionPhotos.push({ url, label: `${room.name} — ${item.name}`, type: "before" });
         });
       });

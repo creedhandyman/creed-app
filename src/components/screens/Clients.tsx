@@ -40,7 +40,7 @@ export default function Clients({ setPage }: Props) {
   const deleteClient = async (id: string) => {
     if (await useStore.getState().showConfirm("Delete Client", "Delete this client and all associated data?")) {
       await db.del("clients", id);
-      loadAll();
+      await loadAll();
     }
   };
 
@@ -234,20 +234,20 @@ export default function Clients({ setPage }: Props) {
                   <div className="g2" style={{ marginBottom: 6 }}>
                     <div>
                       <div className="sl" style={{ fontSize: 12 }}>Phone</div>
-                      <input defaultValue={c.phone} placeholder="Phone" style={{ fontSize: 13 }} onBlur={async (e) => { if (e.target.value !== c.phone) { await db.patch("clients", c.id, { phone: e.target.value }); loadAll(); } }} />
+                      <input defaultValue={c.phone} placeholder="Phone" style={{ fontSize: 13 }} onBlur={async (e) => { if (e.target.value !== c.phone) { await db.patch("clients", c.id, { phone: e.target.value }); await loadAll(); } }} />
                     </div>
                     <div>
                       <div className="sl" style={{ fontSize: 12 }}>Email</div>
-                      <input defaultValue={c.email} placeholder="Email" style={{ fontSize: 13 }} onBlur={async (e) => { if (e.target.value !== c.email) { await db.patch("clients", c.id, { email: e.target.value }); loadAll(); } }} />
+                      <input defaultValue={c.email} placeholder="Email" style={{ fontSize: 13 }} onBlur={async (e) => { if (e.target.value !== c.email) { await db.patch("clients", c.id, { email: e.target.value }); await loadAll(); } }} />
                     </div>
                   </div>
                   <div style={{ marginBottom: 6 }}>
                     <div className="sl" style={{ fontSize: 12 }}>Address</div>
-                    <input defaultValue={c.address} placeholder="Address" style={{ fontSize: 13 }} onBlur={async (e) => { if (e.target.value !== c.address) { await db.patch("clients", c.id, { address: e.target.value }); loadAll(); } }} />
+                    <input defaultValue={c.address} placeholder="Address" style={{ fontSize: 13 }} onBlur={async (e) => { if (e.target.value !== c.address) { await db.patch("clients", c.id, { address: e.target.value }); await loadAll(); } }} />
                   </div>
                   <div style={{ marginBottom: 8 }}>
                     <div className="sl" style={{ fontSize: 12 }}>Notes</div>
-                    <textarea defaultValue={c.notes} placeholder="Gate code, dog, special instructions..." style={{ fontSize: 13, height: 50 }} onBlur={async (e) => { if (e.target.value !== c.notes) { await db.patch("clients", c.id, { notes: e.target.value }); loadAll(); } }} />
+                    <textarea defaultValue={c.notes} placeholder="Gate code, dog, special instructions..." style={{ fontSize: 13, height: 50 }} onBlur={async (e) => { if (e.target.value !== c.notes) { await db.patch("clients", c.id, { notes: e.target.value }); await loadAll(); } }} />
                   </div>
 
                   {/* Preferred tech */}
