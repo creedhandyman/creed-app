@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
         },
       ],
       mode: "payment",
-      success_url: `${origin}/payment/success?job_id=${jobId}`,
+      // Include session_id so the success page can verify the payment server-side
+      // before marking the job as paid.
+      success_url: `${origin}/payment/success?job_id=${jobId}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/payment/cancel`,
       metadata: {
         job_id: jobId,

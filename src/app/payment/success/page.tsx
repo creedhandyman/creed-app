@@ -1,20 +1,38 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { db } from "@/lib/supabase";
 import { Suspense } from "react";
 
 function SuccessContent() {
   const params = useSearchParams();
   const jobId = params.get("job_id");
+  const sessionId = params.get("session_id");
   const [updated, setUpdated] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (jobId && !updated) {
-      db.patch("jobs", jobId, { status: "paid" });
-      setUpdated(true);
-    }
-  }, [jobId, updated]);
+    if (!jobId || !sessionId || updated) return;
+    // Verify the payment server-side before the job is marked paid.
+    // The server checks the Stripe session's payment_status and confirms
+    // the job_id matches the session metadata.
+    (async () => {
+      try {
+        const res = await fetch("/api/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, jobId }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setVerifyError(data?.error || "Could not verify payment");
+          return;
+        }
+        setUpdated(true);
+      } catch (err) {
+        setVerifyError(err instanceof Error ? err.message : "Verification failed");
+      }
+    })();
+  }, [jobId, sessionId, updated]);
 
   return (
     <div
@@ -34,20 +52,22 @@ function SuccessContent() {
           style={{ height: 80, display: "block", margin: "0 auto 16px" }}
           onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
         />
-        <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+        <div style={{ fontSize: 64, marginBottom: 16 }}>{verifyError ? "⚠️" : "✅"}</div>
         <h1
           style={{
             fontFamily: "Oswald, sans-serif",
             fontSize: 24,
-            color: "#00cc66",
+            color: verifyError ? "#ff8800" : "#00cc66",
             textTransform: "uppercase",
             marginBottom: 8,
           }}
         >
-          Payment Received
+          {verifyError ? "Payment Pending" : "Payment Received"}
         </h1>
         <p style={{ color: "#888", fontSize: 14, fontFamily: "Source Sans 3, sans-serif", marginBottom: 24 }}>
-          Thank you for your payment. Your invoice has been marked as paid.
+          {verifyError
+            ? "We received your payment but couldn't confirm it on our end yet. Your invoice will update once confirmed. Contact us if this persists."
+            : "Thank you for your payment. Your invoice has been marked as paid."}
         </p>
         <a
           href="/"

@@ -21,15 +21,15 @@ export async function POST(req: NextRequest) {
     }
 
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    let event;
-
-    if (webhookSecret) {
-      // Verify signature in production
-      event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
-    } else {
-      // Dev mode — parse without verification
-      event = JSON.parse(body);
+    if (!webhookSecret) {
+      console.error("STRIPE_WEBHOOK_SECRET not configured — rejecting webhook");
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
     }
+
+    // Always verify the signature — no dev-mode bypass.
+    // For local testing, use `stripe listen --forward-to localhost:3000/api/stripe/webhook`
+    // which sets STRIPE_WEBHOOK_SECRET via the CLI.
+    const event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
 
     switch (event.type) {
       case "checkout.session.completed": {
