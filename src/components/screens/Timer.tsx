@@ -316,12 +316,19 @@ export default function Timer({ setPage }: Props) {
                 min="0"
                 style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 11 }}
                 onBlur={async (ev) => {
+                  // Only allow editing entries owned by current user (defense-in-depth
+                  // against legacy rows without user_id but matching user_name).
+                  if (e.user_id && e.user_id !== user.id && !isOwner) return;
                   const newHrs = parseFloat(ev.target.value) || 0;
+                  if (newHrs === e.hours) return;
+                  // Use the entry-owner's rate, not the logged-in user's rate.
+                  const owner = profiles.find((p) => p.id === e.user_id);
+                  const ownerRate = owner?.rate || user.rate || 55;
                   await db.patch("time_entries", e.id, {
                     hours: newHrs,
-                    amount: Math.round(newHrs * rate * 100) / 100,
+                    amount: Math.round(newHrs * ownerRate * 100) / 100,
                   });
-                  loadAll();
+                  await loadAll();
                 }}
               />
               <span style={{ color: "var(--color-success)", minWidth: 45 }}>
@@ -329,9 +336,10 @@ export default function Timer({ setPage }: Props) {
               </span>
               <button
                 onClick={async () => {
+                  if (e.user_id && e.user_id !== user.id && !isOwner) return;
                   if (!await useStore.getState().showConfirm("Delete Entry", "Delete this time entry?")) return;
                   await db.del("time_entries", e.id);
-                  loadAll();
+                  await loadAll();
                 }}
                 style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12 }}
               >

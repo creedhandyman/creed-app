@@ -269,4 +269,8 @@ if (typeof window !== "undefined") {
       useStore.getState().setUser(null);
     }
   });
+
+  // Let supabase.ts surface DB errors via our toast system
+  (window as unknown as { __dbToast?: (m: string, t: "error") => void }).__dbToast =
+    (msg: string, type: "error") => useStore.getState().showToast(msg, type);
 }

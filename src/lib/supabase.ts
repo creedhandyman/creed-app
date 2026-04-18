@@ -22,6 +22,18 @@ function getOrgId(): string | null {
   }
 }
 
+// Surface DB errors to the UI via a toast callback registered from the store.
+// Using a window hook avoids a circular import between supabase.ts <-> store.ts.
+function reportDbError(table: string, op: string, err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  // eslint-disable-next-line no-console
+  console.error(`[db] ${op} ${table} failed:`, err);
+  if (typeof window !== "undefined") {
+    const toast = (window as unknown as { __dbToast?: (m: string, t: "error") => void }).__dbToast;
+    if (toast) toast(`${op} ${table} failed: ${msg}`, "error");
+  }
+}
+
 export const db = {
   get: async <T = Record<string, unknown>>(
     table: string,
@@ -40,7 +52,8 @@ export const db = {
       const { data, error } = await query;
       if (error) throw error;
       return (data as T[]) || [];
-    } catch {
+    } catch (err) {
+      reportDbError(table, "load", err);
       return [];
     }
   },
@@ -59,7 +72,8 @@ export const db = {
       const { data: result, error } = await supabase.from(table).insert(data as never).select();
       if (error) throw error;
       return result as T[];
-    } catch {
+    } catch (err) {
+      reportDbError(table, "insert", err);
       return null;
     }
   },
@@ -70,17 +84,19 @@ export const db = {
     updates: Record<string, unknown>
   ): Promise<void> => {
     try {
-      await supabase.from(table).update(updates).eq("id", id);
-    } catch {
-      // silent fail
+      const { error } = await supabase.from(table).update(updates).eq("id", id);
+      if (error) throw error;
+    } catch (err) {
+      reportDbError(table, "update", err);
     }
   },
 
   del: async (table: string, id: string): Promise<void> => {
     try {
-      await supabase.from(table).delete().eq("id", id);
-    } catch {
-      // silent fail
+      const { error } = await supabase.from(table).delete().eq("id", id);
+      if (error) throw error;
+    } catch (err) {
+      reportDbError(table, "delete", err);
     }
   },
 };
