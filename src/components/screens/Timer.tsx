@@ -41,12 +41,18 @@ export default function Timer({ setPage }: Props) {
   const [st, setSt] = useState(() => ld<number | null>("t_st", null));
   const [sj, setSj] = useState(() => ld("t_sj", ""));
   const [el, setEl] = useState(0);
+  // Server-side active entry so admins can see who is currently clocked in
+  // from the Crew Activity tab, not just this browser's localStorage.
+  const [activeId, setActiveId] = useState<string | null>(() => ld<string | null>("t_active_id", null));
+  const [tab, setTab] = useState<"time" | "crew">("time");
 
   const [mh, setMh] = useState("");
   const [mj, setMj] = useState("");
   const [mUser, setMUser] = useState(user.id);
   const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
   const [expandedCrew, setExpandedCrew] = useState<string | null>(null);
+  // Re-render every minute on the Crew tab so live durations tick
+  const [tick, setTick] = useState(0);
 
   const rate = user.rate || 55;
 
@@ -54,6 +60,19 @@ export default function Timer({ setPage }: Props) {
   useEffect(() => sv("t_on", on), [on]);
   useEffect(() => sv("t_st", st), [st]);
   useEffect(() => sv("t_sj", sj), [sj]);
+  useEffect(() => sv("t_active_id", activeId), [activeId]);
+
+  // Tick every 30s on Crew tab so "clocked in 1h 12m ago" stays current
+  useEffect(() => {
+    if (tab !== "crew") return;
+    const iv = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(iv);
+  }, [tab]);
+
+  const fmtTime = (ts: number) => {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
 
   // Tick + auto-stop after 12 hours
   const MAX_TIMER_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -61,19 +80,27 @@ export default function Timer({ setPage }: Props) {
     if (!on || !st) return;
     const elapsed = Date.now() - st;
     if (elapsed >= MAX_TIMER_MS) {
-      // Auto-stop: log 12 hours and reset
+      // Auto-stop: patch the existing active entry with 12 hours.
       useStore.getState().showToast("Timer auto-stopped after 12 hours. The time has been logged.", "info");
       (async () => {
-        await db.post("time_entries", {
-          job: sj || "General",
-          entry_date: new Date().toLocaleDateString(),
-          hours: 12,
-          amount: Math.round(12 * rate * 100) / 100,
-          user_id: user.id,
-          user_name: user.name,
-          start_time: fmtTime(st),
-          end_time: fmtTime(Date.now()),
-        });
+        const hrs = 12;
+        const amount = Math.round(hrs * rate * 100) / 100;
+        if (activeId) {
+          await db.patch("time_entries", activeId, {
+            hours: hrs, amount,
+            end_time: fmtTime(Date.now()),
+          });
+        } else {
+          await db.post("time_entries", {
+            job: sj || "General",
+            entry_date: new Date().toLocaleDateString(),
+            hours: hrs, amount,
+            user_id: user.id, user_name: user.name,
+            start_time: fmtTime(st),
+            end_time: fmtTime(Date.now()),
+          });
+        }
+        setActiveId(null);
         await loadAll();
       })();
       setOn(false);
@@ -92,34 +119,67 @@ export default function Timer({ setPage }: Props) {
     return () => clearInterval(iv);
   }, [on, st]);
 
-  const start = () => {
-    setSt(Date.now());
+  // Clock in: create an in-progress time_entries row so admins can see who
+  // is currently clocked in from the Crew Activity tab (previously clock-in
+  // was local-only until the user clocked out).
+  const start = async () => {
+    const startedAt = Date.now();
+    setSt(startedAt);
     setOn(true);
-  };
-
-  const fmtTime = (ts: number) => {
-    const d = new Date(ts);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const result = await db.post<{ id: string }>("time_entries", {
+      job: sj || "General",
+      entry_date: new Date().toLocaleDateString(),
+      hours: 0,
+      amount: 0,
+      user_id: user.id,
+      user_name: user.name,
+      start_time: fmtTime(startedAt),
+      // end_time intentionally omitted — present of end_time == finished
+    });
+    if (result && result[0]?.id) {
+      setActiveId(result[0].id);
+      await loadAll();
+    } else {
+      // DB insert failed — fall back to local-only timer. stop() will post
+      // a regular entry when the user clocks out.
+      setActiveId(null);
+    }
   };
 
   const stop = async () => {
     const hrs = Math.round(el / 3600000 * 100) / 100;
     if (hrs >= 0.01) {
-      await db.post("time_entries", {
-        job: sj || "General",
-        entry_date: new Date().toLocaleDateString(),
-        hours: hrs,
-        amount: Math.round(hrs * rate * 100) / 100,
-        user_id: user.id,
-        user_name: user.name,
-        start_time: st ? fmtTime(st) : "",
-        end_time: fmtTime(Date.now()),
-      });
+      if (activeId) {
+        // Close out the existing active row
+        await db.patch("time_entries", activeId, {
+          hours: hrs,
+          amount: Math.round(hrs * rate * 100) / 100,
+          end_time: fmtTime(Date.now()),
+          job: sj || "General",
+        });
+      } else {
+        await db.post("time_entries", {
+          job: sj || "General",
+          entry_date: new Date().toLocaleDateString(),
+          hours: hrs,
+          amount: Math.round(hrs * rate * 100) / 100,
+          user_id: user.id,
+          user_name: user.name,
+          start_time: st ? fmtTime(st) : "",
+          end_time: fmtTime(Date.now()),
+        });
+      }
+      await loadAll();
+    } else if (activeId) {
+      // Timer was only running briefly; delete the in-progress row instead
+      // of leaving a zero-hour ghost entry.
+      await db.del("time_entries", activeId);
       await loadAll();
     }
     setOn(false);
     setSt(null);
     setEl(0);
+    setActiveId(null);
   };
 
   const addManual = async () => {
@@ -146,17 +206,92 @@ export default function Timer({ setPage }: Props) {
   const today = new Date().toISOString().split("T")[0];
   const todayJobs = schedule.filter((s) => s.sched_date === today);
 
-  // My time entries
-  const myTime = timeEntries.filter(
-    (e) => e.user_id === user.id || (!e.user_id && e.user_name === user.name)
-  );
+  // My time entries — exclude the still-open active row (zero hours, no end_time)
+  // from the completed log so a user mid-clock doesn't see a ghost entry.
+  const myTime = timeEntries
+    .filter((e) => e.user_id === user.id || (!e.user_id && e.user_name === user.name))
+    .filter((e) => !!e.end_time || (e.hours || 0) > 0);
+
+  // Active sessions across the whole crew (end_time unset == still clocked in).
+  // Used by Crew Activity tab. Ignore rows older than 24h as stale.
+  const activeSessions = timeEntries.filter((e) => {
+    if (e.end_time) return false;
+    // Only rows that were created as active (have a start_time)
+    if (!e.start_time) return false;
+    return true;
+  });
+
+  // Human-readable elapsed time: "2h 14m" / "45m" / "30s"
+  const elapsedFrom = (startTimeStr: string, entryDate: string) => {
+    try {
+      // start_time is HH:MM AM/PM. Combine with entry_date (MM/DD/YYYY or YYYY-MM-DD).
+      let base: Date;
+      if (entryDate?.includes("-")) {
+        base = new Date(entryDate + "T00:00:00");
+      } else if (entryDate?.includes("/")) {
+        const [m, d, y] = entryDate.split("/");
+        base = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+      } else {
+        base = new Date();
+      }
+      // Parse "09:30 AM" into hours+mins
+      const m = startTimeStr.match(/(\d+):(\d+)\s*([AP]M)?/i);
+      if (m) {
+        let h = parseInt(m[1]);
+        const mm = parseInt(m[2]);
+        const ampm = m[3]?.toUpperCase();
+        if (ampm === "PM" && h < 12) h += 12;
+        if (ampm === "AM" && h === 12) h = 0;
+        base.setHours(h, mm, 0, 0);
+      }
+      const diff = Date.now() - base.getTime();
+      if (diff < 0) return "–";
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return "just started";
+      if (mins < 60) return `${mins}m`;
+      const h = Math.floor(mins / 60);
+      const rem = mins % 60;
+      return rem ? `${h}h ${rem}m` : `${h}h`;
+    } catch { return "–"; }
+  };
+  // (referenced by render; `tick` re-triggers render every 30s on the crew tab)
+  void tick;
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10 }}>
         ⏱ {t("timer.title")}
       </h2>
 
+      {/* Tab switcher (Crew tab is admin-only) */}
+      {isOwner && (
+        <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+          <button
+            onClick={() => setTab("time")}
+            className={tab === "time" ? "bb" : "bo"}
+            style={{ fontSize: 12, padding: "6px 14px", flex: 1 }}
+          >
+            ⏱ My Time
+          </button>
+          <button
+            onClick={() => setTab("crew")}
+            className={tab === "crew" ? "bb" : "bo"}
+            style={{ fontSize: 12, padding: "6px 14px", flex: 1, position: "relative" }}
+          >
+            👷 Crew Activity
+            {activeSessions.length > 0 && (
+              <span style={{
+                marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 8,
+                background: "var(--color-success)", color: "#fff", fontFamily: "Oswald",
+              }}>
+                {activeSessions.length} ON
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {tab === "time" && (<>
       {/* Today's Jobs */}
       {todayJobs.length > 0 && (
         <div className="cd mb">
@@ -349,11 +484,75 @@ export default function Timer({ setPage }: Props) {
           ))
         )}
       </div>
+      </>)}
 
-      {/* Crew Activity — owners/managers only */}
-      {isOwner && profiles.length > 1 && (
-        <div className="cd" style={{ marginTop: 14 }}>
-          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)" }}>👷 {t("timer.crewActivity")}</h4>
+      {/* ── Crew Activity tab (admin only) ── */}
+      {tab === "crew" && isOwner && (<>
+        {/* Currently clocked in */}
+        <div className="cd mb" style={{ borderLeft: `3px solid ${activeSessions.length ? "var(--color-success)" : "#444"}` }}>
+          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-success)" }}>
+            🟢 Currently Clocked In ({activeSessions.length})
+          </h4>
+          {!activeSessions.length ? (
+            <p className="dim" style={{ fontSize: 12 }}>No one is actively clocked in right now.</p>
+          ) : (
+            activeSessions.map((e) => {
+              const owner = profiles.find((p) => p.id === e.user_id) || { name: e.user_name, rate: 55 };
+              const elapsed = e.start_time ? elapsedFrom(e.start_time, e.entry_date) : "–";
+              return (
+                <div
+                  key={e.id}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "8px 0", borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-success)", display: "inline-block", animation: "pulse 2s infinite" }} />
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{owner.name}</span>
+                    </div>
+                    <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+                      {e.job || "General"} · started {e.start_time || "?"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "Oswald", fontSize: 16, color: "var(--color-success)" }}>{elapsed}</div>
+                    <button
+                      onClick={async () => {
+                        if (!await useStore.getState().showConfirm("Force Clock-Out", `Clock out ${owner.name}? This will close the session without the employee's own clock-out.`)) return;
+                        const hrs = e.start_time ? (() => {
+                          const m = e.start_time.match(/(\d+):(\d+)\s*([AP]M)?/i);
+                          if (!m) return 0;
+                          let h = parseInt(m[1]); const mm = parseInt(m[2]);
+                          const ampm = m[3]?.toUpperCase();
+                          if (ampm === "PM" && h < 12) h += 12;
+                          if (ampm === "AM" && h === 12) h = 0;
+                          const start = new Date(); start.setHours(h, mm, 0, 0);
+                          return Math.round((Date.now() - start.getTime()) / 3600000 * 100) / 100;
+                        })() : 0;
+                        await db.patch("time_entries", e.id, {
+                          hours: hrs,
+                          amount: Math.round(hrs * (owner.rate || 55) * 100) / 100,
+                          end_time: fmtTime(Date.now()),
+                        });
+                        await loadAll();
+                      }}
+                      style={{ background: "none", color: "var(--color-accent-red)", fontSize: 10, padding: 0, marginTop: 2 }}
+                    >
+                      force stop
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Per-employee breakdown — today / week, with drill-down */}
+        <div className="cd">
+          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)" }}>📊 Crew Breakdown</h4>
           {(() => {
             const todayStr = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
             const todayISO = new Date().toISOString().split("T")[0];
@@ -487,7 +686,7 @@ export default function Timer({ setPage }: Props) {
             });
           })()}
         </div>
-      )}
+      </>)}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <p className="dim" style={{ fontSize: 12 }}>

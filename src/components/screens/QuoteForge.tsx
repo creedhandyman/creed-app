@@ -1571,57 +1571,77 @@ function QuoteTab({
                             <span style={{ width: 55, textAlign: "right" }}>Price</span>
                             <span style={{ width: 16 }}></span>
                           </div>
-                          {it.materials.map((mat, mi) => (
-                            <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 12 }}>
-                              <input
-                                value={mat.n}
-                                onChange={(e) => {
-                                  const mats = [...it.materials];
-                                  mats[mi] = { ...mats[mi], n: e.target.value };
-                                  upItem(rm.name, it.id, "materials", mats);
-                                }}
-                                style={{ flex: 1, fontSize: 11, padding: 2 }}
-                              />
-                              <input
-                                type="number"
-                                value={(mat as unknown as Record<string, unknown>).qty as number || 1}
-                                min="1"
-                                step="1"
-                                onChange={(e) => {
-                                  const qty = parseInt(e.target.value) || 1;
-                                  const mats = [...it.materials];
-                                  (mats[mi] as unknown as Record<string, unknown>).qty = qty;
-                                  // Recalc total: unit price × qty
-                                  const unitPrice = (mats[mi] as unknown as Record<string, unknown>).unitPrice as number || mats[mi].c;
-                                  mats[mi] = { ...mats[mi], c: Math.round(unitPrice * qty * 100) / 100 };
-                                  (mats[mi] as unknown as Record<string, unknown>).qty = qty;
-                                  (mats[mi] as unknown as Record<string, unknown>).unitPrice = unitPrice;
-                                  upItem(rm.name, it.id, "materials", mats);
-                                }}
-                                style={{ width: 32, fontSize: 11, padding: 2, textAlign: "center" }}
-                              />
-                              <span style={{ fontSize: 11 }}>$</span>
-                              <input
-                                type="number"
-                                value={mat.c}
-                                min="0"
-                                step="1"
-                                onChange={(e) => {
-                                  const mats = [...it.materials];
-                                  mats[mi] = { ...mats[mi], c: parseFloat(e.target.value) || 0 };
-                                  upItem(rm.name, it.id, "materials", mats);
-                                }}
-                                style={{ width: 50, fontSize: 11, padding: 2, textAlign: "right" }}
-                              />
-                              <button
-                                onClick={() => {
-                                  const mats = it.materials.filter((_, i) => i !== mi);
-                                  upItem(rm.name, it.id, "materials", mats.length ? mats : [{ n: "Materials", c: 0 }]);
-                                }}
-                                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 11, padding: 0 }}
-                              >✕</button>
-                            </div>
-                          ))}
+                          {it.materials.map((mat, mi) => {
+                            const matAny = mat as unknown as { qty?: number };
+                            const qtyVal = matAny.qty;
+                            return (
+                              <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 12 }}>
+                                <input
+                                  value={mat.n}
+                                  onChange={(e) => {
+                                    const mats = [...it.materials];
+                                    mats[mi] = { ...mats[mi], n: e.target.value };
+                                    upItem(rm.name, it.id, "materials", mats);
+                                  }}
+                                  style={{ flex: 1, fontSize: 11, padding: 2 }}
+                                />
+                                <input
+                                  type="number"
+                                  // Allow the field to clear to empty — previously `|| 1` snapped
+                                  // back to 1 every keystroke, so typing "3" over "1" became "13".
+                                  value={qtyVal === undefined || qtyVal === null ? "" : qtyVal}
+                                  placeholder="1"
+                                  min="0"
+                                  step="1"
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    const mats = [...it.materials];
+                                    const clone = { ...(mats[mi] as unknown as Record<string, unknown>) };
+                                    if (raw === "") delete clone.qty;
+                                    else clone.qty = parseInt(raw) || 0;
+                                    mats[mi] = clone as unknown as Material;
+                                    upItem(rm.name, it.id, "materials", mats);
+                                  }}
+                                  onBlur={(e) => {
+                                    const v = parseInt(e.target.value);
+                                    if (!v || v < 1) {
+                                      const mats = [...it.materials];
+                                      const clone = { ...(mats[mi] as unknown as Record<string, unknown>) };
+                                      clone.qty = 1;
+                                      mats[mi] = clone as unknown as Material;
+                                      upItem(rm.name, it.id, "materials", mats);
+                                    }
+                                  }}
+                                  style={{ width: 36, fontSize: 11, padding: 2, textAlign: "center" }}
+                                />
+                                <span style={{ fontSize: 11 }}>$</span>
+                                <input
+                                  type="number"
+                                  value={mat.c === 0 ? "" : mat.c}
+                                  placeholder="0"
+                                  min="0"
+                                  step="0.01"
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    const nextC = raw === "" ? 0 : (parseFloat(raw) || 0);
+                                    const mats = [...it.materials];
+                                    mats[mi] = { ...mats[mi], c: nextC };
+                                    upItem(rm.name, it.id, "materials", mats);
+                                  }}
+                                  style={{ width: 56, fontSize: 11, padding: 2, textAlign: "right" }}
+                                />
+                                <button
+                                  onClick={() => {
+                                    const mats = it.materials.filter((_, i) => i !== mi);
+                                    upItem(rm.name, it.id, "materials", mats.length ? mats : [{ n: "Materials", c: 0 }]);
+                                  }}
+                                  style={{ background: "none", color: "var(--color-accent-red)", fontSize: 11, padding: 0 }}
+                                >✕</button>
+                              </div>
+                            );
+                          })}
                           <button
                             onClick={() => {
                               upItem(rm.name, it.id, "materials", [...it.materials, { n: "New material", c: 0 }]);
