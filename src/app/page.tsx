@@ -35,9 +35,12 @@ export default function Home() {
       const { loadAll, showToast } = useStore.getState();
       loadAll();
       if (stripeStatus === "success") {
-        showToast("Stripe connected successfully!", "success");
+        showToast("Stripe connected — you can accept payments now", "success");
       } else if (stripeStatus === "pending") {
-        showToast("Stripe setup started — finish onboarding in your Stripe dashboard", "info");
+        showToast(
+          "Stripe onboarding complete — Stripe is verifying your account. Payments usually enable within a few minutes.",
+          "info",
+        );
       } else if (stripeStatus === "error") {
         const reason = params.get("reason") || "unknown";
         showToast(`Stripe connection failed (${reason}). Check Vercel env vars.`, "error");

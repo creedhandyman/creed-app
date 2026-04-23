@@ -31,7 +31,12 @@ export async function GET(req: NextRequest) {
     );
 
     const account = await stripe.accounts.retrieve(accountId);
-    const connected = !!account.charges_enabled;
+    // Treat "onboarding finished" as connected for UI purposes — charges_enabled
+    // can lag a few minutes while Stripe verifies. details_submitted means the
+    // user finished the onboarding flow, which is what the UI should react to.
+    const detailsDone = !!account.details_submitted;
+    const chargesReady = !!account.charges_enabled;
+    const connected = detailsDone || chargesReady;
 
     const { error } = await supabase
       .from("organizations")
@@ -43,7 +48,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(`/?stripe=error&reason=db_update_failed`, origin));
     }
 
-    return NextResponse.redirect(new URL(`/?stripe=${connected ? "success" : "pending"}`, origin));
+    // Success when charges are live; pending when onboarding done but verification
+    // still in progress; error/restart if they bailed early.
+    const status = chargesReady ? "success" : detailsDone ? "pending" : "error";
+    return NextResponse.redirect(new URL(`/?stripe=${status}`, origin));
   } catch (e) {
     console.error("Stripe callback error:", e);
     return NextResponse.redirect(new URL("/?stripe=error&reason=exception", origin));

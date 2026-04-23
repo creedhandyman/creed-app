@@ -238,9 +238,12 @@ export const useStore = create<AppState>((set, get) => ({
         db.get<QuestPayout>("quest_payouts", orgFilter),
       ]);
     set({ clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, questPayouts, loading: false });
-    // Also refresh org data (picks up Stripe changes, site updates, etc.)
+    // Also refresh org data (picks up Stripe changes, site updates, etc.).
+    // Query by the user's org_id (authoritative) — querying by the currently
+    // cached org.id meant that if the cached org was null/stale, the refetch
+    // silently returned nothing and the UI never updated after Stripe connect.
     if (orgId) {
-      const orgs = await db.get<Organization>("organizations", { id: get().org?.id });
+      const orgs = await db.get<Organization>("organizations", { id: orgId });
       if (orgs.length) { set({ org: orgs[0] }); sv("org", orgs[0]); }
     }
   },
