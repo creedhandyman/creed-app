@@ -144,6 +144,9 @@ export default function Timer({ setPage }: Props) {
       // a regular entry when the user clocks out.
       setActiveId(null);
     }
+    // Jump to WorkVision so the crew lands on the work order + photo upload
+    // flow for their active job instead of staring at the timer screen.
+    setPage?.("workvision");
   };
 
   const stop = async () => {
