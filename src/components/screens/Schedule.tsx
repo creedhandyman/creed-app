@@ -95,7 +95,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     setQsWorkers([]);
     setQsNote("");
     await loadAll();
-    useStore.getState().showToast("Scheduled", "success");
+    useStore.getState().showToast(t("sched.scheduledToast"), "success");
   };
 
   const addSchedule = async () => {
@@ -246,10 +246,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         return (
           <div className="cd mb" style={{ borderLeft: "3px solid var(--color-success)" }}>
             <h4 style={{ fontSize: 13, marginBottom: 6 }}>
-              👆 Drag or Tap a Job → Day to Schedule
+              👆 {t("sched.quickSchedule")}
               {armedJob && (
                 <span style={{ marginLeft: 8, color: "var(--color-success)", fontSize: 11, fontFamily: "Oswald" }}>
-                  • ARMED: {armedJob.slice(0, 30)}{armedJob.length > 30 ? "…" : ""}
+                  • {t("sched.armed")}: {armedJob.slice(0, 30)}{armedJob.length > 30 ? "…" : ""}
                 </span>
               )}
             </h4>
@@ -286,12 +286,12 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             </div>
             {armedJob && (
               <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
-                Now tap a day on the calendar below, or drag the chip onto one.
+                {t("sched.tapADay")}
                 <button
                   onClick={() => setArmedJob(null)}
                   style={{ background: "none", color: "var(--color-accent-red)", fontSize: 11, marginLeft: 6, padding: 0 }}
                 >
-                  × cancel
+                  × {t("common.cancel").toLowerCase()}
                 </button>
               </div>
             )}
@@ -315,14 +315,14 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             borderRadius: 12, padding: 18, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
           }}
         >
-          <h4 style={{ fontSize: 14, color: "var(--color-primary)", marginBottom: 6 }}>Schedule Job</h4>
+          <h4 style={{ fontSize: 14, color: "var(--color-primary)", marginBottom: 6 }}>{t("sched.scheduleJob")}</h4>
           <div style={{ fontSize: 12, marginBottom: 12 }}>
             <b>{armedJob}</b>
             <span className="dim"> on </span>
             <b>{new Date(dropTarget + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</b>
           </div>
           <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 11 }}>Time</label>
+            <label className="sl" style={{ fontSize: 11 }}>{t("sched.time")}</label>
             <input
               type="time"
               value={qsTime}
@@ -331,7 +331,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             />
           </div>
           <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 11 }}>Workers</label>
+            <label className="sl" style={{ fontSize: 11 }}>{t("sched.workers")}</label>
             <div className="row" style={{ marginTop: 4 }}>
               {profiles.map((p) => {
                 const sel = qsWorkers.includes(p.name);
@@ -353,11 +353,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
-            <label className="sl" style={{ fontSize: 11 }}>Notes</label>
+            <label className="sl" style={{ fontSize: 11 }}>{t("sched.notes")}</label>
             <input
               value={qsNote}
               onChange={(e) => setQsNote(e.target.value)}
-              placeholder="Optional"
+              placeholder={t("sched.optional")}
               style={{ marginTop: 4 }}
             />
           </div>
@@ -367,10 +367,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               className="bo"
               style={{ flex: 1, fontSize: 12 }}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button onClick={quickAdd} className="bg" style={{ flex: 2, fontSize: 13 }}>
-              Schedule →
+              {t("sched.scheduleAction")}
             </button>
           </div>
         </div>

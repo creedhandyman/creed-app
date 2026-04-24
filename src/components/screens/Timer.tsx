@@ -274,14 +274,14 @@ export default function Timer({ setPage }: Props) {
             className={tab === "time" ? "bb" : "bo"}
             style={{ fontSize: 12, padding: "6px 14px", flex: 1 }}
           >
-            ⏱ My Time
+            ⏱ {t("timer.myTimeTab")}
           </button>
           <button
             onClick={() => setTab("crew")}
             className={tab === "crew" ? "bb" : "bo"}
             style={{ fontSize: 12, padding: "6px 14px", flex: 1, position: "relative" }}
           >
-            👷 Crew Activity
+            👷 {t("timer.crewTab")}
             {activeSessions.length > 0 && (
               <span style={{
                 marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 8,
@@ -494,10 +494,10 @@ export default function Timer({ setPage }: Props) {
         {/* Currently clocked in */}
         <div className="cd mb" style={{ borderLeft: `3px solid ${activeSessions.length ? "var(--color-success)" : "#444"}` }}>
           <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-success)" }}>
-            🟢 Currently Clocked In ({activeSessions.length})
+            🟢 {t("timer.currentlyClockedIn")} ({activeSessions.length})
           </h4>
           {!activeSessions.length ? (
-            <p className="dim" style={{ fontSize: 12 }}>No one is actively clocked in right now.</p>
+            <p className="dim" style={{ fontSize: 12 }}>{t("timer.noActiveSessions")}</p>
           ) : (
             activeSessions.map((e) => {
               const owner = profiles.find((p) => p.id === e.user_id) || { name: e.user_name, rate: 55 };
@@ -517,7 +517,7 @@ export default function Timer({ setPage }: Props) {
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{owner.name}</span>
                     </div>
                     <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
-                      {e.job || "General"} · started {e.start_time || "?"}
+                      {e.job || t("timer.general")} · {t("timer.startedAt")} {e.start_time || "?"}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
@@ -544,7 +544,7 @@ export default function Timer({ setPage }: Props) {
                       }}
                       style={{ background: "none", color: "var(--color-accent-red)", fontSize: 10, padding: 0, marginTop: 2 }}
                     >
-                      force stop
+                      {t("timer.forceStop")}
                     </button>
                   </div>
                 </div>
@@ -555,7 +555,7 @@ export default function Timer({ setPage }: Props) {
 
         {/* Per-employee breakdown — today / week, with drill-down */}
         <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)" }}>📊 Crew Breakdown</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)" }}>📊 {t("timer.crewBreakdown")}</h4>
           {(() => {
             const todayStr = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
             const todayISO = new Date().toISOString().split("T")[0];
@@ -599,9 +599,9 @@ export default function Timer({ setPage }: Props) {
                     </div>
                     <div style={{ textAlign: "right" }}>
                       {todayHrs > 0 ? (
-                        <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 15 }}>{todayHrs.toFixed(1)}h today</span>
+                        <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 15 }}>{todayHrs.toFixed(1)}h {t("timer.todayLabel").toLowerCase()}</span>
                       ) : (
-                        <span className="dim" style={{ fontSize: 13 }}>Not clocked in</span>
+                        <span className="dim" style={{ fontSize: 13 }}>{t("timer.notClockedIn")}</span>
                       )}
                     </div>
                   </div>
@@ -620,14 +620,14 @@ export default function Timer({ setPage }: Props) {
                       )}
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div className="dim">Today: ${todayPay.toFixed(0)}</div>
-                      <div className="dim">Week: {weekHrs.toFixed(1)}h · ${weekPay.toFixed(0)}</div>
+                      <div className="dim">{t("timer.todayLabel")}: ${todayPay.toFixed(0)}</div>
+                      <div className="dim">{t("timer.weekLabel")}: {weekHrs.toFixed(1)}h · ${weekPay.toFixed(0)}</div>
                     </div>
                   </div>
                   {isExpanded && (
                     <div style={{ marginTop: 8, padding: 8, background: darkMode ? "#0f0f18" : "#f7f7fa", borderRadius: 6 }}>
                       <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>
-                        All entries ({allEntries.length})
+                        {t("timer.allEntries")} ({allEntries.length})
                       </div>
                       {!allEntries.length ? (
                         <p className="dim" style={{ fontSize: 12 }}>No entries</p>

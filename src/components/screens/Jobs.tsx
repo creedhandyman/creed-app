@@ -488,13 +488,13 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       background: statusColor(j.status) + "22",
                     }}
                   >
-                    <option value="quoted">Quoted</option>
-                    <option value="accepted">Accepted</option>
-                    <option value="scheduled">Scheduled</option>
-                    <option value="active">Active</option>
-                    <option value="complete">Complete</option>
-                    <option value="invoiced">Invoiced</option>
-                    <option value="paid">Paid</option>
+                    <option value="quoted">{t("status.quoted")}</option>
+                    <option value="accepted">{t("status.accepted")}</option>
+                    <option value="scheduled">{t("status.scheduled")}</option>
+                    <option value="active">{t("status.active")}</option>
+                    <option value="complete">{t("status.complete")}</option>
+                    <option value="invoiced">{t("status.invoiced")}</option>
+                    <option value="paid">{t("status.paid")}</option>
                   </select>
                 </div>
               </div>

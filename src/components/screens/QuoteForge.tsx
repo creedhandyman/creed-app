@@ -19,6 +19,7 @@ import { exportQuotePdf } from "@/lib/export-pdf";
 import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
 import ClientSelect from "../ClientSelect";
+import { t } from "@/lib/i18n";
 
 // Compress image for AI processing — aggressive for mobile (S23 Ultra = 200MP)
 async function compressImage(file: File, maxSize = 800): Promise<string> {
@@ -2212,7 +2213,7 @@ function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; o
           cursor: "pointer",
         }}
       >
-        <span>🗂 Saved Inspections ({inspections.length})</span>
+        <span>🗂 {t("qf.savedInspections")} ({inspections.length})</span>
         <span style={{ fontSize: 12 }}>{open ? "▼" : "▶"}</span>
       </button>
       {open && (
@@ -2234,10 +2235,10 @@ function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; o
                 </div>
                 <div className="row" style={{ marginTop: 8, gap: 6 }}>
                   <button className="bb" onClick={() => { if (inspection) onQuote(inspection); }} style={{ fontSize: 12, padding: "5px 10px" }}>
-                    Quote This
+                    {t("qf.quoteThis")}
                   </button>
                   <button className="bo" onClick={() => onPrint(insp, inspData, roomCount, findingsCount)} style={{ fontSize: 12, padding: "5px 10px" }}>
-                    Print
+                    {t("qf.print")}
                   </button>
                   <button className="bo" onClick={async () => {
                     if (await useStore.getState().showConfirm("Delete Inspection", "Delete this saved inspection?")) {
