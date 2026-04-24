@@ -34,12 +34,17 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [sj, setSj] = useState(() => ld("t_sj", ""));
   const [el, setEl] = useState(0);
   const [notes, setNotes] = useState("");
+  // Active server-side time_entries row id, shared with Timer.tsx via localStorage
+  // so clock-out in either screen patches the same row instead of creating a new
+  // entry and orphaning the original.
+  const [activeId, setActiveId] = useState<string | null>(() => ld<string | null>("t_active_id", null));
   const rate = user.rate || 55;
 
   // Persist timer
   useEffect(() => sv("t_on", on), [on]);
   useEffect(() => sv("t_st", st), [st]);
   useEffect(() => sv("t_sj", sj), [sj]);
+  useEffect(() => sv("t_active_id", activeId), [activeId]);
 
   // Tick
   useEffect(() => {
@@ -63,35 +68,85 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const todaySchedule = schedule.filter((s) => s.sched_date === todayStr);
 
-  // Clock in
-  const clockIn = (job: string) => {
+  // Clock in: create an in-progress time_entries row so admins can see who's
+  // clocked in right now (same pattern Timer.tsx uses).
+  const clockIn = async (job: string) => {
+    const startedAt = Date.now();
     setSj(job);
-    setSt(Date.now());
+    setSt(startedAt);
     setOn(true);
     setEl(0);
+    const result = await db.post<{ id: string }>("time_entries", {
+      job: job || "General",
+      entry_date: new Date().toLocaleDateString("en-US"),
+      hours: 0,
+      amount: 0,
+      user_id: user.id,
+      user_name: user.name,
+      start_time: fmtTime(startedAt),
+    });
+    if (result && result[0]?.id) {
+      setActiveId(result[0].id);
+      await loadAll();
+    } else {
+      setActiveId(null);
+    }
   };
 
-  // Clock out + save
+  // Clock out + save — patches the existing active row instead of inserting
+  // a new entry, so "Currently Clocked In" updates correctly. Falls back to
+  // patching whatever open row this user has if activeId got lost.
   const clockOut = async () => {
     if (!st) return;
     const hrs = (Date.now() - st) / (1000 * 60 * 60);
+    const rounded = Math.round(hrs * 100) / 100;
+    const amount = Math.round(hrs * rate * 100) / 100;
     if (hrs > 0.01) {
-      await db.post("time_entries", {
-        job: sj || "General",
-        entry_date: new Date().toLocaleDateString("en-US"),
-        hours: Math.round(hrs * 100) / 100,
-        amount: Math.round(hrs * rate * 100) / 100,
-        user_id: user.id,
-        user_name: user.name,
-        start_time: fmtTime(st),
-        end_time: fmtTime(Date.now()),
-      });
+      if (activeId) {
+        await db.patch("time_entries", activeId, {
+          hours: rounded,
+          amount,
+          end_time: fmtTime(Date.now()),
+          job: sj || "General",
+        });
+      } else {
+        // Fallback: find this user's most-recent open active row and close it.
+        const open = useStore.getState().timeEntries
+          .filter((e) => e.user_id === user.id && e.start_time && !e.end_time)
+          .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
+        const target = open[open.length - 1];
+        if (target) {
+          await db.patch("time_entries", target.id, {
+            hours: rounded,
+            amount,
+            end_time: fmtTime(Date.now()),
+            job: sj || "General",
+          });
+        } else {
+          // No open row at all — last-resort: post a completed entry.
+          await db.post("time_entries", {
+            job: sj || "General",
+            entry_date: new Date().toLocaleDateString("en-US"),
+            hours: rounded,
+            amount,
+            user_id: user.id,
+            user_name: user.name,
+            start_time: fmtTime(st),
+            end_time: fmtTime(Date.now()),
+          });
+        }
+      }
+    } else if (activeId) {
+      // Brief in-and-out — delete the in-progress row instead of leaving a
+      // zero-hour ghost entry.
+      await db.del("time_entries", activeId);
     }
     setOn(false);
     setSt(null);
     setEl(0);
     setSj("");
-    loadAll();
+    setActiveId(null);
+    await loadAll();
     useStore.getState().showToast(`Clocked out — ${hrs.toFixed(1)} hours logged`, "success");
   };
 
