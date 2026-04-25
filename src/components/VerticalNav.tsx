@@ -59,7 +59,7 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
                   filter: onDash ? "drop-shadow(0 0 6px rgba(255,255,255,0.45))" : "none",
                 }}
               />
-              <span style={{ fontSize: 9, marginTop: 2 }}>{t("nav.home") || "Home"}</span>
+              <span style={{ fontSize: 9, marginTop: -3 }}>{t("nav.home") || "Home"}</span>
               {onDash && (
                 <span
                   aria-hidden
