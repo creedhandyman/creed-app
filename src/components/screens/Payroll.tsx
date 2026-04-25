@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import { Icon } from "../Icon";
 
 export default function Payroll() {
   const user = useStore((s) => s.user)!;
@@ -237,8 +238,9 @@ td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        💰 {t("pay.title")}
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="money" size={22} color="var(--color-primary)" />
+        {t("pay.title")}
       </h2>
 
       {/* Employee selector */}

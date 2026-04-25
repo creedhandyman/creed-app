@@ -21,6 +21,7 @@ import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
 import ClientSelect from "../ClientSelect";
 import { t } from "@/lib/i18n";
+import { Icon } from "../Icon";
 
 // Compress image for AI processing — aggressive for mobile (S23 Ultra = 200MP)
 async function compressImage(file: File, maxSize = 800): Promise<string> {
@@ -668,8 +669,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   if (!mode) {
     return (
       <div className="fi">
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-          ⚡ QuoteForge Pro
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Icon name="quote" size={22} color="var(--color-primary)" />
+          QuoteForge Pro
         </h2>
         {parsing && (
           <div className="cd mb">
@@ -1189,7 +1191,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
       {/* Assign Workers */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 13, marginBottom: 6 }}>👷 Assign Workers</h4>
+        <h4 style={{ fontSize: 13, marginBottom: 6, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="worker" size={14} color="var(--color-primary)" />
+          Assign Workers
+        </h4>
         <div className="row">
           {profiles.map((u) => (
             <button

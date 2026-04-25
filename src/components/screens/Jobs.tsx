@@ -7,6 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
 import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
+import { Icon } from "../Icon";
 
 interface Props {
   setPage: (p: string) => void;
@@ -401,8 +402,9 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10 }}>
-        📋 Jobs
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="jobs" size={22} color="var(--color-primary)" />
+        Jobs
       </h2>
 
       {/* Job tabs */}

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { Icon } from "../Icon";
 
 interface MileageEntry {
   id: string;
@@ -195,7 +196,10 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
   return (
     <div className="fi">
       <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>🚗 Mileage</h2>
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Icon name="mileage" size={22} color="var(--color-primary)" />
+          Mileage
+        </h2>
         <div className="row">
           {entries.length > 0 && (
             <button className="bo" onClick={exportMileagePdf} style={{ fontSize: 12, padding: "4px 10px" }}>

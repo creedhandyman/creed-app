@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import { Icon } from "../Icon";
 
 interface Props {
   setPage: (p: string) => void;
@@ -99,7 +100,10 @@ export default function Clients({ setPage }: Props) {
   return (
     <div className="fi">
       <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>👥 {t("dash.clients")} ({totalClients})</h2>
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Icon name="clients" size={22} color="var(--color-primary)" />
+          {t("dash.clients")} ({totalClients})
+        </h2>
         <button className="bb" onClick={() => setShowAdd(!showAdd)} style={{ fontSize: 13, padding: "5px 12px" }}>
           {showAdd ? t("common.cancel") : "+ Add"}
         </button>

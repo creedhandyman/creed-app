@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { QRCodeSVG } from "qrcode.react";
+import { Icon } from "../Icon";
 
 interface Quest {
   name: string;
@@ -227,8 +228,9 @@ export default function Quests() {
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        🎯 {t("quest.title")} <span className="dim" style={{ fontSize: 13, fontWeight: 400 }}>{cycleLabel}</span>
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="quest" size={22} color="var(--color-primary)" />
+        {t("quest.title")} <span className="dim" style={{ fontSize: 13, fontWeight: 400 }}>{cycleLabel}</span>
       </h2>
 
       {/* Sub-tabs */}

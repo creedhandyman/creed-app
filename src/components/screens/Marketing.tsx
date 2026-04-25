@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
+import { Icon } from "../Icon";
 
 interface GalleryPhoto {
   url: string;
@@ -269,7 +270,10 @@ Return this JSON format:
   if (step === "overview" && org?.site_content) {
     return (
       <div className="fi">
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>📣 Marketing</h2>
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="marketing" size={22} color="var(--color-primary)" />
+        Marketing
+      </h2>
 
         {/* Site status */}
         <div className="cd mb" style={{ borderLeft: "3px solid var(--color-success)" }}>
@@ -470,7 +474,10 @@ Return this JSON format:
             <div className="dim" style={{ fontSize: 10 }}>Send to clients after jobs</div>
           </div>
           <div className="cd">
-            <h4 style={{ fontSize: 13 }}>📊 Stats</h4>
+            <h4 style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icon name="trending" size={14} color="var(--color-primary)" />
+              Stats
+            </h4>
             <div className="dim" style={{ fontSize: 10 }}>{reviews.length} reviews · {reviews.filter((r) => r.rating === 5).length} five-star</div>
           </div>
         </div>
@@ -512,7 +519,10 @@ Return this JSON format:
   if (step === "generating") {
     return (
       <div className="fi">
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>📣 Marketing</h2>
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="marketing" size={22} color="var(--color-primary)" />
+        Marketing
+      </h2>
         <div className="cd" style={{ textAlign: "center", padding: 40 }}>
           <div style={{ fontSize: 48, marginBottom: 12, animation: "pulse 1.5s ease-in-out infinite" }}>🤖</div>
           <style>{`@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }`}</style>
@@ -526,7 +536,10 @@ Return this JSON format:
   // ── SURVEY ──
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>📣 Marketing</h2>
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="marketing" size={22} color="var(--color-primary)" />
+        Marketing
+      </h2>
 
       <div className="cd mb">
         <h4 style={{ fontSize: 14, marginBottom: 4 }}>🌐 Build Your Website</h4>

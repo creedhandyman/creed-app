@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+import { Icon } from "../Icon";
 
 interface Message {
   role: "user" | "assistant";
@@ -138,7 +139,10 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
       <div className="row mb" style={{ justifyContent: "space-between", flexShrink: 0 }}>
         <div className="row">
           <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Back</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>🔧 AI Troubleshooter</h2>
+          <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <Icon name="troubleshoot" size={20} color="var(--color-primary)" />
+            AI Troubleshooter
+          </h2>
         </div>
         {messages.length > 0 && (
           <button

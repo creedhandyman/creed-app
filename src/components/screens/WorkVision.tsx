@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { makeGuide } from "@/lib/parser";
+import { Icon } from "../Icon";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -238,7 +239,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return (
       <div className="fi">
         <div className="row mb" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>👷 {t("wv.title")}</h2>
+          <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <Icon name="worker" size={22} color="var(--color-primary)" />
+            {t("wv.title")}
+          </h2>
           <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Dashboard</button>
         </div>
 

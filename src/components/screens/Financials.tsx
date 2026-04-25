@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
+import { Icon } from "../Icon";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
 
@@ -134,7 +135,10 @@ export default function Financials({ setPage }: { setPage: (p: string) => void }
     <div className="fi">
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>📊 Financials</h2>
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Icon name="trending" size={22} color="var(--color-primary)" />
+          Financials
+        </h2>
         <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Dashboard</button>
       </div>
 

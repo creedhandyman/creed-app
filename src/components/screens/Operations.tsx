@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Clients from "./Clients";
+import { Icon } from "../Icon";
 
 function OpsSettings() {
   const org = useStore((s) => s.org);
@@ -60,7 +61,10 @@ function OpsSettings() {
 
       {/* Quote Settings */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 14, marginBottom: 12 }}>📊 Quote Settings</h4>
+        <h4 style={{ fontSize: 14, marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="trending" size={16} color="var(--color-primary)" />
+          Quote Settings
+        </h4>
         <div className="g2 mb">
           <div>
             <label className="sl">Markup %</label>
@@ -87,7 +91,10 @@ function OpsSettings() {
 
       {/* Trade Rates */}
       <div className="cd">
-        <h4 style={{ fontSize: 14, marginBottom: 8 }}>💰 Custom Rates by Trade</h4>
+        <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="money" size={16} color="var(--color-primary)" />
+          Custom Rates by Trade
+        </h4>
         <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>Set hourly rates per trade for quotes.</div>
         {["Plumbing", "Electrical", "Carpentry", "HVAC", "Painting", "Flooring", "General"].map((trade) => (
           <div key={trade} className="row" style={{ marginBottom: 4 }}>

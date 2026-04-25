@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import { Icon } from "../Icon";
 
 interface Props {
   setPage: (p: string) => void;
@@ -240,8 +241,9 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14 }}>
-        📅 {t("sched.title")}
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="schedule" size={22} color="var(--color-primary)" />
+        {t("sched.title")}
       </h2>
 
       {/* ── Quick Schedule: drag or tap-arm an unscheduled job, then drop/tap a day ── */}

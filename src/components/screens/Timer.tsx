@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import { Icon } from "../Icon";
 
 interface Props {
   setPage?: (p: string) => void;
@@ -262,8 +263,9 @@ export default function Timer({ setPage }: Props) {
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10 }}>
-        ⏱ {t("timer.title")}
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="time" size={22} color="var(--color-primary)" />
+        {t("timer.title")}
       </h2>
 
       {/* Tab switcher (Crew tab is admin-only) */}
@@ -298,7 +300,10 @@ export default function Timer({ setPage }: Props) {
       {/* Today's Jobs */}
       {todayJobs.length > 0 && (
         <div className="cd mb">
-          <h4 style={{ fontSize: 12, marginBottom: 6 }}>📅 Today&apos;s Jobs</h4>
+          <h4 style={{ fontSize: 12, marginBottom: 6, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Icon name="schedule" size={14} color="var(--color-primary)" />
+            Today&apos;s Jobs
+          </h4>
           <div className="row">
             {todayJobs.map((s) => (
               <button
@@ -555,7 +560,10 @@ export default function Timer({ setPage }: Props) {
 
         {/* Per-employee breakdown — today / week, with drill-down */}
         <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)" }}>📊 {t("timer.crewBreakdown")}</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Icon name="trending" size={14} color="var(--color-primary)" />
+            {t("timer.crewBreakdown")}
+          </h4>
           {(() => {
             const todayStr = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
             const todayISO = new Date().toISOString().split("T")[0];
