@@ -106,7 +106,7 @@ export async function renderPdfPages(
     canvas.height = viewport.height;
     const ctx = canvas.getContext("2d")!;
     await page.render({ canvasContext: ctx, viewport }).promise;
-    images.push(canvas.toDataURL("image/jpeg", 0.5));
+    images.push(canvas.toDataURL("image/jpeg", 0.4));
     canvas.remove();
     onProgress?.(i, count);
   }
@@ -439,11 +439,40 @@ export function extractZip(address: string | undefined | null): string {
   return last.slice(0, 5);
 }
 
-// Each AI call gets at most this many images so the request body stays under
-// Vercel's 4.5 MB serverless limit. Rendered PDF pages cap at 1200 px JPEG
-// (≈ 200 KB) and inspection photos at 1200 px JPEG (≈ 150 KB), so 8 × 1.33
-// (base64 overhead) ≈ 2 MB — leaves headroom for the system prompt + text.
-const IMAGES_PER_BATCH = 8;
+// Pack as many images per AI call as we can without blowing past Vercel's
+// 4.5 MB serverless body limit. We aim for ~3 MB of image payload, leaving
+// 1.5 MB of headroom for the system prompt + corrections + inspection text +
+// JSON overhead. The hard count ceiling is a safety net — a flood of tiny
+// thumbnails shouldn't pile 100 images into one prompt.
+const BATCH_TARGET_BYTES = 3 * 1024 * 1024;
+const BATCH_MAX_COUNT = 20;
+
+/**
+ * Group images so each batch's serialized size stays under BATCH_TARGET_BYTES.
+ * Image strings are base64 data URLs, so `.length` ≈ payload size when sent
+ * as JSON. Smaller images naturally pack tighter; oversized ones get their
+ * own batch (with the per-batch 413 fallback in aiParsePdfSingle as backstop).
+ */
+function chunkImagesBySize(images: string[]): string[][] {
+  const out: string[][] = [];
+  let cur: string[] = [];
+  let curBytes = 0;
+  for (const img of images) {
+    const bytes = img.length;
+    const wouldOverflow = curBytes + bytes > BATCH_TARGET_BYTES;
+    const wouldExceedMax = cur.length >= BATCH_MAX_COUNT;
+    if (cur.length > 0 && (wouldOverflow || wouldExceedMax)) {
+      out.push(cur);
+      cur = [img];
+      curBytes = bytes;
+    } else {
+      cur.push(img);
+      curBytes += bytes;
+    }
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
 
 /**
  * Merge multiple AiParseResult partials into one. Items grouped by trade name
@@ -479,18 +508,14 @@ export async function aiParsePdf(
   propertyZip?: string,
   onProgress?: (msg: string) => void
 ): Promise<AiParseResult | null> {
-  // No images, or few enough to fit in a single request — single call.
-  if (images.length <= IMAGES_PER_BATCH) {
-    return aiParsePdfSingle(text, images, laborRate, licensedTrades, propertyZip);
-  }
-
-  // Many images — split into batches. Each call carries the FULL text (so the
-  // AI sees every finding) plus its slice of images for visual context. Items
-  // derived purely from text repeat across batches and dedupe on merge; items
-  // derived from a specific photo survive on their batch.
-  const batches: string[][] = [];
-  for (let i = 0; i < images.length; i += IMAGES_PER_BATCH) {
-    batches.push(images.slice(i, i + IMAGES_PER_BATCH));
+  // Pack images into byte-budgeted batches. Small enough → a single call.
+  // Each call carries the FULL text (so the AI sees every finding) plus its
+  // slice of images for visual context. Items derived purely from text repeat
+  // across batches and dedupe on merge; items derived from a specific photo
+  // survive on their batch.
+  const batches = images.length > 0 ? chunkImagesBySize(images) : [[]];
+  if (batches.length <= 1) {
+    return aiParsePdfSingle(text, batches[0] || [], laborRate, licensedTrades, propertyZip);
   }
 
   const partials: AiParseResult[] = [];
