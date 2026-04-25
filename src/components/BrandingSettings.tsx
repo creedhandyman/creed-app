@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
@@ -16,6 +17,10 @@ export default function BrandingSettings() {
   const setOrg = useStore((s) => s.setOrg);
   const loadAll = useStore((s) => s.loadAll);
   const isOwner = user.role === "owner" || user.role === "manager";
+  const [uploading, setUploading] = useState(false);
+  // Bumps when we successfully save a new logo so the inline preview
+  // refetches the URL even though Supabase served it cached before.
+  const [logoBust, setLogoBust] = useState(0);
 
   if (!isOwner || !org) return null;
 
@@ -24,48 +29,132 @@ export default function BrandingSettings() {
     if (orgs.length) setOrg(orgs[0]);
   };
 
+  const onLogoFile = async (file: File) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      // Timestamp the filename so every upload is a unique URL — avoids the
+      // browser-cache "I uploaded a new logo but I still see the old one"
+      // problem that comes with overwriting the same path.
+      const path = `logos/${org.id}_${Date.now()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("receipts")
+        .upload(path, file, { upsert: false, contentType: file.type || undefined });
+      if (error) {
+        useStore.getState().showToast("Upload failed: " + error.message, "error");
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
+      await db.patch("organizations", org.id, { logo_url: urlData.publicUrl });
+      await loadAll();
+      await refreshOrg();
+      setLogoBust(Date.now());
+      useStore.getState().showToast("Logo updated", "success");
+    } catch (err) {
+      useStore
+        .getState()
+        .showToast("Logo upload error: " + (err instanceof Error ? err.message : String(err)), "error");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Cache-bust the inline preview so re-uploads show immediately.
+  const previewSrc = org?.logo_url
+    ? org.logo_url + (logoBust ? (org.logo_url.includes("?") ? "&" : "?") + "v=" + logoBust : "")
+    : "/CREED_LOGO.png";
+
   return (
     <>
-      {/* Logo */}
-      <div className="cd mb" style={{ textAlign: "center", padding: 16 }}>
+      {/* Logo — clicking the label opens the file picker (most reliable
+          cross-browser pattern, including iOS Safari where programmatic
+          .click() on a display:none input is flaky). */}
+      <div className="cd mb" style={{ textAlign: "center", padding: 18 }}>
         <img
-          src={org?.logo_url || "/CREED_LOGO.png"}
+          src={previewSrc}
           alt="Logo"
-          style={{ height: 60, display: "block", margin: "0 auto 8px", borderRadius: 8 }}
+          style={{
+            height: 64,
+            maxWidth: "100%",
+            display: "block",
+            margin: "0 auto 10px",
+            borderRadius: 8,
+            objectFit: "contain",
+          }}
           onError={(e) => ((e.target as HTMLImageElement).src = "/CREED_LOGO.png")}
         />
-        <input
-          type="file"
-          accept="image/*"
-          id="logo-upload"
-          style={{ display: "none" }}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const ext = file.name.split(".").pop() || "png";
-            const path = `logos/${org.id}.${ext}`;
-            const { error } = await supabase.storage
-              .from("receipts")
-              .upload(path, file, { upsert: true });
-            if (error) {
-              useStore.getState().showToast("Upload failed: " + error.message, "error");
-              return;
-            }
-            const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
-            await db.patch("organizations", org.id, { logo_url: urlData.publicUrl });
-            await loadAll();
-            await refreshOrg();
-            useStore.getState().showToast("Logo updated", "success");
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "7px 16px",
+            fontFamily: "Oswald, sans-serif",
+            fontSize: 12,
+            textTransform: "uppercase",
+            letterSpacing: ".06em",
+            border: "1px solid var(--color-border-dark)",
+            borderRadius: 10,
+            cursor: uploading ? "not-allowed" : "pointer",
+            color: uploading ? "#888" : "var(--color-primary)",
+            background: "transparent",
+            opacity: uploading ? 0.6 : 1,
+            transition: "all 200ms cubic-bezier(0.22, 1, 0.36, 1)",
           }}
-        />
-        <button
-          className="bo"
-          onClick={() => document.getElementById("logo-upload")?.click()}
-          style={{ fontSize: 12, padding: "5px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
         >
-          <Icon name="camera" size={13} />
-          Change Logo
-        </button>
+          <Icon name="camera" size={14} />
+          {uploading ? "Uploading…" : org?.logo_url ? "Change Logo" : "Upload Logo"}
+          <input
+            type="file"
+            accept="image/png, image/jpeg, image/webp, image/svg+xml"
+            disabled={uploading}
+            // Position off-screen instead of display:none so iOS Safari can
+            // open the picker reliably when the label is tapped.
+            style={{
+              position: "absolute",
+              width: 1,
+              height: 1,
+              opacity: 0,
+              overflow: "hidden",
+              clipPath: "inset(50%)",
+              pointerEvents: "none",
+            }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onLogoFile(file);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {org?.logo_url && (
+          <button
+            onClick={async () => {
+              if (!await useStore.getState().showConfirm("Remove Logo", "Remove the logo? PDFs will fall back to the org name only."))
+                return;
+              await db.patch("organizations", org.id, { logo_url: null });
+              await loadAll();
+              await refreshOrg();
+              setLogoBust(Date.now());
+              useStore.getState().showToast("Logo removed", "success");
+            }}
+            style={{
+              background: "none",
+              color: "var(--color-accent-red)",
+              fontSize: 11,
+              padding: "6px 12px",
+              marginLeft: 6,
+              fontFamily: "Oswald, sans-serif",
+              textTransform: "uppercase",
+              letterSpacing: ".06em",
+            }}
+          >
+            Remove
+          </button>
+        )}
+        <div className="dim" style={{ fontSize: 10, marginTop: 8 }}>
+          PNG, JPG, WEBP, or SVG · square or wide images work best
+        </div>
       </div>
 
       {/* Editable business info */}
