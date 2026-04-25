@@ -10,13 +10,11 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-const NAV_ITEMS: (NavItem | "logo" | "tape")[] = [
+const NAV_ITEMS: (NavItem | "logo")[] = [
   { id: "quests", icon: "quest", labelKey: "nav.quest" },
   { id: "ops", icon: "ops", labelKey: "nav.ops", adminOnly: true },
   { id: "time", icon: "time", labelKey: "nav.time" },
-  "tape",
   "logo",
-  "tape",
   { id: "sched", icon: "schedule", labelKey: "nav.sched" },
   { id: "jobs", icon: "jobs", labelKey: "nav.jobs" },
   { id: "qf", icon: "quote", labelKey: "nav.quote" },
@@ -36,14 +34,12 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
   return (
     <div className="vnav">
       {items.map((item, i) => {
-        if (item === "tape") {
-          return <div key={`tape-${i}`} className="caution-tape" />;
-        }
         if (item === "logo") {
           const onDash = page === "dash";
-          // Logo button = Dashboard. Active state matches the other nav
-          // buttons (gradient bg + glow), with a small label below for clarity
-          // and a pulsing indicator dot when on the dashboard.
+          // Logo button = Dashboard. Sized larger than its sibling nav
+          // buttons so it reads as the visual anchor. Active state matches
+          // the other nav buttons (gradient bg + glow), with a small label
+          // below for clarity and a pulsing indicator dot on the dashboard.
           return (
             <button
               key="logo"
@@ -51,13 +47,15 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
               className={onDash ? "act" : ""}
               aria-label="Dashboard"
               title="Dashboard"
-              style={{ position: "relative", overflow: "visible" }}
+              style={{ position: "relative", overflow: "visible", width: 52, height: 52 }}
             >
               <img
                 src={LOGO}
                 alt=""
                 onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
                 style={{
+                  width: 38,
+                  height: 38,
                   filter: onDash ? "drop-shadow(0 0 6px rgba(255,255,255,0.45))" : "none",
                 }}
               />

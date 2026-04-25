@@ -431,33 +431,6 @@ button:focus-visible {
 }
 .scale-in { animation: scaleIn var(--t-base) var(--ease-spring) forwards; }
 
-/* ─── CONSTRUCTION TAPE DIVIDER ────────────────────── */
-.caution-tape {
-  width: 36px;
-  height: 6px;
-  border-radius: 2px;
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--color-highlight),
-    var(--color-highlight) 4px,
-    #1a1a1a 4px,
-    #1a1a1a 8px
-  );
-  margin: 2px 0;
-  opacity: 0.7;
-  transition: opacity var(--t-slow) var(--ease-out);
-}
-.vnav:hover .caution-tape { opacity: 0.95; }
-.light .caution-tape {
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--color-highlight),
-    var(--color-highlight) 4px,
-    #2a2a2a 4px,
-    #2a2a2a 8px
-  );
-}
-
 /* ─── NAV ──────────────────────────────────────────── */
 .vnav {
   position: fixed;
@@ -581,7 +554,6 @@ button:focus-visible {
   min-width: 44px;
 }
 .nav-bottom .vnav img { width: 24px; height: 24px; }
-.nav-bottom .caution-tape { width: 4px; height: 24px; margin: 0 1px; }
 .nav-bottom .mc {
   margin-right: 0;
   /* 56px nav + 16px buffer + safe-area for the home indicator.
