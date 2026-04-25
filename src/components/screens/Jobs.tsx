@@ -8,6 +8,7 @@ import type { Job } from "@/lib/types";
 import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { Icon } from "../Icon";
+import { wrapPrint, openPrint } from "@/lib/print-template";
 
 interface Props {
   setPage: (p: string) => void;
@@ -334,70 +335,98 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     }
   };
 
+  const escapeHtml = (s: string) =>
+    String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
   const generateInvoice = (j: typeof jobs[0]) => {
     const today = new Date().toLocaleDateString("en-US", {
       year: "numeric", month: "long", day: "numeric",
     });
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice — ${j.property}</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;font-size:12px}
-.page{max-width:700px;margin:0 auto;padding:40px}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #2E75B6}
-h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase;letter-spacing:.05em}
-.llc{font-family:Oswald;font-size:10px;color:#C00000;letter-spacing:.15em}
-.info{font-size:10px;color:#666;margin-top:4px;line-height:1.6}
-.inv-label{text-align:right}
-.inv-label h2{font-family:Oswald;font-size:20px;color:#2E75B6;text-transform:uppercase}
-.inv-label .date{font-size:11px;color:#666;margin-top:2px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
-.box{background:#f5f7fa;border-radius:6px;padding:10px 14px}
-.box .label{font-family:Oswald;font-size:9px;text-transform:uppercase;color:#888;letter-spacing:.08em}
-.box .value{font-size:13px;font-weight:600;margin-top:2px}
-table{width:100%;border-collapse:collapse;margin-bottom:20px}
-th{font-family:Oswald;text-transform:uppercase;font-size:9px;letter-spacing:.06em;color:#fff;background:#2E75B6;padding:6px 10px;text-align:left}
-td{padding:5px 10px;border-bottom:1px solid #eee}
-.total-row{font-weight:700;background:#f0f4f8;border-top:2px solid #2E75B6}
-.total-row td{font-family:Oswald;font-size:14px}
-.amount-due{text-align:center;margin:24px 0;padding:20px;background:#f0f4f8;border-radius:8px}
-.amount-due .label{font-family:Oswald;font-size:11px;color:#888;text-transform:uppercase}
-.amount-due .value{font-family:Oswald;font-size:32px;color:#2E75B6;font-weight:700}
-.terms{font-size:10px;color:#666;line-height:1.6;margin-bottom:20px}
-.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:9px;color:#888}
-@media print{.page{padding:20px}}
-</style></head><body><div class="page">
-<div class="header">
-  <div><h1>${org?.name || "Service Provider"}</h1>
-  <div class="info">${org?.phone ? "☎ " + org.phone + "<br/>" : ""}${org?.email ? "✉ " + org.email + "<br/>" : ""}${org?.license_num ? "License #" + org.license_num : ""}</div></div>
-  <div class="inv-label"><h2>Invoice</h2><div class="date">${today}</div></div>
-</div>
-<div class="grid">
-  <div class="box"><div class="label">Bill To</div><div class="value">${j.client || "Client"}</div></div>
-  <div class="box"><div class="label">Property</div><div class="value">${j.property}</div></div>
-  <div class="box"><div class="label">Job Date</div><div class="value">${j.job_date || "—"}</div></div>
-  <div class="box"><div class="label">Status</div><div class="value">Due Upon Receipt</div></div>
-</div>
+    const invoiceNum = "INV-" + j.id.slice(0, 6).toUpperCase();
+    const orgName = org?.name || "Service Provider";
+
+    const body = `
+<section class="grid-2" style="margin-bottom:18px">
+  <div class="box">
+    <div class="label">Bill To</div>
+    <div class="value">${escapeHtml(j.client || "Client")}</div>
+  </div>
+  <div class="box">
+    <div class="label">Property</div>
+    <div class="value">${escapeHtml(j.property)}</div>
+  </div>
+  <div class="box">
+    <div class="label">Job Date</div>
+    <div class="value">${escapeHtml(j.job_date || "—")}</div>
+  </div>
+  <div class="box">
+    <div class="label">Payment Terms</div>
+    <div class="value">Due Upon Receipt</div>
+  </div>
+</section>
+
+<h2>Services Rendered</h2>
 <table>
-  <thead><tr><th>Description</th><th style="text-align:right">Hours</th><th style="text-align:right">Labor</th><th style="text-align:right">Materials</th><th style="text-align:right">Total</th></tr></thead>
+  <thead>
+    <tr>
+      <th>Description</th>
+      <th class="r" style="width:80px">Hours</th>
+      <th class="r" style="width:90px">Labor</th>
+      <th class="r" style="width:90px">Materials</th>
+      <th class="r" style="width:90px">Total</th>
+    </tr>
+  </thead>
   <tbody>
-    <tr><td>Property repairs at ${j.property}</td><td style="text-align:right">${(j.total_hrs || 0).toFixed(1)}</td><td style="text-align:right">$${(j.total_labor || 0).toFixed(2)}</td><td style="text-align:right">$${(j.total_mat || 0).toFixed(2)}</td><td style="text-align:right">$${(j.total || 0).toFixed(2)}</td></tr>
-    <tr class="total-row"><td colspan="4">Amount Due</td><td style="text-align:right">$${(j.total || 0).toFixed(2)}</td></tr>
+    <tr>
+      <td><b>Property repairs at ${escapeHtml(j.property)}</b><br/><span class="dim" style="font-size:11px">Per accepted estimate, work completed ${escapeHtml(j.job_date || "")}</span></td>
+      <td class="r">${(j.total_hrs || 0).toFixed(1)}</td>
+      <td class="r">$${(j.total_labor || 0).toFixed(2)}</td>
+      <td class="r">$${(j.total_mat || 0).toFixed(2)}</td>
+      <td class="r">$${(j.total || 0).toFixed(2)}</td>
+    </tr>
   </tbody>
 </table>
-<div class="amount-due"><div class="label">Total Amount Due</div><div class="value">$${(j.total || 0).toFixed(2)}</div></div>
-<div class="terms">
-  <b>Payment Terms:</b> Due upon receipt.<br/>
-  Please make checks payable to <b>${org?.name || "Service Provider"}</b>.<br/>
-  For questions about this invoice, contact ${org?.phone || ""} ${org?.email ? "or " + org.email : ""}.
+
+<section style="margin:20px 0;padding:22px 26px;background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;border-left:4px solid #2E75B6;display:flex;justify-content:space-between;align-items:center">
+  <div>
+    <div style="font-family:Oswald,sans-serif;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.12em">Total Amount Due</div>
+    <div style="font-size:11px;color:#666;margin-top:2px">Reference: ${invoiceNum}</div>
+  </div>
+  <div style="font-family:Oswald,sans-serif;font-size:34px;color:#2E75B6;font-weight:700">$${(j.total || 0).toFixed(2)}</div>
+</section>
+
+<h2>Payment Terms</h2>
+<div style="font-size:11.5px;color:#444;line-height:1.7">
+  <p>Payment is due upon receipt unless other arrangements have been made.</p>
+  <p style="margin-top:6px">Please make checks payable to <b>${escapeHtml(orgName)}</b>${org?.address ? " and mail to " + escapeHtml(org.address) : ""}.</p>
+  <p style="margin-top:6px">For questions about this invoice, contact ${org?.phone ? escapeHtml(org.phone) : ""}${org?.phone && org?.email ? " or " : ""}${org?.email ? escapeHtml(org.email) : ""}.</p>
 </div>
-<div class="footer">${org?.name || "Service Provider"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</div>
-</div></body></html>`;
-    const win = window.open("", "_blank");
-    if (!win) { useStore.getState().showToast("Allow popups to generate invoice", "error"); return; }
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => win.print(), 600);
+
+<div class="tape"></div>
+
+<div style="text-align:center;font-size:11px;color:#666;margin-top:8px">
+  Thank you for your business.
+</div>
+`;
+
+    const html = wrapPrint(
+      {
+        orgName,
+        orgPhone: org?.phone,
+        orgEmail: org?.email,
+        orgAddress: org?.address,
+        orgLicense: org?.license_num,
+        orgLogo: org?.logo_url,
+        docTitle: "Invoice",
+        docNumber: invoiceNum,
+        docDate: today,
+        docSubtitle: j.property,
+      },
+      body,
+    );
+    if (!openPrint(html)) {
+      useStore.getState().showToast("Allow popups to generate invoice", "error");
+    }
   };
 
   return (

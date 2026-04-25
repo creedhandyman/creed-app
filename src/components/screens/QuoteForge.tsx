@@ -22,6 +22,7 @@ import type { InspectionData } from "./Inspector";
 import ClientSelect from "../ClientSelect";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import { wrapPrint, openPrint } from "@/lib/print-template";
 
 // Compress image for AI processing — aggressive for mobile (S23 Ultra = 200MP)
 async function compressImage(file: File, maxSize = 800): Promise<string> {
@@ -647,23 +648,80 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
      START SCREEN
      ══════════════════════════════════════════ */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const printInspection = (insp: any, inspData: any, roomCount: number, findingsCount: number) => {
+    const esc = (s: string) =>
+      String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const orgN = org?.name || "Service Provider";
-    const d = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const reportNum = "INS-" + (insp.id || "").slice(0, 6).toUpperCase();
     const rms = inspData?.inspection?.rooms || [];
-    let rHtml = "";
+
+    let areasHtml = "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rms.forEach((r: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows = r.items.map((it: any) => {
         const cc = it.condition === "D" ? "#C00000" : it.condition === "P" ? "#ff8800" : it.condition === "F" ? "#ffcc00" : "#00cc66";
-        const cl = it.condition === "D" ? "DMG" : it.condition === "P" ? "POOR" : it.condition === "F" ? "FAIR" : "OK";
-        const photos = it.photos?.length ? it.photos.slice(0, 3).map((u: string) => '<img src="' + u + '" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin:1px" />').join("") : "";
-        return '<tr><td>' + it.name + '</td><td style="text-align:center"><span style="padding:2px 6px;border-radius:3px;background:' + cc + '22;color:' + cc + ';font-size:11px">' + cl + '</span></td><td>' + (it.comment || "") + '</td><td>' + (photos || "") + '</td></tr>';
+        const cl = it.condition === "D" ? "DAMAGED" : it.condition === "P" ? "POOR" : it.condition === "F" ? "FAIR" : "OK";
+        const photos = it.photos?.length
+          ? it.photos.slice(0, 3).map((u: string) => `<img src="${esc(u)}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;margin-right:2px;border:1px solid #ddd" />`).join("")
+          : "";
+        return `<tr><td><b>${esc(it.name)}</b></td><td class="r"><span style="font-family:Oswald,sans-serif;font-size:10px;padding:2px 8px;border-radius:3px;background:${cc}22;color:${cc};letter-spacing:.06em">${cl}</span></td><td class="dim">${esc(it.comment || "")}</td><td>${photos}</td></tr>`;
       }).join("");
-      rHtml += '<h3 style="font-family:Oswald;font-size:14px;color:#2E75B6;margin:16px 0 6px">' + r.name + '</h3><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#2E75B6;color:#fff"><th style="padding:6px 8px;text-align:left;font-family:Oswald;font-size:11px">Item</th><th style="padding:6px 8px;text-align:center;font-family:Oswald;font-size:11px">Condition</th><th style="padding:6px 8px;text-align:left;font-family:Oswald;font-size:11px">Notes</th><th style="padding:6px 8px;font-family:Oswald;font-size:11px">Photos</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      areasHtml += `<h3>${esc(r.name)}</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Item</th>
+      <th class="r" style="width:90px">Condition</th>
+      <th>Notes</th>
+      <th style="width:160px">Photos</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>`;
     });
-    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Inspection</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;color:#1a1a2a;font-size:13px}.page{max-width:800px;margin:0 auto;padding:32px 40px}td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}@media print{.page{padding:16px 24px}}</style></head><body><div class="page"><div style="display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2E75B6"><div><h1 style="font-family:Oswald,sans-serif;font-size:22px;color:#2E75B6;text-transform:uppercase">' + orgN + '</h1><div style="font-size:12px;color:#666;margin-top:4px">Property Inspection Report</div></div><div style="text-align:right"><div style="font-family:Oswald,sans-serif;font-size:14px;color:#2E75B6">INSPECTION REPORT</div><div style="font-size:12px;color:#666">' + insp.job_date + '</div><div style="font-size:12px;color:#666">' + insp.property + '</div>' + (insp.client ? '<div style="font-size:12px;color:#666">Client: ' + insp.client + '</div>' : '') + '</div></div><div style="display:flex;gap:12px;margin-bottom:16px"><div style="flex:1;background:#f5f7fa;border-radius:8px;padding:12px;text-align:center"><div style="font-family:Oswald;font-size:11px;color:#888;text-transform:uppercase">Areas</div><div style="font-family:Oswald;font-size:24px;color:#2E75B6">' + roomCount + '</div></div><div style="flex:1;background:#f5f7fa;border-radius:8px;padding:12px;text-align:center"><div style="font-family:Oswald;font-size:11px;color:#888;text-transform:uppercase">Findings</div><div style="font-family:Oswald;font-size:24px;color:#ff8800">' + findingsCount + '</div></div></div>' + rHtml + '<div style="border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:24px">' + orgN + ' - ' + d + '</div></div></body></html>';
-    const win = window.open("", "_blank");
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+
+    const body = `
+<section style="display:flex;gap:12px;margin-bottom:18px">
+  <div class="box" style="flex:1;text-align:center;padding:14px">
+    <div style="font-family:Oswald,sans-serif;font-size:30px;font-weight:700;color:#2E75B6;line-height:1">${roomCount}</div>
+    <div class="label" style="margin-top:6px">Areas Inspected</div>
+  </div>
+  <div class="box" style="flex:1;text-align:center;padding:14px">
+    <div style="font-family:Oswald,sans-serif;font-size:30px;font-weight:700;color:#ff8800;line-height:1">${findingsCount}</div>
+    <div class="label" style="margin-top:6px">Findings</div>
+  </div>
+</section>
+
+<section class="grid-2" style="margin-bottom:14px">
+  <div class="box"><div class="label">Property</div><div class="value">${esc(insp.property || "—")}</div></div>
+  <div class="box"><div class="label">Client</div><div class="value">${esc(insp.client || "—")}</div></div>
+</section>
+
+<h2>Findings by Area</h2>
+${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findings recorded.</div>'}
+`;
+
+    const html = wrapPrint(
+      {
+        orgName: orgN,
+        orgPhone: org?.phone,
+        orgEmail: org?.email,
+        orgAddress: org?.address,
+        orgLicense: org?.license_num,
+        orgLogo: org?.logo_url,
+        docTitle: "Inspection Report",
+        docNumber: reportNum,
+        docDate: today,
+        docSubtitle: insp.property,
+      },
+      body,
+    );
+    if (!openPrint(html)) {
+      useStore.getState().showToast("Allow popups to print inspection", "error");
+    }
   };
 
   if (!mode) {

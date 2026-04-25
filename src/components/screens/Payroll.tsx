@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import { wrapPrint, openPrint } from "@/lib/print-template";
 
 export default function Payroll() {
   const user = useStore((s) => s.user)!;
@@ -165,73 +166,96 @@ export default function Payroll() {
   };
 
   const generatePayStub = () => {
+    const esc = (s: string) =>
+      String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const today = new Date().toLocaleDateString("en-US", {
       year: "numeric", month: "long", day: "numeric",
     });
+    const stubNum = "PS-" + Date.now().toString(36).toUpperCase().slice(-6);
+    const orgName = org?.name || "Service Provider";
+
     const jobRows = Object.entries(byJob)
       .map(([job, hrs]) =>
-        `<tr><td>${job}</td><td style="text-align:right">${hrs.toFixed(2)}</td><td style="text-align:right">$${(hrs * (selUser.rate || 55)).toFixed(2)}</td></tr>`
+        `<tr><td>${esc(job)}</td><td class="r">${hrs.toFixed(2)}</td><td class="r">$${(hrs * (selUser.rate || 55)).toFixed(2)}</td></tr>`,
       )
       .join("");
     const bonusRows = approvedQuests
-      .map((q) => `<tr><td>🎯 ${q.name}</td><td style="text-align:right">Bonus</td><td style="text-align:right">$${q.bonus.toFixed(2)}</td></tr>`)
+      .map(
+        (q) =>
+          `<tr><td><span style="color:#9d4edd;font-weight:600">★ ${esc(q.name)}</span></td><td class="r dim">Bonus</td><td class="r">$${q.bonus.toFixed(2)}</td></tr>`,
+      )
       .join("");
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Pay Stub — ${selUser.name}</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;padding:0}
-.page{max-width:600px;margin:0 auto;padding:40px}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #2E75B6}
-.brand h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase;letter-spacing:.05em}
-.brand .llc{font-family:Oswald;font-size:10px;color:#C00000;letter-spacing:.15em}
-.brand .info{font-size:10px;color:#666;margin-top:4px;line-height:1.6}
-.stub-label h2{font-family:Oswald;font-size:18px;color:#2E75B6;text-transform:uppercase}
-.stub-label .date{font-size:11px;color:#666;margin-top:2px}
-.emp-box{background:#f5f7fa;border-radius:8px;padding:14px 18px;margin-bottom:20px;display:flex;justify-content:space-between}
-.emp-box .label{font-family:Oswald;font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.08em}
-.emp-box .value{font-size:14px;font-weight:600;margin-top:2px}
-table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}
-th{font-family:Oswald;text-transform:uppercase;font-size:10px;letter-spacing:.08em;color:#fff;background:#2E75B6;padding:8px 12px;text-align:left}
-th:nth-child(2),th:nth-child(3){text-align:right}
-td{padding:6px 12px;border-bottom:1px solid #eee}
-td:nth-child(2),td:nth-child(3){text-align:right;font-family:Oswald}
-.totals{background:#f5f7fa;border-radius:8px;padding:16px 20px;margin-bottom:24px}
-.totals-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
-.totals-row.grand{border-top:2px solid #2E75B6;margin-top:8px;padding-top:10px;font-size:20px;font-family:Oswald;font-weight:700;color:#2E75B6}
-.footer{border-top:1px solid #ddd;padding-top:12px;text-align:center;font-size:10px;color:#888}
-@media print{body{padding:0}.page{padding:20px}}
-</style></head><body><div class="page">
-<div class="header">
-  <div class="brand"><h1>${org?.name || "Service Provider"}</h1>
-  <div class="info">${org?.address || ""}${org?.phone ? "<br/>" + org.phone : ""}${org?.license_num ? "<br/>License #" + org.license_num : ""}</div></div>
-  <div class="stub-label"><h2>Pay Stub</h2><div class="date">${today}</div></div>
-</div>
-<div style="display:flex;gap:12px;margin-bottom:20px">
-  <div class="emp-box" style="flex:1"><div><div class="label">Employee</div><div class="value">${selUser.name}</div></div></div>
-  <div class="emp-box" style="flex:1"><div><div class="label">Employee #</div><div class="value">${selUser.emp_num || "—"}</div></div></div>
-  <div class="emp-box" style="flex:1"><div><div class="label">Rate</div><div class="value">$${selUser.rate || 55}/hr</div></div></div>
-</div>
-<table><thead><tr><th>Job</th><th>Hours</th><th>Amount</th></tr></thead><tbody>${jobRows}${bonusRows}</tbody></table>
-<div class="totals">
-  <div class="totals-row"><span>Total Hours</span><span>${totalHrs.toFixed(2)}</span></div>
-  <div class="totals-row"><span>Rate</span><span>$${selUser.rate || 55}/hr</span></div>
-  <div class="totals-row"><span>Labor</span><span>$${laborPay.toFixed(2)}</span></div>
-  ${totalBonus > 0 ? `<div class="totals-row"><span>🎯 Quest Bonuses</span><span>$${totalBonus.toFixed(2)}</span></div>` : ""}
-  <div class="totals-row grand"><span>Net Pay</span><span>$${totalPay.toFixed(2)}</span></div>
-</div>
-<div class="footer">
-  <p>${org?.name || "Service Provider"}${org?.address ? " · " + org.address : ""}${org?.phone ? " · " + org.phone : ""}${org?.license_num ? " · Lic #" + org.license_num : ""}</p>
-  <p style="margin-top:8px">This is not an official tax document. For tax purposes, refer to your W-2 or 1099.</p>
-</div>
-</div></body></html>`;
+    const body = `
+<section style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
+  <div class="box">
+    <div class="label">Employee</div>
+    <div class="value">${esc(selUser.name)}</div>
+  </div>
+  <div class="box">
+    <div class="label">Employee #</div>
+    <div class="value">${esc(selUser.emp_num || "—")}</div>
+  </div>
+  <div class="box">
+    <div class="label">Hourly Rate</div>
+    <div class="value">$${selUser.rate || 55}/hr</div>
+  </div>
+</section>
 
-    const win = window.open("", "_blank");
-    if (!win) { useStore.getState().showToast(`Processed: ${selUser.name} — $${totalPay.toFixed(2)}`, "success"); return; }
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => win.print(), 600);
+<h2>Earnings Detail</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Job / Item</th>
+      <th class="r" style="width:90px">Hours</th>
+      <th class="r" style="width:110px">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${jobRows || '<tr><td colspan="3" class="dim">No labor entries</td></tr>'}
+    ${bonusRows}
+  </tbody>
+</table>
+
+<section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;padding:18px 22px;margin:18px 0;border-left:4px solid #2E75B6">
+  <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+    <span class="muted">Total Hours</span><span style="font-family:Oswald,sans-serif">${totalHrs.toFixed(2)}</span>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+    <span class="muted">Labor (${totalHrs.toFixed(2)} × $${selUser.rate || 55}/hr)</span><span style="font-family:Oswald,sans-serif">$${laborPay.toFixed(2)}</span>
+  </div>
+  ${totalBonus > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#9d4edd"><span>★ Quest Bonuses (${approvedQuests.length})</span><span style="font-family:Oswald,sans-serif">$${totalBonus.toFixed(2)}</span></div>` : ""}
+  <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid #2E75B6;margin-top:10px;padding-top:12px">
+    <span style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#2E75B6">Net Pay</span>
+    <span style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:#2E75B6">$${totalPay.toFixed(2)}</span>
+  </div>
+</section>
+
+<div style="font-size:10.5px;color:#888;margin-top:12px;line-height:1.6">
+  <p>This statement reflects gross earnings only. It is not an official tax document. For tax purposes, refer to your W-2 or 1099.</p>
+</div>
+`;
+
+    const html = wrapPrint(
+      {
+        orgName,
+        orgPhone: org?.phone,
+        orgEmail: org?.email,
+        orgAddress: org?.address,
+        orgLicense: org?.license_num,
+        orgLogo: org?.logo_url,
+        docTitle: "Pay Stub",
+        docNumber: stubNum,
+        docDate: today,
+        docSubtitle: selUser.name,
+      },
+      body,
+    );
+    if (!openPrint(html)) {
+      useStore
+        .getState()
+        .showToast(`Processed: ${selUser.name} — $${totalPay.toFixed(2)}`, "success");
+    }
   };
 
   const userPayHistory = payHistory.filter((p) => p.user_id === sel);
