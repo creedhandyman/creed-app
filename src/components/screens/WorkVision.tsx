@@ -41,6 +41,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [activeId, setActiveId] = useState<string | null>(() => ld<string | null>("t_active_id", null));
   // Which task in the work order is expanded to show materials / photos / comment
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
+  // Guide tab: tap-to-check tools and shopping items, plus custom additions
+  const [checkedTools, setCheckedTools] = useState<Set<string>>(() => new Set());
+  const [checkedShop, setCheckedShop] = useState<Set<number>>(() => new Set());
+  const [extraTools, setExtraTools] = useState<string[]>([]);
+  const [extraShop, setExtraShop] = useState<{ n: string; c: number; room: string }[]>([]);
+  const [newTool, setNewTool] = useState("");
+  const [newShopName, setNewShopName] = useState("");
+  const [newShopCost, setNewShopCost] = useState("");
   const rate = user.rate || 55;
 
   // Persist timer
@@ -578,31 +586,226 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         </div>
       )}
 
-      {/* ── GUIDE TAB — Tools + Shopping ── */}
+      {/* ── GUIDE TAB — interactive Tools + Shopping checklist (matches
+            the QuoteForge Guide tab depth so the crew on site sees the
+            same structure the estimator built). ── */}
       {section === "guide" && activeJob && (() => {
         try {
           const roomsData = jobData?.rooms || [];
           const guide = makeGuide(roomsData);
+          const allTools = [...guide.tools, ...extraTools];
+          const allShop: { n: string; c: number; room?: string; trade?: string }[] = [
+            ...guide.shop,
+            ...extraShop,
+          ];
+          const shopTotal = allShop.reduce((s, i) => s + (i.c || 0), 0);
+          const shopRemaining = allShop.reduce(
+            (s, i, idx) => s + (checkedShop.has(idx) ? 0 : i.c || 0),
+            0,
+          );
+          const toggleTool = (tool: string) =>
+            setCheckedTools((prev) => {
+              const next = new Set(prev);
+              if (next.has(tool)) next.delete(tool);
+              else next.add(tool);
+              return next;
+            });
+          const toggleShop = (i: number) =>
+            setCheckedShop((prev) => {
+              const next = new Set(prev);
+              if (next.has(i)) next.delete(i);
+              else next.add(i);
+              return next;
+            });
+
           return (
             <div>
+              {/* Tools */}
               <div className="cd mb">
-                <h4 style={{ fontSize: 13, marginBottom: 8 }}>🔨 {t("wv.toolsNeeded")}</h4>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {guide.tools.map((tool: string, i: number) => (
-                    <span key={i} style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, background: darkMode ? "#1a1a28" : "#f0f0f5", border: `1px solid ${border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <h4 style={{ fontSize: 13, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Icon name="hammer" size={14} color="var(--color-primary)" />
+                    {t("wv.toolsNeeded")} ({allTools.length})
+                  </h4>
+                  <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                    {checkedTools.size}/{allTools.length} packed
+                  </span>
+                </div>
+                {allTools.length === 0 && (
+                  <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>No tools listed.</div>
+                )}
+                {allTools.map((tool, i) => {
+                  const done = checkedTools.has(tool);
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => toggleTool(tool)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        fontSize: 13, padding: "6px 0",
+                        borderBottom: `1px solid ${border}`,
+                        cursor: "pointer",
+                        textDecoration: done ? "line-through" : "none",
+                        opacity: done ? 0.5 : 1,
+                        transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
+                      }}
+                    >
+                      <span style={{
+                        width: 18, height: 18, borderRadius: 4,
+                        border: `2px solid ${done ? "var(--color-success)" : "#666"}`,
+                        background: done ? "var(--color-success)" : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0,
+                      }}>
+                        {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
+                      </span>
                       {tool}
-                    </span>
-                  ))}
+                    </div>
+                  );
+                })}
+                {/* Add custom tool */}
+                <div className="row" style={{ marginTop: 8 }}>
+                  <input
+                    value={newTool}
+                    onChange={(e) => setNewTool(e.target.value)}
+                    placeholder="Add tool…"
+                    style={{ flex: 1, fontSize: 13, padding: "6px 10px" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newTool.trim()) {
+                        setExtraTools((prev) => [...prev, newTool.trim()]);
+                        setNewTool("");
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (newTool.trim()) {
+                        setExtraTools((prev) => [...prev, newTool.trim()]);
+                        setNewTool("");
+                      }
+                    }}
+                    aria-label="Add tool"
+                    style={{ background: "none", color: "var(--color-primary)", padding: "0 6px", display: "inline-flex" }}
+                  >
+                    <Icon name="add" size={18} />
+                  </button>
                 </div>
               </div>
+
+              {/* Shopping */}
               <div className="cd">
-                <h4 style={{ fontSize: 13, marginBottom: 8 }}>🛒 {t("wv.shoppingList")} (${guide.shop.reduce((s: number, i: { c: number }) => s + (i.c || 0), 0)})</h4>
-                {guide.shop.map((item: { n: string; c: number; trade?: string }, i: number) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", borderBottom: `1px solid ${border}` }}>
-                    <span>{item.n}</span>
-                    <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>${item.c}</span>
-                  </div>
-                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <h4 style={{ fontSize: 13, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Icon name="cart" size={14} color="var(--color-warning)" />
+                    {t("wv.shoppingList")} (${shopTotal.toFixed(0)})
+                  </h4>
+                  <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                    ${shopRemaining.toFixed(0)} left
+                  </span>
+                </div>
+                {allShop.length === 0 && (
+                  <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>No shopping items.</div>
+                )}
+                {allShop.map((s, i) => {
+                  const done = checkedShop.has(i);
+                  const prevTrade = i > 0 ? allShop[i - 1].trade : null;
+                  const curTrade = s.trade || "";
+                  const showHeader = curTrade && curTrade !== prevTrade;
+                  return (
+                    <div key={i}>
+                      {showHeader && (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: "var(--color-primary)",
+                            marginTop: i > 0 ? 12 : 0,
+                            marginBottom: 4,
+                            fontFamily: "Oswald",
+                            textTransform: "uppercase",
+                            letterSpacing: ".08em",
+                          }}
+                        >
+                          {curTrade}
+                        </div>
+                      )}
+                      <div
+                        onClick={() => toggleShop(i)}
+                        style={{
+                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          fontSize: 13, padding: "6px 0 6px 4px",
+                          borderBottom: `1px solid ${border}`,
+                          cursor: "pointer",
+                          textDecoration: done ? "line-through" : "none",
+                          opacity: done ? 0.5 : 1,
+                          transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
+                        }}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{
+                            width: 18, height: 18, borderRadius: 4,
+                            border: `2px solid ${done ? "var(--color-success)" : "#666"}`,
+                            background: done ? "var(--color-success)" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0,
+                          }}>
+                            {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
+                          </span>
+                          {s.n}
+                        </span>
+                        <span style={{ color: done ? "#888" : "var(--color-success)", fontFamily: "Oswald" }}>
+                          ${(s.c || 0).toFixed(0)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Add custom shop item */}
+                <div className="row" style={{ marginTop: 8 }}>
+                  <input
+                    value={newShopName}
+                    onChange={(e) => setNewShopName(e.target.value)}
+                    placeholder="Item name…"
+                    style={{ flex: 1, fontSize: 13, padding: "6px 10px" }}
+                  />
+                  <input
+                    type="number"
+                    value={newShopCost}
+                    onChange={(e) => setNewShopCost(e.target.value)}
+                    placeholder="$"
+                    style={{ width: 64, fontSize: 13, padding: "6px 8px" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newShopName.trim()) {
+                        setExtraShop((prev) => [...prev, {
+                          n: newShopName.trim(),
+                          c: parseFloat(newShopCost) || 0,
+                          room: "Custom",
+                          trade: "Added on site",
+                        }]);
+                        setNewShopName("");
+                        setNewShopCost("");
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (newShopName.trim()) {
+                        setExtraShop((prev) => [...prev, {
+                          n: newShopName.trim(),
+                          c: parseFloat(newShopCost) || 0,
+                          room: "Custom",
+                          trade: "Added on site",
+                        }]);
+                        setNewShopName("");
+                        setNewShopCost("");
+                      }
+                    }}
+                    aria-label="Add shopping item"
+                    style={{ background: "none", color: "var(--color-warning)", padding: "0 6px", display: "inline-flex" }}
+                  >
+                    <Icon name="add" size={18} />
+                  </button>
+                </div>
               </div>
             </div>
           );
