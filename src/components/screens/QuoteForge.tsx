@@ -489,7 +489,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   };
 
   /* ── Item ops ── */
-  const rmItem = (rn: string, id: string) =>
+  const rmItem = (rn: string, id: string) => {
+    if (!id) {
+      console.warn("rmItem called without an item id — refusing to delete");
+      return;
+    }
     setRooms(
       rooms
         .map((r) =>
@@ -497,8 +501,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         )
         .filter((r) => r.items.length > 0)
     );
+  };
 
   const upItem = (rn: string, id: string, field: string, value: number | Material[]) => {
+    // Defensive: refuse to operate on a falsy id. Without this guard,
+    // `i.id === id` would match every other item whose id is also undefined
+    // and the patch would update them all at once.
+    if (!id) {
+      console.warn("upItem called without an item id — refusing to update");
+      return;
+    }
     // Track corrections for AI learning
     const room = rooms.find((r) => r.name === rn);
     const item = room?.items.find((i) => i.id === id);
@@ -1566,12 +1578,16 @@ function QuoteTab({
                       <div style={{ fontSize: 8 }} className="dim">HRS</div>
                       <input
                         type="number"
-                        value={it.laborHrs}
+                        value={it.laborHrs === 0 ? "" : it.laborHrs}
+                        placeholder="0"
                         step=".25"
                         min="0"
-                        onChange={(e) =>
-                          upItem(rm.name, it.id, "laborHrs", parseFloat(e.target.value) || 0)
-                        }
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const v = raw === "" ? 0 : (parseFloat(raw) || 0);
+                          upItem(rm.name, it.id, "laborHrs", v);
+                        }}
                         style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 11 }}
                       />
                     </div>
@@ -1968,8 +1984,14 @@ function GuideTab({
                 />
                 <input
                   type="number"
-                  value={s.hrs}
-                  onChange={(e) => onEditStep(i, { hrs: parseFloat(e.target.value) || 0 })}
+                  value={s.hrs === 0 ? "" : s.hrs}
+                  placeholder="0"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const v = raw === "" ? 0 : (parseFloat(raw) || 0);
+                    onEditStep(i, { hrs: v });
+                  }}
                   step=".25"
                   min="0"
                   style={{ fontSize: 11, padding: "1px 4px", width: 50, textAlign: "center" }}

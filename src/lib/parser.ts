@@ -235,6 +235,16 @@ export interface AiParseResult {
 
 /* ====== POST-PARSE VALIDATION ====== */
 export function validateQuote(rooms: Room[]): Room[] {
+  // 0. Ensure every item has a stable id. Without this, saved quotes from
+  //    older versions (or any item that lost its id in transit) would all
+  //    have id===undefined, and editing one item's hours would patch every
+  //    other id-less item in the same room because `i.id === id` matches all
+  //    `undefined` ids at once.
+  rooms = rooms.map((r) => ({
+    ...r,
+    items: r.items.map((it) => (it.id ? it : { ...it, id: crypto.randomUUID().slice(0, 8) })),
+  }));
+
   // 1. Detect phantom materials — same high-cost item in 3+ rooms = likely a bug
   const materialCount: Record<string, { count: number; totalCost: number }> = {};
   rooms.forEach((r) => r.items.forEach((it) => it.materials.forEach((m) => {
