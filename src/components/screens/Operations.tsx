@@ -6,6 +6,8 @@ import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Clients from "./Clients";
 import TeamSettings from "../TeamSettings";
+import BillingSettings from "../BillingSettings";
+import BrandingSettings from "../BrandingSettings";
 import { Icon, type IconName } from "../Icon";
 
 function OpsSettings() {
@@ -30,6 +32,9 @@ function OpsSettings() {
 
   return (
     <div>
+      {/* Branding & Business Info — logo, name, phone, address, license # */}
+      <BrandingSettings />
+
       {/* Licensed Trades */}
       <div className="cd mb">
         <h4 style={{ fontSize: 14, marginBottom: 8 }}>🔑 Licensed Trades</h4>
@@ -117,7 +122,7 @@ function OpsSettings() {
   );
 }
 
-type OpsTab = "payroll" | "financials" | "clients" | "team" | "settings";
+type OpsTab = "payroll" | "financials" | "clients" | "team" | "billing" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
   const [tab, setTab] = useState<OpsTab>("payroll");
@@ -127,6 +132,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
     { id: "financials", label: "Financials", icon: "trending" },
     { id: "clients",    label: "Clients",    icon: "clients" },
     { id: "team",       label: "Team",       icon: "worker" },
+    { id: "billing",    label: "Billing",    icon: "receipt" },
     { id: "settings",   label: "Settings",   icon: "settings" },
   ];
 
@@ -163,6 +169,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
       {tab === "financials" && <Financials setPage={setPage} />}
       {tab === "clients" && <Clients setPage={setPage} />}
       {tab === "team" && <TeamSettings />}
+      {tab === "billing" && <BillingSettings />}
       {tab === "settings" && <OpsSettings />}
     </div>
   );
