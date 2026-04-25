@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
-import TeamSettings from "./TeamSettings";
 
 interface Props {
   onClose: () => void;
@@ -37,7 +36,7 @@ export default function Settings({ onClose }: Props) {
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-        {["account", "team", "payments", "general"].map((tb) => (
+        {["account", "payments", "general"].map((tb) => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
@@ -196,8 +195,7 @@ export default function Settings({ onClose }: Props) {
         </div>
       )}
 
-      {/* Team tab */}
-      {tab === "team" && <TeamSettings />}
+      {/* Team tab moved to Operations → Team. Removed from Settings tabs. */}
 
       {/* Operations tab */}
       {/* Operations settings moved to Ops tab */}
