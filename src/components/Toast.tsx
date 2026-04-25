@@ -2,11 +2,11 @@
 import { useStore } from "@/lib/store";
 
 const COLORS = {
-  success: { bg: "#00cc6622", border: "#00cc66", icon: "\u2705" },
-  error: { bg: "#C0000022", border: "#C00000", icon: "\u274C" },
-  info: { bg: "#2E75B622", border: "#2E75B6", icon: "\u2139\uFE0F" },
-  warning: { bg: "#ff880022", border: "#ff8800", icon: "\u26A0\uFE0F" },
-};
+  success: { border: "#00cc66", icon: "✅" },
+  error:   { border: "#C00000", icon: "❌" },
+  info:    { border: "#2E75B6", icon: "ℹ️" },
+  warning: { border: "#ff8800", icon: "⚠️" },
+} as const;
 
 export default function Toast() {
   const { message, type, visible } = useStore((s) => s.toast);
@@ -21,30 +21,45 @@ export default function Toast() {
       onClick={hideToast}
       style={{
         position: "fixed",
-        top: 16,
+        top: "max(16px, env(safe-area-inset-top))",
         left: "50%",
         transform: "translateX(-50%)",
         zIndex: 9999,
-        background: "#12121a",
-        border: `1px solid ${c.border}`,
-        borderLeft: `4px solid ${c.border}`,
-        borderRadius: 10,
-        padding: "12px 20px",
+        background: "rgba(18, 18, 26, 0.92)",
+        backdropFilter: "blur(14px) saturate(140%)",
+        WebkitBackdropFilter: "blur(14px) saturate(140%)",
+        border: `1px solid ${c.border}55`,
+        borderLeft: `3px solid ${c.border}`,
+        borderRadius: 12,
+        padding: "12px 18px 12px 16px",
         minWidth: 260,
         maxWidth: 420,
         display: "flex",
         alignItems: "center",
-        gap: 10,
+        gap: 12,
         cursor: "pointer",
-        boxShadow: `0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px ${c.border}33`,
-        animation: "toastIn 0.3s ease",
+        boxShadow: `0 12px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px ${c.border}22, 0 0 24px ${c.border}33`,
+        animation: "toastIn 0.32s cubic-bezier(0.22, 1, 0.36, 1)",
       }}
     >
-      <span style={{ fontSize: 18, flexShrink: 0 }}>{c.icon}</span>
-      <span style={{ fontSize: 13, color: "#e2e2e8", fontFamily: "Source Sans 3, sans-serif", lineHeight: 1.4 }}>
+      <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1 }}>{c.icon}</span>
+      <span
+        style={{
+          fontSize: 13.5,
+          color: "#e8e8ee",
+          fontFamily: "Source Sans 3, sans-serif",
+          lineHeight: 1.4,
+          letterSpacing: 0.1,
+        }}
+      >
         {message}
       </span>
-      <style>{`@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(-12px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }`}</style>
+      <style>{`
+        @keyframes toastIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.96); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
