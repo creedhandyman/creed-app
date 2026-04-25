@@ -1,5 +1,4 @@
 import type { Room } from "./types";
-import { calculateCost, makeGuide } from "./parser";
 import { wrapPrint, openPrint } from "./print-template";
 
 interface ExportOptions {
@@ -70,8 +69,6 @@ export function exportQuotePdf(opts: ExportOptions) {
     month: "long",
     day: "numeric",
   });
-
-  const guide = makeGuide(rooms);
 
   // Build summary rows per trade/room category
   const summaryRows = rooms.map((rm) => {
@@ -150,11 +147,6 @@ export function exportQuotePdf(opts: ExportOptions) {
     </div>`;
   });
 
-  // Tools checklist
-  const toolsHtml = guide.tools
-    .map((t) => `<span style="min-width:140px;display:inline-block;font-size:12px">☐ ${esc(t)}</span>`)
-    .join("");
-
   // Subtotal before markup/tax
   const subtotal = totalLabor + totalMat;
 
@@ -229,9 +221,6 @@ ${photos.length > 0 ? `
     .join("")}
 </div>
 ` : ""}
-
-<h2>Tools Checklist</h2>
-<div style="display:flex;flex-wrap:wrap;gap:4px 16px;margin-bottom:16px">${toolsHtml}</div>
 
 <h2>Notes &amp; Exclusions</h2>
 <div style="font-size:12px;color:#444;line-height:1.8">

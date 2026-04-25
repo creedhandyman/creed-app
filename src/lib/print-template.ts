@@ -324,6 +324,11 @@ export function printFooter(brand: PrintBrand): string {
 /**
  * Wraps a doc with full HTML5 boilerplate, the shared styles, and the
  * standard header + footer. Caller provides the body content.
+ *
+ * Includes a "print on full load" script so the browser doesn't fire
+ * window.print() before remote images (logo, photos) finish loading —
+ * the previous 600ms timeout was racing slow Supabase storage images
+ * and printing a logo-less page.
  */
 export function wrapPrint(brand: PrintBrand, bodyHtml: string): string {
   const title = `${brand.docTitle}${brand.docNumber ? " " + brand.docNumber : ""}${
@@ -343,20 +348,44 @@ export function wrapPrint(brand: PrintBrand, bodyHtml: string): string {
     ${bodyHtml}
     ${printFooter(brand)}
   </div>
+  <script>
+    // Wait for images (logo + photos) to load before printing. Falls
+    // through after 6s if any image hangs so the user isn't stuck.
+    (function () {
+      var imgs = Array.prototype.slice.call(document.images || []);
+      function ready(img) {
+        return img.complete && img.naturalWidth > 0;
+      }
+      function fire() { try { window.focus(); window.print(); } catch (e) {} }
+      if (imgs.length === 0) { setTimeout(fire, 200); return; }
+      var done = 0;
+      var fired = false;
+      function check() {
+        if (fired) return;
+        done++;
+        if (done >= imgs.length) { fired = true; setTimeout(fire, 150); }
+      }
+      imgs.forEach(function (img) {
+        if (ready(img)) check();
+        else { img.addEventListener("load", check); img.addEventListener("error", check); }
+      });
+      // Hard timeout so we never block forever
+      setTimeout(function () { if (!fired) { fired = true; fire(); } }, 6000);
+    })();
+  </script>
 </body>
 </html>`;
 }
 
 /**
- * Open the rendered HTML in a new tab and trigger print. Returns true
- * on success, false if popups are blocked.
+ * Open the rendered HTML in a new tab. The HTML's embedded script
+ * triggers window.print() once all images have loaded.
  */
 export function openPrint(html: string): boolean {
   const win = window.open("", "_blank");
   if (!win) return false;
   win.document.write(html);
   win.document.close();
-  setTimeout(() => win.print(), 600);
   return true;
 }
 
