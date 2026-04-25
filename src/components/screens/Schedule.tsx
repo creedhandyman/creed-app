@@ -191,7 +191,9 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         }}
         style={{
           background: isHover
-            ? "var(--color-success)" + "33"
+            ? "var(--color-success)" + "55"
+            : armedJob
+            ? "var(--color-success)" + "11"
             : isSelected
             ? "var(--color-primary)" + "33"
             : isToday
@@ -199,12 +201,19 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             : darkMode
             ? "#12121a"
             : "#fff",
-          border: `1px solid ${isHover ? "var(--color-success)" : isSelected ? "var(--color-primary)" : isToday ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
+          // When a job is armed, every day cell shows a dashed green outline
+          // so it's obvious where to drop/tap. Hovered cell goes solid + bright.
+          border: isHover
+            ? `2px solid var(--color-success)`
+            : armedJob
+            ? `1px dashed var(--color-success)`
+            : `1px solid ${isSelected ? "var(--color-primary)" : isToday ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
           borderRadius: 6,
           padding: 4,
           minHeight: view === "month" ? 50 : 70,
           overflow: "hidden",
           cursor: armedJob ? "copy" : "pointer",
+          transition: "background 0.1s, border-color 0.1s",
         }}
       >
         <div
@@ -299,17 +308,32 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         );
       })()}
 
-      {/* Quick-Schedule Modal — opens when a job is dropped or tapped onto a day */}
-      {armedJob && dropTarget && (<>
+      {/* Quick-Schedule Modal — opens when a job is dropped or tapped onto a day.
+          Uses a flex container so the modal is reliably centered in the viewport
+          on mobile (fixed + transform-centered breaks if any ancestor has a
+          transform; this layout works regardless). */}
+      {armedJob && dropTarget && (
         <div
           onClick={() => { setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
-          style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.5)" }}
-        />
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 199,
+            background: "rgba(0,0,0,.5)",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            padding: "8vh 16px",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
         <div
           onClick={(e) => e.stopPropagation()}
           style={{
-            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 200,
-            width: "92%", maxWidth: 380, maxHeight: "85vh", overflowY: "auto",
+            zIndex: 200,
+            width: "100%",
+            maxWidth: 380,
             background: darkMode ? "#12121a" : "#fff",
             border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
             borderRadius: 12, padding: 18, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
@@ -374,7 +398,8 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             </button>
           </div>
         </div>
-      </>)}
+        </div>
+      )}
 
       {/* Add to Schedule */}
       <div className="cd mb">

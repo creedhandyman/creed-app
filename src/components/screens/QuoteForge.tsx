@@ -339,6 +339,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);
         if (result.client && !client) setClient(result.client);
+        // Carry Quick Quote photos into the job's gallery as "before" photos
+        // so they save with the job when the user hits Save (previously the
+        // photos only existed transiently for the AI call).
+        if (quickPhotos.length > 0) {
+          const beforePhotos = quickPhotos.map((url) => ({
+            url,
+            label: "Quick Quote",
+            type: "before" as const,
+          }));
+          setJobPhotos((prev) => {
+            const existing = new Set(prev.map((p) => p.url));
+            return [...prev, ...beforePhotos.filter((p) => !existing.has(p.url))];
+          });
+        }
         setRooms(validateQuote(result.rooms));
         setParsing(false);
         setParseStatus("");
@@ -350,7 +364,17 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       useStore.getState().showToast("AI parsing failed — trying built-in parser", "warning");
     }
 
-    // Fallback to regex parser
+    // Fallback to regex parser. Also carry Quick Quote photos onto the job
+    // so they don't get lost when AI is unavailable.
+    if (quickPhotos.length > 0) {
+      const beforePhotos = quickPhotos.map((url) => ({
+        url, label: "Quick Quote", type: "before" as const,
+      }));
+      setJobPhotos((prev) => {
+        const existing = new Set(prev.map((p) => p.url));
+        return [...prev, ...beforePhotos.filter((p) => !existing.has(p.url))];
+      });
+    }
     setParseStatus("AI unavailable — using built-in parser...");
     doRegexParse(rawText);
   };
