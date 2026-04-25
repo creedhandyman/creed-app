@@ -101,8 +101,12 @@ export function exportQuotePdf(opts: ExportOptions) {
     rm.items.forEach((it) => {
       it.materials.forEach((m) => {
         if (m.c > 0) {
-          const matQty = (m as unknown as Record<string, unknown>).qty as number || 1;
-          const matUnit = (m as unknown as Record<string, unknown>).unitPrice as number || m.c;
+          const matQty = m.qty && m.qty > 0 ? m.qty : 1;
+          // unitPrice falls back to c/qty so a lump-sum entry still divides
+          // correctly across qty when the AI only set one of the two.
+          const matUnit = m.unitPrice && m.unitPrice > 0
+            ? m.unitPrice
+            : Math.round((m.c / matQty) * 100) / 100;
           const key = m.n + "|" + matUnit;
           if (matMap[key]) {
             matMap[key].qty += matQty;

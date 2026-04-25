@@ -150,7 +150,9 @@ export interface QuestPayout {
 
 export interface Material {
   n: string;
-  c: number;
+  c: number;          // line total (= qty × unitPrice when both are set)
+  qty?: number;       // quantity, defaults to 1 if absent
+  unitPrice?: number; // per-unit price, defaults to c (lump sum) if absent
 }
 
 export interface RoomItem {

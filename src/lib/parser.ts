@@ -153,10 +153,10 @@ Expected output:
       "comment": "All vinyl replacements. 9 bedroom 41x51 + 1 odd 48x50, 3 living room 58x80, 3 kitchen 33x42.5. Sizes may require custom order or rough opening modification.",
       "laborHrs": 80,
       "materials": [
-        {"n": "Bedroom windows 41x51 vinyl (9 ea $375)", "c": 3375},
-        {"n": "Bedroom window 48x50 vinyl (1 ea $375)", "c": 375},
-        {"n": "Living Room windows 58x80 vinyl (3 ea $475)", "c": 1425},
-        {"n": "Kitchen windows 33x42.5 vinyl (3 ea $300)", "c": 900}
+        {"n": "Bedroom window 41x51 vinyl", "qty": 9, "unitPrice": 375, "c": 3375},
+        {"n": "Bedroom window 48x50 vinyl (odd size)", "qty": 1, "unitPrice": 375, "c": 375},
+        {"n": "Living Room window 58x80 vinyl", "qty": 3, "unitPrice": 475, "c": 1425},
+        {"n": "Kitchen window 33x42.5 vinyl", "qty": 3, "unitPrice": 300, "c": 900}
       ]
     }]
   }],
@@ -178,7 +178,13 @@ Every line item MUST include:
 - "detail": "Room Name — Brief task description" (e.g. "Kitchen — Replace sprayer and re-caulk sink")
 - "comment": Clear 1-2 sentence work description referencing the inspection finding. The client must understand WHAT will be done.
 - "laborHrs": Conservative clock hours for one worker
-- "materials": Only materials that directly correspond to a specific inspection finding
+- "materials": Array of { "n": name, "c": line_total, "qty": optional_quantity, "unitPrice": optional_per_unit_cost }
+
+MATERIAL FIELDS — populate qty + unitPrice whenever you know them:
+- Single item ("1 faucet, $55"): { "n": "Kitchen faucet", "c": 55, "qty": 1, "unitPrice": 55 }
+- Multiple identical items ("4 caulk tubes @ $5 ea"): { "n": "Caulk tube", "c": 20, "qty": 4, "unitPrice": 5 }
+- Lump sum (sqft-based, supplies, etc.): qty/unitPrice optional. Just "c": 990 is fine.
+ALWAYS keep c = qty × unitPrice when you set both.
 
 ## RULES
 
@@ -362,9 +368,14 @@ export function validateQuote(rooms: Room[]): Room[] {
         : (isExpensive ? 2000 : 500);
       if (matTotal > cap) {
         console.warn(`VALIDATION: Material cost for "${it.detail}" is $${matTotal} (cap $${cap}). Resetting.`);
-        // Scale materials down proportionally to cap
+        // Scale materials down proportionally to cap. Scale unitPrice
+        // alongside c so qty × unitPrice stays consistent.
         const scale = cap / matTotal;
-        return { ...it, materials: it.materials.map((m) => ({ ...m, c: Math.round(m.c * scale) })) };
+        return { ...it, materials: it.materials.map((m) => ({
+          ...m,
+          c: Math.round(m.c * scale),
+          ...(m.unitPrice !== undefined ? { unitPrice: Math.round(m.unitPrice * scale * 100) / 100 } : {}),
+        })) };
       }
       return it;
     }),
@@ -1995,11 +2006,12 @@ export function makeGuide(rooms: Room[]): Guide {
     r.items.forEach((it) => {
       // Use actual stored materials — no re-derivation, no scaling
       it.materials.forEach((mat) => {
+        const matQty = mat.qty && mat.qty > 0 ? mat.qty : 1;
         if (mat.c > 0 && mat.n !== "Materials" && mat.n !== "Mat") {
-          shop.push({ n: mat.n, c: mat.c, room: r.name });
+          shop.push({ n: mat.n, c: mat.c, room: r.name, qty: matQty });
         } else if (mat.c > 0) {
           // Generic "Materials" entry — use item detail as name
-          shop.push({ n: it.detail || "Materials", c: mat.c, room: r.name });
+          shop.push({ n: it.detail || "Materials", c: mat.c, room: r.name, qty: matQty });
         }
       });
 
@@ -2045,12 +2057,13 @@ export function makeGuide(rooms: Room[]): Guide {
 
   shop.forEach((item) => {
     const key = getGroupKey(item.n);
+    const itemQty = item.qty && item.qty > 0 ? item.qty : 1;
     if (grouped[key]) {
-      grouped[key].qty += 1;
+      grouped[key].qty += itemQty;
       grouped[key].totalCost += item.c;
       grouped[key].rooms.add(item.room);
     } else {
-      grouped[key] = { name: key, totalCost: item.c, qty: 1, rooms: new Set([item.room]) };
+      grouped[key] = { name: key, totalCost: item.c, qty: itemQty, rooms: new Set([item.room]) };
     }
   });
 

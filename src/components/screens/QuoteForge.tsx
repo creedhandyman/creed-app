@@ -591,6 +591,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   /* ── Calculations ── */
   const markupPct = org?.markup_pct || 0;
   const taxPct = org?.tax_pct || 0;
+  const tripFee = org?.trip_fee || 0;
   const all = rooms.flatMap((r) =>
     r.items.map((i) => {
       const roomRate = getRateForRoom(r.name);
@@ -602,8 +603,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     })
   );
   const subtotal = all.reduce((s, i) => s + i.tot, 0);
-  const taxAmount = taxPct > 0 ? Math.round(subtotal * (taxPct / 100) * 100) / 100 : 0;
-  const gt = Math.round((subtotal + taxAmount) * 100) / 100;
+  // Trip fee is a service charge added before tax — tax applies to the
+  // combined work + trip-fee base.
+  const taxableBase = subtotal + tripFee;
+  const taxAmount = taxPct > 0 ? Math.round(taxableBase * (taxPct / 100) * 100) / 100 : 0;
+  const gt = Math.round((taxableBase + taxAmount) * 100) / 100;
   const tl = all.reduce((s, i) => s + i.lc, 0);
   const tm = all.reduce((s, i) => s + i.mc, 0);
   const th = all.reduce((s, i) => s + i.laborHrs, 0);
@@ -1215,6 +1219,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           { l: "Labor", v: "$" + tl.toFixed(0), c: "var(--color-primary)" },
           { l: markupPct > 0 ? `Mat +${markupPct}%` : "Materials", v: "$" + tm.toFixed(0), c: "var(--color-warning)" },
           { l: "Hours", v: th.toFixed(1), c: "var(--color-highlight)" },
+          ...(tripFee > 0 ? [{ l: "Trip Fee", v: "$" + tripFee.toFixed(0), c: "var(--color-success)" }] : []),
           ...(taxPct > 0 ? [{ l: `Tax ${taxPct}%`, v: "$" + taxAmount.toFixed(0), c: "var(--color-accent-red)" }] : []),
         ].map((x, i) => (
           <div key={i} className="cd" style={{ textAlign: "center", padding: 8 }}>
@@ -1398,6 +1403,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 markupPct,
                 taxPct,
                 taxAmount,
+                tripFee,
               });
             })()
           }
@@ -1728,8 +1734,8 @@ function QuoteTab({
                             <span style={{ width: 16 }}></span>
                           </div>
                           {it.materials.map((mat, mi) => {
-                            const matAny = mat as unknown as { qty?: number };
-                            const qtyVal = matAny.qty;
+                            const qtyVal = mat.qty;
+                            const unitVal = mat.unitPrice;
                             return (
                               <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 12 }}>
                                 <input
@@ -1753,29 +1759,63 @@ function QuoteTab({
                                   onChange={(e) => {
                                     const raw = e.target.value;
                                     const mats = [...it.materials];
-                                    const clone = { ...(mats[mi] as unknown as Record<string, unknown>) };
-                                    if (raw === "") delete clone.qty;
-                                    else clone.qty = parseInt(raw) || 0;
-                                    mats[mi] = clone as unknown as Material;
+                                    const next: Material = { ...mats[mi] };
+                                    if (raw === "") delete next.qty;
+                                    else next.qty = parseInt(raw) || 0;
+                                    // If unitPrice is set, recompute total = qty × unit
+                                    if (next.unitPrice !== undefined && next.qty !== undefined) {
+                                      next.c = Math.round(next.qty * next.unitPrice * 100) / 100;
+                                    }
+                                    mats[mi] = next;
                                     upItem(rm.name, it.id, "materials", mats);
                                   }}
                                   onBlur={(e) => {
                                     const v = parseInt(e.target.value);
                                     if (!v || v < 1) {
                                       const mats = [...it.materials];
-                                      const clone = { ...(mats[mi] as unknown as Record<string, unknown>) };
-                                      clone.qty = 1;
-                                      mats[mi] = clone as unknown as Material;
+                                      const next: Material = { ...mats[mi], qty: 1 };
+                                      if (next.unitPrice !== undefined) {
+                                        next.c = Math.round(next.unitPrice * 100) / 100;
+                                      }
+                                      mats[mi] = next;
                                       upItem(rm.name, it.id, "materials", mats);
                                     }
                                   }}
                                   style={{ width: 36, fontSize: 11, padding: 2, textAlign: "center" }}
+                                  title="Quantity"
                                 />
-                                <span style={{ fontSize: 11 }}>$</span>
+                                <span style={{ fontSize: 10, color: "#888" }}>×$</span>
+                                <input
+                                  type="number"
+                                  value={unitVal === undefined || unitVal === null ? "" : unitVal}
+                                  placeholder="unit"
+                                  min="0"
+                                  step="0.01"
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    const mats = [...it.materials];
+                                    const next: Material = { ...mats[mi] };
+                                    if (raw === "") {
+                                      delete next.unitPrice;
+                                    } else {
+                                      const u = parseFloat(raw) || 0;
+                                      next.unitPrice = u;
+                                      const q = next.qty && next.qty > 0 ? next.qty : 1;
+                                      next.c = Math.round(q * u * 100) / 100;
+                                      if (next.qty === undefined) next.qty = q;
+                                    }
+                                    mats[mi] = next;
+                                    upItem(rm.name, it.id, "materials", mats);
+                                  }}
+                                  style={{ width: 52, fontSize: 11, padding: 2, textAlign: "right" }}
+                                  title="Unit price"
+                                />
+                                <span style={{ fontSize: 11 }}>=$</span>
                                 <input
                                   type="number"
                                   value={mat.c === 0 ? "" : mat.c}
-                                  placeholder="0"
+                                  placeholder="total"
                                   min="0"
                                   step="0.01"
                                   onFocus={(e) => e.target.select()}
@@ -1783,10 +1823,17 @@ function QuoteTab({
                                     const raw = e.target.value;
                                     const nextC = raw === "" ? 0 : (parseFloat(raw) || 0);
                                     const mats = [...it.materials];
-                                    mats[mi] = { ...mats[mi], c: nextC };
+                                    const next: Material = { ...mats[mi], c: nextC };
+                                    // If user types a total directly, recompute unitPrice
+                                    // from qty so the row stays internally consistent.
+                                    if (next.qty && next.qty > 0) {
+                                      next.unitPrice = Math.round((nextC / next.qty) * 100) / 100;
+                                    }
+                                    mats[mi] = next;
                                     upItem(rm.name, it.id, "materials", mats);
                                   }}
                                   style={{ width: 56, fontSize: 11, padding: 2, textAlign: "right" }}
+                                  title="Line total"
                                 />
                                 <button
                                   onClick={() => {
