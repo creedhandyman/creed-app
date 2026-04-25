@@ -81,7 +81,8 @@ export async function readPdf(file: File): Promise<string> {
 export async function renderPdfPages(
   file: File,
   maxPages = 15,
-  scale = 1.0
+  scale = 1.0,
+  onProgress?: (rendered: number, total: number) => void
 ): Promise<string[]> {
   const lib = await loadPdf();
   const buf = await file.arrayBuffer();
@@ -107,18 +108,27 @@ export async function renderPdfPages(
     await page.render({ canvasContext: ctx, viewport }).promise;
     images.push(canvas.toDataURL("image/jpeg", 0.5));
     canvas.remove();
+    onProgress?.(i, count);
   }
   return images;
 }
 
 /* ====== AI PARSE ====== */
 
-const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You take property inspection reports as input and produce accurate, client-ready service estimates.
+const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You produce accurate, client-ready service estimates from whatever the user provides.
 
-## INPUT FORMAT
-Property inspection reports contain room-by-room findings with condition ratings (S=Satisfactory, F=Fair, P=Poor, D=Damaged) and action items marked "Maintenance".
+## INPUT TYPES
+You accept TWO input types — detect which you're looking at and parse accordingly:
 
-## CRITICAL RULE — DEDUPLICATION
+TYPE A — Property inspection report (zInspector or similar): room-by-room findings with condition ratings (S=Satisfactory, F=Fair, P=Poor, D=Damaged) and "Maintenance" action markers. Apply ALL rules below (dedup summary tables, group by trade, etc.).
+
+TYPE B — Anything else: free-form work descriptions, existing quotes/estimates, photo-only requests, scope notes, room measurements with no condition data, existing line-item tables with sizes/quantities/prices, etc. SKIP the inspection-specific rules (deduplication, S/F/P/D filtering, "Maintenance"-only rule). Instead, parse the input pragmatically: extract every quotable task, size, quantity, and price you can see, and produce a complete line-item estimate. Pull labor hours and material costs from the reference tables below.
+
+CRITICAL: NEVER return an empty rooms array if the input contains ANY quotable work — descriptions, sizes, photos showing damage, prices already stated, etc. If you can identify even ONE task, produce at least one line item. Returning rooms:[] is reserved for genuinely empty input (blank text + no images).
+
+If the input already lists prices (e.g. "16 windows × $375 = $1500"), use those prices verbatim in the materials field rather than overriding them with the reference table — the user already priced the materials. Add labor hours from the reference table since those are usually missing.
+
+## CRITICAL RULE — DEDUPLICATION (TYPE A ONLY)
 zInspector reports contain the SAME data TWICE:
 - SUMMARY TABLE (early pages): Has "Area" + "Detail" + "Condition" columns in a table. SKIP THIS ENTIRELY.
 - DETAILED BREAKDOWNS (later pages): Room names as section headers with expanded descriptions. USE ONLY THIS.

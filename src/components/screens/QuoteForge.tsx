@@ -46,14 +46,42 @@ async function compressImage(file: File, maxSize = 800): Promise<string> {
 
 function AiLoadingDisplay({ status }: { status: string }) {
   const steps = [
-    { label: "Reading document", icon: "📄", match: /reading|rendering|upload/i },
-    { label: "Analyzing content", icon: "🔍", match: /analyzing|sending|text/i },
+    { label: "Reading document", icon: "📄", match: /reading|rendering|render(ed|ing)/i },
+    { label: "Analyzing content", icon: "🔍", match: /analyz|sending|text|batch/i },
     { label: "Identifying repairs", icon: "🔧", match: /identify|photo|vision/i },
     { label: "Estimating costs", icon: "💰", match: /estimat|pric|cost/i },
-    { label: "Building quote", icon: "📋", match: /build|generat|compil/i },
+    { label: "Building quote", icon: "📋", match: /build|generat|compil|merg/i },
   ];
+
+  // Pull "X of Y" out of the status when present. Status messages look like
+  // "Rendering PDF pages 4 of 30..." or "Batch 3 of 7: analyzing 8 images..."
+  // — we use the ratio to drive a real percentage so the user sees the bar
+  // advance as each page renders or each batch finishes.
+  const stepMatch = status.match(/(\d+)\s+of\s+(\d+)/);
+  const stepCur = stepMatch ? parseInt(stepMatch[1]) : 0;
+  const stepTotal = stepMatch ? parseInt(stepMatch[2]) : 0;
+  const stepRatio = stepTotal > 0 ? stepCur / stepTotal : 0;
+  const isBatch = /batch/i.test(status);
+  const isRender = /render/i.test(status);
+
   const activeIdx = steps.findIndex((s) => s.match.test(status));
   const currentStep = activeIdx >= 0 ? activeIdx : status ? 1 : 0;
+
+  // Map progress to a meaningful range: rendering owns 0-30%, batching owns
+  // 30-90%, merging fills the rest. So the bar advances steadily through the
+  // whole pipeline rather than jumping.
+  const isMerging = /merg/i.test(status);
+  let barPct: number;
+  if (isMerging) {
+    barPct = 95;
+  } else if (isRender && stepTotal > 0) {
+    barPct = stepRatio * 30;
+  } else if (isBatch && stepTotal > 0) {
+    barPct = 30 + stepRatio * 60;
+  } else {
+    barPct = ((currentStep + 1) / steps.length) * 100;
+  }
+  barPct = Math.max(5, Math.min(100, barPct));
 
   return (
     <div style={{ padding: 20, textAlign: "center" }}>
@@ -81,21 +109,35 @@ function AiLoadingDisplay({ status }: { status: string }) {
               <span style={{ fontSize: 12, color: isDone ? "var(--color-success)" : isActive ? "#fff" : "#555", fontWeight: isActive ? 600 : 400 }}>
                 {step.label}{isActive ? "..." : ""}
               </span>
+              {/* Inline counter on the active row when we know X/Y */}
+              {isActive && stepTotal > 0 && (
+                <span style={{ fontSize: 11, marginLeft: "auto", color: "var(--color-primary)", fontFamily: "Oswald" }}>
+                  {stepCur}/{stepTotal}
+                </span>
+              )}
             </div>
           );
         })}
       </div>
 
       {/* Progress bar */}
-      <div style={{ marginTop: 16, height: 4, background: "#1e1e2e", borderRadius: 2, overflow: "hidden" }}>
+      <div style={{ marginTop: 16, height: 6, background: "#1e1e2e", borderRadius: 3, overflow: "hidden" }}>
         <div style={{
-          height: 4, borderRadius: 2,
+          height: 6, borderRadius: 3,
           background: "linear-gradient(90deg, var(--color-primary), var(--color-success), var(--color-primary))",
           backgroundSize: "200% 100%",
           animation: "shimmer 2s linear infinite",
-          width: `${Math.max(10, ((currentStep + 1) / steps.length) * 100)}%`,
+          width: `${barPct}%`,
           transition: "width 0.5s",
         }} />
+      </div>
+
+      {/* Numeric percent + batch counter beneath the bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 4, color: "var(--color-primary)", fontFamily: "Oswald" }}>
+        <span>{Math.round(barPct)}%</span>
+        {stepTotal > 0 && (
+          <span>{isBatch ? "Batch" : isRender ? "Page" : "Step"} {stepCur} of {stepTotal}</span>
+        )}
       </div>
 
       <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
@@ -298,7 +340,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       if (file && file.name.endsWith(".pdf")) {
         setParseStatus("Rendering PDF pages...");
         try {
-          images = await renderPdfPages(file, Number.MAX_SAFE_INTEGER);
+          images = await renderPdfPages(file, Number.MAX_SAFE_INTEGER, 1.0,
+            (rendered, total) => setParseStatus(`Rendering PDF pages ${rendered} of ${total}...`));
           setParseStatus(`Rendered ${images.length} page${images.length === 1 ? "" : "s"}, sending to AI...`);
         } catch (e) {
           console.warn("Failed to render PDF pages:", e);
