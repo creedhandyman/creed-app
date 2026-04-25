@@ -162,9 +162,15 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0];
 
+  // viewDate drives which week/month is on screen. Anchored to today on
+  // mount; the prev/next/Today header controls move it. A separate `now`
+  // stays around so today's cell stays highlighted regardless of where the
+  // user is paged to.
+  const [viewDate, setViewDate] = useState(() => new Date());
+
   // Week data
-  const ws = new Date(now);
-  ws.setDate(now.getDate() - now.getDay());
+  const ws = new Date(viewDate);
+  ws.setDate(viewDate.getDate() - viewDate.getDay());
   ws.setHours(0, 0, 0, 0);
   const week = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(ws);
@@ -173,8 +179,8 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   });
 
   // Month data
-  const year = now.getFullYear();
-  const month = now.getMonth();
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const monthCells: (Date | null)[] = [];
@@ -182,6 +188,17 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   for (let d = 1; d <= daysInMonth; d++) monthCells.push(new Date(year, month, d));
   // Pad to fill last row
   while (monthCells.length % 7 !== 0) monthCells.push(null);
+
+  // Step the viewDate by one week or one month depending on current view.
+  const stepView = (dir: -1 | 1) => {
+    setViewDate((prev) => {
+      const next = new Date(prev);
+      if (view === "week") next.setDate(prev.getDate() + dir * 7);
+      else next.setMonth(prev.getMonth() + dir);
+      return next;
+    });
+  };
+  const goToday = () => setViewDate(new Date());
 
   const renderDayCell = (d: Date | null, key: number | string) => {
     if (!d) {
@@ -226,13 +243,24 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         }}
         onDragOver={(e) => { e.preventDefault(); if (!isHover) setHoverDay(ds); }}
         onDragLeave={() => setHoverDay((h) => (h === ds ? null : h))}
-        onDrop={(e) => {
+        onDrop={async (e) => {
           e.preventDefault();
-          const job = e.dataTransfer.getData("text/plain");
-          if (!job) return;
-          setArmedJob(job);
-          setDropTarget(ds);
           setHoverDay(null);
+          const payload = e.dataTransfer.getData("text/plain");
+          if (!payload) return;
+          // "move:<id>" = re-arrange an existing schedule entry to this day.
+          // Anything else = a job property dragged from the unscheduled palette.
+          if (payload.startsWith("move:")) {
+            const id = payload.slice(5);
+            const entry = schedule.find((s) => s.id === id);
+            if (!entry || entry.sched_date === ds) return;
+            await db.patch("schedule", id, { sched_date: ds });
+            await loadAll();
+            useStore.getState().showToast(t("sched.scheduledToast"), "success");
+            return;
+          }
+          setArmedJob(payload);
+          setDropTarget(ds);
         }}
         style={{
           background: isHover
@@ -278,12 +306,51 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         >
           {d.getDate()}
         </div>
-        {items.length > 0 && (
-          <div style={{ fontSize: view === "month" ? 7 : 9, textAlign: "center", color: "var(--color-primary)" }}>
+        {items.length > 0 && view === "month" && (
+          <div style={{ fontSize: 7, textAlign: "center", color: "var(--color-primary)" }}>
             {items.length} job{items.length !== 1 ? "s" : ""}
-            {firstTime && view === "week" && (
-              <div style={{ fontSize: 9, color: "var(--color-success)", fontFamily: "Oswald" }}>
+          </div>
+        )}
+        {items.length > 0 && view === "week" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
+            {firstTime && (
+              <div style={{ fontSize: 9, color: "var(--color-success)", fontFamily: "Oswald", textAlign: "center" }}>
                 {firstTime}
+              </div>
+            )}
+            {/* Draggable chips for the first two jobs of the day. Drag to a
+                different day cell to reschedule. Long names truncate so the
+                chip stays inside the cell on narrow viewports. */}
+            {items.slice(0, 2).map((it) => (
+              <div
+                key={it.id}
+                draggable
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  e.dataTransfer.setData("text/plain", `move:${it.id}`);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onClick={(e) => e.stopPropagation()}
+                title={`${it.job}${it.note ? " — " + it.note : ""}`}
+                style={{
+                  fontSize: 9,
+                  padding: "2px 4px",
+                  borderRadius: 3,
+                  background: "var(--color-primary)" + "22",
+                  color: "var(--color-primary)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  cursor: "grab",
+                  border: "1px solid var(--color-primary)33",
+                }}
+              >
+                {it.job}
+              </div>
+            ))}
+            {items.length > 2 && (
+              <div style={{ fontSize: 8, color: "var(--color-primary)", textAlign: "center" }}>
+                +{items.length - 2} more
               </div>
             )}
           </div>
@@ -605,13 +672,60 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         )}
       </div>
 
-      {/* View Toggle */}
-      <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <span className="dim" style={{ fontSize: 12, fontFamily: "Oswald" }}>
-          {view === "month"
-            ? `${MONTH_NAMES[month]} ${year}`
-            : `Week of ${MONTH_NAMES[ws.getMonth()]} ${ws.getDate()}`}
-        </span>
+      {/* View Toggle + period nav */}
+      <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <button
+            onClick={() => stepView(-1)}
+            aria-label={view === "week" ? "Previous week" : "Previous month"}
+            title={view === "week" ? "Previous week" : "Previous month"}
+            style={{
+              padding: "2px 8px",
+              fontSize: 14,
+              background: darkMode ? "#12121a" : "#fff",
+              color: "var(--color-primary)",
+              border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
+              borderRadius: 4,
+              lineHeight: 1,
+            }}
+          >◀</button>
+          <span
+            className="dim"
+            style={{ fontSize: 12, fontFamily: "Oswald", minWidth: 110, textAlign: "center" }}
+          >
+            {view === "month"
+              ? `${MONTH_NAMES[month]} ${year}`
+              : `Week of ${MONTH_NAMES[ws.getMonth()]} ${ws.getDate()}`}
+          </span>
+          <button
+            onClick={() => stepView(1)}
+            aria-label={view === "week" ? "Next week" : "Next month"}
+            title={view === "week" ? "Next week" : "Next month"}
+            style={{
+              padding: "2px 8px",
+              fontSize: 14,
+              background: darkMode ? "#12121a" : "#fff",
+              color: "var(--color-primary)",
+              border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
+              borderRadius: 4,
+              lineHeight: 1,
+            }}
+          >▶</button>
+          <button
+            onClick={goToday}
+            style={{
+              marginLeft: 4,
+              padding: "2px 10px",
+              fontSize: 11,
+              fontFamily: "Oswald",
+              background: "transparent",
+              color: "var(--color-primary)",
+              border: `1px solid var(--color-primary)`,
+              borderRadius: 4,
+              lineHeight: 1.4,
+            }}
+          >Today</button>
+        </div>
         <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
           <button
             onClick={() => setView("week")}
