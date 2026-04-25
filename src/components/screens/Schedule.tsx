@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
@@ -38,9 +38,32 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const [armedJob, setArmedJob] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [hoverDay, setHoverDay] = useState<string | null>(null);
-  const [qsTime, setQsTime] = useState("");
-  const [qsWorkers, setQsWorkers] = useState<string[]>([]);
+  // Last-used time and workers persist between drops so back-to-back
+  // scheduling sessions don't require re-typing the same defaults.
+  const loadStr = (k: string, fb: string) => {
+    if (typeof window === "undefined") return fb;
+    try { return localStorage.getItem("c_sched_" + k) || fb; } catch { return fb; }
+  };
+  const loadList = (k: string): string[] => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem("c_sched_" + k) || "[]"); } catch { return []; }
+  };
+  const [qsTime, setQsTime] = useState(() => loadStr("lastTime", ""));
+  const [qsWorkers, setQsWorkers] = useState<string[]>(() => loadList("lastWorkers"));
   const [qsNote, setQsNote] = useState("");
+  // "All Scheduled" list collapse state — defaults closed so the page doesn't
+  // grow a mile long once dozens of jobs accumulate.
+  const [allOpen, setAllOpen] = useState(false);
+  const [showPast, setShowPast] = useState(false);
+
+  // When a job is armed via the drag palette, re-run the day-suggestion
+  // logic so the user immediately sees a "schedule near nearby work" hint.
+  useEffect(() => {
+    if (armedJob) suggestDay(armedJob);
+    else setSuggestion(null);
+    // suggestDay closes over `schedule`, so re-run if schedule changes too
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [armedJob, schedule]);
 
   // Suggest a day based on nearby scheduled jobs
   const suggestDay = (jobProperty: string) => {
@@ -93,10 +116,19 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     await db.post("schedule", { sched_date: dropTarget, job: armedJob, note: parts.join(" · ") });
     const matched = jobs.find((j) => j.property === armedJob && (j.status === "quoted" || j.status === "accepted"));
     if (matched) await db.patch("jobs", matched.id, { status: "scheduled" });
+    // Persist time + workers so the next drop pre-fills with the same
+    // defaults — the common case is scheduling several jobs in a row at
+    // the same start time with the same crew.
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("c_sched_lastTime", qsTime || "");
+        localStorage.setItem("c_sched_lastWorkers", JSON.stringify(qsWorkers));
+      }
+    } catch { /* ignore quota errors */ }
     setArmedJob(null);
     setDropTarget(null);
-    setQsTime("");
-    setQsWorkers([]);
+    // Keep qsTime + qsWorkers as-is; only the note clears so it doesn't
+    // get accidentally reused on the next job.
     setQsNote("");
     await loadAll();
     useStore.getState().showToast(t("sched.scheduledToast"), "success");
@@ -171,6 +203,15 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
 
     const isSelected = ds === selectedDay;
     const isHover = ds === hoverDay;
+    const isSuggested = !!armedJob && suggestion?.date === ds;
+    // Pull the earliest start-time out of the day's notes for a quick glance
+    // at when work begins. Notes look like "🕐 09:30 · 👷 …".
+    const firstTime = items.length
+      ? items
+          .map((it) => it.note?.match(/🕐\s*(\d{1,2}:\d{2})/)?.[1])
+          .filter((x): x is string => !!x)
+          .sort()[0]
+      : undefined;
     return (
       <div
         key={key}
@@ -196,6 +237,8 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         style={{
           background: isHover
             ? "var(--color-success)" + "55"
+            : isSuggested
+            ? "var(--color-highlight)" + "33"
             : armedJob
             ? "var(--color-success)" + "11"
             : isSelected
@@ -206,9 +249,12 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             ? "#12121a"
             : "#fff",
           // When a job is armed, every day cell shows a dashed green outline
-          // so it's obvious where to drop/tap. Hovered cell goes solid + bright.
+          // so it's obvious where to drop/tap. The suggested day gets a solid
+          // gold ring to draw the eye. Hovered cell goes solid + bright.
           border: isHover
             ? `2px solid var(--color-success)`
+            : isSuggested
+            ? `2px solid var(--color-highlight)`
             : armedJob
             ? `1px dashed var(--color-success)`
             : `1px solid ${isSelected ? "var(--color-primary)" : isToday ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
@@ -218,6 +264,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           overflow: "hidden",
           cursor: armedJob ? "copy" : "pointer",
           transition: "background 0.1s, border-color 0.1s",
+          position: "relative",
         }}
       >
         <div
@@ -234,6 +281,25 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         {items.length > 0 && (
           <div style={{ fontSize: view === "month" ? 7 : 9, textAlign: "center", color: "var(--color-primary)" }}>
             {items.length} job{items.length !== 1 ? "s" : ""}
+            {firstTime && view === "week" && (
+              <div style={{ fontSize: 9, color: "var(--color-success)", fontFamily: "Oswald" }}>
+                {firstTime}
+              </div>
+            )}
+          </div>
+        )}
+        {isSuggested && (
+          <div
+            aria-hidden
+            title="Suggested — nearby work"
+            style={{
+              position: "absolute",
+              top: 2,
+              right: 2,
+              fontSize: 10,
+            }}
+          >
+            ⭐
           </div>
         )}
       </div>
@@ -247,13 +313,14 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         {t("sched.title")}
       </h2>
 
-      {/* ── Quick Schedule: drag or tap-arm an unscheduled job, then drop/tap a day ── */}
+      {/* ── Quick Schedule: drag or tap-arm an accepted job, then drop/tap a day ── */}
       {(() => {
-        // Jobs that could use scheduling: quoted/accepted with no entry on the
-        // schedule yet. Include "scheduled" too so re-arranging is easy.
+        // Only "accepted" jobs appear in the drag palette — quoted jobs
+        // shouldn't be on the calendar before the client signs off, and
+        // already-scheduled jobs live on the calendar itself.
         const futureSched = new Set(schedule.map((s) => s.job));
         const unscheduled = jobs.filter((j) =>
-          ["quoted", "accepted", "scheduled"].includes(j.status) &&
+          j.status === "accepted" &&
           !futureSched.has(j.property)
         );
         if (unscheduled.length === 0) return null;
@@ -307,6 +374,37 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 >
                   × {t("common.cancel").toLowerCase()}
                 </button>
+              </div>
+            )}
+            {armedJob && suggestion && (
+              <div
+                onClick={() => { setDropTarget(suggestion.date); }}
+                title="Drop on the highlighted day"
+                style={{
+                  marginTop: 6,
+                  padding: "5px 10px",
+                  borderRadius: 6,
+                  background: "var(--color-highlight)" + "1f",
+                  border: "1px solid var(--color-highlight)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span>⭐</span>
+                <span>
+                  Suggested:{" "}
+                  <b>
+                    {new Date(suggestion.date + "T12:00:00").toLocaleDateString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </b>
+                  <span className="dim"> — {suggestion.reason}</span>
+                </span>
               </div>
             )}
           </div>
@@ -692,49 +790,113 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         </div>
       </div>
 
-      {/* All Scheduled */}
-      {schedule.length > 0 && (
-        <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 6 }}>All Scheduled</h4>
-          {schedule.map((s) => (
-            <div
-              key={s.id}
-              className="sep"
+      {/* All Scheduled — collapsed by default to keep the page short. Inside,
+          upcoming and past are split so the next jobs are always at the top
+          and old entries don't bury them. */}
+      {schedule.length > 0 && (() => {
+        const upcoming = schedule
+          .filter((s) => s.sched_date >= todayStr)
+          .slice()
+          .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
+        const past = schedule
+          .filter((s) => s.sched_date < todayStr)
+          .slice()
+          .sort((a, b) => b.sched_date.localeCompare(a.sched_date));
+
+        const renderRow = (s: typeof schedule[number], dim = false) => (
+          <div
+            key={s.id}
+            className="sep"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 12,
+              alignItems: "center",
+              opacity: dim ? 0.65 : 1,
+            }}
+          >
+            <span style={{ minWidth: 80 }}>{s.sched_date}</span>
+            <span
+              onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
+              style={{ color: "var(--color-primary)", flex: 1, marginLeft: 8, cursor: "pointer", textDecoration: "underline" }}
+              title="Open in Google Maps"
+            >
+              📍 {s.job}
+            </span>
+            <span className="dim" style={{ fontSize: 11, marginRight: 8 }}>{s.note}</span>
+            <button
+              onClick={async () => {
+                if (!await useStore.getState().showConfirm("Remove Entry", "Remove from schedule?")) return;
+                await db.del("schedule", s.id);
+                loadAll();
+              }}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
+                background: "none",
+                color: "var(--color-accent-red)",
                 fontSize: 12,
-                alignItems: "center",
               }}
             >
-              <span style={{ minWidth: 80 }}>{s.sched_date}</span>
-              <span
-                onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
-                style={{ color: "var(--color-primary)", flex: 1, marginLeft: 8, cursor: "pointer", textDecoration: "underline" }}
-                title="Open in Google Maps"
-              >
-                📍 {s.job}
+              ✕
+            </button>
+          </div>
+        );
+
+        return (
+          <div className="cd">
+            <button
+              onClick={() => setAllOpen((v) => !v)}
+              style={{
+                background: "none",
+                width: "100%",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: 0,
+                fontSize: 13,
+                fontWeight: 600,
+                color: "inherit",
+              }}
+              aria-expanded={allOpen}
+            >
+              <span>
+                All Scheduled
+                <span className="dim" style={{ fontWeight: 400, marginLeft: 6 }}>
+                  ({upcoming.length} upcoming{past.length ? `, ${past.length} past` : ""})
+                </span>
               </span>
-              <span className="dim">{s.note}</span>
-              <button
-                onClick={async () => {
-                  if (!await useStore.getState().showConfirm("Remove Entry", "Remove from schedule?")) return;
-                  await db.del("schedule", s.id);
-                  loadAll();
-                }}
-                style={{
-                  background: "none",
-                  color: "var(--color-accent-red)",
-                  fontSize: 12,
-                  marginLeft: 8,
-                }}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+              <span style={{ fontSize: 11, color: "var(--color-primary)" }}>
+                {allOpen ? "▲ Hide" : "▼ Show"}
+              </span>
+            </button>
+            {allOpen && (
+              <div style={{ marginTop: 8 }}>
+                {upcoming.length === 0 ? (
+                  <p className="dim" style={{ fontSize: 12 }}>No upcoming entries.</p>
+                ) : (
+                  upcoming.map((s) => renderRow(s, false))
+                )}
+                {past.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setShowPast((v) => !v)}
+                      style={{
+                        background: "none",
+                        marginTop: 8,
+                        fontSize: 11,
+                        color: "var(--color-primary)",
+                        padding: "4px 0",
+                      }}
+                    >
+                      {showPast ? "▲ Hide past" : `▼ Show past (${past.length})`}
+                    </button>
+                    {showPast && past.map((s) => renderRow(s, true))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <p className="dim" style={{ fontSize: 12 }}>
