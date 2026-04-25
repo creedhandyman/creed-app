@@ -234,7 +234,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     });
 
   const priColor = (pri: string) => pri === "HIGH" ? "var(--color-accent-red)" : pri === "MED" ? "var(--color-warning)" : "var(--color-success)";
-  const priLabel = (pri: string) => pri === "HIGH" ? "URGENT" : pri === "MED" ? "NEEDED" : "MINOR";
+  const priLabel = (pri: string) => pri === "HIGH" ? t("wv.urgent") : pri === "MED" ? t("wv.needed") : t("wv.minor");
 
   // Pull the rich detail for a work-order task: matching quote item (so we
   // can show its materials and original inspection comment), plus any
@@ -378,10 +378,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* Section tabs */}
       <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
         {[
-          { id: "tasks" as const, label: `✅ Tasks (${workOrder.filter((w) => !w.done).length})`, count: workOrder.length },
-          { id: "guide" as const, label: "🛒 Guide", count: 0 },
-          { id: "notes" as const, label: "📝 Notes", count: 0 },
-          { id: "photos" as const, label: `📸 Photos (${jobData?.photos?.length || 0})`, count: 0 },
+          { id: "tasks" as const, label: `✅ ${t("wv.tasks")} (${workOrder.filter((w) => !w.done).length})`, count: workOrder.length },
+          { id: "guide" as const, label: `🛒 ${t("wv.guide")}`, count: 0 },
+          { id: "notes" as const, label: `📝 ${t("common.notes")}`, count: 0 },
+          { id: "photos" as const, label: `📸 ${t("common.photos")} (${jobData?.photos?.length || 0})`, count: 0 },
         ].map((s) => (
           <button
             key={s.id}
@@ -426,9 +426,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 const enriched = enrichTask(w);
                 const matTotal = enriched.materials.reduce((s, m) => s + (m.c || 0), 0);
                 const conditionLabel =
-                  enriched.condition === "D" ? "DAMAGED" :
-                  enriched.condition === "P" ? "POOR" :
-                  enriched.condition === "F" ? "FAIR" : "";
+                  enriched.condition === "D" ? t("wv.damaged") :
+                  enriched.condition === "P" ? t("wv.poor") :
+                  enriched.condition === "F" ? t("wv.fair") : "";
                 return (
                   <div
                     key={w._idx}
@@ -513,7 +513,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       >
                         {enriched.comment && (
                           <div style={{ marginBottom: 10 }}>
-                            <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>Inspection note</div>
+                            <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>{t("wv.inspectionNote")}</div>
                             <div style={{ fontSize: 13, color: darkMode ? "#cfd4dc" : "#333", lineHeight: 1.5 }}>
                               {enriched.comment}
                             </div>
@@ -522,7 +522,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         {enriched.materials.length > 0 && (
                           <div style={{ marginBottom: 10 }}>
                             <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>
-                              Materials ({matTotal > 0 ? `$${matTotal.toFixed(0)}` : "—"})
+                              {t("wv.materials")} ({matTotal > 0 ? `$${matTotal.toFixed(0)}` : "—"})
                             </div>
                             {enriched.materials.map((m, mi) => (
                               <div key={mi} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "2px 0" }}>
@@ -537,7 +537,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         {enriched.photos.length > 0 && (
                           <div>
                             <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>
-                              Before photos ({enriched.photos.length})
+                              {t("wv.beforePhotos")} ({enriched.photos.length})
                             </div>
                             <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
                               {enriched.photos.map((url, pi) => (
@@ -560,7 +560,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         )}
                         {!enriched.comment && enriched.materials.length === 0 && enriched.photos.length === 0 && (
                           <div className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
-                            No additional context for this task.
+                            {t("wv.noContext")}
                           </div>
                         )}
                       </div>
@@ -572,7 +572,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           )}
           {workOrder.length === 0 && (
             <div className="cd" style={{ textAlign: "center", padding: 24 }}>
-              <p className="dim">No work order items — check the quote</p>
+              <p className="dim">{t("wv.noWorkOrder")}</p>
             </div>
           )}
         </div>
@@ -586,7 +586,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           return (
             <div>
               <div className="cd mb">
-                <h4 style={{ fontSize: 13, marginBottom: 8 }}>🔨 Tools Needed</h4>
+                <h4 style={{ fontSize: 13, marginBottom: 8 }}>🔨 {t("wv.toolsNeeded")}</h4>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {guide.tools.map((tool: string, i: number) => (
                     <span key={i} style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, background: darkMode ? "#1a1a28" : "#f0f0f5", border: `1px solid ${border}` }}>
@@ -596,7 +596,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 </div>
               </div>
               <div className="cd">
-                <h4 style={{ fontSize: 13, marginBottom: 8 }}>🛒 Shopping List (${guide.shop.reduce((s: number, i: { c: number }) => s + (i.c || 0), 0)})</h4>
+                <h4 style={{ fontSize: 13, marginBottom: 8 }}>🛒 {t("wv.shoppingList")} (${guide.shop.reduce((s: number, i: { c: number }) => s + (i.c || 0), 0)})</h4>
                 {guide.shop.map((item: { n: string; c: number; trade?: string }, i: number) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", borderBottom: `1px solid ${border}` }}>
                     <span>{item.n}</span>
@@ -632,7 +632,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {section === "photos" && (
         <div className="cd">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <h4 style={{ fontSize: 13 }}>📸 Job Photos</h4>
+            <h4 style={{ fontSize: 13 }}>📸 {t("wv.jobPhotos")}</h4>
             <div className="row" style={{ gap: 4 }}>
               <button
                 className="bb"
@@ -644,7 +644,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 }}
                 style={{ fontSize: 12, padding: "5px 10px" }}
               >
-                📷 Take Photo
+                📷 {t("common.takePhoto")}
               </button>
               <button
                 className="bo"
@@ -661,14 +661,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 }}
                 style={{ fontSize: 12, padding: "5px 10px" }}
               >
-                📁 Upload
+                📁 {t("common.upload")}
               </button>
             </div>
           </div>
 
           {/* After photos prompt */}
           <div style={{ marginBottom: 10, padding: 8, borderRadius: 6, background: darkMode ? "#1a1a0a" : "#fffbe6", border: "1px solid var(--color-warning)", fontSize: 12 }}>
-            💡 Take before, during, and after photos for your job report
+            💡 {t("wv.photosTip")}
           </div>
 
           {jobData?.photos?.length > 0 ? (
@@ -685,7 +685,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               ))}
             </div>
           ) : (
-            <p className="dim" style={{ textAlign: "center", padding: 16 }}>No photos yet — take some during the job</p>
+            <p className="dim" style={{ textAlign: "center", padding: 16 }}>{t("wv.noPhotos")}</p>
           )}
         </div>
       )}

@@ -9,6 +9,7 @@ import TeamSettings from "../TeamSettings";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
 import { Icon, type IconName } from "../Icon";
+import { t } from "@/lib/i18n";
 
 function OpsSettings() {
   const org = useStore((s) => s.org);
@@ -37,8 +38,8 @@ function OpsSettings() {
 
       {/* Licensed Trades */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 14, marginBottom: 8 }}>🔑 Licensed Trades</h4>
-        <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>AI will fully quote licensed trades instead of flagging for subcontractors.</div>
+        <h4 style={{ fontSize: 14, marginBottom: 8 }}>🔑 {t("ops.licensedTrades")}</h4>
+        <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>{t("ops.licensedHelp")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
           {["Electrical", "Plumbing", "HVAC", "Roofing", "Gas Fitting", "Fire Protection", "Structural", "Asbestos/Mold"].map((trade) => {
             const isLicensed = licensed.includes(trade);
@@ -69,28 +70,28 @@ function OpsSettings() {
       <div className="cd mb">
         <h4 style={{ fontSize: 14, marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="trending" size={16} color="var(--color-primary)" />
-          Quote Settings
+          {t("ops.quoteSettings")}
         </h4>
         <div className="g2 mb">
           <div>
-            <label className="sl">Markup %</label>
+            <label className="sl">{t("ops.markup")}</label>
             <input type="number" key={`mk-${org.markup_pct}`} defaultValue={org.markup_pct || 0} min="0" step="1" placeholder="0" style={{ marginTop: 4 }}
               onBlur={async (e) => { await db.patch("organizations", org.id, { markup_pct: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>Applied to material costs</div>
+            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.markupHelp")}</div>
           </div>
           <div>
-            <label className="sl">Tax %</label>
+            <label className="sl">{t("ops.tax")}</label>
             <input type="number" key={`tx-${org.tax_pct}`} defaultValue={org.tax_pct || 0} min="0" step="0.1" placeholder="0" style={{ marginTop: 4 }}
               onBlur={async (e) => { await db.patch("organizations", org.id, { tax_pct: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>Applied to quote total</div>
+            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.taxHelp")}</div>
           </div>
         </div>
         <div className="g2">
           <div>
-            <label className="sl">Trip Fee ($)</label>
+            <label className="sl">{t("ops.tripFee")}</label>
             <input type="number" key={`tf-${org.trip_fee}`} defaultValue={org.trip_fee || 0} min="0" step="5" placeholder="0" style={{ marginTop: 4 }}
               onBlur={async (e) => { await db.patch("organizations", org.id, { trip_fee: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>Once per day on-site</div>
+            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.tripFeeHelp")}</div>
           </div>
         </div>
       </div>
@@ -99,9 +100,9 @@ function OpsSettings() {
       <div className="cd">
         <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="money" size={16} color="var(--color-primary)" />
-          Custom Rates by Trade
+          {t("ops.customRates")}
         </h4>
-        <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>Set hourly rates per trade for quotes.</div>
+        <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>{t("ops.customRatesHelp")}</div>
         {["Plumbing", "Electrical", "Carpentry", "HVAC", "Painting", "Flooring", "General"].map((trade) => (
           <div key={trade} className="row" style={{ marginBottom: 4 }}>
             <span style={{ fontSize: 12, width: 80 }}>{trade}</span>
@@ -128,12 +129,12 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
   const [tab, setTab] = useState<OpsTab>("payroll");
 
   const tabs: { id: OpsTab; label: string; icon: IconName }[] = [
-    { id: "payroll",    label: "Payroll",    icon: "money" },
-    { id: "financials", label: "Financials", icon: "trending" },
-    { id: "clients",    label: "Clients",    icon: "clients" },
-    { id: "team",       label: "Team",       icon: "worker" },
-    { id: "billing",    label: "Billing",    icon: "receipt" },
-    { id: "settings",   label: "Settings",   icon: "settings" },
+    { id: "payroll",    label: t("ops.payroll"),    icon: "money" },
+    { id: "financials", label: t("ops.financials"), icon: "trending" },
+    { id: "clients",    label: t("ops.clients"),    icon: "clients" },
+    { id: "team",       label: t("ops.team"),       icon: "worker" },
+    { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
+    { id: "settings",   label: t("ops.settings"),   icon: "settings" },
   ];
 
   return (

@@ -2,6 +2,7 @@
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { Icon } from "./Icon";
+import { t } from "@/lib/i18n";
 import type { Organization } from "@/lib/types";
 
 /**
@@ -22,28 +23,27 @@ export default function BillingSettings() {
       <div className="cd">
         <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="money" size={16} color="var(--color-primary)" />
-          Payment Processing
+          {t("billing.processing")}
         </h4>
         {org?.stripe_connected ? (
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <Icon name="checkCircle" size={20} color="var(--color-success)" />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>Stripe Connected</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{t("billing.connected")}</div>
                 <div className="dim" style={{ fontSize: 11 }}>
                   Account: {org.stripe_account_id?.slice(0, 12)}...
                 </div>
               </div>
             </div>
             <p className="dim" style={{ fontSize: 11 }}>
-              You can generate payment links from the Jobs screen. Clients pay online and the money goes directly to your Stripe account.
+              {t("billing.connectedHelp")}
             </p>
           </div>
         ) : (
           <div>
             <p style={{ fontSize: 12, marginBottom: 12, color: darkMode ? "#ccc" : "#333" }}>
-              Connect your Stripe account to accept online payments from clients.
-              Money goes directly to your bank — we take a small 2% platform fee.
+              {t("billing.connectIntro")}
             </p>
             {isOwner ? (
               <button
@@ -96,7 +96,7 @@ export default function BillingSettings() {
                 style={{ fontSize: 13, padding: "10px 20px", display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 <Icon name="link" size={14} />
-                Connect Stripe Account
+                {t("billing.connect")}
               </button>
             ) : (
               <p className="dim" style={{ fontSize: 11 }}>
