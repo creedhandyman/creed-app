@@ -779,7 +779,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <div
             onClick={() => setMode("quick")}
             style={{
-              background: "linear-gradient(135deg, #2E75B6, #1a4d8a)",
+              background: darkMode ? "#12121a" : "#fff",
+              border: `2px solid var(--color-primary)`,
               borderRadius: 12,
               padding: "20px",
               cursor: "pointer",
@@ -789,11 +790,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               position: "relative",
             }}
           >
-            <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "#C00000", fontFamily: "Oswald" }}>Small jobs</span>
+            <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-primary)", fontFamily: "Oswald" }}>Small jobs</span>
             <div style={{ fontSize: 36 }}>📸</div>
             <div>
-              <h4 style={{ color: "#fff", fontSize: 16, margin: 0 }}>Quick Quote</h4>
-              <p style={{ color: "#ffffffaa", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
+              <h4 style={{ color: "var(--color-primary)", fontSize: 16, margin: 0 }}>Quick Quote</h4>
+              <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
                 Describe the issue, add photos → AI generates a quote
               </p>
             </div>
@@ -829,7 +830,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             onClick={() => fileRef.current?.click()}
             style={{
               background: darkMode ? "#12121a" : "#fff",
-              border: `1px solid ${darkMode ? "#1e1e2e" : "#e0e0e0"}`,
+              border: `2px solid var(--color-warning)`,
               borderRadius: 12,
               padding: "20px",
               cursor: "pointer",
