@@ -28,6 +28,34 @@ function fmt(ms: number): string {
   return `${Math.floor(s / 3600).toString().padStart(2, "0")}:${Math.floor((s % 3600) / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 }
 
+// Composite sort key for a time entry. entry_date may be "YYYY-MM-DD" or
+// "MM/DD/YYYY"; start_time is "HH:MM AM/PM". Higher = more recent.
+function recencyKey(e: { entry_date?: string; start_time?: string }): string {
+  const d = e.entry_date || "";
+  const isoDate = d.includes("/")
+    ? (() => {
+        const [m, day, y] = d.split("/");
+        return `${y.padStart(4, "20")}-${m.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      })()
+    : d;
+  const t = e.start_time || "";
+  const m = t.match(/(\d+):(\d+)\s*([AP]M)?/i);
+  let mins = 0;
+  if (m) {
+    let h = parseInt(m[1]);
+    const ampm = m[3]?.toUpperCase();
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    mins = h * 60 + parseInt(m[2]);
+  }
+  return `${isoDate}T${mins.toString().padStart(4, "0")}`;
+}
+
+const byRecentDesc = (
+  a: { entry_date?: string; start_time?: string },
+  b: { entry_date?: string; start_time?: string }
+) => recencyKey(b).localeCompare(recencyKey(a));
+
 export default function Timer({ setPage }: Props) {
   const user = useStore((s) => s.user)!;
   const profiles = useStore((s) => s.profiles);
@@ -212,9 +240,12 @@ export default function Timer({ setPage }: Props) {
 
   // My time entries — exclude the still-open active row (zero hours, no end_time)
   // from the completed log so a user mid-clock doesn't see a ghost entry.
+  // Sorted newest-first by entry_date + start_time.
   const myTime = timeEntries
     .filter((e) => e.user_id === user.id || (!e.user_id && e.user_name === user.name))
-    .filter((e) => !!e.end_time || (e.hours || 0) > 0);
+    .filter((e) => !!e.end_time || (e.hours || 0) > 0)
+    .slice()
+    .sort(byRecentDesc);
 
   // Active sessions across the whole crew (end_time unset == still clocked in).
   // Used by Crew Activity tab. Ignore rows older than 24h as stale.
@@ -573,7 +604,10 @@ export default function Timer({ setPage }: Props) {
             weekStart.setHours(0, 0, 0, 0);
 
             return profiles.map((p) => {
-              const allEntries = timeEntries.filter((e) => e.user_id === p.id || e.user_name === p.name);
+              const allEntries = timeEntries
+                .filter((e) => e.user_id === p.id || e.user_name === p.name)
+                .slice()
+                .sort(byRecentDesc);
               const todayEntries = allEntries.filter((e) =>
                 e.entry_date === todayStr || e.entry_date === todayISO || e.entry_date === todayStr.replace(/^0/, "")
               );
