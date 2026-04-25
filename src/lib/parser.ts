@@ -405,49 +405,88 @@ export function validateQuote(rooms: Room[]): Room[] {
   return rooms;
 }
 
+/**
+ * Extract a 5-digit US ZIP from an address string. Returns "" if not present.
+ * Tolerates "12345" or "12345-6789" formats anywhere in the string; if
+ * multiple matches exist, takes the last one (typically the trailing ZIP).
+ */
+export function extractZip(address: string | undefined | null): string {
+  if (!address) return "";
+  const matches = address.match(/\b(\d{5})(?:-\d{4})?\b/g);
+  if (!matches || !matches.length) return "";
+  // Take the last 5-digit run — the trailing ZIP, not a house number
+  const last = matches[matches.length - 1];
+  return last.slice(0, 5);
+}
+
 export async function aiParsePdf(
   text: string,
   images: string[],
   laborRate?: number,
-  licensedTrades?: string[]
+  licensedTrades?: string[],
+  propertyZip?: string
 ): Promise<AiParseResult | null> {
   try {
-    // Load recent price corrections for AI learning
+    // Load recent price corrections for AI learning. When a propertyZip is
+    // passed, partition the corrections into "local" (same ZIP) and "regional"
+    // (everything else) so the AI prefers prices from the same ZIP code over
+    // averaged numbers from other markets.
     let correctionsPrompt = "";
     try {
       const corrections = await db.get<{
         item_name: string; original_hours: number; corrected_hours: number;
         original_mat_cost: number; corrected_mat_cost: number; trade: string;
+        zip?: string;
       }>("price_corrections");
       if (corrections.length > 0) {
-        // Aggregate corrections by item type
-        const byItem: Record<string, { hrsAdj: number[]; matAdj: number[]; count: number }> = {};
-        corrections.slice(0, 100).forEach((c) => {
+        type Bucket = { hrsAdj: number[]; matAdj: number[]; count: number };
+        const byItem: Record<string, { local: Bucket; other: Bucket }> = {};
+        const newBucket = (): Bucket => ({ hrsAdj: [], matAdj: [], count: 0 });
+        corrections.slice(0, 200).forEach((c) => {
           const key = c.item_name.toLowerCase().replace(/[^a-z\s]/g, "").trim();
           if (!key) return;
-          if (!byItem[key]) byItem[key] = { hrsAdj: [], matAdj: [], count: 0 };
-          if (c.corrected_hours !== c.original_hours) byItem[key].hrsAdj.push(c.corrected_hours);
-          if (c.corrected_mat_cost !== c.original_mat_cost) byItem[key].matAdj.push(c.corrected_mat_cost);
-          byItem[key].count++;
+          if (!byItem[key]) byItem[key] = { local: newBucket(), other: newBucket() };
+          const isLocal = !!(propertyZip && c.zip && c.zip === propertyZip);
+          const bucket = isLocal ? byItem[key].local : byItem[key].other;
+          if (c.corrected_hours !== c.original_hours) bucket.hrsAdj.push(c.corrected_hours);
+          if (c.corrected_mat_cost !== c.original_mat_cost) bucket.matAdj.push(c.corrected_mat_cost);
+          bucket.count++;
         });
-        const lessons = Object.entries(byItem)
-          .filter(([, v]) => v.count >= 2) // only use patterns with 2+ corrections
-          .slice(0, 20)
-          .map(([item, v]) => {
-            const parts = [];
-            if (v.hrsAdj.length) {
-              const avgHrs = v.hrsAdj.reduce((a, b) => a + b, 0) / v.hrsAdj.length;
-              parts.push(`typically ${avgHrs.toFixed(1)}h`);
-            }
-            if (v.matAdj.length) {
-              const avgMat = v.matAdj.reduce((a, b) => a + b, 0) / v.matAdj.length;
-              parts.push(`materials ~$${avgMat.toFixed(0)}`);
-            }
-            return parts.length ? `- ${item}: ${parts.join(", ")}` : null;
-          })
-          .filter(Boolean);
-        if (lessons.length) {
-          correctionsPrompt = `\nLEARNED PRICING (from past job corrections by this team — use these when applicable):\n${lessons.join("\n")}\n\n`;
+        const formatLesson = (item: string, b: Bucket): string | null => {
+          const parts = [];
+          if (b.hrsAdj.length) {
+            const avgHrs = b.hrsAdj.reduce((a, x) => a + x, 0) / b.hrsAdj.length;
+            parts.push(`typically ${avgHrs.toFixed(1)}h`);
+          }
+          if (b.matAdj.length) {
+            const avgMat = b.matAdj.reduce((a, x) => a + x, 0) / b.matAdj.length;
+            parts.push(`materials ~$${avgMat.toFixed(0)}`);
+          }
+          return parts.length ? `- ${item}: ${parts.join(", ")}` : null;
+        };
+        const localLessons: string[] = [];
+        const otherLessons: string[] = [];
+        Object.entries(byItem).forEach(([item, v]) => {
+          if (v.local.count >= 2) {
+            const l = formatLesson(item, v.local);
+            if (l) localLessons.push(l);
+          } else if (v.other.count >= 2) {
+            const l = formatLesson(item, v.other);
+            if (l) otherLessons.push(l);
+          }
+        });
+        if (localLessons.length || otherLessons.length) {
+          correctionsPrompt = "";
+          if (localLessons.length && propertyZip) {
+            correctionsPrompt += `\nLEARNED PRICING — LOCAL TO ZIP ${propertyZip} (prefer these for same-area jobs):\n${localLessons.slice(0, 25).join("\n")}\n`;
+          }
+          if (otherLessons.length) {
+            const heading = propertyZip
+              ? `\nLEARNED PRICING — REGIONAL (other ZIPs, use as fallback):`
+              : `\nLEARNED PRICING (from past job corrections by this team — use these when applicable):`;
+            correctionsPrompt += `${heading}\n${otherLessons.slice(0, 20).join("\n")}\n`;
+          }
+          correctionsPrompt += "\n";
         }
       }
     } catch { /* corrections not available, continue without */ }
@@ -723,7 +762,7 @@ export async function aiParseInspection(
     }
   }
 
-  return aiParsePdf(text, imageData, laborRate, licensedTrades);
+  return aiParsePdf(text, imageData, laborRate, licensedTrades, extractZip(inspection.property));
 }
 
 /* ====== TEXT NORMALIZATION ====== */

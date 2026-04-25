@@ -6,6 +6,7 @@ import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
 import { t } from "@/lib/i18n";
+import { extractZip } from "@/lib/parser";
 
 interface Props {
   setPage: (p: string) => void;
@@ -190,9 +191,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     await db.patch("receipts", receiptId, { note: newNote });
 
     // Feed each line item into price_corrections so the quote AI picks up
-    // actual supply costs. Trade is inferred from the job when available.
+    // actual supply costs. Trade and ZIP are inferred from the job when
+    // available — ZIP lets the AI weight same-area pricing for future quotes.
     const job = jobs.find((j) => j.id === jobId);
     const trade = job?.trade || "General";
+    const zip = extractZip(job?.property || "");
     const logs = items
       .filter((it) => it?.name && typeof it.price === "number" && it.price > 0)
       .map((it) => ({
@@ -203,6 +206,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         original_hours: 0,
         corrected_hours: 0,
         trade,
+        zip,
       }));
     for (const entry of logs) {
       await db.post("price_corrections", entry);

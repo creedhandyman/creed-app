@@ -13,6 +13,7 @@ import {
   makeGuide,
   calculateCost,
   validateQuote,
+  extractZip,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
@@ -333,7 +334,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
       let licensedTrades: string[] = [];
       try { licensedTrades = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
-      const result = await aiParsePdf(rawText, images, rate, licensedTrades);
+      const result = await aiParsePdf(rawText, images, rate, licensedTrades, extractZip(prop));
 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);
@@ -444,7 +445,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     } else {
       setRooms([...rooms, { name: nr, items: [it] }]);
     }
-    // Track custom material for AI learning
+    // Track custom material for AI learning. Tag with the property's ZIP so
+    // future quotes in the same area weight these prices over out-of-region.
     db.post("price_corrections", {
       item_name: nd,
       original_hours: 0,
@@ -453,6 +455,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       corrected_mat_cost: parseFloat(nm) || 0,
       material_name: "Custom item",
       trade: nr,
+      zip: extractZip(prop),
     });
     setNd("");
     setNc("");
@@ -490,6 +493,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           corrected_mat_cost: newMat,
           material_name: field === "materials" ? (value as Material[]).map((m) => m.n).join(", ") : item.materials.map((m) => m.n).join(", "),
           trade: rn,
+          zip: extractZip(prop),
         });
       }
     }
