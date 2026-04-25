@@ -254,7 +254,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       let licensedTradesInsp: string[] = [];
       try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
       setParseStatus("Identifying repairs from findings...");
-      const result = await aiParseInspection(input, rate, licensedTradesInsp);
+      const result = await aiParseInspection(input, rate, licensedTradesInsp, setParseStatus);
       if (result && result.rooms.length > 0) {
         setParseStatus("Building quote...");
         setRooms(validateQuote(result.rooms));
@@ -292,31 +292,22 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setParseStatus("Analyzing with AI...");
 
     try {
-      // Get page images if we have a small PDF, or use paste photos
-      // Skip images for large PDFs (>2MB) — text-only avoids Vercel 4.5MB body limit
+      // Render every PDF page / send every photo. aiParsePdf chunks images
+      // into batches under the Vercel 4.5MB body limit and merges the results.
       let images: string[] = [];
       if (file && file.name.endsWith(".pdf")) {
-        if (file.size < 2 * 1024 * 1024) {
-          // Small PDF — send up to 5 pages as images + text
-          setParseStatus("Rendering PDF pages...");
-          images = await renderPdfPages(file, 5);
-          setParseStatus(`Sending ${images.length} pages + text to AI...`);
-        } else {
-          // Large PDF — send first 3 key pages as images + all text
-          setParseStatus(`Large PDF (${(file.size / 1024 / 1024).toFixed(1)}MB) — rendering key pages...`);
-          try {
-            images = await renderPdfPages(file, 3);
-            setParseStatus(`Sending ${images.length} key pages + text to AI...`);
-          } catch (e) {
-            console.warn("Failed to render pages for large PDF:", e);
-            setParseStatus("Sending text only to AI...");
-          }
+        setParseStatus("Rendering PDF pages...");
+        try {
+          images = await renderPdfPages(file, Number.MAX_SAFE_INTEGER);
+          setParseStatus(`Rendered ${images.length} page${images.length === 1 ? "" : "s"}, sending to AI...`);
+        } catch (e) {
+          console.warn("Failed to render PDF pages:", e);
+          setParseStatus("Sending text only to AI...");
         }
       } else if (quickPhotos.length > 0) {
         // Photos are now URLs — fetch and convert to base64 for AI
-        const urlsToSend = quickPhotos.slice(0, 15);
-        setParseStatus(`Loading ${urlsToSend.length} photos for AI...`);
-        for (const url of urlsToSend) {
+        setParseStatus(`Loading ${quickPhotos.length} photo${quickPhotos.length === 1 ? "" : "s"} for AI...`);
+        for (const url of quickPhotos) {
           try {
             if (url.startsWith("data:")) { images.push(url); continue; }
             const resp = await fetch(url);
@@ -329,14 +320,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             images.push(b64);
           } catch { /* skip failed fetches */ }
         }
-        setParseStatus(`Sending text + ${images.length} photos to AI...`);
+        setParseStatus(`Sending text + ${images.length} photo${images.length === 1 ? "" : "s"} to AI...`);
       } else {
         setParseStatus("Sending text to AI...");
       }
 
       let licensedTrades: string[] = [];
       try { licensedTrades = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
-      const result = await aiParsePdf(rawText, images, rate, licensedTrades, extractZip(prop));
+      const result = await aiParsePdf(rawText, images, rate, licensedTrades, extractZip(prop), setParseStatus);
 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);
