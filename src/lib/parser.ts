@@ -122,11 +122,50 @@ You accept TWO input types — detect which you're looking at and parse accordin
 
 TYPE A — Property inspection report (zInspector or similar): room-by-room findings with condition ratings (S=Satisfactory, F=Fair, P=Poor, D=Damaged) and "Maintenance" action markers. Apply ALL rules below (dedup summary tables, group by trade, etc.).
 
-TYPE B — Anything else: free-form work descriptions, existing quotes/estimates, photo-only requests, scope notes, room measurements with no condition data, existing line-item tables with sizes/quantities/prices, etc. SKIP the inspection-specific rules (deduplication, S/F/P/D filtering, "Maintenance"-only rule). Instead, parse the input pragmatically: extract every quotable task, size, quantity, and price you can see, and produce a complete line-item estimate. Pull labor hours and material costs from the reference tables below.
+TYPE B — Anything else: free-form scopes, existing quotes/estimates, line-item tables with sizes/qty/prices, photo-only requests, etc. SKIP the inspection-specific rules (no S/F/P/D filtering, no "Maintenance" marker, no summary-table dedup).
 
-CRITICAL: NEVER return an empty rooms array if the input contains ANY quotable work — descriptions, sizes, photos showing damage, prices already stated, etc. If you can identify even ONE task, produce at least one line item. Returning rooms:[] is reserved for genuinely empty input (blank text + no images).
+For TYPE B inputs, follow these rules in order:
 
-If the input already lists prices (e.g. "16 windows × $375 = $1500"), use those prices verbatim in the materials field rather than overriding them with the reference table — the user already priced the materials. Add labor hours from the reference table since those are usually missing.
+1. CONDITION = "-". All TYPE B line items use condition: "-". S/F/P/D is reserved for inspection findings.
+
+2. USE STATED VALUES VERBATIM. If the input gives a unit price ($X/window), a quantity (16 windows), or a labor cost ($Y), preserve those exactly. The user has already priced this — don't substitute reference values.
+
+3. LABOR DOLLARS → CLOCK HOURS. When labor is stated as a dollar amount (e.g. "Labor: $4400" or "16 × $275 = $4400"), convert to clock hours via cost / hourly_rate. Set crewSize: 1 unless the task obviously requires 2+ people. The pricing layer multiplies clock hours × crewSize × rate.
+
+4. CONSOLIDATE LIKE-SCOPE WORK. A multi-unit project should be ONE line item per trade, not one per unit. Sum quantities and totals in the materials field; use the comment to break down the units.
+
+5. FALL BACK TO REFERENCE TABLES only for missing values. If a task is described without a price, use the materials table. If labor isn't stated and the task type isn't in the reference, estimate conservatively.
+
+6. NEVER return rooms:[] for input with ANY quotable work. One identifiable task = at least one line item. Empty rooms is reserved for genuinely empty input (blank text + no images).
+
+WORKED EXAMPLE (TYPE B, $55/hr labor rate):
+Input: "TRIPLEX WINDOWS — 16 vinyl windows. Bedroom 41x51 (qty 9 @ $375), Bedroom odd 48x50 (qty 1 @ $375), Living Room 58x80 (qty 3 @ $475), Kitchen 33x42.5 (qty 3 @ $300). Materials $6075. Labor 16 × $275 = $4400. Grand Total $10475."
+
+Expected output:
+{
+  "property": "Triplex",
+  "client": "",
+  "rooms": [{
+    "name": "Carpentry",
+    "items": [{
+      "detail": "Triplex — Replace 16 vinyl windows",
+      "condition": "-",
+      "comment": "All vinyl replacements. 9 bedroom 41x51 + 1 odd 48x50, 3 living room 58x80, 3 kitchen 33x42.5. Sizes may require custom order or rough opening modification.",
+      "laborHrs": 80,
+      "materials": [
+        {"n": "Bedroom windows 41x51 vinyl (9 ea $375)", "c": 3375},
+        {"n": "Bedroom window 48x50 vinyl (1 ea $375)", "c": 375},
+        {"n": "Living Room windows 58x80 vinyl (3 ea $475)", "c": 1425},
+        {"n": "Kitchen windows 33x42.5 vinyl (3 ea $300)", "c": 900}
+      ]
+    }]
+  }],
+  "notes": ["Sizes may require custom order; final material pricing to be confirmed."],
+  "crewSize": 1,
+  "estDays": 4
+}
+
+Note: $4400 labor / $55/hr = 80 clock hours. Materials sum to exactly $6075. crewSize=1 so the math layer doesn't double the labor.
 
 ## CRITICAL RULE — DEDUPLICATION (TYPE A ONLY)
 zInspector reports contain the SAME data TWICE:
@@ -255,14 +294,19 @@ export function validateQuote(rooms: Room[]): Room[] {
     items: r.items.map((it) => (it.id ? it : { ...it, id: crypto.randomUUID().slice(0, 8) })),
   }));
 
-  // 1. Detect phantom materials — same high-cost item in 3+ rooms = likely a bug
+  // 1. Detect phantom materials — same high-cost item in 3+ rooms = likely a bug.
+  // Skip TYPE B / project-scope items (condition "-") since multi-unit jobs
+  // legitimately list the same material across unit-grouped items.
   const materialCount: Record<string, { count: number; totalCost: number }> = {};
-  rooms.forEach((r) => r.items.forEach((it) => it.materials.forEach((m) => {
-    const key = m.n.toLowerCase();
-    if (!materialCount[key]) materialCount[key] = { count: 0, totalCost: 0 };
-    materialCount[key].count++;
-    materialCount[key].totalCost += m.c;
-  })));
+  rooms.forEach((r) => r.items.forEach((it) => {
+    if (it.condition === "-") return;
+    it.materials.forEach((m) => {
+      const key = m.n.toLowerCase();
+      if (!materialCount[key]) materialCount[key] = { count: 0, totalCost: 0 };
+      materialCount[key].count++;
+      materialCount[key].totalCost += m.c;
+    });
+  }));
 
   const phantomMaterials = new Set<string>();
   Object.entries(materialCount).forEach(([key, v]) => {
@@ -302,14 +346,20 @@ export function validateQuote(rooms: Room[]): Room[] {
     }),
   }));
 
-  // 4. Cap unreasonable material costs per item (no single item > $500 unless it's a major fixture)
+  // 4. Cap unreasonable material costs per item. Inspection-style items
+  // (condition S/F/P/D) get tight caps because they represent a single repair
+  // task. Project-scope items (condition "-") get loose caps because they
+  // legitimately roll up multiple units (e.g. 16 windows across a triplex).
   const EXPENSIVE_KEYWORDS = /water heater|condenser|furnace|ac unit|mini.?split|garage door|countertop|tub|vanity|window|appliance|flooring|carpet/i;
   rooms = rooms.map((r) => ({
     ...r,
     items: r.items.map((it) => {
       const matTotal = it.materials.reduce((s, m) => s + (m.c || 0), 0);
       const isExpensive = EXPENSIVE_KEYWORDS.test(it.detail + " " + it.comment);
-      const cap = isExpensive ? 2000 : 500;
+      const isProjectScope = it.condition === "-";
+      const cap = isProjectScope
+        ? (isExpensive ? 25000 : 10000)
+        : (isExpensive ? 2000 : 500);
       if (matTotal > cap) {
         console.warn(`VALIDATION: Material cost for "${it.detail}" is $${matTotal} (cap $${cap}). Resetting.`);
         // Scale materials down proportionally to cap
@@ -320,13 +370,18 @@ export function validateQuote(rooms: Room[]): Room[] {
     }),
   }));
 
-  // 5. Cap unreasonable hours (no single item should exceed 10h)
+  // 5. Cap unreasonable hours. Inspection items: 10h trip / 8h reset (no single
+  // repair task takes longer than that). Project-scope items: 200h trip / 100h
+  // reset (a multi-unit job can legitimately be 50-100 clock hours).
   rooms = rooms.map((r) => ({
     ...r,
     items: r.items.map((it) => {
-      if (it.laborHrs > 10) {
-        console.warn(`VALIDATION: Capped hours for "${it.detail}" from ${it.laborHrs}h to 8h`);
-        return { ...it, laborHrs: 8 };
+      const isProjectScope = it.condition === "-";
+      const trip = isProjectScope ? 200 : 10;
+      const reset = isProjectScope ? 100 : 8;
+      if (it.laborHrs > trip) {
+        console.warn(`VALIDATION: Capped hours for "${it.detail}" from ${it.laborHrs}h to ${reset}h`);
+        return { ...it, laborHrs: reset };
       }
       return it;
     }),
