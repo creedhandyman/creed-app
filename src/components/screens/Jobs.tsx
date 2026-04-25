@@ -20,8 +20,30 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const profiles = useStore((s) => s.profiles);
   const jobs = useStore((s) => s.jobs);
   const receipts = useStore((s) => s.receipts);
+  const timeEntries = useStore((s) => s.timeEntries);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+
+  // Aggregate actual labor logged for a job — sums time_entries that match
+  // the job's property string. Used in the Hours card and the Time Logged
+  // breakdown so quotes can be compared to reality and the AI can learn.
+  const getJobLabor = (jobProp: string) => {
+    const entries = timeEntries.filter((e) => e.job === jobProp && (e.hours || 0) > 0);
+    const totalHrs = entries.reduce((s, e) => s + (e.hours || 0), 0);
+    const totalCost = entries.reduce((s, e) => s + (e.amount || 0), 0);
+    // Roll up by employee
+    const byPerson: Record<string, { name: string; hrs: number; cost: number; rate: number }> = {};
+    entries.forEach((e) => {
+      const id = e.user_id || e.user_name;
+      if (!byPerson[id]) {
+        const p = profiles.find((x) => x.id === e.user_id);
+        byPerson[id] = { name: e.user_name || p?.name || "Unknown", hrs: 0, cost: 0, rate: p?.rate || 0 };
+      }
+      byPerson[id].hrs += e.hours || 0;
+      byPerson[id].cost += e.amount || 0;
+    });
+    return { totalHrs, totalCost, byPerson: Object.values(byPerson), entries };
+  };
 
   const [jobTab, setJobTab] = useState<"active" | "billing" | "paid">("active");
   const [open, setOpen] = useState<string | null>(null);
@@ -234,6 +256,32 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       }
     }
     await db.patch("jobs", id, { status });
+
+    // When a job goes Complete, log the quoted-vs-actual hours variance into
+    // price_corrections so the AI quoter learns from real outcomes. Tagged
+    // with __job__:{trade} so parser.ts can surface it as a separate
+    // "PAST JOB DURATIONS" prompt section.
+    if (status === "complete") {
+      const completedJob = jobs.find((j) => j.id === id);
+      if (completedJob) {
+        const labor = getJobLabor(completedJob.property);
+        const quotedHrs = completedJob.total_hrs || 0;
+        if (labor.totalHrs > 0 && quotedHrs > 0 && Math.abs(labor.totalHrs - quotedHrs) > 0.5) {
+          const trade = completedJob.trade || "General";
+          await db.post("price_corrections", {
+            item_name: `__job__:${trade}`,
+            original_hours: quotedHrs,
+            corrected_hours: Math.round(labor.totalHrs * 100) / 100,
+            original_mat_cost: completedJob.total_mat || 0,
+            corrected_mat_cost: completedJob.total_mat || 0,
+            material_name: "Full job calibration",
+            trade,
+            zip: extractZip(completedJob.property),
+          });
+        }
+      }
+    }
+
     loadAll();
 
     // Auto-generate client message on key status changes
@@ -539,20 +587,77 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                   </div>
 
                   {/* Job info cards */}
-                  <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                    <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                      <div className="sl">Labor</div>
-                      <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 14 }}>${(j.total_labor || 0).toFixed(0)}</div>
-                    </div>
-                    <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                      <div className="sl">Materials</div>
-                      <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 14 }}>${(j.total_mat || 0).toFixed(0)}</div>
-                    </div>
-                    <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                      <div className="sl">Hours</div>
-                      <div style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 14 }}>{(j.total_hrs || 0).toFixed(1)}</div>
-                    </div>
-                  </div>
+                  {(() => {
+                    const labor = getJobLabor(j.property);
+                    const quoted = j.total_hrs || 0;
+                    const variancePct = quoted > 0 ? ((labor.totalHrs - quoted) / quoted) * 100 : 0;
+                    const overBudget = labor.totalHrs > quoted && quoted > 0;
+                    const underBudget = quoted > 0 && labor.totalHrs > 0 && labor.totalHrs <= quoted;
+                    return (
+                      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                        <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                          <div className="sl">Labor</div>
+                          <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 14 }}>${(j.total_labor || 0).toFixed(0)}</div>
+                        </div>
+                        <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                          <div className="sl">Materials</div>
+                          <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 14 }}>${(j.total_mat || 0).toFixed(0)}</div>
+                        </div>
+                        <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                          <div className="sl">Hours</div>
+                          <div style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 14 }}>{quoted.toFixed(1)}</div>
+                          {labor.totalHrs > 0 && (
+                            <div
+                              style={{
+                                fontSize: 9,
+                                marginTop: 2,
+                                color: overBudget ? "var(--color-accent-red)" : underBudget ? "var(--color-success)" : "#888",
+                                fontFamily: "Oswald",
+                              }}
+                              title="Actual hours logged via Timer"
+                            >
+                              {labor.totalHrs.toFixed(1)}h actual
+                              {quoted > 0 && ` (${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%)`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Time Logged detail — only when entries exist */}
+                  {(() => {
+                    const labor = getJobLabor(j.property);
+                    if (labor.totalHrs === 0) return null;
+                    const isOpenSection = expandedSection === `time-${j.id}`;
+                    return (
+                      <div style={{ marginBottom: 8 }}>
+                        <button
+                          className="bo"
+                          onClick={(e) => { e.stopPropagation(); setExpandedSection(isOpenSection ? null : `time-${j.id}`); }}
+                          style={{ fontSize: 12, padding: "4px 10px", width: "100%", textAlign: "left" }}
+                        >
+                          ⏱ Time Logged: {labor.totalHrs.toFixed(1)}h · ${labor.totalCost.toFixed(0)} ({labor.byPerson.length} crew) {isOpenSection ? "▼" : "▶"}
+                        </button>
+                        {isOpenSection && (
+                          <div style={{ marginTop: 6, padding: 8, background: darkMode ? "#0f0f18" : "#f7f7fa", borderRadius: 6 }}>
+                            {labor.byPerson
+                              .sort((a, b) => b.hrs - a.hrs)
+                              .map((p) => (
+                                <div key={p.name} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                                  <span>👷 {p.name}</span>
+                                  <span style={{ color: "var(--color-highlight)", fontFamily: "Oswald" }}>{p.hrs.toFixed(1)}h</span>
+                                  <span style={{ color: "var(--color-success)", fontFamily: "Oswald", minWidth: 60, textAlign: "right" }}>${p.cost.toFixed(0)}</span>
+                                </div>
+                              ))}
+                            <div className="dim" style={{ fontSize: 10, marginTop: 6, fontStyle: "italic" }}>
+                              Quoted {(j.total_hrs || 0).toFixed(1)}h · Actual {labor.totalHrs.toFixed(1)}h · This data trains the AI quoter for similar future jobs.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Inspection + Work Order — collapsible side by side */}
                   {(() => {

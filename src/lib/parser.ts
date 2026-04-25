@@ -439,10 +439,35 @@ export async function aiParsePdf(
         zip?: string;
       }>("price_corrections");
       if (corrections.length > 0) {
+        // Job-level calibrations (item_name starts with "__job__:") are kept
+        // separate from per-item corrections and surfaced as their own prompt
+        // section so the AI uses them as overall sizing context.
+        type JobCal = { quoted: number[]; actual: number[]; localQuoted: number[]; localActual: number[] };
+        const jobCalsByTrade: Record<string, JobCal> = {};
+        const itemCorrections: typeof corrections = [];
+        corrections.forEach((c) => {
+          if (typeof c.item_name === "string" && c.item_name.startsWith("__job__:")) {
+            const trade = c.item_name.slice("__job__:".length) || c.trade || "General";
+            if (!jobCalsByTrade[trade]) {
+              jobCalsByTrade[trade] = { quoted: [], actual: [], localQuoted: [], localActual: [] };
+            }
+            const cal = jobCalsByTrade[trade];
+            const isLocal = !!(propertyZip && c.zip && c.zip === propertyZip);
+            cal.quoted.push(c.original_hours);
+            cal.actual.push(c.corrected_hours);
+            if (isLocal) {
+              cal.localQuoted.push(c.original_hours);
+              cal.localActual.push(c.corrected_hours);
+            }
+          } else {
+            itemCorrections.push(c);
+          }
+        });
+
         type Bucket = { hrsAdj: number[]; matAdj: number[]; count: number };
         const byItem: Record<string, { local: Bucket; other: Bucket }> = {};
         const newBucket = (): Bucket => ({ hrsAdj: [], matAdj: [], count: 0 });
-        corrections.slice(0, 200).forEach((c) => {
+        itemCorrections.slice(0, 200).forEach((c) => {
           const key = c.item_name.toLowerCase().replace(/[^a-z\s]/g, "").trim();
           if (!key) return;
           if (!byItem[key]) byItem[key] = { local: newBucket(), other: newBucket() };
@@ -475,8 +500,29 @@ export async function aiParsePdf(
             if (l) otherLessons.push(l);
           }
         });
-        if (localLessons.length || otherLessons.length) {
+        // Format job-level calibrations: "Plumbing: avg 8.5h quoted vs 11h
+        // actual across 4 jobs (local: 12h actual)" — gives the AI sizing
+        // context grounded in this team's real outcomes.
+        const jobCalLines: string[] = [];
+        const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+        Object.entries(jobCalsByTrade).forEach(([trade, cal]) => {
+          if (cal.quoted.length === 0) return;
+          const parts = [
+            `quoted ${avg(cal.quoted).toFixed(1)}h`,
+            `actual ${avg(cal.actual).toFixed(1)}h`,
+            `n=${cal.quoted.length}`,
+          ];
+          if (cal.localActual.length > 0) {
+            parts.push(`local actual ${avg(cal.localActual).toFixed(1)}h (n=${cal.localActual.length})`);
+          }
+          jobCalLines.push(`- ${trade}: ${parts.join(", ")}`);
+        });
+
+        if (localLessons.length || otherLessons.length || jobCalLines.length) {
           correctionsPrompt = "";
+          if (jobCalLines.length) {
+            correctionsPrompt += `\nPAST JOB DURATIONS — actual hours from completed work (use as overall sizing context, especially when local data exists):\n${jobCalLines.join("\n")}\n`;
+          }
           if (localLessons.length && propertyZip) {
             correctionsPrompt += `\nLEARNED PRICING — LOCAL TO ZIP ${propertyZip} (prefer these for same-area jobs):\n${localLessons.slice(0, 25).join("\n")}\n`;
           }
