@@ -39,6 +39,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // so clock-out in either screen patches the same row instead of creating a new
   // entry and orphaning the original.
   const [activeId, setActiveId] = useState<string | null>(() => ld<string | null>("t_active_id", null));
+  // Which task in the work order is expanded to show materials / photos / comment
+  const [expandedTask, setExpandedTask] = useState<number | null>(null);
   const rate = user.rate || 55;
 
   // Persist timer
@@ -234,6 +236,36 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const priColor = (pri: string) => pri === "HIGH" ? "var(--color-accent-red)" : pri === "MED" ? "var(--color-warning)" : "var(--color-success)";
   const priLabel = (pri: string) => pri === "HIGH" ? "URGENT" : pri === "MED" ? "NEEDED" : "MINOR";
 
+  // Pull the rich detail for a work-order task: matching quote item (so we
+  // can show its materials and original inspection comment), plus any
+  // inspection photos that captured the area before work started. Crews on
+  // site need this context — the Tasks tab was previously just a checklist.
+  type Material = { n: string; c: number };
+  type QuoteItem = { detail: string; comment?: string; materials?: Material[]; laborHrs?: number };
+  type Room = { name: string; items: QuoteItem[] };
+  type InspectionItem = { name: string; condition?: string; comment?: string; photos?: string[] };
+  type InspectionRoom = { name: string; items: InspectionItem[] };
+  const enrichTask = (task: { room: string; detail: string }) => {
+    const rooms: Room[] = jobData?.rooms || [];
+    const room = rooms.find((r) => r.name === task.room);
+    const tDetail = (task.detail || "").toLowerCase();
+    const item = room?.items?.find(
+      (i) => (i.detail || "").toLowerCase() === tDetail || tDetail.includes((i.detail || "").toLowerCase()) || (i.detail || "").toLowerCase().includes(tDetail),
+    );
+    const inspRooms: InspectionRoom[] = jobData?.inspection?.rooms || [];
+    const inspRoom = inspRooms.find((r) => r.name === task.room);
+    const inspItem = inspRoom?.items?.find(
+      (i) => (i.name || "").toLowerCase() === tDetail || tDetail.includes((i.name || "").toLowerCase()),
+    );
+    return {
+      materials: item?.materials || [],
+      comment: item?.comment || inspItem?.comment || "",
+      photos: inspItem?.photos || [],
+      laborHrs: item?.laborHrs,
+      condition: inspItem?.condition,
+    };
+  };
+
   // ── NOT CLOCKED IN ──
   if (!on) {
     return (
@@ -387,47 +419,155 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 <span style={{ fontSize: 13, fontFamily: "Oswald", color: "var(--color-success)" }}>{workOrder.filter((w) => w.done).length}/{workOrder.length}</span>
               </div>
 
-              {/* Priority sorted work order */}
-              {sortedWO.map((w) => (
-                <div
-                  key={w._idx}
-                  onClick={() => toggleWO(w._idx)}
-                  style={{
-                    display: "flex", alignItems: "flex-start", gap: 10,
-                    padding: "10px 8px", marginBottom: 6,
-                    borderRadius: 10, cursor: "pointer",
-                    background: w.done ? "transparent" : darkMode ? "#12121a" : "#fff",
-                    border: w.done ? `1px solid ${border}` : `1px solid ${priColor(w.pri)}33`,
-                    borderLeft: w.done ? `1px solid ${border}` : `3px solid ${priColor(w.pri)}`,
-                    opacity: w.done ? 0.45 : 1,
-                  }}
-                >
-                  <span style={{
-                    width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1,
-                    border: `2px solid ${w.done ? "var(--color-success)" : priColor(w.pri)}`,
-                    background: w.done ? "var(--color-success)" : "transparent",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 14, color: "#fff",
-                  }}>
-                    {w.done && "✓"}
-                  </span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, textDecoration: w.done ? "line-through" : "none" }}>{w.detail}</div>
-                      {!w.done && (
-                        <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: priColor(w.pri) + "22", color: priColor(w.pri), fontFamily: "Oswald" }}>
-                          {priLabel(w.pri)}
-                        </span>
-                      )}
+              {/* Priority sorted work order — tap body to expand for materials,
+                  inspection comment, and before-photos. Tap the box to mark done. */}
+              {sortedWO.map((w) => {
+                const isOpen = expandedTask === w._idx;
+                const enriched = enrichTask(w);
+                const matTotal = enriched.materials.reduce((s, m) => s + (m.c || 0), 0);
+                const conditionLabel =
+                  enriched.condition === "D" ? "DAMAGED" :
+                  enriched.condition === "P" ? "POOR" :
+                  enriched.condition === "F" ? "FAIR" : "";
+                return (
+                  <div
+                    key={w._idx}
+                    style={{
+                      marginBottom: 6,
+                      borderRadius: 10,
+                      background: w.done ? "transparent" : darkMode ? "#12121a" : "#fff",
+                      border: w.done ? `1px solid ${border}` : `1px solid ${priColor(w.pri)}33`,
+                      borderLeft: w.done ? `1px solid ${border}` : `3px solid ${priColor(w.pri)}`,
+                      opacity: w.done ? 0.55 : 1,
+                      overflow: "hidden",
+                      transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 8px" }}>
+                      {/* Checkbox — tap to toggle done. Stops propagation so it
+                          doesn't also expand the task. */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleWO(w._idx); }}
+                        aria-label={w.done ? "Mark not done" : "Mark done"}
+                        style={{
+                          width: 24, height: 24, borderRadius: 6, flexShrink: 0, marginTop: 1,
+                          border: `2px solid ${w.done ? "var(--color-success)" : priColor(w.pri)}`,
+                          background: w.done ? "var(--color-success)" : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          color: "#fff", padding: 0, cursor: "pointer",
+                        }}
+                      >
+                        {w.done && <Icon name="check" size={14} color="#fff" strokeWidth={3} />}
+                      </button>
+                      {/* Task body — tap to expand */}
+                      <div
+                        onClick={() => setExpandedTask(isOpen ? null : w._idx)}
+                        style={{ flex: 1, cursor: "pointer" }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, textDecoration: w.done ? "line-through" : "none" }}>{w.detail}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                            {!w.done && (
+                              <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: priColor(w.pri) + "22", color: priColor(w.pri), fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                                {priLabel(w.pri)}
+                              </span>
+                            )}
+                            <Icon name={isOpen ? "collapse" : "expand"} size={14} color="#888" />
+                          </div>
+                        </div>
+                        <div className="dim" style={{ fontSize: 13, marginTop: 3, lineHeight: 1.4 }}>{w.action}</div>
+                        <div style={{ fontSize: 12, marginTop: 4, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                          <span style={{ color: "var(--color-primary)", fontFamily: "Oswald" }}>{w.hrs}h</span>
+                          <span className="dim">{w.room}</span>
+                          {matTotal > 0 && (
+                            <span style={{ color: "var(--color-warning)", fontFamily: "Oswald" }}>
+                              ${matTotal.toFixed(0)} mat
+                            </span>
+                          )}
+                          {conditionLabel && (
+                            <span
+                              style={{
+                                fontSize: 9,
+                                padding: "1px 5px",
+                                borderRadius: 3,
+                                background: enriched.condition === "D" ? "var(--color-accent-red)22" : enriched.condition === "P" ? "var(--color-warning)22" : "var(--color-highlight)22",
+                                color: enriched.condition === "D" ? "var(--color-accent-red)" : enriched.condition === "P" ? "var(--color-warning)" : "var(--color-highlight)",
+                                fontFamily: "Oswald",
+                                letterSpacing: ".06em",
+                              }}
+                            >
+                              {conditionLabel}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="dim" style={{ fontSize: 13, marginTop: 3, lineHeight: 1.4 }}>{w.action}</div>
-                    <div style={{ fontSize: 12, marginTop: 4, display: "flex", gap: 10 }}>
-                      <span style={{ color: "var(--color-primary)", fontFamily: "Oswald" }}>{w.hrs}h</span>
-                      <span className="dim">{w.room}</span>
-                    </div>
+                    {/* Expanded detail panel */}
+                    {isOpen && (
+                      <div
+                        style={{
+                          padding: "10px 12px 12px 44px",
+                          background: darkMode ? "#0d0d14" : "#f8f8fb",
+                          borderTop: `1px solid ${border}`,
+                        }}
+                      >
+                        {enriched.comment && (
+                          <div style={{ marginBottom: 10 }}>
+                            <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>Inspection note</div>
+                            <div style={{ fontSize: 13, color: darkMode ? "#cfd4dc" : "#333", lineHeight: 1.5 }}>
+                              {enriched.comment}
+                            </div>
+                          </div>
+                        )}
+                        {enriched.materials.length > 0 && (
+                          <div style={{ marginBottom: 10 }}>
+                            <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>
+                              Materials ({matTotal > 0 ? `$${matTotal.toFixed(0)}` : "—"})
+                            </div>
+                            {enriched.materials.map((m, mi) => (
+                              <div key={mi} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "2px 0" }}>
+                                <span>{m.n}</span>
+                                <span style={{ color: "var(--color-success)", fontFamily: "Oswald", flexShrink: 0, marginLeft: 8 }}>
+                                  ${(m.c || 0).toFixed(0)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {enriched.photos.length > 0 && (
+                          <div>
+                            <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>
+                              Before photos ({enriched.photos.length})
+                            </div>
+                            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+                              {enriched.photos.map((url, pi) => (
+                                <a
+                                  key={pi}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ flexShrink: 0 }}
+                                >
+                                  <img
+                                    src={url}
+                                    alt=""
+                                    style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 6, border: `1px solid ${border}`, display: "block" }}
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {!enriched.comment && enriched.materials.length === 0 && enriched.photos.length === 0 && (
+                          <div className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
+                            No additional context for this task.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </>
           )}
           {workOrder.length === 0 && (
