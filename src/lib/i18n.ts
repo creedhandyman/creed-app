@@ -15,6 +15,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.site": "Site",
     "nav.ops": "Ops",
     "nav.clients": "Clients",
+    "nav.home": "Home",
 
     // Dashboard
     "dash.welcome": "Welcome",
@@ -225,6 +226,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.site": "Sitio",
     "nav.ops": "Ops",
     "nav.clients": "Clientes",
+    "nav.home": "Inicio",
 
     // Dashboard
     "dash.welcome": "Bienvenido",

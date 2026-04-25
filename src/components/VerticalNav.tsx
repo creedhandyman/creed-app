@@ -40,15 +40,45 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
           return <div key={`tape-${i}`} className="caution-tape" />;
         }
         if (item === "logo") {
+          const onDash = page === "dash";
+          // Logo button = Dashboard. Active state matches the other nav
+          // buttons (gradient bg + glow), with a small label below for clarity
+          // and a pulsing indicator dot when on the dashboard.
           return (
-            <img
+            <button
               key="logo"
-              src={LOGO}
-              alt=""
               onClick={() => setPage("dash")}
-              onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+              className={onDash ? "act" : ""}
+              aria-label="Dashboard"
               title="Dashboard"
-            />
+              style={{ position: "relative", overflow: "visible" }}
+            >
+              <img
+                src={LOGO}
+                alt=""
+                onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+                style={{
+                  filter: onDash ? "drop-shadow(0 0 6px rgba(255,255,255,0.45))" : "none",
+                }}
+              />
+              <span style={{ fontSize: 9, marginTop: 2 }}>{t("nav.home") || "Home"}</span>
+              {onDash && (
+                <span
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    top: -2,
+                    right: -2,
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "var(--color-success)",
+                    boxShadow: "0 0 0 2px var(--color-dark-bg), 0 0 10px rgba(0, 204, 102, 0.8)",
+                    animation: "pulse 1.8s ease-in-out infinite",
+                  }}
+                />
+              )}
+            </button>
           );
         }
         if (item.adminOnly && !isAdmin) return null;
