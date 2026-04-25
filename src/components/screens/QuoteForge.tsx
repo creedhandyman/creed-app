@@ -823,7 +823,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                 disabled={quickUploading}
                 style={{ fontSize: 12, padding: "4px 10px" }}
               >
-                📷 Take Photo
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                  <Icon name="camera" size={16} />Take Photo
+                </span>
               </button>
               <button
                 className="bo"
@@ -831,7 +833,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
                 disabled={quickUploading}
                 style={{ fontSize: 12, padding: "4px 10px" }}
               >
-                📁 Upload
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                  <Icon name="upload" size={16} />Upload
+                </span>
               </button>
             </div>
           </div>
@@ -956,7 +960,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               opacity: !quickDesc.trim() && !quickPhotos.length ? 0.5 : 1,
             }}
           >
-            🤖 Generate Quote
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+              <Icon name="ai" size={18} />Generate Quote
+            </span>
           </button>
         )}
 
@@ -1002,7 +1008,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             <AiLoadingDisplay status={parseStatus} />
           ) : (
             <div className="row mt">
-              <button className="bb" onClick={doParse}>🤖 AI Parse →</button>
+              <button className="bb" onClick={doParse} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Icon name="ai" size={14} />AI Parse →
+              </button>
               <button className="bo" onClick={() => doRegexParse(text)}>Quick Parse</button>
               <button className="bo" onClick={() => fileRef.current?.click()}>
                 Upload PDF
@@ -1127,7 +1135,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       {/* AI Re-quote */}
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <h4 style={{ fontSize: 13 }}>🤖 AI Assist</h4>
+          <h4 style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Icon name="ai" size={14} color="var(--color-primary)" />AI Assist
+          </h4>
         </div>
         <div className="row">
           <input
@@ -1400,7 +1410,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           {/* Upload buttons */}
           <div className="row mb">
             <button className="bb" onClick={() => galleryRef.current?.click()} disabled={uploadingPhoto} style={{ fontSize: 13, padding: "6px 12px" }}>
-              {uploadingPhoto ? "Uploading..." : "📷 Add Photos"}
+              {uploadingPhoto ? "Uploading..." : (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                  <Icon name="camera" size={14} />Add Photos
+                </span>
+              )}
             </button>
             <span className="dim" style={{ fontSize: 11 }}>{jobPhotos.length} photo{jobPhotos.length !== 1 ? "s" : ""}</span>
           </div>
@@ -1936,7 +1950,10 @@ function GuideTab({
       <div className="cd">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <h4 style={{ color: "var(--color-success)", fontSize: 13, margin: 0 }}>
-            📋 Work Order ({workOrder.length} tasks · {workOrderHrs.toFixed(1)}h)
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icon name="list" size={14} color="var(--color-success)" />
+              Work Order ({workOrder.length} tasks · {workOrderHrs.toFixed(1)}h)
+            </span>
           </h4>
           {isCustomized && (
             <button

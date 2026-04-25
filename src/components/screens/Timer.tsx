@@ -701,7 +701,10 @@ export default function Timer({ setPage }: Props) {
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <p className="dim" style={{ fontSize: 12 }}>
-          💡 Next: Review hours in Payroll
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+            <Icon name="tip" size={14} color="var(--color-highlight)" />
+            Next: Review hours in Payroll
+          </span>
         </p>
       </div>
     </div>

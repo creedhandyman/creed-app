@@ -514,7 +514,9 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                       onClick={(e) => e.stopPropagation()}
                       style={{ fontSize: 12, color: "var(--color-primary)", textDecoration: "none" }}
                     >
-                      📍 View on Map
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <Icon name="mapPin" size={12} color="var(--color-primary)" />View on Map
+                      </span>
                     </a>
                   )}
                 </div>
@@ -752,7 +754,10 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                         }}
                         style={{ fontSize: 12, padding: "5px 12px" }}
                       >
-                        🧾 {j.status === "complete" ? t("jobs.generateInvoice") : t("jobs.viewInvoice")}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                          <Icon name="receipt" size={14} />
+                          {j.status === "complete" ? t("jobs.generateInvoice") : t("jobs.viewInvoice")}
+                        </span>
                       </button>
                       {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && org?.stripe_connected && (<>
                         <button
@@ -826,7 +831,9 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                           }}
                           style={{ fontSize: 12, padding: "5px 12px" }}
                         >
-                          ✅ Mark Paid
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                            <Icon name="check" size={14} />Mark Paid
+                          </span>
                         </button>
                       )}
                     </div>
@@ -1195,7 +1202,9 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                           gap: 4,
                         }}
                       >
-                        📷 {rPhoto ? rPhoto.name : "Attach photo"}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                          <Icon name="camera" size={13} />{rPhoto ? rPhoto.name : "Attach photo"}
+                        </span>
                       </label>
                       <input
                         ref={photoRef}
@@ -1218,7 +1227,9 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
                           }}
                           style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: 0 }}
                         >
-                          ✕ Remove
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
+                            <Icon name="close" size={12} />Remove
+                          </span>
                         </button>
                       )}
                     </div>
@@ -1232,7 +1243,10 @@ td{padding:5px 10px;border-bottom:1px solid #eee}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <p className="dim" style={{ fontSize: 12 }}>
-          {jobTab === "active" ? "💡 Next step: Schedule a job → then start the Timer" : jobTab === "billing" ? "💡 Send payment links to collect from clients" : "💡 All paid — great work!"}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+            <Icon name="tip" size={14} color="var(--color-highlight)" />
+            {jobTab === "active" ? "Next step: Schedule a job → then start the Timer" : jobTab === "billing" ? "Send payment links to collect from clients" : "All paid — great work!"}
+          </span>
         </p>
       </div>
 

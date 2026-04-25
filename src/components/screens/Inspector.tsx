@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import ClientSelect from "../ClientSelect";
+import { Icon } from "../Icon";
 
 /* ── Preset rooms and items ── */
 const ROOM_PRESETS: Record<string, string[]> = {
@@ -334,7 +335,9 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
       <div className="fi">
         <div className="row mb">
           <button className="bo" onClick={() => { clearSaved(); onCancel(); }}>←</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>🔍 New Inspection</h2>
+          <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Icon name="search" size={18} color="var(--color-primary)" />New Inspection
+          </h2>
         </div>
 
         {/* Resume banner */}
@@ -557,7 +560,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
 
         {/* Room size */}
         <div className="cd" style={{ marginBottom: 8, padding: 10, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12 }}>📐</span>
+          <Icon name="calc" size={14} color="var(--color-primary)" />
           <div style={{ flex: 1 }}>
             <label className="sl">Area Size (sq ft)</label>
             <input
@@ -619,12 +622,13 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                   title="Take photo"
                   style={{
                     background: "none",
-                    fontSize: 14,
-                    padding: "0 2px",
+                    padding: "2px 4px",
                     color: item.photos.length ? "var(--color-success)" : "#888",
+                    display: "inline-flex",
+                    alignItems: "center",
                   }}
                 >
-                  📷
+                  <Icon name="camera" size={16} />
                 </button>
                 <button
                   onClick={() => {
@@ -635,12 +639,13 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                   title="Upload photo"
                   style={{
                     background: "none",
-                    fontSize: 14,
-                    padding: "0 2px",
+                    padding: "2px 4px",
                     color: "#888",
+                    display: "inline-flex",
+                    alignItems: "center",
                   }}
                 >
-                  📁
+                  <Icon name="upload" size={16} />
                 </button>
                 {item.photos.length > 0 && (
                   <span style={{ fontSize: 13, color: "var(--color-success)", alignSelf: "center" }}>
@@ -799,7 +804,9 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
     <div className="fi">
       <div className="row mb">
         <button className="bo" onClick={() => setStep("inspect")} style={{ fontSize: 12, padding: "4px 8px" }}>← Edit</button>
-        <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>🔍 Inspection Review</h2>
+        <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="search" size={18} color="var(--color-primary)" />Inspection Review
+        </h2>
       </div>
 
       {/* Property */}

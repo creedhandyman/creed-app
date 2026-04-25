@@ -494,7 +494,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               gap: 6,
             }}
           >
-            <span style={{ fontSize: 14 }}>💡</span>
+            <Icon name="tip" size={14} color="var(--color-success)" />
             <div>
               <div style={{ fontSize: 13, color: "var(--color-success)", fontWeight: 600 }}>
                 Suggested: {suggestion.date}
@@ -676,7 +676,9 @@ td{padding:8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
             }}
             style={{ fontSize: 10 }}
           >
-            🖨 {t("sched.printSchedule")}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
+              <Icon name="print" size={12} />{t("sched.printSchedule")}
+            </span>
           </button>
           <button
             className="bb"
@@ -734,7 +736,10 @@ td{padding:8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <p className="dim" style={{ fontSize: 12 }}>
-          💡 Next: Start the Timer on today&apos;s scheduled job
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+            <Icon name="tip" size={14} color="var(--color-highlight)" />
+            Next: Start the Timer on today&apos;s scheduled job
+          </span>
         </p>
       </div>
     </div>
