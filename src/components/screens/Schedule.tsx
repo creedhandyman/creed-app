@@ -60,6 +60,8 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     const upcoming = schedule.filter((s) => s.sched_date >= today);
 
     for (const entry of upcoming) {
+      // Skip the same job — suggesting "schedule near yourself" is useless.
+      if (entry.job === jobProperty) continue;
       const entryStreet = getStreet(entry.job);
       // Check if streets share words (same area)
       const selectedWords = selectedStreet.split(" ");
