@@ -68,6 +68,8 @@ html, body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Anchored scrolls don't park content under the bottom nav */
+  scroll-padding-bottom: 96px;
 }
 
 body {
@@ -376,7 +378,13 @@ button:focus-visible {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.fi { animation: fi var(--t-slow) var(--ease-out) forwards; }
+.fi {
+  animation: fi var(--t-slow) var(--ease-out) forwards;
+  /* Breathing room at the bottom of every screen so the last element
+     (Save, Add Task, etc.) doesn't sit flush against the bottom nav
+     or screen edge. */
+  padding-bottom: 24px;
+}
 
 @keyframes pulse {
   0%, 100% { transform: scale(1);   opacity: 1; }
@@ -576,7 +584,10 @@ button:focus-visible {
 .nav-bottom .caution-tape { width: 4px; height: 24px; margin: 0 1px; }
 .nav-bottom .mc {
   margin-right: 0;
-  margin-bottom: calc(56px + env(safe-area-inset-bottom));
+  /* 56px nav + 16px buffer + safe-area for the home indicator.
+     Buffer prevents content (Save buttons, Add Task forms, sticky
+     tip lines) from sitting flush against the nav. */
+  margin-bottom: calc(56px + 16px + env(safe-area-inset-bottom));
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
