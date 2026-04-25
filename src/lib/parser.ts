@@ -764,20 +764,18 @@ export interface InspectionInput {
   client: string;
 }
 
-export async function aiParseInspection(
-  inspection: InspectionInput,
-  laborRate?: number,
-  licensedTrades?: string[]
-): Promise<AiParseResult | null> {
-  // Compile inspection into structured text
+/** Compile a subset of inspection rooms into the structured text the AI expects. */
+function compileInspectionText(
+  rooms: InspectionInput["rooms"],
+  property: string,
+  client: string
+): string {
   let text = `PROPERTY INSPECTION REPORT\n`;
-  text += `Property: ${inspection.property}\n`;
-  text += `Client: ${inspection.client}\n`;
+  text += `Property: ${property}\n`;
+  text += `Client: ${client}\n`;
   text += `Date: ${new Date().toLocaleDateString()}\n\n`;
 
-  const allPhotos: string[] = [];
-
-  inspection.rooms.forEach((room) => {
+  rooms.forEach((room) => {
     text += `=== ${room.name} ===\n`;
     if (room.sqft && room.sqft > 0) {
       text += `Room Size: ${room.sqft} square feet\n`;
@@ -794,31 +792,138 @@ export async function aiParseInspection(
       text += `Comment: ${item.notes || (item.condition === "S" ? "No issues" : "Needs attention")}\n`;
       if (item.photos.length) {
         text += `Photos: ${item.photos.length} attached\n`;
-        allPhotos.push(...item.photos);
       }
       text += `\n`;
     });
     text += `\n`;
   });
+  return text;
+}
 
-  // Fetch photos as base64 for AI vision
-  const imageData: string[] = [];
-  for (const url of allPhotos.slice(0, 20)) {
+/** Fetch photo URLs and convert each to a base64 data URL. Skips failures silently. */
+async function fetchPhotosAsBase64(urls: string[]): Promise<string[]> {
+  const out: string[] = [];
+  for (const url of urls) {
     try {
       const res = await fetch(url);
       const blob = await res.blob();
-      const base64 = await new Promise<string>((resolve) => {
+      const b64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(blob);
       });
-      imageData.push(base64);
+      out.push(b64);
     } catch {
       // skip failed photo fetches
     }
   }
+  return out;
+}
 
-  return aiParsePdf(text, imageData, laborRate, licensedTrades, extractZip(inspection.property));
+// Each AI call gets at most this many photos so the request body stays under
+// Vercel's 4.5 MB serverless limit. Compressed inspection photos are ~150 KB,
+// so 10 × 1.33 (base64 overhead) ≈ 2 MB — leaves headroom for the system
+// prompt and inspection text.
+const PHOTOS_PER_BATCH = 10;
+
+export async function aiParseInspection(
+  inspection: InspectionInput,
+  laborRate?: number,
+  licensedTrades?: string[],
+  onProgress?: (msg: string) => void
+): Promise<AiParseResult | null> {
+  const zip = extractZip(inspection.property);
+
+  // Pack rooms into batches so each AI call carries at most PHOTOS_PER_BATCH
+  // photos. Rooms with no photos ride along with whichever batch is currently
+  // open — the AI still needs their text findings to quote them. A single
+  // room whose photo count exceeds the batch size is split across multiple
+  // batches, each carrying that room's full text but a slice of its photos.
+  type Batch = { rooms: InspectionInput["rooms"]; photos: string[] };
+  const batches: Batch[] = [];
+  let curRooms: InspectionInput["rooms"] = [];
+  let curPhotos: string[] = [];
+  const flush = () => {
+    if (curRooms.length || curPhotos.length) {
+      batches.push({ rooms: curRooms, photos: curPhotos });
+      curRooms = [];
+      curPhotos = [];
+    }
+  };
+
+  for (const room of inspection.rooms) {
+    const roomPhotos = room.items.flatMap((it) => it.photos);
+    if (roomPhotos.length === 0) {
+      curRooms.push(room);
+      continue;
+    }
+    if (roomPhotos.length > PHOTOS_PER_BATCH) {
+      // Single room with too many photos — flush, then split this room
+      flush();
+      for (let i = 0; i < roomPhotos.length; i += PHOTOS_PER_BATCH) {
+        batches.push({
+          rooms: [room],
+          photos: roomPhotos.slice(i, i + PHOTOS_PER_BATCH),
+        });
+      }
+      continue;
+    }
+    if (curPhotos.length + roomPhotos.length > PHOTOS_PER_BATCH) {
+      flush();
+    }
+    curRooms.push(room);
+    curPhotos.push(...roomPhotos);
+  }
+  flush();
+
+  // No rooms at all — single text-only call.
+  if (batches.length === 0) {
+    onProgress?.("Identifying repairs from findings...");
+    const text = compileInspectionText(inspection.rooms, inspection.property, inspection.client);
+    return aiParsePdf(text, [], laborRate, licensedTrades, zip);
+  }
+
+  // Run batches sequentially so the user sees per-batch progress and we don't
+  // burst the Anthropic API. Most inspections fit in one batch.
+  const partials: AiParseResult[] = [];
+  for (let i = 0; i < batches.length; i++) {
+    const b = batches[i];
+    const prefix = batches.length > 1 ? `Batch ${i + 1} of ${batches.length}: ` : "";
+    const photoLabel = b.photos.length
+      ? `${b.photos.length} photo${b.photos.length === 1 ? "" : "s"}`
+      : "text only";
+    onProgress?.(`${prefix}analyzing ${photoLabel}...`);
+    const text = compileInspectionText(b.rooms, inspection.property, inspection.client);
+    const imageData = b.photos.length ? await fetchPhotosAsBase64(b.photos) : [];
+    const r = await aiParsePdf(text, imageData, laborRate, licensedTrades, zip);
+    if (r) partials.push(r);
+  }
+
+  if (partials.length === 0) return null;
+  if (partials.length === 1) return partials[0];
+
+  // Merge partials. Items grouped by trade name (case-insensitive) get
+  // concatenated; first-seen casing wins. validateQuote runs once more on
+  // the merged set to catch dupes that span batches.
+  onProgress?.("Merging batches...");
+  const tradeByKey: Record<string, { name: string; items: RoomItem[] }> = {};
+  partials.forEach((p) => p.rooms.forEach((r) => {
+    const key = r.name.trim().toLowerCase();
+    if (!tradeByKey[key]) tradeByKey[key] = { name: r.name, items: [] };
+    tradeByKey[key].items.push(...r.items);
+  }));
+
+  const noteSet = new Set<string>();
+  partials.forEach((p) => p.notes.forEach((n) => { if (n) noteSet.add(n); }));
+
+  return {
+    property: partials.find((p) => p.property)?.property || "",
+    client: partials.find((p) => p.client)?.client || "",
+    rooms: validateQuote(Object.values(tradeByKey)),
+    notes: [...noteSet],
+    crewSize: Math.max(...partials.map((p) => p.crewSize || 2)),
+    estDays: Math.max(...partials.map((p) => p.estDays || 0)),
+  };
 }
 
 /* ====== TEXT NORMALIZATION ====== */

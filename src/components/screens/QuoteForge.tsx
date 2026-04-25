@@ -254,7 +254,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       let licensedTradesInsp: string[] = [];
       try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
       setParseStatus("Identifying repairs from findings...");
-      const result = await aiParseInspection(input, rate, licensedTradesInsp);
+      const result = await aiParseInspection(input, rate, licensedTradesInsp, setParseStatus);
       if (result && result.rooms.length > 0) {
         setParseStatus("Building quote...");
         setRooms(validateQuote(result.rooms));
