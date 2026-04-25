@@ -217,9 +217,51 @@ export default function Settings({ onClose }: Props) {
           {profiles.map((u) => (
             <div key={u.id} className="sep" style={{ fontSize: 13 }}>
               <div className="row" style={{ justifyContent: "space-between" }}>
-                <div>
-                  <b>{u.name}</b>{" "}
-                  <span className="dim">#{u.emp_num}</span>
+                <div className="row" style={{ gap: 8 }}>
+                  {/* Profile photo / avatar with upload */}
+                  <label
+                    title={isOwner || u.id === user.id ? "Click to change photo" : ""}
+                    style={{
+                      width: 36, height: 36, borderRadius: "50%",
+                      background: u.photo_url ? `url(${u.photo_url}) center/cover` : "var(--color-primary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "#fff", fontFamily: "Oswald", fontSize: 14, fontWeight: 700,
+                      cursor: (isOwner || u.id === user.id) ? "pointer" : "default",
+                      flexShrink: 0,
+                      border: "2px solid var(--color-border-dark)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {!u.photo_url && (u.name?.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?")}
+                    {(isOwner || u.id === user.id) && (
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const ext = file.name.split(".").pop() || "jpg";
+                          const path = `avatars/${u.id}_${Date.now()}.${ext}`;
+                          const { error } = await supabase.storage.from("receipts").upload(path, file);
+                          if (error) {
+                            useStore.getState().showToast("Photo upload failed: " + error.message, "error");
+                            return;
+                          }
+                          const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+                          await db.patch("profiles", u.id, { photo_url: data.publicUrl });
+                          await loadAll();
+                          if (u.id === user.id) setUser({ ...user, photo_url: data.publicUrl });
+                          useStore.getState().showToast("Photo updated", "success");
+                          e.target.value = "";
+                        }}
+                      />
+                    )}
+                  </label>
+                  <div>
+                    <b>{u.name}</b>{" "}
+                    <span className="dim">#{u.emp_num}</span>
+                  </div>
                 </div>
                 {isOwner ? (
                   <div className="row">

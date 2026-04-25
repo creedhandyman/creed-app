@@ -392,108 +392,180 @@ export default function Quests() {
       {/* TEAM TAB */}
       {tab === "team" && (
         <div>
+          <div className="dim" style={{ fontSize: 11, marginBottom: 8, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            Stats reflect current cycle: {cycleLabel}
+          </div>
           {profiles.map((p) => {
-            // Stats per tech
-            const techJobs = jobs.filter((j) => {
+            // ── Stats per tech, scoped to the current 6-month cycle ──
+            // Previously these were lifetime totals on a per-cycle screen,
+            // which made hours look "wrong" because they kept piling up.
+            const techJobsLifetime = jobs.filter((j) => {
               try {
                 const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
                 return data?.workers?.some((w: { name: string }) => w.name === p.name);
               } catch { return false; }
             });
+            const techJobs = techJobsLifetime.filter((j) => inCycle(j.created_at));
             const completedJobs = techJobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
             const totalRevenue = techJobs.reduce((s, j) => s + (j.total || 0), 0);
-            const techTime = timeEntries.filter((e) => e.user_id === p.id || e.user_name === p.name);
+            const techTime = timeEntries
+              .filter((e) => e.user_id === p.id || e.user_name === p.name)
+              .filter((e) => inCycle(e.entry_date) && (e.end_time || (e.hours || 0) > 0));
             const totalHrs = techTime.reduce((s, e) => s + (e.hours || 0), 0);
-            const techReviews = reviews.filter((r) => r.employee_names?.includes(p.name));
+            const lifetimeHrs = timeEntries
+              .filter((e) => (e.user_id === p.id || e.user_name === p.name) && (e.end_time || (e.hours || 0) > 0))
+              .reduce((s, e) => s + (e.hours || 0), 0);
+            const techReviews = reviews.filter((r) => r.employee_names?.includes(p.name) && inCycle(r.created_at || ""));
             const fiveStars = techReviews.filter((r) => r.rating === 5).length;
             const avgRating = techReviews.length
               ? (techReviews.reduce((s, r) => s + (r.rating || 0), 0) / techReviews.length).toFixed(1)
               : "—";
 
-            // Trades worked
+            // Trades worked (in cycle)
             const trades: Record<string, number> = {};
             techJobs.filter((j) => j.trade).forEach((j) => {
               trades[j.trade] = (trades[j.trade] || 0) + 1;
             });
             const topTrade = Object.entries(trades).sort((a, b) => b[1] - a[1])[0];
 
-            // Callbacks
+            // Callbacks (in cycle)
             const callbacks = techJobs.filter((j) => j.callback).length;
             const callbackRate = completedJobs > 0 ? ((callbacks / completedJobs) * 100).toFixed(0) : "0";
+
+            const accentColor = p.role === "owner" ? "var(--color-highlight)" : p.role === "manager" ? "var(--color-primary)" : "var(--color-success)";
+            const initials = (p.name || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
             return (
               <div
                 key={p.id}
                 className="cd mb"
                 style={{
-                  borderLeft: `3px solid ${p.role === "owner" ? "var(--color-highlight)" : p.role === "manager" ? "var(--color-primary)" : "var(--color-success)"}`,
-                  padding: 14,
+                  padding: 0,
+                  overflow: "hidden",
+                  borderTop: `4px solid ${accentColor}`,
                 }}
               >
-                {/* Header */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div>
-                    <h4 style={{ fontSize: 16, margin: 0 }}>{p.name}</h4>
-                    <div style={{ fontSize: 12, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", color: p.role === "owner" ? "var(--color-highlight)" : p.role === "manager" ? "var(--color-primary)" : "var(--color-success)" }}>
-                      {p.role} · #{p.emp_num}
-                    </div>
+                {/* ── Card header: photo + name + role + rating ── */}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    padding: 14,
+                    background: `linear-gradient(135deg, ${darkMode ? "#0d0d18" : "#f5f7fa"} 0%, ${darkMode ? "#12121a" : "#fff"} 100%)`,
+                    borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#e0e0e5"}`,
+                  }}
+                >
+                  {/* Photo / initials */}
+                  <div
+                    style={{
+                      width: 78,
+                      height: 78,
+                      borderRadius: 8,
+                      background: p.photo_url
+                        ? `url(${p.photo_url}) center/cover`
+                        : `linear-gradient(135deg, ${accentColor}, ${darkMode ? "#1a1a28" : "#cfd4dc"})`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#fff",
+                      fontFamily: "Oswald",
+                      fontSize: 28,
+                      fontWeight: 700,
+                      flexShrink: 0,
+                      border: `2px solid ${accentColor}`,
+                      letterSpacing: ".05em",
+                    }}
+                  >
+                    {!p.photo_url && initials}
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-highlight)" }}>
-                      {avgRating}
-                    </div>
-                    <div className="dim" style={{ fontSize: 9 }}>avg rating</div>
-                  </div>
-                </div>
-
-                {/* Stats grid */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
-                  <div style={{ textAlign: "center", padding: 6, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6 }}>
-                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-primary)" }}>{completedJobs}</div>
-                    <div className="dim" style={{ fontSize: 8 }}>Jobs</div>
-                  </div>
-                  <div style={{ textAlign: "center", padding: 6, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6 }}>
-                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-success)" }}>{totalHrs.toFixed(0)}</div>
-                    <div className="dim" style={{ fontSize: 8 }}>Hours</div>
-                  </div>
-                  <div style={{ textAlign: "center", padding: 6, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6 }}>
-                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-highlight)" }}>{fiveStars}</div>
-                    <div className="dim" style={{ fontSize: 8 }}>5-Star</div>
-                  </div>
-                  <div style={{ textAlign: "center", padding: 6, background: darkMode ? "#1a1a28" : "#f5f5f8", borderRadius: 6 }}>
-                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: callbacks > 0 ? "var(--color-accent-red)" : "var(--color-success)" }}>{callbackRate}%</div>
-                    <div className="dim" style={{ fontSize: 8 }}>Callback</div>
-                  </div>
-                </div>
-
-                {/* Details row */}
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, flexWrap: "wrap", gap: 4 }}>
-                  <span className="dim">💰 ${totalRevenue.toLocaleString()} revenue</span>
-                  <span className="dim">⭐ {techReviews.length} reviews</span>
-                  {topTrade && <span className="dim">🔧 {topTrade[0]} ({topTrade[1]})</span>}
-                  <span className="dim">💵 ${p.rate}/hr</span>
-                </div>
-
-                {/* Trade badges */}
-                {Object.keys(trades).length > 0 && (
-                  <div style={{ display: "flex", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
-                    {Object.entries(trades).sort((a, b) => b[1] - a[1]).map(([trade, count]) => (
-                      <span
-                        key={trade}
+                  {/* Name + role + rating */}
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                    <div>
+                      <h4 style={{ fontSize: 18, margin: 0, lineHeight: 1.1, fontFamily: "Oswald", letterSpacing: ".03em" }}>
+                        {p.name}
+                      </h4>
+                      <div
                         style={{
-                          fontSize: 13,
-                          padding: "2px 8px",
-                          borderRadius: 10,
-                          background: count >= 10 ? "var(--color-success)" + "22" : "var(--color-primary)" + "22",
-                          color: count >= 10 ? "var(--color-success)" : "var(--color-primary)",
-                          border: `1px solid ${count >= 10 ? "var(--color-success)" : "var(--color-primary)"}`,
+                          fontSize: 11,
+                          fontFamily: "Oswald",
+                          textTransform: "uppercase",
+                          letterSpacing: ".12em",
+                          color: accentColor,
+                          marginTop: 2,
                         }}
                       >
-                        {trade}: {count} {count >= 10 && "✓"}
-                      </span>
-                    ))}
+                        {p.role}
+                        {p.emp_num && ` · #${p.emp_num}`}
+                      </div>
+                      {topTrade && (
+                        <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+                          🔧 {topTrade[0]} specialist
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 6 }}>
+                      <span className="dim" style={{ fontSize: 11 }}>💵 ${p.rate}/hr</span>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-highlight)", lineHeight: 1 }}>
+                          {avgRating}
+                        </div>
+                        <div className="dim" style={{ fontSize: 9, fontFamily: "Oswald", letterSpacing: ".1em", textTransform: "uppercase" }}>
+                          {techReviews.length} reviews
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
+                </div>
+
+                {/* ── Stat block (baseball-card style) ── */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 1, background: darkMode ? "#1e1e2e" : "#e0e0e5" }}>
+                  {[
+                    { label: "Jobs", value: completedJobs, color: "var(--color-primary)" },
+                    { label: "Hours", value: totalHrs.toFixed(0), color: "var(--color-success)" },
+                    { label: "5-Star", value: fiveStars, color: "var(--color-highlight)" },
+                    { label: "Callback", value: callbackRate + "%", color: callbacks > 0 ? "var(--color-accent-red)" : "var(--color-success)" },
+                  ].map((s) => (
+                    <div key={s.label} style={{ background: darkMode ? "#12121a" : "#fff", textAlign: "center", padding: "10px 4px" }}>
+                      <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: s.color, lineHeight: 1 }}>
+                        {s.value}
+                      </div>
+                      <div className="dim" style={{ fontSize: 9, fontFamily: "Oswald", letterSpacing: ".12em", textTransform: "uppercase", marginTop: 4 }}>
+                        {s.label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Footer: revenue + lifetime hours + trade badges ── */}
+                <div style={{ padding: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, flexWrap: "wrap", gap: 6, marginBottom: Object.keys(trades).length ? 8 : 0 }}>
+                    <span className="dim">💰 ${totalRevenue.toLocaleString()} cycle</span>
+                    {lifetimeHrs > totalHrs && (
+                      <span className="dim">⏱ {lifetimeHrs.toFixed(0)}h lifetime</span>
+                    )}
+                  </div>
+                  {Object.keys(trades).length > 0 && (
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {Object.entries(trades).sort((a, b) => b[1] - a[1]).map(([trade, count]) => (
+                        <span
+                          key={trade}
+                          style={{
+                            fontSize: 11,
+                            padding: "2px 8px",
+                            borderRadius: 10,
+                            background: count >= 10 ? "var(--color-success)" + "22" : "var(--color-primary)" + "22",
+                            color: count >= 10 ? "var(--color-success)" : "var(--color-primary)",
+                            border: `1px solid ${count >= 10 ? "var(--color-success)" : "var(--color-primary)"}`,
+                            fontFamily: "Oswald",
+                            letterSpacing: ".05em",
+                          }}
+                        >
+                          {trade}: {count}{count >= 10 && " ✓"}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}

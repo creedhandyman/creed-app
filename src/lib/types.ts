@@ -35,6 +35,7 @@ export interface Profile {
   name: string;
   role: "owner" | "manager" | "tech" | "apprentice";
   rate: number;
+  photo_url?: string;
   start_date: string;
   emp_num: string;
   org_id: string;
