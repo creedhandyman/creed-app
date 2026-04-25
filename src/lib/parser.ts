@@ -439,45 +439,19 @@ export function extractZip(address: string | undefined | null): string {
   return last.slice(0, 5);
 }
 
-// Pack as many images per AI call as we can without blowing past Vercel's
-// 4.5 MB serverless body limit. We aim for ~3 MB of image payload, leaving
-// 1.5 MB of headroom for the system prompt + corrections + inspection text +
-// JSON overhead. The hard count ceiling is a safety net — a flood of tiny
-// thumbnails shouldn't pile 100 images into one prompt.
+// Image payload budget per AI call. Vercel's serverless body limit is 4.5 MB;
+// we aim for ~3 MB of image data so the system prompt + corrections + text +
+// JSON overhead all comfortably fit. The count ceiling is a safety net so a
+// flood of tiny thumbnails can't pile 100 images into one prompt.
 const BATCH_TARGET_BYTES = 3 * 1024 * 1024;
 const BATCH_MAX_COUNT = 20;
 
 /**
- * Group images so each batch's serialized size stays under BATCH_TARGET_BYTES.
- * Image strings are base64 data URLs, so `.length` ≈ payload size when sent
- * as JSON. Smaller images naturally pack tighter; oversized ones get their
- * own batch (with the per-batch 413 fallback in aiParsePdfSingle as backstop).
- */
-function chunkImagesBySize(images: string[]): string[][] {
-  const out: string[][] = [];
-  let cur: string[] = [];
-  let curBytes = 0;
-  for (const img of images) {
-    const bytes = img.length;
-    const wouldOverflow = curBytes + bytes > BATCH_TARGET_BYTES;
-    const wouldExceedMax = cur.length >= BATCH_MAX_COUNT;
-    if (cur.length > 0 && (wouldOverflow || wouldExceedMax)) {
-      out.push(cur);
-      cur = [img];
-      curBytes = bytes;
-    } else {
-      cur.push(img);
-      curBytes += bytes;
-    }
-  }
-  if (cur.length) out.push(cur);
-  return out;
-}
-
-/**
  * Merge multiple AiParseResult partials into one. Items grouped by trade name
  * (case-insensitive) get concatenated; first-seen casing wins. validateQuote
- * runs on the merged set to catch cross-batch duplicates.
+ * runs on the merged set to catch cross-batch duplicates. Used by
+ * aiParseInspection's room-level batching, where each batch's text is
+ * restricted to its rooms so duplicates are rare.
  */
 function mergeParseResults(partials: AiParseResult[]): AiParseResult {
   const tradeByKey: Record<string, { name: string; items: RoomItem[] }> = {};
@@ -508,28 +482,27 @@ export async function aiParsePdf(
   propertyZip?: string,
   onProgress?: (msg: string) => void
 ): Promise<AiParseResult | null> {
-  // Pack images into byte-budgeted batches. Small enough → a single call.
-  // Each call carries the FULL text (so the AI sees every finding) plus its
-  // slice of images for visual context. Items derived purely from text repeat
-  // across batches and dedupe on merge; items derived from a specific photo
-  // survive on their batch.
-  const batches = images.length > 0 ? chunkImagesBySize(images) : [[]];
-  if (batches.length <= 1) {
-    return aiParsePdfSingle(text, batches[0] || [], laborRate, licensedTrades, propertyZip);
+  // Single API call, with images trimmed to fit one request body. We do NOT
+  // batch image-by-image here: the AI sees the full text on every call and
+  // would re-quote the entire property each time, producing 2-3× near-
+  // identical line items that simple text dedup can't catch (the phrasing
+  // varies per batch). Better to drop pages we can't fit than to ship
+  // duplicated quotes. The room-level batching in aiParseInspection is
+  // separate and safe — its per-batch text is restricted to those rooms.
+  const trimmed: string[] = [];
+  let totalBytes = 0;
+  for (const img of images) {
+    if (totalBytes + img.length > BATCH_TARGET_BYTES) break;
+    if (trimmed.length >= BATCH_MAX_COUNT) break;
+    trimmed.push(img);
+    totalBytes += img.length;
   }
-
-  const partials: AiParseResult[] = [];
-  for (let i = 0; i < batches.length; i++) {
-    onProgress?.(`Batch ${i + 1} of ${batches.length}: analyzing ${batches[i].length} images...`);
-    const r = await aiParsePdfSingle(text, batches[i], laborRate, licensedTrades, propertyZip);
-    if (r) partials.push(r);
+  if (trimmed.length < images.length) {
+    const dropped = images.length - trimmed.length;
+    console.warn(`aiParsePdf: sending ${trimmed.length} of ${images.length} images (${dropped} dropped to fit one call)`);
+    onProgress?.(`Sending ${trimmed.length} of ${images.length} pages (${dropped} skipped to fit one call)...`);
   }
-
-  if (partials.length === 0) return null;
-  if (partials.length === 1) return partials[0];
-
-  onProgress?.("Merging batches...");
-  return mergeParseResults(partials);
+  return aiParsePdfSingle(text, trimmed, laborRate, licensedTrades, propertyZip);
 }
 
 async function aiParsePdfSingle(
