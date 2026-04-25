@@ -5,7 +5,8 @@ import { db } from "@/lib/supabase";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Clients from "./Clients";
-import { Icon } from "../Icon";
+import TeamSettings from "../TeamSettings";
+import { Icon, type IconName } from "../Icon";
 
 function OpsSettings() {
   const org = useStore((s) => s.org);
@@ -116,35 +117,52 @@ function OpsSettings() {
   );
 }
 
+type OpsTab = "payroll" | "financials" | "clients" | "team" | "settings";
+
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
-  const [tab, setTab] = useState<"payroll" | "financials" | "clients" | "settings">("payroll");
+  const [tab, setTab] = useState<OpsTab>("payroll");
+
+  const tabs: { id: OpsTab; label: string; icon: IconName }[] = [
+    { id: "payroll",    label: "Payroll",    icon: "money" },
+    { id: "financials", label: "Financials", icon: "trending" },
+    { id: "clients",    label: "Clients",    icon: "clients" },
+    { id: "team",       label: "Team",       icon: "worker" },
+    { id: "settings",   label: "Settings",   icon: "settings" },
+  ];
 
   return (
     <div className="fi">
       <div style={{ display: "flex", gap: 3, marginBottom: 14, overflowX: "auto" }}>
-        {[
-          { id: "payroll" as const, label: "💰 Payroll" },
-          { id: "financials" as const, label: "📊 Financials" },
-          { id: "clients" as const, label: "👥 Clients" },
-          { id: "settings" as const, label: "⚙️ Settings" },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            style={{
-              padding: "6px 12px", borderRadius: 6, fontSize: 12, whiteSpace: "nowrap",
-              background: tab === t.id ? "var(--color-primary)" : "transparent",
-              color: tab === t.id ? "#fff" : "#888", fontFamily: "Oswald",
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+        {tabs.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 6,
+                fontSize: 12,
+                whiteSpace: "nowrap",
+                background: active ? "var(--color-primary)" : "transparent",
+                color: active ? "#fff" : "#888",
+                fontFamily: "Oswald",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <Icon name={t.icon} size={14} strokeWidth={active ? 2 : 1.75} />
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
       {tab === "payroll" && <Payroll />}
       {tab === "financials" && <Financials setPage={setPage} />}
       {tab === "clients" && <Clients setPage={setPage} />}
+      {tab === "team" && <TeamSettings />}
       {tab === "settings" && <OpsSettings />}
     </div>
   );
