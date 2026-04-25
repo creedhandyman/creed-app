@@ -380,21 +380,28 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         {t("sched.title")}
       </h2>
 
-      {/* ── Quick Schedule: drag or tap-arm an accepted job, then drop/tap a day ── */}
+      {/* ── Quick Schedule: drag or tap-arm a job, then drop/tap a day ── */}
       {(() => {
-        // Only "accepted" jobs appear in the drag palette — quoted jobs
-        // shouldn't be on the calendar before the client signs off, and
-        // already-scheduled jobs live on the calendar itself.
-        const futureSched = new Set(schedule.map((s) => s.job));
-        const unscheduled = jobs.filter((j) =>
-          j.status === "accepted" &&
-          !futureSched.has(j.property)
-        );
-        if (unscheduled.length === 0) return null;
+        // Palette shows both accepted (ready to schedule for the first time)
+        // and scheduled jobs (so the user can drag them onto another day to
+        // add a return visit / multi-day work). Sorted with accepted first
+        // so the new work is what the user sees first.
+        const palette = jobs
+          .filter((j) => j.status === "accepted" || j.status === "scheduled")
+          .sort((a, b) => {
+            if (a.status === b.status) return 0;
+            return a.status === "accepted" ? -1 : 1;
+          });
+        if (palette.length === 0) return null;
+        const acceptedCount = palette.filter((j) => j.status === "accepted").length;
+        const scheduledCount = palette.length - acceptedCount;
         return (
           <div className="cd mb" style={{ borderLeft: "3px solid var(--color-success)" }}>
             <h4 style={{ fontSize: 13, marginBottom: 6 }}>
               👆 {t("sched.quickSchedule")}
+              <span className="dim" style={{ fontSize: 11, fontWeight: 400, marginLeft: 6 }}>
+                ({acceptedCount} accepted{scheduledCount ? `, ${scheduledCount} scheduled` : ""})
+              </span>
               {armedJob && (
                 <span style={{ marginLeft: 8, color: "var(--color-success)", fontSize: 11, fontFamily: "Oswald" }}>
                   • {t("sched.armed")}: {armedJob.slice(0, 30)}{armedJob.length > 30 ? "…" : ""}
@@ -402,8 +409,12 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               )}
             </h4>
             <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-              {unscheduled.map((j) => {
+              {palette.map((j) => {
                 const isArmed = armedJob === j.property;
+                const isScheduled = j.status === "scheduled";
+                // Accepted = solid green (new work). Scheduled = dashed
+                // primary (already on calendar; dropping adds another day).
+                const baseColor = isScheduled ? "var(--color-primary)" : "var(--color-success)";
                 return (
                   <button
                     key={j.id}
@@ -415,19 +426,22 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                     }}
                     onDragEnd={() => setHoverDay(null)}
                     onClick={() => setArmedJob(isArmed ? null : j.property)}
+                    title={isScheduled ? "Already scheduled — drop on a day to add another visit" : "Accepted — drop on a day to schedule"}
                     style={{
                       padding: "6px 12px",
                       borderRadius: 16,
                       whiteSpace: "nowrap",
-                      background: isArmed ? "var(--color-success)" : "transparent",
-                      color: isArmed ? "#fff" : "var(--color-primary)",
-                      border: `1px solid ${isArmed ? "var(--color-success)" : "var(--color-primary)"}`,
+                      background: isArmed ? baseColor : "transparent",
+                      color: isArmed ? "#fff" : baseColor,
+                      border: `1px ${isScheduled && !isArmed ? "dashed" : "solid"} ${baseColor}`,
                       fontSize: 12,
                       flexShrink: 0,
                       cursor: "grab",
+                      opacity: isScheduled && !isArmed ? 0.85 : 1,
                     }}
                   >
-                    {isArmed && "✓ "}{j.property.length > 28 ? j.property.slice(0, 28) + "…" : j.property}
+                    {isArmed ? "✓ " : isScheduled ? "📅 " : ""}
+                    {j.property.length > 28 ? j.property.slice(0, 28) + "…" : j.property}
                   </button>
                 );
               })}
