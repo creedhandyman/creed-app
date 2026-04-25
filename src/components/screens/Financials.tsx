@@ -5,7 +5,8 @@ import { Icon } from "../Icon";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
 
-export default function Financials({ setPage }: { setPage: (p: string) => void }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function Financials({ setPage: _setPage }: { setPage: (p: string) => void }) {
   const jobs = useStore((s) => s.jobs);
   const timeEntries = useStore((s) => s.timeEntries);
   const profiles = useStore((s) => s.profiles);
@@ -133,13 +134,13 @@ export default function Financials({ setPage }: { setPage: (p: string) => void }
 
   return (
     <div className="fi">
-      {/* Header */}
-      <div className="row mb" style={{ justifyContent: "space-between" }}>
+      {/* Header — Financials is rendered inside the Ops tabs, so the
+          old "← Dashboard" back button is redundant and removed. */}
+      <div className="row mb">
         <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
           <Icon name="trending" size={22} color="var(--color-primary)" />
           Financials
         </h2>
-        <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Dashboard</button>
       </div>
 
       {/* Range selector */}
