@@ -201,7 +201,77 @@ ALWAYS keep c = qty × unitPrice when you set both.
 
 6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "General Supplies" item under Painting, NOT duplicated per room.
 
-7. ONLY QUOTE MAINTENANCE ITEMS. Condition "S" with Action "None" = skip.
+7. ONLY QUOTE MAINTENANCE ITEMS. Condition "S" with Action "None" = skip. The row is informational only — the inspector found nothing to fix.
+
+## COMMON ERRORS — read these every time before generating output
+
+These are real bugs from past inspection-to-quote runs. AVOID each one.
+
+### A. Wording traps — read the comment word for word
+- "Toilet paper holder missing" → replace ONLY the TP holder (~$12). NOT a new toilet.
+- "Closet curtain rod" / "closet pole" → CARPENTRY hardware. NOT a shower rod, NOT plumbing.
+- "Sink stopper missing" / "aerator slow" / "diverter clogged" → replace stopper (~$15) or aerator (~$5). NOT a new $65 faucet.
+- "Sink clogged" / "tub clogged" → labor only to clear blockage. No new fixture.
+- "Hot Water Tank — S — None" → Status SATISFACTORY + Action NONE = nothing to do. Skip the row. NEVER add a water heater for an S row.
+- "Breaker Box — referenced for inspection" → walk-by inspection only. No replacement parts.
+- "Garage door fallen off, needs reattachment, track repair, tension spring rewinding" → REPAIR. Track hardware (~$30) + tension spring (~$35) + labor. NOT a new $800 garage door.
+- "Stove burners missing, drip pans, deep clean" → replace drip pans + cleaning. NEVER add a "condenser" — condensers are HVAC, not appliances.
+- "New entry knob, no key present" → entry knob (~$20). NOT a smart deadbolt unless explicitly requested.
+
+### B. Repair vs. replace — different cost shapes
+- REPAIR words: fix, repair, tighten, reattach, clear, reinstall, service, patch, touch up, adjust, replace [part]. Cost: small material + labor.
+- REPLACE words: install new, replace [whole unit], new [unit] needed. Cost: full unit cost + labor.
+"Needs new striker plate for deadbolt" = replace striker plate ($5), NOT replace deadbolt. "Needs reinstalling" = labor only. Read every word before pricing.
+
+### C. Count from explicit numbers
+Inspection comments give exact quantities. Use them verbatim:
+- "four 27 by 64 inch blinds" → qty: 4
+- "two 23x64 inch blinds needed" → qty: 2
+- "three knobs missing" → qty: 3
+- "two missing window panes" → qty: 2
+SUM these across all rooms when totalling materials. Don't multiply, don't undercount.
+
+### D. Single-of-a-thing items
+A typical SFH has ONE of these. Don't duplicate them based on related-keyword matches:
+- 1 toilet per bathroom row in inspection. "Toilet paper holder missing" does NOT mean 2 toilets.
+- 1 garage door per garage row.
+- 1 thermostat, 1 doorbell, 1 water heater, 1 breaker panel total.
+- 1 of any item that the inspection mentions exactly once.
+
+### E. Smoke alarms = count of explicit findings
+Count = number of rooms whose Smoke Alarm row has condition D or P AND comment says "no smoke alarm" / "install" / "missing." Add 1-2 for hallway/CO if mentioned. Typical 3-bed = 3-5 total. Anything ≥ 7 means you're double-counting — recount.
+
+### F. Paint math (per house, NOT per room × N)
+For a make-ready job, supplies are SHARED across rooms:
+- Wall paint: BUY BY THE GALLON, not quart. Touch-up only = 1-2 quarts. Full house repaint = 8-12 gallons total.
+- Ceiling paint: 2-4 gallons total for the whole house, regardless of how many rooms have ceiling work. Ceilings share paint.
+- Spackle: 1-2 tubs per house. NEVER per room.
+- Mesh tape: 1 roll per house.
+- Drop cloths/painter's tape/rollers/brushes: ONE "Paint Supplies" line item per house.
+
+### G. Don't hallucinate
+Every material MUST trace to a specific inspection finding word-for-word. Common hallucinations to avoid:
+- Smart locks (only if "smart lock" explicitly mentioned)
+- Window AC units (only if "AC unit" or "window unit" mentioned)
+- Vinyl windows (broken pane = repair the pane, not replace the whole window)
+- Condensers, HVAC parts (only if HVAC unit explicitly mentioned, and they go in COMPLIANCE not Appliances)
+- Duplicate items just because the comment mentions something twice
+
+### H. No "misc materials" placeholder lines
+Every material has a specific name. If you can't name what it is, don't include it. NEVER use "Misc materials" as a line item.
+
+### I. Trade categorization (which bucket each item belongs in)
+- PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch ONLY. No knobs, no fixtures, no blinds.
+- FLOORING: LVP, carpet, tile, grout, cove base, transition strips, baseboards (sqft-priced).
+- CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, window screens, window panes, window glass, closet rods/shelving.
+- PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves, supply lines, dryer vents.
+- ELECTRICAL: outlets, switches, switch/outlet plates, light fixtures, bulbs, light covers, ceiling fans (electrical).
+- APPLIANCES: refrigerator, oven, stove, dishwasher, microwave, washer, dryer parts. NEVER condensers or HVAC parts.
+- SAFETY: smoke alarms, CO detectors, fire extinguishers.
+- COMPLIANCE: water heater, HVAC filters, breaker panel inspection, doorbell, thermostat.
+- EXTERIOR: siding, roof, gutters, downspouts, fence, gates, exterior lights, landscaping.
+- CLEANING/HAULING: junk removal, debris hauling, deep cleaning.
+A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical.
 
 ## LABOR HOURS — clock hours, single worker. Use DECIMALS. Include travel between rooms, setup, cleanup.
 These hours include: getting tools/materials ready, doing the work, cleaning up, and moving to the next task.
@@ -407,12 +477,15 @@ export function validateQuote(rooms: Room[]): Room[] {
     })),
   }));
 
-  // 6. RE-GROUP BY TRADE — if AI returned room-based groups, convert to trade-based
+  // 6. RE-CLASSIFY EACH ITEM BY TRADE (always). Even when the AI returned
+  // trade-named buckets, individual items can be in the wrong one — e.g. a
+  // door knob inside the "Painting" bucket, a water heater inside
+  // "Electrical." Build the trade groups from scratch by classifying each
+  // item against its detail+comment text. Skip only if the input was
+  // already empty.
   const TRADE_CATEGORIES = ["Painting", "Flooring", "Carpentry", "Plumbing", "Electrical", "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling"];
-  const isAlreadyTradeGrouped = rooms.every((r) => TRADE_CATEGORIES.some((t) => r.name.toLowerCase().includes(t.toLowerCase())));
 
-  if (!isAlreadyTradeGrouped && rooms.length > 0) {
-    console.warn("VALIDATION: Rooms are not trade-grouped. Re-grouping by trade.");
+  if (rooms.length > 0) {
     const tradeMap: Record<string, RoomItem[]> = {};
 
     const classifyTrade = (item: RoomItem, roomName: string): string => {
@@ -424,10 +497,12 @@ export function validateQuote(rooms: Room[]): Room[] {
       const scores: Record<string, number> = {};
       const add = (trade: string, pts: number) => { scores[trade] = (scores[trade] || 0) + pts; };
 
-      // Plumbing — check FIRST with strong keywords (prevents paint from stealing plumbing items)
-      if (/faucet|toilet|sink|shower|tub|drain|p.?trap|disposal|water.*heater|supply.*line|shut.*off|sprayer|stopper|sump|sewage|valve|pipe/.test(s)) add("Plumbing", 10);
+      // Plumbing — check FIRST with strong keywords (prevents paint from stealing plumbing items).
+      // Water heater / tank intentionally NOT here — those belong to Compliance.
+      if (/faucet|toilet|sink|tub|drain|p.?trap|disposal|supply.*line|shut.*off|sprayer|stopper|sump|sewage|valve|pipe|aerator|diverter|dryer.*vent/.test(s)) add("Plumbing", 10);
+      if (/\bshower\b/.test(s) && !/shower.*rod|shower.*curtain/.test(s)) add("Plumbing", 10);
       if (/caulk.*(tub|shower|sink|bath)|re.?caulk/.test(s)) add("Plumbing", 8);
-      if (/faucet|toilet|shower|p.?trap|disposal/.test(matNames)) add("Plumbing", 5);
+      if (/faucet|toilet|shower.*head|p.?trap|disposal|aerator/.test(matNames)) add("Plumbing", 5);
 
       // Painting — only if paint/repaint is the PRIMARY task
       if (/\bpaint\b|repaint|prime|primer|touch.?up.*paint|paint.*touch|wall.*ceiling.*paint|paint.*wall|full.*paint/.test(s)) add("Painting", 10);
@@ -457,8 +532,10 @@ export function validateQuote(rooms: Room[]): Room[] {
       // Exterior
       if (/exterior|fence|gate|gutter|downspout|porch|deck|siding|landscape|mailbox|stair.*rail|roof/.test(s)) add("Exterior", 10);
 
-      // Compliance
-      if (/filter|compliance|hvac.*filter|code|thermostat|heater.*filter/.test(s)) add("Compliance", 10);
+      // Compliance — water heater, HVAC filter, doorbell, thermostat, breaker
+      // panel inspections. Water heater / hot water tank lands here (not in
+      // Plumbing) so the trade buckets match the prompt's categorization.
+      if (/water.*heater|water.*tank|hot.*water|doorbell|chime|filter|compliance|hvac.*filter|thermostat|heater.*filter|breaker.*box|breaker.*panel|electrical.*panel/.test(s)) add("Compliance", 12);
 
       // Cleaning
       if (/clean|haul|trash|debris|junk|removal/.test(s)) add("Cleaning/Hauling", 10);
