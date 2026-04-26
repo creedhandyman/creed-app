@@ -93,6 +93,13 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
     byTech[name].pay += e.amount || 0;
   });
   const crewCost = rangeEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  // Split crew cost by paid status — Payroll now marks entries with
+  // paid_at instead of deleting them (so Team Stats keeps lifetime
+  // history). Surfacing the split here gives the manager a cash-flow
+  // view: how much labor has already been paid out vs. how much is
+  // still owed in the next pay run.
+  const crewCostPaid = rangeEntries.reduce((s, e) => s + (e.paid_at ? e.amount || 0 : 0), 0);
+  const crewCostOwed = rangeEntries.reduce((s, e) => s + (!e.paid_at ? e.amount || 0 : 0), 0);
 
   // Actual materials spend from receipts in the same period (real out-of-
   // pocket cost, vs. totalMaterials which is what was CHARGED to the
@@ -211,6 +218,8 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
     ${sectionRow("Cost of Goods Sold")}
     ${lineRow(materialsLabel, cogsMaterials, true)}
     ${lineRow(`Direct Labor (crew pay, ${rangeEntries.length} entries)`, crewCost, true)}
+    ${crewCostOwed > 0 && crewCostPaid > 0 ? lineRow(`&nbsp;&nbsp;&nbsp;&nbsp;↳ Already paid out`, crewCostPaid, true) : ""}
+    ${crewCostOwed > 0 ? lineRow(`&nbsp;&nbsp;&nbsp;&nbsp;↳ Owed in next pay run`, crewCostOwed, true) : ""}
     ${subtotalRow("Total COGS", totalCogs)}
     ${totalRow("Gross Profit", grossProfit, "#2E75B6")}
     ${marginRow("Gross Margin", grossMargin)}
@@ -376,6 +385,14 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               <span className="dim">Crew pay (actual hours)</span>
               <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${crewCost.toLocaleString()}</span>
             </div>
+            {(crewCostPaid > 0 || crewCostOwed > 0) && (
+              <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: 12, fontSize: 11 }}>
+                <span className="dim">↳ Paid ${crewCostPaid.toLocaleString()} · Owed ${crewCostOwed.toLocaleString()}</span>
+                <span className="dim" style={{ fontFamily: "Oswald" }}>
+                  {crewCostOwed > 0 ? `${Math.round((crewCostOwed / crewCost) * 100)}% unpaid` : "all paid"}
+                </span>
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", borderTop: `2px solid var(--color-primary)`, paddingTop: 6, marginTop: 6 }}>
               <span style={{ fontWeight: 700, fontSize: 14 }}>Net Profit</span>
               <span style={{ fontFamily: "Oswald", fontSize: 18, color: profit > 0 ? "var(--color-success)" : "var(--color-accent-red)" }}>${profit.toLocaleString()}</span>
