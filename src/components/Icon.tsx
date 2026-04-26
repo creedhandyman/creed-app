@@ -81,6 +81,7 @@ import {
   ShoppingCart,
   Calculator,
   Folder,
+  MessageSquareText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -164,6 +165,7 @@ const ICONS: Record<string, LucideIcon> = {
   trophy: Trophy,
   fire: Flame,
   bell: Bell,
+  comms: MessageSquareText,
   cart: ShoppingCart,
   calc: Calculator,
   folder: Folder,

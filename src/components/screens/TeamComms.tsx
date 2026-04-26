@@ -109,7 +109,8 @@ export default function TeamComms({ setPage }: Props) {
     <div className="fi">
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-          💬 Team Comms
+          <Icon name="comms" size={22} color="var(--color-primary)" />
+          Team Comms
         </h2>
         {setPage && (
           <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>

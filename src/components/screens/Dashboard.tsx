@@ -288,9 +288,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
             width: 36, height: 36, borderRadius: 10, flexShrink: 0,
             background: "var(--color-primary)" + "22",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 18,
           }}>
-            💬
+            <Icon name="comms" size={20} color="var(--color-primary)" />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
