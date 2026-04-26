@@ -74,15 +74,16 @@ export default function Login() {
             style={{
               fontFamily: "Oswald, sans-serif",
               fontSize: 11,
-              letterSpacing: "0.14em",
+              letterSpacing: "0.1em",
               color: "#9aa6b5",
               margin: 0,
               textTransform: "uppercase",
+              whiteSpace: "nowrap",
             }}
           >
-            Field-Service Manager
-            <span style={{ color: "#2E75B6", margin: "0 6px" }}>·</span>
-            A.I.-Powered Quoting
+            Walk the Property
+            <span style={{ color: "#2E75B6", margin: "0 5px" }}>·</span>
+            We Write the Quote
           </p>
         </div>
 
