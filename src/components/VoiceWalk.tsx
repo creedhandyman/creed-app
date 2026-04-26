@@ -159,6 +159,11 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(0);
+  // Flash/torch — only available on the rear camera of supported mobile
+  // browsers (Android Chrome). Detected from track capabilities after
+  // getUserMedia returns; button hidden when unsupported.
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
   // Final state
   const [finishing, setFinishing] = useState(false);
@@ -240,6 +245,15 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         await videoRef.current.play().catch(() => {});
       }
       setCameraOn(true);
+      // Detect torch support. The MediaTrackCapabilities type doesn't include
+      // `torch` in standard libs (it's a non-standard but widely-supported
+      // extension for video tracks on the rear camera), so cast inline.
+      try {
+        const track = stream.getVideoTracks()[0];
+        const caps = track.getCapabilities?.() as undefined | MediaTrackCapabilities & { torch?: boolean };
+        setTorchSupported(!!caps?.torch);
+      } catch { setTorchSupported(false); }
+      setTorchOn(false);
     } catch (err) {
       console.warn("Camera unavailable:", err);
       setCameraError(
@@ -248,6 +262,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           : "Camera unavailable. Use the file picker below."
       );
       setCameraOn(false);
+      setTorchSupported(false);
     }
   }, []);
 
@@ -256,7 +271,28 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
+    setTorchSupported(false);
+    setTorchOn(false);
   }, []);
+
+  // Apply the torch constraint on toggle. Most cameras need this set on the
+  // active video track; if applyConstraints throws (browser doesn't support
+  // it), revert state so the UI doesn't lie about the flash being on.
+  const toggleTorch = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      await (track.applyConstraints as (c: MediaTrackConstraints & { advanced?: Array<{ torch?: boolean }> }) => Promise<void>)({
+        advanced: [{ torch: next }],
+      });
+      setTorchOn(next);
+    } catch (err) {
+      console.warn("Torch toggle failed:", err);
+      setTorchSupported(false);
+      setTorchOn(false);
+    }
+  }, [torchOn]);
 
   // Start camera on mount; stop on unmount.
   useEffect(() => {
@@ -689,7 +725,9 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
             background: "#000",
             borderRadius: 8,
             overflow: "hidden",
-            aspectRatio: "4 / 3",
+            // Portrait aspect ratio fills more of a phone screen than the
+            // old landscape 4:3 — about 1.3× taller for the same width.
+            aspectRatio: "3 / 4",
             marginBottom: 8,
             display: "flex",
             alignItems: "center",
@@ -712,6 +750,35 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
             <div style={{ color: "#bbb", fontSize: 12, padding: 16, textAlign: "center" }}>
               {cameraError || "Starting camera..."}
             </div>
+          )}
+          {/* Torch toggle overlay — top-right of the preview. Only shown
+              when the active video track exposes the torch capability. */}
+          {cameraOn && torchSupported && (
+            <button
+              onClick={toggleTorch}
+              aria-label={torchOn ? "Turn flash off" : "Turn flash on"}
+              title={torchOn ? "Flash on" : "Flash off"}
+              style={{
+                position: "absolute",
+                top: 10,
+                right: 10,
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                border: "none",
+                background: torchOn ? "rgba(255,204,0,0.95)" : "rgba(0,0,0,0.55)",
+                color: torchOn ? "#1a1a1a" : "#fff",
+                fontSize: 20,
+                lineHeight: 1,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: torchOn ? "0 0 16px rgba(255,204,0,0.6)" : "0 1px 4px rgba(0,0,0,0.4)",
+              }}
+            >
+              {torchOn ? "⚡" : "🔦"}
+            </button>
           )}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
