@@ -432,8 +432,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   // When the user moves to a different room, force-stop the active session
   // and clear the on-screen transcript so they don't see leftover speech
-  // from the previous room. The per-room transcript ref + roomMoments stay
-  // intact — those are the saved work, only the live UI clears.
+  // from the previous room. The flush BEFORE setCurrentIdx (in advanceRoom
+  // and the room-strip click handler) saves any unattached speech as a
+  // voice-only moment first. By the time this effect runs, currentRoomRef
+  // already points at the new room — so we only do UI cleanup here.
   useEffect(() => {
     setInspecting(false);
     setLiveTranscript("");
@@ -531,6 +533,38 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     setUploading((c) => c - 1);
   }, [liveTranscript, pendingTranscript]);
 
+  // If the user spoke but never snapped a photo, the captured speech would
+  // otherwise be discarded when they tap Stop, advance to the next room,
+  // jump rooms via the strip, or hit Finish. Flushing creates a voice-only
+  // moment (photoUrl: "") that the AI parser already handles — see
+  // processVoiceWalkChunk in parser.ts: it skips the image block when
+  // imageData[i] is empty and uses the transcript as the sole input.
+  const flushPendingTranscriptToMoment = useCallback(() => {
+    const room = currentRoomRef.current;
+    if (!room) return;
+    const text = (captureChunkRef.current + " " + liveTranscript + " " + pendingTranscript)
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) return;
+    captureChunkRef.current = "";
+    setLiveTranscript("");
+    setPendingTranscript("");
+    setRoomMoments((prev) => ({
+      ...prev,
+      [room]: [
+        ...(prev[room] || []),
+        {
+          id: crypto.randomUUID().slice(0, 8),
+          photoUrl: "", // voice-only — no photo yet
+          transcript: text,
+          ts: Date.now(),
+        },
+      ],
+    }));
+    // Force re-fire of AI on the next advance now that we have new content.
+    delete roomLastProcessedRef.current[room];
+  }, [liveTranscript, pendingTranscript]);
+
   const snapFromVideo = async () => {
     const video = videoRef.current;
     if (!video || !video.videoWidth) {
@@ -584,7 +618,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   const advanceRoom = () => {
     if (!currentRoom) return;
-    // Fire AI for the room being left (if it has photos and isn't already
+    // Save any unattached speech as a voice-only moment BEFORE leaving the
+    // room — otherwise it'd be wiped by the currentIdx-change effect.
+    flushPendingTranscriptToMoment();
+    // Fire AI for the room being left (if it has moments and isn't already
     // analyzed against this exact moment count).
     fireRoomAi(currentRoom);
     if (currentIdx < rooms.length - 1) {
@@ -594,6 +631,8 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   const finish = async () => {
     if (!currentRoom) return;
+    // Save any unattached speech in the active room before we lock things in.
+    flushPendingTranscriptToMoment();
     setFinishing(true);
 
     // Fire AI for the current room first.
@@ -630,7 +669,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
             name: `Voice note ${i + 1}`,
             condition: "F",
             notes: m.transcript || "(no description)",
-            photos: [m.photoUrl],
+            // Voice-only moments have no photoUrl — emit an empty array
+            // rather than [""] so the inspection report doesn't try to
+            // render a broken image.
+            photos: m.photoUrl ? [m.photoUrl] : [],
           })),
         });
       }
@@ -713,7 +755,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
             return (
               <button
                 key={r}
-                onClick={() => setCurrentIdx(idx)}
+                onClick={() => {
+                  if (idx !== currentIdx) flushPendingTranscriptToMoment();
+                  setCurrentIdx(idx);
+                }}
                 style={{
                   padding: "5px 10px",
                   borderRadius: 14,
@@ -799,10 +844,15 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       )}
 
       {/* Single Start/Stop control — drives mic + camera together so the
-          user always knows whether the inspection is "live" or paused. */}
+          user always knows whether the inspection is "live" or paused.
+          Stop also flushes any unattached speech to a voice-only moment so
+          progress isn't lost. */}
       <div className="cd mb" style={{ padding: 10, textAlign: "center" }}>
         <button
-          onClick={() => setInspecting((v) => !v)}
+          onClick={() => {
+            if (inspecting) flushPendingTranscriptToMoment();
+            setInspecting((v) => !v);
+          }}
           style={{
             padding: "10px 22px",
             fontSize: 14,
@@ -990,13 +1040,41 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
             {thisRoomMoments.map((m) => (
               <div key={m.id} style={{ position: "relative", flexShrink: 0 }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={m.photoUrl}
-                  alt=""
-                  title={m.transcript || "(no description)"}
-                  style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6 }}
-                />
+                {m.photoUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={m.photoUrl}
+                    alt=""
+                    title={m.transcript || "(no description)"}
+                    style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6 }}
+                  />
+                ) : (
+                  /* Voice-only moment — no photo. Render a mic-marked tile
+                     with the transcript previewed inline so the user can
+                     see at a glance what was captured. */
+                  <div
+                    title={m.transcript || "(voice note)"}
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 6,
+                      background: "var(--color-primary)",
+                      color: "#fff",
+                      padding: 4,
+                      fontSize: 9,
+                      lineHeight: 1.15,
+                      overflow: "hidden",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 2,
+                    }}
+                  >
+                    <span style={{ fontSize: 14, lineHeight: 1 }}>🎤</span>
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {(m.transcript || "Voice note").slice(0, 60)}
+                    </span>
+                  </div>
+                )}
                 <button
                   onClick={() => {
                     if (!currentRoom) return;
