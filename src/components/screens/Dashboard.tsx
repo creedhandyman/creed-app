@@ -1,8 +1,15 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
+import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+
+interface TeamMessageRow {
+  id: string;
+  read_by?: string;
+  urgent?: boolean;
+}
 
 interface Props {
   setPage: (p: string) => void;
@@ -64,6 +71,33 @@ export default function Dashboard({ setPage, openSettings }: Props) {
     try { return new Date(j.job_date || j.created_at) >= monthStart; } catch { return false; }
   });
   const earnedMonth = monthJobs.reduce((s, j) => s + (j.total || 0), 0);
+
+  // Team Comms unread count — fetched on mount, updates when the user
+  // navigates back to the dashboard. Cheap query (just id + read_by).
+  const [unreadComms, setUnreadComms] = useState(0);
+  const [hasUrgentComms, setHasUrgentComms] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await db.get<TeamMessageRow>("team_messages");
+        if (cancelled) return;
+        let unread = 0;
+        let urgent = false;
+        for (const r of rows) {
+          let readBy: string[] = [];
+          try { readBy = r.read_by ? JSON.parse(r.read_by) : []; } catch { /* */ }
+          if (!readBy.includes(user.id)) {
+            unread++;
+            if (r.urgent) urgent = true;
+          }
+        }
+        setUnreadComms(unread);
+        setHasUrgentComms(urgent);
+      } catch { /* ignore — column may not exist yet */ }
+    })();
+    return () => { cancelled = true; };
+  }, [user.id]);
 
   // Getting Started guide
   const [guideDismissed, setGuideDismissed] = useState(true);
@@ -220,7 +254,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
       </div>
 
-      {/* Mileage + Website — side by side */}
+      {/* Mileage + Team Comms — side by side. Comms surfaces unread count
+          + urgent flag so the dashboard makes new messages obvious. */}
       <div className="g2 mb">
         <div className="cd" onClick={() => setPage("mileage")} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 12 }}>
           <div style={{
@@ -236,7 +271,57 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           </div>
         </div>
 
-        {isAdmin ? (
+        <div
+          onClick={() => setPage("comms")}
+          className="cd"
+          style={{
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: 12,
+            position: "relative",
+            borderLeft: hasUrgentComms ? "3px solid var(--color-accent-red)" : undefined,
+          }}
+        >
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: "var(--color-primary)" + "22",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18,
+          }}>
+            💬
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+              Team Comms
+              {unreadComms > 0 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "Oswald",
+                    background: hasUrgentComms ? "var(--color-accent-red)" : "var(--color-primary)",
+                    color: "#fff",
+                    padding: "1px 6px",
+                    borderRadius: 8,
+                    letterSpacing: ".04em",
+                  }}
+                >
+                  {unreadComms} new
+                </span>
+              )}
+            </div>
+            <div className="dim" style={{ fontSize: 12 }}>
+              {hasUrgentComms ? "🚨 Urgent update" : unreadComms > 0 ? "New updates" : "Quick updates to the crew"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Marketing (admin) + Troubleshoot — sit on a second row now that
+          Mileage's neighbor slot is occupied by Team Comms. */}
+      <div className="g2 mb">
+        {isAdmin && (
           <div className="cd" onClick={() => setPage("marketing")} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 12 }}>
             <div style={{
               width: 36, height: 36, borderRadius: 10, flexShrink: 0,
@@ -250,21 +335,20 @@ export default function Dashboard({ setPage, openSettings }: Props) {
               <div className="dim" style={{ fontSize: 12 }}>{org?.site_content ? "Manage site" : "Build site"}</div>
             </div>
           </div>
-        ) : (
-          <div className="cd" onClick={() => setPage("troubleshoot")} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 12 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-              background: "var(--color-primary)" + "22",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <Icon name="troubleshoot" size={20} color="var(--color-primary)" />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{t("dash.troubleshoot")}</div>
-              <div className="dim" style={{ fontSize: 12 }}>{t("dash.aiDiagnosis")}</div>
-            </div>
-          </div>
         )}
+        <div className="cd" onClick={() => setPage("troubleshoot")} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 12 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: "var(--color-primary)" + "22",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Icon name="troubleshoot" size={20} color="var(--color-primary)" />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{t("dash.troubleshoot")}</div>
+            <div className="dim" style={{ fontSize: 12 }}>{t("dash.aiDiagnosis")}</div>
+          </div>
+        </div>
       </div>
     </div>
   );

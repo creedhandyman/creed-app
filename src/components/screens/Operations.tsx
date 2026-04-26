@@ -5,7 +5,7 @@ import { db } from "@/lib/supabase";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Clients from "./Clients";
-import TeamSettings from "../TeamSettings";
+import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
 import { Icon, type IconName } from "../Icon";
@@ -169,7 +169,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
       {tab === "payroll" && <Payroll />}
       {tab === "financials" && <Financials setPage={setPage} />}
       {tab === "clients" && <Clients setPage={setPage} />}
-      {tab === "team" && <TeamSettings />}
+      {tab === "team" && <TeamStats />}
       {tab === "billing" && <BillingSettings />}
       {tab === "settings" && <OpsSettings />}
     </div>

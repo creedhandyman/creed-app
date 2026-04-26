@@ -13,6 +13,7 @@ import Quests from "./screens/Quests";
 import Clients from "./screens/Clients";
 import Mileage from "./screens/Mileage";
 import Marketing from "./screens/Marketing";
+import TeamComms from "./screens/TeamComms";
 import Troubleshoot from "./screens/Troubleshoot";
 import Financials from "./screens/Financials";
 import Operations from "./screens/Operations";
@@ -78,6 +79,8 @@ export default function AppShell() {
         return isAdmin ? <Clients setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "mileage":
         return <Mileage setPage={goToPage} />;
+      case "comms":
+        return <TeamComms setPage={goToPage} />;
       case "marketing":
         return isAdmin ? <Marketing /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "troubleshoot":

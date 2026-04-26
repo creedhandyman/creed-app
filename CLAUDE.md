@@ -92,9 +92,22 @@ src/
 - `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
 - `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
 - `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;`
+- ```sql
+  CREATE TABLE team_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID,
+    author_id UUID,
+    author_name TEXT,
+    message TEXT NOT NULL,
+    urgent BOOLEAN DEFAULT FALSE,
+    read_by TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  ```
 
 (The app handles missing columns gracefully — db helpers toast the
-"column does not exist" error so the user notices.)
+"column does not exist" error so the user notices. Same for missing
+tables — Team Comms returns an empty inbox until the table is created.)
 
 ## Big systems shipped recently (for context)
 
