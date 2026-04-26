@@ -1,4 +1,4 @@
-import type { Room, RoomItem, Material } from "./types";
+import type { Room, RoomItem, Material, InspectionRoom } from "./types";
 import { db } from "./supabase";
 import { MATERIALS_DB } from "./materials-db";
 
@@ -1047,6 +1047,150 @@ export async function aiParseInspection(
 
   onProgress?.("Merging batches...");
   return mergeParseResults(partials);
+}
+
+/* ====== VOICE WALK INSPECTION ====== */
+
+export interface VoiceWalkMoment {
+  photoUrl: string;
+  transcript: string;
+  room: string | null;
+}
+
+/**
+ * Convert a voice-narrated walk-through (a list of {photo, transcript, room}
+ * moments) into structured InspectionRoom data, ready to feed into the
+ * existing inspection-review and quote pipeline.
+ *
+ * One AI call: each moment is sent as a (text + image) pair; the model
+ * groups by room and returns inspection items with name/condition/notes.
+ */
+export async function aiParseVoiceWalk(
+  moments: VoiceWalkMoment[],
+  property: string,
+  client: string,
+  onProgress?: (msg: string) => void
+): Promise<InspectionRoom[]> {
+  if (moments.length === 0) return [];
+
+  // Fetch all photos as base64 for the vision call.
+  onProgress?.(`Loading ${moments.length} photo${moments.length === 1 ? "" : "s"}...`);
+  const imageData: string[] = [];
+  for (const m of moments) {
+    try {
+      const res = await fetch(m.photoUrl);
+      const blob = await res.blob();
+      const b64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      imageData.push(b64);
+    } catch {
+      imageData.push(""); // keep array aligned with moments
+    }
+  }
+
+  // Build the message content: alternating image + text for each moment so
+  // the AI sees each photo paired with its transcript.
+  const content: Array<
+    | { type: "text"; text: string }
+    | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+  > = [];
+
+  content.push({
+    type: "text",
+    text:
+      `Property: ${property || "(unspecified)"}\n` +
+      `Client: ${client || "(unspecified)"}\n` +
+      `Below are ${moments.length} moment${moments.length === 1 ? "" : "s"} from a voice-narrated walk-through. ` +
+      `Each moment is one photo + the user's spoken description + the room they said they were in. ` +
+      `Process every moment and return JSON.\n`,
+  });
+
+  moments.forEach((m, i) => {
+    if (imageData[i]) {
+      const [header, data] = imageData[i].split(",");
+      const mediaType = header.match(/image\/([\w]+)/)?.[0] || "image/jpeg";
+      content.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data },
+      });
+    }
+    content.push({
+      type: "text",
+      text:
+        `Moment ${i + 1} — Room: ${m.room || "General"} — Transcript: "${m.transcript || "(silent — infer from photo)"}" — photoUrl: ${m.photoUrl}`,
+    });
+  });
+
+  const system = `You convert a voice-narrated property walk-through into a structured inspection report. For each moment (one photo + spoken description), produce ONE inspection item with these exact fields:
+- "name": short generic component label (e.g. "Sink/Faucet", "Walls/Ceiling", "Door/Lock", "Flooring", "Cabinets", "Toilet", "Tub/Shower", "Outlet/Switch", "Light Fixture"). Use property-inspection conventions, not specific brand names.
+- "condition": EXACTLY one of "S" (Satisfactory), "F" (Fair, minor wear), "P" (Poor, needs attention), "D" (Damaged, urgent). Infer from the transcript and photo. Default to "F" if genuinely unclear.
+- "notes": Clean, professional 1-2 sentence description suitable for an inspection report. Lightly tidy the spoken transcript — fix grammar, expand abbreviations, remove filler words — but preserve specific details (sizes, brands, locations, quantities). If the transcript is empty, describe what the photo shows.
+- "photos": array containing exactly the photoUrl provided for that moment.
+
+Group items into rooms keyed by the room name provided for each moment. Multiple moments in the same room go in the same room's items array. Output ONLY valid JSON of this shape, nothing else:
+
+{
+  "rooms": [
+    {
+      "name": "Kitchen",
+      "items": [
+        { "name": "Sink/Faucet", "condition": "P", "notes": "Faucet aerator is loose and dripping; needs tightening or replacement.", "photos": ["https://..."] }
+      ]
+    }
+  ]
+}`;
+
+  onProgress?.("Structuring with AI...");
+  const res = await fetch("/api/ai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8000,
+      system,
+      messages: [{ role: "user", content }],
+    }),
+  });
+
+  if (!res.ok) {
+    console.error("VoiceWalk AI HTTP error:", res.status, await res.text().catch(() => ""));
+    return [];
+  }
+  const data = await res.json();
+  if (data.error) {
+    console.error("VoiceWalk AI response error:", data.error);
+    return [];
+  }
+  const responseText = data.content?.[0]?.text || "";
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return [];
+  try {
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      rooms?: Array<{
+        name?: string;
+        items?: Array<{ name?: string; condition?: string; notes?: string; photos?: string[] }>;
+      }>;
+    };
+    const rooms: InspectionRoom[] = (parsed.rooms || []).map((r) => ({
+      name: r.name || "General",
+      sqft: 0,
+      items: (r.items || []).map((it) => ({
+        name: it.name || "Item",
+        condition: typeof it.condition === "string" && /^[SFPD]$/i.test(it.condition)
+          ? it.condition.toUpperCase()
+          : "F",
+        notes: it.notes || "",
+        photos: Array.isArray(it.photos) ? it.photos.filter((p): p is string => typeof p === "string") : [],
+      })),
+    }));
+    return rooms.filter((r) => r.items.length > 0);
+  } catch (e) {
+    console.error("VoiceWalk JSON parse failed:", e);
+    return [];
+  }
 }
 
 /* ====== TEXT NORMALIZATION ====== */

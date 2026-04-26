@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import ClientSelect from "../ClientSelect";
 import { Icon } from "../Icon";
+import VoiceWalk from "../VoiceWalk";
 
 /* ── Preset rooms and items ── */
 const ROOM_PRESETS: Record<string, string[]> = {
@@ -110,18 +111,10 @@ const CONDITIONS = [
   { code: "D", label: "DMG", color: "var(--color-accent-red)", bg: "#C0000022" },
 ];
 
-export interface InspectionItem {
-  name: string;
-  condition: string;
-  notes: string;
-  photos: string[]; // public URLs
-}
-
-export interface InspectionRoom {
-  name: string;
-  sqft: number;
-  items: InspectionItem[];
-}
+// Re-export shared inspection types so callers like QuoteForge/VoiceWalk
+// that import from "./Inspector" keep working.
+export type { InspectionItem, InspectionRoom } from "@/lib/types";
+import type { InspectionItem, InspectionRoom } from "@/lib/types";
 
 export interface InspectionData {
   rooms: InspectionRoom[];
@@ -135,7 +128,7 @@ interface Props {
   darkMode: boolean;
 }
 
-type Step = "rooms" | "inspect" | "review";
+type Step = "rooms" | "inspect" | "review" | "voice";
 
 export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   // Load saved state from localStorage
@@ -480,7 +473,71 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         >
           Start Inspection ({selectedRooms.length} areas) →
         </button>
+
+        {/* Alternative entry — voice-narrated walk-through. Same room
+            selection feeds the chip strip inside Voice Walk so the user can
+            tap which area they're currently in as they move through the unit. */}
+        <button
+          onClick={() => {
+            // Need rooms + property to do a useful voice walk too.
+            if (!selectedRooms.length || !property) return;
+            // Initialize roomData with empty rooms so the review step has
+            // somewhere to merge the AI-structured findings into.
+            startInspection();
+            setStep("voice");
+          }}
+          disabled={!selectedRooms.length || !property}
+          style={{
+            width: "100%",
+            padding: 12,
+            fontSize: 14,
+            marginTop: 8,
+            background: "transparent",
+            color: "var(--color-success)",
+            border: `2px solid var(--color-success)`,
+            borderRadius: 8,
+            opacity: !selectedRooms.length || !property ? 0.5 : 1,
+          }}
+        >
+          🎤 Voice Walk — Talk &amp; Photograph
+        </button>
+        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
+          Walk the unit, describe issues out loud, snap photos. AI fills the inspection.
+        </p>
       </div>
+    );
+  }
+
+  /* ═══════════════════════════════════
+     VOICE WALK
+     ═══════════════════════════════════ */
+  if (step === "voice") {
+    return (
+      <VoiceWalk
+        property={property}
+        client={client}
+        rooms={selectedRooms}
+        onComplete={(structuredRooms) => {
+          // Merge the AI-structured findings into the empty room scaffolds
+          // built by startInspection. If the AI returned a room name not in
+          // the user's selected list, append it as a custom area.
+          setRoomData((prev) => {
+            const byName: Record<string, InspectionRoom> = {};
+            prev.forEach((r) => { byName[r.name] = r; });
+            structuredRooms.forEach((sr) => {
+              if (!byName[sr.name]) byName[sr.name] = { name: sr.name, sqft: 0, items: [] };
+              byName[sr.name] = {
+                ...byName[sr.name],
+                items: [...byName[sr.name].items, ...sr.items],
+              };
+            });
+            return Object.values(byName);
+          });
+          setStep("review");
+        }}
+        onCancel={() => setStep("rooms")}
+        darkMode={darkMode}
+      />
     );
   }
 

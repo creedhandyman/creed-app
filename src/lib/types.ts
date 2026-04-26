@@ -155,6 +155,20 @@ export interface Material {
   unitPrice?: number; // per-unit price, defaults to c (lump sum) if absent
 }
 
+/** Inspection findings (Inspector + Voice Walk both produce these). */
+export interface InspectionItem {
+  name: string;       // e.g. "Sink/Faucet"
+  condition: string;  // "S" | "F" | "P" | "D"
+  notes: string;
+  photos: string[];   // public URLs
+}
+
+export interface InspectionRoom {
+  name: string;
+  sqft: number;
+  items: InspectionItem[];
+}
+
 export interface RoomItem {
   id: string;
   detail: string;
