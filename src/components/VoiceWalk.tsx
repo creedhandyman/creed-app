@@ -208,6 +208,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   // Per-room accumulated audio: concatenated chunks across all
   // pause/resume segments in that room.
   const roomAudioChunksRef = useRef<Record<string, Blob[]>>({});
+  // Callbacks waiting for the recorder's onstop to fire (and chunks to
+  // be folded). The Done / Next-Room buttons await this so we don't try
+  // to transcribe before MediaRecorder finalizes the audio.
+  const recorderStopWaitersRef = useRef<Array<() => void>>([]);
 
   // Speech support detection
   const [supported] = useState<boolean>(() => !!getSpeechRecognition());
@@ -409,8 +413,16 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
             if (room) {
               const prior = roomAudioChunksRef.current[room] || [];
               roomAudioChunksRef.current[room] = [...prior, ...recorderChunksRef.current];
+              const totalSize = roomAudioChunksRef.current[room].reduce((s, b) => s + b.size, 0);
+              console.log(`[VoiceWalk] Recorder stopped for "${room}": ${roomAudioChunksRef.current[room].length} chunks, ${totalSize} bytes total`);
             }
             recorderChunksRef.current = [];
+            // Resolve anyone waiting for this stop event (advanceRoom, finish).
+            const waiters = recorderStopWaitersRef.current;
+            recorderStopWaitersRef.current = [];
+            waiters.forEach((w) => {
+              try { w(); } catch { /* */ }
+            });
           };
           rec.start(1000);
           recorderRef.current = rec;
@@ -444,6 +456,32 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     setCameraOn(false);
     setTorchAvailable(true);
     setTorchOn(false);
+  }, []);
+
+  /** Stop the recorder and wait for its onstop to fold chunks into
+   *  roomAudioChunksRef, so callers can immediately transcribe complete
+   *  audio. Used by advanceRoom and finish to avoid the timing bug
+   *  where Whisper got an empty chunk list because the recorder was
+   *  still running when fireRoomAi ran. */
+  const stopRecorderAndWait = useCallback((): Promise<void> => {
+    return new Promise<void>((resolve) => {
+      const rec = recorderRef.current;
+      if (!rec || rec.state === "inactive") {
+        resolve();
+        return;
+      }
+      recorderStopWaitersRef.current.push(resolve);
+      try { rec.stop(); } catch { resolve(); }
+      // Hard timeout in case onstop never fires (some buggy iOS builds).
+      setTimeout(() => {
+        const waiters = recorderStopWaitersRef.current;
+        if (waiters.includes(resolve)) {
+          recorderStopWaitersRef.current = waiters.filter((w) => w !== resolve);
+          console.warn("[VoiceWalk] Recorder onstop timed out after 3s — proceeding anyway");
+          resolve();
+        }
+      }, 3000);
+    });
   }, []);
 
   const toggleTorch = useCallback(async () => {
@@ -689,6 +727,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       }
       const data = await res.json();
       const text = (data.text as string) || "";
+      console.log(`[VoiceWalk] Whisper for "${room}": audio ${blob.size}B → ${text.length} chars: "${text.slice(0, 120)}${text.length > 120 ? "…" : ""}"`);
       if (!text.trim()) {
         console.warn(`[VoiceWalk] Whisper returned empty text for "${room}".`);
       }
@@ -734,6 +773,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       }
 
       const checklist = presetItemsFor(room);
+      console.log(`[VoiceWalk] Calling AI for "${room}": ${transcript.length} chars transcript, ${photos.length} photos, ${checklist.length} checklist items`);
       const items = await aiParseVoiceWalkRoom(
         room,
         transcript,
@@ -742,6 +782,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         property,
         client
       );
+      console.log(`[VoiceWalk] AI returned ${items.length} items for "${room}":`, items.map((it) => `${it.name}[${it.condition}]`).join(", "));
       setRoomItems((prev) => ({ ...prev, [room]: items }));
       setRoomStatus((prev) => ({ ...prev, [room]: "done" }));
       roomStatusRef.current[room] = "done";
@@ -752,8 +793,15 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     }
   }, [roomRecordings, property, client, transcribeRoomAudio]);
 
-  const advanceRoom = () => {
+  const advanceRoom = async () => {
     if (!currentRoom) return;
+    // CRITICAL: stop the recorder and wait for chunks to finalize
+    // before transcribing. Otherwise Whisper gets an empty/partial
+    // audio file and AI returns nothing.
+    if (inspecting) {
+      await stopRecorderAndWait();
+      setInspecting(false);
+    }
     fireRoomAi(currentRoom);
     if (currentIdx < rooms.length - 1) {
       setCurrentIdx(currentIdx + 1);
@@ -762,9 +810,15 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   const finish = async () => {
     if (!currentRoom) return;
+    // CRITICAL: same flush — wait for the recorder to actually finalize
+    // its chunks before fireRoomAi tries to send them to Whisper.
+    if (inspecting) {
+      await stopRecorderAndWait();
+      setInspecting(false);
+    }
     setFinishing(true);
 
-    setFinishStatus("Analyzing this room...");
+    setFinishStatus("Transcribing audio with Whisper…");
     await fireRoomAi(currentRoom);
 
     setFinishStatus("Waiting for any background analysis to finish...");
