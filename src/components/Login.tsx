@@ -98,7 +98,7 @@ export default function Login() {
           >
             Field-Service Manager
             <span style={{ color: "#2E75B6", margin: "0 5px" }}>·</span>
-            A.I.-Powered Quoting
+            Self-Improving A.I.
           </p>
         </div>
 
