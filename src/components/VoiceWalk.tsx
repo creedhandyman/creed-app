@@ -39,7 +39,7 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-/* ── Keyword expansion for the per-room checklist ──────────────────── */
+/* ── Keyword expansion for the per-room checklist auto-tick ─────────── */
 const ITEM_KEYWORD_OVERRIDES: Record<string, string[]> = {
   Caulking: ["caulk", "caulking", "sealant", "seal"],
   Appliances: ["appliance", "stove", "oven", "fridge", "refrigerator", "dishwasher", "microwave", "range"],
@@ -79,6 +79,7 @@ const ITEM_KEYWORD_OVERRIDES: Record<string, string[]> = {
   Thermostat: ["thermostat"],
   "GFCI Outlets": ["gfci", "ground fault"],
   Toilet: ["toilet", "commode"],
+  Flooring: ["floor", "flooring", "carpet", "tile", "vinyl", "laminate", "hardwood"],
 };
 
 function itemKeywords(itemName: string): string[] {
@@ -131,14 +132,44 @@ function dedupOverlap(prev: string, next: string): string {
 
 /* ── Component ─────────────────────────────────────────────────────── */
 
-export interface VoiceMoment {
+interface RoomPhoto {
   id: string;
-  photoUrl: string;
-  transcript: string;
-  ts: number;
+  url: string;
+  tsRelativeMs: number; // ms from the room's recording-started instant
 }
 
+interface RoomRecording {
+  transcript: string; // single growing string for the whole room
+  photos: RoomPhoto[];
+  recordingStartedAt: number | null; // wall-clock ms when first Start happened in this room
+  totalRecordedMs: number; // accumulated across pause/resume
+  lastResumedAt: number | null; // wall-clock when current segment began (null while paused)
+}
+
+const emptyRecording = (): RoomRecording => ({
+  transcript: "",
+  photos: [],
+  recordingStartedAt: null,
+  totalRecordedMs: 0,
+  lastResumedAt: null,
+});
+
 type RoomStatus = "pending" | "analyzing" | "done" | "failed";
+
+const conditionLabel = (c?: string) => {
+  if (c === "S") return "Satisfactory";
+  if (c === "F") return "Fair";
+  if (c === "P") return "Poor";
+  if (c === "D") return "Damaged";
+  return "";
+};
+const conditionColor = (c?: string) => {
+  if (c === "S") return "var(--color-success)";
+  if (c === "F") return "var(--color-highlight)";
+  if (c === "P") return "var(--color-warning)";
+  if (c === "D") return "var(--color-accent-red)";
+  return "var(--color-primary)";
+};
 
 interface Props {
   property: string;
@@ -154,29 +185,13 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   const fileFallbackRef = useRef<HTMLInputElement>(null);
   const recogRef = useRef<SpeechRecognitionLike | null>(null);
   const recogShouldRunRef = useRef(false);
-  // Restart bookkeeping. Each new SpeechRecognition session triggers the
-  // OS "mic on" chime (especially on iOS / accessibility-enabled Android),
-  // so we want to avoid rapid-fire restarts. We track the session's start
-  // time and whether it produced any speech; sessions that die fast and
-  // empty get exponentially-backed-off restarts.
+  // Restart bookkeeping for the speech recognizer.
   const sessionStartRef = useRef(0);
   const sessionGotResultRef = useRef(false);
   const restartFailuresRef = useRef(0);
   const restartTimerRef = useRef<number | null>(null);
-  // Highest results-array index we've already added to the chunk for the
-  // current session. Some browsers (iOS Safari, certain Android builds)
-  // do NOT increment e.resultIndex correctly — they may report 0 on every
-  // event while the array grows. Iterating from resultIndex would then
-  // re-add every prior finalized utterance on each new event, which is
-  // exactly the "okay okay okay here here here" duplication the user sees.
-  // Tracking our own watermark makes us robust to that browser bug.
+  // Watermark + last-final tracking for transcript dedup. See dedupOverlap.
   const finalsProcessedThroughRef = useRef(-1);
-  // Last full finalized text we accepted into the chunk. Used to dedupe
-  // the progressive-superset pattern where consecutive finals overlap
-  // ("okay" → "okay so" → "okay so here") via dedupOverlap above.
-  // Persists across recognizer restarts so audio-buffer overlap between
-  // sessions can also be deduped, but resets on photo capture (the chunk
-  // gets snapped) and on room change (fresh context).
   const lastFinalTextRef = useRef("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -184,49 +199,37 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   // Speech support detection
   const [supported] = useState<boolean>(() => !!getSpeechRecognition());
   // Single inspecting toggle — drives mic AND camera together. Off by
-  // default so the user lands on each room with everything quiet, taps
-  // Start when ready, taps Stop when done.
+  // default. The user lands on each room with everything quiet, taps
+  // Start to begin recording, taps Stop to pause.
   const [inspecting, setInspecting] = useState(false);
-  const [liveTranscript, setLiveTranscript] = useState("");
-  const [pendingTranscript, setPendingTranscript] = useState(""); // typed-fallback buffer
-  // Per-room transcript chunk that's "owned" by the next photo capture.
-  const captureChunkRef = useRef("");
+  const [liveInterim, setLiveInterim] = useState(""); // interim words, replaced each event
+  const [pendingTyped, setPendingTyped] = useState(""); // typed-fallback buffer when speech unsupported
 
-  // Per-room transcripts for auto-checking (everything ever spoken in that room).
-  const roomTranscriptRef = useRef<Record<string, string>>({});
-  const [roomTranscriptTick, setRoomTranscriptTick] = useState(0);
-
-  // Per-room state
+  // Per-room state — ONE recording per room, append-only across pause/resume.
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [roomMoments, setRoomMoments] = useState<Record<string, VoiceMoment[]>>({});
+  const [roomRecordings, setRoomRecordings] = useState<Record<string, RoomRecording>>({});
   const [roomItems, setRoomItems] = useState<Record<string, InspectionItem[]>>({});
   const [roomStatus, setRoomStatus] = useState<Record<string, RoomStatus>>({});
-  // Mirror of roomStatus so async code (the finish-poll loop, the
-  // fireRoomAi early-skip check) reads the latest value without stale
-  // closures. Always updated in tandem with setRoomStatus.
   const roomStatusRef = useRef<Record<string, RoomStatus>>({});
   const [mentioned, setMentioned] = useState<Record<string, Set<string>>>({});
-  // Track how many moments were sent through AI most recently per room — so
-  // we don't re-fire the same call when the user revisits a "done" room
-  // without adding new photos.
-  const roomLastProcessedRef = useRef<Record<string, number>>({});
+  // Hash of (transcript-length, photo-count) for skip-replay; if a room's
+  // hash hasn't changed since last AI run, don't refire.
+  const roomLastProcessedRef = useRef<Record<string, string>>({});
+  // Tick state to force re-render when transcript grows in roomRecordings.
+  const [transcriptTick, setTranscriptTick] = useState(0);
 
   // Camera state
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(0);
-  // Flash/torch — only available on the rear camera of supported mobile
-  // browsers (most Android Chrome). track.getCapabilities() is unreliable
-  // for detection — plenty of devices that flash fine don't list torch in
-  // capabilities — so we render the button optimistically whenever the
-  // camera is on, attempt applyConstraints when tapped, and hide the
-  // button only after a failed attempt.
   const [torchAvailable, setTorchAvailable] = useState(true);
   const [torchOn, setTorchOn] = useState(false);
 
   // Final state
   const [finishing, setFinishing] = useState(false);
   const [finishStatus, setFinishStatus] = useState("");
+  // Live-elapsed clock for the recording display
+  const [nowTick, setNowTick] = useState(0);
 
   const currentRoom = rooms[currentIdx] || rooms[0] || null;
   const currentRoomRef = useRef<string | null>(currentRoom);
@@ -234,10 +237,46 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   const border = darkMode ? "#1e1e2e" : "#eee";
 
-  /* ── Speech recognition lifecycle ───────────────────────────────── */
-  // Hard-shutdown a recognizer: detach its handlers FIRST so its own
-  // onend can't queue a self-restart, then abort/stop. Used both before
-  // creating a new recognizer and from stopRecognition.
+  /* ── Recording timing helpers ────────────────────────────────────── */
+  const currentTsRelative = useCallback((rec?: RoomRecording): number => {
+    const r = rec || (currentRoom ? roomRecordings[currentRoom] : null);
+    if (!r) return 0;
+    if (r.lastResumedAt) {
+      return r.totalRecordedMs + (Date.now() - r.lastResumedAt);
+    }
+    return r.totalRecordedMs;
+  }, [currentRoom, roomRecordings]);
+
+  const fmtMs = (ms: number) => {
+    const s = Math.max(0, Math.round(ms / 1000));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${r.toString().padStart(2, "0")}`;
+  };
+
+  // Live elapsed clock — only ticks while inspecting.
+  useEffect(() => {
+    if (!inspecting) return;
+    const id = window.setInterval(() => setNowTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [inspecting]);
+
+  /* ── Transcript append ───────────────────────────────────────────── */
+  const appendTranscript = useCallback((finalText: string) => {
+    const room = currentRoomRef.current;
+    if (!room || !finalText) return;
+    setRoomRecordings((prev) => {
+      const cur = prev[room] || emptyRecording();
+      const sep = cur.transcript && !cur.transcript.endsWith(" ") ? " " : "";
+      return {
+        ...prev,
+        [room]: { ...cur, transcript: cur.transcript + sep + finalText.trim() },
+      };
+    });
+    setTranscriptTick((t) => t + 1);
+  }, []);
+
+  /* ── Speech recognition lifecycle ────────────────────────────────── */
   const killRecognizer = (rec: SpeechRecognitionLike | null) => {
     if (!rec) return;
     try { (rec as unknown as { onstart: unknown }).onstart = null; } catch { /* */ }
@@ -246,14 +285,9 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     try { rec.stop(); } catch { /* */ }
   };
 
-  // Internal builder — actually constructs and starts a recognizer.
-  // startRecognition wraps this with the "is one already running?" guard;
-  // the onend handler calls scheduleRestart() to bring up a fresh one
-  // with backoff so we don't machine-gun the OS mic-on chime.
   const buildAndStart = useCallback(() => {
     const Ctor = getSpeechRecognition();
     if (!Ctor) return;
-    // Always tear down any previous instance before spawning a new one.
     killRecognizer(recogRef.current);
     recogRef.current = null;
 
@@ -261,27 +295,15 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-US";
-    // Track whether this particular session actually produced any speech;
-    // failed/empty sessions trigger backoff so we don't restart in a
-    // tight loop and chime repeatedly.
     sessionStartRef.current = Date.now();
     sessionGotResultRef.current = false;
-    // New session => new results array on the recognizer => watermark resets.
     finalsProcessedThroughRef.current = -1;
     (r as unknown as { onstart: (() => void) | null }).onstart = () => {
       sessionStartRef.current = Date.now();
       finalsProcessedThroughRef.current = -1;
     };
     r.onresult = (e) => {
-      // Only the currently-active recognizer's events count. A
-      // previously-aborted instance whose onresult fires one last time
-      // would otherwise leak duplicate text into the transcript.
       if (recogRef.current !== r) return;
-      // We do NOT trust e.resultIndex (broken on some mobile browsers).
-      // Iterate the entire results array; for each finalized utterance
-      // past our watermark, dedupe its content against the previous
-      // final (handles progressive-superset bug + audio overlap across
-      // restarts). For interim, rebuild the preview string fresh.
       let interim = "";
       let newFinalText = "";
       let highestFinalIdx = finalsProcessedThroughRef.current;
@@ -296,81 +318,44 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
             if (toAdd) {
               newFinalText += (newFinalText ? " " : "") + toAdd;
             }
-            // Track the FULL text (not just the delta) so the next
-            // dedup compares against the right reference. If this
-            // entry is a strict superset of lastFinal, the superset
-            // is what subsequent entries will overlap with.
-            if (trimmed.length > lastFinal.length || !trimmed.startsWith(lastFinal.slice(0, Math.min(lastFinal.length, trimmed.length)))) {
+            if (
+              trimmed.length > lastFinal.length ||
+              !trimmed.startsWith(lastFinal.slice(0, Math.min(lastFinal.length, trimmed.length)))
+            ) {
               lastFinal = trimmed;
             }
             if (i > highestFinalIdx) highestFinalIdx = i;
           }
-          // else: already past our watermark — skip.
         } else {
           interim += text;
         }
       }
       finalsProcessedThroughRef.current = highestFinalIdx;
       lastFinalTextRef.current = lastFinal;
-      // Any result (even interim) means the session is healthy — reset
-      // the failure counter so the next legitimate restart is fast.
       sessionGotResultRef.current = true;
       restartFailuresRef.current = 0;
-      if (newFinalText) {
-        const padded = (captureChunkRef.current.endsWith(" ") || !captureChunkRef.current ? "" : " ") + newFinalText + " ";
-        captureChunkRef.current += padded;
-        const room = currentRoomRef.current;
-        if (room) {
-          roomTranscriptRef.current[room] = (roomTranscriptRef.current[room] || "") + padded;
-          setRoomTranscriptTick((t) => t + 1);
-        }
-      }
-      setLiveTranscript((captureChunkRef.current + (interim ? interim : "")).replace(/\s+/g, " "));
+      if (newFinalText) appendTranscript(newFinalText);
+      setLiveInterim(interim);
     };
     r.onend = () => {
-      // Only the active recognizer is allowed to schedule a restart.
-      // Stale instances (from a prior start/stop cycle) bail here so they
-      // can't run in parallel with the current one.
       if (recogRef.current !== r) return;
       if (!recogShouldRunRef.current) return;
-      // Decide how aggressively to back off based on this session's life.
-      // Each restart triggers the OS mic-on chime, so short sessions get
-      // a noticeable cooldown to keep the chime from firing every couple
-      // seconds (the iOS Safari pattern, where every utterance ends the
-      // session). Long-running sessions (Chrome desktop, etc.) restart
-      // quickly so the user doesn't lose speech.
       const lived = Date.now() - sessionStartRef.current;
       let delay: number;
       if (!sessionGotResultRef.current && lived < 4000) {
-        // Session died fast and empty (no-speech, mic permission flap,
-        // network blip). Exponential backoff.
         restartFailuresRef.current = Math.min(restartFailuresRef.current + 1, 5);
         delay = Math.min(2500, 400 * 2 ** (restartFailuresRef.current - 1));
       } else {
         restartFailuresRef.current = 0;
-        if (lived < 6000) {
-          // Healthy short session (typical iOS-Safari per-utterance
-          // ending). Wait long enough that the chime doesn't feel
-          // like a strobe. 700ms is a pause the user notices but
-          // tolerates; matches how a person taking a breath sounds.
-          delay = 700;
-        } else if (lived < 30000) {
-          delay = 250;
-        } else {
-          // Long session — engine was clearly stable. Restart fast.
-          delay = 120;
-        }
+        if (lived < 6000) delay = 700;
+        else if (lived < 30000) delay = 250;
+        else delay = 120;
       }
-      // Coalesce — only the most recent scheduled restart fires.
-      if (restartTimerRef.current !== null) {
-        clearTimeout(restartTimerRef.current);
-      }
+      if (restartTimerRef.current !== null) clearTimeout(restartTimerRef.current);
       restartTimerRef.current = window.setTimeout(() => {
         restartTimerRef.current = null;
         if (!recogShouldRunRef.current) return;
         if (recogRef.current !== r) return;
-        // Replace this dead instance with a fresh one (a new SR after end
-        // is sometimes more reliable than calling .start() on the old).
         buildAndStart();
       }, delay);
     };
@@ -380,13 +365,11 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       }
     };
     recogRef.current = r;
-    try { r.start(); } catch { /* already running */ }
-  }, []);
+    try { r.start(); } catch { /* */ }
+  }, [appendTranscript]);
 
   const startRecognition = useCallback(() => {
     if (!getSpeechRecognition()) return;
-    // If a recognizer is already alive for this session, don't spawn a
-    // second one — that's the path that produced doubled transcripts.
     if (recogRef.current && recogShouldRunRef.current) return;
     recogShouldRunRef.current = true;
     restartFailuresRef.current = 0;
@@ -404,10 +387,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     killRecognizer(prev);
   }, []);
 
-  // The inspecting flag drives BOTH mic and camera below — see the unified
-  // useEffect after the camera lifecycle helpers.
-
-  /* ── Camera lifecycle ──────────────────────────────────────────── */
+  /* ── Camera lifecycle ────────────────────────────────────────────── */
   const startCamera = useCallback(async () => {
     setCameraError(null);
     try {
@@ -421,17 +401,14 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         await videoRef.current.play().catch(() => {});
       }
       setCameraOn(true);
-      // Reset torch state for this camera session; availability is decided
-      // optimistically (button visible) and only flipped to false if the
-      // first toggle attempt fails.
       setTorchAvailable(true);
       setTorchOn(false);
     } catch (err) {
       console.warn("Camera unavailable:", err);
       setCameraError(
         err instanceof Error && err.name === "NotAllowedError"
-          ? "Camera permission denied. Use the file picker below."
-          : "Camera unavailable. Use the file picker below."
+          ? "Camera permission denied. Use the file picker."
+          : "Camera unavailable. Use the file picker."
       );
       setCameraOn(false);
       setTorchAvailable(false);
@@ -443,14 +420,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
-    setTorchAvailable(true); // reset for next camera session
+    setTorchAvailable(true);
     setTorchOn(false);
   }, []);
 
-  // Apply the torch constraint on toggle. The advanced[] array silently
-  // ignores unsupported constraints rather than throwing, so we also check
-  // the resulting track settings to confirm the toggle actually took effect.
-  // Hide the button on a confirmed-no-op so the user gets honest feedback.
   const toggleTorch = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
     if (!track) return;
@@ -459,10 +432,8 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       await (track.applyConstraints as (c: MediaTrackConstraints & { advanced?: Array<{ torch?: boolean }> }) => Promise<void>)({
         advanced: [{ torch: next }],
       });
-      // Verify the constraint actually applied by reading back settings.
       const settings = track.getSettings?.() as undefined | MediaTrackSettings & { torch?: boolean };
       if (settings && "torch" in settings && settings.torch !== next) {
-        // Apply was accepted but the device ignored it — torch isn't real here.
         setTorchAvailable(false);
         setTorchOn(false);
         useStore.getState().showToast("Flash not supported on this device", "info");
@@ -477,41 +448,78 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     }
   }, [torchOn]);
 
-  // Unified inspecting toggle: when on, start mic (if supported) + camera.
-  // When off, stop both. The user gets one obvious "▶ Start" / "■ Stop"
-  // control instead of separate confusing affordances.
+  /* ── Pause/resume bookkeeping for the current room recording ─────── */
+  const beginSegment = useCallback(() => {
+    const room = currentRoomRef.current;
+    if (!room) return;
+    setRoomRecordings((prev) => {
+      const cur = prev[room] || emptyRecording();
+      return {
+        ...prev,
+        [room]: {
+          ...cur,
+          recordingStartedAt: cur.recordingStartedAt ?? Date.now(),
+          lastResumedAt: Date.now(),
+        },
+      };
+    });
+  }, []);
+
+  const endSegment = useCallback(() => {
+    const room = currentRoomRef.current;
+    if (!room) return;
+    setRoomRecordings((prev) => {
+      const cur = prev[room];
+      if (!cur || !cur.lastResumedAt) return prev;
+      return {
+        ...prev,
+        [room]: {
+          ...cur,
+          totalRecordedMs: cur.totalRecordedMs + (Date.now() - cur.lastResumedAt),
+          lastResumedAt: null,
+        },
+      };
+    });
+    // Reset dedup ref so a stale tail from this segment doesn't get
+    // matched against the first final of the next segment.
+    lastFinalTextRef.current = "";
+  }, []);
+
+  /* ── Unified inspecting toggle: when on, mic + camera + segment.
+        When off, all three pause cleanly. ─────────────────────────── */
   useEffect(() => {
     if (inspecting) {
+      beginSegment();
       if (supported) startRecognition();
       startCamera();
     } else {
       stopRecognition();
       stopCamera();
+      endSegment();
+      setLiveInterim("");
     }
-    return () => { stopRecognition(); stopCamera(); };
+    return () => {
+      stopRecognition();
+      stopCamera();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspecting, supported]);
 
-  // When the user moves to a different room, force-stop the active session
-  // and clear the on-screen transcript so they don't see leftover speech
-  // from the previous room. The flush BEFORE setCurrentIdx (in advanceRoom
-  // and the room-strip click handler) saves any unattached speech as a
-  // voice-only moment first. By the time this effect runs, currentRoomRef
-  // already points at the new room — so we only do UI cleanup here.
+  // Force-pause when changing rooms; the new room starts cold.
   useEffect(() => {
     setInspecting(false);
-    setLiveTranscript("");
-    setPendingTranscript("");
-    captureChunkRef.current = "";
+    setLiveInterim("");
+    setPendingTyped("");
     lastFinalTextRef.current = "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx]);
 
-  /* ── Auto-check items on transcript ─────────────────────────────── */
+  /* ── Auto-tick checklist items as they're mentioned ──────────────── */
   useEffect(() => {
     if (!currentRoom) return;
-    const speechText = (roomTranscriptRef.current[currentRoom] || "").toLowerCase();
-    const fallbackText = supported ? "" : pendingTranscript.toLowerCase();
+    const rec = roomRecordings[currentRoom];
+    const speechText = (rec?.transcript || "").toLowerCase();
+    const fallbackText = supported ? "" : pendingTyped.toLowerCase();
     const text = `${speechText} ${fallbackText}`.trim();
     if (!text) return;
     const items = presetItemsFor(currentRoom);
@@ -528,7 +536,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       for (const f of found) next.add(f);
       return { ...prev, [currentRoom]: next };
     });
-  }, [currentRoom, roomTranscriptTick, pendingTranscript, supported, mentioned]);
+  }, [currentRoom, transcriptTick, pendingTyped, supported, mentioned, roomRecordings]);
 
   const toggleItem = (room: string, item: string) => {
     setMentioned((prev) => {
@@ -539,7 +547,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     });
   };
 
-  /* ── Photo capture ─────────────────────────────────────────────── */
+  /* ── Photo capture ───────────────────────────────────────────────── */
   const compressBlob = (blob: Blob, maxSize = 1200): Promise<Blob> =>
     new Promise((resolve) => {
       const url = URL.createObjectURL(blob);
@@ -561,19 +569,9 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       img.src = url;
     });
 
-  const attachMomentBlob = useCallback(async (blob: Blob) => {
+  const attachPhoto = useCallback(async (blob: Blob) => {
     const room = currentRoomRef.current;
     if (!room) return;
-    // Snap off the current transcript chunk.
-    const chunk = (captureChunkRef.current + " " + liveTranscript + " " + pendingTranscript).trim();
-    captureChunkRef.current = "";
-    setLiveTranscript("");
-    setPendingTranscript("");
-    // The chunk was just consumed — reset the dedup reference so the
-    // next final doesn't accidentally get truncated against text that's
-    // no longer in the chunk.
-    lastFinalTextRef.current = "";
-
     setUploading((c) => c + 1);
     try {
       const compressed = await compressBlob(blob);
@@ -581,57 +579,35 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       const { error } = await supabase.storage.from("receipts").upload(path, compressed);
       if (error) throw error;
       const { data } = supabase.storage.from("receipts").getPublicUrl(path);
-      setRoomMoments((prev) => ({
-        ...prev,
-        [room]: [
-          ...(prev[room] || []),
-          {
-            id: crypto.randomUUID().slice(0, 8),
-            photoUrl: data.publicUrl,
-            transcript: chunk,
-            ts: Date.now(),
+      setRoomRecordings((prev) => {
+        const cur = prev[room] || emptyRecording();
+        const ts = cur.lastResumedAt
+          ? cur.totalRecordedMs + (Date.now() - cur.lastResumedAt)
+          : cur.totalRecordedMs;
+        return {
+          ...prev,
+          [room]: {
+            ...cur,
+            // First photo before any recording: implicitly start the clock
+            // from now so subsequent photos get sane offsets.
+            recordingStartedAt: cur.recordingStartedAt ?? Date.now(),
+            photos: [
+              ...cur.photos,
+              {
+                id: crypto.randomUUID().slice(0, 8),
+                url: data.publicUrl,
+                tsRelativeMs: ts,
+              },
+            ],
           },
-        ],
-      }));
+        };
+      });
     } catch (err) {
       console.error("Voice walk photo upload failed:", err);
       useStore.getState().showToast("Photo upload failed", "error");
     }
     setUploading((c) => c - 1);
-  }, [liveTranscript, pendingTranscript]);
-
-  // If the user spoke but never snapped a photo, the captured speech would
-  // otherwise be discarded when they tap Stop, advance to the next room,
-  // jump rooms via the strip, or hit Finish. Flushing creates a voice-only
-  // moment (photoUrl: "") that the AI parser already handles — see
-  // processVoiceWalkChunk in parser.ts: it skips the image block when
-  // imageData[i] is empty and uses the transcript as the sole input.
-  const flushPendingTranscriptToMoment = useCallback(() => {
-    const room = currentRoomRef.current;
-    if (!room) return;
-    const text = (captureChunkRef.current + " " + liveTranscript + " " + pendingTranscript)
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!text) return;
-    captureChunkRef.current = "";
-    setLiveTranscript("");
-    setPendingTranscript("");
-    lastFinalTextRef.current = "";
-    setRoomMoments((prev) => ({
-      ...prev,
-      [room]: [
-        ...(prev[room] || []),
-        {
-          id: crypto.randomUUID().slice(0, 8),
-          photoUrl: "", // voice-only — no photo yet
-          transcript: text,
-          ts: Date.now(),
-        },
-      ],
-    }));
-    // Force re-fire of AI on the next advance now that we have new content.
-    delete roomLastProcessedRef.current[room];
-  }, [liveTranscript, pendingTranscript]);
+  }, []);
 
   const snapFromVideo = async () => {
     const video = videoRef.current;
@@ -645,32 +621,38 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     canvas.getContext("2d")!.drawImage(video, 0, 0);
     const blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.85));
     if (!blob) return;
-    await attachMomentBlob(blob);
+    await attachPhoto(blob);
   };
 
   const onFallbackFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
-    for (const f of Array.from(files)) await attachMomentBlob(f);
+    for (const f of Array.from(files)) await attachPhoto(f);
     if (fileFallbackRef.current) fileFallbackRef.current.value = "";
   };
 
-  /* ── Per-room AI processing (background) ────────────────────────── */
+  /* ── Per-room AI processing (background) ─────────────────────────── */
   const fireRoomAi = useCallback(async (room: string) => {
-    const moments = roomMoments[room] || [];
-    if (moments.length === 0) return;
-    // Skip if we've already processed exactly this set of moments.
+    const rec = roomRecordings[room];
+    if (!rec) return;
+    const transcript = (rec.transcript || "").trim();
+    const photos = rec.photos;
+    if (transcript.length < 5 && photos.length === 0) return;
+    const sig = `${transcript.length}|${photos.length}`;
     if (
-      roomLastProcessedRef.current[room] === moments.length &&
+      roomLastProcessedRef.current[room] === sig &&
       roomStatusRef.current[room] === "done"
     ) return;
-    roomLastProcessedRef.current[room] = moments.length;
+    roomLastProcessedRef.current[room] = sig;
     setRoomStatus((prev) => ({ ...prev, [room]: "analyzing" }));
     roomStatusRef.current[room] = "analyzing";
     try {
+      const checklist = presetItemsFor(room);
       const items = await aiParseVoiceWalkRoom(
         room,
-        moments.map((m) => ({ photoUrl: m.photoUrl, transcript: m.transcript, room })),
+        transcript,
+        photos.map((p) => ({ url: p.url, tsRelativeMs: p.tsRelativeMs })),
+        checklist,
         property,
         client
       );
@@ -682,15 +664,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       setRoomStatus((prev) => ({ ...prev, [room]: "failed" }));
       roomStatusRef.current[room] = "failed";
     }
-  }, [roomMoments, property, client]);
+  }, [roomRecordings, property, client]);
 
   const advanceRoom = () => {
     if (!currentRoom) return;
-    // Save any unattached speech as a voice-only moment BEFORE leaving the
-    // room — otherwise it'd be wiped by the currentIdx-change effect.
-    flushPendingTranscriptToMoment();
-    // Fire AI for the room being left (if it has moments and isn't already
-    // analyzed against this exact moment count).
     fireRoomAi(currentRoom);
     if (currentIdx < rooms.length - 1) {
       setCurrentIdx(currentIdx + 1);
@@ -699,54 +676,48 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   const finish = async () => {
     if (!currentRoom) return;
-    // Save any unattached speech in the active room before we lock things in.
-    flushPendingTranscriptToMoment();
     setFinishing(true);
 
-    // Fire AI for the current room first.
     setFinishStatus("Analyzing this room...");
     await fireRoomAi(currentRoom);
 
-    // Wait for any rooms still analyzing to settle. Poll the ref (not the
-    // captured state) so we see updates that happened after this function
-    // started.
     setFinishStatus("Waiting for any background analysis to finish...");
     const stillAnalyzing = () =>
       Object.values(roomStatusRef.current).some((s) => s === "analyzing");
-    let safety = 120; // 60 seconds max
+    let safety = 120;
     while (stillAnalyzing() && safety-- > 0) {
       await new Promise((res) => setTimeout(res, 500));
     }
 
     setFinishStatus("Building inspection...");
-    // Build final InspectionRoom[] from accumulated items.
     const out: InspectionRoom[] = [];
     for (const room of rooms) {
       const items = roomItems[room];
+      const rec = roomRecordings[room];
+      const hasContent = rec && (rec.transcript.trim().length > 0 || rec.photos.length > 0);
       if (items && items.length > 0) {
         out.push({ name: room, sqft: 0, items });
         continue;
       }
-      // Fall back to raw moments if AI didn't (or hasn't) produced items.
-      const fallbackMoments = roomMoments[room] || [];
-      if (fallbackMoments.length > 0) {
+      // AI returned nothing but the user did record content here — surface a
+      // single placeholder so their work isn't lost.
+      if (hasContent) {
         out.push({
           name: room,
           sqft: 0,
-          items: fallbackMoments.map((m, i) => ({
-            name: `Voice note ${i + 1}`,
-            condition: "F",
-            notes: m.transcript || "(no description)",
-            // Voice-only moments have no photoUrl — emit an empty array
-            // rather than [""] so the inspection report doesn't try to
-            // render a broken image.
-            photos: m.photoUrl ? [m.photoUrl] : [],
-          })),
+          items: [
+            {
+              name: "General",
+              condition: "F",
+              notes: rec.transcript.trim().slice(0, 240) || "(photos captured, no narration)",
+              photos: rec.photos.map((p) => p.url),
+            },
+          ],
         });
       }
     }
     if (out.length === 0) {
-      useStore.getState().showToast("No moments captured — nothing to build", "warning");
+      useStore.getState().showToast("No content captured — nothing to build", "warning");
       setFinishing(false);
       return;
     }
@@ -756,6 +727,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   /* ── Render ────────────────────────────────────────────────────── */
 
   if (finishing) {
+    const totalPhotos = Object.values(roomRecordings).reduce((a, r) => a + r.photos.length, 0);
     return (
       <div className="fi" style={{ textAlign: "center", padding: "40px 20px" }}>
         <div style={{ fontSize: 48, marginBottom: 12 }}>🤖</div>
@@ -763,7 +735,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           {finishStatus || "Finishing..."}
         </h3>
         <p className="dim" style={{ fontSize: 12 }}>
-          {Object.values(roomMoments).reduce((a, b) => a + b.length, 0)} photos · {rooms.length} rooms
+          {totalPhotos} photo{totalPhotos === 1 ? "" : "s"} · {rooms.length} room{rooms.length === 1 ? "" : "s"}
         </p>
       </div>
     );
@@ -771,8 +743,20 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   const items = currentRoom ? presetItemsFor(currentRoom) : [];
   const checkedSet = currentRoom ? mentioned[currentRoom] || new Set<string>() : new Set<string>();
-  const thisRoomMoments = currentRoom ? roomMoments[currentRoom] || [] : [];
+  const currentRec = currentRoom ? roomRecordings[currentRoom] : undefined;
+  const thisRoomPhotos = currentRec?.photos || [];
+  const thisRoomItems = currentRoom ? roomItems[currentRoom] || [] : [];
   const isLastRoom = currentIdx === rooms.length - 1;
+
+  // AI-derived condition lookup for the active room's checklist.
+  const itemByName = new Map<string, InspectionItem>();
+  for (const it of thisRoomItems) {
+    itemByName.set(it.name, it);
+  }
+
+  const elapsedDisplay = currentRec ? fmtMs(currentTsRelative(currentRec)) : "0:00";
+  // Avoid unused warning on nowTick — it just forces re-render.
+  void nowTick;
 
   const statusColor = (s?: RoomStatus) => {
     if (s === "done") return "var(--color-success)";
@@ -801,7 +785,11 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <button className="bo" onClick={() => { stopCamera(); stopRecognition(); onCancel(); }} style={{ fontSize: 12, padding: "4px 8px" }}>← Cancel</button>
+        <button
+          className="bo"
+          onClick={() => { stopCamera(); stopRecognition(); onCancel(); }}
+          style={{ fontSize: 12, padding: "4px 8px" }}
+        >← Cancel</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
           <span>🎤</span> Voice Walk
         </h2>
@@ -818,14 +806,13 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
             const status = roomStatus[r];
             const total = presetItemsFor(r).length;
             const checked = mentioned[r]?.size || 0;
-            const photoCount = (roomMoments[r] || []).length;
+            const photoCount = (roomRecordings[r]?.photos.length) || 0;
             const c = statusColor(status);
             return (
               <button
                 key={r}
                 onClick={() => {
-                  if (idx !== currentIdx) flushPendingTranscriptToMoment();
-                  setCurrentIdx(idx);
+                  if (idx !== currentIdx) setCurrentIdx(idx);
                 }}
                 style={{
                   padding: "5px 10px",
@@ -868,289 +855,283 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         >
           <b style={{ color: "var(--color-warning)" }}>Voice not available</b>
           <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
-            This browser doesn&apos;t support speech recognition. You can still snap photos and type a description below each — items will auto-check the same way.
+            This browser doesn&apos;t support speech recognition. Type your narration in the box below; AI will use it the same way.
           </div>
         </div>
       )}
 
-      {/* Active room — title + checklist */}
+      {/* PRIMARY: room title + checklist with AI-derived conditions */}
       {currentRoom && (
-        <div className="cd mb" style={{ padding: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <h3 style={{ fontSize: 16, color: "var(--color-primary)", margin: 0 }}>{currentRoom}</h3>
+        <div className="cd mb" style={{ padding: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h3 style={{ fontSize: 17, color: "var(--color-primary)", margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {currentRoom}
+              {roomStatus[currentRoom] === "analyzing" && (
+                <span style={{ fontSize: 11, color: "var(--color-highlight)", fontFamily: "Oswald" }}>· analyzing…</span>
+              )}
+              {roomStatus[currentRoom] === "done" && (
+                <span style={{ fontSize: 11, color: "var(--color-success)", fontFamily: "Oswald" }}>· {thisRoomItems.length} item{thisRoomItems.length === 1 ? "" : "s"}</span>
+              )}
+            </h3>
             {items.length > 0 && (
               <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald" }}>
-                {checkedSet.size}/{items.length} mentioned
+                {checkedSet.size}/{items.length} mentioned · {thisRoomPhotos.length} 📷
               </span>
             )}
           </div>
-          {items.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+
+          {items.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {items.map((item) => {
                 const isChecked = checkedSet.has(item);
+                const ai = itemByName.get(item);
+                const cond = ai?.condition;
                 return (
-                  <button
+                  <div
                     key={item}
-                    onClick={() => toggleItem(currentRoom, item)}
                     style={{
-                      padding: "3px 8px",
-                      borderRadius: 12,
-                      fontSize: 11,
-                      background: isChecked ? "var(--color-success)" : "transparent",
-                      color: isChecked ? "#fff" : "#888",
-                      border: `1px solid ${isChecked ? "var(--color-success)" : darkMode ? "#1e1e2e" : "#ddd"}`,
-                      whiteSpace: "nowrap",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 6,
+                      padding: "5px 7px",
+                      borderRadius: 6,
+                      background: ai
+                        ? `${conditionColor(cond)}14`
+                        : isChecked
+                          ? darkMode ? "rgba(38,166,91,0.10)" : "rgba(38,166,91,0.06)"
+                          : "transparent",
+                      border: `1px solid ${ai
+                        ? `${conditionColor(cond)}50`
+                        : isChecked
+                          ? "var(--color-success)50"
+                          : darkMode ? "#1e1e2e" : "#e8e8e8"}`,
                     }}
                   >
-                    {isChecked ? "✓ " : "○ "}{item}
-                  </button>
+                    <button
+                      onClick={() => toggleItem(currentRoom, item)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: ai ? conditionColor(cond) : (isChecked ? "var(--color-success)" : "#888"),
+                        cursor: "pointer",
+                        fontSize: 14,
+                        padding: 0,
+                        lineHeight: 1,
+                        marginTop: 1,
+                      }}
+                      aria-label={isChecked ? "Unmark" : "Mark"}
+                    >
+                      {isChecked || ai ? "✓" : "○"}
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: ai ? 600 : 400, color: ai ? conditionColor(cond) : "inherit" }}>
+                          {item}
+                        </span>
+                        {ai && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontFamily: "Oswald",
+                              background: conditionColor(cond),
+                              color: "#fff",
+                              padding: "1px 6px",
+                              borderRadius: 8,
+                              letterSpacing: ".04em",
+                              flexShrink: 0,
+                            }}
+                            title={conditionLabel(cond)}
+                          >
+                            {cond}
+                          </span>
+                        )}
+                      </div>
+                      {ai?.notes && (
+                        <div style={{ fontSize: 11, color: "#666", marginTop: 1, lineHeight: 1.3 }}>
+                          {ai.notes}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Single Start/Stop control — drives mic + camera together so the
-          user always knows whether the inspection is "live" or paused.
-          Stop also flushes any unattached speech to a voice-only moment so
-          progress isn't lost. */}
-      <div className="cd mb" style={{ padding: 10, textAlign: "center" }}>
-        <button
-          onClick={() => {
-            if (inspecting) flushPendingTranscriptToMoment();
-            setInspecting((v) => !v);
-          }}
-          style={{
-            padding: "10px 22px",
-            fontSize: 14,
-            fontFamily: "Oswald",
-            background: inspecting ? "var(--color-accent-red)" : "var(--color-success)",
-            color: "#fff",
-            borderRadius: 22,
-            border: "none",
-            animation: inspecting ? "vw-pulse 1.5s ease-in-out infinite" : "none",
-            letterSpacing: ".04em",
-          }}
-        >
-          {inspecting ? "■ Stop Inspecting" : "▶ Start Inspecting"}
-        </button>
-        <style>{`@keyframes vw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.75; } }`}</style>
-        <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
-          {inspecting
-            ? "Mic + camera live. Talk through what you see, snap photos."
-            : "Tap to turn on the mic and camera for this room."}
-        </div>
-      </div>
-
-      {/* Live transcript — only shown while inspecting (so a stale transcript
-          from the last room doesn't linger after you advance). */}
-      {inspecting && (
-        <div className="cd mb" style={{ padding: 10 }}>
-          <div className="dim" style={{ fontSize: 11, marginBottom: 6, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-            TRANSCRIPT
-          </div>
-          <div
-            style={{
-              background: darkMode ? "#0d0d14" : "#f7f7fa",
-              border: `1px dashed ${border}`,
-              borderRadius: 8,
-              padding: 8,
-              minHeight: 50,
-              fontSize: 12,
-              color: liveTranscript || pendingTranscript ? "inherit" : "#888",
-            }}
-          >
-            {supported ? (
-              liveTranscript || "Listening… describe what you see, then tap 📸 to attach a photo."
-            ) : (
-              <textarea
-                value={pendingTranscript}
-                onChange={(e) => setPendingTranscript(e.target.value)}
-                placeholder="Type a description for the next photo..."
-                style={{
-                  width: "100%",
-                  background: "transparent",
-                  border: "none",
-                  resize: "vertical",
-                  minHeight: 48,
-                  fontSize: 12,
-                  color: "inherit",
-                }}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Inline camera preview + snap — only mounted while inspecting so
-          the camera light doesn't come on the moment you enter the screen. */}
-      {inspecting && (
-      <div className="cd mb" style={{ padding: 10 }}>
-        <div className="dim" style={{ fontSize: 11, marginBottom: 6, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-          CAMERA
-        </div>
-        <div
-          style={{
-            position: "relative",
-            background: "#000",
-            borderRadius: 8,
-            overflow: "hidden",
-            // Portrait aspect ratio fills more of a phone screen than the
-            // old landscape 4:3 — about 1.3× taller for the same width.
-            aspectRatio: "3 / 4",
-            marginBottom: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: cameraOn ? "block" : "none",
-            }}
-          />
-          {!cameraOn && (
-            <div style={{ color: "#bbb", fontSize: 12, padding: 16, textAlign: "center" }}>
-              {cameraError || "Starting camera..."}
+          ) : (
+            <div className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
+              No standard checklist for this room — describe what you see.
             </div>
           )}
-          {/* Torch toggle overlay — top-right of the preview. Shown
-              optimistically when the camera is on; if the first tap turns
-              out to be a no-op (device doesn't actually support flash),
-              the button hides itself with a toast for honest feedback. */}
-          {cameraOn && torchAvailable && (
-            <button
-              onClick={toggleTorch}
-              aria-label={torchOn ? "Turn flash off" : "Turn flash on"}
-              title={torchOn ? "Flash on" : "Flash off"}
+        </div>
+      )}
+
+      {/* SECONDARY: camera preview + snap button — ONLY mounted while inspecting */}
+      {inspecting && (
+        <div className="cd mb" style={{ padding: 10 }}>
+          <div
+            style={{
+              position: "relative",
+              background: "#000",
+              borderRadius: 8,
+              overflow: "hidden",
+              aspectRatio: "3 / 4",
+              marginBottom: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: cameraOn ? "block" : "none",
+              }}
+            />
+            {!cameraOn && (
+              <div style={{ color: "#bbb", fontSize: 12, padding: 16, textAlign: "center" }}>
+                {cameraError || "Starting camera..."}
+              </div>
+            )}
+            {cameraOn && torchAvailable && (
+              <button
+                onClick={toggleTorch}
+                aria-label={torchOn ? "Turn flash off" : "Turn flash on"}
+                title={torchOn ? "Flash on" : "Flash off"}
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  border: "none",
+                  background: torchOn ? "rgba(255,204,0,0.95)" : "rgba(0,0,0,0.55)",
+                  color: torchOn ? "#1a1a1a" : "#fff",
+                  fontSize: 20,
+                  lineHeight: 1,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: torchOn ? "0 0 16px rgba(255,204,0,0.6)" : "0 1px 4px rgba(0,0,0,0.4)",
+                }}
+              >
+                {torchOn ? "⚡" : "🔦"}
+              </button>
+            )}
+            {/* Live recording indicator overlay */}
+            <div
               style={{
                 position: "absolute",
                 top: 10,
-                right: 10,
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                border: "none",
-                background: torchOn ? "rgba(255,204,0,0.95)" : "rgba(0,0,0,0.55)",
-                color: torchOn ? "#1a1a1a" : "#fff",
-                fontSize: 20,
-                lineHeight: 1,
-                cursor: "pointer",
+                left: 10,
+                background: "rgba(0,0,0,0.6)",
+                color: "#fff",
+                fontSize: 11,
+                fontFamily: "Oswald",
+                padding: "3px 8px",
+                borderRadius: 12,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                boxShadow: torchOn ? "0 0 16px rgba(255,204,0,0.6)" : "0 1px 4px rgba(0,0,0,0.4)",
+                gap: 5,
+                letterSpacing: ".06em",
               }}
             >
-              {torchOn ? "⚡" : "🔦"}
-            </button>
-          )}
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button
-            onClick={snapFromVideo}
-            disabled={!cameraOn}
-            style={{
-              flex: 1,
-              padding: "10px",
-              fontSize: 14,
-              fontFamily: "Oswald",
-              background: cameraOn ? "var(--color-primary)" : "#888",
-              color: "#fff",
-              borderRadius: 8,
-              border: "none",
-              opacity: cameraOn ? 1 : 0.5,
-            }}
-          >
-            📸 Snap &amp; Attach
-          </button>
-          {!cameraOn ? (
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "var(--color-accent-red)",
+                  animation: "vw-pulse 1.5s ease-in-out infinite",
+                }}
+              />
+              REC {elapsedDisplay}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
             <button
-              onClick={() => fileFallbackRef.current?.click()}
-              className="bo"
-              style={{ fontSize: 12, padding: "10px 14px" }}
+              onClick={snapFromVideo}
+              disabled={!cameraOn || uploading > 0}
+              style={{
+                flex: 1,
+                padding: "12px",
+                fontSize: 15,
+                fontFamily: "Oswald",
+                background: cameraOn ? "var(--color-primary)" : "#888",
+                color: "#fff",
+                borderRadius: 8,
+                border: "none",
+                opacity: cameraOn ? 1 : 0.5,
+                letterSpacing: ".04em",
+              }}
             >
-              📁 File
+              📸 Snap Photo
             </button>
-          ) : (
             <button
               onClick={() => fileFallbackRef.current?.click()}
               className="bo"
-              style={{ fontSize: 11, padding: "6px 10px" }}
+              style={{ fontSize: 12, padding: "10px 12px" }}
               title="Pick from gallery instead"
             >
               📁
             </button>
+          </div>
+          {uploading > 0 && (
+            <div style={{ fontSize: 11, color: "var(--color-primary)", marginTop: 6, textAlign: "center" }}>
+              Uploading {uploading} photo{uploading === 1 ? "" : "s"}…
+            </div>
           )}
         </div>
-        {uploading > 0 && (
-          <div style={{ fontSize: 11, color: "var(--color-primary)", marginTop: 6, textAlign: "center" }}>
-            Uploading {uploading} photo{uploading === 1 ? "" : "s"}…
-          </div>
-        )}
-      </div>
       )}
 
-      {/* This room's captured moments — small thumb strip */}
-      {thisRoomMoments.length > 0 && (
+      {/* This room's captured photos — small thumb strip */}
+      {thisRoomPhotos.length > 0 && (
         <div className="cd mb" style={{ padding: 10 }}>
           <div className="dim" style={{ fontSize: 11, marginBottom: 6, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-            CAPTURED IN {currentRoom?.toUpperCase()} ({thisRoomMoments.length})
+            PHOTOS IN {currentRoom?.toUpperCase()} ({thisRoomPhotos.length})
           </div>
           <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
-            {thisRoomMoments.map((m) => (
-              <div key={m.id} style={{ position: "relative", flexShrink: 0 }}>
-                {m.photoUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={m.photoUrl}
-                    alt=""
-                    title={m.transcript || "(no description)"}
-                    style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6 }}
-                  />
-                ) : (
-                  /* Voice-only moment — no photo. Render a mic-marked tile
-                     with the transcript previewed inline so the user can
-                     see at a glance what was captured. */
-                  <div
-                    title={m.transcript || "(voice note)"}
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: 6,
-                      background: "var(--color-primary)",
-                      color: "#fff",
-                      padding: 4,
-                      fontSize: 9,
-                      lineHeight: 1.15,
-                      overflow: "hidden",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 2,
-                    }}
-                  >
-                    <span style={{ fontSize: 14, lineHeight: 1 }}>🎤</span>
-                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {(m.transcript || "Voice note").slice(0, 60)}
-                    </span>
-                  </div>
-                )}
+            {thisRoomPhotos.map((p) => (
+              <div key={p.id} style={{ position: "relative", flexShrink: 0 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={p.url}
+                  alt=""
+                  title={`+${fmtMs(p.tsRelativeMs)}`}
+                  style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6 }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 2,
+                    left: 2,
+                    fontSize: 9,
+                    fontFamily: "Oswald",
+                    background: "rgba(0,0,0,0.6)",
+                    color: "#fff",
+                    padding: "0 4px",
+                    borderRadius: 3,
+                  }}
+                >
+                  +{fmtMs(p.tsRelativeMs)}
+                </div>
                 <button
                   onClick={() => {
                     if (!currentRoom) return;
-                    setRoomMoments((prev) => ({
-                      ...prev,
-                      [currentRoom]: (prev[currentRoom] || []).filter((x) => x.id !== m.id),
-                    }));
-                    // Force re-fire on next advance.
+                    setRoomRecordings((prev) => {
+                      const cur = prev[currentRoom];
+                      if (!cur) return prev;
+                      return {
+                        ...prev,
+                        [currentRoom]: { ...cur, photos: cur.photos.filter((x) => x.id !== p.id) },
+                      };
+                    });
                     delete roomLastProcessedRef.current[currentRoom];
                   }}
                   style={{
@@ -1175,6 +1156,103 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           </div>
         </div>
       )}
+
+      {/* Live transcript — compact peek strip while inspecting (so it doesn't
+          dominate the screen). Below this is the typed-fallback for browsers
+          without speech support. */}
+      {inspecting && supported && (
+        <div
+          className="cd mb"
+          style={{
+            padding: "6px 10px",
+            background: darkMode ? "#0d0d14" : "#f7f7fa",
+            border: `1px dashed ${border}`,
+            fontSize: 11,
+            color: "#888",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            minHeight: 28,
+          }}
+        >
+          <span style={{ fontFamily: "Oswald", letterSpacing: ".06em", flexShrink: 0 }}>HEARING</span>
+          <span style={{
+            flex: 1,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            color: liveInterim || (currentRec?.transcript) ? "inherit" : "#888",
+            fontStyle: liveInterim ? "italic" : "normal",
+          }}>
+            {liveInterim || currentRec?.transcript?.split(/\s+/).slice(-12).join(" ") || "Listening…"}
+          </span>
+        </div>
+      )}
+      {!supported && (
+        <div className="cd mb" style={{ padding: 10 }}>
+          <div className="dim" style={{ fontSize: 11, marginBottom: 4, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+            TYPE YOUR NARRATION
+          </div>
+          <textarea
+            value={pendingTyped}
+            onChange={(e) => {
+              setPendingTyped(e.target.value);
+              // Mirror the typed text into the room's transcript so AI sees it.
+              if (currentRoom) {
+                setRoomRecordings((prev) => {
+                  const cur = prev[currentRoom] || emptyRecording();
+                  return {
+                    ...prev,
+                    [currentRoom]: { ...cur, transcript: e.target.value },
+                  };
+                });
+                setTranscriptTick((t) => t + 1);
+              }
+            }}
+            placeholder="The flooring is dirty, needs cleaning. The toilet runs after flushing. The sink leaks under the vanity..."
+            style={{
+              width: "100%",
+              background: darkMode ? "#0d0d14" : "#f7f7fa",
+              border: `1px dashed ${border}`,
+              borderRadius: 8,
+              padding: 8,
+              minHeight: 70,
+              fontSize: 12,
+              color: "inherit",
+              resize: "vertical",
+            }}
+          />
+        </div>
+      )}
+
+      {/* PRIMARY ACTION: single Start/Stop pill */}
+      <div className="cd mb" style={{ padding: 10, textAlign: "center" }}>
+        <button
+          onClick={() => setInspecting((v) => !v)}
+          style={{
+            padding: "12px 28px",
+            fontSize: 15,
+            fontFamily: "Oswald",
+            background: inspecting ? "var(--color-accent-red)" : "var(--color-success)",
+            color: "#fff",
+            borderRadius: 24,
+            border: "none",
+            animation: inspecting ? "vw-pulse 1.5s ease-in-out infinite" : "none",
+            letterSpacing: ".04em",
+            minWidth: 220,
+          }}
+        >
+          {inspecting ? "■ Pause Recording" : (currentRec && currentRec.totalRecordedMs > 0 ? "▶ Resume Recording" : "▶ Start Recording")}
+        </button>
+        <style>{`@keyframes vw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }`}</style>
+        <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+          {inspecting
+            ? "Mic + camera live. Talk through what you see, snap photos as you go."
+            : currentRec && currentRec.totalRecordedMs > 0
+              ? `${elapsedDisplay} recorded · tap to add more.`
+              : "Tap to start a single continuous recording for this room."}
+        </div>
+      </div>
 
       {/* Advance / Finish */}
       <button

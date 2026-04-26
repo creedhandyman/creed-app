@@ -1203,17 +1203,166 @@ export async function aiParseVoiceWalk(
 }
 
 /**
- * AI-structure one room's worth of voice-walk moments. Public so the new
- * per-room flow can fire each room's analysis as soon as the user moves
- * on (background processing while they walk the next room).
+ * NEW per-room signature: one continuous transcript + an array of
+ * timestamped photos + the room's checklist. AI fills the checklist
+ * with conditions and notes instead of producing per-photo memos.
+ *
+ * Photos carry `tsRelativeMs` (ms since recording start) so the model
+ * can correlate "what was being said when this photo was taken".
  */
+export interface VoiceWalkPhoto {
+  url: string;
+  tsRelativeMs: number;
+}
+
 export async function aiParseVoiceWalkRoom(
   roomName: string,
-  moments: VoiceWalkMoment[],
+  transcript: string,
+  photos: VoiceWalkPhoto[],
+  checklist: string[],
   property: string,
   client: string
 ): Promise<InspectionRoom["items"]> {
-  return processVoiceWalkChunk(roomName, moments, property, client);
+  return processVoiceWalkRoom(roomName, transcript, photos, checklist, property, client);
+}
+
+/** New flow: transcript + timestamped photos + checklist → InspectionItems. */
+async function processVoiceWalkRoom(
+  roomName: string,
+  transcript: string,
+  photos: VoiceWalkPhoto[],
+  checklist: string[],
+  property: string,
+  client: string
+): Promise<InspectionRoom["items"]> {
+  // Skip work if there's nothing to analyze.
+  const cleanTranscript = (transcript || "").trim();
+  if (!cleanTranscript && photos.length === 0) return [];
+
+  // Fetch all photos as base64 for the vision call.
+  const imageData: string[] = [];
+  for (const p of photos) {
+    try {
+      const res = await fetch(p.url);
+      const blob = await res.blob();
+      const b64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      imageData.push(b64);
+    } catch {
+      imageData.push("");
+    }
+  }
+
+  const fmtTime = (ms: number) => {
+    const s = Math.max(0, Math.round(ms / 1000));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${r.toString().padStart(2, "0")}`;
+  };
+
+  const content: Array<
+    | { type: "text"; text: string }
+    | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+  > = [];
+
+  const checklistSection = checklist.length
+    ? `\nStandard checklist for this room (use these exact names when applicable):\n${checklist.map((c) => `- ${c}`).join("\n")}\n`
+    : `\n(No standard checklist for this room — infer item names from what the inspector mentioned.)\n`;
+
+  content.push({
+    type: "text",
+    text:
+      `Property: ${property || "(unspecified)"}\n` +
+      `Client: ${client || "(unspecified)"}\n` +
+      `Room: ${roomName}\n` +
+      checklistSection +
+      `\nFull transcript of the inspector's narration in this room:\n"""\n${cleanTranscript || "(no narration captured)"}\n"""\n\n` +
+      `${photos.length} photo${photos.length === 1 ? "" : "s"} follow${photos.length === 1 ? "s" : ""}, in capture order. Each photo's caption marks when it was taken (m:ss into the recording) so you can correlate it with the transcript.\n`,
+  });
+
+  photos.forEach((p, i) => {
+    if (imageData[i]) {
+      const [header, data] = imageData[i].split(",");
+      const mediaType = header.match(/image\/([\w]+)/)?.[0] || "image/jpeg";
+      content.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data },
+      });
+    }
+    content.push({
+      type: "text",
+      text: `Photo ${i + 1} — captured at +${fmtTime(p.tsRelativeMs)} — ${p.url}`,
+    });
+  });
+
+  const system = `You analyze ONE continuous voice-narrated walk-through of a single room with timestamped photos. Your job is to convert the narration + photos into structured inspection items keyed to the room's standard checklist.
+
+OUTPUT one InspectionItem per checklist entry the inspector ACTUALLY mentioned (in the transcript) or that's clearly visible-with-an-issue in a photo. OMIT checklist items that were not addressed at all — assume satisfactory by default.
+
+For each produced item:
+- "name": MUST match a checklist entry verbatim when one applies (e.g. "Flooring", "Walls/Ceiling", "Sink/Faucet"). If the inspector clearly raised a non-checklist issue (a built-in bookcase, an exterior shed door, etc.), use a short generic component label instead. Don't invent items the inspector didn't address.
+- "condition": EXACTLY one of:
+  - "S" — Satisfactory. No issues mentioned, or "looks good", "fine", "no issues".
+  - "F" — Fair. Light wear: "dirty", "needs cleaning", "stained", "scuffed", "minor wear", "could use a refresh".
+  - "P" — Poor. Needs attention: "broken", "doesn't work", "missing", "loose", "leaking", "torn", "cracked".
+  - "D" — Damaged. Urgent / safety / major: "shattered", "rotted", "exposed wires", "fell off", "hazard", "water damage".
+- "notes": A clean, professional 1–2 sentence finding suitable for an inspection report. NOT the full transcript verbatim — extract just what's relevant to this item, fix grammar, expand abbreviations, drop filler ("um", "okay so", "this thing is"). Preserve specific details (sizes, locations, quantities, colors) when stated.
+- "photos": array of photo URLs that show this item. Match by what's visible in the photo and by what was being said around the time the photo was captured (the photo captions tell you when). A photo can belong to multiple items if appropriate; an item can have zero photos if it was only spoken about.
+
+RULES:
+- DO NOT fabricate. If a checklist item wasn't mentioned and isn't visibly damaged in any photo, OMIT it — do not invent a default "S" entry. (We assume omitted items are satisfactory.)
+- DO NOT create catch-all "Voice note" / "Recording" / "General" items. Every output item must correspond to a real component the inspector addressed.
+- If a single transcript clause covers multiple items ("the floor is dirty and the walls have scuffs"), split into separate items.
+- If the transcript was empty but a photo clearly shows damage, include the item with appropriate condition inferred from the photo alone.
+
+Output ONLY valid JSON of this shape:
+
+{
+  "items": [
+    { "name": "Flooring", "condition": "F", "notes": "Carpet is heavily soiled and shows multiple stains; needs deep cleaning.", "photos": ["https://..."] }
+  ]
+}`;
+
+  const res = await fetch("/api/ai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4000,
+      system,
+      messages: [{ role: "user", content }],
+    }),
+  });
+
+  if (!res.ok) {
+    console.error("VoiceWalkRoom AI HTTP error:", res.status, await res.text().catch(() => ""));
+    return [];
+  }
+  const data = await res.json();
+  if (data.error) {
+    console.error("VoiceWalkRoom AI response error:", data.error);
+    return [];
+  }
+  const responseText = data.content?.[0]?.text || "";
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return [];
+  try {
+    const parsed = JSON.parse(jsonMatch[0]) as { items?: VoiceWalkItem[] };
+    return (parsed.items || []).map((it) => ({
+      name: it.name || "Item",
+      condition: typeof it.condition === "string" && /^[SFPD]$/i.test(it.condition)
+        ? it.condition.toUpperCase()
+        : "F",
+      notes: it.notes || "",
+      photos: Array.isArray(it.photos) ? it.photos.filter((p): p is string => typeof p === "string") : [],
+    }));
+  } catch (e) {
+    console.error("VoiceWalkRoom JSON parse failed:", e);
+    return [];
+  }
 }
 
 /** One AI call covering a single room (or a chunk of one). Returns items only. */
