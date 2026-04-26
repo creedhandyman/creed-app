@@ -77,10 +77,8 @@ body {
   font-size: 14px;
   line-height: 1.5;
   transition: background var(--t-base) var(--ease-out), color var(--t-base) var(--ease-out);
-  /* iOS safe-area aware. The max() ensures at least 6px of breathing
-     room at the top even on devices without a notch — the browser
-     URL bar can otherwise clip the first few pixels of content. */
-  padding-top: max(env(safe-area-inset-top), 6px);
+  /* iOS safe-area aware */
+  padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -517,9 +515,7 @@ button:focus-visible {
 /* ─── MAIN CONTENT ─────────────────────────────────── */
 .mc {
   margin-right: 56px;
-  /* Top padding bumped from 16 → 24 so titles, header rows, and the
-     top of cards aren't visually pinched against the URL bar / notch. */
-  padding: 24px 18px 16px;
+  padding: 16px 18px;
   max-width: 1200px;
   min-height: 100vh;
 }
@@ -581,10 +577,7 @@ button:focus-visible {
 /* ─── MOBILE RESPONSIVE ────────────────────────────── */
 @media (max-width: 480px) {
   .g2 { grid-template-columns: 1fr; }
-  /* Bumped top padding from 12 → 20 so the first content row (titles,
-     header rows, sticky camera previews in VoiceWalk, etc.) clears
-     the iOS Safari URL bar reliably. */
-  .mc { padding: 20px 10px 12px; }
+  .mc { padding: 12px 10px; }
   h1 { font-size: 24px; }
   h2 { font-size: 20px; }
   /* Tap targets: ensure all buttons hit 44px minimum */
