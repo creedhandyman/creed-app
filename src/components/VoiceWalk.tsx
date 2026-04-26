@@ -134,6 +134,14 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   const sessionGotResultRef = useRef(false);
   const restartFailuresRef = useRef(0);
   const restartTimerRef = useRef<number | null>(null);
+  // Highest results-array index we've already added to the chunk for the
+  // current session. Some browsers (iOS Safari, certain Android builds)
+  // do NOT increment e.resultIndex correctly — they may report 0 on every
+  // event while the array grows. Iterating from resultIndex would then
+  // re-add every prior finalized utterance on each new event, which is
+  // exactly the "okay okay okay here here here" duplication the user sees.
+  // Tracking our own watermark makes us robust to that browser bug.
+  const finalsProcessedThroughRef = useRef(-1);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -222,31 +230,48 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     // tight loop and chime repeatedly.
     sessionStartRef.current = Date.now();
     sessionGotResultRef.current = false;
+    // New session => new results array on the recognizer => watermark resets.
+    finalsProcessedThroughRef.current = -1;
     (r as unknown as { onstart: (() => void) | null }).onstart = () => {
       sessionStartRef.current = Date.now();
+      finalsProcessedThroughRef.current = -1;
     };
     r.onresult = (e) => {
       // Only the currently-active recognizer's events count. A
       // previously-aborted instance whose onresult fires one last time
       // would otherwise leak duplicate text into the transcript.
       if (recogRef.current !== r) return;
+      // We do NOT trust e.resultIndex (broken on some mobile browsers).
+      // Iterate the entire results array; for each finalized utterance,
+      // only add it if its index is past our watermark. For interim
+      // utterances, build a fresh preview string from scratch.
       let interim = "";
-      let final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      let newFinalText = "";
+      let highestFinalIdx = finalsProcessedThroughRef.current;
+      for (let i = 0; i < e.results.length; i++) {
         const result = e.results[i];
         const text = result[0]?.transcript || "";
-        if (result.isFinal) final += text + " ";
-        else interim += text;
+        if (result.isFinal) {
+          if (i > finalsProcessedThroughRef.current) {
+            newFinalText += text + " ";
+            if (i > highestFinalIdx) highestFinalIdx = i;
+          }
+          // else: already incorporated this finalized result on a prior
+          // event — skip to avoid duplication.
+        } else {
+          interim += text;
+        }
       }
+      finalsProcessedThroughRef.current = highestFinalIdx;
       // Any result (even interim) means the session is healthy — reset
       // the failure counter so the next legitimate restart is fast.
       sessionGotResultRef.current = true;
       restartFailuresRef.current = 0;
-      if (final) {
-        captureChunkRef.current += final;
+      if (newFinalText) {
+        captureChunkRef.current += newFinalText;
         const room = currentRoomRef.current;
         if (room) {
-          roomTranscriptRef.current[room] = (roomTranscriptRef.current[room] || "") + final;
+          roomTranscriptRef.current[room] = (roomTranscriptRef.current[room] || "") + newFinalText;
           setRoomTranscriptTick((t) => t + 1);
         }
       }
