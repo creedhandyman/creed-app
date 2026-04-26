@@ -820,7 +820,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             <div>
               <h4 style={{ color: "var(--color-success)", fontSize: 16, margin: 0 }}>Full Inspection</h4>
               <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
-                Area-by-area walkthrough with conditions and photos — or use 🎤 Voice Walk to talk through each room hands-free while AI fills the checklist for you.
+                Area-by-area walkthrough with conditions and photos. Inside any room, tap 🎤 Voice to record one continuous walk-through — Whisper transcribes, AI fills the checklist with conditions and notes.
               </p>
             </div>
           </div>
