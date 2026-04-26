@@ -182,17 +182,36 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   const border = darkMode ? "#1e1e2e" : "#eee";
 
   /* ── Speech recognition lifecycle ───────────────────────────────── */
+  // Hard-shutdown a recognizer: detach its handlers FIRST so its own
+  // onend can't queue a self-restart, then abort/stop. Used both before
+  // creating a new recognizer and from stopRecognition.
+  const killRecognizer = (rec: SpeechRecognitionLike | null) => {
+    if (!rec) return;
+    try { rec.onend = null; rec.onresult = null; rec.onerror = null; } catch { /* */ }
+    try { rec.abort(); } catch { /* */ }
+    try { rec.stop(); } catch { /* */ }
+  };
+
   const startRecognition = useCallback(() => {
     const Ctor = getSpeechRecognition();
     if (!Ctor) return;
-    if (recogRef.current) {
-      try { recogRef.current.abort(); } catch { /* */ }
-    }
+    // If a recognizer is already running for this session, don't spawn a
+    // second one — that's the path that produced doubled transcripts.
+    if (recogRef.current && recogShouldRunRef.current) return;
+    // Hard-stop any prior recognizer (handlers detached so it can't
+    // resurrect itself in onend).
+    killRecognizer(recogRef.current);
+    recogRef.current = null;
+
     const r = new Ctor();
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-US";
     r.onresult = (e) => {
+      // Only the currently-active recognizer's events count. A
+      // previously-aborted instance whose onresult fires one last time
+      // would otherwise leak duplicate text into the transcript.
+      if (recogRef.current !== r) return;
       let interim = "";
       let final = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -212,6 +231,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       setLiveTranscript(captureChunkRef.current + interim);
     };
     r.onend = () => {
+      // Only the active recognizer is allowed to self-restart. Stale
+      // instances (from a prior start/stop cycle) bail here so they
+      // can't run in parallel with the current one.
+      if (recogRef.current !== r) return;
       if (recogShouldRunRef.current) {
         try { r.start(); } catch { /* already running */ }
       }
@@ -228,7 +251,9 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   const stopRecognition = useCallback(() => {
     recogShouldRunRef.current = false;
-    try { recogRef.current?.stop(); } catch { /* */ }
+    const prev = recogRef.current;
+    recogRef.current = null;
+    killRecognizer(prev);
   }, []);
 
   // The inspecting flag drives BOTH mic and camera below — see the unified
