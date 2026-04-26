@@ -1125,6 +1125,20 @@ export async function aiParseVoiceWalk(
   return out;
 }
 
+/**
+ * AI-structure one room's worth of voice-walk moments. Public so the new
+ * per-room flow can fire each room's analysis as soon as the user moves
+ * on (background processing while they walk the next room).
+ */
+export async function aiParseVoiceWalkRoom(
+  roomName: string,
+  moments: VoiceWalkMoment[],
+  property: string,
+  client: string
+): Promise<InspectionRoom["items"]> {
+  return processVoiceWalkChunk(roomName, moments, property, client);
+}
+
 /** One AI call covering a single room (or a chunk of one). Returns items only. */
 async function processVoiceWalkChunk(
   roomName: string,
