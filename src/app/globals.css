@@ -560,10 +560,11 @@ button:focus-visible {
 .nav-bottom .vnav img { width: 24px; height: 24px; }
 .nav-bottom .mc {
   margin-right: 0;
-  /* 56px nav + 16px buffer + safe-area for the home indicator.
-     Buffer prevents content (Save buttons, Add Task forms, sticky
-     tip lines) from sitting flush against the nav. */
-  margin-bottom: calc(56px + 16px + env(safe-area-inset-bottom));
+  /* 56px nav + 36px buffer + safe-area for the home indicator. The
+     buffer was bumped from 16 → 36 because Inspector's Save Inspection
+     button and the bottom of long forms were getting visually clipped
+     by the nav on shorter viewports. */
+  margin-bottom: calc(56px + 36px + env(safe-area-inset-bottom));
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
