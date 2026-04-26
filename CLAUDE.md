@@ -91,6 +91,7 @@ src/
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
 - `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
 - `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
+- `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;`
 
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices.)

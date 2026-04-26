@@ -82,6 +82,10 @@ export interface Job {
   // job back to its original state without losing context.
   archived?: boolean;
   archived_at?: string;
+  // Set when the user has triggered a review-request prompt for this job
+  // (via SMS / email / copy). Stops the auto-prompt from re-firing every
+  // time the row re-renders after completion.
+  review_requested_at?: string;
 }
 
 export interface TimeEntry {

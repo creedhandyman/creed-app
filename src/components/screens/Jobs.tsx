@@ -8,6 +8,7 @@ import type { Job } from "@/lib/types";
 import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { Icon } from "../Icon";
+import ReviewRequestModal from "../ReviewRequestModal";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 
 interface Props {
@@ -49,6 +50,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
   const [jobTab, setJobTab] = useState<"active" | "billing" | "paid" | "archive">("active");
   const [open, setOpen] = useState<string | null>(null);
+  // Drives the review-request modal. Set to a job when status transitions
+  // to "complete" or "paid" AND the job hasn't had a review request yet.
+  const [reviewJob, setReviewJob] = useState<Job | null>(null);
   const [rn, setRn] = useState("");
   const [ra, setRa] = useState("");
   const [rPhoto, setRPhoto] = useState<File | null>(null);
@@ -310,6 +314,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         navigator.clipboard.writeText(msg);
         useStore.getState().showToast("Client message copied — paste & send to " + job.client, "success");
       }
+    }
+
+    // Auto-fire the review-request modal on the first transition into
+    // "complete" or "paid" — only if we haven't already prompted for this
+    // job. The modal lets the user fire off a one-tap text/email asking
+    // for a review while the job is still fresh in the client's mind.
+    if ((status === "complete" || status === "paid") && job && !job.review_requested_at) {
+      setReviewJob(job);
     }
   };
 
@@ -628,6 +640,23 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     }} style={{ fontSize: 12, padding: "6px 14px" }}>
                       📤 Send Job to Client
                     </button>
+                    {/* Manual review-request — appears on completed/paid jobs.
+                        Useful for re-sending if the auto-prompt was dismissed
+                        or if you want to ping a client weeks after the job. */}
+                    {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (
+                      <button
+                        className="bo"
+                        onClick={(e) => { e.stopPropagation(); setReviewJob(j); }}
+                        style={{
+                          fontSize: 12,
+                          padding: "6px 14px",
+                          color: j.review_requested_at ? "#888" : "var(--color-highlight)",
+                        }}
+                        title={j.review_requested_at ? "Already requested — tap to send another" : "Send a review request to this client"}
+                      >
+                        {j.review_requested_at ? "📨 Review Sent" : "⭐ Request Review"}
+                      </button>
+                    )}
                     {/* Archive / Restore — for jobs the client never accepted
                         (or any job worth quietly setting aside). Status field
                         is preserved so a Restore returns the job to its
@@ -1391,6 +1420,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
           />
         </div>
       )}
+
+      {/* Review-request modal — auto-opens when a job hits complete/paid,
+          or when the user clicks "📨 Request Review" on a job row. */}
+      <ReviewRequestModal
+        job={reviewJob}
+        onClose={() => setReviewJob(null)}
+        onSent={() => loadAll()}
+      />
     </div>
   );
 }

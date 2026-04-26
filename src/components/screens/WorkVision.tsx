@@ -4,7 +4,9 @@ import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { makeGuide } from "@/lib/parser";
+import type { Job } from "@/lib/types";
 import { Icon } from "../Icon";
+import ReviewRequestModal from "../ReviewRequestModal";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -224,8 +226,19 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // Clock out
     await clockOut();
     useStore.getState().showToast("Job completed! Great work.", "success");
+    // Pop the review-request modal before navigating away — last chance to
+    // capture the client's goodwill while the work is fresh in their mind.
+    if (!activeJob.review_requested_at) {
+      setReviewJob({ ...activeJob, status: "complete" });
+      // Don't navigate immediately; the modal's onClose will handle that.
+      return;
+    }
     setPage("dash");
   };
+
+  // Drives the review-request modal — populated by completeJob when a fresh
+  // completion happens, cleared on close (which also navigates to dashboard).
+  const [reviewJob, setReviewJob] = useState<Job | null>(null);
 
   const border = darkMode ? "#1e1e2e" : "#eee";
   const [section, setSection] = useState<"tasks" | "guide" | "notes" | "photos">("tasks");
@@ -900,6 +913,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         </div>
       )}
       </div>{/* end swipeable */}
+
+      {/* Review-request modal — pops after a successful completeJob to
+          capture the client's goodwill before we navigate away. Closing
+          the modal (any path) finishes the navigation to dashboard. */}
+      <ReviewRequestModal
+        job={reviewJob}
+        onClose={() => { setReviewJob(null); setPage("dash"); }}
+        onSent={() => loadAll()}
+      />
     </div>
   );
 }
