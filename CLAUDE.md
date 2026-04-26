@@ -102,6 +102,12 @@ src/
 - `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
 - `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
 - `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;`
+- `ALTER TABLE time_entries ADD COLUMN paid_at TIMESTAMPTZ;`
+  (Payroll now sets this instead of deleting the row, so Team Stats
+  can compute lifetime hours/earnings. Existing rows have it NULL =
+  unpaid, which is the correct state for any pre-migration entries
+  the org has already paid out by hand. To retroactively flag those
+  as paid: `UPDATE time_entries SET paid_at = NOW();`)
 - ```sql
   CREATE TABLE team_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

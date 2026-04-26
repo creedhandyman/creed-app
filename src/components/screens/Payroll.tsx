@@ -22,8 +22,13 @@ export default function Payroll() {
   const [sel, setSel] = useState(user.id);
   const selUser = profiles.find((u) => u.id === sel) || user;
 
+  // Only UNPAID entries roll into the next payroll run. Paid entries
+  // stay in the table forever so Team Stats can compute lifetime hours
+  // and earnings — see TeamStats.tsx careerStats().
   const entries = timeEntries.filter(
-    (e) => e.user_id === sel || (sel === user.id && !e.user_id && e.user_name === user.name)
+    (e) =>
+      !e.paid_at &&
+      (e.user_id === sel || (sel === user.id && !e.user_id && e.user_name === user.name))
   );
   const totalHrs = entries.reduce((s, e) => s + (e.hours || 0), 0);
   const laborPay = totalHrs * (selUser.rate || 55);
@@ -126,9 +131,13 @@ export default function Payroll() {
           bonuses: approvedQuests.map((q) => ({ name: q.name, amount: q.bonus })),
         }),
       });
-      // Clear time entries for this employee
+      // Mark these entries as paid instead of deleting them — Team
+      // Stats reads ALL time_entries (paid + unpaid) for lifetime
+      // career totals. Filtering on `paid_at` above keeps them out
+      // of future pay cycles.
+      const paidAt = new Date().toISOString();
       for (const entry of entries) {
-        await db.del("time_entries", entry.id);
+        await db.patch("time_entries", entry.id, { paid_at: paidAt });
       }
       // Record only the admin-approved quest payouts so the others remain pending
       // (still showing as "pending review" next cycle).

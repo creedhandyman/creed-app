@@ -98,6 +98,11 @@ export interface TimeEntry {
   user_name: string;
   start_time?: string;
   end_time?: string;
+  /** ISO timestamp when this entry was rolled into a payroll run.
+   *  Null/undefined = unpaid (will appear in the next pay cycle).
+   *  Set = already paid; kept in the table forever so Team Stats
+   *  can compute lifetime hours/earnings without losing history. */
+  paid_at?: string;
 }
 
 export interface Review {
