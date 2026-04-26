@@ -289,15 +289,25 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     setTranscriptTick((t) => t + 1);
   }, []);
 
-  /* ── Speech recognition lifecycle (LIVE PREVIEW ONLY) ────────────────
-     Web Speech is no longer the canonical transcript source. Whisper
-     (via /api/transcribe) handles that from the MediaRecorder audio
-     blob. Web Speech runs ONLY to give the user immediate feedback
-     ("HEARING …") while they talk. We do NOT auto-restart it — when
-     the engine ends a session naturally on iOS Safari, it just stops
-     until the user pauses + resumes the recording. The mic chime
-     therefore fires ONCE per Resume tap, not every 6 seconds.
+  /* ── Speech recognition lifecycle (LIVE PREVIEW + auto-tick driver) ──
+     Web Speech is the source for the live "HEARING …" peek AND for
+     the per-room transcript that drives the auto-tick keyword matcher.
+     Whisper still owns the canonical transcript at end-of-room, but
+     we need Web Speech to keep running through the whole recording so
+     items tick off live as the inspector mentions them.
+
+     iOS Safari ends sessions every utterance, so we MUST auto-restart
+     to keep the live transcript alive. The OS mic-on chime fires per
+     restart (unavoidable) — short healthy sessions get a 700ms cool-
+     down so it doesn't strobe every couple seconds; long sessions
+     restart in ~120ms so we don't lose words.
   ─────────────────────────────────────────────────────────────────── */
+  const speechShouldRunRef = useRef(false);
+  const speechSessionStartRef = useRef(0);
+  const speechSessionGotResultRef = useRef(false);
+  const speechRestartTimerRef = useRef<number | null>(null);
+  const speechRestartFailuresRef = useRef(0);
+
   const killRecognizer = (rec: SpeechRecognitionLike | null) => {
     if (!rec) return;
     try { (rec as unknown as { onstart: unknown }).onstart = null; } catch { /* */ }
@@ -306,7 +316,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     try { rec.stop(); } catch { /* */ }
   };
 
-  const startPreviewRecognition = useCallback(() => {
+  const buildAndStartRecognizer = useCallback(() => {
     const Ctor = getSpeechRecognition();
     if (!Ctor) return;
     killRecognizer(recogRef.current);
@@ -317,6 +327,12 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-US";
+    speechSessionStartRef.current = Date.now();
+    speechSessionGotResultRef.current = false;
+    (r as unknown as { onstart: (() => void) | null }).onstart = () => {
+      speechSessionStartRef.current = Date.now();
+      finalsProcessedThroughRef.current = -1;
+    };
     r.onresult = (e) => {
       if (recogRef.current !== r) return;
       let interim = "";
@@ -345,17 +361,32 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       }
       finalsProcessedThroughRef.current = highestFinalIdx;
       lastFinalTextRef.current = lastFinal;
-      // Mirror to the per-room transcript so the auto-tick keyword
-      // matcher fires before Whisper finalizes (improves UX — items
-      // tick on screen as they're mentioned, not minutes later).
+      speechSessionGotResultRef.current = true;
+      speechRestartFailuresRef.current = 0;
       if (newFinalText) appendTranscript(newFinalText);
       setLiveInterim(interim);
     };
     r.onend = () => {
-      // No auto-restart. The MediaRecorder is still running and Whisper
-      // will produce the canonical transcript on Stop. The user just
-      // loses the live preview after this point in the segment.
-      if (recogRef.current === r) recogRef.current = null;
+      if (recogRef.current !== r) return;
+      if (!speechShouldRunRef.current) return;
+      const lived = Date.now() - speechSessionStartRef.current;
+      let delay: number;
+      if (!speechSessionGotResultRef.current && lived < 4000) {
+        speechRestartFailuresRef.current = Math.min(speechRestartFailuresRef.current + 1, 5);
+        delay = Math.min(2500, 400 * 2 ** (speechRestartFailuresRef.current - 1));
+      } else {
+        speechRestartFailuresRef.current = 0;
+        if (lived < 6000) delay = 700;
+        else if (lived < 30000) delay = 250;
+        else delay = 120;
+      }
+      if (speechRestartTimerRef.current !== null) clearTimeout(speechRestartTimerRef.current);
+      speechRestartTimerRef.current = window.setTimeout(() => {
+        speechRestartTimerRef.current = null;
+        if (!speechShouldRunRef.current) return;
+        if (recogRef.current !== r) return;
+        buildAndStartRecognizer();
+      }, delay);
     };
     r.onerror = (ev) => {
       if (ev.error && ev.error !== "no-speech" && ev.error !== "aborted") {
@@ -366,7 +397,20 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     try { r.start(); } catch { /* */ }
   }, [appendTranscript]);
 
+  const startPreviewRecognition = useCallback(() => {
+    if (!getSpeechRecognition()) return;
+    if (recogRef.current && speechShouldRunRef.current) return;
+    speechShouldRunRef.current = true;
+    speechRestartFailuresRef.current = 0;
+    buildAndStartRecognizer();
+  }, [buildAndStartRecognizer]);
+
   const stopPreviewRecognition = useCallback(() => {
+    speechShouldRunRef.current = false;
+    if (speechRestartTimerRef.current !== null) {
+      clearTimeout(speechRestartTimerRef.current);
+      speechRestartTimerRef.current = null;
+    }
     const prev = recogRef.current;
     recogRef.current = null;
     killRecognizer(prev);
@@ -387,79 +431,79 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     return "";
   };
 
-  const startRecorder = useCallback(async () => {
-    if (typeof MediaRecorder === "undefined") return;
-    if (recorderRef.current && recorderRef.current.state === "recording") return;
-    try {
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = pickRecorderMime();
-      const opts = mime ? { mimeType: mime } : undefined;
-      const rec = new MediaRecorder(audioStream, opts);
-      recorderChunksRef.current = [];
-      rec.ondataavailable = (ev) => {
-        if (ev.data && ev.data.size > 0) {
-          recorderChunksRef.current.push(ev.data);
-        }
-      };
-      rec.onstop = () => {
-        // When this segment ends, fold its chunks into the room's
-        // accumulated chunks. They'll be concatenated + transcribed
-        // on advance/finish.
-        const room = currentRoomRef.current;
-        if (room) {
-          const prior = roomAudioChunksRef.current[room] || [];
-          roomAudioChunksRef.current[room] = [...prior, ...recorderChunksRef.current];
-        }
-        recorderChunksRef.current = [];
-        // Stop the underlying tracks so the OS mic indicator goes away
-        // when the user pauses.
-        audioStream.getTracks().forEach((t) => t.stop());
-      };
-      rec.start(1000); // emit chunks each second so we don't lose data on tab close
-      recorderRef.current = rec;
-    } catch (err) {
-      console.warn("MediaRecorder start failed:", err);
-    }
-  }, []);
-
-  const stopRecorder = useCallback(() => {
-    const rec = recorderRef.current;
-    recorderRef.current = null;
-    if (!rec) return;
-    try {
-      if (rec.state !== "inactive") rec.stop();
-    } catch { /* */ }
-  }, []);
-
-  /* ── Camera lifecycle ────────────────────────────────────────────── */
-  const startCamera = useCallback(async () => {
+  /* ── Combined media lifecycle (camera + audio in ONE getUserMedia) ──
+     iOS Safari often fails the second getUserMedia call when one is
+     already active. Requesting audio+video in a single call gives us
+     a stream we can use for both the camera <video> AND for
+     MediaRecorder via the audio track. Web Speech then runs
+     independently using the system mic. */
+  const startCameraAndRecorder = useCallback(async () => {
     setCameraError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
-        audio: false,
+        audio: true,
       });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // Mute so we don't echo the mic back through the speaker.
+        videoRef.current.muted = true;
         await videoRef.current.play().catch(() => {});
       }
       setCameraOn(true);
       setTorchAvailable(true);
       setTorchOn(false);
+
+      // Start MediaRecorder on JUST the audio track from the same stream.
+      if (typeof MediaRecorder !== "undefined" && stream.getAudioTracks().length > 0) {
+        try {
+          const audioOnly = new MediaStream(stream.getAudioTracks());
+          const mime = pickRecorderMime();
+          const opts = mime ? { mimeType: mime } : undefined;
+          const rec = new MediaRecorder(audioOnly, opts);
+          recorderChunksRef.current = [];
+          rec.ondataavailable = (ev) => {
+            if (ev.data && ev.data.size > 0) {
+              recorderChunksRef.current.push(ev.data);
+            }
+          };
+          rec.onstop = () => {
+            // Fold this segment's chunks into the room's accumulated
+            // chunks. Concatenated + Whisper-transcribed on advance/finish.
+            const room = currentRoomRef.current;
+            if (room) {
+              const prior = roomAudioChunksRef.current[room] || [];
+              roomAudioChunksRef.current[room] = [...prior, ...recorderChunksRef.current];
+            }
+            recorderChunksRef.current = [];
+          };
+          rec.start(1000);
+          recorderRef.current = rec;
+        } catch (err) {
+          console.warn("MediaRecorder start failed:", err);
+        }
+      }
     } catch (err) {
-      console.warn("Camera unavailable:", err);
+      console.warn("getUserMedia(audio+video) failed:", err);
       setCameraError(
         err instanceof Error && err.name === "NotAllowedError"
-          ? "Camera permission denied. Use the file picker."
-          : "Camera unavailable. Use the file picker."
+          ? "Camera/mic permission denied. Use the file picker."
+          : "Camera/mic unavailable. Use the file picker."
       );
       setCameraOn(false);
       setTorchAvailable(false);
     }
   }, []);
 
-  const stopCamera = useCallback(() => {
+  const stopCameraAndRecorder = useCallback(() => {
+    // Stop MediaRecorder first so its onstop fires while tracks still live.
+    const rec = recorderRef.current;
+    recorderRef.current = null;
+    if (rec) {
+      try { if (rec.state !== "inactive") rec.stop(); } catch { /* */ }
+    }
+    // Then tear down the stream.
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -530,28 +574,25 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   }, []);
 
   /* ── Unified inspecting toggle ──────────────────────────────────────
-     When on: open MediaRecorder (canonical audio) + camera + Web Speech
-     preview. When off: stop all three, fold this segment's audio into
-     the room's accumulated chunks. Whisper transcription happens later
-     (on advance / finish), not on every pause, so a quick pause-and-
-     resume doesn't burn an API call.
+     When on: open camera + recorder (single getUserMedia) + Web Speech
+     preview. Web Speech feeds the live transcript that drives the
+     auto-tick checklist matcher; MediaRecorder owns the canonical
+     audio for Whisper at end-of-room. When off: tear all three down,
+     fold this segment's audio into the room's accumulated chunks.
   ────────────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (inspecting) {
       beginSegment();
-      startRecorder();
+      startCameraAndRecorder();
       if (supported) startPreviewRecognition();
-      startCamera();
     } else {
       stopPreviewRecognition();
-      stopCamera();
-      stopRecorder();
+      stopCameraAndRecorder();
       endSegment();
     }
     return () => {
       stopPreviewRecognition();
-      stopCamera();
-      stopRecorder();
+      stopCameraAndRecorder();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspecting, supported]);
@@ -881,7 +922,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <button
           className="bo"
-          onClick={() => { stopPreviewRecognition(); stopCamera(); stopRecorder(); onCancel(); }}
+          onClick={() => { stopPreviewRecognition(); stopCameraAndRecorder(); onCancel(); }}
           style={{ fontSize: 12, padding: "4px 8px" }}
         >← Cancel</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
