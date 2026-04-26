@@ -957,10 +957,11 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         </div>
       )}
 
-      {/* PRIMARY: room title + checklist with AI-derived conditions */}
+      {/* Room title — split from the checklist body so the camera can
+          slot between them when inspecting. */}
       {currentRoom && (
-        <div className="cd mb" style={{ padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div className="cd mb" style={{ padding: "10px 12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3 style={{ fontSize: 17, color: "var(--color-primary)", margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
               {currentRoom}
               {roomStatus[currentRoom] === "analyzing" && (
@@ -976,102 +977,34 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
               </span>
             )}
           </div>
-
-          {items.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {items.map((item) => {
-                const isChecked = checkedSet.has(item);
-                const ai = itemByName.get(item);
-                const cond = ai?.condition;
-                return (
-                  <div
-                    key={item}
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 6,
-                      padding: "5px 7px",
-                      borderRadius: 6,
-                      background: ai
-                        ? `${conditionColor(cond)}14`
-                        : isChecked
-                          ? darkMode ? "rgba(38,166,91,0.10)" : "rgba(38,166,91,0.06)"
-                          : "transparent",
-                      border: `1px solid ${ai
-                        ? `${conditionColor(cond)}50`
-                        : isChecked
-                          ? "var(--color-success)50"
-                          : darkMode ? "#1e1e2e" : "#e8e8e8"}`,
-                    }}
-                  >
-                    <button
-                      onClick={() => toggleItem(currentRoom, item)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: ai ? conditionColor(cond) : (isChecked ? "var(--color-success)" : "#888"),
-                        cursor: "pointer",
-                        fontSize: 14,
-                        padding: 0,
-                        lineHeight: 1,
-                        marginTop: 1,
-                      }}
-                      aria-label={isChecked ? "Unmark" : "Mark"}
-                    >
-                      {isChecked || ai ? "✓" : "○"}
-                    </button>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 12, fontWeight: ai ? 600 : 400, color: ai ? conditionColor(cond) : "inherit" }}>
-                          {item}
-                        </span>
-                        {ai && (
-                          <span
-                            style={{
-                              fontSize: 10,
-                              fontFamily: "Oswald",
-                              background: conditionColor(cond),
-                              color: "#fff",
-                              padding: "1px 6px",
-                              borderRadius: 8,
-                              letterSpacing: ".04em",
-                              flexShrink: 0,
-                            }}
-                            title={conditionLabel(cond)}
-                          >
-                            {cond}
-                          </span>
-                        )}
-                      </div>
-                      {ai?.notes && (
-                        <div style={{ fontSize: 11, color: "#666", marginTop: 1, lineHeight: 1.3 }}>
-                          {ai.notes}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
-              No standard checklist for this room — describe what you see.
-            </div>
-          )}
         </div>
       )}
 
-      {/* SECONDARY: camera preview + snap button — ONLY mounted while inspecting */}
+      {/* CAMERA — when inspecting, sticky to the top of the viewport so
+          the user can scroll the checklist below without losing the
+          preview or the snap button. 4:3 landscape aspect keeps it
+          short so the checklist stays visible right beneath. */}
       {inspecting && (
-        <div className="cd mb" style={{ padding: 10 }}>
+        <div
+          className="cd mb"
+          style={{
+            padding: 8,
+            position: "sticky",
+            top: 4,
+            zIndex: 10,
+            // Solid background so checklist rows can't show through.
+            background: darkMode ? "#0a0a12" : "#fff",
+            boxShadow: darkMode ? "0 2px 6px rgba(0,0,0,0.4)" : "0 2px 6px rgba(0,0,0,0.08)",
+          }}
+        >
           <div
             style={{
               position: "relative",
               background: "#000",
               borderRadius: 8,
               overflow: "hidden",
-              aspectRatio: "3 / 4",
-              marginBottom: 8,
+              aspectRatio: "4 / 3",
+              marginBottom: 6,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1184,6 +1117,99 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
               Uploading {uploading} photo{uploading === 1 ? "" : "s"}…
             </div>
           )}
+        </div>
+      )}
+
+      {/* CHECKLIST BODY — sits directly beneath the (sticky) camera so the
+          user can read every item while framing photos, no scroll-juggling.
+          Rows compact during inspection (single-line), expand to show AI
+          notes once analysis is done. */}
+      {currentRoom && items.length > 0 && (
+        <div className="cd mb" style={{ padding: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {items.map((item) => {
+              const isChecked = checkedSet.has(item);
+              const ai = itemByName.get(item);
+              const cond = ai?.condition;
+              return (
+                <div
+                  key={item}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 6,
+                    padding: inspecting ? "3px 7px" : "5px 7px",
+                    borderRadius: 6,
+                    background: ai
+                      ? `${conditionColor(cond)}14`
+                      : isChecked
+                        ? darkMode ? "rgba(38,166,91,0.10)" : "rgba(38,166,91,0.06)"
+                        : "transparent",
+                    border: `1px solid ${ai
+                      ? `${conditionColor(cond)}50`
+                      : isChecked
+                        ? "var(--color-success)50"
+                        : darkMode ? "#1e1e2e" : "#e8e8e8"}`,
+                  }}
+                >
+                  <button
+                    onClick={() => toggleItem(currentRoom, item)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: ai ? conditionColor(cond) : (isChecked ? "var(--color-success)" : "#888"),
+                      cursor: "pointer",
+                      fontSize: 14,
+                      padding: 0,
+                      lineHeight: 1,
+                      marginTop: 1,
+                    }}
+                    aria-label={isChecked ? "Unmark" : "Mark"}
+                  >
+                    {isChecked || ai ? "✓" : "○"}
+                  </button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: ai ? 600 : 400, color: ai ? conditionColor(cond) : "inherit" }}>
+                        {item}
+                      </span>
+                      {ai && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontFamily: "Oswald",
+                            background: conditionColor(cond),
+                            color: "#fff",
+                            padding: "1px 6px",
+                            borderRadius: 8,
+                            letterSpacing: ".04em",
+                            flexShrink: 0,
+                          }}
+                          title={conditionLabel(cond)}
+                        >
+                          {cond}
+                        </span>
+                      )}
+                    </div>
+                    {/* AI notes hidden during inspection to keep rows tight;
+                        shown after the user pauses so they can review. */}
+                    {ai?.notes && !inspecting && (
+                      <div style={{ fontSize: 11, color: "#666", marginTop: 1, lineHeight: 1.3 }}>
+                        {ai.notes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {currentRoom && items.length === 0 && (
+        <div className="cd mb" style={{ padding: 10 }}>
+          <div className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
+            No standard checklist for this room — describe what you see.
+          </div>
         </div>
       )}
 
