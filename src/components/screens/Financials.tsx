@@ -1,9 +1,17 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
+import { db } from "@/lib/supabase";
+import { wrapPrint, openPrint } from "@/lib/print-template";
 import { Icon } from "../Icon";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
+
+interface MileageRow {
+  id: string;
+  trip_date: string;
+  total_miles: number;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function Financials({ setPage: _setPage }: { setPage: (p: string) => void }) {
@@ -12,10 +20,12 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   const profiles = useStore((s) => s.profiles);
   const reviews = useStore((s) => s.reviews);
   const clients = useStore((s) => s.clients);
+  const receipts = useStore((s) => s.receipts);
   const darkMode = useStore((s) => s.darkMode);
   const org = useStore((s) => s.org);
 
   const [range, setRange] = useState<Range>("month");
+  const [printing, setPrinting] = useState(false);
 
   // Date filter
   const now = new Date();
@@ -83,7 +93,16 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
     byTech[name].pay += e.amount || 0;
   });
   const crewCost = rangeEntries.reduce((s, e) => s + (e.amount || 0), 0);
-  const profit = completedRevenue - totalMaterials - crewCost;
+
+  // Actual materials spend from receipts in the same period (real out-of-
+  // pocket cost, vs. totalMaterials which is what was CHARGED to the
+  // client). When receipts exist for the period we use actual; otherwise
+  // fall back to charged so the profit number still works.
+  const periodReceipts = receipts.filter((r) => inRange(r.receipt_date));
+  const actualMaterialsSpent = periodReceipts.reduce((s, r) => s + (r.amount || 0), 0);
+  const materialsForProfit = actualMaterialsSpent > 0 ? actualMaterialsSpent : totalMaterials;
+
+  const profit = completedRevenue - materialsForProfit - crewCost;
   const techEntries = Object.entries(byTech).sort((a, b) => b[1].hours - a[1].hours);
 
   // Top clients
@@ -124,6 +143,124 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
 
   const border = darkMode ? "#1e1e2e" : "#eee";
 
+  /* ── Print Profit & Loss statement ───────────────────────────────── */
+  const periodLabel = (() => {
+    if (range === "week") return "Last 7 Days";
+    if (range === "month") return "Last 30 Days";
+    if (range === "quarter") return "Last 90 Days";
+    if (range === "year") return "Last 12 Months";
+    return "All Time";
+  })();
+
+  const printPL = async () => {
+    setPrinting(true);
+    try {
+      // Fetch mileage from the DB (not in store — each user fetches their own
+      // on demand). For org-wide P&L, db.get applies the org_id filter.
+      let mileageRows: MileageRow[] = [];
+      try {
+        mileageRows = await db.get<MileageRow>("mileage");
+      } catch { /* fall through with empty mileage */ }
+      const periodMileage = mileageRows.filter((m) => inRange(m.trip_date));
+      const totalMiles = periodMileage.reduce((s, m) => s + (m.total_miles || 0), 0);
+      const IRS_RATE = 0.70;
+      const mileageExpense = Math.round(totalMiles * IRS_RATE * 100) / 100;
+
+      // Use ACTUAL materials spend from receipts when available; fall back to
+      // the materials CHARGED on completed jobs (less precise but always
+      // present).
+      const cogsMaterials = actualMaterialsSpent > 0 ? actualMaterialsSpent : totalMaterials;
+      const materialsLabel = actualMaterialsSpent > 0
+        ? `Materials (actual receipts, ${periodReceipts.length})`
+        : "Materials (charged to clients)";
+
+      const totalCogs = cogsMaterials + crewCost;
+      const grossProfit = completedRevenue - totalCogs;
+      const grossMargin = completedRevenue > 0 ? (grossProfit / completedRevenue) * 100 : 0;
+      const totalOpex = mileageExpense;
+      const netProfit = grossProfit - totalOpex;
+      const netMargin = completedRevenue > 0 ? (netProfit / completedRevenue) * 100 : 0;
+
+      const fmt$ = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const sectionRow = (label: string) =>
+        `<tr><td colspan="2" style="background:#f0f4f8;color:#2E75B6;font-family:Oswald,sans-serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-top:2px solid #2E75B6">${label}</td></tr>`;
+      const lineRow = (label: string, amount: number, indent = false) =>
+        `<tr><td style="${indent ? "padding-left:24px;" : ""}padding:4px 10px">${label}</td><td style="text-align:right;padding:4px 10px;font-family:Oswald,sans-serif">${fmt$(amount)}</td></tr>`;
+      const subtotalRow = (label: string, amount: number) =>
+        `<tr style="font-weight:600;border-top:1px solid #ddd"><td style="padding:6px 10px">${label}</td><td style="text-align:right;padding:6px 10px;font-family:Oswald,sans-serif">${fmt$(amount)}</td></tr>`;
+      const totalRow = (label: string, amount: number, color: string) =>
+        `<tr style="font-weight:700;font-size:14px;border-top:2px solid ${color}"><td style="padding:8px 10px;color:${color}">${label}</td><td style="text-align:right;padding:8px 10px;font-family:Oswald,sans-serif;color:${color}">${fmt$(amount)}</td></tr>`;
+      const marginRow = (label: string, pct: number) =>
+        `<tr><td style="padding:4px 10px;color:#666">${label}</td><td style="text-align:right;padding:4px 10px;font-family:Oswald,sans-serif;color:#666">${pct.toFixed(1)}%</td></tr>`;
+
+      const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      const periodFromTo = `${rangeStart.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} – ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+
+      const body = `
+<section style="margin-bottom:18px">
+  <h2>Profit &amp; Loss Statement</h2>
+  <div style="font-size:12px;color:#666;margin-bottom:14px">
+    Period: <b>${periodLabel}</b> &nbsp;·&nbsp; ${periodFromTo}
+  </div>
+  <table style="border-collapse:collapse;font-size:13px">
+    ${sectionRow("Revenue")}
+    ${lineRow("Service Income (paid jobs)", paidRevenue, true)}
+    ${lineRow("Outstanding Invoices", outstandingInvoices, true)}
+    ${lineRow("Completed (not yet invoiced)", completedRevenue - paidRevenue - outstandingInvoices, true)}
+    ${subtotalRow("Total Revenue", completedRevenue)}
+    ${sectionRow("Cost of Goods Sold")}
+    ${lineRow(materialsLabel, cogsMaterials, true)}
+    ${lineRow(`Direct Labor (crew pay, ${rangeEntries.length} entries)`, crewCost, true)}
+    ${subtotalRow("Total COGS", totalCogs)}
+    ${totalRow("Gross Profit", grossProfit, "#2E75B6")}
+    ${marginRow("Gross Margin", grossMargin)}
+    ${sectionRow("Operating Expenses")}
+    ${lineRow(`Mileage (${totalMiles.toFixed(1)} mi × $${IRS_RATE.toFixed(2)})`, mileageExpense, true)}
+    ${subtotalRow("Total Operating Expenses", totalOpex)}
+    ${totalRow("Net Profit", netProfit, netProfit >= 0 ? "#00cc66" : "#C00000")}
+    ${marginRow("Net Margin", netMargin)}
+  </table>
+</section>
+
+<section style="margin-top:18px">
+  <h3>Job Activity Summary</h3>
+  <table style="font-size:12px">
+    <tr><td>Jobs in period</td><td style="text-align:right;font-family:Oswald,sans-serif">${rangeJobs.length}</td></tr>
+    <tr><td>Jobs completed</td><td style="text-align:right;font-family:Oswald,sans-serif">${completed.length}</td></tr>
+    <tr><td>Jobs paid</td><td style="text-align:right;font-family:Oswald,sans-serif">${paid.length}</td></tr>
+    <tr><td>Average job size</td><td style="text-align:right;font-family:Oswald,sans-serif">${fmt$(avgJobSize)}</td></tr>
+    <tr><td>Close rate</td><td style="text-align:right;font-family:Oswald,sans-serif">${closeRate}%</td></tr>
+  </table>
+</section>
+
+<div style="margin-top:24px;padding-top:12px;border-top:1px solid #ddd;font-size:11px;color:#888">
+  Generated ${today}. ${actualMaterialsSpent > 0 ? "Material costs reflect actual receipt data for the period." : "Material costs reflect amounts charged to clients (no receipt data for this period)."} Mileage at the IRS standard rate of $${IRS_RATE.toFixed(2)}/mi.
+</div>
+`;
+
+      const html = wrapPrint(
+        {
+          orgName: org?.name || "",
+          orgPhone: org?.phone,
+          orgEmail: org?.email,
+          orgAddress: org?.address,
+          orgLicense: org?.license_num,
+          orgLogo: org?.logo_url,
+          docTitle: "Profit & Loss",
+          docNumber: `P&L-${range.toUpperCase()}`,
+          docDate: today,
+          docSubtitle: periodLabel,
+        },
+        body,
+      );
+      if (!openPrint(html)) {
+        useStore.getState().showToast("Allow popups to print P&L", "error");
+      }
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const statCard = (label: string, value: string | number, color: string, sub?: string) => (
     <div className="cd" style={{ textAlign: "center", padding: 12, borderLeft: `3px solid ${color}` }}>
       <div className="sl">{label}</div>
@@ -136,11 +273,28 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
     <div className="fi">
       {/* Header — Financials is rendered inside the Ops tabs, so the
           old "← Dashboard" back button is redundant and removed. */}
-      <div className="row mb">
+      <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
           <Icon name="trending" size={22} color="var(--color-primary)" />
           Financials
         </h2>
+        <button
+          className="bo"
+          onClick={printPL}
+          disabled={printing}
+          style={{
+            fontSize: 12,
+            padding: "5px 12px",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            opacity: printing ? 0.6 : 1,
+          }}
+          title="Print Profit & Loss statement for the selected period"
+        >
+          <Icon name="print" size={14} />
+          {printing ? "Building..." : "Print P&L"}
+        </button>
       </div>
 
       {/* Range selector */}
@@ -213,8 +367,10 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               <span style={{ fontFamily: "Oswald", color: "var(--color-warning)" }}>${totalMaterials.toLocaleString()}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${border}`, paddingTop: 4, marginTop: 4 }}>
-              <span className="dim">Materials cost</span>
-              <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${totalMaterials.toLocaleString()}</span>
+              <span className="dim">
+                {actualMaterialsSpent > 0 ? `Materials (actual, ${periodReceipts.length} receipts)` : "Materials (charged proxy)"}
+              </span>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${materialsForProfit.toLocaleString()}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span className="dim">Crew pay (actual hours)</span>
@@ -225,9 +381,73 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               <span style={{ fontFamily: "Oswald", fontSize: 18, color: profit > 0 ? "var(--color-success)" : "var(--color-accent-red)" }}>${profit.toLocaleString()}</span>
             </div>
           </div>
-          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>Margin: <b>{completedRevenue > 0 ? Math.round((profit / completedRevenue) * 100) : 0}%</b></div>
+          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+            Margin: <b>{completedRevenue > 0 ? Math.round((profit / completedRevenue) * 100) : 0}%</b>
+            {actualMaterialsSpent === 0 && totalMaterials > 0 && (
+              <span style={{ marginLeft: 8, color: "var(--color-warning)", fontSize: 11 }}>
+                · Add receipts for true material cost
+              </span>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* A/R Aging — outstanding invoices bucketed by age. Only shown when
+          there's something to chase. Anchor is the job_date (closest proxy
+          for invoice-issued; we don't track an explicit invoiced_at). */}
+      {(() => {
+        const invoicedAll = jobs.filter((j) => j.status === "invoiced" && !j.archived);
+        if (invoicedAll.length === 0) return null;
+        const today = new Date();
+        const buckets = [
+          { label: "Current (0-29 days)", min: 0, max: 29, color: "var(--color-success)", count: 0, total: 0 },
+          { label: "30-59 days", min: 30, max: 59, color: "var(--color-warning)", count: 0, total: 0 },
+          { label: "60-89 days", min: 60, max: 89, color: "#ff8800", count: 0, total: 0 },
+          { label: "90+ days", min: 90, max: Infinity, color: "var(--color-accent-red)", count: 0, total: 0 },
+        ];
+        invoicedAll.forEach((j) => {
+          let age = 0;
+          try {
+            const d = new Date(j.job_date || j.created_at);
+            age = Math.floor((today.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
+          } catch { /* age stays 0 */ }
+          const bucket = buckets.find((b) => age >= b.min && age <= b.max);
+          if (bucket) {
+            bucket.count++;
+            bucket.total += j.total || 0;
+          }
+        });
+        const grandTotal = buckets.reduce((s, b) => s + b.total, 0);
+        const overdueTotal = buckets.slice(1).reduce((s, b) => s + b.total, 0);
+        return (
+          <div className="cd mb" style={{ padding: 14, borderLeft: `3px solid ${overdueTotal > 0 ? "var(--color-warning)" : "var(--color-success)"}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <h4 style={{ fontSize: 13, color: "var(--color-warning)", margin: 0 }}>
+                A/R Aging — Outstanding Invoices
+              </h4>
+              <span style={{ fontFamily: "Oswald", fontSize: 14, color: "var(--color-warning)" }}>
+                ${grandTotal.toLocaleString()}
+              </span>
+            </div>
+            {buckets.map((b) => (
+              <div key={b.label} style={{ marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+                  <span>{b.label} <span className="dim">({b.count})</span></span>
+                  <span style={{ fontFamily: "Oswald", color: b.color }}>${b.total.toLocaleString()}</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: border }}>
+                  <div style={{ height: "100%", borderRadius: 3, background: b.color, width: `${grandTotal > 0 ? (b.total / grandTotal) * 100 : 0}%`, transition: "width .3s" }} />
+                </div>
+              </div>
+            ))}
+            {overdueTotal > 0 && (
+              <div className="dim" style={{ fontSize: 11, marginTop: 6, color: "var(--color-warning)" }}>
+                ${overdueTotal.toLocaleString()} past due — worth a follow-up.
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Jobs per week chart */}
       <div className="cd mb" style={{ padding: 14 }}>
