@@ -130,7 +130,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
   // Speech support detection
   const [supported] = useState<boolean>(() => !!getSpeechRecognition());
-  const [recording, setRecording] = useState(false);
+  // Single inspecting toggle — drives mic AND camera together. Off by
+  // default so the user lands on each room with everything quiet, taps
+  // Start when ready, taps Stop when done.
+  const [inspecting, setInspecting] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
   const [pendingTranscript, setPendingTranscript] = useState(""); // typed-fallback buffer
   // Per-room transcript chunk that's "owned" by the next photo capture.
@@ -228,11 +231,8 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     try { recogRef.current?.stop(); } catch { /* */ }
   }, []);
 
-  useEffect(() => {
-    if (recording && supported) startRecognition();
-    else stopRecognition();
-    return () => { stopRecognition(); };
-  }, [recording, supported, startRecognition, stopRecognition]);
+  // The inspecting flag drives BOTH mic and camera below — see the unified
+  // useEffect after the camera lifecycle helpers.
 
   /* ── Camera lifecycle ──────────────────────────────────────────── */
   const startCamera = useCallback(async () => {
@@ -304,12 +304,32 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     }
   }, [torchOn]);
 
-  // Start camera on mount; stop on unmount.
+  // Unified inspecting toggle: when on, start mic (if supported) + camera.
+  // When off, stop both. The user gets one obvious "▶ Start" / "■ Stop"
+  // control instead of separate confusing affordances.
   useEffect(() => {
-    startCamera();
-    return () => { stopCamera(); };
+    if (inspecting) {
+      if (supported) startRecognition();
+      startCamera();
+    } else {
+      stopRecognition();
+      stopCamera();
+    }
+    return () => { stopRecognition(); stopCamera(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [inspecting, supported]);
+
+  // When the user moves to a different room, force-stop the active session
+  // and clear the on-screen transcript so they don't see leftover speech
+  // from the previous room. The per-room transcript ref + roomMoments stay
+  // intact — those are the saved work, only the live UI clears.
+  useEffect(() => {
+    setInspecting(false);
+    setLiveTranscript("");
+    setPendingTranscript("");
+    captureChunkRef.current = "";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIdx]);
 
   /* ── Auto-check items on transcript ─────────────────────────────── */
   useEffect(() => {
@@ -667,64 +687,76 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         </div>
       )}
 
-      {/* Recording control + live transcript */}
-      <div className="cd mb" style={{ padding: 10 }}>
-        {supported && (
-          <div style={{ marginBottom: 8, textAlign: "center" }}>
-            <button
-              onClick={() => setRecording((r) => !r)}
-              style={{
-                padding: "6px 14px",
-                fontSize: 12,
-                fontFamily: "Oswald",
-                background: recording ? "var(--color-accent-red)" : "var(--color-success)",
-                color: "#fff",
-                borderRadius: 16,
-                border: "none",
-                animation: recording ? "pulse 1.5s ease-in-out infinite" : "none",
-              }}
-            >
-              {recording ? "● Recording" : "🎤 Start Recording"}
-            </button>
-            <style>{`@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }`}</style>
-          </div>
-        )}
-
-        <div
+      {/* Single Start/Stop control — drives mic + camera together so the
+          user always knows whether the inspection is "live" or paused. */}
+      <div className="cd mb" style={{ padding: 10, textAlign: "center" }}>
+        <button
+          onClick={() => setInspecting((v) => !v)}
           style={{
-            background: darkMode ? "#0d0d14" : "#f7f7fa",
-            border: `1px dashed ${border}`,
-            borderRadius: 8,
-            padding: 8,
-            minHeight: 50,
-            fontSize: 12,
-            color: liveTranscript || pendingTranscript ? "inherit" : "#888",
+            padding: "10px 22px",
+            fontSize: 14,
+            fontFamily: "Oswald",
+            background: inspecting ? "var(--color-accent-red)" : "var(--color-success)",
+            color: "#fff",
+            borderRadius: 22,
+            border: "none",
+            animation: inspecting ? "vw-pulse 1.5s ease-in-out infinite" : "none",
+            letterSpacing: ".04em",
           }}
         >
-          {supported ? (
-            liveTranscript || (recording
-              ? "Listening… describe what you see, then tap 📸 to attach a photo."
-              : "Tap Start Recording, then describe items as you photograph them.")
-          ) : (
-            <textarea
-              value={pendingTranscript}
-              onChange={(e) => setPendingTranscript(e.target.value)}
-              placeholder="Type a description for the next photo..."
-              style={{
-                width: "100%",
-                background: "transparent",
-                border: "none",
-                resize: "vertical",
-                minHeight: 48,
-                fontSize: 12,
-                color: "inherit",
-              }}
-            />
-          )}
+          {inspecting ? "■ Stop Inspecting" : "▶ Start Inspecting"}
+        </button>
+        <style>{`@keyframes vw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.75; } }`}</style>
+        <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+          {inspecting
+            ? "Mic + camera live. Talk through what you see, snap photos."
+            : "Tap to turn on the mic and camera for this room."}
         </div>
       </div>
 
-      {/* Inline camera preview + snap */}
+      {/* Live transcript — only shown while inspecting (so a stale transcript
+          from the last room doesn't linger after you advance). */}
+      {inspecting && (
+        <div className="cd mb" style={{ padding: 10 }}>
+          <div className="dim" style={{ fontSize: 11, marginBottom: 6, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+            TRANSCRIPT
+          </div>
+          <div
+            style={{
+              background: darkMode ? "#0d0d14" : "#f7f7fa",
+              border: `1px dashed ${border}`,
+              borderRadius: 8,
+              padding: 8,
+              minHeight: 50,
+              fontSize: 12,
+              color: liveTranscript || pendingTranscript ? "inherit" : "#888",
+            }}
+          >
+            {supported ? (
+              liveTranscript || "Listening… describe what you see, then tap 📸 to attach a photo."
+            ) : (
+              <textarea
+                value={pendingTranscript}
+                onChange={(e) => setPendingTranscript(e.target.value)}
+                placeholder="Type a description for the next photo..."
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  resize: "vertical",
+                  minHeight: 48,
+                  fontSize: 12,
+                  color: "inherit",
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Inline camera preview + snap — only mounted while inspecting so
+          the camera light doesn't come on the moment you enter the screen. */}
+      {inspecting && (
       <div className="cd mb" style={{ padding: 10 }}>
         <div className="dim" style={{ fontSize: 11, marginBottom: 6, fontFamily: "Oswald", letterSpacing: ".06em" }}>
           CAMERA
@@ -836,6 +868,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           </div>
         )}
       </div>
+      )}
 
       {/* This room's captured moments — small thumb strip */}
       {thisRoomMoments.length > 0 && (
