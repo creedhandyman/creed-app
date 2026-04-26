@@ -521,7 +521,20 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                 );
                 return { ...r, items: [...kept, ...incoming] };
               }));
-              setVoiceRoomIdx(null);
+              // Auto-advance to the next area: open Voice Walk for the
+              // next room and move the underlying Inspector cursor with
+              // it, so when the user eventually exits Voice they land
+              // on the right room. If this was the last room, close
+              // Voice Walk and let the user review.
+              const nextIdx = (voiceRoomIdx ?? 0) + 1;
+              if (nextIdx < roomData.length) {
+                setCurrentRoomIdx(nextIdx);
+                setVoiceRoomIdx(nextIdx);
+                useStore.getState().showToast(`Moving to ${roomData[nextIdx].name}…`, "info");
+              } else {
+                setVoiceRoomIdx(null);
+                useStore.getState().showToast("All rooms processed — review and save.", "success");
+              }
             }}
             onCancel={() => setVoiceRoomIdx(null)}
             darkMode={darkMode}

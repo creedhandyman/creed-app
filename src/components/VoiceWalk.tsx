@@ -191,9 +191,9 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   // Refs that survive renders
   const fileFallbackRef = useRef<HTMLInputElement>(null);
   const recogRef = useRef<SpeechRecognitionLike | null>(null);
-  // Watermark + last-final tracking for transcript dedup. See dedupOverlap.
-  const finalsProcessedThroughRef = useRef(-1);
-  const lastFinalTextRef = useRef("");
+  // (Web Speech dedup refs removed — Whisper now owns the canonical
+  // transcript and handles its own correctness. Web Speech only sets
+  // liveInterim for the visual peek.)
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -274,40 +274,31 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     return () => clearInterval(id);
   }, [inspecting]);
 
-  /* ── Transcript append ───────────────────────────────────────────── */
-  const appendTranscript = useCallback((finalText: string) => {
+  /* ── Transcript setter — called once Whisper returns at end-of-room. */
+  const setRoomTranscript = useCallback((finalText: string) => {
     const room = currentRoomRef.current;
     if (!room || !finalText) return;
     setRoomRecordings((prev) => {
       const cur = prev[room] || emptyRecording();
-      const sep = cur.transcript && !cur.transcript.endsWith(" ") ? " " : "";
-      return {
-        ...prev,
-        [room]: { ...cur, transcript: cur.transcript + sep + finalText.trim() },
-      };
+      return { ...prev, [room]: { ...cur, transcript: finalText.trim() } };
     });
     setTranscriptTick((t) => t + 1);
   }, []);
 
-  /* ── Speech recognition lifecycle (LIVE PREVIEW + auto-tick driver) ──
-     Web Speech is the source for the live "HEARING …" peek AND for
-     the per-room transcript that drives the auto-tick keyword matcher.
-     Whisper still owns the canonical transcript at end-of-room, but
-     we need Web Speech to keep running through the whole recording so
-     items tick off live as the inspector mentions them.
+  /* ── Speech recognition lifecycle (LIVE INTERIM PREVIEW ONLY) ────────
+     We do NOT use Web Speech for the canonical transcript anymore —
+     Whisper handles that at end-of-room from the full MediaRecorder
+     blob. Web Speech runs ONLY to populate the small "HEARING …"
+     peek strip with interim words while the user talks.
 
-     iOS Safari ends sessions every utterance, so we MUST auto-restart
-     to keep the live transcript alive. The OS mic-on chime fires per
-     restart (unavoidable) — short healthy sessions get a 700ms cool-
-     down so it doesn't strobe every couple seconds; long sessions
-     restart in ~120ms so we don't lose words.
+     We do NOT auto-restart. iOS Safari ends sessions per utterance;
+     when that happens, the peek goes quiet but the recording itself
+     is still capturing audio via MediaRecorder. The OS mic chime
+     fires ONCE per Resume tap — never every 6 seconds.
+
+     Auto-tick of the checklist now fires from the Whisper transcript
+     at end-of-room (when fireRoomAi runs), not live during recording.
   ─────────────────────────────────────────────────────────────────── */
-  const speechShouldRunRef = useRef(false);
-  const speechSessionStartRef = useRef(0);
-  const speechSessionGotResultRef = useRef(false);
-  const speechRestartTimerRef = useRef<number | null>(null);
-  const speechRestartFailuresRef = useRef(0);
-
   const killRecognizer = (rec: SpeechRecognitionLike | null) => {
     if (!rec) return;
     try { (rec as unknown as { onstart: unknown }).onstart = null; } catch { /* */ }
@@ -316,77 +307,33 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     try { rec.stop(); } catch { /* */ }
   };
 
-  const buildAndStartRecognizer = useCallback(() => {
+  const startPreviewRecognition = useCallback(() => {
     const Ctor = getSpeechRecognition();
     if (!Ctor) return;
     killRecognizer(recogRef.current);
     recogRef.current = null;
-    finalsProcessedThroughRef.current = -1;
 
     const r = new Ctor();
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-US";
-    speechSessionStartRef.current = Date.now();
-    speechSessionGotResultRef.current = false;
-    (r as unknown as { onstart: (() => void) | null }).onstart = () => {
-      speechSessionStartRef.current = Date.now();
-      finalsProcessedThroughRef.current = -1;
-    };
     r.onresult = (e) => {
       if (recogRef.current !== r) return;
+      // Build a fresh interim string each event — we don't accumulate
+      // anything because the canonical transcript comes from Whisper.
       let interim = "";
-      let newFinalText = "";
-      let highestFinalIdx = finalsProcessedThroughRef.current;
-      let lastFinal = lastFinalTextRef.current;
-      for (let i = 0; i < e.results.length; i++) {
-        const result = e.results[i];
-        const text = result[0]?.transcript || "";
-        if (result.isFinal) {
-          if (i > finalsProcessedThroughRef.current) {
-            const trimmed = text.trim();
-            const toAdd = dedupOverlap(lastFinal, trimmed);
-            if (toAdd) newFinalText += (newFinalText ? " " : "") + toAdd;
-            if (
-              trimmed.length > lastFinal.length ||
-              !trimmed.startsWith(lastFinal.slice(0, Math.min(lastFinal.length, trimmed.length)))
-            ) {
-              lastFinal = trimmed;
-            }
-            if (i > highestFinalIdx) highestFinalIdx = i;
-          }
-        } else {
-          interim += text;
-        }
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = e.results[i]?.[0]?.transcript || "";
+        if (!e.results[i].isFinal) interim += text;
       }
-      finalsProcessedThroughRef.current = highestFinalIdx;
-      lastFinalTextRef.current = lastFinal;
-      speechSessionGotResultRef.current = true;
-      speechRestartFailuresRef.current = 0;
-      if (newFinalText) appendTranscript(newFinalText);
       setLiveInterim(interim);
     };
     r.onend = () => {
-      if (recogRef.current !== r) return;
-      if (!speechShouldRunRef.current) return;
-      const lived = Date.now() - speechSessionStartRef.current;
-      let delay: number;
-      if (!speechSessionGotResultRef.current && lived < 4000) {
-        speechRestartFailuresRef.current = Math.min(speechRestartFailuresRef.current + 1, 5);
-        delay = Math.min(2500, 400 * 2 ** (speechRestartFailuresRef.current - 1));
-      } else {
-        speechRestartFailuresRef.current = 0;
-        if (lived < 6000) delay = 700;
-        else if (lived < 30000) delay = 250;
-        else delay = 120;
-      }
-      if (speechRestartTimerRef.current !== null) clearTimeout(speechRestartTimerRef.current);
-      speechRestartTimerRef.current = window.setTimeout(() => {
-        speechRestartTimerRef.current = null;
-        if (!speechShouldRunRef.current) return;
-        if (recogRef.current !== r) return;
-        buildAndStartRecognizer();
-      }, delay);
+      // No auto-restart. The MediaRecorder is still capturing audio;
+      // the user's words aren't being lost — they just stop showing
+      // up in the peek strip. Whisper at end-of-room covers everything.
+      if (recogRef.current === r) recogRef.current = null;
+      setLiveInterim("");
     };
     r.onerror = (ev) => {
       if (ev.error && ev.error !== "no-speech" && ev.error !== "aborted") {
@@ -395,22 +342,9 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     };
     recogRef.current = r;
     try { r.start(); } catch { /* */ }
-  }, [appendTranscript]);
-
-  const startPreviewRecognition = useCallback(() => {
-    if (!getSpeechRecognition()) return;
-    if (recogRef.current && speechShouldRunRef.current) return;
-    speechShouldRunRef.current = true;
-    speechRestartFailuresRef.current = 0;
-    buildAndStartRecognizer();
-  }, [buildAndStartRecognizer]);
+  }, []);
 
   const stopPreviewRecognition = useCallback(() => {
-    speechShouldRunRef.current = false;
-    if (speechRestartTimerRef.current !== null) {
-      clearTimeout(speechRestartTimerRef.current);
-      speechRestartTimerRef.current = null;
-    }
     const prev = recogRef.current;
     recogRef.current = null;
     killRecognizer(prev);
@@ -568,9 +502,6 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         },
       };
     });
-    // Reset dedup ref so a stale tail from this segment doesn't get
-    // matched against the first final of the next segment.
-    lastFinalTextRef.current = "";
   }, []);
 
   /* ── Unified inspecting toggle ──────────────────────────────────────
@@ -602,7 +533,6 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     setInspecting(false);
     setLiveInterim("");
     setPendingTyped("");
-    lastFinalTextRef.current = "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx]);
 
@@ -726,25 +656,46 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   /* ── Whisper transcription of the room's audio ───────────────────── */
   const transcribeRoomAudio = useCallback(async (room: string): Promise<string> => {
     const chunks = roomAudioChunksRef.current[room] || [];
-    if (chunks.length === 0) return "";
-    // Concatenate all this room's chunks into one Blob. The chunks are
-    // homogeneous because we always pick the same mime per session.
+    if (chunks.length === 0) {
+      console.warn(`[VoiceWalk] No audio chunks for room "${room}" — MediaRecorder may not have run.`);
+      useStore.getState().showToast("No audio captured — check mic permission and try again.", "warning");
+      return "";
+    }
     const type = chunks[0]?.type || "audio/webm";
     const blob = new Blob(chunks, { type });
-    if (blob.size < 1024) return ""; // too short to be worth transcribing
+    if (blob.size < 1024) {
+      console.warn(`[VoiceWalk] Audio for "${room}" too short (${blob.size}B) — skipping Whisper.`);
+      return "";
+    }
     try {
       const fd = new FormData();
       fd.append("audio", blob, `voicewalk-${room.replace(/\W+/g, "-")}.webm`);
       const res = await fetch("/api/transcribe", { method: "POST", body: fd });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        if (res.status === 503) {
+          // OPENAI_API_KEY not configured on the server — make this loud
+          // so the user actually adds the key. Without it the AI gets
+          // nothing useful and items end up lumped under "General".
+          useStore.getState().showToast(
+            "Voice transcription needs OPENAI_API_KEY set in Vercel. AI categorization won't work without it.",
+            "error"
+          );
+        } else {
+          useStore.getState().showToast(`Transcription failed: ${err.error || res.status}`, "error");
+        }
         console.warn("Transcribe failed:", res.status, err);
-        return ""; // caller will fall back to Web-Speech transcript
+        return "";
       }
       const data = await res.json();
-      return (data.text as string) || "";
+      const text = (data.text as string) || "";
+      if (!text.trim()) {
+        console.warn(`[VoiceWalk] Whisper returned empty text for "${room}".`);
+      }
+      return text;
     } catch (err) {
       console.warn("Transcribe network error:", err);
+      useStore.getState().showToast("Transcription network error — check connection.", "error");
       return "";
     }
   }, []);
@@ -826,35 +777,37 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
 
     setFinishStatus("Building inspection...");
     const out: InspectionRoom[] = [];
+    let aiSucceededAny = false;
+    let recordedAny = false;
     for (const room of rooms) {
       const items = roomItems[room];
       const rec = roomRecordings[room];
       const hasContent = rec && (rec.transcript.trim().length > 0 || rec.photos.length > 0);
+      if (hasContent) recordedAny = true;
       if (items && items.length > 0) {
         out.push({ name: room, sqft: 0, items });
-        continue;
+        aiSucceededAny = true;
       }
-      // AI returned nothing but the user did record content here — surface a
-      // single placeholder so their work isn't lost.
-      if (hasContent) {
-        out.push({
-          name: room,
-          sqft: 0,
-          items: [
-            {
-              name: "General",
-              condition: "F",
-              notes: rec.transcript.trim().slice(0, 240) || "(photos captured, no narration)",
-              photos: rec.photos.map((p) => p.url),
-            },
-          ],
-        });
-      }
+      // No "General" fallback. If AI returned nothing for this room we
+      // simply don't emit items — the room's existing checklist scaffold
+      // (from Inspector.startInspection) stays intact, so the user can
+      // still fill it in by hand. Recording itself isn't lost; transcript
+      // and photos remain on the recording for re-runs.
     }
     if (out.length === 0) {
-      useStore.getState().showToast("No content captured — nothing to build", "warning");
+      if (recordedAny) {
+        useStore.getState().showToast(
+          "AI couldn't categorize the recording. Check OPENAI_API_KEY in Vercel and try again.",
+          "error"
+        );
+      } else {
+        useStore.getState().showToast("No content captured — nothing to build", "warning");
+      }
       setFinishing(false);
       return;
+    }
+    if (!aiSucceededAny) {
+      useStore.getState().showToast("AI couldn't categorize any rooms — see console", "warning");
     }
     onComplete(out);
   };
