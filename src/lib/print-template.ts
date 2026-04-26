@@ -64,9 +64,9 @@ h2 {
   text-transform: uppercase;
   letter-spacing: .06em;
   font-weight: 600;
-  margin: 22px 0 8px;
+  margin: 14px 0 4px;
   border-bottom: 2px solid ${accent};
-  padding-bottom: 5px;
+  padding-bottom: 3px;
 }
 h3 {
   font-family: Oswald, sans-serif;
@@ -74,7 +74,7 @@ h3 {
   color: #444;
   text-transform: uppercase;
   letter-spacing: .06em;
-  margin: 14px 0 6px;
+  margin: 8px 0 4px;
 }
 h4 {
   font-family: Oswald, sans-serif;
@@ -250,8 +250,12 @@ tr:nth-child(even) td { background: #fafbfd; }
 @media print {
   body { background: #fff; }
   .page { padding: 18mm 16mm; max-width: 100%; }
-  h2 { break-after: avoid; }
-  table, .box, .head { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
+  /* Allow long material tables to break across pages — only the row and the
+     small summary boxes / page header should never split. Forcing whole
+     tables to stay together used to push tall trade sections onto their own
+     page and leave huge gaps. */
+  .box, .head { break-inside: avoid; }
   tr { break-inside: avoid; }
 }
 `;

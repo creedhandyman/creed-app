@@ -134,19 +134,16 @@ export function exportQuotePdf(opts: ExportOptions) {
     const clockHrs = crewSize > 1 ? (sectionHrs / crewSize).toFixed(1) : sectionHrs.toFixed(1);
 
     breakdownHtml += `
-    <div style="margin-bottom:18px;page-break-inside:avoid">
+    <div style="margin-bottom:10px">
       <h3>${esc(rm.name)}</h3>
       <table>
         <thead><tr><th>Material</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:80px">Unit Price</th><th class="r" style="width:80px">Total</th><th>Notes</th></tr></thead>
         <tbody>${matRows || '<tr><td colspan="5" class="dim">Labor only</td></tr>'}</tbody>
       </table>
-      <div style="background:#f5f7fa;border-radius:6px;padding:10px 14px;font-size:12px;margin-top:6px">
-        <div>Material Subtotal: <b>$${sectionMat.toFixed(2)}</b></div>
-        <div>Labor (${clockHrs} clock hrs × ${crewSize} crew = ${sectionHrs.toFixed(1)} man-hrs at $${rate}/hr): <b>$${sectionLabor.toFixed(2)}</b></div>
-        <div style="font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid #ddd;color:#2E75B6;font-weight:600">
-          Material: $${sectionMat.toFixed(2)} &nbsp;·&nbsp; Labor: $${sectionLabor.toFixed(2)} &nbsp;·&nbsp;
-          <b>Section Total: $${(sectionLabor + sectionMat).toFixed(2)}</b>
-        </div>
+      <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:#2E75B6;font-weight:600">
+        Labor (${clockHrs}h × ${crewSize} crew = ${sectionHrs.toFixed(1)} man-hrs @ $${rate}/hr): $${sectionLabor.toFixed(2)}
+        &nbsp;·&nbsp; Material: $${sectionMat.toFixed(2)}
+        &nbsp;·&nbsp; <b>Section Total: $${(sectionLabor + sectionMat).toFixed(2)}</b>
       </div>
     </div>`;
   });
