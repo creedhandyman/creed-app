@@ -67,9 +67,25 @@ export default function Login() {
           <img
             src="/CREED_LOGO.png"
             alt=""
-            style={{ height: 156, display: "block", margin: "0 auto 12px" }}
+            style={{ height: 156, display: "block", margin: "0 auto 8px" }}
             onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
           />
+          <p
+            style={{
+              fontFamily: "Oswald, sans-serif",
+              fontSize: 11,
+              letterSpacing: "0.14em",
+              color: "#9aa6b5",
+              margin: 0,
+              textTransform: "uppercase",
+            }}
+          >
+            All-in-One Business Manager
+            <span style={{ color: "#2E75B6", margin: "0 6px" }}>·</span>
+            Self-Learning
+            <span style={{ color: "#2E75B6", margin: "0 6px" }}>·</span>
+            Time Saver
+          </p>
         </div>
 
         {/* Card */}
