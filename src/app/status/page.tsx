@@ -103,11 +103,22 @@ function StatusContent() {
     if (!canvasRef.current || !job || !jobId) return;
     setSubmittingSig(true);
     const sigData = canvasRef.current.toDataURL("image/png");
-    await db.patch("jobs", jobId, {
+    // Signature on a "quoted" job auto-promotes it to "accepted" so the
+    // contractor's workload view reflects the new state without a manual
+    // status flip. Other statuses stay as-is — re-signing a paid invoice
+    // shouldn't reset its workflow state.
+    const patch: Record<string, unknown> = {
       client_signature: sigData,
       signature_date: new Date().toLocaleDateString(),
+    };
+    if (job.status === "quoted") patch.status = "accepted";
+    await db.patch("jobs", jobId, patch);
+    setJob({
+      ...job,
+      client_signature: sigData,
+      signature_date: new Date().toLocaleDateString(),
+      status: job.status === "quoted" ? "accepted" : job.status,
     });
-    setJob({ ...job, client_signature: sigData, signature_date: new Date().toLocaleDateString() });
     setSubmittingSig(false);
   };
 

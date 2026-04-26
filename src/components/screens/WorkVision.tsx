@@ -102,6 +102,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     } else {
       setActiveId(null);
     }
+    // Auto-promote the matching job from "scheduled" to "active" so the
+    // workload view reflects what's actually happening. Don't flip jobs
+    // already in "complete"/"paid" backwards.
+    if (job) {
+      const matched = jobs.find((j) => j.property === job && j.status === "scheduled");
+      if (matched) await db.patch("jobs", matched.id, { status: "active" });
+    }
   };
 
   // Clock out + save — patches the existing active row instead of inserting

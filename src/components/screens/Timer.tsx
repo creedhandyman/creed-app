@@ -173,6 +173,14 @@ export default function Timer({ setPage }: Props) {
       // a regular entry when the user clocks out.
       setActiveId(null);
     }
+    // Auto-promote the matching job from "scheduled" to "active" so the
+    // workload view reflects what's actually happening on site. Skip if the
+    // selected entry is "General" or doesn't match a scheduled job — we
+    // don't want to flip "complete" or "paid" backwards.
+    if (sj) {
+      const matched = jobs.find((j) => j.property === sj && j.status === "scheduled");
+      if (matched) await db.patch("jobs", matched.id, { status: "active" });
+    }
     // Jump to WorkVision so the crew lands on the work order + photo upload
     // flow for their active job instead of staring at the timer screen.
     setPage?.("workvision");
