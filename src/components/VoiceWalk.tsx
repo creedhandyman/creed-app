@@ -278,31 +278,27 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     return () => clearInterval(id);
   }, [inspecting]);
 
-  /* ── Transcript setter — called once Whisper returns at end-of-room. */
-  const setRoomTranscript = useCallback((finalText: string) => {
-    const room = currentRoomRef.current;
-    if (!room || !finalText) return;
-    setRoomRecordings((prev) => {
-      const cur = prev[room] || emptyRecording();
-      return { ...prev, [room]: { ...cur, transcript: finalText.trim() } };
-    });
-    setTranscriptTick((t) => t + 1);
-  }, []);
-
-  /* ── Speech recognition lifecycle (LIVE INTERIM PREVIEW ONLY) ────────
-     We do NOT use Web Speech for the canonical transcript anymore —
-     Whisper handles that at end-of-room from the full MediaRecorder
-     blob. Web Speech runs ONLY to populate the small "HEARING …"
-     peek strip with interim words while the user talks.
+  /* ── Speech recognition lifecycle (LIVE PREVIEW + auto-tick driver) ──
+     Web Speech feeds two things while the user is recording:
+     1) the small "HEARING …" peek strip (interim words)
+     2) the per-room transcript that drives auto-tick of the checklist
+        (final words appended via setRoomTranscript)
 
      We do NOT auto-restart. iOS Safari ends sessions per utterance;
-     when that happens, the peek goes quiet but the recording itself
-     is still capturing audio via MediaRecorder. The OS mic chime
-     fires ONCE per Resume tap — never every 6 seconds.
+     when that happens the peek goes quiet AND auto-tick stops growing.
+     The MediaRecorder keeps capturing audio in the background — at
+     end-of-room Whisper transcribes the full thing and OVERWRITES the
+     transcript, which re-fires auto-tick on a complete dataset and
+     feeds the AI categorization.
 
-     Auto-tick of the checklist now fires from the Whisper transcript
-     at end-of-room (when fireRoomAi runs), not live during recording.
+     Net: ONE OS mic chime per Resume tap (instead of every 6s), and
+     items still tick off live as they're mentioned (continuously on
+     Chrome desktop; for the first ~5–10s on iOS until the first
+     session ends naturally).
   ─────────────────────────────────────────────────────────────────── */
+  const finalsProcessedThroughRef = useRef(-1);
+  const lastFinalTextRef = useRef("");
+
   const killRecognizer = (rec: SpeechRecognitionLike | null) => {
     if (!rec) return;
     try { (rec as unknown as { onstart: unknown }).onstart = null; } catch { /* */ }
@@ -311,11 +307,31 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     try { rec.stop(); } catch { /* */ }
   };
 
+  /** Append a final fragment from Web Speech onto the room's transcript
+   *  so the auto-tick effect can read it during recording. Whisper
+   *  overwrites this wholesale at end-of-room with the canonical text.
+   */
+  const appendLiveTranscript = useCallback((finalText: string) => {
+    const room = currentRoomRef.current;
+    if (!room || !finalText.trim()) return;
+    setRoomRecordings((prev) => {
+      const cur = prev[room] || emptyRecording();
+      const sep = cur.transcript && !cur.transcript.endsWith(" ") ? " " : "";
+      return {
+        ...prev,
+        [room]: { ...cur, transcript: cur.transcript + sep + finalText.trim() },
+      };
+    });
+    setTranscriptTick((t) => t + 1);
+  }, []);
+
   const startPreviewRecognition = useCallback(() => {
     const Ctor = getSpeechRecognition();
     if (!Ctor) return;
     killRecognizer(recogRef.current);
     recogRef.current = null;
+    finalsProcessedThroughRef.current = -1;
+    lastFinalTextRef.current = "";
 
     const r = new Ctor();
     r.continuous = true;
@@ -323,19 +339,43 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     r.lang = "en-US";
     r.onresult = (e) => {
       if (recogRef.current !== r) return;
-      // Build a fresh interim string each event — we don't accumulate
-      // anything because the canonical transcript comes from Whisper.
+      // Walk every results entry, dedupe progressive supersets
+      // (iOS quirk — see dedupOverlap), and append only NEW final
+      // text past our watermark.
       let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const text = e.results[i]?.[0]?.transcript || "";
-        if (!e.results[i].isFinal) interim += text;
+      let newFinalText = "";
+      let highestFinalIdx = finalsProcessedThroughRef.current;
+      let lastFinal = lastFinalTextRef.current;
+      for (let i = 0; i < e.results.length; i++) {
+        const result = e.results[i];
+        const text = result[0]?.transcript || "";
+        if (result.isFinal) {
+          if (i > finalsProcessedThroughRef.current) {
+            const trimmed = text.trim();
+            const toAdd = dedupOverlap(lastFinal, trimmed);
+            if (toAdd) newFinalText += (newFinalText ? " " : "") + toAdd;
+            if (
+              trimmed.length > lastFinal.length ||
+              !trimmed.startsWith(lastFinal.slice(0, Math.min(lastFinal.length, trimmed.length)))
+            ) {
+              lastFinal = trimmed;
+            }
+            if (i > highestFinalIdx) highestFinalIdx = i;
+          }
+        } else {
+          interim += text;
+        }
       }
+      finalsProcessedThroughRef.current = highestFinalIdx;
+      lastFinalTextRef.current = lastFinal;
+      if (newFinalText) appendLiveTranscript(newFinalText);
       setLiveInterim(interim);
     };
     r.onend = () => {
-      // No auto-restart. The MediaRecorder is still capturing audio;
-      // the user's words aren't being lost — they just stop showing
-      // up in the peek strip. Whisper at end-of-room covers everything.
+      // No auto-restart. iOS will end the session after each utterance;
+      // when that happens, the user just stops seeing live ticks. The
+      // recording itself continues via MediaRecorder, and Whisper at
+      // end-of-room fills in everything that was missed.
       if (recogRef.current === r) recogRef.current = null;
       setLiveInterim("");
     };
@@ -346,7 +386,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     };
     recogRef.current = r;
     try { r.start(); } catch { /* */ }
-  }, []);
+  }, [appendLiveTranscript]);
 
   const stopPreviewRecognition = useCallback(() => {
     const prev = recogRef.current;
@@ -763,13 +803,16 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       const transcript = (whisperText || rec.transcript || "").trim();
 
       // Persist the canonical transcript back into the recording so the
-      // checklist auto-tick + UI display use it too.
+      // checklist auto-tick + UI display use it too. This OVERWRITES any
+      // partial Web-Speech transcript that accumulated during recording
+      // (Web Speech is fragmented on iOS; Whisper has the complete text).
       if (whisperText) {
         setRoomRecordings((prev) => {
           const cur = prev[room];
           if (!cur) return prev;
           return { ...prev, [room]: { ...cur, transcript: whisperText } };
         });
+        setTranscriptTick((t) => t + 1);
       }
 
       const checklist = presetItemsFor(room);
