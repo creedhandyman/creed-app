@@ -100,6 +100,35 @@ function presetItemsFor(room: string): string[] {
   return baseKey ? ROOM_PRESETS[baseKey] : [];
 }
 
+/* ── Transcript dedup ────────────────────────────────────────────────
+   Given the previous finalized text and a new finalized text, return
+   only the portion of `next` to append. This handles two real-world
+   buggy patterns we've seen on mobile browsers:
+
+   1. Progressive-superset bug: each interim becomes a new finalized
+      result at a new index, with text being the cumulative sentence
+      so far. Naive concatenation produces "okay okay so okay so here".
+   2. Audio-buffer overlap across recognizer restarts: when a session
+      ends mid-sentence and a new one starts, the new session's first
+      final often re-includes the tail of the prior session's final.
+
+   We find the longest suffix of `prev` that is also a prefix of `next`,
+   strip it, and return the remainder.
+*/
+function dedupOverlap(prev: string, next: string): string {
+  const p = prev.trim();
+  const n = next.trim();
+  if (!p) return n;
+  if (!n) return "";
+  const maxLen = Math.min(p.length, n.length);
+  for (let len = maxLen; len > 0; len--) {
+    if (p.endsWith(n.slice(0, len))) {
+      return n.slice(len).trim();
+    }
+  }
+  return n;
+}
+
 /* ── Component ─────────────────────────────────────────────────────── */
 
 export interface VoiceMoment {
@@ -142,6 +171,13 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   // exactly the "okay okay okay here here here" duplication the user sees.
   // Tracking our own watermark makes us robust to that browser bug.
   const finalsProcessedThroughRef = useRef(-1);
+  // Last full finalized text we accepted into the chunk. Used to dedupe
+  // the progressive-superset pattern where consecutive finals overlap
+  // ("okay" → "okay so" → "okay so here") via dedupOverlap above.
+  // Persists across recognizer restarts so audio-buffer overlap between
+  // sessions can also be deduped, but resets on photo capture (the chunk
+  // gets snapped) and on room change (fresh context).
+  const lastFinalTextRef = useRef("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -242,40 +278,54 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       // would otherwise leak duplicate text into the transcript.
       if (recogRef.current !== r) return;
       // We do NOT trust e.resultIndex (broken on some mobile browsers).
-      // Iterate the entire results array; for each finalized utterance,
-      // only add it if its index is past our watermark. For interim
-      // utterances, build a fresh preview string from scratch.
+      // Iterate the entire results array; for each finalized utterance
+      // past our watermark, dedupe its content against the previous
+      // final (handles progressive-superset bug + audio overlap across
+      // restarts). For interim, rebuild the preview string fresh.
       let interim = "";
       let newFinalText = "";
       let highestFinalIdx = finalsProcessedThroughRef.current;
+      let lastFinal = lastFinalTextRef.current;
       for (let i = 0; i < e.results.length; i++) {
         const result = e.results[i];
         const text = result[0]?.transcript || "";
         if (result.isFinal) {
           if (i > finalsProcessedThroughRef.current) {
-            newFinalText += text + " ";
+            const trimmed = text.trim();
+            const toAdd = dedupOverlap(lastFinal, trimmed);
+            if (toAdd) {
+              newFinalText += (newFinalText ? " " : "") + toAdd;
+            }
+            // Track the FULL text (not just the delta) so the next
+            // dedup compares against the right reference. If this
+            // entry is a strict superset of lastFinal, the superset
+            // is what subsequent entries will overlap with.
+            if (trimmed.length > lastFinal.length || !trimmed.startsWith(lastFinal.slice(0, Math.min(lastFinal.length, trimmed.length)))) {
+              lastFinal = trimmed;
+            }
             if (i > highestFinalIdx) highestFinalIdx = i;
           }
-          // else: already incorporated this finalized result on a prior
-          // event — skip to avoid duplication.
+          // else: already past our watermark — skip.
         } else {
           interim += text;
         }
       }
       finalsProcessedThroughRef.current = highestFinalIdx;
+      lastFinalTextRef.current = lastFinal;
       // Any result (even interim) means the session is healthy — reset
       // the failure counter so the next legitimate restart is fast.
       sessionGotResultRef.current = true;
       restartFailuresRef.current = 0;
       if (newFinalText) {
-        captureChunkRef.current += newFinalText;
+        const padded = (captureChunkRef.current.endsWith(" ") || !captureChunkRef.current ? "" : " ") + newFinalText + " ";
+        captureChunkRef.current += padded;
         const room = currentRoomRef.current;
         if (room) {
-          roomTranscriptRef.current[room] = (roomTranscriptRef.current[room] || "") + newFinalText;
+          roomTranscriptRef.current[room] = (roomTranscriptRef.current[room] || "") + padded;
           setRoomTranscriptTick((t) => t + 1);
         }
       }
-      setLiveTranscript(captureChunkRef.current + interim);
+      setLiveTranscript((captureChunkRef.current + (interim ? interim : "")).replace(/\s+/g, " "));
     };
     r.onend = () => {
       // Only the active recognizer is allowed to schedule a restart.
@@ -284,21 +334,33 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       if (recogRef.current !== r) return;
       if (!recogShouldRunRef.current) return;
       // Decide how aggressively to back off based on this session's life.
+      // Each restart triggers the OS mic-on chime, so short sessions get
+      // a noticeable cooldown to keep the chime from firing every couple
+      // seconds (the iOS Safari pattern, where every utterance ends the
+      // session). Long-running sessions (Chrome desktop, etc.) restart
+      // quickly so the user doesn't lose speech.
       const lived = Date.now() - sessionStartRef.current;
-      if (sessionGotResultRef.current || lived > 4000) {
-        // Healthy session — engine ended on its own (iOS 60s cap, long
-        // silence). Restart quickly; the chime is unavoidable but rare.
-        restartFailuresRef.current = 0;
-      } else {
-        // Session died fast and empty (e.g. immediate no-speech, mic
-        // permission flap, network blip). Back off so we don't chime on
-        // top of chime.
+      let delay: number;
+      if (!sessionGotResultRef.current && lived < 4000) {
+        // Session died fast and empty (no-speech, mic permission flap,
+        // network blip). Exponential backoff.
         restartFailuresRef.current = Math.min(restartFailuresRef.current + 1, 5);
+        delay = Math.min(2500, 400 * 2 ** (restartFailuresRef.current - 1));
+      } else {
+        restartFailuresRef.current = 0;
+        if (lived < 6000) {
+          // Healthy short session (typical iOS-Safari per-utterance
+          // ending). Wait long enough that the chime doesn't feel
+          // like a strobe. 700ms is a pause the user notices but
+          // tolerates; matches how a person taking a breath sounds.
+          delay = 700;
+        } else if (lived < 30000) {
+          delay = 250;
+        } else {
+          // Long session — engine was clearly stable. Restart fast.
+          delay = 120;
+        }
       }
-      const delay =
-        restartFailuresRef.current === 0
-          ? 120
-          : Math.min(2500, 400 * 2 ** (restartFailuresRef.current - 1));
       // Coalesce — only the most recent scheduled restart fires.
       if (restartTimerRef.current !== null) {
         clearTimeout(restartTimerRef.current);
@@ -441,6 +503,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     setLiveTranscript("");
     setPendingTranscript("");
     captureChunkRef.current = "";
+    lastFinalTextRef.current = "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx]);
 
@@ -506,6 +569,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     captureChunkRef.current = "";
     setLiveTranscript("");
     setPendingTranscript("");
+    // The chunk was just consumed — reset the dedup reference so the
+    // next final doesn't accidentally get truncated against text that's
+    // no longer in the chunk.
+    lastFinalTextRef.current = "";
 
     setUploading((c) => c + 1);
     try {
@@ -549,6 +616,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     captureChunkRef.current = "";
     setLiveTranscript("");
     setPendingTranscript("");
+    lastFinalTextRef.current = "";
     setRoomMoments((prev) => ({
       ...prev,
       [room]: [
