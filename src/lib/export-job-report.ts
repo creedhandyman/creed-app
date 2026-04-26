@@ -57,9 +57,21 @@ export function exportJobReport(opts: ReportOptions) {
   // Work order rows with priority pills
   const priColor = (pri: string) =>
     pri === "HIGH" ? "#C00000" : pri === "MED" ? "#ff8800" : "#00cc66";
+  // Workorder table rows, with a trade-group header before the first row of
+  // each new trade. The array is pre-sorted by trade in makeGuide so adjacent
+  // rows with the same room belong together — we just need a visible divider.
   const workRows = workOrder
-    .map(
-      (w) => `
+    .map((w, i) => {
+      const prev = i > 0 ? workOrder[i - 1].room : null;
+      const showHeader = w.room !== prev;
+      const tradeCount = workOrder.filter((x) => x.room === w.room).length;
+      const tradeHrs = workOrder
+        .filter((x) => x.room === w.room)
+        .reduce((sum, x) => sum + (x.hrs || 0), 0);
+      const header = showHeader
+        ? `<tr><td colspan="6" style="background:#f0f4f8;color:#2E75B6;font-family:Oswald,sans-serif;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-top:2px solid #2E75B6"><span>${esc(w.room)}</span><span style="float:right;color:#888;font-size:10px;letter-spacing:0;text-transform:none">${tradeCount} task${tradeCount === 1 ? "" : "s"} · ${tradeHrs.toFixed(1)}h</span></td></tr>`
+        : "";
+      return `${header}
     <tr>
       <td style="text-align:center;font-size:14px;color:${w.done ? "#00cc66" : "#cfd4dc"}">${w.done ? "&#10003;" : "&#9633;"}</td>
       <td><span style="font-family:Oswald,sans-serif;font-size:10px;padding:2px 7px;border-radius:3px;background:${priColor(w.pri)}22;color:${priColor(w.pri)};letter-spacing:.06em">${esc(w.pri)}</span></td>
@@ -68,8 +80,8 @@ export function exportJobReport(opts: ReportOptions) {
       <td class="dim">${esc(w.action)}</td>
       <td class="r">${w.hrs}h</td>
     </tr>
-  `,
-    )
+  `;
+    })
     .join("");
 
   // Photo grid (before/after pairs)

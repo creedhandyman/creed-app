@@ -2027,8 +2027,34 @@ export function makeGuide(rooms: Room[]): Guide {
     })
   );
 
+  // Sort steps by trade first (workflow order: rough trades → finishes →
+  // safety/compliance → cleanup), then by priority within each trade. This
+  // groups items so a tech doesn't bounce between toolboxes mid-job.
+  const TRADE_WORKFLOW = [
+    "Plumbing",
+    "Electrical",
+    "Carpentry",
+    "Appliances",
+    "Exterior",
+    "Flooring",
+    "Painting",
+    "Safety",
+    "Compliance",
+    "Cleaning/Hauling",
+  ];
+  const tradeIndex = (room: string): number => {
+    const i = TRADE_WORKFLOW.indexOf(room);
+    return i === -1 ? TRADE_WORKFLOW.length : i; // unknowns sort to the end
+  };
   const priOrder = { HIGH: 0, MED: 1, LOW: 2 };
-  steps.sort((a, b) => priOrder[a.pri] - priOrder[b.pri]);
+  steps.sort((a, b) => {
+    const ti = tradeIndex(a.room) - tradeIndex(b.room);
+    if (ti !== 0) return ti;
+    // Same trade: keep alphabetical by room name (stable for unknown trades),
+    // then priority within the same room.
+    if (a.room !== b.room) return a.room.localeCompare(b.room);
+    return priOrder[a.pri] - priOrder[b.pri];
+  });
 
   // Smart consolidation — group similar materials by category
   const grouped: Record<string, { name: string; totalCost: number; qty: number; rooms: Set<string> }> = {};

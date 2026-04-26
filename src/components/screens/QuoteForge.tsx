@@ -2110,9 +2110,41 @@ function GuideTab({
             No tasks yet. Add items to the quote or create one below.
           </div>
         )}
-        {workOrder.map((s, i) => (
+        {workOrder.map((s, i) => {
+          // Render a small trade header above the first step of each new trade
+          // group (the array is pre-sorted by trade in makeGuide). Helps the
+          // user see at a glance what's in each trade's bucket.
+          const prevTrade = i > 0 ? workOrder[i - 1].room : null;
+          const showHeader = s.room !== prevTrade;
+          const tradeHrs = workOrder
+            .filter((w) => w.room === s.room)
+            .reduce((sum, w) => sum + (w.hrs || 0), 0);
+          const tradeCount = workOrder.filter((w) => w.room === s.room).length;
+          return (
+          <div key={`group-${i}`}>
+          {showHeader && (
+            <div
+              style={{
+                marginTop: i === 0 ? 0 : 8,
+                marginBottom: 2,
+                fontSize: 11,
+                fontFamily: "Oswald",
+                textTransform: "uppercase",
+                letterSpacing: ".08em",
+                color: "var(--color-primary)",
+                display: "flex",
+                justifyContent: "space-between",
+                paddingBottom: 2,
+                borderBottom: `2px solid var(--color-primary)`,
+              }}
+            >
+              <span>{s.room}</span>
+              <span className="dim" style={{ fontSize: 10 }}>
+                {tradeCount} task{tradeCount === 1 ? "" : "s"} · {tradeHrs.toFixed(1)}h
+              </span>
+            </div>
+          )}
           <div
-            key={i}
             style={{
               padding: "4px 0",
               borderBottom: `1px solid ${border}`,
@@ -2175,7 +2207,9 @@ function GuideTab({
               ✕
             </button>
           </div>
-        ))}
+          </div>
+          );
+        })}
 
         {/* Add new task */}
         <div style={{ marginTop: 8, padding: 6, border: `1px dashed ${border}`, borderRadius: 4 }}>
