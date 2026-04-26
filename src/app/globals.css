@@ -560,11 +560,12 @@ button:focus-visible {
 .nav-bottom .vnav img { width: 24px; height: 24px; }
 .nav-bottom .mc {
   margin-right: 0;
-  /* 56px nav + 36px buffer + safe-area for the home indicator. The
-     buffer was bumped from 16 → 36 because Inspector's Save Inspection
-     button and the bottom of long forms were getting visually clipped
-     by the nav on shorter viewports. */
-  margin-bottom: calc(56px + 36px + env(safe-area-inset-bottom));
+  /* 56px nav + 72px buffer + safe-area. The buffer keeps growing
+     because iOS Safari's bottom URL bar (in iOS 15+) and the home
+     indicator together eat real viewport that fixed-position 0 doesn't
+     account for. 72px is enough that the last button in Inspector's
+     room nav sits clearly above the chrome. */
+  margin-bottom: calc(56px + 72px + env(safe-area-inset-bottom));
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
