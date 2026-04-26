@@ -1057,13 +1057,27 @@ export interface VoiceWalkMoment {
   room: string | null;
 }
 
+// Soft cap: split a single room's moments into chunks of this size if needed,
+// so a wildly photo-heavy room stays under the 4.5 MB request body limit.
+// 12 × ~150 KB JPEG × 1.33 base64 overhead ≈ 2.4 MB, comfortably under.
+const VOICE_WALK_MOMENTS_PER_CHUNK = 12;
+
+type VoiceWalkItem = {
+  name?: string;
+  condition?: string;
+  notes?: string;
+  photos?: string[];
+};
+
 /**
  * Convert a voice-narrated walk-through (a list of {photo, transcript, room}
  * moments) into structured InspectionRoom data, ready to feed into the
  * existing inspection-review and quote pipeline.
  *
- * One AI call: each moment is sent as a (text + image) pair; the model
- * groups by room and returns inspection items with name/condition/notes.
+ * Batched room-by-room: one AI call per room (further sub-chunked if a room
+ * has more than VOICE_WALK_MOMENTS_PER_CHUNK photos). Each call carries only
+ * that room's text + photos, so the model can't blur context across rooms
+ * and the request body stays small.
  */
 export async function aiParseVoiceWalk(
   moments: VoiceWalkMoment[],
@@ -1073,8 +1087,52 @@ export async function aiParseVoiceWalk(
 ): Promise<InspectionRoom[]> {
   if (moments.length === 0) return [];
 
-  // Fetch all photos as base64 for the vision call.
-  onProgress?.(`Loading ${moments.length} photo${moments.length === 1 ? "" : "s"}...`);
+  // Group moments by room while preserving the original order within each
+  // room (and the order rooms were first encountered).
+  const byRoom: Record<string, VoiceWalkMoment[]> = {};
+  const roomOrder: string[] = [];
+  for (const m of moments) {
+    const r = m.room || "General";
+    if (!byRoom[r]) { byRoom[r] = []; roomOrder.push(r); }
+    byRoom[r].push(m);
+  }
+
+  const out: InspectionRoom[] = [];
+  for (let i = 0; i < roomOrder.length; i++) {
+    const roomName = roomOrder[i];
+    const roomMoments = byRoom[roomName];
+
+    // Sub-chunk if this room has too many moments to fit in one call.
+    const chunks: VoiceWalkMoment[][] = [];
+    for (let j = 0; j < roomMoments.length; j += VOICE_WALK_MOMENTS_PER_CHUNK) {
+      chunks.push(roomMoments.slice(j, j + VOICE_WALK_MOMENTS_PER_CHUNK));
+    }
+
+    const items: InspectionRoom["items"] = [];
+    for (let c = 0; c < chunks.length; c++) {
+      const roomLabel = roomOrder.length > 1 ? `Room ${i + 1}/${roomOrder.length}: ${roomName}` : roomName;
+      const partLabel = chunks.length > 1 ? ` (part ${c + 1}/${chunks.length})` : "";
+      onProgress?.(`${roomLabel}${partLabel} — analyzing ${chunks[c].length} photo${chunks[c].length === 1 ? "" : "s"}...`);
+      const chunkItems = await processVoiceWalkChunk(roomName, chunks[c], property, client);
+      items.push(...chunkItems);
+    }
+
+    if (items.length > 0) {
+      out.push({ name: roomName, sqft: 0, items });
+    }
+  }
+
+  return out;
+}
+
+/** One AI call covering a single room (or a chunk of one). Returns items only. */
+async function processVoiceWalkChunk(
+  roomName: string,
+  moments: VoiceWalkMoment[],
+  property: string,
+  client: string
+): Promise<InspectionRoom["items"]> {
+  // Fetch photos as base64 for the vision call.
   const imageData: string[] = [];
   for (const m of moments) {
     try {
@@ -1091,8 +1149,6 @@ export async function aiParseVoiceWalk(
     }
   }
 
-  // Build the message content: alternating image + text for each moment so
-  // the AI sees each photo paired with its transcript.
   const content: Array<
     | { type: "text"; text: string }
     | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
@@ -1103,9 +1159,8 @@ export async function aiParseVoiceWalk(
     text:
       `Property: ${property || "(unspecified)"}\n` +
       `Client: ${client || "(unspecified)"}\n` +
-      `Below are ${moments.length} moment${moments.length === 1 ? "" : "s"} from a voice-narrated walk-through. ` +
-      `Each moment is one photo + the user's spoken description + the room they said they were in. ` +
-      `Process every moment and return JSON.\n`,
+      `Room: ${roomName}\n` +
+      `Below are ${moments.length} moment${moments.length === 1 ? "" : "s"} from a voice-narrated walk-through, ALL captured in the ${roomName}. Each moment is one photo + the user's spoken description. Process every moment and return JSON.\n`,
   });
 
   moments.forEach((m, i) => {
@@ -1120,36 +1175,30 @@ export async function aiParseVoiceWalk(
     content.push({
       type: "text",
       text:
-        `Moment ${i + 1} — Room: ${m.room || "General"} — Transcript: "${m.transcript || "(silent — infer from photo)"}" — photoUrl: ${m.photoUrl}`,
+        `Moment ${i + 1} — Transcript: "${m.transcript || "(silent — infer from photo)"}" — photoUrl: ${m.photoUrl}`,
     });
   });
 
-  const system = `You convert a voice-narrated property walk-through into a structured inspection report. For each moment (one photo + spoken description), produce ONE inspection item with these exact fields:
+  const system = `You convert one room's moments from a voice-narrated property walk-through into structured inspection items. For each moment (photo + spoken description), produce ONE inspection item with these exact fields:
 - "name": short generic component label (e.g. "Sink/Faucet", "Walls/Ceiling", "Door/Lock", "Flooring", "Cabinets", "Toilet", "Tub/Shower", "Outlet/Switch", "Light Fixture"). Use property-inspection conventions, not specific brand names.
 - "condition": EXACTLY one of "S" (Satisfactory), "F" (Fair, minor wear), "P" (Poor, needs attention), "D" (Damaged, urgent). Infer from the transcript and photo. Default to "F" if genuinely unclear.
 - "notes": Clean, professional 1-2 sentence description suitable for an inspection report. Lightly tidy the spoken transcript — fix grammar, expand abbreviations, remove filler words — but preserve specific details (sizes, brands, locations, quantities). If the transcript is empty, describe what the photo shows.
 - "photos": array containing exactly the photoUrl provided for that moment.
 
-Group items into rooms keyed by the room name provided for each moment. Multiple moments in the same room go in the same room's items array. Output ONLY valid JSON of this shape, nothing else:
+Output ONLY valid JSON of this shape, nothing else:
 
 {
-  "rooms": [
-    {
-      "name": "Kitchen",
-      "items": [
-        { "name": "Sink/Faucet", "condition": "P", "notes": "Faucet aerator is loose and dripping; needs tightening or replacement.", "photos": ["https://..."] }
-      ]
-    }
+  "items": [
+    { "name": "Sink/Faucet", "condition": "P", "notes": "Faucet aerator is loose and dripping; needs tightening or replacement.", "photos": ["https://..."] }
   ]
 }`;
 
-  onProgress?.("Structuring with AI...");
   const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 8000,
+      max_tokens: 4000,
       system,
       messages: [{ role: "user", content }],
     }),
@@ -1168,25 +1217,15 @@ Group items into rooms keyed by the room name provided for each moment. Multiple
   const jsonMatch = responseText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return [];
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      rooms?: Array<{
-        name?: string;
-        items?: Array<{ name?: string; condition?: string; notes?: string; photos?: string[] }>;
-      }>;
-    };
-    const rooms: InspectionRoom[] = (parsed.rooms || []).map((r) => ({
-      name: r.name || "General",
-      sqft: 0,
-      items: (r.items || []).map((it) => ({
-        name: it.name || "Item",
-        condition: typeof it.condition === "string" && /^[SFPD]$/i.test(it.condition)
-          ? it.condition.toUpperCase()
-          : "F",
-        notes: it.notes || "",
-        photos: Array.isArray(it.photos) ? it.photos.filter((p): p is string => typeof p === "string") : [],
-      })),
+    const parsed = JSON.parse(jsonMatch[0]) as { items?: VoiceWalkItem[] };
+    return (parsed.items || []).map((it) => ({
+      name: it.name || "Item",
+      condition: typeof it.condition === "string" && /^[SFPD]$/i.test(it.condition)
+        ? it.condition.toUpperCase()
+        : "F",
+      notes: it.notes || "",
+      photos: Array.isArray(it.photos) ? it.photos.filter((p): p is string => typeof p === "string") : [],
     }));
-    return rooms.filter((r) => r.items.length > 0);
   } catch (e) {
     console.error("VoiceWalk JSON parse failed:", e);
     return [];
