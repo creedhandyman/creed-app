@@ -382,26 +382,29 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
 
       {/* ── Quick Schedule: drag or tap-arm a job, then drop/tap a day ── */}
       {(() => {
-        // Palette shows both accepted (ready to schedule for the first time)
-        // and scheduled jobs (so the user can drag them onto another day to
-        // add a return visit / multi-day work). Archived jobs are excluded
-        // — those are explicitly set aside as cold leads. Sorted with
-        // accepted first so the new work is what the user sees first.
+        // Palette shows accepted (ready to schedule for the first time),
+        // scheduled (already on calendar — drop to add another visit), and
+        // active (mid-job — drop to add a return visit or follow-up day).
+        // Archived jobs are excluded. Sorted accepted → scheduled → active
+        // so the newest work is what the user sees first.
+        const STATUS_ORDER: Record<string, number> = { accepted: 0, scheduled: 1, active: 2 };
         const palette = jobs
-          .filter((j) => !j.archived && (j.status === "accepted" || j.status === "scheduled"))
-          .sort((a, b) => {
-            if (a.status === b.status) return 0;
-            return a.status === "accepted" ? -1 : 1;
-          });
+          .filter((j) => !j.archived && (j.status === "accepted" || j.status === "scheduled" || j.status === "active"))
+          .sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
         if (palette.length === 0) return null;
         const acceptedCount = palette.filter((j) => j.status === "accepted").length;
-        const scheduledCount = palette.length - acceptedCount;
+        const scheduledCount = palette.filter((j) => j.status === "scheduled").length;
+        const activeCount = palette.filter((j) => j.status === "active").length;
         return (
           <div className="cd mb" style={{ borderLeft: "3px solid var(--color-success)" }}>
             <h4 style={{ fontSize: 13, marginBottom: 6 }}>
               👆 {t("sched.quickSchedule")}
               <span className="dim" style={{ fontSize: 11, fontWeight: 400, marginLeft: 6 }}>
-                ({acceptedCount} accepted{scheduledCount ? `, ${scheduledCount} scheduled` : ""})
+                ({[
+                  acceptedCount && `${acceptedCount} accepted`,
+                  scheduledCount && `${scheduledCount} scheduled`,
+                  activeCount && `${activeCount} active`,
+                ].filter(Boolean).join(", ")})
               </span>
               {armedJob && (
                 <span style={{ marginLeft: 8, color: "var(--color-success)", fontSize: 11, fontFamily: "Oswald" }}>
@@ -413,9 +416,23 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               {palette.map((j) => {
                 const isArmed = armedJob === j.property;
                 const isScheduled = j.status === "scheduled";
-                // Accepted = solid green (new work). Scheduled = dashed
-                // primary (already on calendar; dropping adds another day).
-                const baseColor = isScheduled ? "var(--color-primary)" : "var(--color-success)";
+                const isActive = j.status === "active";
+                // Accepted = solid green (new work, ready to schedule).
+                // Scheduled = dashed primary (already on calendar; drop to
+                // add another visit).
+                // Active = solid highlight/yellow (mid-job; drop to schedule
+                // a return or follow-up day).
+                const baseColor = isActive
+                  ? "var(--color-highlight)"
+                  : isScheduled
+                  ? "var(--color-primary)"
+                  : "var(--color-success)";
+                const prefix = isArmed ? "✓ " : isActive ? "⚡ " : isScheduled ? "📅 " : "";
+                const tip = isActive
+                  ? "In progress — drop on a day to schedule a return visit"
+                  : isScheduled
+                  ? "Already scheduled — drop on a day to add another visit"
+                  : "Accepted — drop on a day to schedule";
                 return (
                   <button
                     key={j.id}
@@ -427,7 +444,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                     }}
                     onDragEnd={() => setHoverDay(null)}
                     onClick={() => setArmedJob(isArmed ? null : j.property)}
-                    title={isScheduled ? "Already scheduled — drop on a day to add another visit" : "Accepted — drop on a day to schedule"}
+                    title={tip}
                     style={{
                       padding: "6px 12px",
                       borderRadius: 16,
@@ -441,7 +458,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                       opacity: isScheduled && !isArmed ? 0.85 : 1,
                     }}
                   >
-                    {isArmed ? "✓ " : isScheduled ? "📅 " : ""}
+                    {prefix}
                     {j.property.length > 28 ? j.property.slice(0, 28) + "…" : j.property}
                   </button>
                 );
