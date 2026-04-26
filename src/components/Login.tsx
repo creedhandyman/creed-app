@@ -49,8 +49,21 @@ export default function Login() {
       }}
     >
       <div style={{ width: 340 }}>
-        {/* Logo + Title */}
+        {/* Title + Logo */}
         <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <h1
+            style={{
+              fontFamily: "Oswald, sans-serif",
+              fontSize: 36,
+              fontWeight: 700,
+              letterSpacing: "0.18em",
+              color: "#2E75B6",
+              margin: "0 0 12px",
+              textTransform: "uppercase",
+            }}
+          >
+            C.H.M
+          </h1>
           <img
             src="/CREED_LOGO.png"
             alt=""
