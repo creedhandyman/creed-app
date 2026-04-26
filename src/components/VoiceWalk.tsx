@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
 import { ROOM_PRESETS } from "./screens/Inspector";
 import type { InspectionRoom, InspectionItem } from "./screens/Inspector";
+import { Icon } from "./Icon";
 
 /* ── Web Speech API typing — narrow declarations so we don't pull in the
    full DOM lib type for every browser variant. ──────────────────────── */
@@ -884,7 +885,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           style={{ fontSize: 12, padding: "4px 8px" }}
         >← Cancel</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <span>🎤</span> Voice Walk
+          <Icon name="mic" size={18} color="var(--color-primary)" strokeWidth={2} /> Voice Walk
         </h2>
         <span className="dim" style={{ fontSize: 11 }}>
           Room {currentIdx + 1}/{rooms.length}

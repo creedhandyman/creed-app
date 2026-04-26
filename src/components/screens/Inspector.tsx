@@ -128,7 +128,7 @@ interface Props {
   darkMode: boolean;
 }
 
-type Step = "rooms" | "inspect" | "review" | "voice";
+type Step = "rooms" | "inspect" | "review";
 
 export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   // Load saved state from localStorage
@@ -477,71 +477,10 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         >
           Start Inspection ({selectedRooms.length} areas) →
         </button>
-
-        {/* Alternative entry — voice-narrated walk-through. Same room
-            selection feeds the chip strip inside Voice Walk so the user can
-            tap which area they're currently in as they move through the unit. */}
-        <button
-          onClick={() => {
-            // Need rooms + property to do a useful voice walk too.
-            if (!selectedRooms.length || !property) return;
-            // Initialize roomData with empty rooms so the review step has
-            // somewhere to merge the AI-structured findings into.
-            startInspection();
-            setStep("voice");
-          }}
-          disabled={!selectedRooms.length || !property}
-          style={{
-            width: "100%",
-            padding: 12,
-            fontSize: 14,
-            marginTop: 8,
-            background: "transparent",
-            color: "var(--color-success)",
-            border: `2px solid var(--color-success)`,
-            borderRadius: 8,
-            opacity: !selectedRooms.length || !property ? 0.5 : 1,
-          }}
-        >
-          🎤 Voice Walk — Talk &amp; Photograph
-        </button>
-        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
-          Walk the unit, describe issues out loud, snap photos. AI fills the inspection.
+        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 6 }}>
+          Each room has a Voice mic — tap it inside the inspection to record continuously and let AI fill the checklist.
         </p>
       </div>
-    );
-  }
-
-  /* ═══════════════════════════════════
-     VOICE WALK
-     ═══════════════════════════════════ */
-  if (step === "voice") {
-    return (
-      <VoiceWalk
-        property={property}
-        client={client}
-        rooms={selectedRooms}
-        onComplete={(structuredRooms) => {
-          // Merge the AI-structured findings into the empty room scaffolds
-          // built by startInspection. If the AI returned a room name not in
-          // the user's selected list, append it as a custom area.
-          setRoomData((prev) => {
-            const byName: Record<string, InspectionRoom> = {};
-            prev.forEach((r) => { byName[r.name] = r; });
-            structuredRooms.forEach((sr) => {
-              if (!byName[sr.name]) byName[sr.name] = { name: sr.name, sqft: 0, items: [] };
-              byName[sr.name] = {
-                ...byName[sr.name],
-                items: [...byName[sr.name].items, ...sr.items],
-              };
-            });
-            return Object.values(byName);
-          });
-          setStep("review");
-        }}
-        onCancel={() => setStep("rooms")}
-        darkMode={darkMode}
-      />
     );
   }
 
@@ -629,16 +568,17 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                 color: "#fff",
                 border: "none",
                 borderRadius: 16,
-                padding: "5px 10px",
+                padding: "5px 12px",
                 fontSize: 13,
                 fontFamily: "Oswald",
                 letterSpacing: ".04em",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 4,
+                gap: 5,
               }}
             >
-              🎤 Voice
+              <Icon name="mic" size={14} color="#fff" strokeWidth={2.25} />
+              Voice
             </button>
             <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald" }}>
               {currentRoomIdx + 1} / {roomData.length}
