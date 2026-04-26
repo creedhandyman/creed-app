@@ -125,6 +125,15 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   const fileFallbackRef = useRef<HTMLInputElement>(null);
   const recogRef = useRef<SpeechRecognitionLike | null>(null);
   const recogShouldRunRef = useRef(false);
+  // Restart bookkeeping. Each new SpeechRecognition session triggers the
+  // OS "mic on" chime (especially on iOS / accessibility-enabled Android),
+  // so we want to avoid rapid-fire restarts. We track the session's start
+  // time and whether it produced any speech; sessions that die fast and
+  // empty get exponentially-backed-off restarts.
+  const sessionStartRef = useRef(0);
+  const sessionGotResultRef = useRef(false);
+  const restartFailuresRef = useRef(0);
+  const restartTimerRef = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -187,19 +196,20 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   // creating a new recognizer and from stopRecognition.
   const killRecognizer = (rec: SpeechRecognitionLike | null) => {
     if (!rec) return;
+    try { (rec as unknown as { onstart: unknown }).onstart = null; } catch { /* */ }
     try { rec.onend = null; rec.onresult = null; rec.onerror = null; } catch { /* */ }
     try { rec.abort(); } catch { /* */ }
     try { rec.stop(); } catch { /* */ }
   };
 
-  const startRecognition = useCallback(() => {
+  // Internal builder — actually constructs and starts a recognizer.
+  // startRecognition wraps this with the "is one already running?" guard;
+  // the onend handler calls scheduleRestart() to bring up a fresh one
+  // with backoff so we don't machine-gun the OS mic-on chime.
+  const buildAndStart = useCallback(() => {
     const Ctor = getSpeechRecognition();
     if (!Ctor) return;
-    // If a recognizer is already running for this session, don't spawn a
-    // second one — that's the path that produced doubled transcripts.
-    if (recogRef.current && recogShouldRunRef.current) return;
-    // Hard-stop any prior recognizer (handlers detached so it can't
-    // resurrect itself in onend).
+    // Always tear down any previous instance before spawning a new one.
     killRecognizer(recogRef.current);
     recogRef.current = null;
 
@@ -207,6 +217,14 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-US";
+    // Track whether this particular session actually produced any speech;
+    // failed/empty sessions trigger backoff so we don't restart in a
+    // tight loop and chime repeatedly.
+    sessionStartRef.current = Date.now();
+    sessionGotResultRef.current = false;
+    (r as unknown as { onstart: (() => void) | null }).onstart = () => {
+      sessionStartRef.current = Date.now();
+    };
     r.onresult = (e) => {
       // Only the currently-active recognizer's events count. A
       // previously-aborted instance whose onresult fires one last time
@@ -220,6 +238,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         if (result.isFinal) final += text + " ";
         else interim += text;
       }
+      // Any result (even interim) means the session is healthy — reset
+      // the failure counter so the next legitimate restart is fast.
+      sessionGotResultRef.current = true;
+      restartFailuresRef.current = 0;
       if (final) {
         captureChunkRef.current += final;
         const room = currentRoomRef.current;
@@ -231,13 +253,39 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       setLiveTranscript(captureChunkRef.current + interim);
     };
     r.onend = () => {
-      // Only the active recognizer is allowed to self-restart. Stale
-      // instances (from a prior start/stop cycle) bail here so they
+      // Only the active recognizer is allowed to schedule a restart.
+      // Stale instances (from a prior start/stop cycle) bail here so they
       // can't run in parallel with the current one.
       if (recogRef.current !== r) return;
-      if (recogShouldRunRef.current) {
-        try { r.start(); } catch { /* already running */ }
+      if (!recogShouldRunRef.current) return;
+      // Decide how aggressively to back off based on this session's life.
+      const lived = Date.now() - sessionStartRef.current;
+      if (sessionGotResultRef.current || lived > 4000) {
+        // Healthy session — engine ended on its own (iOS 60s cap, long
+        // silence). Restart quickly; the chime is unavoidable but rare.
+        restartFailuresRef.current = 0;
+      } else {
+        // Session died fast and empty (e.g. immediate no-speech, mic
+        // permission flap, network blip). Back off so we don't chime on
+        // top of chime.
+        restartFailuresRef.current = Math.min(restartFailuresRef.current + 1, 5);
       }
+      const delay =
+        restartFailuresRef.current === 0
+          ? 120
+          : Math.min(2500, 400 * 2 ** (restartFailuresRef.current - 1));
+      // Coalesce — only the most recent scheduled restart fires.
+      if (restartTimerRef.current !== null) {
+        clearTimeout(restartTimerRef.current);
+      }
+      restartTimerRef.current = window.setTimeout(() => {
+        restartTimerRef.current = null;
+        if (!recogShouldRunRef.current) return;
+        if (recogRef.current !== r) return;
+        // Replace this dead instance with a fresh one (a new SR after end
+        // is sometimes more reliable than calling .start() on the old).
+        buildAndStart();
+      }, delay);
     };
     r.onerror = (ev) => {
       if (ev.error && ev.error !== "no-speech" && ev.error !== "aborted") {
@@ -245,12 +293,25 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       }
     };
     recogRef.current = r;
-    recogShouldRunRef.current = true;
-    try { r.start(); } catch { /* */ }
+    try { r.start(); } catch { /* already running */ }
   }, []);
+
+  const startRecognition = useCallback(() => {
+    if (!getSpeechRecognition()) return;
+    // If a recognizer is already alive for this session, don't spawn a
+    // second one — that's the path that produced doubled transcripts.
+    if (recogRef.current && recogShouldRunRef.current) return;
+    recogShouldRunRef.current = true;
+    restartFailuresRef.current = 0;
+    buildAndStart();
+  }, [buildAndStart]);
 
   const stopRecognition = useCallback(() => {
     recogShouldRunRef.current = false;
+    if (restartTimerRef.current !== null) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
     const prev = recogRef.current;
     recogRef.current = null;
     killRecognizer(prev);
