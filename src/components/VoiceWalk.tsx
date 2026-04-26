@@ -2,9 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
-import { aiParseVoiceWalkRoom } from "@/lib/parser";
 import { ROOM_PRESETS } from "./screens/Inspector";
-import type { InspectionRoom, InspectionItem } from "./screens/Inspector";
 import { Icon } from "./Icon";
 
 /* ── Web Speech API typing — narrow declarations so we don't pull in the
@@ -155,37 +153,56 @@ const emptyRecording = (): RoomRecording => ({
   lastResumedAt: null,
 });
 
+// Internal status type for the strip's color/icon helpers below.
 type RoomStatus = "pending" | "analyzing" | "done" | "failed";
 
-const conditionLabel = (c?: string) => {
-  if (c === "S") return "Satisfactory";
-  if (c === "F") return "Fair";
-  if (c === "P") return "Poor";
-  if (c === "D") return "Damaged";
-  return "";
-};
-const conditionColor = (c?: string) => {
-  if (c === "S") return "var(--color-success)";
-  if (c === "F") return "var(--color-highlight)";
-  if (c === "P") return "var(--color-warning)";
-  if (c === "D") return "var(--color-accent-red)";
-  return "var(--color-primary)";
-};
+// (conditionLabel/Color helpers moved to Inspector — VoiceWalk no
+//  longer renders AI condition badges; the parent does that after
+//  background processing completes.)
+
+/** Raw recording payload handed back to the parent on finish. The
+ *  parent (Inspector) runs Whisper + AI in the background so the
+ *  user can advance to the next room without blocking on processing.
+ *  See Inspector.processRoomVoice. */
+export interface VoiceWalkResult {
+  /** Audio captured by MediaRecorder for this segment. Null if the
+   *  recorder failed (mic denied, etc.). */
+  audioBlob: Blob | null;
+  audioMime: string;
+  /** Photos captured during the recording, in order with relative
+   *  timestamps so AI can correlate "what was being said" per photo. */
+  photos: { url: string; tsRelativeMs: number }[];
+  /** Whatever Web Speech captured live (peek strip text). On iOS
+   *  this is fragmented; the parent should re-transcribe the audio
+   *  via Whisper for the canonical transcript. */
+  partialTranscript: string;
+}
+
+/** Per-room status the parent passes in for the progress strip.
+ *  "analyzing" → ⏳ (Whisper/AI running in the background)
+ *  "done"      → ✓
+ *  "failed"    → ✕
+ *  undefined   → not started */
+export type VoiceWalkRoomStatus = "analyzing" | "done" | "failed";
 
 interface Props {
   property: string;
   client: string;
   rooms: string[];
-  onComplete: (data: InspectionRoom[]) => void;
+  onComplete: (result: VoiceWalkResult) => void;
   onCancel: () => void;
   darkMode: boolean;
-  /** When true (or when rooms.length === 1), hide the multi-room
-   *  progress strip and replace "Next Room" with a "Done" button.
-   *  Used by the Inspector per-room mic integration. */
+  /** When true (or when rooms.length === 1), the strip is informational
+   *  only — the user can't navigate to a different room. They came in
+   *  via Inspector's per-room mic, do this one room, return. */
   singleRoom?: boolean;
+  /** Statuses for OTHER rooms in the inspection that the parent is
+   *  processing in the background. Lights up the strip with ⏳/✓. */
+  roomStatuses?: Record<string, VoiceWalkRoomStatus>;
 }
 
-export default function VoiceWalk({ property, client, rooms, onComplete, onCancel, darkMode, singleRoom }: Props) {
+export default function VoiceWalk({ property, client: _client, rooms, onComplete, onCancel, darkMode, singleRoom, roomStatuses }: Props) {
+  void property; void _client; // (used only by the parent's processRoomVoice now)
   const isSingleRoom = singleRoom || rooms.length === 1;
 
   // Refs that survive renders
@@ -225,13 +242,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   // Per-room state — ONE recording per room, append-only across pause/resume.
   const [currentIdx, setCurrentIdx] = useState(0);
   const [roomRecordings, setRoomRecordings] = useState<Record<string, RoomRecording>>({});
-  const [roomItems, setRoomItems] = useState<Record<string, InspectionItem[]>>({});
-  const [roomStatus, setRoomStatus] = useState<Record<string, RoomStatus>>({});
-  const roomStatusRef = useRef<Record<string, RoomStatus>>({});
   const [mentioned, setMentioned] = useState<Record<string, Set<string>>>({});
-  // Hash of (transcript-length, photo-count) for skip-replay; if a room's
-  // hash hasn't changed since last AI run, don't refire.
-  const roomLastProcessedRef = useRef<Record<string, string>>({});
   // Tick state to force re-render when transcript grows in roomRecordings.
   const [transcriptTick, setTranscriptTick] = useState(0);
 
@@ -242,9 +253,6 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   const [torchAvailable, setTorchAvailable] = useState(true);
   const [torchOn, setTorchOn] = useState(false);
 
-  // Final state
-  const [finishing, setFinishing] = useState(false);
-  const [finishStatus, setFinishStatus] = useState("");
   // Live-elapsed clock for the recording display
   const [nowTick, setNowTick] = useState(0);
 
@@ -731,213 +739,35 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     if (fileFallbackRef.current) fileFallbackRef.current.value = "";
   };
 
-  /* ── Whisper transcription of the room's audio ───────────────────── */
-  const transcribeRoomAudio = useCallback(async (room: string): Promise<string> => {
-    const chunks = roomAudioChunksRef.current[room] || [];
-    if (chunks.length === 0) {
-      console.warn(`[VoiceWalk] No audio chunks for room "${room}" — MediaRecorder may not have run.`);
-      useStore.getState().showToast("No audio captured — check mic permission and try again.", "warning");
-      return "";
-    }
-    const type = chunks[0]?.type || "audio/webm";
-    const blob = new Blob(chunks, { type });
-    if (blob.size < 1024) {
-      console.warn(`[VoiceWalk] Audio for "${room}" too short (${blob.size}B) — skipping Whisper.`);
-      return "";
-    }
-    try {
-      const fd = new FormData();
-      fd.append("audio", blob, `voicewalk-${room.replace(/\W+/g, "-")}.webm`);
-      const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        if (res.status === 503) {
-          // OPENAI_API_KEY not configured on the server — make this loud
-          // so the user actually adds the key. Without it the AI gets
-          // nothing useful and items end up lumped under "General".
-          useStore.getState().showToast(
-            "Voice transcription needs OPENAI_API_KEY set in Vercel. AI categorization won't work without it.",
-            "error"
-          );
-        } else {
-          useStore.getState().showToast(`Transcription failed: ${err.error || res.status}`, "error");
-        }
-        console.warn("Transcribe failed:", res.status, err);
-        return "";
-      }
-      const data = await res.json();
-      const text = (data.text as string) || "";
-      console.log(`[VoiceWalk] Whisper for "${room}": audio ${blob.size}B → ${text.length} chars: "${text.slice(0, 120)}${text.length > 120 ? "…" : ""}"`);
-      if (!text.trim()) {
-        console.warn(`[VoiceWalk] Whisper returned empty text for "${room}".`);
-      }
-      return text;
-    } catch (err) {
-      console.warn("Transcribe network error:", err);
-      useStore.getState().showToast("Transcription network error — check connection.", "error");
-      return "";
-    }
-  }, []);
-
-  /* ── Per-room AI processing (background) ─────────────────────────── */
-  const fireRoomAi = useCallback(async (room: string) => {
-    const rec = roomRecordings[room];
-    if (!rec) return;
-    const photos = rec.photos;
-    const audioChunks = roomAudioChunksRef.current[room] || [];
-    if ((rec.transcript || "").trim().length < 5 && photos.length === 0 && audioChunks.length === 0) return;
-
-    const sig = `${(rec.transcript || "").length}|${photos.length}|${audioChunks.length}`;
-    if (
-      roomLastProcessedRef.current[room] === sig &&
-      roomStatusRef.current[room] === "done"
-    ) return;
-    roomLastProcessedRef.current[room] = sig;
-    setRoomStatus((prev) => ({ ...prev, [room]: "analyzing" }));
-    roomStatusRef.current[room] = "analyzing";
-    try {
-      // Prefer Whisper transcription of the canonical audio. Fall back
-      // to whatever Web Speech gave us in the live preview if Whisper
-      // is unavailable (no OPENAI_API_KEY) or the audio is too short.
-      const whisperText = await transcribeRoomAudio(room);
-      const transcript = (whisperText || rec.transcript || "").trim();
-
-      // Persist the canonical transcript back into the recording so the
-      // checklist auto-tick + UI display use it too. This OVERWRITES any
-      // partial Web-Speech transcript that accumulated during recording
-      // (Web Speech is fragmented on iOS; Whisper has the complete text).
-      if (whisperText) {
-        setRoomRecordings((prev) => {
-          const cur = prev[room];
-          if (!cur) return prev;
-          return { ...prev, [room]: { ...cur, transcript: whisperText } };
-        });
-        setTranscriptTick((t) => t + 1);
-      }
-
-      const checklist = presetItemsFor(room);
-      console.log(`[VoiceWalk] Calling AI for "${room}": ${transcript.length} chars transcript, ${photos.length} photos, ${checklist.length} checklist items`);
-      const items = await aiParseVoiceWalkRoom(
-        room,
-        transcript,
-        photos.map((p) => ({ url: p.url, tsRelativeMs: p.tsRelativeMs })),
-        checklist,
-        property,
-        client
-      );
-      console.log(`[VoiceWalk] AI returned ${items.length} items for "${room}":`, items.map((it) => `${it.name}[${it.condition}]`).join(", "));
-      setRoomItems((prev) => ({ ...prev, [room]: items }));
-      setRoomStatus((prev) => ({ ...prev, [room]: "done" }));
-      roomStatusRef.current[room] = "done";
-    } catch (err) {
-      console.error(`AI failed for room ${room}:`, err);
-      setRoomStatus((prev) => ({ ...prev, [room]: "failed" }));
-      roomStatusRef.current[room] = "failed";
-    }
-  }, [roomRecordings, property, client, transcribeRoomAudio]);
-
-  const advanceRoom = async () => {
+  /* ── Finish: hand raw recording data to the parent for background
+       processing. The parent (Inspector) runs Whisper + AI without
+       blocking the user — they advance to the next room immediately.
+       Status indicators in the strip light up via roomStatuses prop. */
+  const finish = useCallback(async () => {
     if (!currentRoom) return;
-    // CRITICAL: stop the recorder and wait for chunks to finalize
-    // before transcribing. Otherwise Whisper gets an empty/partial
-    // audio file and AI returns nothing.
+    // CRITICAL: stop the recorder and wait for MediaRecorder.onstop
+    // to fold the chunks. Otherwise the audioBlob below is incomplete.
     if (inspecting) {
       await stopRecorderAndWait();
       setInspecting(false);
     }
-    fireRoomAi(currentRoom);
-    if (currentIdx < rooms.length - 1) {
-      setCurrentIdx(currentIdx + 1);
-    }
-  };
-
-  const finish = async () => {
-    if (!currentRoom) return;
-    // CRITICAL: same flush — wait for the recorder to actually finalize
-    // its chunks before fireRoomAi tries to send them to Whisper.
-    if (inspecting) {
-      await stopRecorderAndWait();
-      setInspecting(false);
-    }
-    setFinishing(true);
-
-    setFinishStatus("Transcribing audio with Whisper…");
-    await fireRoomAi(currentRoom);
-
-    setFinishStatus("Waiting for any background analysis to finish...");
-    const stillAnalyzing = () =>
-      Object.values(roomStatusRef.current).some((s) => s === "analyzing");
-    let safety = 120;
-    while (stillAnalyzing() && safety-- > 0) {
-      await new Promise((res) => setTimeout(res, 500));
-    }
-
-    setFinishStatus("Building inspection...");
-    const out: InspectionRoom[] = [];
-    let aiSucceededAny = false;
-    let recordedAny = false;
-    for (const room of rooms) {
-      const items = roomItems[room];
-      const rec = roomRecordings[room];
-      const hasContent = rec && (rec.transcript.trim().length > 0 || rec.photos.length > 0);
-      if (hasContent) recordedAny = true;
-      if (items && items.length > 0) {
-        out.push({ name: room, sqft: 0, items });
-        aiSucceededAny = true;
-      }
-      // No "General" fallback. If AI returned nothing for this room we
-      // simply don't emit items — the room's existing checklist scaffold
-      // (from Inspector.startInspection) stays intact, so the user can
-      // still fill it in by hand. Recording itself isn't lost; transcript
-      // and photos remain on the recording for re-runs.
-    }
-    if (out.length === 0) {
-      if (recordedAny) {
-        useStore.getState().showToast(
-          "AI couldn't categorize the recording. Check OPENAI_API_KEY in Vercel and try again.",
-          "error"
-        );
-      } else {
-        useStore.getState().showToast("No content captured — nothing to build", "warning");
-      }
-      setFinishing(false);
-      return;
-    }
-    if (!aiSucceededAny) {
-      useStore.getState().showToast("AI couldn't categorize any rooms — see console", "warning");
-    }
-    onComplete(out);
-  };
+    const rec = roomRecordings[currentRoom];
+    const chunks = roomAudioChunksRef.current[currentRoom] || [];
+    const audioMime = chunks[0]?.type || "audio/webm";
+    const audioBlob = chunks.length > 0 ? new Blob(chunks, { type: audioMime }) : null;
+    const photos = rec?.photos.map((p) => ({ url: p.url, tsRelativeMs: p.tsRelativeMs })) || [];
+    const partialTranscript = (rec?.transcript || "").trim();
+    console.log(`[VoiceWalk] Finishing "${currentRoom}": audio ${audioBlob?.size || 0}B, ${photos.length} photos, partial transcript ${partialTranscript.length} chars`);
+    onComplete({ audioBlob, audioMime, photos, partialTranscript });
+  }, [currentRoom, inspecting, roomRecordings, stopRecorderAndWait, onComplete]);
 
   /* ── Render ────────────────────────────────────────────────────── */
-
-  if (finishing) {
-    const totalPhotos = Object.values(roomRecordings).reduce((a, r) => a + r.photos.length, 0);
-    return (
-      <div className="fi" style={{ textAlign: "center", padding: "40px 20px" }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🤖</div>
-        <h3 style={{ color: "var(--color-primary)", fontSize: 16, marginBottom: 8 }}>
-          {finishStatus || "Finishing..."}
-        </h3>
-        <p className="dim" style={{ fontSize: 12 }}>
-          {totalPhotos} photo{totalPhotos === 1 ? "" : "s"} · {rooms.length} room{rooms.length === 1 ? "" : "s"}
-        </p>
-      </div>
-    );
-  }
 
   const items = currentRoom ? presetItemsFor(currentRoom) : [];
   const checkedSet = currentRoom ? mentioned[currentRoom] || new Set<string>() : new Set<string>();
   const currentRec = currentRoom ? roomRecordings[currentRoom] : undefined;
   const thisRoomPhotos = currentRec?.photos || [];
-  const thisRoomItems = currentRoom ? roomItems[currentRoom] || [] : [];
   const isLastRoom = currentIdx === rooms.length - 1;
-
-  // AI-derived condition lookup for the active room's checklist.
-  const itemByName = new Map<string, InspectionItem>();
-  for (const it of thisRoomItems) {
-    itemByName.set(it.name, it);
-  }
 
   const elapsedDisplay = currentRec ? fmtMs(currentTsRelative(currentRec)) : "0:00";
   // Avoid unused warning on nowTick — it just forces re-render.
@@ -990,7 +820,9 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 2 }}>
           {rooms.map((r, idx) => {
             const active = idx === currentIdx;
-            const status = roomStatus[r];
+            // Status from parent's background processing — renders the
+            // ⏳/✓/✕ indicator on each room's chip in the strip.
+            const status = roomStatuses?.[r];
             const total = presetItemsFor(r).length;
             const checked = mentioned[r]?.size || 0;
             const photoCount = (roomRecordings[r]?.photos.length) || 0;
@@ -1055,11 +887,11 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3 style={{ fontSize: 17, color: "var(--color-primary)", margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
               {currentRoom}
-              {roomStatus[currentRoom] === "analyzing" && (
+              {currentRoom && roomStatuses?.[currentRoom] === "analyzing" && (
                 <span style={{ fontSize: 11, color: "var(--color-highlight)", fontFamily: "Oswald" }}>· analyzing…</span>
               )}
-              {roomStatus[currentRoom] === "done" && (
-                <span style={{ fontSize: 11, color: "var(--color-success)", fontFamily: "Oswald" }}>· {thisRoomItems.length} item{thisRoomItems.length === 1 ? "" : "s"}</span>
+              {currentRoom && roomStatuses?.[currentRoom] === "done" && (
+                <span style={{ fontSize: 11, color: "var(--color-success)", fontFamily: "Oswald" }}>· done ✓</span>
               )}
             </h3>
             {items.length > 0 && (
@@ -1211,17 +1043,18 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         </div>
       )}
 
-      {/* CHECKLIST BODY — sits directly beneath the (sticky) camera so the
-          user can read every item while framing photos, no scroll-juggling.
-          Rows compact during inspection (single-line), expand to show AI
-          notes once analysis is done. */}
+      {/* CHECKLIST BODY — beneath the (sticky) camera so the user can
+          read every item while framing photos, no scroll-juggling.
+          AI conditions/notes don't render here anymore — that's the
+          parent's job (Inspector renders them once Whisper+AI complete
+          in the background). VoiceWalk just shows the auto-tick state
+          (mentioned-while-recording) so the user gets immediate
+          visual feedback. */}
       {currentRoom && items.length > 0 && (
         <div className="cd mb" style={{ padding: 10 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {items.map((item) => {
               const isChecked = checkedSet.has(item);
-              const ai = itemByName.get(item);
-              const cond = ai?.condition;
               return (
                 <div
                   key={item}
@@ -1231,16 +1064,14 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
                     gap: 6,
                     padding: inspecting ? "3px 7px" : "5px 7px",
                     borderRadius: 6,
-                    background: ai
-                      ? `${conditionColor(cond)}14`
-                      : isChecked
-                        ? darkMode ? "rgba(38,166,91,0.10)" : "rgba(38,166,91,0.06)"
-                        : "transparent",
-                    border: `1px solid ${ai
-                      ? `${conditionColor(cond)}50`
-                      : isChecked
+                    background: isChecked
+                      ? darkMode ? "rgba(38,166,91,0.10)" : "rgba(38,166,91,0.06)"
+                      : "transparent",
+                    border: `1px solid ${
+                      isChecked
                         ? "var(--color-success)50"
-                        : darkMode ? "#1e1e2e" : "#e8e8e8"}`,
+                        : darkMode ? "#1e1e2e" : "#e8e8e8"
+                    }`,
                   }}
                 >
                   <button
@@ -1248,7 +1079,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
                     style={{
                       background: "transparent",
                       border: "none",
-                      color: ai ? conditionColor(cond) : (isChecked ? "var(--color-success)" : "#888"),
+                      color: isChecked ? "var(--color-success)" : "#888",
                       cursor: "pointer",
                       fontSize: 14,
                       padding: 0,
@@ -1257,38 +1088,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
                     }}
                     aria-label={isChecked ? "Unmark" : "Mark"}
                   >
-                    {isChecked || ai ? "✓" : "○"}
+                    {isChecked ? "✓" : "○"}
                   </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: ai ? 600 : 400, color: ai ? conditionColor(cond) : "inherit" }}>
-                        {item}
-                      </span>
-                      {ai && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontFamily: "Oswald",
-                            background: conditionColor(cond),
-                            color: "#fff",
-                            padding: "1px 6px",
-                            borderRadius: 8,
-                            letterSpacing: ".04em",
-                            flexShrink: 0,
-                          }}
-                          title={conditionLabel(cond)}
-                        >
-                          {cond}
-                        </span>
-                      )}
-                    </div>
-                    {/* AI notes hidden during inspection to keep rows tight;
-                        shown after the user pauses so they can review. */}
-                    {ai?.notes && !inspecting && (
-                      <div style={{ fontSize: 11, color: "#666", marginTop: 1, lineHeight: 1.3 }}>
-                        {ai.notes}
-                      </div>
-                    )}
+                    <span style={{ fontSize: 12 }}>{item}</span>
                   </div>
                 </div>
               );
@@ -1346,7 +1149,6 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
                         [currentRoom]: { ...cur, photos: cur.photos.filter((x) => x.id !== p.id) },
                       };
                     });
-                    delete roomLastProcessedRef.current[currentRoom];
                   }}
                   style={{
                     position: "absolute",
@@ -1468,10 +1270,12 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         </div>
       </div>
 
-      {/* Advance / Finish */}
+      {/* Done — hands raw recording back to Inspector. Whisper + AI run
+          in the parent in the background while the user moves to the
+          next room. Status shows up in the strip above as ⏳ → ✓. */}
       <button
         className="bb"
-        onClick={isLastRoom ? finish : advanceRoom}
+        onClick={finish}
         disabled={uploading > 0}
         style={{
           width: "100%",
@@ -1481,17 +1285,11 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           opacity: uploading > 0 ? 0.5 : 1,
         }}
       >
-        {isSingleRoom
-          ? "✓ Done — Apply to Room"
-          : isLastRoom
-            ? "✓ Finish & Build Inspection"
-            : `Next Room: ${rooms[currentIdx + 1]} →`}
+        ✓ Done — {isSingleRoom ? "Apply to Room" : "Process &amp; Next Room"}
       </button>
-      {!isLastRoom && !isSingleRoom && (
-        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
-          AI starts analyzing this room while you walk the next one.
-        </p>
-      )}
+      <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
+        AI processes this room in the background. The next room opens immediately.
+      </p>
       {isSingleRoom && (
         <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
           Tap Done to transcribe and apply findings to this room.

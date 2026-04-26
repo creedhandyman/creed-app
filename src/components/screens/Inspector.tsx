@@ -4,7 +4,8 @@ import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import ClientSelect from "../ClientSelect";
 import { Icon } from "../Icon";
-import VoiceWalk from "../VoiceWalk";
+import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../VoiceWalk";
+import { aiParseVoiceWalkRoom } from "@/lib/parser";
 
 /* ── Preset rooms and items ── */
 export const ROOM_PRESETS: Record<string, string[]> = {
@@ -153,8 +154,14 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   const [showResume, setShowResume] = useState(() => !!localStorage.getItem("c_inspect_roomData"));
   // Per-room voice-walk overlay. When non-null, render the VoiceWalk
   // component in single-room mode for the room at this index. On Done,
-  // its items get merged into roomData[voiceRoomIdx].
+  // its raw recording is processed asynchronously by processRoomVoice
+  // (Whisper + AI) — the user is auto-advanced to the next room while
+  // the previous one transcribes/categorizes in the background.
   const [voiceRoomIdx, setVoiceRoomIdx] = useState<number | null>(null);
+  // Per-room background processing status, keyed by room NAME (since
+  // VoiceWalk's strip is keyed that way). Drives the ⏳/✓ chip badges.
+  const [voiceProcessingStatus, setVoiceProcessingStatus] =
+    useState<Record<string, VoiceWalkRoomStatus>>({});
 
   // Auto-save to localStorage on every change
   const save = useCallback((key: string, value: unknown) => {
@@ -209,6 +216,103 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
     setSelectedRooms((prev) => [...prev, customRoom.trim()]);
     setCustomRoom("");
   };
+
+  /** Background processing for a finished VoiceWalk recording. The user
+   *  has already advanced to the next room — this runs Whisper +
+   *  aiParseVoiceWalkRoom on the prior room's audio/photos and merges
+   *  the resulting items into roomData. The ⏳ / ✓ status drives the
+   *  strip chips so the user can see progress without blocking. */
+  const processRoomVoice = useCallback(async (roomIdx: number, result: VoiceWalkResult) => {
+    const roomName = (() => {
+      // Read from current state, not the stale closure; the user could
+      // have added/renamed rooms between Voice handoff and now.
+      let name = "";
+      setRoomData((prev) => {
+        name = prev[roomIdx]?.name || "";
+        return prev;
+      });
+      return name;
+    })();
+    if (!roomName) return;
+
+    setVoiceProcessingStatus((prev) => ({ ...prev, [roomName]: "analyzing" }));
+
+    try {
+      // Whisper transcribe the audio. Fall back to whatever Web Speech
+      // captured (`partialTranscript`) if Whisper is unavailable.
+      let transcript = result.partialTranscript;
+      if (result.audioBlob && result.audioBlob.size > 1024) {
+        try {
+          const fd = new FormData();
+          fd.append("audio", result.audioBlob, `voicewalk-${roomName.replace(/\W+/g, "-")}.webm`);
+          const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+          if (res.ok) {
+            const data = await res.json();
+            const text = (data.text as string) || "";
+            console.log(`[Inspector] Whisper for "${roomName}": ${result.audioBlob.size}B → ${text.length} chars`);
+            if (text.trim()) transcript = text.trim();
+          } else {
+            const errBody = await res.json().catch(() => ({}));
+            if (res.status === 503) {
+              useStore.getState().showToast(
+                "Voice transcription needs OPENAI_API_KEY in Vercel env vars.",
+                "error"
+              );
+            } else {
+              useStore.getState().showToast(`Transcribe ${res.status}: ${errBody.error || ""}`, "error");
+            }
+            console.warn("[Inspector] Whisper failed:", res.status, errBody);
+          }
+        } catch (e) {
+          console.warn("[Inspector] Whisper network error:", e);
+        }
+      } else {
+        console.warn(`[Inspector] No audio blob for "${roomName}" (size ${result.audioBlob?.size || 0}B); using partial transcript only`);
+      }
+
+      if (!transcript && result.photos.length === 0) {
+        // Nothing to feed AI. Mark as failed so the chip shows ✕.
+        setVoiceProcessingStatus((prev) => ({ ...prev, [roomName]: "failed" }));
+        return;
+      }
+
+      // AI categorization
+      const checklist = ROOM_PRESETS[roomName] || (() => {
+        const baseKey = Object.keys(ROOM_PRESETS).find((k) => roomName.startsWith(k.replace(/ \d+$/, "")));
+        return baseKey ? ROOM_PRESETS[baseKey] : [];
+      })();
+      console.log(`[Inspector] AI for "${roomName}": ${transcript.length} chars, ${result.photos.length} photos, ${checklist.length} checklist items`);
+      const items = await aiParseVoiceWalkRoom(
+        roomName,
+        transcript,
+        result.photos,
+        checklist,
+        property,
+        client
+      );
+      console.log(`[Inspector] AI returned ${items.length} items for "${roomName}":`, items.map((it) => `${it.name}[${it.condition}]`).join(", "));
+
+      // Merge into roomData. Drop scaffold-S items the user never touched
+      // so the AI items don't duplicate them; keep anything the user
+      // worked on manually (notes, photos, condition changed).
+      if (items.length > 0) {
+        setRoomData((prev) => prev.map((r, ri) => {
+          if (ri !== roomIdx) return r;
+          const kept = r.items.filter((it) =>
+            it.condition !== "S" || (it.notes && it.notes.trim()) || (it.photos && it.photos.length > 0)
+          );
+          return { ...r, items: [...kept, ...items] };
+        }));
+      } else {
+        useStore.getState().showToast(`AI couldn't categorize "${roomName}" — checklist scaffold kept.`, "warning");
+      }
+      setVoiceProcessingStatus((prev) => ({ ...prev, [roomName]: "done" }));
+    } catch (err) {
+      console.error(`[Inspector] processRoomVoice failed for "${roomName}":`, err);
+      setVoiceProcessingStatus((prev) => ({ ...prev, [roomName]: "failed" }));
+      useStore.getState().showToast(`Processing failed for ${roomName}`, "error");
+    }
+  }, [property, client]);
 
   const startInspection = () => {
     const data = selectedRooms.map((room) => {
@@ -504,36 +608,31 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
           <VoiceWalk
             property={property}
             client={client}
-            rooms={[voiceRoom.name]}
+            // Pass the FULL rooms list so VoiceWalk's strip can show
+            // ⏳ / ✓ chips for the rooms still being processed in the
+            // background even though the user is recording a new one.
+            rooms={roomData.map((r) => r.name)}
             singleRoom
-            onComplete={(structured) => {
-              const incoming = structured[0]?.items || [];
-              setRoomData((prev) => prev.map((r, ri) => {
-                if (ri !== voiceRoomIdx) return r;
-                if (incoming.length === 0) return r;
-                // Drop existing scaffold "S" items that the user never
-                // touched (no notes, no photos), then append the AI's
-                // conditioned items. Items the user already worked on
-                // (notes filled, photos attached, condition changed)
-                // stay so manual edits aren't lost.
-                const kept = r.items.filter((it) =>
-                  it.condition !== "S" || (it.notes && it.notes.trim()) || (it.photos && it.photos.length > 0)
-                );
-                return { ...r, items: [...kept, ...incoming] };
-              }));
+            roomStatuses={voiceProcessingStatus}
+            onComplete={(result) => {
+              // Capture the index BEFORE we mutate it — processRoomVoice
+              // runs in the background and needs to know which room.
+              const idx = voiceRoomIdx;
+              if (idx !== null) {
+                // Fire and forget. The user advances immediately; the
+                // chip in the strip flips ⏳ → ✓ when this finishes.
+                void processRoomVoice(idx, result);
+              }
               // Auto-advance to the next area: open Voice Walk for the
-              // next room and move the underlying Inspector cursor with
-              // it, so when the user eventually exits Voice they land
-              // on the right room. If this was the last room, close
-              // Voice Walk and let the user review.
-              const nextIdx = (voiceRoomIdx ?? 0) + 1;
+              // next room and move the underlying Inspector cursor too.
+              const nextIdx = (idx ?? 0) + 1;
               if (nextIdx < roomData.length) {
                 setCurrentRoomIdx(nextIdx);
                 setVoiceRoomIdx(nextIdx);
                 useStore.getState().showToast(`Moving to ${roomData[nextIdx].name}…`, "info");
               } else {
                 setVoiceRoomIdx(null);
-                useStore.getState().showToast("All rooms processed — review and save.", "success");
+                useStore.getState().showToast("All rooms recorded — processing in the background.", "success");
               }
             }}
             onCancel={() => setVoiceRoomIdx(null)}
@@ -606,11 +705,18 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
           </div>
         )}
 
-        {/* Room jump — tap any room to jump to it */}
+        {/* Room jump — tap any room to jump to it. Voice processing
+            status (⏳/✓/✕) shows here too so the user can see which
+            rooms are still being categorized after leaving VoiceWalk. */}
         <div style={{ display: "flex", gap: 3, marginBottom: 10, overflowX: "auto", paddingBottom: 4 }}>
           {roomData.map((r, ri) => {
             const hasFindings = r.items.some((it) => it.condition !== "S");
             const hasPhotos = r.items.some((it) => it.photos.length > 0);
+            const vStatus = voiceProcessingStatus[r.name];
+            const statusBadge = vStatus === "analyzing" ? "⏳ "
+              : vStatus === "done" ? "✓ "
+              : vStatus === "failed" ? "✕ "
+              : "";
             return (
               <button
                 key={ri}
@@ -623,6 +729,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                   fontFamily: "Oswald", flexShrink: 0,
                 }}
               >
+                {statusBadge}
                 {r.name.length > 10 ? r.name.slice(0, 10) + "…" : r.name}
                 {hasPhotos && " 📷"}
               </button>
