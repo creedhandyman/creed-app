@@ -88,6 +88,9 @@ src/
 
 - `ALTER TABLE price_corrections ADD COLUMN zip TEXT;`
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
+- `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
+- `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
+- `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
 
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices.)

@@ -47,7 +47,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     return { totalHrs, totalCost, byPerson: Object.values(byPerson), entries };
   };
 
-  const [jobTab, setJobTab] = useState<"active" | "billing" | "paid">("active");
+  const [jobTab, setJobTab] = useState<"active" | "billing" | "paid" | "archive">("active");
   const [open, setOpen] = useState<string | null>(null);
   const [rn, setRn] = useState("");
   const [ra, setRa] = useState("");
@@ -438,14 +438,20 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
       {/* Job tabs */}
       {(() => {
-        // Inspections live in QuoteForge's "Saved Inspections" cabinet, not here
-        const activeJobs = jobs.filter((j) => j.status !== "inspection" && !["complete", "invoiced", "paid"].includes(j.status));
-        const billingJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced");
-        const paidJobs = jobs.filter((j) => j.status === "paid");
+        // Inspections live in QuoteForge's "Saved Inspections" cabinet, not here.
+        // Archived jobs are filtered out of the work tabs and live in their
+        // own tab so cold quotes don't clutter the active workload.
+        const activeJobs = jobs.filter((j) => !j.archived && j.status !== "inspection" && !["complete", "invoiced", "paid"].includes(j.status));
+        const billingJobs = jobs.filter((j) => !j.archived && (j.status === "complete" || j.status === "invoiced"));
+        const paidJobs = jobs.filter((j) => !j.archived && j.status === "paid");
+        const archivedJobs = jobs.filter((j) => j.archived);
         const tabs = [
           { id: "active" as const, l: `🔨 ${t("jobs.active")} (${activeJobs.length})`, c: "var(--color-primary)" },
           { id: "billing" as const, l: `🧾 ${t("jobs.billing")} (${billingJobs.length})`, c: "var(--color-warning)" },
           { id: "paid" as const, l: `✅ ${t("jobs.paid")} (${paidJobs.length})`, c: "var(--color-success)" },
+          ...(archivedJobs.length > 0
+            ? [{ id: "archive" as const, l: `📦 Archive (${archivedJobs.length})`, c: "#888" }]
+            : []),
         ];
         return (
           <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
@@ -492,17 +498,25 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       )}
 
       {(() => {
-        const filtered = jobTab === "active"
-          ? jobs.filter((j) => j.status !== "inspection" && !["complete", "invoiced", "paid"].includes(j.status))
+        const filtered = jobTab === "archive"
+          ? jobs.filter((j) => j.archived)
+          : jobTab === "active"
+          ? jobs.filter((j) => !j.archived && j.status !== "inspection" && !["complete", "invoiced", "paid"].includes(j.status))
           : jobTab === "billing"
-          ? jobs.filter((j) => j.status === "complete" || j.status === "invoiced")
-          : jobs.filter((j) => j.status === "paid");
+          ? jobs.filter((j) => !j.archived && (j.status === "complete" || j.status === "invoiced"))
+          : jobs.filter((j) => !j.archived && j.status === "paid");
 
         if (!filtered.length) {
           return (
             <div className="cd" style={{ textAlign: "center", padding: 24 }}>
               <p className="dim">
-                {jobTab === "active" ? t("jobs.noActive") : jobTab === "billing" ? t("jobs.noBilling") : t("jobs.noPaid")}
+                {jobTab === "active"
+                  ? t("jobs.noActive")
+                  : jobTab === "billing"
+                  ? t("jobs.noBilling")
+                  : jobTab === "paid"
+                  ? t("jobs.noPaid")
+                  : "No archived jobs."}
               </p>
               {jobTab === "active" && (
                 <button className="bb mt" onClick={() => setPage("qf")}>⚡ Start Quote</button>
@@ -614,6 +628,44 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     }} style={{ fontSize: 12, padding: "6px 14px" }}>
                       📤 Send Job to Client
                     </button>
+                    {/* Archive / Restore — for jobs the client never accepted
+                        (or any job worth quietly setting aside). Status field
+                        is preserved so a Restore returns the job to its
+                        previous state with no data loss. */}
+                    {!j.archived && (j.status === "quoted" || j.status === "accepted") && (
+                      <button
+                        className="bo"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await db.patch("jobs", j.id, {
+                            archived: true,
+                            archived_at: new Date().toISOString(),
+                          });
+                          loadAll();
+                        }}
+                        style={{ fontSize: 12, padding: "6px 10px", color: "#888" }}
+                        title="Hide this quote from active jobs without deleting it"
+                      >
+                        📦 Archive
+                      </button>
+                    )}
+                    {j.archived && (
+                      <button
+                        className="bo"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await db.patch("jobs", j.id, {
+                            archived: false,
+                            archived_at: null,
+                          });
+                          loadAll();
+                        }}
+                        style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-success)" }}
+                        title="Restore this job to its original status"
+                      >
+                        ↩ Restore
+                      </button>
+                    )}
                     <button className="bo" onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }} style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-accent-red)" }}>
                       🗑 {t("jobs.delete")}
                     </button>

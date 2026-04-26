@@ -384,10 +384,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
       {(() => {
         // Palette shows both accepted (ready to schedule for the first time)
         // and scheduled jobs (so the user can drag them onto another day to
-        // add a return visit / multi-day work). Sorted with accepted first
-        // so the new work is what the user sees first.
+        // add a return visit / multi-day work). Archived jobs are excluded
+        // — those are explicitly set aside as cold leads. Sorted with
+        // accepted first so the new work is what the user sees first.
         const palette = jobs
-          .filter((j) => j.status === "accepted" || j.status === "scheduled")
+          .filter((j) => !j.archived && (j.status === "accepted" || j.status === "scheduled"))
           .sort((a, b) => {
             if (a.status === b.status) return 0;
             return a.status === "accepted" ? -1 : 1;

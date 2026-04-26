@@ -77,6 +77,11 @@ export interface Job {
   recurrence_rule?: string; // weekly | biweekly | monthly | quarterly
   next_due?: string;
   parent_job_id?: string;
+  // Archive flag for jobs the client never accepted (or never moved on).
+  // Status field is preserved (typically "quoted") so a restore brings the
+  // job back to its original state without losing context.
+  archived?: boolean;
+  archived_at?: string;
 }
 
 export interface TimeEntry {
