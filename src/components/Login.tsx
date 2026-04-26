@@ -80,11 +80,9 @@ export default function Login() {
               textTransform: "uppercase",
             }}
           >
-            All-in-One Business Manager
+            Field-Service Manager
             <span style={{ color: "#2E75B6", margin: "0 6px" }}>·</span>
-            Self-Learning
-            <span style={{ color: "#2E75B6", margin: "0 6px" }}>·</span>
-            Time Saver
+            A.I.-Powered Quoting
           </p>
         </div>
 
