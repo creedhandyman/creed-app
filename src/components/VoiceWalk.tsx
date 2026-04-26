@@ -178,23 +178,35 @@ interface Props {
   onComplete: (data: InspectionRoom[]) => void;
   onCancel: () => void;
   darkMode: boolean;
+  /** When true (or when rooms.length === 1), hide the multi-room
+   *  progress strip and replace "Next Room" with a "Done" button.
+   *  Used by the Inspector per-room mic integration. */
+  singleRoom?: boolean;
 }
 
-export default function VoiceWalk({ property, client, rooms, onComplete, onCancel, darkMode }: Props) {
+export default function VoiceWalk({ property, client, rooms, onComplete, onCancel, darkMode, singleRoom }: Props) {
+  const isSingleRoom = singleRoom || rooms.length === 1;
+
   // Refs that survive renders
   const fileFallbackRef = useRef<HTMLInputElement>(null);
   const recogRef = useRef<SpeechRecognitionLike | null>(null);
-  const recogShouldRunRef = useRef(false);
-  // Restart bookkeeping for the speech recognizer.
-  const sessionStartRef = useRef(0);
-  const sessionGotResultRef = useRef(false);
-  const restartFailuresRef = useRef(0);
-  const restartTimerRef = useRef<number | null>(null);
   // Watermark + last-final tracking for transcript dedup. See dedupOverlap.
   const finalsProcessedThroughRef = useRef(-1);
   const lastFinalTextRef = useRef("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // MediaRecorder owns the canonical audio track. Web Speech is only
+  // used for live preview now. The recorder runs continuously from
+  // Start to Stop — no cycling, no chimes after the initial mic-on.
+  // Per-room: each room collects its own array of audio chunks across
+  // any pause/resume segments. They get concatenated and sent to
+  // /api/transcribe when the user advances or finishes.
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recorderChunksRef = useRef<Blob[]>([]);
+  // Per-room accumulated audio: concatenated chunks across all
+  // pause/resume segments in that room.
+  const roomAudioChunksRef = useRef<Record<string, Blob[]>>({});
 
   // Speech support detection
   const [supported] = useState<boolean>(() => !!getSpeechRecognition());
@@ -276,7 +288,15 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     setTranscriptTick((t) => t + 1);
   }, []);
 
-  /* ── Speech recognition lifecycle ────────────────────────────────── */
+  /* ── Speech recognition lifecycle (LIVE PREVIEW ONLY) ────────────────
+     Web Speech is no longer the canonical transcript source. Whisper
+     (via /api/transcribe) handles that from the MediaRecorder audio
+     blob. Web Speech runs ONLY to give the user immediate feedback
+     ("HEARING …") while they talk. We do NOT auto-restart it — when
+     the engine ends a session naturally on iOS Safari, it just stops
+     until the user pauses + resumes the recording. The mic chime
+     therefore fires ONCE per Resume tap, not every 6 seconds.
+  ─────────────────────────────────────────────────────────────────── */
   const killRecognizer = (rec: SpeechRecognitionLike | null) => {
     if (!rec) return;
     try { (rec as unknown as { onstart: unknown }).onstart = null; } catch { /* */ }
@@ -285,23 +305,17 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     try { rec.stop(); } catch { /* */ }
   };
 
-  const buildAndStart = useCallback(() => {
+  const startPreviewRecognition = useCallback(() => {
     const Ctor = getSpeechRecognition();
     if (!Ctor) return;
     killRecognizer(recogRef.current);
     recogRef.current = null;
+    finalsProcessedThroughRef.current = -1;
 
     const r = new Ctor();
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-US";
-    sessionStartRef.current = Date.now();
-    sessionGotResultRef.current = false;
-    finalsProcessedThroughRef.current = -1;
-    (r as unknown as { onstart: (() => void) | null }).onstart = () => {
-      sessionStartRef.current = Date.now();
-      finalsProcessedThroughRef.current = -1;
-    };
     r.onresult = (e) => {
       if (recogRef.current !== r) return;
       let interim = "";
@@ -315,9 +329,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           if (i > finalsProcessedThroughRef.current) {
             const trimmed = text.trim();
             const toAdd = dedupOverlap(lastFinal, trimmed);
-            if (toAdd) {
-              newFinalText += (newFinalText ? " " : "") + toAdd;
-            }
+            if (toAdd) newFinalText += (newFinalText ? " " : "") + toAdd;
             if (
               trimmed.length > lastFinal.length ||
               !trimmed.startsWith(lastFinal.slice(0, Math.min(lastFinal.length, trimmed.length)))
@@ -332,59 +344,90 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       }
       finalsProcessedThroughRef.current = highestFinalIdx;
       lastFinalTextRef.current = lastFinal;
-      sessionGotResultRef.current = true;
-      restartFailuresRef.current = 0;
+      // Mirror to the per-room transcript so the auto-tick keyword
+      // matcher fires before Whisper finalizes (improves UX — items
+      // tick on screen as they're mentioned, not minutes later).
       if (newFinalText) appendTranscript(newFinalText);
       setLiveInterim(interim);
     };
     r.onend = () => {
-      if (recogRef.current !== r) return;
-      if (!recogShouldRunRef.current) return;
-      const lived = Date.now() - sessionStartRef.current;
-      let delay: number;
-      if (!sessionGotResultRef.current && lived < 4000) {
-        restartFailuresRef.current = Math.min(restartFailuresRef.current + 1, 5);
-        delay = Math.min(2500, 400 * 2 ** (restartFailuresRef.current - 1));
-      } else {
-        restartFailuresRef.current = 0;
-        if (lived < 6000) delay = 700;
-        else if (lived < 30000) delay = 250;
-        else delay = 120;
-      }
-      if (restartTimerRef.current !== null) clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = window.setTimeout(() => {
-        restartTimerRef.current = null;
-        if (!recogShouldRunRef.current) return;
-        if (recogRef.current !== r) return;
-        buildAndStart();
-      }, delay);
+      // No auto-restart. The MediaRecorder is still running and Whisper
+      // will produce the canonical transcript on Stop. The user just
+      // loses the live preview after this point in the segment.
+      if (recogRef.current === r) recogRef.current = null;
     };
     r.onerror = (ev) => {
       if (ev.error && ev.error !== "no-speech" && ev.error !== "aborted") {
-        console.warn("SpeechRecognition error:", ev.error);
+        console.warn("SpeechRecognition preview error:", ev.error);
       }
     };
     recogRef.current = r;
     try { r.start(); } catch { /* */ }
   }, [appendTranscript]);
 
-  const startRecognition = useCallback(() => {
-    if (!getSpeechRecognition()) return;
-    if (recogRef.current && recogShouldRunRef.current) return;
-    recogShouldRunRef.current = true;
-    restartFailuresRef.current = 0;
-    buildAndStart();
-  }, [buildAndStart]);
-
-  const stopRecognition = useCallback(() => {
-    recogShouldRunRef.current = false;
-    if (restartTimerRef.current !== null) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
+  const stopPreviewRecognition = useCallback(() => {
     const prev = recogRef.current;
     recogRef.current = null;
     killRecognizer(prev);
+    setLiveInterim("");
+  }, []);
+
+  /* ── MediaRecorder lifecycle (CANONICAL audio) ──────────────────── */
+  const pickRecorderMime = (): string => {
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus",
+    ];
+    for (const c of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(c)) return c;
+    }
+    return "";
+  };
+
+  const startRecorder = useCallback(async () => {
+    if (typeof MediaRecorder === "undefined") return;
+    if (recorderRef.current && recorderRef.current.state === "recording") return;
+    try {
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = pickRecorderMime();
+      const opts = mime ? { mimeType: mime } : undefined;
+      const rec = new MediaRecorder(audioStream, opts);
+      recorderChunksRef.current = [];
+      rec.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) {
+          recorderChunksRef.current.push(ev.data);
+        }
+      };
+      rec.onstop = () => {
+        // When this segment ends, fold its chunks into the room's
+        // accumulated chunks. They'll be concatenated + transcribed
+        // on advance/finish.
+        const room = currentRoomRef.current;
+        if (room) {
+          const prior = roomAudioChunksRef.current[room] || [];
+          roomAudioChunksRef.current[room] = [...prior, ...recorderChunksRef.current];
+        }
+        recorderChunksRef.current = [];
+        // Stop the underlying tracks so the OS mic indicator goes away
+        // when the user pauses.
+        audioStream.getTracks().forEach((t) => t.stop());
+      };
+      rec.start(1000); // emit chunks each second so we don't lose data on tab close
+      recorderRef.current = rec;
+    } catch (err) {
+      console.warn("MediaRecorder start failed:", err);
+    }
+  }, []);
+
+  const stopRecorder = useCallback(() => {
+    const rec = recorderRef.current;
+    recorderRef.current = null;
+    if (!rec) return;
+    try {
+      if (rec.state !== "inactive") rec.stop();
+    } catch { /* */ }
   }, []);
 
   /* ── Camera lifecycle ────────────────────────────────────────────── */
@@ -485,22 +528,29 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     lastFinalTextRef.current = "";
   }, []);
 
-  /* ── Unified inspecting toggle: when on, mic + camera + segment.
-        When off, all three pause cleanly. ─────────────────────────── */
+  /* ── Unified inspecting toggle ──────────────────────────────────────
+     When on: open MediaRecorder (canonical audio) + camera + Web Speech
+     preview. When off: stop all three, fold this segment's audio into
+     the room's accumulated chunks. Whisper transcription happens later
+     (on advance / finish), not on every pause, so a quick pause-and-
+     resume doesn't burn an API call.
+  ────────────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (inspecting) {
       beginSegment();
-      if (supported) startRecognition();
+      startRecorder();
+      if (supported) startPreviewRecognition();
       startCamera();
     } else {
-      stopRecognition();
+      stopPreviewRecognition();
       stopCamera();
+      stopRecorder();
       endSegment();
-      setLiveInterim("");
     }
     return () => {
-      stopRecognition();
+      stopPreviewRecognition();
       stopCamera();
+      stopRecorder();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspecting, supported]);
@@ -631,14 +681,41 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     if (fileFallbackRef.current) fileFallbackRef.current.value = "";
   };
 
+  /* ── Whisper transcription of the room's audio ───────────────────── */
+  const transcribeRoomAudio = useCallback(async (room: string): Promise<string> => {
+    const chunks = roomAudioChunksRef.current[room] || [];
+    if (chunks.length === 0) return "";
+    // Concatenate all this room's chunks into one Blob. The chunks are
+    // homogeneous because we always pick the same mime per session.
+    const type = chunks[0]?.type || "audio/webm";
+    const blob = new Blob(chunks, { type });
+    if (blob.size < 1024) return ""; // too short to be worth transcribing
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, `voicewalk-${room.replace(/\W+/g, "-")}.webm`);
+      const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.warn("Transcribe failed:", res.status, err);
+        return ""; // caller will fall back to Web-Speech transcript
+      }
+      const data = await res.json();
+      return (data.text as string) || "";
+    } catch (err) {
+      console.warn("Transcribe network error:", err);
+      return "";
+    }
+  }, []);
+
   /* ── Per-room AI processing (background) ─────────────────────────── */
   const fireRoomAi = useCallback(async (room: string) => {
     const rec = roomRecordings[room];
     if (!rec) return;
-    const transcript = (rec.transcript || "").trim();
     const photos = rec.photos;
-    if (transcript.length < 5 && photos.length === 0) return;
-    const sig = `${transcript.length}|${photos.length}`;
+    const audioChunks = roomAudioChunksRef.current[room] || [];
+    if ((rec.transcript || "").trim().length < 5 && photos.length === 0 && audioChunks.length === 0) return;
+
+    const sig = `${(rec.transcript || "").length}|${photos.length}|${audioChunks.length}`;
     if (
       roomLastProcessedRef.current[room] === sig &&
       roomStatusRef.current[room] === "done"
@@ -647,6 +724,22 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     setRoomStatus((prev) => ({ ...prev, [room]: "analyzing" }));
     roomStatusRef.current[room] = "analyzing";
     try {
+      // Prefer Whisper transcription of the canonical audio. Fall back
+      // to whatever Web Speech gave us in the live preview if Whisper
+      // is unavailable (no OPENAI_API_KEY) or the audio is too short.
+      const whisperText = await transcribeRoomAudio(room);
+      const transcript = (whisperText || rec.transcript || "").trim();
+
+      // Persist the canonical transcript back into the recording so the
+      // checklist auto-tick + UI display use it too.
+      if (whisperText) {
+        setRoomRecordings((prev) => {
+          const cur = prev[room];
+          if (!cur) return prev;
+          return { ...prev, [room]: { ...cur, transcript: whisperText } };
+        });
+      }
+
       const checklist = presetItemsFor(room);
       const items = await aiParseVoiceWalkRoom(
         room,
@@ -664,7 +757,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       setRoomStatus((prev) => ({ ...prev, [room]: "failed" }));
       roomStatusRef.current[room] = "failed";
     }
-  }, [roomRecordings, property, client]);
+  }, [roomRecordings, property, client, transcribeRoomAudio]);
 
   const advanceRoom = () => {
     if (!currentRoom) return;
@@ -787,7 +880,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <button
           className="bo"
-          onClick={() => { stopCamera(); stopRecognition(); onCancel(); }}
+          onClick={() => { stopPreviewRecognition(); stopCamera(); stopRecorder(); onCancel(); }}
           style={{ fontSize: 12, padding: "4px 8px" }}
         >← Cancel</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -798,7 +891,9 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         </span>
       </div>
 
-      {/* Progress strip — every room with its status */}
+      {/* Progress strip — every room with its status. Hidden in
+          single-room mode (Inspector per-room mic integration). */}
+      {!isSingleRoom && (
       <div className="cd mb" style={{ padding: 8 }}>
         <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 2 }}>
           {rooms.map((r, idx) => {
@@ -847,6 +942,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           })}
         </div>
       </div>
+      )}
 
       {!supported && (
         <div
@@ -1267,13 +1363,20 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           opacity: uploading > 0 ? 0.5 : 1,
         }}
       >
-        {isLastRoom
-          ? "✓ Finish & Build Inspection"
-          : `Next Room: ${rooms[currentIdx + 1]} →`}
+        {isSingleRoom
+          ? "✓ Done — Apply to Room"
+          : isLastRoom
+            ? "✓ Finish & Build Inspection"
+            : `Next Room: ${rooms[currentIdx + 1]} →`}
       </button>
-      {!isLastRoom && (
+      {!isLastRoom && !isSingleRoom && (
         <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
           AI starts analyzing this room while you walk the next one.
+        </p>
+      )}
+      {isSingleRoom && (
+        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
+          Tap Done to transcribe and apply findings to this room.
         </p>
       )}
     </div>

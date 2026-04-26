@@ -84,6 +84,16 @@ src/
   that same row. The active row's id lives in localStorage as
   `c_t_active_id`. Both Timer.tsx and WorkVision.tsx share this state.
 
+## Required env vars (Vercel)
+
+- `ANTHROPIC_API_KEY` — Claude API for AI quoting / inspections.
+- `OPENAI_API_KEY` — OpenAI Whisper transcription. Used by
+  `/api/transcribe` for the Voice Walk feature's continuous-recording
+  flow (MediaRecorder → Whisper → AI). Without it, Voice Walk falls
+  back to Web Speech transcripts (incomplete on iOS Safari but
+  functional on desktop Chrome).
+- (Stripe / Supabase keys per existing setup.)
+
 ## Schema migrations the user should run in Supabase
 
 - `ALTER TABLE price_corrections ADD COLUMN zip TEXT;`

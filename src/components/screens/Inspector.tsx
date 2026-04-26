@@ -151,6 +151,10 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [photoTarget, setPhotoTarget] = useState<{ room: number; item: number } | null>(null);
   const [showResume, setShowResume] = useState(() => !!localStorage.getItem("c_inspect_roomData"));
+  // Per-room voice-walk overlay. When non-null, render the VoiceWalk
+  // component in single-room mode for the room at this index. On Done,
+  // its items get merged into roomData[voiceRoomIdx].
+  const [voiceRoomIdx, setVoiceRoomIdx] = useState<number | null>(null);
 
   // Auto-save to localStorage on every change
   const save = useCallback((key: string, value: unknown) => {
@@ -548,6 +552,45 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
     const room = roomData[currentRoomIdx];
     if (!room) return null;
 
+    // When the user taps the per-room mic, render VoiceWalk in
+    // single-room mode for that room. On Done, merge findings into
+    // the room's items (replacing scaffold S items so the AI's
+    // conditioned items don't duplicate them).
+    if (voiceRoomIdx !== null) {
+      const voiceRoom = roomData[voiceRoomIdx];
+      if (!voiceRoom) {
+        setVoiceRoomIdx(null);
+      } else {
+        return (
+          <VoiceWalk
+            property={property}
+            client={client}
+            rooms={[voiceRoom.name]}
+            singleRoom
+            onComplete={(structured) => {
+              const incoming = structured[0]?.items || [];
+              setRoomData((prev) => prev.map((r, ri) => {
+                if (ri !== voiceRoomIdx) return r;
+                if (incoming.length === 0) return r;
+                // Drop existing scaffold "S" items that the user never
+                // touched (no notes, no photos), then append the AI's
+                // conditioned items. Items the user already worked on
+                // (notes filled, photos attached, condition changed)
+                // stay so manual edits aren't lost.
+                const kept = r.items.filter((it) =>
+                  it.condition !== "S" || (it.notes && it.notes.trim()) || (it.photos && it.photos.length > 0)
+                );
+                return { ...r, items: [...kept, ...incoming] };
+              }));
+              setVoiceRoomIdx(null);
+            }}
+            onCancel={() => setVoiceRoomIdx(null)}
+            darkMode={darkMode}
+          />
+        );
+      }
+    }
+
     return (
       <div className="fi">
         {/* Hidden file inputs — one for camera, one for gallery/files */}
@@ -574,9 +617,33 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
             <button className="bo" onClick={() => setStep("rooms")} style={{ fontSize: 12, padding: "4px 8px" }}>←</button>
             <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>{room.name}</h2>
           </div>
-          <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald" }}>
-            {currentRoomIdx + 1} / {roomData.length}
-          </span>
+          <div className="row" style={{ gap: 8 }}>
+            {/* Per-room voice walk: tap to open a one-continuous-recording
+                + camera + checklist panel for THIS room. AI fills the
+                checklist with conditions and notes when you tap Done. */}
+            <button
+              onClick={() => setVoiceRoomIdx(currentRoomIdx)}
+              title="Voice walk this room"
+              style={{
+                background: "var(--color-success)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 16,
+                padding: "5px 10px",
+                fontSize: 13,
+                fontFamily: "Oswald",
+                letterSpacing: ".04em",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              🎤 Voice
+            </button>
+            <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald" }}>
+              {currentRoomIdx + 1} / {roomData.length}
+            </span>
+          </div>
         </div>
 
         {/* Upload indicator */}
