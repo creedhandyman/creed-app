@@ -160,9 +160,12 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(0);
   // Flash/torch — only available on the rear camera of supported mobile
-  // browsers (Android Chrome). Detected from track capabilities after
-  // getUserMedia returns; button hidden when unsupported.
-  const [torchSupported, setTorchSupported] = useState(false);
+  // browsers (most Android Chrome). track.getCapabilities() is unreliable
+  // for detection — plenty of devices that flash fine don't list torch in
+  // capabilities — so we render the button optimistically whenever the
+  // camera is on, attempt applyConstraints when tapped, and hide the
+  // button only after a failed attempt.
+  const [torchAvailable, setTorchAvailable] = useState(true);
   const [torchOn, setTorchOn] = useState(false);
 
   // Final state
@@ -245,14 +248,10 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         await videoRef.current.play().catch(() => {});
       }
       setCameraOn(true);
-      // Detect torch support. The MediaTrackCapabilities type doesn't include
-      // `torch` in standard libs (it's a non-standard but widely-supported
-      // extension for video tracks on the rear camera), so cast inline.
-      try {
-        const track = stream.getVideoTracks()[0];
-        const caps = track.getCapabilities?.() as undefined | MediaTrackCapabilities & { torch?: boolean };
-        setTorchSupported(!!caps?.torch);
-      } catch { setTorchSupported(false); }
+      // Reset torch state for this camera session; availability is decided
+      // optimistically (button visible) and only flipped to false if the
+      // first toggle attempt fails.
+      setTorchAvailable(true);
       setTorchOn(false);
     } catch (err) {
       console.warn("Camera unavailable:", err);
@@ -262,7 +261,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
           : "Camera unavailable. Use the file picker below."
       );
       setCameraOn(false);
-      setTorchSupported(false);
+      setTorchAvailable(false);
     }
   }, []);
 
@@ -271,13 +270,14 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
-    setTorchSupported(false);
+    setTorchAvailable(true); // reset for next camera session
     setTorchOn(false);
   }, []);
 
-  // Apply the torch constraint on toggle. Most cameras need this set on the
-  // active video track; if applyConstraints throws (browser doesn't support
-  // it), revert state so the UI doesn't lie about the flash being on.
+  // Apply the torch constraint on toggle. The advanced[] array silently
+  // ignores unsupported constraints rather than throwing, so we also check
+  // the resulting track settings to confirm the toggle actually took effect.
+  // Hide the button on a confirmed-no-op so the user gets honest feedback.
   const toggleTorch = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
     if (!track) return;
@@ -286,11 +286,21 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       await (track.applyConstraints as (c: MediaTrackConstraints & { advanced?: Array<{ torch?: boolean }> }) => Promise<void>)({
         advanced: [{ torch: next }],
       });
+      // Verify the constraint actually applied by reading back settings.
+      const settings = track.getSettings?.() as undefined | MediaTrackSettings & { torch?: boolean };
+      if (settings && "torch" in settings && settings.torch !== next) {
+        // Apply was accepted but the device ignored it — torch isn't real here.
+        setTorchAvailable(false);
+        setTorchOn(false);
+        useStore.getState().showToast("Flash not supported on this device", "info");
+        return;
+      }
       setTorchOn(next);
     } catch (err) {
       console.warn("Torch toggle failed:", err);
-      setTorchSupported(false);
+      setTorchAvailable(false);
       setTorchOn(false);
+      useStore.getState().showToast("Flash not supported on this device", "info");
     }
   }, [torchOn]);
 
@@ -751,9 +761,11 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
               {cameraError || "Starting camera..."}
             </div>
           )}
-          {/* Torch toggle overlay — top-right of the preview. Only shown
-              when the active video track exposes the torch capability. */}
-          {cameraOn && torchSupported && (
+          {/* Torch toggle overlay — top-right of the preview. Shown
+              optimistically when the camera is on; if the first tap turns
+              out to be a no-op (device doesn't actually support flash),
+              the button hides itself with a toast for honest feedback. */}
+          {cameraOn && torchAvailable && (
             <button
               onClick={toggleTorch}
               aria-label={torchOn ? "Turn flash off" : "Turn flash on"}
