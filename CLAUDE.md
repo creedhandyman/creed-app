@@ -103,7 +103,10 @@ src/
     read_by TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
   );
+  ALTER TABLE team_messages DISABLE ROW LEVEL SECURITY;
   ```
+  (RLS off matches the rest of the schema — multi-tenant isolation is
+  enforced application-side via the auto-injected org_id filter.)
 
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices. Same for missing

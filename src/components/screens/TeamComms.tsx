@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useStore } from "@/lib/store";
-import { db } from "@/lib/supabase";
+import { db, supabase } from "@/lib/supabase";
 import { Icon } from "../Icon";
 
 interface TeamMessage {
@@ -40,13 +40,32 @@ export default function TeamComms({ setPage }: Props) {
   const [urgent, setUrgent] = useState(false);
   const [posting, setPosting] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Error string when load/post failed because the table is missing or RLS
+  // is blocking. Surfaces as an inline banner with the migration SQL so the
+  // user can fix it without leaving the screen.
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await db.get<TeamMessage>("team_messages");
-      // Newest first (db helper sorts by created_at desc).
-      setMessages(rows);
+      // Bypass the db helper's swallow-error path so we can detect a missing
+      // table and show actionable setup help.
+      const orgId = (() => {
+        try {
+          const u = JSON.parse(localStorage.getItem("c_user") || "null");
+          return u?.org_id || null;
+        } catch { return null; }
+      })();
+      let query = supabase.from("team_messages").select("*").order("created_at", { ascending: false });
+      if (orgId) query = query.eq("org_id", orgId);
+      const { data, error } = await query;
+      if (error) {
+        setSetupError(error.message);
+        setMessages([]);
+      } else {
+        setSetupError(null);
+        setMessages((data as TeamMessage[]) || []);
+      }
     } finally {
       setLoading(false);
     }
@@ -58,13 +77,20 @@ export default function TeamComms({ setPage }: Props) {
     if (!draft.trim()) return;
     setPosting(true);
     try {
-      await db.post("team_messages", {
+      const result = await db.post("team_messages", {
         author_id: user.id,
         author_name: user.name,
         message: draft.trim(),
         urgent,
         read_by: JSON.stringify([user.id]), // author has implicitly "read" their own post
       });
+      // db.post returns null on error and already toasts the underlying
+      // message — surface the setup banner too so the cause is obvious.
+      if (result === null) {
+        setSetupError("Insert failed — table may not exist or RLS is blocking.");
+        return;
+      }
+      setSetupError(null);
       setDraft("");
       setUrgent(false);
       await load();
@@ -118,6 +144,80 @@ export default function TeamComms({ setPage }: Props) {
           </button>
         )}
       </div>
+
+      {/* Setup help — shown when the table is missing or an insert was
+          blocked. Inline migration SQL so the admin can copy-paste straight
+          into Supabase without leaving the screen. */}
+      {setupError && (
+        <div
+          className="cd mb"
+          style={{
+            borderLeft: "3px solid var(--color-warning)",
+            padding: 12,
+          }}
+        >
+          <h4 style={{ fontSize: 13, color: "var(--color-warning)", marginBottom: 4 }}>
+            ⚠ Team Comms not set up yet
+          </h4>
+          <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
+            Run this once in your Supabase SQL editor to enable the message board:
+          </div>
+          <pre
+            style={{
+              background: darkMode ? "#0d0d14" : "#f7f7fa",
+              border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
+              borderRadius: 6,
+              padding: 8,
+              fontSize: 11,
+              fontFamily: "monospace",
+              overflowX: "auto",
+              margin: 0,
+              whiteSpace: "pre-wrap",
+              color: "inherit",
+            }}
+          >{`CREATE TABLE team_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID,
+  author_id UUID,
+  author_name TEXT,
+  message TEXT NOT NULL,
+  urgent BOOLEAN DEFAULT FALSE,
+  read_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE team_messages DISABLE ROW LEVEL SECURITY;`}</pre>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`CREATE TABLE team_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID,
+  author_id UUID,
+  author_name TEXT,
+  message TEXT NOT NULL,
+  urgent BOOLEAN DEFAULT FALSE,
+  read_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE team_messages DISABLE ROW LEVEL SECURITY;`);
+              useStore.getState().showToast("Migration SQL copied", "success");
+            }}
+            className="bo"
+            style={{ fontSize: 11, padding: "4px 10px", marginTop: 6 }}
+          >
+            📋 Copy SQL
+          </button>
+          <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            Error: <span style={{ fontFamily: "monospace" }}>{setupError}</span>
+          </div>
+          <button
+            onClick={load}
+            className="bb"
+            style={{ fontSize: 11, padding: "4px 10px", marginTop: 6, marginLeft: 6 }}
+          >
+            🔁 Retry after running migration
+          </button>
+        </div>
+      )}
 
       {/* Compose */}
       <div className="cd mb" style={{ padding: 12 }}>
