@@ -3,8 +3,75 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import { aiParseVoiceWalk } from "@/lib/parser";
-import { Icon } from "./Icon";
+import { ROOM_PRESETS } from "./screens/Inspector";
 import type { InspectionRoom } from "./screens/Inspector";
+
+/* ── Keyword expansion for the per-room checklist ──────────────────── */
+// For most preset items the item name itself yields decent keywords (split on
+// "/", strip trailing "s" so "Doors" matches "door"). Overrides cover items
+// where common spoken language doesn't include the preset name verbatim.
+const ITEM_KEYWORD_OVERRIDES: Record<string, string[]> = {
+  Caulking: ["caulk", "caulking", "sealant", "seal"],
+  Appliances: ["appliance", "stove", "oven", "fridge", "refrigerator", "dishwasher", "microwave", "range"],
+  "Electrical/Lights": ["outlet", "switch", "light", "bulb", "fixture", "wiring", "electrical"],
+  Counters: ["counter", "countertop", "counter top"],
+  "Walls/Ceiling": ["wall", "ceiling", "drywall"],
+  "Windows/Blinds": ["window", "blind", "curtain", "screen"],
+  "Door/Lock": ["door", "lock", "handle", "knob", "deadbolt"],
+  "Door/Opener": ["door", "garage door", "opener"],
+  "Mirror/Medicine Cabinet": ["mirror", "medicine"],
+  "Towel Bar/TP Holder": ["towel", "tp holder", "toilet paper", "paper holder"],
+  "Exhaust Fan": ["exhaust", "fan", "vent fan"],
+  "Tub/Shower": ["tub", "shower", "bath"],
+  "Sink/Vanity": ["sink", "vanity", "faucet"],
+  "Sink/Faucet": ["sink", "faucet", "tap", "aerator"],
+  Connections: ["connection", "hookup", "hose"],
+  Venting: ["vent", "venting", "duct"],
+  Closet: ["closet"],
+  Doorbell: ["doorbell", "bell", "chime"],
+  Railings: ["rail", "railing", "banister", "handrail"],
+  Baseboards: ["baseboard", "trim"],
+  "Exterior Door": ["exterior door", "back door", "side door"],
+  Siding: ["siding", "stucco"],
+  "Gutters/Downspouts": ["gutter", "downspout"],
+  "Porch/Deck": ["porch", "deck", "patio"],
+  Landscaping: ["landscape", "yard", "grass", "tree", "shrub", "bush", "weed"],
+  "Exterior Lights": ["exterior light", "outdoor light", "porch light", "flood light"],
+  Fencing: ["fence", "fencing", "gate"],
+  "HVAC Unit": ["hvac", "ac unit", "air conditioner", "condenser", "heat pump"],
+  "HVAC System": ["hvac", "furnace", "air conditioner", "heating"],
+  "Water Heater": ["water heater", "hot water"],
+  "Air Filter": ["air filter", "filter"],
+  "Condenser Unit": ["condenser", "ac unit"],
+  "Breaker Panel": ["breaker", "panel", "electrical panel"],
+  "Smoke/CO Detectors": ["smoke", "co detector", "carbon monoxide", "alarm", "detector"],
+  "Fire Extinguisher": ["fire extinguisher", "extinguisher"],
+  Thermostat: ["thermostat"],
+  "GFCI Outlets": ["gfci", "ground fault"],
+  Toilet: ["toilet", "commode"],
+};
+
+function itemKeywords(itemName: string): string[] {
+  const override = ITEM_KEYWORD_OVERRIDES[itemName];
+  if (override) return override.map((s) => s.toLowerCase());
+  // Default: split on "/" and ",", lowercase, strip trailing "s".
+  return itemName
+    .toLowerCase()
+    .split(/[/,]/)
+    .map((p) => p.trim().replace(/s$/, ""))
+    .filter((p) => p.length >= 3);
+}
+
+/** Look up the preset checklist for a room, accommodating numbered variants
+ * like "Bedroom 5" that fall back to the base "Bedroom 1" preset. */
+function presetItemsFor(room: string): string[] {
+  const exact = ROOM_PRESETS[room];
+  if (exact) return exact;
+  const baseKey = Object.keys(ROOM_PRESETS).find(
+    (k) => room.startsWith(k.replace(/ \d+$/, ""))
+  );
+  return baseKey ? ROOM_PRESETS[baseKey] : [];
+}
 
 /* ── Web Speech API typing — narrow declarations so we don't pull in the
    full DOM lib type for every browser variant. ──────────────────────── */
@@ -73,6 +140,23 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
   const [pendingTranscript, setPendingTranscript] = useState(""); // for the manual-text fallback
   const [processing, setProcessing] = useState(false);
   const [processStatus, setProcessStatus] = useState("");
+  // Items the user has mentioned (or manually checked) per room. The
+  // checklist below the chip strip auto-checks an item the moment its
+  // keywords appear in the transcript, giving the user a visual "have I
+  // covered everything?" reminder while they walk.
+  const [mentioned, setMentioned] = useState<Record<string, Set<string>>>({});
+  // Per-room transcript accumulator: only checks against the words spoken
+  // since the user entered that room, so leftover speech from a previous
+  // room can't accidentally check items in the new one.
+  const roomTranscriptRef = useRef<Record<string, string>>({});
+  // currentRoomRef mirrors currentRoom so the speech-recognition closure
+  // (set up once) can read the latest room without restarting recognition.
+  const currentRoomRef = useRef<string | null>(currentRoom);
+  useEffect(() => { currentRoomRef.current = currentRoom; }, [currentRoom]);
+  // Tick state forces the auto-check useEffect to re-run when finalized
+  // speech is appended to a room's transcript ref (refs don't trigger
+  // re-renders on their own).
+  const [roomTranscriptTick, setRoomTranscriptTick] = useState(0);
 
   const border = darkMode ? "#1e1e2e" : "#eee";
 
@@ -98,6 +182,13 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
       }
       if (final) {
         transcriptChunkRef.current += final;
+        // Append finalized speech to the current room's running transcript
+        // so the auto-check effect re-runs against the up-to-date text.
+        const room = currentRoomRef.current;
+        if (room) {
+          roomTranscriptRef.current[room] = (roomTranscriptRef.current[room] || "") + final;
+          setRoomTranscriptTick((t) => t + 1);
+        }
       }
       setLiveTranscript(transcriptChunkRef.current + interim);
     };
@@ -130,6 +221,43 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
     else stopRecognition();
     return () => { stopRecognition(); };
   }, [recording, supported, startRecognition, stopRecognition]);
+
+  /* ── Auto-check items as they're mentioned in transcript ────────── */
+  // Sweep the current room's running transcript on each finalized chunk
+  // (or each keystroke in the no-speech-API fallback) and add any preset
+  // items whose keywords appear to mentioned[room]. Idempotent: items
+  // don't un-check from this effect, and manual taps below merge in.
+  useEffect(() => {
+    if (!currentRoom) return;
+    const speechText = (roomTranscriptRef.current[currentRoom] || "").toLowerCase();
+    const fallbackText = supported ? "" : pendingTranscript.toLowerCase();
+    const text = `${speechText} ${fallbackText}`.trim();
+    if (!text) return;
+    const items = presetItemsFor(currentRoom);
+    const found: string[] = [];
+    const already = mentioned[currentRoom] || new Set<string>();
+    for (const item of items) {
+      if (already.has(item)) continue;
+      const keywords = itemKeywords(item);
+      if (keywords.some((k) => text.includes(k))) found.push(item);
+    }
+    if (found.length === 0) return;
+    setMentioned((prev) => {
+      const next = new Set(prev[currentRoom] || []);
+      for (const f of found) next.add(f);
+      return { ...prev, [currentRoom]: next };
+    });
+  }, [currentRoom, roomTranscriptTick, pendingTranscript, supported, mentioned]);
+
+  // Manual toggle for an item — user tap on the checklist below.
+  const toggleItem = (room: string, item: string) => {
+    setMentioned((prev) => {
+      const set = new Set(prev[room] || []);
+      if (set.has(item)) set.delete(item);
+      else set.add(item);
+      return { ...prev, [room]: set };
+    });
+  };
 
   /* ── Photo capture ─────────────────────────────────────────────── */
   const compressFile = (file: File, maxSize = 1200): Promise<Blob> =>
@@ -288,7 +416,7 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         </div>
       )}
 
-      {/* Current-room chip strip */}
+      {/* Current-room chip strip + checklist */}
       <div className="cd mb" style={{ padding: 10 }}>
         <div className="dim" style={{ fontSize: 11, marginBottom: 6, fontFamily: "Oswald", letterSpacing: ".06em" }}>
           CURRENT AREA
@@ -296,6 +424,8 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
         <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 2 }}>
           {rooms.map((r) => {
             const active = r === currentRoom;
+            const total = presetItemsFor(r).length;
+            const checked = mentioned[r]?.size || 0;
             return (
               <button
                 key={r}
@@ -309,13 +439,70 @@ export default function VoiceWalk({ property, client, rooms, onComplete, onCance
                   color: active ? "#fff" : "var(--color-primary)",
                   border: `1px solid var(--color-primary)`,
                   flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
                 }}
               >
-                {r}
+                <span>{r}</span>
+                {total > 0 && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontFamily: "Oswald",
+                      opacity: 0.85,
+                      background: active ? "rgba(255,255,255,0.18)" : "rgba(46,117,182,0.12)",
+                      padding: "1px 5px",
+                      borderRadius: 8,
+                    }}
+                  >
+                    {checked}/{total}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
+
+        {/* Per-room checklist — auto-checks as items get mentioned, tap to
+            toggle manually. Items the user already checked off get a green
+            tick; everything else stays unchecked so it's obvious what's
+            still left to inspect in this area. */}
+        {currentRoom && (() => {
+          const items = presetItemsFor(currentRoom);
+          if (items.length === 0) return null;
+          const set = mentioned[currentRoom] || new Set<string>();
+          return (
+            <div style={{ marginTop: 8 }}>
+              <div className="dim" style={{ fontSize: 10, marginBottom: 4, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                AREAS OF CONCERN — {currentRoom.toUpperCase()} ({set.size}/{items.length})
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {items.map((item) => {
+                  const isChecked = set.has(item);
+                  return (
+                    <button
+                      key={item}
+                      onClick={() => toggleItem(currentRoom, item)}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 12,
+                        fontSize: 11,
+                        background: isChecked ? "var(--color-success)" : "transparent",
+                        color: isChecked ? "#fff" : "#888",
+                        border: `1px solid ${isChecked ? "var(--color-success)" : darkMode ? "#1e1e2e" : "#ddd"}`,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {isChecked ? "✓ " : "○ "}{item}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Recording + camera controls */}

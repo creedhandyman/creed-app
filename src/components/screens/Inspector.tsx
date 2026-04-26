@@ -7,7 +7,7 @@ import { Icon } from "../Icon";
 import VoiceWalk from "../VoiceWalk";
 
 /* ── Preset rooms and items ── */
-const ROOM_PRESETS: Record<string, string[]> = {
+export const ROOM_PRESETS: Record<string, string[]> = {
   Kitchen: ["Sink/Faucet", "Counters", "Cabinets", "Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Appliances", "Electrical/Lights", "Caulking"],
   "Living Room": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Electrical/Lights", "Baseboards"],
   "Dining Room": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Electrical/Lights", "Baseboards"],
