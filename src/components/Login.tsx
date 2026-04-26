@@ -85,6 +85,21 @@ export default function Login() {
             <span style={{ color: "#2E75B6", margin: "0 5px" }}>·</span>
             We Write the Quote
           </p>
+          <p
+            style={{
+              fontFamily: "Oswald, sans-serif",
+              fontSize: 9,
+              letterSpacing: "0.12em",
+              color: "#6c7480",
+              margin: "3px 0 0",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Field-Service Manager
+            <span style={{ color: "#2E75B6", margin: "0 5px" }}>·</span>
+            A.I.-Powered Quoting
+          </p>
         </div>
 
         {/* Card */}
