@@ -225,6 +225,12 @@ export interface InspectionItem {
 export interface InspectionRoom {
   name: string;
   sqft: number;
+  // Optional dimensions captured by the per-room W×L calculator in
+  // Inspector.tsx. sqft is the source of truth (used by the AI quote and
+  // the report); width/length are stored only so the inputs round-trip if
+  // the inspector navigates back to the room.
+  width?: number;
+  length?: number;
   items: InspectionItem[];
 }
 

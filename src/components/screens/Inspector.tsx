@@ -792,28 +792,55 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
           <div style={{ height: 3, background: "var(--color-primary)", borderRadius: 2, width: `${((currentRoomIdx + 1) / roomData.length) * 100}%`, transition: "width 0.3s" }} />
         </div>
 
-        {/* Room size */}
+        {/* Room size — W × L auto-calculates sqft. Width/length persist on
+            the room so the inputs round-trip when the inspector navigates
+            back; sqft is still the source of truth for downstream pricing. */}
         <div className="cd" style={{ marginBottom: 8, padding: 10, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="calc" size={14} color="var(--color-primary)" />
           <div style={{ flex: 1 }}>
-            <label className="sl">Area Size (sq ft)</label>
-            <input
-              type="number"
-              value={room.sqft || ""}
-              placeholder="e.g. 120"
-              min="0"
-              style={{ marginTop: 2, fontSize: 13 }}
-              onChange={(e) => {
-                const val = parseFloat(e.target.value) || 0;
-                setRoomData((prev) =>
-                  prev.map((r, ri) => ri === currentRoomIdx ? { ...r, sqft: val } : r)
-                );
-              }}
-            />
+            <label className="sl">Area Size (W × L)</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={room.width || ""}
+                placeholder="W"
+                min="0"
+                step="0.1"
+                style={{ fontSize: 13, width: 70, textAlign: "center" }}
+                onChange={(e) => {
+                  const w = parseFloat(e.target.value) || 0;
+                  setRoomData((prev) =>
+                    prev.map((r, ri) => ri === currentRoomIdx
+                      ? { ...r, width: w, sqft: w && r.length ? +(w * r.length).toFixed(1) : r.sqft }
+                      : r)
+                  );
+                }}
+              />
+              <span style={{ fontSize: 14, color: "#888" }}>×</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={room.length || ""}
+                placeholder="L"
+                min="0"
+                step="0.1"
+                style={{ fontSize: 13, width: 70, textAlign: "center" }}
+                onChange={(e) => {
+                  const l = parseFloat(e.target.value) || 0;
+                  setRoomData((prev) =>
+                    prev.map((r, ri) => ri === currentRoomIdx
+                      ? { ...r, length: l, sqft: r.width && l ? +(r.width * l).toFixed(1) : r.sqft }
+                      : r)
+                  );
+                }}
+              />
+              <span style={{ fontSize: 11, color: "#888" }}>ft</span>
+            </div>
           </div>
           {room.sqft > 0 && (
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 16, fontFamily: "Oswald", color: "var(--color-primary)" }}>{room.sqft}</div>
+              <div style={{ fontSize: 18, fontFamily: "Oswald", color: "var(--color-primary)", lineHeight: 1 }}>{room.sqft}</div>
               <div className="dim" style={{ fontSize: 8 }}>sq ft</div>
             </div>
           )}
