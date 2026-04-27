@@ -25,6 +25,13 @@ function fmtTime(ts: number): string {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
+// Stable identity for a work-order item across renders — used by toggleWO to
+// find the right item in the latest store snapshot even if the array order
+// shifted. Kept in sync with the merge key in QuoteForge.saveJob.
+function woStableKey(w: { room?: string; detail?: string }): string {
+  return `${(w.room || "").toLowerCase().trim()}|||${(w.detail || "").toLowerCase().trim()}`;
+}
+
 export default function WorkVision({ setPage }: { setPage: (p: string) => void }) {
   const user = useStore((s) => s.user)!;
   const jobs = useStore((s) => s.jobs);
@@ -36,7 +43,20 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [st, setSt] = useState(() => ld<number | null>("t_st", null));
   const [sj, setSj] = useState(() => ld("t_sj", ""));
   const [el, setEl] = useState(0);
-  const [notes, setNotes] = useState("");
+  // Serialize all writes that mutate the job's `rooms` blob (checkbox toggles,
+  // photo uploads, completion notes, etc.). Two fast taps used to race: tap A
+  // would `loadAll()` async, tap B's render closure still saw the pre-A
+  // snapshot, and tap B's spread-and-write reverted A's flag. Each task here
+  // chains onto the prior promise and reads the truly-current store state
+  // right before it patches.
+  const roomsQueue = useRef<Promise<void>>(Promise.resolve());
+  const enqueueRoomsWrite = (task: () => Promise<void>) => {
+    const next = roomsQueue.current.then(task).catch((err) => {
+      console.warn("[WorkVision] rooms write failed:", err);
+    });
+    roomsQueue.current = next;
+    return next;
+  };
   // Active server-side time_entries row id, shared with Timer.tsx via localStorage
   // so clock-out in either screen patches the same row instead of creating a new
   // entry and orphaning the original.
@@ -170,17 +190,40 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     useStore.getState().showToast(`Clocked out — ${hrs.toFixed(1)} hours logged`, "success");
   };
 
-  // Toggle work order item
-  const toggleWO = async (idx: number) => {
+  // Toggle work order item. Match by `(room, detail)` against the latest
+  // store snapshot read at save-time so we never write a stale workOrder
+  // array — that's the bug Bernard hit where two quick taps wiped each
+  // other's `done` flags. The roomsQueue serializes concurrent toggles so
+  // each one reads state that includes the prior toggle's commit.
+  const toggleWO = (idx: number) => {
     if (!activeJob) return;
-    const updated = [...workOrder];
-    updated[idx] = { ...updated[idx], done: !updated[idx].done };
-    const data = { ...jobData, workOrder: updated };
-    await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(data) });
-    loadAll();
+    const clicked = workOrder[idx];
+    if (!clicked) return;
+    const targetKey = woStableKey(clicked);
+    const nextDone = !clicked.done;
+    enqueueRoomsWrite(async () => {
+      const fresh = useStore.getState().jobs.find((j) => j.id === activeJob.id);
+      if (!fresh) return;
+      let freshData: Record<string, unknown> = {};
+      try {
+        freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
+      } catch { return; }
+      const freshWO = Array.isArray(freshData.workOrder)
+        ? (freshData.workOrder as { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[])
+        : [];
+      const matchIdx = freshWO.findIndex((w) => woStableKey(w) === targetKey);
+      if (matchIdx < 0) return; // task no longer exists in current blob — drop the toggle
+      const updatedWO = [...freshWO];
+      updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
+      await db.patch("jobs", activeJob.id, {
+        rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }),
+      });
+      await loadAll();
+    });
   };
 
-  // Upload work photo
+  // Upload work photo. Same fresh-read + queue pattern so a photo upload
+  // can't race with checkbox toggles or note edits and clobber the blob.
   const uploadWorkPhoto = async (file: File) => {
     if (!activeJob) return;
     const ext = file.name.split(".").pop() || "jpg";
@@ -188,17 +231,20 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     const { error } = await supabase.storage.from("receipts").upload(path, file);
     if (error) { useStore.getState().showToast("Photo upload failed: " + error.message, "error"); return; }
     const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
-    if (urlData?.publicUrl) {
-      // Re-read fresh job data from store to avoid stale snapshot
+    if (!urlData?.publicUrl) return;
+    const publicUrl = urlData.publicUrl;
+    await enqueueRoomsWrite(async () => {
       const freshJob = useStore.getState().jobs.find((j) => j.id === activeJob.id);
       let freshData: Record<string, unknown> = {};
-      try { freshData = freshJob ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {} : {}; } catch { /* */ }
-      if (!freshData.photos) freshData.photos = [];
-      (freshData.photos as Array<{ url: string; label: string; type: string }>).push({ url: urlData.publicUrl, label: "", type: "work" });
+      try {
+        freshData = freshJob ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {} : {};
+      } catch { /* */ }
+      if (!Array.isArray(freshData.photos)) freshData.photos = [];
+      (freshData.photos as Array<{ url: string; label: string; type: string }>).push({ url: publicUrl, label: "", type: "work" });
       await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(freshData) });
       await loadAll();
-      useStore.getState().showToast("Photo added", "success");
-    }
+    });
+    useStore.getState().showToast("Photo added", "success");
   };
 
   // Complete job
@@ -216,13 +262,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         return;
       }
     }
-    // Save notes if any
-    if (notes.trim()) {
-      const data = { ...jobData, jobNotes: (jobData?.jobNotes || "") + "\n" + notes.trim() };
-      await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(data), status: "complete" });
-    } else {
-      await db.patch("jobs", activeJob.id, { status: "complete" });
-    }
+    // Drain any in-flight blob writes (debounced note save, photo upload,
+    // toggle) so the rooms blob is fully committed before the status flip.
+    // Avoids a window where Complete fires, then a stale queued patch
+    // overwrites the just-committed blob with state from a pre-complete read.
+    await roomsQueue.current;
+    await db.patch("jobs", activeJob.id, { status: "complete" });
     // Clock out
     await clockOut();
     useStore.getState().showToast("Job completed! Great work.", "success");
@@ -833,21 +878,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       })()}
 
       {/* ── NOTES TAB ── */}
-      {section === "notes" && (
+      {section === "notes" && activeJob && (
         <div className="cd">
           <h4 style={{ fontSize: 13, marginBottom: 8 }}>📝 {t("wv.jobNotes")}</h4>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder={t("wv.notesPlaceholder")}
-            style={{ height: 120, fontSize: 14, resize: "vertical" }}
-          />
-          {jobData?.jobNotes && (
-            <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-              <div className="sl" style={{ marginBottom: 4 }}>Previous Notes</div>
-              <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>{jobData.jobNotes}</div>
-            </div>
-          )}
+          {/* Keyed on activeJob.id so switching jobs remounts with the new
+              job's notes (and flushes any pending save for the prior job). */}
+          <JobNotesEditor key={activeJob.id} jobId={activeJob.id} />
         </div>
       )}
 
@@ -923,5 +959,74 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         onSent={() => loadAll()}
       />
     </div>
+  );
+}
+
+// Self-contained notes editor for the active job. Loads jobNotes from the
+// store, autosaves on idle (600ms debounce), and flushes on unmount so the
+// last keystrokes survive a tab-switch or app-close. Each save reads a fresh
+// `rooms` blob and merges in the new note so it can't accidentally wipe a
+// concurrent toggle/photo write. Mirrors the pattern in Jobs.tsx
+// JobNotesInput — kept in sync with that component.
+function JobNotesEditor({ jobId }: { jobId: string }) {
+  const initial = (() => {
+    try {
+      const job = useStore.getState().jobs.find((j) => j.id === jobId);
+      if (!job) return "";
+      const d = typeof job.rooms === "string" ? JSON.parse(job.rooms) : (job.rooms || {});
+      return d?.jobNotes || "";
+    } catch { return ""; }
+  })();
+  const [value, setValue] = useState(initial);
+  const lastSaved = useRef(initial);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  const save = async (note: string) => {
+    if (note === lastSaved.current) return;
+    lastSaved.current = note;
+    try {
+      const fresh = useStore.getState().jobs.find((x) => x.id === jobId);
+      if (!fresh) return;
+      const d = typeof fresh.rooms === "string"
+        ? (JSON.parse(fresh.rooms) || {})
+        : (fresh.rooms || {});
+      d.jobNotes = note;
+      await db.patch("jobs", jobId, { rooms: JSON.stringify(d) });
+    } catch { /* swallow — db helper toasts the error */ }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) {
+        clearTimeout(timer.current);
+        // Fire-and-forget flush. We don't await on unmount because React
+        // unmount handlers can't be async and we don't want to block.
+        save(valueRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => {
+        const v = e.target.value;
+        setValue(v);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => save(v), 600);
+      }}
+      onBlur={() => {
+        if (timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+        save(valueRef.current);
+      }}
+      placeholder={t("wv.notesPlaceholder")}
+      style={{ height: 120, fontSize: 14, resize: "vertical", width: "100%" }}
+    />
   );
 }

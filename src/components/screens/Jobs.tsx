@@ -29,6 +29,19 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
+  // Serialize all `rooms` blob mutations on this screen — checkbox toggles,
+  // after-photo uploads — so two quick taps can't race and clobber each
+  // other (the bug Bernard hit where checked items kept un-checking).
+  const roomsQueue = useRef<Promise<void>>(Promise.resolve());
+  const enqueueRoomsWrite = (task: () => Promise<void>) => {
+    roomsQueue.current = roomsQueue.current.then(task).catch((err) => {
+      console.warn("[Jobs] rooms write failed:", err);
+    });
+    return roomsQueue.current;
+  };
+  const woStableKey = (w: { room?: string; detail?: string }) =>
+    `${(w.room || "").toLowerCase().trim()}|||${(w.detail || "").toLowerCase().trim()}`;
+
   // ── Historical labor reconstruction ────────────────────────────────
   // Pre-c99d286, Payroll did `db.del("time_entries", id)` instead of
   // patching paid_at, so any job paid out before that fix has its
@@ -1261,8 +1274,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                                 input.multiple = true;
                                 input.onchange = async () => {
                                   if (!input.files?.length) return;
-                                  const updated = { ...jobData };
-                                  if (!updated.photos) updated.photos = [];
+                                  // Upload to storage first (no blob mutation
+                                  // yet) so the rooms-write step is short-
+                                  // lived and serializable.
+                                  const newPhotos: { url: string; label: string; type: "after" }[] = [];
                                   for (let i = 0; i < input.files.length; i++) {
                                     const file = input.files[i];
                                     const ext = file.name.split(".").pop() || "jpg";
@@ -1270,11 +1285,30 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                                     const { error } = await supabase.storage.from("receipts").upload(path, file);
                                     if (!error) {
                                       const { data } = supabase.storage.from("receipts").getPublicUrl(path);
-                                      if (data?.publicUrl) updated.photos.push({ url: data.publicUrl, label: "", type: "after" });
+                                      if (data?.publicUrl) newPhotos.push({ url: data.publicUrl, label: "", type: "after" });
                                     }
                                   }
-                                  await db.patch("jobs", j.id, { rooms: JSON.stringify(updated) });
-                                  loadAll();
+                                  if (!newPhotos.length) return;
+                                  await enqueueRoomsWrite(async () => {
+                                    const fresh = useStore.getState().jobs.find((x) => x.id === j.id);
+                                    if (!fresh) return;
+                                    let freshData: Record<string, unknown> = {};
+                                    try {
+                                      freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
+                                    } catch { return; }
+                                    const existingPhotos = Array.isArray(freshData.photos)
+                                      ? (freshData.photos as Array<{ url: string; label: string; type: string }>)
+                                      : [];
+                                    const seen = new Set(existingPhotos.map((p) => p.url));
+                                    const merged = [
+                                      ...existingPhotos,
+                                      ...newPhotos.filter((p) => !seen.has(p.url)),
+                                    ];
+                                    await db.patch("jobs", j.id, {
+                                      rooms: JSON.stringify({ ...freshData, photos: merged }),
+                                    });
+                                    await loadAll();
+                                  });
                                   useStore.getState().showToast("After photos uploaded", "success");
                                 };
                                 input.click();
@@ -1349,13 +1383,35 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           {workOrder.map((w, wi) => (
                             <div
                               key={wi}
-                              onClick={async (e) => {
+                              onClick={(e) => {
                                 e.stopPropagation();
-                                const updated = [...workOrder];
-                                updated[wi] = { ...w, done: !w.done };
-                                const newData = { ...jobData, workOrder: updated };
-                                await db.patch("jobs", j.id, { rooms: JSON.stringify(newData) });
-                                loadAll();
+                                // Read fresh blob from the store at save-time
+                                // (the render closure can be stale if a prior
+                                // toggle's loadAll hasn't completed). Match
+                                // the clicked task by (room, detail) so a
+                                // mid-flight reorder can't redirect the toggle
+                                // to the wrong row.
+                                const targetKey = woStableKey(w);
+                                const nextDone = !w.done;
+                                enqueueRoomsWrite(async () => {
+                                  const fresh = useStore.getState().jobs.find((x) => x.id === j.id);
+                                  if (!fresh) return;
+                                  let freshData: Record<string, unknown> = {};
+                                  try {
+                                    freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
+                                  } catch { return; }
+                                  const freshWO = Array.isArray(freshData.workOrder)
+                                    ? (freshData.workOrder as { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[])
+                                    : [];
+                                  const matchIdx = freshWO.findIndex((x) => woStableKey(x) === targetKey);
+                                  if (matchIdx < 0) return;
+                                  const updatedWO = [...freshWO];
+                                  updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
+                                  await db.patch("jobs", j.id, {
+                                    rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }),
+                                  });
+                                  await loadAll();
+                                });
                               }}
                               style={{
                                 display: "flex", alignItems: "center", gap: 6, padding: "3px 0",
