@@ -791,7 +791,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             }}
           >
             <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-primary)", fontFamily: "Oswald" }}>Small jobs</span>
-            <div style={{ fontSize: 36 }}>📸</div>
+            <Icon name="quote" size={36} color="var(--color-primary)" strokeWidth={2} />
             <div>
               <h4 style={{ color: "var(--color-primary)", fontSize: 16, margin: 0 }}>Quick Quote</h4>
               <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
@@ -816,7 +816,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             }}
           >
             <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-success)", fontFamily: "Oswald" }}>Most accurate</span>
-            <div style={{ fontSize: 36 }}>🔍</div>
+            <Icon name="search" size={36} color="var(--color-success)" strokeWidth={2} />
             <div>
               <h4 style={{ color: "var(--color-success)", fontSize: 16, margin: 0 }}>Full Inspection</h4>
               <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
@@ -841,7 +841,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             }}
           >
             <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-warning)", fontFamily: "Oswald" }}>PDF reports</span>
-            <div style={{ fontSize: 36 }}>📁</div>
+            <Icon name="doc" size={36} color="var(--color-warning)" strokeWidth={2} />
             <div>
               <h4 style={{ color: "var(--color-warning)", fontSize: 16, margin: 0 }}>Upload Report</h4>
               <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
