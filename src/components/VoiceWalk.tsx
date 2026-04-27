@@ -1082,6 +1082,12 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {items.map((item) => {
               const isChecked = checkedSet.has(item);
+              // Highlight has to be obvious in daylight on a phone — Bernard
+              // wants a glance to tell him what's already covered. Solid
+              // green border + filled green background + bold green text on
+              // the matched item; the prior version used a malformed
+              // `var(--color-success)50` border (you can't suffix a var())
+              // so nothing rendered.
               return (
                 <div
                   key={item}
@@ -1092,13 +1098,14 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                     padding: inspecting ? "3px 7px" : "5px 7px",
                     borderRadius: 6,
                     background: isChecked
-                      ? darkMode ? "rgba(38,166,91,0.10)" : "rgba(38,166,91,0.06)"
+                      ? darkMode ? "rgba(38,166,91,0.28)" : "rgba(38,166,91,0.18)"
                       : "transparent",
-                    border: `1px solid ${
+                    border: `${isChecked ? 2 : 1}px solid ${
                       isChecked
-                        ? "var(--color-success)50"
+                        ? "var(--color-success)"
                         : darkMode ? "#1e1e2e" : "#e8e8e8"
                     }`,
+                    transition: "background 0.2s, border-color 0.2s",
                   }}
                 >
                   <button
@@ -1108,7 +1115,8 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                       border: "none",
                       color: isChecked ? "var(--color-success)" : "#888",
                       cursor: "pointer",
-                      fontSize: 14,
+                      fontSize: isChecked ? 16 : 14,
+                      fontWeight: isChecked ? 700 : 400,
                       padding: 0,
                       lineHeight: 1,
                       marginTop: 1,
@@ -1118,7 +1126,15 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                     {isChecked ? "✓" : "○"}
                   </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 12 }}>{item}</span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: isChecked ? 600 : 400,
+                        color: isChecked ? "var(--color-success)" : undefined,
+                      }}
+                    >
+                      {item}
+                    </span>
                   </div>
                 </div>
               );
