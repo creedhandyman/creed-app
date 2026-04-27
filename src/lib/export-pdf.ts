@@ -246,7 +246,7 @@ ${photos.length > 0 ? `
   ${photos
     .map(
       (p) =>
-        `<div style="text-align:center"><img src="${esc(p.url)}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:6px;border:1px solid #ddd" /><div style="font-size:11px;color:#666;margin-top:3px">${esc(p.label || p.type || "")}</div></div>`,
+        `<div style="text-align:center"><img src="${esc(p.url)}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:6px;border:1px solid #ddd" /></div>`,
     )
     .join("")}
 </div>

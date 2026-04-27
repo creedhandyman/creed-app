@@ -293,6 +293,7 @@ Hours INCLUDE old floor removal, subfloor prep, AND new floor installation:
 - Carpet: 1 hour per 60 sqft (includes pad)
 - Tile: 1 hour per 15-20 sqft
 - Baseboard per room: 1.5-2.5h
+FLOORING LABOR FLOOR: Total flooring labor for a room (hours × labor rate, in dollars) MUST average AT LEAST $2.50/sqft. If your hour estimate above produces less than $2.50/sqft of labor at the user's labor rate, RAISE the hours until the labor charge is ≥ $2.50/sqft × room sqft. (At a $55/hr labor rate this works out to ~1h per 22 sqft minimum for any flooring type; tile usually clears the floor naturally, LVP and carpet often need to be bumped up.)
 FLOORING MATERIALS — calculate from sqft:
 - LVP/Laminate: $2.00/sqft + 10% waste. Example: 450 sqft = 495 sqft × $2 = $990
 - Underlayment: $0.30/sqft. Example: 450 sqft = $135
