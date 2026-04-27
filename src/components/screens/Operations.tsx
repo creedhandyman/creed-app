@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Clients from "./Clients";
+import BackfillCustomers from "./BackfillCustomers";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
@@ -123,7 +124,7 @@ function OpsSettings() {
   );
 }
 
-type OpsTab = "payroll" | "financials" | "clients" | "team" | "billing" | "settings";
+type OpsTab = "payroll" | "financials" | "clients" | "team" | "billing" | "backfill" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
   const [tab, setTab] = useState<OpsTab>("payroll");
@@ -134,6 +135,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
     { id: "clients",    label: t("ops.clients"),    icon: "clients" },
     { id: "team",       label: t("ops.team"),       icon: "worker" },
     { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
+    { id: "backfill",   label: "Backfill",          icon: "link" },
     { id: "settings",   label: t("ops.settings"),   icon: "settings" },
   ];
 
@@ -171,6 +173,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
       {tab === "clients" && <Clients setPage={setPage} />}
       {tab === "team" && <TeamStats />}
       {tab === "billing" && <BillingSettings />}
+      {tab === "backfill" && <BackfillCustomers />}
       {tab === "settings" && <OpsSettings />}
     </div>
   );
