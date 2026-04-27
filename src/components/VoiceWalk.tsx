@@ -50,7 +50,7 @@ const ITEM_KEYWORD_OVERRIDES: Record<string, string[]> = {
   "Door/Opener": ["door", "garage door", "opener"],
   "Mirror/Medicine Cabinet": ["mirror", "medicine"],
   "Towel Bar/TP Holder": ["towel", "tp holder", "toilet paper", "paper holder"],
-  "Exhaust Fan": ["exhaust", "fan", "vent fan"],
+  "Exhaust Fan": ["exhaust fan", "vent fan", "exhaust"],
   "Tub/Shower": ["tub", "shower", "bath"],
   "Sink/Vanity": ["sink", "vanity", "faucet"],
   "Sink/Faucet": ["sink", "faucet", "tap", "aerator"],
@@ -221,9 +221,11 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   // any pause/resume segments. They get concatenated and sent to
   // /api/transcribe when the user advances or finishes.
   const recorderRef = useRef<MediaRecorder | null>(null);
-  const recorderChunksRef = useRef<Blob[]>([]);
-  // Per-room accumulated audio: concatenated chunks across all
-  // pause/resume segments in that room.
+  // Per-room accumulated audio. With single-take enforcement (re-record
+  // wipes this for the current room before starting fresh), each room's
+  // entry is the chunks of exactly ONE MediaRecorder instance — so the
+  // resulting Blob is a single coherent WebM/MP4 stream that Whisper
+  // can decode end-to-end.
   const roomAudioChunksRef = useRef<Record<string, Blob[]>>({});
   // Callbacks waiting for the recorder's onstop to fire (and chunks to
   // be folded). The Done / Next-Room buttons await this so we don't try
@@ -448,24 +450,25 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
           const mime = pickRecorderMime();
           const opts = mime ? { mimeType: mime } : undefined;
           const rec = new MediaRecorder(audioOnly, opts);
-          recorderChunksRef.current = [];
+          // Each MediaRecorder owns its OWN chunks via closure capture.
+          // A previously shared ref was racy: a late-firing onstop from
+          // a prior recorder could fold the *current* recorder's
+          // in-progress chunks (and then wipe them).
+          const myChunks: Blob[] = [];
+          // Capture the room name at recording-start so onstop folds
+          // into the right bucket even if currentRoomRef somehow drifts.
+          const myRoom = currentRoomRef.current;
           rec.ondataavailable = (ev) => {
-            if (ev.data && ev.data.size > 0) {
-              recorderChunksRef.current.push(ev.data);
-            }
+            if (ev.data && ev.data.size > 0) myChunks.push(ev.data);
           };
           rec.onstop = () => {
-            // Fold this segment's chunks into the room's accumulated
-            // chunks. Concatenated + Whisper-transcribed on advance/finish.
-            const room = currentRoomRef.current;
-            if (room) {
-              const prior = roomAudioChunksRef.current[room] || [];
-              roomAudioChunksRef.current[room] = [...prior, ...recorderChunksRef.current];
-              const totalSize = roomAudioChunksRef.current[room].reduce((s, b) => s + b.size, 0);
-              console.log(`[VoiceWalk] Recorder stopped for "${room}": ${roomAudioChunksRef.current[room].length} chunks, ${totalSize} bytes total`);
+            if (myRoom) {
+              const prior = roomAudioChunksRef.current[myRoom] || [];
+              roomAudioChunksRef.current[myRoom] = [...prior, ...myChunks];
+              const totalSize = roomAudioChunksRef.current[myRoom].reduce((s, b) => s + b.size, 0);
+              console.log(`[VoiceWalk] Recorder stopped for "${myRoom}": ${myChunks.length} chunks, ${totalSize} bytes total`);
             }
-            recorderChunksRef.current = [];
-            // Resolve anyone waiting for this stop event (advanceRoom, finish).
+            // Resolve anyone waiting for this stop event (Done / re-record).
             const waiters = recorderStopWaitersRef.current;
             recorderStopWaitersRef.current = [];
             waiters.forEach((w) => {
@@ -739,6 +742,28 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
     if (fileFallbackRef.current) fileFallbackRef.current.value = "";
   };
 
+  /* ── Re-record: discard prior audio/transcript/timing for the current
+       room and start a fresh single take. Photos are preserved (the user
+       may have framed good shots and only want to redo narration). */
+  const reRecord = useCallback(async () => {
+    const room = currentRoomRef.current;
+    if (!room) return;
+    // Defensive: ensure any prior recorder.onstop has fired (and folded
+    // its chunks) before we wipe the bucket.
+    await stopRecorderAndWait();
+    delete roomAudioChunksRef.current[room];
+    setRoomRecordings((prev) => {
+      const cur = prev[room];
+      return {
+        ...prev,
+        [room]: { ...emptyRecording(), photos: cur?.photos || [] },
+      };
+    });
+    setMentioned((prev) => ({ ...prev, [room]: new Set<string>() }));
+    setLiveInterim("");
+    setInspecting(true);
+  }, [stopRecorderAndWait]);
+
   /* ── Finish: hand raw recording data to the parent for background
        processing. The parent (Inspector) runs Whisper + AI without
        blocking the user — they advance to the next room immediately.
@@ -802,8 +827,10 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <button
           className="bo"
+          disabled={uploading > 0}
           onClick={() => { stopPreviewRecognition(); stopCameraAndRecorder(); onCancel(); }}
-          style={{ fontSize: 12, padding: "4px 8px" }}
+          title={uploading > 0 ? "Wait for photo upload to finish…" : "Cancel"}
+          style={{ fontSize: 12, padding: "4px 8px", opacity: uploading > 0 ? 0.5 : 1 }}
         >← Cancel</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="mic" size={18} color="var(--color-primary)" strokeWidth={2} /> Voice Walk
@@ -1241,33 +1268,56 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
         </div>
       )}
 
-      {/* PRIMARY ACTION: single Start/Stop pill */}
+      {/* PRIMARY ACTION: single-take Start/Stop, with Re-record after stop.
+          Once the user stops, the recording is sealed — pause/resume is
+          deliberately NOT supported because concatenating multiple
+          MediaRecorder segments produces a malformed WebM/MP4 blob that
+          Whisper can only decode the first segment of. To redo, the user
+          taps Re-record (clears prior audio + transcript, keeps photos). */}
       <div className="cd mb" style={{ padding: 10, textAlign: "center" }}>
-        <button
-          onClick={() => setInspecting((v) => !v)}
-          style={{
-            padding: "12px 28px",
-            fontSize: 15,
-            fontFamily: "Oswald",
-            background: inspecting ? "var(--color-accent-red)" : "var(--color-success)",
-            color: "#fff",
-            borderRadius: 24,
-            border: "none",
-            animation: inspecting ? "vw-pulse 1.5s ease-in-out infinite" : "none",
-            letterSpacing: ".04em",
-            minWidth: 220,
-          }}
-        >
-          {inspecting ? "■ Pause Recording" : (currentRec && currentRec.totalRecordedMs > 0 ? "▶ Resume Recording" : "▶ Start Recording")}
-        </button>
-        <style>{`@keyframes vw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }`}</style>
-        <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
-          {inspecting
-            ? "Mic + camera live. Talk through what you see, snap photos as you go."
-            : currentRec && currentRec.totalRecordedMs > 0
-              ? `${elapsedDisplay} recorded · tap to add more.`
-              : "Tap to start a single continuous recording for this room."}
-        </div>
+        {!inspecting && currentRec && currentRec.totalRecordedMs > 0 ? (
+          <>
+            <div style={{ fontSize: 14, fontFamily: "Oswald", color: "var(--color-success)", letterSpacing: ".04em" }}>
+              ✓ Recorded {elapsedDisplay}
+            </div>
+            <button
+              onClick={reRecord}
+              className="bo"
+              style={{ marginTop: 8, fontSize: 12, padding: "6px 14px" }}
+            >
+              ↻ Re-record (clears prior)
+            </button>
+            <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+              Tap Done below to apply, or re-record to start over.
+            </div>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setInspecting((v) => !v)}
+              style={{
+                padding: "12px 28px",
+                fontSize: 15,
+                fontFamily: "Oswald",
+                background: inspecting ? "var(--color-accent-red)" : "var(--color-success)",
+                color: "#fff",
+                borderRadius: 24,
+                border: "none",
+                animation: inspecting ? "vw-pulse 1.5s ease-in-out infinite" : "none",
+                letterSpacing: ".04em",
+                minWidth: 220,
+              }}
+            >
+              {inspecting ? "■ Stop Recording" : "▶ Start Recording"}
+            </button>
+            <style>{`@keyframes vw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }`}</style>
+            <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+              {inspecting
+                ? "Mic + camera live. Talk through what you see, snap photos as you go."
+                : "One continuous take per room — tap Stop when finished."}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Done — sticky above the bottom nav so the button is always

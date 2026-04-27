@@ -221,18 +221,12 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
    *  has already advanced to the next room — this runs Whisper +
    *  aiParseVoiceWalkRoom on the prior room's audio/photos and merges
    *  the resulting items into roomData. The ⏳ / ✓ status drives the
-   *  strip chips so the user can see progress without blocking. */
-  const processRoomVoice = useCallback(async (roomIdx: number, result: VoiceWalkResult) => {
-    const roomName = (() => {
-      // Read from current state, not the stale closure; the user could
-      // have added/renamed rooms between Voice handoff and now.
-      let name = "";
-      setRoomData((prev) => {
-        name = prev[roomIdx]?.name || "";
-        return prev;
-      });
-      return name;
-    })();
+   *  strip chips so the user can see progress without blocking.
+   *
+   *  roomName is passed by the caller (which has the fresh roomData in
+   *  scope) instead of being looked up here, so we don't need a stale
+   *  closure or a side-effecting setState read. */
+  const processRoomVoice = useCallback(async (roomIdx: number, roomName: string, result: VoiceWalkResult) => {
     if (!roomName) return;
 
     setVoiceProcessingStatus((prev) => ({ ...prev, [roomName]: "analyzing" }));
@@ -252,14 +246,23 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
             console.log(`[Inspector] Whisper for "${roomName}": ${result.audioBlob.size}B → ${text.length} chars`);
             if (text.trim()) transcript = text.trim();
           } else {
+            // Toasts stay user-friendly; technical detail goes to console.
+            // We always have partialTranscript as a fallback, so transcription
+            // failure isn't a hard error — downgrade to warning severity.
             const errBody = await res.json().catch(() => ({}));
+            const fellBackMsg = result.partialTranscript
+              ? "using live preview text"
+              : "no narration captured";
             if (res.status === 503) {
               useStore.getState().showToast(
-                "Voice transcription needs OPENAI_API_KEY in Vercel env vars.",
-                "error"
+                `Voice transcription unavailable — ${fellBackMsg}.`,
+                "warning"
               );
             } else {
-              useStore.getState().showToast(`Transcribe ${res.status}: ${errBody.error || ""}`, "error");
+              useStore.getState().showToast(
+                `Voice transcription failed — ${fellBackMsg}.`,
+                "warning"
+              );
             }
             console.warn("[Inspector] Whisper failed:", res.status, errBody);
           }
@@ -292,16 +295,27 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
       );
       console.log(`[Inspector] AI returned ${items.length} items for "${roomName}":`, items.map((it) => `${it.name}[${it.condition}]`).join(", "));
 
-      // Merge into roomData. Drop scaffold-S items the user never touched
-      // so the AI items don't duplicate them; keep anything the user
-      // worked on manually (notes, photos, condition changed).
+      // Merge into roomData. Policy:
+      //  1. Drop scaffold-S items the user never touched (they're the
+      //     default placeholders and would clutter the result).
+      //  2. Keep user-edited items (non-S, OR has notes, OR has photos).
+      //  3. For each AI item, drop it if a user-edited item with the
+      //     same name already exists — user edits win over AI for the
+      //     same component. Otherwise append.
+      //  4. AI items with a name matching a dropped scaffold replace it.
+      // This prevents the previous duplicate-Flooring problem where AI
+      // and scaffold both produced an entry under the same name.
       if (items.length > 0) {
         setRoomData((prev) => prev.map((r, ri) => {
           if (ri !== roomIdx) return r;
-          const kept = r.items.filter((it) =>
-            it.condition !== "S" || (it.notes && it.notes.trim()) || (it.photos && it.photos.length > 0)
+          const isUserEdited = (it: InspectionItem) =>
+            it.condition !== "S" || !!(it.notes && it.notes.trim()) || (it.photos && it.photos.length > 0);
+          const userEditedNames = new Set(
+            r.items.filter(isUserEdited).map((it) => it.name.toLowerCase())
           );
-          return { ...r, items: [...kept, ...items] };
+          const kept = r.items.filter(isUserEdited);
+          const newAi = items.filter((it) => !userEditedNames.has(it.name.toLowerCase()));
+          return { ...r, items: [...kept, ...newAi] };
         }));
       } else {
         useStore.getState().showToast(`AI couldn't categorize "${roomName}" — checklist scaffold kept.`, "warning");
@@ -606,22 +620,30 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
       } else {
         return (
           <VoiceWalk
+            // Remount on auto-advance so VoiceWalk's internal state
+            // (currentIdx, recordings, mentioned, audio chunks) starts
+            // fresh for the new room instead of carrying state from
+            // the previous one.
+            key={voiceRoomIdx}
             property={property}
             client={client}
-            // Pass the FULL rooms list so VoiceWalk's strip can show
-            // ⏳ / ✓ chips for the rooms still being processed in the
-            // background even though the user is recording a new one.
-            rooms={roomData.map((r) => r.name)}
+            // Pass ONLY the active room. VoiceWalk's currentIdx defaults
+            // to 0 so it naturally shows rooms[0] = the active room.
+            // The strip is hidden in singleRoom mode anyway, so passing
+            // the full list bought nothing and caused the title /
+            // checklist / audio-bucket to all key off the wrong room.
+            rooms={[voiceRoom.name]}
             singleRoom
             roomStatuses={voiceProcessingStatus}
             onComplete={(result) => {
-              // Capture the index BEFORE we mutate it — processRoomVoice
-              // runs in the background and needs to know which room.
+              // Capture the index AND name BEFORE we mutate state —
+              // processRoomVoice runs in the background and needs both.
               const idx = voiceRoomIdx;
-              if (idx !== null) {
+              const name = idx !== null ? roomData[idx]?.name : undefined;
+              if (idx !== null && name) {
                 // Fire and forget. The user advances immediately; the
                 // chip in the strip flips ⏳ → ✓ when this finishes.
-                void processRoomVoice(idx, result);
+                void processRoomVoice(idx, name, result);
               }
               // Auto-advance to the next area: open Voice Walk for the
               // next room and move the underlying Inspector cursor too.

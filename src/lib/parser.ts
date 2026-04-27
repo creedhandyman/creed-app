@@ -877,7 +877,7 @@ async function aiParsePdfSingle(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 16000,
         system: `Labor rate: $${laborRate || 55}.00/hour.\n\n` +
           (licensedTrades?.length
@@ -955,7 +955,7 @@ export async function checkAiAvailable(): Promise<boolean> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 10,
         messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
       }),
@@ -1239,22 +1239,25 @@ async function processVoiceWalkRoom(
   const cleanTranscript = (transcript || "").trim();
   if (!cleanTranscript && photos.length === 0) return [];
 
-  // Fetch all photos as base64 for the vision call.
-  const imageData: string[] = [];
-  for (const p of photos) {
-    try {
-      const res = await fetch(p.url);
-      const blob = await res.blob();
-      const b64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-      imageData.push(b64);
-    } catch {
-      imageData.push("");
-    }
-  }
+  // Fetch all photos as base64 for the vision call, in parallel.
+  // (Sequential await was a 5–10× slowdown for rooms with several
+  //  photos.) Failures keep the array aligned with `photos` via "".
+  const imageData: string[] = await Promise.all(
+    photos.map(async (p) => {
+      try {
+        const res = await fetch(p.url);
+        const blob = await res.blob();
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        return "";
+      }
+    })
+  );
 
   const fmtTime = (ms: number) => {
     const s = Math.max(0, Math.round(ms / 1000));
@@ -1330,7 +1333,7 @@ Output ONLY valid JSON of this shape:
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 4000,
       system,
       messages: [{ role: "user", content }],
@@ -1437,7 +1440,7 @@ Output ONLY valid JSON of this shape, nothing else:
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 4000,
       system,
       messages: [{ role: "user", content }],
