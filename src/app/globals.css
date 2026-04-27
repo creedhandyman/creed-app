@@ -539,7 +539,10 @@ button:focus-visible {
    scrolls underneath. */
 .sb {
   position: sticky;
-  bottom: calc(56px + env(safe-area-inset-bottom) + 8px);
+  /* nav height (56) + iOS home indicator (env safe-area) + 16px gap.
+     The 16px matches the global .mc bottom buffer so the sticky pin
+     and the page's natural bottom edge land at the same level. */
+  bottom: calc(56px + env(safe-area-inset-bottom) + 16px);
   z-index: 5;
   padding: 10px 4px 6px;
   margin: 0 -4px;
@@ -551,8 +554,12 @@ button:focus-visible {
   background: linear-gradient(to top, var(--color-light-bg) 75%, transparent);
 }
 /* When the right/desktop nav is active there's no fixed bottom nav,
-   so the sticky offset goes to 0 and the gradient is unneeded. */
-.nav-left .sb, body:not(.nav-bottom) .sb {
+   so the sticky offset goes to 0 and the gradient is unneeded. The
+   `nav-bottom` / `nav-left` classes live on <html> (set by
+   ThemeProvider on documentElement), not on <body>, so we have to
+   match against html — `body:not(.nav-bottom)` was always true and
+   silently disabled the sticky behavior. */
+.nav-left .sb, html:not(.nav-bottom) .sb {
   position: static;
   background: transparent;
   padding: 0;
