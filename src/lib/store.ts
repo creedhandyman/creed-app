@@ -5,6 +5,8 @@ import type {
   Organization,
   Profile,
   Client,
+  Customer,
+  Address,
   Job,
   TimeEntry,
   Review,
@@ -62,6 +64,8 @@ interface AppState {
 
   // data
   clients: Client[];
+  customers: Customer[];
+  addresses: Address[];
   profiles: Profile[];
   jobs: Job[];
   timeEntries: TimeEntry[];
@@ -73,6 +77,19 @@ interface AppState {
   questPayouts: QuestPayout[];
   loading: boolean;
   loadAll: () => Promise<void>;
+
+  /** Upsert helpers — write to Supabase, then patch the local state in
+   *  place so the UI updates immediately without a full loadAll().
+   *  Pass an `id` to update; omit it to insert. Returns the persisted
+   *  row, or null on failure. */
+  upsertCustomer: (
+    row: Partial<Customer> & { name: string }
+  ) => Promise<Customer | null>;
+  deleteCustomer: (id: string) => Promise<boolean>;
+  upsertAddress: (
+    row: Partial<Address> & { customer_id: string }
+  ) => Promise<Address | null>;
+  deleteAddress: (id: string) => Promise<boolean>;
 
   // auto-refresh
   _interval: ReturnType<typeof setInterval> | null;
@@ -210,6 +227,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   /* ── Data ── */
   clients: [],
+  customers: [],
+  addresses: [],
   profiles: [],
   jobs: [],
   timeEntries: [],
@@ -224,20 +243,28 @@ export const useStore = create<AppState>((set, get) => ({
   loadAll: async () => {
     const orgId = get().user?.org_id;
     const orgFilter = orgId ? { org_id: orgId } : undefined;
-    const [clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, questPayouts] =
-      await Promise.all([
-        db.get<Client>("clients", orgFilter),
-        db.get<Profile>("profiles", orgFilter),
-        db.get<Job>("jobs", orgFilter),
-        db.get<TimeEntry>("time_entries", orgFilter),
-        db.get<Review>("reviews", orgFilter),
-        db.get<Referral>("referrals", orgFilter),
-        db.get<ScheduleEntry>("schedule", orgFilter),
-        db.get<PayHistory>("pay_history", orgFilter),
-        db.get<Receipt>("receipts", orgFilter),
-        db.get<QuestPayout>("quest_payouts", orgFilter),
-      ]);
-    set({ clients, profiles, jobs, timeEntries, reviews, referrals, schedule, payHistory, receipts, questPayouts, loading: false });
+    const [
+      clients, customers, addresses, profiles, jobs, timeEntries,
+      reviews, referrals, schedule, payHistory, receipts, questPayouts,
+    ] = await Promise.all([
+      db.get<Client>("clients", orgFilter),
+      db.get<Customer>("customers", orgFilter),
+      db.get<Address>("addresses", orgFilter),
+      db.get<Profile>("profiles", orgFilter),
+      db.get<Job>("jobs", orgFilter),
+      db.get<TimeEntry>("time_entries", orgFilter),
+      db.get<Review>("reviews", orgFilter),
+      db.get<Referral>("referrals", orgFilter),
+      db.get<ScheduleEntry>("schedule", orgFilter),
+      db.get<PayHistory>("pay_history", orgFilter),
+      db.get<Receipt>("receipts", orgFilter),
+      db.get<QuestPayout>("quest_payouts", orgFilter),
+    ]);
+    set({
+      clients, customers, addresses, profiles, jobs, timeEntries,
+      reviews, referrals, schedule, payHistory, receipts, questPayouts,
+      loading: false,
+    });
     // Also refresh org data (picks up Stripe changes, site updates, etc.).
     // Query by the user's org_id (authoritative) — querying by the currently
     // cached org.id meant that if the cached org was null/stale, the refetch
@@ -246,6 +273,60 @@ export const useStore = create<AppState>((set, get) => ({
       const orgs = await db.get<Organization>("organizations", { id: orgId });
       if (orgs.length) { set({ org: orgs[0] }); sv("org", orgs[0]); }
     }
+  },
+
+  /* ── Customer + Address helpers ──────────────────────────────────
+     Upsert / delete keep local state in sync without a full loadAll
+     so detail screens can edit-and-see-results without a round-trip.
+     db.post/patch/del already toast errors via the __dbToast hook. */
+  upsertCustomer: async (row) => {
+    const isUpdate = !!row.id;
+    if (isUpdate) {
+      const updates = { ...row, updated_at: new Date().toISOString() };
+      delete (updates as { id?: string }).id;
+      await db.patch("customers", row.id!, updates);
+      const updated = { ...get().customers.find((c) => c.id === row.id), ...updates, id: row.id! } as Customer;
+      set({ customers: get().customers.map((c) => (c.id === row.id ? updated : c)) });
+      return updated;
+    }
+    const inserted = await db.post<Customer>("customers", row as Record<string, unknown>);
+    if (!inserted || inserted.length === 0) return null;
+    const created = inserted[0];
+    set({ customers: [created, ...get().customers] });
+    return created;
+  },
+
+  deleteCustomer: async (id) => {
+    await db.del("customers", id);
+    set({
+      customers: get().customers.filter((c) => c.id !== id),
+      // Address rows cascade-delete in Postgres; mirror that locally.
+      addresses: get().addresses.filter((a) => a.customer_id !== id),
+    });
+    return true;
+  },
+
+  upsertAddress: async (row) => {
+    const isUpdate = !!row.id;
+    if (isUpdate) {
+      const updates = { ...row, updated_at: new Date().toISOString() };
+      delete (updates as { id?: string }).id;
+      await db.patch("addresses", row.id!, updates);
+      const updated = { ...get().addresses.find((a) => a.id === row.id), ...updates, id: row.id! } as Address;
+      set({ addresses: get().addresses.map((a) => (a.id === row.id ? updated : a)) });
+      return updated;
+    }
+    const inserted = await db.post<Address>("addresses", row as Record<string, unknown>);
+    if (!inserted || inserted.length === 0) return null;
+    const created = inserted[0];
+    set({ addresses: [created, ...get().addresses] });
+    return created;
+  },
+
+  deleteAddress: async (id) => {
+    await db.del("addresses", id);
+    set({ addresses: get().addresses.filter((a) => a.id !== id) });
+    return true;
   },
 
   /* ── Auto-refresh ── */

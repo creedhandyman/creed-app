@@ -53,6 +53,48 @@ export interface Client {
   created_at?: string;
 }
 
+/** Customer = first-class CRM entity. Coexists with the legacy `clients`
+ *  table during migration. New flows (Step 1 of the multi-property
+ *  roadmap) link Jobs to a Customer + Address via FKs; the existing
+ *  free-text `client` and `property` columns on Jobs remain populated
+ *  for back-compat until the legacy `clients` table is retired. */
+export type CustomerType = "individual" | "business" | "property_manager";
+
+export interface Customer {
+  id: string;
+  org_id: string;
+  name: string;
+  type: CustomerType;
+  /** For business / property_manager rows: the human point of contact
+   *  (e.g. "Sarah at Key Renter"). Optional for individuals. */
+  primary_contact?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Address {
+  id: string;
+  org_id: string;
+  customer_id: string;
+  /** Short human label — "Main", "Beach house", "2415 W Lotus". Falls
+   *  back to the street line in the UI when not set. */
+  label?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  is_primary?: boolean;
+  /** Freeform JSONB for property-manager-specific fields (unit_count,
+   *  owner, occupancy_status). Supabase auto-parses jsonb to an object;
+   *  treat as untyped until we lock down the schema. */
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Job {
   id: string;
   property: string;
@@ -73,6 +115,15 @@ export interface Job {
   client_signature?: string;
   signature_date?: string;
   org_id?: string;
+  /** Optional FK into the new Customer entity. When set, the job is
+   *  linked to a structured customer record; otherwise the legacy
+   *  free-text `client` field is the source of truth. Both can be
+   *  populated simultaneously during the migration. */
+  customer_id?: string;
+  /** Optional FK into the new Address entity. Same coexistence story
+   *  as `customer_id` — the legacy `property` string remains
+   *  authoritative until both are linked. */
+  address_id?: string;
   is_recurring?: boolean;
   recurrence_rule?: string; // weekly | biweekly | monthly | quarterly
   next_due?: string;
