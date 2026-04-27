@@ -14,8 +14,6 @@ import Clients from "./screens/Clients";
 import Mileage from "./screens/Mileage";
 import Marketing from "./screens/Marketing";
 import Troubleshoot from "./screens/Troubleshoot";
-import Customers from "./screens/Customers";
-import CustomerDetail from "./screens/CustomerDetail";
 import Financials from "./screens/Financials";
 import Operations from "./screens/Operations";
 import WorkVision from "./screens/WorkVision";
@@ -25,10 +23,6 @@ export default function AppShell() {
   const [showSettings, setShowSettings] = useState(false);
   const [editJobId, setEditJobId] = useState<string | null>(null);
   const [scheduleJobName, setScheduleJobName] = useState<string | null>(null);
-  // Customers list → detail navigation. When non-null, the customers
-  // route renders CustomerDetail instead of the list. Cleared on any
-  // page change so back navigation lands on the list, not detail.
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const user = useStore((s) => s.user)!;
   const darkMode = useStore((s) => s.darkMode);
 
@@ -49,7 +43,6 @@ export default function AppShell() {
     // Scroll to top when switching screens
     window.scrollTo(0, 0);
     if (p !== "sched") setScheduleJobName(null);
-    if (p !== "customers") setSelectedCustomerId(null);
     setPage(p);
   };
 
@@ -85,10 +78,6 @@ export default function AppShell() {
         return isAdmin ? <Clients setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "mileage":
         return <Mileage setPage={goToPage} />;
-      case "customers":
-        return selectedCustomerId
-          ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />
-          : <Customers setPage={goToPage} onSelect={setSelectedCustomerId} />;
       case "marketing":
         return isAdmin ? <Marketing /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "troubleshoot":

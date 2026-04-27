@@ -1,10 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Clients from "./Clients";
+import Customers from "./Customers";
+import CustomerDetail from "./CustomerDetail";
 import BackfillCustomers from "./BackfillCustomers";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
@@ -124,18 +126,26 @@ function OpsSettings() {
   );
 }
 
-type OpsTab = "payroll" | "financials" | "clients" | "team" | "billing" | "backfill" | "settings";
+type OpsTab = "payroll" | "financials" | "clients" | "customers" | "backfill" | "team" | "billing" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
   const [tab, setTab] = useState<OpsTab>("payroll");
+  // CustomerDetail is rendered inline within the customers sub-tab. Its
+  // state lives here so switching to a different sub-tab and back resets
+  // to the list view (rather than the user landing on a stale detail).
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  useEffect(() => {
+    if (tab !== "customers") setSelectedCustomerId(null);
+  }, [tab]);
 
   const tabs: { id: OpsTab; label: string; icon: IconName }[] = [
     { id: "payroll",    label: t("ops.payroll"),    icon: "money" },
     { id: "financials", label: t("ops.financials"), icon: "trending" },
     { id: "clients",    label: t("ops.clients"),    icon: "clients" },
+    { id: "customers",  label: "Customers",         icon: "briefcase" },
+    { id: "backfill",   label: "Backfill",          icon: "link" },
     { id: "team",       label: t("ops.team"),       icon: "worker" },
     { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
-    { id: "backfill",   label: "Backfill",          icon: "link" },
     { id: "settings",   label: t("ops.settings"),   icon: "settings" },
   ];
 
@@ -171,9 +181,14 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
       {tab === "payroll" && <Payroll />}
       {tab === "financials" && <Financials setPage={setPage} />}
       {tab === "clients" && <Clients setPage={setPage} />}
+      {tab === "customers" && (
+        selectedCustomerId
+          ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />
+          : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />
+      )}
+      {tab === "backfill" && <BackfillCustomers />}
       {tab === "team" && <TeamStats />}
       {tab === "billing" && <BillingSettings />}
-      {tab === "backfill" && <BackfillCustomers />}
       {tab === "settings" && <OpsSettings />}
     </div>
   );
