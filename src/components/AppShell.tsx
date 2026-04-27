@@ -10,7 +10,6 @@ import Schedule from "./screens/Schedule";
 import TimerScreen from "./screens/Timer";
 import Payroll from "./screens/Payroll";
 import Quests from "./screens/Quests";
-import Clients from "./screens/Clients";
 import Mileage from "./screens/Mileage";
 import Marketing from "./screens/Marketing";
 import Troubleshoot from "./screens/Troubleshoot";
@@ -35,7 +34,7 @@ export default function AppShell() {
 
   const goToPage = (p: string) => {
     // Block restricted pages for techs/apprentices
-    if (!isAdmin && ["payroll", "clients", "marketing", "ops", "financials"].includes(p)) {
+    if (!isAdmin && ["payroll", "marketing", "ops", "financials"].includes(p)) {
       setPage("dash");
       return;
     }
@@ -74,8 +73,6 @@ export default function AppShell() {
         return <WorkVision setPage={goToPage} />;
       case "quests":
         return <Quests />;
-      case "clients":
-        return isAdmin ? <Clients setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "mileage":
         return <Mileage setPage={goToPage} />;
       case "marketing":

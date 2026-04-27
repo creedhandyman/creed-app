@@ -4,7 +4,6 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
-import Clients from "./Clients";
 import Customers from "./Customers";
 import CustomerDetail from "./CustomerDetail";
 import TeamStats from "../TeamStats";
@@ -125,7 +124,7 @@ function OpsSettings() {
   );
 }
 
-type OpsTab = "payroll" | "financials" | "clients" | "customers" | "team" | "billing" | "settings";
+type OpsTab = "payroll" | "financials" | "customers" | "team" | "billing" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
   const [tab, setTab] = useState<OpsTab>("payroll");
@@ -140,8 +139,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
   const tabs: { id: OpsTab; label: string; icon: IconName }[] = [
     { id: "payroll",    label: t("ops.payroll"),    icon: "money" },
     { id: "financials", label: t("ops.financials"), icon: "trending" },
-    { id: "clients",    label: t("ops.clients"),    icon: "clients" },
-    { id: "customers",  label: "Customers",         icon: "briefcase" },
+    { id: "customers",  label: "Customers",         icon: "clients" },
     { id: "team",       label: t("ops.team"),       icon: "worker" },
     { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
     { id: "settings",   label: t("ops.settings"),   icon: "settings" },
@@ -178,7 +176,6 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
 
       {tab === "payroll" && <Payroll />}
       {tab === "financials" && <Financials setPage={setPage} />}
-      {tab === "clients" && <Clients setPage={setPage} />}
       {tab === "customers" && (
         selectedCustomerId
           ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />

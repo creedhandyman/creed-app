@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
-import type { Job, Client } from "@/lib/types";
+import type { Job, Customer } from "@/lib/types";
 
 interface Props {
   job: Job | null;          // job that just completed; null hides the modal
@@ -22,17 +22,22 @@ interface Props {
  */
 export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
   const org = useStore((s) => s.org);
-  const clients = useStore((s) => s.clients);
+  const customers = useStore((s) => s.customers);
   const darkMode = useStore((s) => s.darkMode);
 
-  const [client, setClient] = useState<Client | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     if (!job) return;
-    // Look up the matching client by name so we can pull phone + email.
-    const c = clients.find((cl) => cl.name === job.client) || null;
-    setClient(c);
+    // Pull contact info from the linked Customer entity. The legacy
+    // free-text `job.client` string is still used as the display
+    // greeting (it's whatever was typed when the job was created),
+    // but phone/email come from the structured customer record now.
+    const c = job.customer_id
+      ? customers.find((cu) => cu.id === job.customer_id) ?? null
+      : null;
+    setCustomer(c);
 
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const reviewUrl = `${origin}/review?org=${org?.id || ""}&job=${job.id}`;
@@ -43,12 +48,12 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
       `Hi${firstName ? ` ${firstName}` : ""}! Thanks for choosing ${orgName} for the work at ${job.property}. ` +
       `If you have a minute, we'd really appreciate a quick review — it makes a big difference for a small business: ${reviewUrl}`
     );
-  }, [job, clients, org]);
+  }, [job, customers, org]);
 
   if (!job) return null;
 
-  const phone = client?.phone || "";
-  const email = client?.email || "";
+  const phone = customer?.phone || "";
+  const email = customer?.email || "";
 
   // Persist review_requested_at so we don't re-prompt on the next status
   // change or row re-render. Best-effort patch; we don't block the action.

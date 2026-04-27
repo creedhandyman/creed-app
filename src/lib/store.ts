@@ -4,7 +4,6 @@ import { supabase, db } from "./supabase";
 import type {
   Organization,
   Profile,
-  Client,
   Customer,
   Address,
   Job,
@@ -63,7 +62,6 @@ interface AppState {
   resolveConfirm: (v: boolean) => void;
 
   // data
-  clients: Client[];
   customers: Customer[];
   addresses: Address[];
   profiles: Profile[];
@@ -229,7 +227,6 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   /* ── Data ── */
-  clients: [],
   customers: [],
   addresses: [],
   profiles: [],
@@ -247,10 +244,9 @@ export const useStore = create<AppState>((set, get) => ({
     const orgId = get().user?.org_id;
     const orgFilter = orgId ? { org_id: orgId } : undefined;
     const [
-      clients, customers, addresses, profiles, jobs, timeEntries,
+      customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts,
     ] = await Promise.all([
-      db.get<Client>("clients", orgFilter),
       db.get<Customer>("customers", orgFilter),
       db.get<Address>("addresses", orgFilter),
       db.get<Profile>("profiles", orgFilter),
@@ -264,7 +260,7 @@ export const useStore = create<AppState>((set, get) => ({
       db.get<QuestPayout>("quest_payouts", orgFilter),
     ]);
     set({
-      clients, customers, addresses, profiles, jobs, timeEntries,
+      customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts,
       loading: false,
     });

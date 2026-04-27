@@ -12,7 +12,6 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import type { Address, CustomerType } from "@/lib/types";
-import ClientSelect from "./ClientSelect";
 
 interface Props {
   prop: string;
@@ -351,7 +350,12 @@ export default function CustomerPicker({
           placeholder="Property address *"
           style={{ fontSize }}
         />
-        <ClientSelect value={client} onChange={setClient} style={{ fontSize }} />
+        <input
+          value={client}
+          onChange={(e) => setClient(e.target.value)}
+          placeholder="Client name (optional)"
+          style={{ fontSize }}
+        />
       </div>
     </div>
   );

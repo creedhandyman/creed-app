@@ -19,7 +19,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   const timeEntries = useStore((s) => s.timeEntries);
   const profiles = useStore((s) => s.profiles);
   const reviews = useStore((s) => s.reviews);
-  const clients = useStore((s) => s.clients);
+  const customers = useStore((s) => s.customers);
   const receipts = useStore((s) => s.receipts);
   const darkMode = useStore((s) => s.darkMode);
   const org = useStore((s) => s.org);
@@ -540,7 +540,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
 
       {/* Quick stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8 }}>
-        {statCard("Total Clients", clients.length, "var(--color-primary)")}
+        {statCard("Total Customers", customers.length, "var(--color-primary)")}
         {statCard("Avg Rating", avgRating, "var(--color-highlight)", `${reviews.length} reviews`)}
         {statCard("Quote Value", `$${totalQuoteValue.toLocaleString()}`, "#888", "all quotes")}
       </div>

@@ -42,22 +42,11 @@ export interface Profile {
   created_at?: string;
 }
 
-export interface Client {
-  id: string;
-  org_id: string;
-  name: string;
-  phone: string;
-  email: string;
-  address: string;
-  notes: string;
-  created_at?: string;
-}
-
-/** Customer = first-class CRM entity. Coexists with the legacy `clients`
- *  table during migration. New flows (Step 1 of the multi-property
- *  roadmap) link Jobs to a Customer + Address via FKs; the existing
- *  free-text `client` and `property` columns on Jobs remain populated
- *  for back-compat until the legacy `clients` table is retired. */
+/** Customer = first-class CRM entity. Replaces the retired legacy
+ *  `clients` table. The free-text `client` and `property` strings on
+ *  Job rows are preserved as display fallbacks (rendered in Jobs lists,
+ *  PDFs, etc.) but the structured contact info — phone, email — comes
+ *  from the linked Customer entity via Job.customer_id. */
 export type CustomerType = "individual" | "business" | "property_manager";
 
 export interface Customer {

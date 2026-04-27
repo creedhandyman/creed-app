@@ -1409,12 +1409,17 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           onClick={() =>
             (() => {
               const o = useStore.getState().org;
-              const clientData = useStore.getState().clients.find((c) => c.name === client);
+              // Pull contact info from the linked Customer entity if one is
+              // set on this quote. Free-text-only quotes (no customer_id)
+              // simply ship the PDF without contact info.
+              const customerData = customerId
+                ? useStore.getState().customers.find((c) => c.id === customerId)
+                : undefined;
               exportQuotePdf({
                 property: prop,
                 client,
-                clientPhone: clientData?.phone,
-                clientEmail: clientData?.email,
+                clientPhone: customerData?.phone,
+                clientEmail: customerData?.email,
                 rooms,
                 rate,
                 workers: workers.map((wid) => {
@@ -1446,8 +1451,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         <button
           className="bo"
           onClick={() => {
-            const clientData = profiles.length ? useStore.getState().clients.find((c: { name: string }) => c.name === client) : null;
-            const email = clientData?.email || "";
+            const customerData = customerId
+              ? useStore.getState().customers.find((c) => c.id === customerId)
+              : undefined;
+            const email = customerData?.email || "";
             const orgName = useStore.getState().org?.name || "Service Provider";
             const subject = encodeURIComponent(`Quote — ${prop}`);
             const body = encodeURIComponent(

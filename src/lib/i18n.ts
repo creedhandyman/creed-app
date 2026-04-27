@@ -14,8 +14,6 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.quest": "Quest",
     "nav.site": "Site",
     "nav.ops": "Ops",
-    "nav.clients": "Clients",
-    "nav.customers": "People",
     "nav.home": "Home",
 
     // Dashboard
@@ -26,7 +24,6 @@ const translations: Record<Lang, Record<string, string>> = {
     "dash.netPay": "Net Pay This Week",
     "dash.startQuote": "Start a Quote",
     "dash.startQuoteDesc": "Upload a PDF, paste an inspection, or build from scratch",
-    "dash.clients": "Clients",
     "dash.contacts": "contacts",
     "dash.mileage": "Mileage",
     "dash.trackTrips": "Track trips",
@@ -231,7 +228,6 @@ const translations: Record<Lang, Record<string, string>> = {
     // Operations tabs + sections
     "ops.payroll": "Payroll",
     "ops.financials": "Financials",
-    "ops.clients": "Clients",
     "ops.team": "Team",
     "ops.billing": "Billing",
     "ops.settings": "Settings",
@@ -317,8 +313,6 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.quest": "Metas",
     "nav.site": "Sitio",
     "nav.ops": "Ops",
-    "nav.clients": "Clientes",
-    "nav.customers": "Personas",
     "nav.home": "Inicio",
 
     // Dashboard
@@ -329,7 +323,6 @@ const translations: Record<Lang, Record<string, string>> = {
     "dash.netPay": "Pago Neto Esta Semana",
     "dash.startQuote": "Crear Cotizaci\u00f3n",
     "dash.startQuoteDesc": "Sube un PDF, pega una inspecci\u00f3n, o crea desde cero",
-    "dash.clients": "Clientes",
     "dash.contacts": "contactos",
     "dash.mileage": "Millaje",
     "dash.trackTrips": "Registrar viajes",
@@ -534,7 +527,6 @@ const translations: Record<Lang, Record<string, string>> = {
     // Operations tabs + sections
     "ops.payroll": "N\u00f3mina",
     "ops.financials": "Finanzas",
-    "ops.clients": "Clientes",
     "ops.team": "Equipo",
     "ops.billing": "Facturaci\u00f3n",
     "ops.settings": "Configuraci\u00f3n",
