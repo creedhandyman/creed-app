@@ -75,7 +75,10 @@ export default function Customers({ setPage, onSelect }: Props) {
       notes: notes.trim() || undefined,
     });
     if (!created) {
-      useStore.getState().showToast("Failed to save customer", "error");
+      // db.post (or the upsertCustomer fallback) has already toasted the
+      // underlying Supabase error. Don't fire a second generic toast — it
+      // overwrites the diagnostic message before the user can read it.
+      // Leave the form filled so they can retry.
       return;
     }
     setName(""); setType("individual"); setPrimaryContact("");
