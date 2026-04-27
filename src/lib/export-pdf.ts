@@ -1,4 +1,4 @@
-import type { Room } from "./types";
+import type { Room, RoomItem } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 
 interface ExportOptions {
@@ -70,26 +70,49 @@ export function exportQuotePdf(opts: ExportOptions) {
     day: "numeric",
   });
 
-  // Build summary rows per trade/room category
-  const summaryRows = rooms.map((rm) => {
-    const items = rm.items;
-    const hrs = items.reduce((s, it) => s + it.laborHrs, 0);
+  // Pre-aggregate rooms by trade category (case-insensitive name match) so
+  // multiple Room objects with the same trade — e.g. two "Painting" rooms
+  // from different parse batches — collapse into one PDF section. Without
+  // this, the breakdown could render the same trade twice and the per-room
+  // material dedup wouldn't bridge the gap.
+  type Category = { name: string; items: RoomItem[] };
+  const byCategory: Record<string, Category> = {};
+  const categoryOrder: string[] = [];
+  rooms.forEach((rm) => {
+    if (rm.items.length === 0) return;
+    const key = rm.name.trim().toLowerCase();
+    if (!byCategory[key]) {
+      byCategory[key] = { name: rm.name, items: [] };
+      categoryOrder.push(key);
+    }
+    byCategory[key].items.push(...rm.items);
+  });
+  const categories = categoryOrder.map((k) => byCategory[k]);
+
+  // Build summary rows per trade category (one row per category, not per
+  // raw Room — so duplicate trade entries fold together).
+  const summaryRows = categories.map((cat) => {
+    const hrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
     const labor = hrs * rate;
-    const mat = items.reduce(
+    const mat = cat.items.reduce(
       (s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0),
       0,
     );
-    return { name: rm.name, hrs, labor, mat, total: labor + mat, itemCount: items.length };
+    return { name: cat.name, hrs, labor, mat, total: labor + mat, itemCount: cat.items.length };
   });
 
-  // Build detailed breakdown sections — consolidate duplicate materials per
-  // section so the PDF reads like a real estimate, not a dump of every line.
+  // Build detailed breakdown sections — consolidate duplicate materials
+  // across ALL items in the category by (normalized name + rounded unit
+  // price) so the same SKU from different rooms merges into one row with
+  // summed qty, summed total, and a deduped, comma-separated note listing
+  // every room/task that needed it. Different SKUs of the same product
+  // family ("Wall paint (1 gal)" vs "Wall paint (3 gal)") stay separate
+  // because their unit prices differ.
   let breakdownHtml = "";
-  rooms.forEach((rm) => {
-    if (rm.items.length === 0) return;
-    const sectionHrs = rm.items.reduce((s, it) => s + it.laborHrs, 0);
+  categories.forEach((cat) => {
+    const sectionHrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
     const sectionLabor = sectionHrs * rate;
-    const sectionMat = rm.items.reduce(
+    const sectionMat = cat.items.reduce(
       (s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0),
       0,
     );
@@ -98,16 +121,22 @@ export function exportQuotePdf(opts: ExportOptions) {
       string,
       { n: string; unitPrice: number; qty: number; total: number; notes: string[] }
     > = {};
-    rm.items.forEach((it) => {
+    cat.items.forEach((it) => {
       it.materials.forEach((m) => {
         if (m.c > 0) {
           const matQty = m.qty && m.qty > 0 ? m.qty : 1;
           // unitPrice falls back to c/qty so a lump-sum entry still divides
           // correctly across qty when the AI only set one of the two.
-          const matUnit = m.unitPrice && m.unitPrice > 0
-            ? m.unitPrice
-            : Math.round((m.c / matQty) * 100) / 100;
-          const key = m.n + "|" + matUnit;
+          // Rounded to 2dp so trivial floating-point variance ($30.00 vs
+          // $30.0000001) doesn't split rows.
+          const matUnit = Math.round(
+            (m.unitPrice && m.unitPrice > 0 ? m.unitPrice : m.c / matQty) * 100,
+          ) / 100;
+          // Normalize the name for keying (trim + lowercase) so casing or
+          // trailing-space differences in AI output don't split rows.
+          // Display name preserves original casing (first-seen).
+          const nameKey = m.n.trim().toLowerCase();
+          const key = nameKey + "|" + matUnit;
           if (matMap[key]) {
             matMap[key].qty += matQty;
             matMap[key].total += m.c;
@@ -115,7 +144,7 @@ export function exportQuotePdf(opts: ExportOptions) {
               matMap[key].notes.push(it.detail);
           } else {
             matMap[key] = {
-              n: m.n,
+              n: m.n.trim(),
               unitPrice: matUnit,
               qty: matQty,
               total: m.c,
@@ -127,7 +156,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     });
     let matRows = "";
     Object.values(matMap).forEach((m) => {
-      matRows += `<tr><td>${esc(m.n)}</td><td class="r">${m.qty}</td><td class="r">$${m.unitPrice.toFixed(2)}</td><td class="r">$${m.total.toFixed(2)}</td><td class="dim">${esc(m.notes.slice(0, 3).join(", "))}</td></tr>`;
+      matRows += `<tr><td>${esc(m.n)}</td><td class="r">${m.qty}</td><td class="r">$${m.unitPrice.toFixed(2)}</td><td class="r">$${m.total.toFixed(2)}</td><td class="dim">${esc(m.notes.join(", "))}</td></tr>`;
     });
 
     const crewSize = sectionHrs > 8 ? 2 : 1;
@@ -135,7 +164,7 @@ export function exportQuotePdf(opts: ExportOptions) {
 
     breakdownHtml += `
     <div style="margin-bottom:10px">
-      <h3>${esc(rm.name)}</h3>
+      <h3>${esc(cat.name)}</h3>
       <table>
         <thead><tr><th>Material</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:80px">Unit Price</th><th class="r" style="width:80px">Total</th><th>Notes</th></tr></thead>
         <tbody>${matRows || '<tr><td colspan="5" class="dim">Labor only</td></tr>'}</tbody>
