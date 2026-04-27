@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { exportJobReport } from "@/lib/export-job-report";
@@ -24,28 +24,116 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const jobs = useStore((s) => s.jobs);
   const receipts = useStore((s) => s.receipts);
   const timeEntries = useStore((s) => s.timeEntries);
+  const payHistory = useStore((s) => s.payHistory);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
+  // ── Historical labor reconstruction ────────────────────────────────
+  // Pre-c99d286, Payroll did `db.del("time_entries", id)` instead of
+  // patching paid_at, so any job paid out before that fix has its
+  // time_entries physically gone from Supabase — and Jobs' "actual
+  // hours" stat went blank for those jobs.
+  //
+  // pay_history.details (JSON) preserved per-job hours per pay run, so
+  // we can recover the totals (not the individual sessions). Build a
+  // {job → {userKey → {hrs, cost}}} map from pay_history once per
+  // payHistory change so each getJobLabor call is O(users-on-job).
+  //
+  // De-dup vs live time_entries: post-fix payruns DO leave time_entries
+  // (with paid_at set), so for those (user, job) pairs we'd otherwise
+  // double-count. We only "recover" the gap — max(0, historical -
+  // live_paid) — so post-fix runs contribute zero recovery and pre-fix
+  // runs contribute the full deleted amount.
+  const userKey = (uid: string | undefined, name: string | undefined) =>
+    (uid && uid.length > 0) ? uid : (name ? `name:${name}` : "unknown");
+
+  const historicalByJobByUser = useMemo(() => {
+    const out: Record<string, Record<string, { name: string; hrs: number; cost: number }>> = {};
+    for (const ph of payHistory) {
+      let details: { jobs?: { job?: string; hrs?: number; amount?: number }[] } = {};
+      try { details = ph.details ? JSON.parse(ph.details) : {}; } catch { /* */ }
+      if (!details.jobs) continue;
+      const uid = userKey(ph.user_id, ph.name);
+      for (const dj of details.jobs) {
+        if (!dj.job) continue;
+        if (!out[dj.job]) out[dj.job] = {};
+        if (!out[dj.job][uid]) out[dj.job][uid] = { name: ph.name || "Unknown", hrs: 0, cost: 0 };
+        out[dj.job][uid].hrs += dj.hrs || 0;
+        out[dj.job][uid].cost += dj.amount || 0;
+      }
+    }
+    return out;
+  }, [payHistory]);
+
   // Aggregate actual labor logged for a job — sums time_entries that match
-  // the job's property string. Used in the Hours card and the Time Logged
+  // the job's property string AND adds back any deleted-but-paid hours
+  // recovered from pay_history. Used in the Hours card and the Time Logged
   // breakdown so quotes can be compared to reality and the AI can learn.
   const getJobLabor = (jobProp: string) => {
     const entries = timeEntries.filter((e) => e.job === jobProp && (e.hours || 0) > 0);
-    const totalHrs = entries.reduce((s, e) => s + (e.hours || 0), 0);
-    const totalCost = entries.reduce((s, e) => s + (e.amount || 0), 0);
-    // Roll up by employee
+    const loggedHrs = entries.reduce((s, e) => s + (e.hours || 0), 0);
+    const loggedCost = entries.reduce((s, e) => s + (e.amount || 0), 0);
+
+    // Live-paid totals per user (post-fix payruns where rows are kept).
+    // These are already in `loggedHrs` — we use them only to compute the
+    // gap, NOT to add again.
+    const livePaidByUser: Record<string, { hrs: number; cost: number }> = {};
+    for (const e of entries) {
+      if (!e.paid_at) continue;
+      const k = userKey(e.user_id, e.user_name);
+      if (!livePaidByUser[k]) livePaidByUser[k] = { hrs: 0, cost: 0 };
+      livePaidByUser[k].hrs += e.hours || 0;
+      livePaidByUser[k].cost += e.amount || 0;
+    }
+
+    // Recover the gap per user — historical (from pay_history) minus
+    // live-paid (already in entries). Anything pre-fix shows up here
+    // because livePaidByUser[uid] is 0 for those users on this job.
+    const histForJob = historicalByJobByUser[jobProp] || {};
+    const recoveredByUser: Record<string, { name: string; hrs: number; cost: number }> = {};
+    let recoveredHrs = 0;
+    let recoveredCost = 0;
+    for (const [uid, h] of Object.entries(histForJob)) {
+      const livePaid = livePaidByUser[uid] || { hrs: 0, cost: 0 };
+      const gapHrs = Math.max(0, h.hrs - livePaid.hrs);
+      const gapCost = Math.max(0, h.cost - livePaid.cost);
+      if (gapHrs > 0 || gapCost > 0) {
+        recoveredByUser[uid] = { name: h.name, hrs: gapHrs, cost: gapCost };
+        recoveredHrs += gapHrs;
+        recoveredCost += gapCost;
+      }
+    }
+
+    // Per-employee rollup — combine live entries and recovered hours.
     const byPerson: Record<string, { name: string; hrs: number; cost: number; rate: number }> = {};
-    entries.forEach((e) => {
-      const id = e.user_id || e.user_name;
+    for (const e of entries) {
+      const id = userKey(e.user_id, e.user_name);
       if (!byPerson[id]) {
         const p = profiles.find((x) => x.id === e.user_id);
         byPerson[id] = { name: e.user_name || p?.name || "Unknown", hrs: 0, cost: 0, rate: p?.rate || 0 };
       }
       byPerson[id].hrs += e.hours || 0;
       byPerson[id].cost += e.amount || 0;
-    });
-    return { totalHrs, totalCost, byPerson: Object.values(byPerson), entries };
+    }
+    for (const [uid, r] of Object.entries(recoveredByUser)) {
+      if (!byPerson[uid]) {
+        const p = uid.startsWith("name:") ? null : profiles.find((x) => x.id === uid);
+        byPerson[uid] = { name: r.name, hrs: 0, cost: 0, rate: p?.rate || 0 };
+      }
+      byPerson[uid].hrs += r.hrs;
+      byPerson[uid].cost += r.cost;
+    }
+
+    return {
+      totalHrs: loggedHrs + recoveredHrs,
+      totalCost: loggedCost + recoveredCost,
+      loggedHrs,
+      loggedCost,
+      recoveredHrs,
+      recoveredCost,
+      byPerson: Object.values(byPerson),
+      entries,
+    };
   };
 
   const [jobTab, setJobTab] = useState<"active" | "billing" | "paid" | "archive">("active");
@@ -764,6 +852,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                                   <span style={{ color: "var(--color-success)", fontFamily: "Oswald", minWidth: 60, textAlign: "right" }}>${p.cost.toFixed(0)}</span>
                                 </div>
                               ))}
+                            {labor.recoveredHrs > 0 && (
+                              <div className="dim" style={{ fontSize: 10, marginTop: 6 }}>
+                                {labor.loggedHrs.toFixed(1)}h logged · {labor.recoveredHrs.toFixed(1)}h recovered from past payroll
+                              </div>
+                            )}
                             <div className="dim" style={{ fontSize: 10, marginTop: 6, fontStyle: "italic" }}>
                               Quoted {(j.total_hrs || 0).toFixed(1)}h · Actual {labor.totalHrs.toFixed(1)}h · This data trains the AI quoter for similar future jobs.
                             </div>
