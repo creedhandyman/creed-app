@@ -28,8 +28,26 @@ function getOrgId(): string | null {
 
 // Surface DB errors to the UI via a toast callback registered from the store.
 // Using a window hook avoids a circular import between supabase.ts <-> store.ts.
+function formatDbError(err: unknown): string {
+  // PostgrestError extends Error in supabase-js v2 and carries extra fields
+  // (code, hint, details). Surface those — without them the toast sometimes
+  // collapses to a single generic line that doesn't help diagnose.
+  if (err && typeof err === "object") {
+    const e = err as { message?: string; details?: string | null; hint?: string | null; code?: string };
+    if (e.message) {
+      const parts = [e.message];
+      if (e.code) parts.push(`(${e.code})`);
+      if (e.hint) parts.push(`— hint: ${e.hint}`);
+      if (e.details) parts.push(`— details: ${e.details}`);
+      return parts.join(" ");
+    }
+  }
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 function reportDbError(table: string, op: string, err: unknown) {
-  const msg = err instanceof Error ? err.message : String(err);
+  const msg = formatDbError(err);
   // eslint-disable-next-line no-console
   console.error(`[db] ${op} ${table} failed:`, err);
   if (typeof window !== "undefined") {
@@ -67,15 +85,25 @@ export const db = {
     row: Record<string, unknown>
   ): Promise<T[] | null> => {
     try {
-      // Auto-inject org_id if not already set
-      const data = { ...row };
+      // Strip explicit `undefined` keys so the request body is clean — most
+      // dialects ignore them, but it removes noise from network traces and
+      // avoids any chance of an undefined-vs-null mismatch downstream.
+      const data: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(row)) {
+        if (v !== undefined) data[k] = v;
+      }
+      // Auto-inject org_id if not already set.
       if (!NO_ORG_ID.has(table) && !data.org_id) {
         const orgId = getOrgId();
         if (orgId) data.org_id = orgId;
       }
       const { data: result, error } = await supabase.from(table).insert(data as never).select();
       if (error) throw error;
-      return result as T[];
+      // Some RLS configs let inserts succeed but return an empty result from
+      // the trailing SELECT (no SELECT policy for the anon role). Return an
+      // empty array in that case so callers can decide whether to refetch
+      // — null is reserved for actual errors.
+      return (result as T[]) ?? [];
     } catch (err) {
       reportDbError(table, "insert", err);
       return null;

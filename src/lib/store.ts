@@ -210,7 +210,10 @@ export const useStore = create<AppState>((set, get) => ({
   toast: { message: "", type: "info" as const, visible: false },
   showToast: (message, type = "success") => {
     set({ toast: { message, type, visible: true } });
-    setTimeout(() => get().hideToast(), 3000);
+    // Errors get a longer window — they often carry diagnostic detail
+    // (Postgres code/hint) that a 3s flash doesn't give time to read.
+    const ms = type === "error" ? 8000 : 3000;
+    setTimeout(() => get().hideToast(), ms);
   },
   hideToast: () => set({ toast: { ...get().toast, visible: false } }),
   confirmState: { title: "", message: "", visible: false, resolve: null },
@@ -289,11 +292,28 @@ export const useStore = create<AppState>((set, get) => ({
       set({ customers: get().customers.map((c) => (c.id === row.id ? updated : c)) });
       return updated;
     }
-    const inserted = await db.post<Customer>("customers", row as Record<string, unknown>);
-    if (!inserted || inserted.length === 0) return null;
-    const created = inserted[0];
-    set({ customers: [created, ...get().customers] });
-    return created;
+    // Pass org_id explicitly as belt-and-suspenders alongside db.post's
+    // auto-inject — guards against the rare case where localStorage is
+    // out of sync with the in-memory user (e.g. mid-onboarding).
+    const orgId = get().user?.org_id;
+    const payload = { ...row, ...(orgId ? { org_id: orgId } : {}) };
+    const inserted = await db.post<Customer>("customers", payload as Record<string, unknown>);
+    if (inserted === null) return null; // db.post already toasted the real error
+    if (inserted.length > 0) {
+      const created = inserted[0];
+      set({ customers: [created, ...get().customers] });
+      return created;
+    }
+    // Insert succeeded but the trailing .select() returned no rows (likely
+    // an RLS policy gap on the anon role). Refresh so the UI catches up.
+    await get().loadAll();
+    if (orgId && row.name) {
+      const found = get().customers
+        .filter((c) => c.org_id === orgId && c.name === row.name)
+        .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+      if (found) return found;
+    }
+    return null;
   },
 
   deleteCustomer: async (id) => {
@@ -316,11 +336,24 @@ export const useStore = create<AppState>((set, get) => ({
       set({ addresses: get().addresses.map((a) => (a.id === row.id ? updated : a)) });
       return updated;
     }
-    const inserted = await db.post<Address>("addresses", row as Record<string, unknown>);
-    if (!inserted || inserted.length === 0) return null;
-    const created = inserted[0];
-    set({ addresses: [created, ...get().addresses] });
-    return created;
+    const orgId = get().user?.org_id;
+    const payload = { ...row, ...(orgId ? { org_id: orgId } : {}) };
+    const inserted = await db.post<Address>("addresses", payload as Record<string, unknown>);
+    if (inserted === null) return null;
+    if (inserted.length > 0) {
+      const created = inserted[0];
+      set({ addresses: [created, ...get().addresses] });
+      return created;
+    }
+    // Same RLS-empty-select fallback as upsertCustomer.
+    await get().loadAll();
+    if (orgId && row.customer_id) {
+      const found = get().addresses
+        .filter((a) => a.org_id === orgId && a.customer_id === row.customer_id && (row.street ? a.street === row.street : true))
+        .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+      if (found) return found;
+    }
+    return null;
   },
 
   deleteAddress: async (id) => {
