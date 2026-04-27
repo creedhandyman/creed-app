@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { wrapPrint, openPrint } from "@/lib/print-template";
+import SmsNotifyButtons from "../SmsNotifyButtons";
 
 interface Props {
   setPage: (p: string) => void;
@@ -830,25 +831,37 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               {dayItems.length === 0 ? (
                 <p className="dim" style={{ fontSize: 11 }}>{t("sched.noJobs")}</p>
               ) : (
-                dayItems.map((s) => (
-                  <div key={s.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-                    <div>
-                      <b
-                        onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
-                        style={{ color: "var(--color-primary)", cursor: "pointer" }}
-                        title="Open in Google Maps"
-                      >📍 {s.job}</b>
-                      {s.note && <div className="dim" style={{ fontSize: 10 }}>{s.note}</div>}
+                dayItems.map((s) => {
+                  // Match the schedule entry's free-text property string back
+                  // to a real Job row so we can wire SMS notifications. Last-
+                  // updated wins on duplicates so the most recent quote at
+                  // that address is what we text about.
+                  const linkedJob = jobs
+                    .filter((j) => j.property === s.job && !j.archived)
+                    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+                  return (
+                    <div key={s.id} className="sep" style={{ fontSize: 12, padding: "8px 0" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: linkedJob ? 6 : 0, gap: 6 }}>
+                        <div>
+                          <b
+                            onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
+                            style={{ color: "var(--color-primary)", cursor: "pointer" }}
+                            title="Open in Google Maps"
+                          >📍 {s.job}</b>
+                          {s.note && <div className="dim" style={{ fontSize: 10 }}>{s.note}</div>}
+                        </div>
+                        <button
+                          className="bb"
+                          onClick={() => setPage("time")}
+                          style={{ fontSize: 13, padding: "3px 8px" }}
+                        >
+                          ⏱ Start
+                        </button>
+                      </div>
+                      {linkedJob && <SmsNotifyButtons jobId={linkedJob.id} compact />}
                     </div>
-                    <button
-                      className="bb"
-                      onClick={() => setPage("time")}
-                      style={{ fontSize: 13, padding: "3px 8px" }}
-                    >
-                      ⏱ Start
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           );

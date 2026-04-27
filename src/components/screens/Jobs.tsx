@@ -9,6 +9,7 @@ import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { Icon } from "../Icon";
 import ReviewRequestModal from "../ReviewRequestModal";
+import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 
 interface Props {
@@ -806,6 +807,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     }} style={{ fontSize: 12, padding: "6px 14px" }}>
                       📤 Send Job to Client
                     </button>
+                    {/* Twilio SMS templates — only show on the statuses where
+                        each makes sense in the job lifecycle. Bernard hits
+                        "On the way / Late" when leaving for or at a job, and
+                        "Job complete" right before flipping status. */}
+                    {(j.status === "scheduled" || j.status === "active" || j.status === "complete") && (
+                      <div style={{ flexBasis: "100%" }}>
+                        <SmsNotifyButtons jobId={j.id} />
+                      </div>
+                    )}
                     {/* Manual review-request — appears on completed/paid jobs.
                         Useful for re-sending if the auto-prompt was dismissed
                         or if you want to ping a client weeks after the job. */}
