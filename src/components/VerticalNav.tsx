@@ -16,6 +16,7 @@ const NAV_ITEMS: (NavItem | "logo")[] = [
   { id: "time", icon: "time", labelKey: "nav.time" },
   "logo",
   { id: "sched", icon: "schedule", labelKey: "nav.sched" },
+  { id: "customers", icon: "clients", labelKey: "nav.customers" },
   { id: "jobs", icon: "jobs", labelKey: "nav.jobs" },
   { id: "qf", icon: "quote", labelKey: "nav.quote" },
 ];
