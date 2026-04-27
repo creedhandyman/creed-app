@@ -51,11 +51,22 @@ function StatusContent() {
   const currentIdx = job ? STATUS_STEPS.findIndex((s) => s.key === job.status) : -1;
   const completedCount = workOrder.filter((w) => w.done).length;
 
-  // Signature pad
+  // Signature: prospects can either draw on the canvas or type their
+  // name + tick the "I authorize" box. Both paths go through the new
+  // /api/jobs/approve route which stamps approved_at + approved_ip
+  // server-side and auto-promotes a quoted job to accepted.
+  const [signMode, setSignMode] = useState<"type" | "draw">("type");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [signed, setSigned] = useState(false);
   const [submittingSig, setSubmittingSig] = useState(false);
+  const [typedName, setTypedName] = useState("");
+  const [authorized, setAuthorized] = useState(false);
+  const [signError, setSignError] = useState("");
+
+  // Deposit / Stripe checkout
+  const [depositPct, setDepositPct] = useState(50);
+  const [depositLoading, setDepositLoading] = useState(false);
 
   const getPos = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     const canvas = canvasRef.current;
@@ -99,27 +110,82 @@ function StatusContent() {
     }
   };
 
-  const submitSignature = async () => {
-    if (!canvasRef.current || !job || !jobId) return;
+  const submitApproval = async (signatureType: "typed" | "canvas", signatureValue: string) => {
+    if (!job || !jobId || !signatureValue) return;
+    setSignError("");
     setSubmittingSig(true);
-    const sigData = canvasRef.current.toDataURL("image/png");
-    // Signature on a "quoted" job auto-promotes it to "accepted" so the
-    // contractor's workload view reflects the new state without a manual
-    // status flip. Other statuses stay as-is — re-signing a paid invoice
-    // shouldn't reset its workflow state.
-    const patch: Record<string, unknown> = {
-      client_signature: sigData,
-      signature_date: new Date().toLocaleDateString(),
-    };
-    if (job.status === "quoted") patch.status = "accepted";
-    await db.patch("jobs", jobId, patch);
-    setJob({
-      ...job,
-      client_signature: sigData,
-      signature_date: new Date().toLocaleDateString(),
-      status: job.status === "quoted" ? "accepted" : job.status,
-    });
+    try {
+      const res = await fetch("/api/jobs/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, signatureType, signatureValue }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSignError(data?.error || "Couldn't save your approval — please try again.");
+        setSubmittingSig(false);
+        return;
+      }
+      const stampedDate = new Date().toLocaleDateString();
+      setJob({
+        ...job,
+        client_signature: signatureValue,
+        signature_date: stampedDate,
+        approved_at: new Date().toISOString(),
+        status: data.status || (job.status === "quoted" ? "accepted" : job.status),
+      });
+    } catch (e) {
+      setSignError(e instanceof Error ? e.message : "Network error — please try again.");
+    }
     setSubmittingSig(false);
+  };
+
+  const submitTypedSignature = () => {
+    const name = typedName.trim();
+    if (!name) {
+      setSignError("Please type your full name to authorize.");
+      return;
+    }
+    if (!authorized) {
+      setSignError("Please tick the authorization box.");
+      return;
+    }
+    submitApproval("typed", name);
+  };
+
+  const submitCanvasSignature = () => {
+    if (!canvasRef.current) return;
+    submitApproval("canvas", canvasRef.current.toDataURL("image/png"));
+  };
+
+  const startDeposit = async () => {
+    if (!job || !jobId || !org) return;
+    setDepositLoading(true);
+    try {
+      const amount = Math.round(job.total * (depositPct / 100) * 100) / 100;
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId,
+          property: job.property,
+          client: job.client,
+          amount,
+          orgName: org.name,
+          stripeAccountId: org.stripe_account_id,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        setSignError(data?.error || "Couldn't start checkout.");
+        setDepositLoading(false);
+      }
+    } catch (e) {
+      setSignError(e instanceof Error ? e.message : "Network error.");
+      setDepositLoading(false);
+    }
   };
 
   if (loading) {
@@ -255,70 +321,233 @@ function StatusContent() {
           </div>
         )}
 
-        {/* Signature */}
+        {/* Signature + approval */}
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
           <h3 style={{ fontFamily: "Oswald", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
-            Client Approval
+            Approve & Sign
           </h3>
 
           {job.client_signature ? (
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: "#00cc66", marginBottom: 6 }}>✅ Signed on {job.signature_date}</div>
-              <img
-                src={job.client_signature}
-                alt="Signature"
-                style={{ maxWidth: "100%", height: 60, border: "1px solid #1e1e2e", borderRadius: 6, background: "#0a0a0f" }}
-              />
-            </div>
-          ) : (
-            <div>
-              <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
-                Sign below to approve this work:
+              <div style={{ fontSize: 11, color: "#00cc66", marginBottom: 6 }}>
+                ✅ Approved on {job.signature_date}
               </div>
-              <canvas
-                ref={canvasRef}
-                width={340}
-                height={100}
-                onMouseDown={startDraw}
-                onMouseMove={draw}
-                onMouseUp={stopDraw}
-                onMouseLeave={stopDraw}
-                onTouchStart={startDraw}
-                onTouchMove={draw}
-                onTouchEnd={stopDraw}
-                style={{
-                  width: "100%",
-                  height: 100,
-                  border: "1px solid #333",
+              {/* Canvas signatures are data URLs (start with "data:");
+                  typed signatures are plain strings — render each
+                  appropriately. */}
+              {job.client_signature.startsWith("data:") ? (
+                <img
+                  src={job.client_signature}
+                  alt="Signature"
+                  style={{ maxWidth: "100%", height: 60, border: "1px solid #1e1e2e", borderRadius: 6, background: "#0a0a0f" }}
+                />
+              ) : (
+                <div style={{
+                  fontFamily: "Caveat, cursive, Georgia, serif",
+                  fontSize: 28,
+                  color: "#e2e2e8",
+                  padding: "10px 6px",
+                  border: "1px solid #1e1e2e",
                   borderRadius: 6,
                   background: "#0a0a0f",
-                  cursor: "crosshair",
-                  touchAction: "none",
-                }}
-              />
-              <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
-                <button
-                  onClick={clearSig}
-                  style={{ background: "none", color: "#888", fontSize: 11, padding: 0, textDecoration: "underline" }}
-                >
-                  Clear
-                </button>
-                <button
-                  onClick={submitSignature}
-                  disabled={!signed || submittingSig}
-                  style={{
-                    padding: "8px 20px", borderRadius: 8, fontSize: 13,
-                    fontFamily: "Oswald", textTransform: "uppercase",
-                    background: signed ? "#00cc66" : "#333",
-                    color: "#fff", opacity: signed ? 1 : 0.5,
-                  }}
-                >
-                  {submittingSig ? "Saving..." : "✍ Submit Signature"}
-                </button>
-              </div>
+                }}>
+                  {job.client_signature}
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              {/* Mode toggle */}
+              <div style={{ display: "flex", gap: 4, marginBottom: 10, background: "#0a0a0f", borderRadius: 8, padding: 3 }}>
+                {(["type", "draw"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => { setSignMode(m); setSignError(""); }}
+                    style={{
+                      flex: 1,
+                      padding: "7px 0",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontFamily: "Oswald",
+                      textTransform: "uppercase",
+                      letterSpacing: ".05em",
+                      background: signMode === m ? "#2E75B6" : "transparent",
+                      color: signMode === m ? "#fff" : "#888",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {m === "type" ? "⌨ Type Name" : "✍ Draw Signature"}
+                  </button>
+                ))}
+              </div>
+
+              {signMode === "type" ? (
+                <div>
+                  <input
+                    value={typedName}
+                    onChange={(e) => setTypedName(e.target.value)}
+                    placeholder="Type your full name"
+                    autoComplete="name"
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #1e1e2e",
+                      background: "#0a0a0f",
+                      color: "#e2e2e8",
+                      fontSize: 16,
+                      marginBottom: 10,
+                      fontFamily: "Source Sans 3, sans-serif",
+                    }}
+                  />
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 12, color: "#aaa", marginBottom: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={authorized}
+                      onChange={(e) => setAuthorized(e.target.checked)}
+                      style={{ marginTop: 2, cursor: "pointer" }}
+                    />
+                    <span>
+                      I authorize {org?.name || "this contractor"} to perform the work described above for ${job.total?.toFixed(2) || "0.00"}.
+                    </span>
+                  </label>
+                  <button
+                    onClick={submitTypedSignature}
+                    disabled={!typedName.trim() || !authorized || submittingSig}
+                    style={{
+                      width: "100%",
+                      padding: "11px",
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontFamily: "Oswald",
+                      textTransform: "uppercase",
+                      letterSpacing: ".05em",
+                      background: typedName.trim() && authorized ? "#00cc66" : "#333",
+                      color: "#fff",
+                      border: "none",
+                      cursor: !typedName.trim() || !authorized ? "not-allowed" : "pointer",
+                      opacity: typedName.trim() && authorized ? 1 : 0.5,
+                    }}
+                  >
+                    {submittingSig ? "Saving..." : "✓ Approve & Sign"}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
+                    Draw your signature below to approve this work:
+                  </div>
+                  <canvas
+                    ref={canvasRef}
+                    width={340}
+                    height={100}
+                    onMouseDown={startDraw}
+                    onMouseMove={draw}
+                    onMouseUp={stopDraw}
+                    onMouseLeave={stopDraw}
+                    onTouchStart={startDraw}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDraw}
+                    style={{
+                      width: "100%",
+                      height: 100,
+                      border: "1px solid #333",
+                      borderRadius: 6,
+                      background: "#0a0a0f",
+                      cursor: "crosshair",
+                      touchAction: "none",
+                    }}
+                  />
+                  <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
+                    <button
+                      onClick={clearSig}
+                      style={{ background: "none", color: "#888", fontSize: 11, padding: 0, textDecoration: "underline" }}
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={submitCanvasSignature}
+                      disabled={!signed || submittingSig}
+                      style={{
+                        padding: "8px 20px", borderRadius: 8, fontSize: 13,
+                        fontFamily: "Oswald", textTransform: "uppercase",
+                        background: signed ? "#00cc66" : "#333",
+                        color: "#fff", opacity: signed ? 1 : 0.5,
+                        border: "none",
+                      }}
+                    >
+                      {submittingSig ? "Saving..." : "✓ Approve & Sign"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {signError && (
+                <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "#3a0d0d", border: "1px solid #C00000", fontSize: 12, color: "#ff8888" }}>
+                  {signError}
+                </div>
+              )}
+            </>
           )}
         </div>
+
+        {/* Deposit button — only after approval, only if total > 0 and
+            the contractor has Stripe Connect set up. We default to a 50%
+            deposit; the prospect can dial it up to 100% (full payment
+            up front) before being routed to Stripe Checkout. */}
+        {job.client_signature && job.total > 0 && job.status !== "paid" && org?.stripe_connected && (
+          <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <h3 style={{ fontFamily: "Oswald", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
+              Pay Deposit
+            </h3>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              {[25, 50, 100].map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setDepositPct(p)}
+                  style={{
+                    flex: 1,
+                    padding: "8px 0",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontFamily: "Oswald",
+                    background: depositPct === p ? "#2E75B6" : "transparent",
+                    color: depositPct === p ? "#fff" : "#888",
+                    border: `1px solid ${depositPct === p ? "#2E75B6" : "#333"}`,
+                    cursor: "pointer",
+                  }}
+                >
+                  {p === 100 ? "Pay in full" : `${p}% deposit`}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={startDeposit}
+              disabled={depositLoading}
+              style={{
+                width: "100%",
+                padding: "12px",
+                borderRadius: 8,
+                fontSize: 14,
+                fontFamily: "Oswald",
+                textTransform: "uppercase",
+                letterSpacing: ".05em",
+                background: "#2E75B6",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+                opacity: depositLoading ? 0.6 : 1,
+              }}
+            >
+              {depositLoading ? "Redirecting..." : `💳 Pay $${(job.total * (depositPct / 100)).toFixed(2)} now`}
+            </button>
+            <p style={{ fontSize: 10, color: "#555", textAlign: "center", margin: "8px 0 0" }}>
+              Secure checkout via Stripe.
+              {depositPct < 100 && ` Remaining $${(job.total * ((100 - depositPct) / 100)).toFixed(2)} due on completion.`}
+            </p>
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{ textAlign: "center", color: "#555", fontSize: 10, marginTop: 16 }}>

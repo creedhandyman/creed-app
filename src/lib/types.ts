@@ -103,6 +103,11 @@ export interface Job {
   requested_tech: string;
   client_signature?: string;
   signature_date?: string;
+  /** Server-stamped audit trail for the public /status approval flow.
+   *  approved_at is set on the first signature/typed-name submission;
+   *  approved_ip captures the client's request IP at that moment. */
+  approved_at?: string;
+  approved_ip?: string;
   org_id?: string;
   /** Optional FK into the new Customer entity. When set, the job is
    *  linked to a structured customer record; otherwise the legacy
