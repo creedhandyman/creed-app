@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
-import ClientSelect from "../ClientSelect";
+import CustomerPicker from "../CustomerPicker";
 import { Icon } from "../Icon";
 import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../VoiceWalk";
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
@@ -121,6 +121,12 @@ export interface InspectionData {
   rooms: InspectionRoom[];
   property: string;
   client: string;
+  /** Optional FKs into the new Customer/Address entities. When set, the
+   *  resulting inspection job inherits the structured link; otherwise
+   *  the legacy free-text `property`/`client` strings remain the source
+   *  of truth. */
+  customer_id?: string;
+  address_id?: string;
 }
 
 interface Props {
@@ -145,6 +151,12 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   const [customRoom, setCustomRoom] = useState("");
   const [property, setProperty] = useState(() => loadSaved("property", ""));
   const [client, setClient] = useState(() => loadSaved("client", ""));
+  const [customerId, setCustomerId] = useState<string | undefined>(
+    () => loadSaved<string | undefined>("customerId", undefined)
+  );
+  const [addressId, setAddressId] = useState<string | undefined>(
+    () => loadSaved<string | undefined>("addressId", undefined)
+  );
   const [currentRoomIdx, setCurrentRoomIdx] = useState(() => loadSaved("roomIdx", 0));
   const [roomData, setRoomData] = useState<InspectionRoom[]>(() => loadSaved("roomData", []));
   // uploading state replaced by uploadCount for non-blocking batch uploads
@@ -181,6 +193,8 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   useEffect(() => save("rooms", selectedRooms), [selectedRooms, save]);
   useEffect(() => save("property", property), [property, save]);
   useEffect(() => save("client", client), [client, save]);
+  useEffect(() => save("customerId", customerId), [customerId, save]);
+  useEffect(() => save("addressId", addressId), [addressId, save]);
   useEffect(() => save("roomIdx", currentRoomIdx), [currentRoomIdx, save]);
   // Save roomData but limit photo URLs to prevent localStorage overflow
   useEffect(() => {
@@ -197,7 +211,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   }, [roomData, save]);
 
   const clearSaved = () => {
-    ["step", "rooms", "property", "client", "roomIdx", "roomData"].forEach(
+    ["step", "rooms", "property", "client", "customerId", "addressId", "roomIdx", "roomData"].forEach(
       (k) => localStorage.removeItem("c_inspect_" + k)
     );
   };
@@ -439,7 +453,13 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
 
   const handleGenerate = () => {
     clearSaved();
-    onComplete({ rooms: roomData, property, client });
+    onComplete({
+      rooms: roomData,
+      property,
+      client,
+      customer_id: customerId,
+      address_id: addressId,
+    });
   };
 
   /* ═══════════════════════════════════
@@ -488,6 +508,8 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
                   setSelectedRooms([]);
                   setProperty("");
                   setClient("");
+                  setCustomerId(undefined);
+                  setAddressId(undefined);
                   setCurrentRoomIdx(0);
                   setShowResume(false);
                 }}
@@ -501,10 +523,16 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
 
         {/* Property + Client */}
         <div className="cd mb">
-          <div className="g2">
-            <input value={property} onChange={(e) => setProperty(e.target.value)} placeholder="Property address *" />
-            <ClientSelect value={client} onChange={setClient} />
-          </div>
+          <CustomerPicker
+            prop={property}
+            setProp={setProperty}
+            client={client}
+            setClient={setClient}
+            customerId={customerId}
+            setCustomerId={setCustomerId}
+            addressId={addressId}
+            setAddressId={setAddressId}
+          />
         </div>
 
         {/* Room checklist */}

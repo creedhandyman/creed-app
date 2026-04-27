@@ -19,7 +19,7 @@ import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
 import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
-import ClientSelect from "../ClientSelect";
+import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { wrapPrint, openPrint } from "@/lib/print-template";
@@ -164,6 +164,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [text, setText] = useState("");
   const [prop, setProp] = useState("");
   const [client, setClient] = useState("");
+  // Optional FKs into the new Customer/Address entities. When set, the
+  // job is linked structurally; the legacy free-text `prop`/`client`
+  // strings stay populated alongside for back-compat.
+  const [customerId, setCustomerId] = useState<string | undefined>(undefined);
+  const [addressId, setAddressId] = useState<string | undefined>(undefined);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [tab, setTab] = useState("quote");
   const [workers, setWorkers] = useState<string[]>([]);
@@ -191,6 +196,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
     setProp(job.property || "");
     setClient(job.client || "");
+    setCustomerId(job.customer_id || undefined);
+    setAddressId(job.address_id || undefined);
     setEditingId(job.id);
 
     try {
@@ -248,6 +255,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
     setProp(data.property);
     setClient(data.client);
+    setCustomerId(data.customer_id);
+    setAddressId(data.address_id);
     setInspectionData(data);
 
     // Save inspection as standalone record
@@ -255,6 +264,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       await db.post("jobs", {
         property: data.property,
         client: data.client,
+        ...(data.customer_id ? { customer_id: data.customer_id } : {}),
+        ...(data.address_id ? { address_id: data.address_id } : {}),
         job_date: new Date().toISOString().split("T")[0],
         rooms: JSON.stringify({
           inspection: {
@@ -652,6 +663,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const jobData = {
       property: prop,
       client: client || "",
+      ...(customerId ? { customer_id: customerId } : {}),
+      ...(addressId ? { address_id: addressId } : {}),
       job_date: new Date().toISOString().split("T")[0],
       rooms: JSON.stringify(data),
       total: gt,
@@ -676,6 +689,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setText("");
     setProp("");
     setClient("");
+    setCustomerId(undefined);
+    setAddressId(undefined);
     setWorkers([]);
     setCustomWorkOrder(null);
     setEditingId(null);
@@ -888,10 +903,16 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
 
         {/* Property + Client */}
         <div className="cd mb">
-          <div className="g2">
-            <input value={prop} onChange={(e) => setProp(e.target.value)} placeholder="Property address *" />
-            <ClientSelect value={client} onChange={setClient} />
-          </div>
+          <CustomerPicker
+            prop={prop}
+            setProp={setProp}
+            client={client}
+            setClient={setClient}
+            customerId={customerId}
+            setCustomerId={setCustomerId}
+            addressId={addressId}
+            setAddressId={setAddressId}
+          />
         </div>
 
         {/* Description */}
@@ -1093,13 +1114,17 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             placeholder="Paste report text here..."
             style={{ height: 200, fontFamily: "monospace", fontSize: 11 }}
           />
-          <div className="g2 mt">
-            <input
-              value={prop}
-              onChange={(e) => setProp(e.target.value)}
-              placeholder="Property address"
+          <div className="mt">
+            <CustomerPicker
+              prop={prop}
+              setProp={setProp}
+              client={client}
+              setClient={setClient}
+              customerId={customerId}
+              setCustomerId={setCustomerId}
+              addressId={addressId}
+              setAddressId={setAddressId}
             />
-            <ClientSelect value={client} onChange={setClient} />
           </div>
           {parsing ? (
             <AiLoadingDisplay status={parseStatus} />
@@ -1136,14 +1161,16 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <h2 style={{ fontSize: 18, color: "var(--color-warning)" }}>Manual Quote</h2>
         </div>
         <div className="cd mb">
-          <div className="g2">
-            <input
-              value={prop}
-              onChange={(e) => setProp(e.target.value)}
-              placeholder="Property *"
-            />
-            <ClientSelect value={client} onChange={setClient} />
-          </div>
+          <CustomerPicker
+            prop={prop}
+            setProp={setProp}
+            client={client}
+            setClient={setClient}
+            customerId={customerId}
+            setCustomerId={setCustomerId}
+            addressId={addressId}
+            setAddressId={setAddressId}
+          />
         </div>
         <AddItemForm
           nr={nr} setNr={setNr} nd={nd} setNd={setNd} nc={nc} setNc={setNc}
@@ -1190,14 +1217,18 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           gap: 8,
         }}
       >
-        <div style={{ flex: "1 1 160px" }}>
-          <input
-            value={prop}
-            onChange={(e) => setProp(e.target.value)}
-            placeholder="Property *"
-            style={{ marginBottom: 4, fontSize: 13 }}
+        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+          <CustomerPicker
+            prop={prop}
+            setProp={setProp}
+            client={client}
+            setClient={setClient}
+            customerId={customerId}
+            setCustomerId={setCustomerId}
+            addressId={addressId}
+            setAddressId={setAddressId}
+            compact
           />
-          <ClientSelect value={client} onChange={setClient} style={{ fontSize: 13 }} />
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="sl">Total</div>
