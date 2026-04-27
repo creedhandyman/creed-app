@@ -948,8 +948,10 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
           + Add Item
         </button>
 
-        {/* Navigation */}
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Navigation — sticky above the bottom nav so the Next button
+            never gets clipped when the user scrolls to the bottom of a
+            room with a long item list. */}
+        <div className="sb" style={{ display: "flex", gap: 8 }}>
           {currentRoomIdx > 0 && (
             <button
               className="bo"
@@ -1055,26 +1057,29 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         );
       })}
 
-      {/* Generate button */}
-      <button
-        className="bb"
-        onClick={handleGenerate}
-        disabled={findingsCount === 0}
-        style={{
-          width: "100%",
-          padding: 14,
-          fontSize: 16,
-          background: findingsCount === 0 ? "#333" : "var(--color-primary)",
-          opacity: findingsCount === 0 ? 0.5 : 1,
-        }}
-      >
-        🤖 Generate Quote ({findingsCount} findings)
-      </button>
-      {findingsCount === 0 && (
-        <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 6 }}>
-          Mark at least one item as Fair, Poor, or Damaged to generate a quote
-        </p>
-      )}
+      {/* Generate button — sticky above the bottom nav so it never gets
+          covered when the room list at the top of review scrolls long. */}
+      <div className="sb">
+        <button
+          className="bb"
+          onClick={handleGenerate}
+          disabled={findingsCount === 0}
+          style={{
+            width: "100%",
+            padding: 14,
+            fontSize: 16,
+            background: findingsCount === 0 ? "#333" : "var(--color-primary)",
+            opacity: findingsCount === 0 ? 0.5 : 1,
+          }}
+        >
+          🤖 Generate Quote ({findingsCount} findings)
+        </button>
+        {findingsCount === 0 && (
+          <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 6 }}>
+            Mark at least one item as Fair, Poor, or Damaged to generate a quote
+          </p>
+        )}
+      </div>
     </div>
   );
 }

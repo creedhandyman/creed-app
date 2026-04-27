@@ -529,6 +529,36 @@ button:focus-visible {
 }
 .nav-left .mc { margin-right: 0; margin-left: 56px; }
 
+/* ─── STICKY-BOTTOM UTILITY ────────────────────────────
+   Pin a button or button-row just above the bottom nav so it can't
+   get clipped when the user scrolls to the end of a long form. The
+   element behaves as `position: relative` until it would otherwise
+   scroll out of view, then sticks at the configured bottom offset.
+   Used by Inspector's room-nav + Generate Quote, VoiceWalk's Done.
+   The faint top fade keeps content visible-but-de-emphasized as it
+   scrolls underneath. */
+.sb {
+  position: sticky;
+  bottom: calc(56px + env(safe-area-inset-bottom) + 8px);
+  z-index: 5;
+  padding: 10px 4px 6px;
+  margin: 0 -4px;
+}
+.dark .sb {
+  background: linear-gradient(to top, var(--color-dark-bg) 75%, transparent);
+}
+.light .sb {
+  background: linear-gradient(to top, var(--color-light-bg) 75%, transparent);
+}
+/* When the right/desktop nav is active there's no fixed bottom nav,
+   so the sticky offset goes to 0 and the gradient is unneeded. */
+.nav-left .sb, body:not(.nav-bottom) .sb {
+  position: static;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
 /* ─── BOTTOM NAV (mobile-thumb-friendly) ───────────── */
 .nav-bottom .vnav {
   top: auto;

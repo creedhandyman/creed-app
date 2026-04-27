@@ -1270,26 +1270,30 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
         </div>
       </div>
 
-      {/* Done — hands raw recording back to Inspector. Whisper + AI run
-          in the parent in the background while the user moves to the
-          next room. Status shows up in the strip above as ⏳ → ✓. */}
-      <button
-        className="bb"
-        onClick={finish}
-        disabled={uploading > 0}
-        style={{
-          width: "100%",
-          padding: 14,
-          fontSize: 15,
-          fontFamily: "Oswald",
-          opacity: uploading > 0 ? 0.5 : 1,
-        }}
-      >
-        ✓ Done — {isSingleRoom ? "Apply to Room" : "Process &amp; Next Room"}
-      </button>
-      <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
-        AI processes this room in the background. The next room opens immediately.
-      </p>
+      {/* Done — sticky above the bottom nav so the button is always
+          visible regardless of how far the user has scrolled the
+          checklist below the camera. Hands raw recording back to
+          Inspector; Whisper + AI run there in the background while
+          the user moves to the next room. */}
+      <div className="sb">
+        <button
+          className="bb"
+          onClick={finish}
+          disabled={uploading > 0}
+          style={{
+            width: "100%",
+            padding: 14,
+            fontSize: 15,
+            fontFamily: "Oswald",
+            opacity: uploading > 0 ? 0.5 : 1,
+          }}
+        >
+          ✓ Done — {isSingleRoom ? "Apply to Room" : "Process & Next Room"}
+        </button>
+        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
+          AI processes this room in the background. The next room opens immediately.
+        </p>
+      </div>
       {isSingleRoom && (
         <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
           Tap Done to transcribe and apply findings to this room.
