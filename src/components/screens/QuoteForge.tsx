@@ -638,28 +638,88 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     if (gt <= 0 && !await useStore.getState().showConfirm("Empty Quote", "Quote total is $0. Save anyway?")) {
       return;
     }
+    // Pull the prior saved blob so an edit-save merges into it instead of
+    // overwriting field-collected state (work-order `done` checkmarks,
+    // after/work photos, jobNotes from WorkVision, etc.).
+    type WO = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean };
+    type JobPhoto = { url: string; label: string; type: "before" | "after" | "work" };
+    let prevData: Record<string, unknown> = {};
+    if (editingId) {
+      const prevJob = useStore.getState().jobs.find((j) => j.id === editingId);
+      try {
+        prevData = prevJob ? (typeof prevJob.rooms === "string" ? JSON.parse(prevJob.rooms) : prevJob.rooms) || {} : {};
+      } catch { prevData = {}; }
+    }
+
     // Use custom work order if user edited it, otherwise auto-generate from guide
     const sourceSteps = customWorkOrder ?? guide.steps;
-    const workOrder = sourceSteps.map((s) => ({
-      room: s.room, detail: s.detail, action: s.action, pri: s.pri, hrs: s.hrs, done: false,
-    }));
+    const woKey = (s: { room?: string; detail?: string }) =>
+      `${(s.room || "").toLowerCase().trim()}|||${(s.detail || "").toLowerCase().trim()}`;
+    const prevWO: WO[] = Array.isArray(prevData.workOrder) ? prevData.workOrder as WO[] : [];
+    const prevWOByKey = new Map(prevWO.map((w) => [woKey(w), w]));
+    const seenKeys = new Set<string>();
+    const workOrder: WO[] = sourceSteps.map((s) => {
+      const key = woKey(s);
+      seenKeys.add(key);
+      const prior = prevWOByKey.get(key);
+      return {
+        room: s.room, detail: s.detail, action: s.action, pri: s.pri, hrs: s.hrs,
+        done: prior?.done ?? false,
+      };
+    });
+    // Surface any previously-completed items that no longer exist in the new
+    // quote — drop them but warn so we'd notice in the console if a save
+    // unexpectedly nukes finished work.
+    const droppedDone = prevWO
+      .filter((w) => w.done && !seenKeys.has(woKey(w)))
+      .map((w) => `${w.room} — ${w.detail}`);
+    if (droppedDone.length) {
+      console.warn(
+        `[QuoteForge.saveJob] Dropping ${droppedDone.length} previously-checked work-order item(s) that are no longer in the quote:`,
+        droppedDone,
+      );
+    }
+
+    // Photos: preserve every existing photo (before/after/work) and append
+    // anything new the user added in this edit session. Match on URL so a
+    // photo added in QuoteForge AND already on the job doesn't double up.
+    const prevPhotos: JobPhoto[] = Array.isArray(prevData.photos) ? prevData.photos as JobPhoto[] : [];
+    const seenUrls = new Set(prevPhotos.map((p) => p.url));
+    const mergedPhotos: JobPhoto[] = [
+      ...prevPhotos,
+      ...jobPhotos.filter((p) => !seenUrls.has(p.url)),
+    ];
+
+    // Spread prevData first so unknown/forward-compatible fields (jobNotes,
+    // future blob keys) survive the save. Then override the keys QuoteForge
+    // owns.
     const data = {
+      ...prevData,
       rooms: rooms,
       workers: workers.map((wid) => {
         const u = profiles.find((x) => x.id === wid);
         return { id: wid, name: u?.name || "" };
       }),
-      photos: jobPhotos,
+      photos: mergedPhotos,
       workOrder,
-      inspection: inspectionData ? {
-        rooms: inspectionData.rooms.map((r) => ({
-          name: r.name,
-          items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
-        })),
-        property: inspectionData.property,
-        client: inspectionData.client,
-      } : undefined,
+      // Only overwrite `inspection` if the user just ran the inspector in
+      // this session; otherwise keep whatever was there (handled by spread).
+      ...(inspectionData ? {
+        inspection: {
+          rooms: inspectionData.rooms.map((r) => ({
+            name: r.name,
+            items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
+          })),
+          property: inspectionData.property,
+          client: inspectionData.client,
+        },
+      } : {}),
     };
+    // On a new save, status starts at "quoted". On an edit, keep whatever the
+    // job's current status is — mid-job edits (active/complete/paid) shouldn't
+    // silently demote the job back to "quoted" and reset its lifecycle.
+    const prevJob = editingId ? useStore.getState().jobs.find((j) => j.id === editingId) : null;
+    const nextStatus = prevJob?.status ?? "quoted";
     const jobData = {
       property: prop,
       client: client || "",
@@ -671,7 +731,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       total_labor: tl,
       total_mat: tm,
       total_hrs: th,
-      status: "quoted" as const,
+      status: nextStatus,
       created_by: user.name,
     };
 
