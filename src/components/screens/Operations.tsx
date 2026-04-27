@@ -7,7 +7,6 @@ import Financials from "./Financials";
 import Clients from "./Clients";
 import Customers from "./Customers";
 import CustomerDetail from "./CustomerDetail";
-import BackfillCustomers from "./BackfillCustomers";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
@@ -126,7 +125,7 @@ function OpsSettings() {
   );
 }
 
-type OpsTab = "payroll" | "financials" | "clients" | "customers" | "backfill" | "team" | "billing" | "settings";
+type OpsTab = "payroll" | "financials" | "clients" | "customers" | "team" | "billing" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
   const [tab, setTab] = useState<OpsTab>("payroll");
@@ -143,7 +142,6 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
     { id: "financials", label: t("ops.financials"), icon: "trending" },
     { id: "clients",    label: t("ops.clients"),    icon: "clients" },
     { id: "customers",  label: "Customers",         icon: "briefcase" },
-    { id: "backfill",   label: "Backfill",          icon: "link" },
     { id: "team",       label: t("ops.team"),       icon: "worker" },
     { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
     { id: "settings",   label: t("ops.settings"),   icon: "settings" },
@@ -186,7 +184,6 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
           ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />
           : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />
       )}
-      {tab === "backfill" && <BackfillCustomers />}
       {tab === "team" && <TeamStats />}
       {tab === "billing" && <BillingSettings />}
       {tab === "settings" && <OpsSettings />}
