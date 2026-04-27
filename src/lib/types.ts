@@ -94,7 +94,7 @@ export interface Job {
   total_labor: number;
   total_mat: number;
   total_hrs: number;
-  status: "quoted" | "accepted" | "scheduled" | "active" | "complete" | "invoiced" | "paid" | "inspection";
+  status: "lead" | "quoted" | "accepted" | "scheduled" | "active" | "complete" | "invoiced" | "paid" | "inspection";
   created_by: string;
   created_at: string;
   trade: string;

@@ -421,8 +421,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   };
 
   const statusColor = (s: string) => {
-    // ROYGBIV progression from quoted → paid
+    // ROYGBIV progression from quoted → paid. Lead sits before quoted
+    // (the "quote-not-yet-built" state from a public intake) and gets
+    // a hot pink so it visually outranks even red — these are the
+    // newest things needing attention.
     switch (s) {
+      case "lead":       return "#ff3d6e"; // hot pink — new prospect
       case "quoted":     return "#C00000"; // red
       case "accepted":   return "#ff8800"; // orange
       case "scheduled":  return "#ffcc00"; // yellow
@@ -598,13 +602,23 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       )}
 
       {(() => {
-        const filtered = jobTab === "archive"
+        const baseFiltered = jobTab === "archive"
           ? jobs.filter((j) => j.archived)
           : jobTab === "active"
           ? jobs.filter((j) => !j.archived && j.status !== "inspection" && !["complete", "invoiced", "paid"].includes(j.status))
           : jobTab === "billing"
           ? jobs.filter((j) => !j.archived && (j.status === "complete" || j.status === "invoiced"))
           : jobs.filter((j) => !j.archived && j.status === "paid");
+        // Within the active tab, leads bubble to the top — they're the
+        // newest external work and need triage before older quotes.
+        const filtered = jobTab === "active"
+          ? [...baseFiltered].sort((a, b) => {
+              const al = a.status === "lead" ? 0 : 1;
+              const bl = b.status === "lead" ? 0 : 1;
+              if (al !== bl) return al - bl;
+              return (b.created_at || "").localeCompare(a.created_at || "");
+            })
+          : baseFiltered;
 
         if (!filtered.length) {
           return (
@@ -628,6 +642,19 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         return filtered.map((j) => {
           const w = getWorkers(j);
           const isOpen = open === j.id;
+          // For status="lead" jobs, the rooms JSON carries the
+          // prospect's description + uploaded photos so Bernard can
+          // triage without leaving Jobs.
+          const leadInfo: { description?: string; photos?: string[] } | null = (() => {
+            if (j.status !== "lead") return null;
+            try {
+              const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+              return {
+                description: data?.leadDescription,
+                photos: Array.isArray(data?.leadPhotos) ? data.leadPhotos : [],
+              };
+            } catch { return null; }
+          })();
 
           return (
             <div key={j.id} className="cd mb" style={{ borderLeft: `4px solid ${statusColor(j.status)}` }}>
@@ -644,7 +671,22 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                 onClick={() => setOpen(isOpen ? null : j.id)}
               >
                 <div>
-                  <h4 style={{ fontSize: 14 }}>{j.property}</h4>
+                  <h4 style={{ fontSize: 14, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {j.status === "lead" && (
+                      <span style={{
+                        fontSize: 9,
+                        fontFamily: "Oswald",
+                        letterSpacing: ".08em",
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        background: "#ff3d6e",
+                        color: "#fff",
+                      }}>
+                        NEW LEAD
+                      </span>
+                    )}
+                    {j.property}
+                  </h4>
                   <div style={{ fontSize: 11 }} className="dim">
                     {j.client} · {j.job_date}
                     {w.length > 0 && " · 👷 " + w.map((x) => x.name).join(", ")}
@@ -687,6 +729,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                       background: statusColor(j.status) + "22",
                     }}
                   >
+                    <option value="lead">Lead</option>
                     <option value="quoted">{t("status.quoted")}</option>
                     <option value="accepted">{t("status.accepted")}</option>
                     <option value="scheduled">{t("status.scheduled")}</option>
@@ -707,11 +750,46 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
                   }}
                 >
+                  {/* Lead context — only on status="lead" rows. Shows the
+                      prospect's free-text description + any photos they
+                      uploaded so Bernard can triage and build the quote. */}
+                  {leadInfo && (leadInfo.description || (leadInfo.photos?.length ?? 0) > 0) && (
+                    <div className="cd mb" style={{ borderLeft: "3px solid #ff3d6e", padding: 10 }}>
+                      <div style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".08em", color: "#ff3d6e", marginBottom: 6 }}>
+                        REQUEST FROM PROSPECT
+                      </div>
+                      {leadInfo.description && (
+                        <div style={{ fontSize: 13, color: "#e2e2e8", whiteSpace: "pre-wrap", marginBottom: leadInfo.photos?.length ? 8 : 0 }}>
+                          {leadInfo.description}
+                        </div>
+                      )}
+                      {leadInfo.photos && leadInfo.photos.length > 0 && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(70px, 1fr))", gap: 6 }}>
+                          {leadInfo.photos.map((url, i) => (
+                            <a
+                              key={i}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <img
+                                src={url}
+                                alt=""
+                                style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 6, border: "1px solid #1e1e2e" }}
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Quick action buttons — clean row */}
                   <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
                     {onEditJob && (
                       <button className="bb" onClick={(e) => { e.stopPropagation(); onEditJob(j.id); }} style={{ fontSize: 12, padding: "6px 14px" }}>
-                        ✏️ {t("jobs.editQuote")}
+                        {j.status === "lead" ? "⚡ Build Quote" : `✏️ ${t("jobs.editQuote")}`}
                       </button>
                     )}
                     <button className="bb" onClick={(e) => { e.stopPropagation(); if (onScheduleJob) onScheduleJob(j.property); else setPage("sched"); }} style={{ fontSize: 12, padding: "6px 14px" }}>
