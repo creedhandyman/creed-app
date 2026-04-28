@@ -83,6 +83,18 @@ function AiLoadingDisplay({ status }: { status: string }) {
   }
   barPct = Math.max(5, Math.min(100, barPct));
 
+  // Auto-crawl toward 99% so the bar keeps moving during the static AI wait
+  // (after the doc renders, the next status update can be 15-30s away). Real
+  // progress overrides whenever it's ahead — we just take max() below.
+  const [crawl, setCrawl] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setCrawl((p) => Math.min(99, p + Math.max(0.15, (99 - p) * 0.012)));
+    }, 200);
+    return () => clearInterval(id);
+  }, []);
+  const displayPct = Math.min(99, Math.max(barPct, crawl));
+
   return (
     <div style={{ padding: 20, textAlign: "center" }}>
       <div style={{ fontSize: 40, marginBottom: 12, animation: "pulse 1.5s ease-in-out infinite" }}>🤖</div>
@@ -127,14 +139,14 @@ function AiLoadingDisplay({ status }: { status: string }) {
           background: "linear-gradient(90deg, var(--color-primary), var(--color-success), var(--color-primary))",
           backgroundSize: "200% 100%",
           animation: "shimmer 2s linear infinite",
-          width: `${barPct}%`,
+          width: `${displayPct}%`,
           transition: "width 0.5s",
         }} />
       </div>
 
       {/* Numeric percent + batch counter beneath the bar */}
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 4, color: "var(--color-primary)", fontFamily: "Oswald" }}>
-        <span>{Math.round(barPct)}%</span>
+        <span>{Math.round(displayPct)}%</span>
         {stepTotal > 0 && (
           <span>{isBatch ? "Batch" : isRender ? "Page" : "Step"} {stepCur} of {stepTotal}</span>
         )}
