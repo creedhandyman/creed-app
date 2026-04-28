@@ -422,13 +422,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     if (next >= 0 && next < sections.length) setSection(sections[next]);
   };
 
-  // Sort work orders: HIGH first, then MED, then LOW, completed at bottom
+  // Sort work orders: HIGH first, then MED, then LOW, completed at bottom.
+  // `?? 2` (not `|| 2`) — priOrder.HIGH is 0, which `||` treats as falsy, so
+  // HIGH items were silently demoted to the same rank as LOW.
   const priOrder: Record<string, number> = { HIGH: 0, MED: 1, LOW: 2 };
   const sortedWO = [...workOrder]
     .map((w, i) => ({ ...w, _idx: i }))
     .sort((a, b) => {
       if (a.done !== b.done) return a.done ? 1 : -1;
-      return (priOrder[a.pri] || 2) - (priOrder[b.pri] || 2);
+      return (priOrder[a.pri] ?? 2) - (priOrder[b.pri] ?? 2);
     });
 
   const priColor = (pri: string) => pri === "HIGH" ? "var(--color-accent-red)" : pri === "MED" ? "var(--color-warning)" : "var(--color-success)";
