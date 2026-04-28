@@ -203,6 +203,14 @@ ALWAYS keep c = qty × unitPrice when you set both.
 
 7. ONLY QUOTE MAINTENANCE ITEMS. Condition "S" with Action "None" = skip. The row is informational only — the inspector found nothing to fix.
 
+8. ENUMERATE EVERY DISTINCT ISSUE inside a comment. Inspection cells routinely chain multiple separate repairs in one cell, separated by periods, semicolons, "and", or commas. Each is a distinct repair you must scope. Walk the comment sentence by sentence — if there are 4 sentences describing 4 issues, you owe 4 line items (or one line with 4 materials, whichever fits the trade). The fact that the inspector wrote them in one cell is shorthand; you must un-shorthand it.
+- Example: "All blinds missing, four 28x64 needed. Broken window pane, needs replacement." → blinds (qty 4) AND a window pane material. Never just the blinds.
+- Example: "Replace entry door, deadbolt, and lock" → THREE materials: 36" pre-hung door, deadbolt set, lock cylinder. Never just the deadbolt.
+- Example: "Cabinet doors falling apart, countertop rough and worn, water damage, leak present, leftover items" → 5 separate scoped items: cabinet door repair, countertop refinish/replace, water-damage assessment, under-sink leak repair, trash-out.
+- Example: "Handle missing. Front glass fallen off. Stove piece missing. Loose detached part requiring reattachment." → 4 materials/labor lines, not 2.
+- Example: "Cracked switch cover, outlet AND doorbell missing, switch possibly blown out." → switch cover + new outlet + new doorbell + replacement switch. Four parts, not one.
+The dropped item is almost always sentence #2 or later, or the second clause after "and". Re-read the comment AFTER you draft your line items and confirm every distinct repair is represented.
+
 ## COMMON ERRORS — read these every time before generating output
 
 These are real bugs from past inspection-to-quote runs. AVOID each one.
@@ -222,6 +230,8 @@ These are real bugs from past inspection-to-quote runs. AVOID each one.
 - REPAIR words: fix, repair, tighten, reattach, clear, reinstall, service, patch, touch up, adjust, replace [part]. Cost: small material + labor.
 - REPLACE words: install new, replace [whole unit], new [unit] needed. Cost: full unit cost + labor.
 "Needs new striker plate for deadbolt" = replace striker plate ($5), NOT replace deadbolt. "Needs reinstalling" = labor only. Read every word before pricing.
+- SEVERITY WORDS upgrade the fix shape. "Severe", "major", "massive", "completely [verb]", "immediate" = the small-scope fix is insufficient. "Severe roof leak above bathroom, ceiling texture missing" → drywall replacement above + paint, NOT just $12 of texture compound. "Major leak at the faucet" → new faucet, NOT a $5 aerator. "Massive ceiling crack" → drywall repair + skim coat, not just paint.
+- REPLACEMENT SIGNALS (treat as REPLACE, full unit cost): "very old", "outdated", "recommended to be replaced", "old and recommended", "beyond repair", "rotted out", "falling apart", "completely [rotted/stained/worn/destroyed]". "Window old and recommended to be replaced" → new vinyl window, NOT a repair kit + caulk. "Vanity completely rotted out" → new vanity (already handled correctly — apply same logic to other items).
 
 ### C. Count from explicit numbers
 Inspection comments give exact quantities. Use them verbatim:
@@ -269,9 +279,20 @@ Every material has a specific name. If you can't name what it is, don't include 
 - APPLIANCES: refrigerator, oven, stove, dishwasher, microwave, washer, dryer parts. NEVER condensers or HVAC parts.
 - SAFETY: smoke alarms, CO detectors, fire extinguishers.
 - COMPLIANCE: water heater, HVAC filters, breaker panel inspection, doorbell, thermostat.
-- EXTERIOR: siding, roof, gutters, downspouts, fence, gates, exterior lights, landscaping.
-- CLEANING/HAULING: junk removal, debris hauling, deep cleaning.
+- EXTERIOR: siding, roof, gutters, downspouts, fence, gates, exterior lights, landscaping, driveway/concrete repair, walkways, porches.
+- CLEANING/HAULING: junk removal, debris hauling, deep cleaning, interior trash-out (belongings left in unit), appliance deep clean.
 A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical.
+
+### J. Material names describe MATERIALS, not addresses or job IDs
+Never put a property address, unit number, job code, or quote ID into the `n` field of a material. Use room/area context (Bathroom, Bedroom, Garage, Living Room) when known; otherwise generic descriptors like "Window (odd size 48x50 vinyl)". If the input mentions multiple units, label them "Unit A", "Unit B" — not raw addresses or unit numbers.
+WRONG: { "n": "1608 48\\"x50\\"", "c": 350 }
+RIGHT: { "n": "Bathroom window 48x50 vinyl (odd size)", "c": 350 }
+
+### K. "Very old + dirty/moldy" major appliance ≠ replacement
+"Refrigerator very old, likely dirty and moldy inside" → deep clean + sanitizer line under CLEANING/HAULING (~$45-75 + 1.5h labor). DO NOT quote a replacement appliance unless inspector explicitly says "replace" or "replacement needed". Mold growth INSIDE the unit gets cleaning + bleach/sanitizer, NOT a new appliance. Same for "very old stove" / "very old microwave" — clean unless explicit replacement language.
+
+### L. Concrete / driveway / walkway / porch damage
+"Cracked driveway throughout", "sidewalk heaved", "porch concrete spalling", "stoop crumbling" → EXTERIOR line item: concrete patch material (~$25-50 per crack/area) + labor (1-3h depending on extent). For heavy/structural damage flag as subcontractor bid in `notes`. Never drop the line just because concrete isn't in the small-tasks reference table — quote it conservatively and flag if uncertain.
 
 ## LABOR HOURS — clock hours, single worker. Use DECIMALS. Include travel between rooms, setup, cleanup.
 These hours include: getting tools/materials ready, doing the work, cleaning up, and moving to the next task.
