@@ -61,9 +61,10 @@ export default function Quests() {
   const fiveStarReviews = reviews.filter((r) => r.rating === 5 && inCycle(r.created_at)).length;
   const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at)).length;
 
-  // Group jobs by client to find repeat clients with 5+ jobs (cycle)
+  // Group jobs by client to find repeat clients with 5+ jobs (cycle).
+  // Exclude leads — a prospect submitting 5 intake forms isn't 5 jobs.
   const jobsByClient: Record<string, number> = {};
-  cycleJobs.filter((j) => j.client).forEach((j) => {
+  cycleJobs.filter((j) => j.client && j.status !== "lead").forEach((j) => {
     jobsByClient[j.client] = (jobsByClient[j.client] || 0) + 1;
   });
   const repeatClients = Object.values(jobsByClient).filter((c) => c >= 5).length;
