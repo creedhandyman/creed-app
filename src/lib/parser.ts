@@ -285,7 +285,7 @@ Every material has a specific name. If you can't name what it is, don't include 
 A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical.
 
 ### J. Material names describe MATERIALS, not addresses or job IDs
-Never put a property address, unit number, job code, or quote ID into the `n` field of a material. Use room/area context (Bathroom, Bedroom, Garage, Living Room) when known; otherwise generic descriptors like "Window (odd size 48x50 vinyl)". If the input mentions multiple units, label them "Unit A", "Unit B" — not raw addresses or unit numbers.
+Never put a property address, unit number, job code, or quote ID into the \`n\` field of a material. Use room/area context (Bathroom, Bedroom, Garage, Living Room) when known; otherwise generic descriptors like "Window (odd size 48x50 vinyl)". If the input mentions multiple units, label them "Unit A", "Unit B" — not raw addresses or unit numbers.
 WRONG: { "n": "1608 48\\"x50\\"", "c": 350 }
 RIGHT: { "n": "Bathroom window 48x50 vinyl (odd size)", "c": 350 }
 
@@ -293,7 +293,7 @@ RIGHT: { "n": "Bathroom window 48x50 vinyl (odd size)", "c": 350 }
 "Refrigerator very old, likely dirty and moldy inside" → deep clean + sanitizer line under CLEANING/HAULING (~$45-75 + 1.5h labor). DO NOT quote a replacement appliance unless inspector explicitly says "replace" or "replacement needed". Mold growth INSIDE the unit gets cleaning + bleach/sanitizer, NOT a new appliance. Same for "very old stove" / "very old microwave" — clean unless explicit replacement language.
 
 ### L. Concrete / driveway / walkway / porch damage
-"Cracked driveway throughout", "sidewalk heaved", "porch concrete spalling", "stoop crumbling" → EXTERIOR line item: concrete patch material (~$25-50 per crack/area) + labor (1-3h depending on extent). For heavy/structural damage flag as subcontractor bid in `notes`. Never drop the line just because concrete isn't in the small-tasks reference table — quote it conservatively and flag if uncertain.
+"Cracked driveway throughout", "sidewalk heaved", "porch concrete spalling", "stoop crumbling" → EXTERIOR line item: concrete patch material (~$25-50 per crack/area) + labor (1-3h depending on extent). For heavy/structural damage flag as subcontractor bid in \`notes\`. Never drop the line just because concrete isn't in the small-tasks reference table — quote it conservatively and flag if uncertain.
 
 ## LABOR HOURS — clock hours, single worker. Use DECIMALS. Include travel between rooms, setup, cleanup.
 These hours include: getting tools/materials ready, doing the work, cleaning up, and moving to the next task.
