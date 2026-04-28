@@ -255,7 +255,7 @@ export const useStore = create<AppState>((set, get) => ({
       db.get<Review>("reviews", orgFilter),
       db.get<Referral>("referrals", orgFilter),
       db.get<ScheduleEntry>("schedule", orgFilter),
-      db.get<PayHistory>("pay_history", orgFilter),
+      db.get<PayHistory>("pay_history", orgFilter, { limit: 500 }),
       db.get<Receipt>("receipts", orgFilter),
       db.get<QuestPayout>("quest_payouts", orgFilter),
     ]);

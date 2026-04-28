@@ -59,7 +59,8 @@ function reportDbError(table: string, op: string, err: unknown) {
 export const db = {
   get: async <T = Record<string, unknown>>(
     table: string,
-    filters?: Record<string, unknown>
+    filters?: Record<string, unknown>,
+    options?: { limit?: number }
   ): Promise<T[]> => {
     try {
       let query = supabase.from(table).select("*");
@@ -71,6 +72,7 @@ export const db = {
           query = query.eq(key, value);
         }
       }
+      if (options?.limit) query = query.limit(options.limit);
       const { data, error } = await query;
       if (error) throw error;
       return (data as T[]) || [];
