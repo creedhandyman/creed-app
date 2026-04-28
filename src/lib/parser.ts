@@ -201,7 +201,7 @@ ALWAYS keep c = qty × unitPrice when you set both.
 
 6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "General Supplies" item under Painting, NOT duplicated per room.
 
-7. ONLY QUOTE MAINTENANCE ITEMS. Condition "S" with Action "None" = skip. The row is informational only — the inspector found nothing to fix.
+7. ONLY QUOTE MAINTENANCE ITEMS. Skip a row ONLY when BOTH condition is "S" AND action is "None". A row with condition P / F / D is still a maintenance item even if the inspector mistakenly wrote "Action: None" — the CONDITION RATING IS AUTHORITATIVE. Inspectors occasionally tag a damaged item with action None by mistake (e.g. Driveway/Floor — P — None — "Cracked driveway throughout, repairs needed"). Do not let that drop the line — quote it from the comment.
 
 8. ENUMERATE EVERY DISTINCT ISSUE inside a comment. Inspection cells routinely chain multiple separate repairs in one cell, separated by periods, semicolons, "and", or commas. Each is a distinct repair you must scope. Walk the comment sentence by sentence — if there are 4 sentences describing 4 issues, you owe 4 line items (or one line with 4 materials, whichever fits the trade). The fact that the inspector wrote them in one cell is shorthand; you must un-shorthand it.
 - Example: "All blinds missing, four 28x64 needed. Broken window pane, needs replacement." → blinds (qty 4) AND a window pane material. Never just the blinds.
@@ -231,6 +231,7 @@ These are real bugs from past inspection-to-quote runs. AVOID each one.
 - REPLACE words: install new, replace [whole unit], new [unit] needed. Cost: full unit cost + labor.
 "Needs new striker plate for deadbolt" = replace striker plate ($5), NOT replace deadbolt. "Needs reinstalling" = labor only. Read every word before pricing.
 - SEVERITY WORDS upgrade the fix shape. "Severe", "major", "massive", "completely [verb]", "immediate" = the small-scope fix is insufficient. "Severe roof leak above bathroom, ceiling texture missing" → drywall replacement above + paint, NOT just $12 of texture compound. "Major leak at the faucet" → new faucet, NOT a $5 aerator. "Massive ceiling crack" → drywall repair + skim coat, not just paint.
+- SEVERITY WORDS OVERRIDE the wording-trap rules in section A. If "major", "severe", "massive", or "immediate" appears in the same comment as a fixture, do NOT apply the small-fix trap from section A even when a trap-keyword (aerator, stopper, clogged, diverter) is also present. The severity word is the dominant signal. Example: "Major leak at the faucet" overrides the "aerator slow → $5 aerator" trap and quotes a new faucet (~$55). "Severe clog" / "severe blockage" → snake + camera inspection labor + possible repair, not just a $0 labor unblock.
 - REPLACEMENT SIGNALS (treat as REPLACE, full unit cost): "very old", "outdated", "recommended to be replaced", "old and recommended", "beyond repair", "rotted out", "falling apart", "completely [rotted/stained/worn/destroyed]". "Window old and recommended to be replaced" → new vinyl window, NOT a repair kit + caulk. "Vanity completely rotted out" → new vanity (already handled correctly — apply same logic to other items).
 
 ### C. Count from explicit numbers
@@ -326,7 +327,7 @@ EXAMPLE: 450 sqft LVP = ONE item: 10h labor + $1,170 materials. NOT three separa
 Doors: pre-hung door=2-2.5h, bifold=1.25h, entry door=2.5-3h
 
 ## MATERIALS — LOW-END RETAIL PRICES
-Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung door=$85, bifold door=$50, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower head=$22, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, faucet=$55, toilet repair kit=$15, LVP=$1.50/sqft
+Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung interior door=$90, pre-hung exterior/entry door=$275, bifold door=$50, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower head=$22, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, faucet=$55, toilet repair kit=$15, LVP=$2.00/sqft
 PAINT MATERIALS — calculate per room:
 - Small room (bathroom, closet): 1 gal paint ($16) + 1 qt primer ($10) = $26
 - Medium room (bedroom, kitchen): 2 gal paint ($32) + 1 gal primer ($16) = $48
@@ -363,6 +364,7 @@ Capture from report: paint colors, hardware finishes (brushed nickel, oil-rubbed
 }
 
 ## VERIFY BEFORE OUTPUT
+- RE-READ EVERY D AND P COMMENT after drafting your line items. For each comment, count the distinct sentences/clauses describing repairs and verify you have a line (or a material under an existing line) for each one. If a comment described 5 distinct issues but you have 3 line items for that room, you missed 2 — go back and add them. The most common drop pattern is sentence #2 or later, or the second clause after "and". Do this pass every time, not just on long comments.
 - Total hours: 40-70 for typical 3-bed full make-ready (including full paint). Under 30 for a full paint job = too low.
 - Total cost: $3,000-$6,000 typical. Over $8,000 = re-check.
 - No item appears in more than 2 rooms (if it does, it's a duplicate).
