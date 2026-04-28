@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
-import { makeGuide } from "@/lib/parser";
+import { makeGuide, extractZip } from "@/lib/parser";
 import type { Job } from "@/lib/types";
 import { Icon } from "../Icon";
 import ReviewRequestModal from "../ReviewRequestModal";
@@ -105,11 +105,17 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [activeJobId, setActiveJobId] = useState<string | null>(() => ld<string | null>("t_active_job_id", null));
   // Which task in the work order is expanded to show materials / photos / comment
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
-  // Guide tab: tap-to-check tools and shopping items, plus custom additions
-  const [checkedTools, setCheckedTools] = useState<Set<string>>(() => new Set());
-  const [checkedShop, setCheckedShop] = useState<Set<number>>(() => new Set());
+  // Guide tab: tap-to-check tools and shopping items, plus custom additions.
+  // Persisted into the job's `rooms` blob (same place workOrder lives) so
+  // they survive remounts AND show up in the Jobs tab — Bernard wanted the
+  // shopping list to actually save and sync, not reset every time he leaves
+  // WorkVision. Checked items are keyed by stable identity (`n|room|trade`)
+  // so the right boxes stay checked even if the underlying guide.shop array
+  // reorders between renders.
+  const [checkedTools, setCheckedTools] = useState<string[]>([]);
+  const [checkedShop, setCheckedShop] = useState<string[]>([]);
   const [extraTools, setExtraTools] = useState<string[]>([]);
-  const [extraShop, setExtraShop] = useState<{ n: string; c: number; room: string }[]>([]);
+  const [extraShop, setExtraShop] = useState<{ n: string; c: number; room?: string; trade?: string }[]>([]);
   const [newTool, setNewTool] = useState("");
   const [newShopName, setNewShopName] = useState("");
   const [newShopCost, setNewShopCost] = useState("");
@@ -143,6 +149,51 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     catch { return null; }
   })();
   const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[] = jobData?.workOrder || [];
+
+  // ── Guide-tab persistence ────────────────────────────────────────
+  // Stable identity for a shop item so checked-state survives reorders /
+  // remounts. Trade can be missing on legacy custom items — fall back to "".
+  const shopKey = (s: { n: string; room?: string; trade?: string }) =>
+    `${(s.n || "").toLowerCase().trim()}|||${(s.room || "").toLowerCase().trim()}|||${(s.trade || "").toLowerCase().trim()}`;
+
+  // Hydrate guide-tab state from the active job whenever it changes — so
+  // switching between jobs shows each job's own custom items + checks, and a
+  // page refresh doesn't wipe the shopping list.
+  useEffect(() => {
+    if (!activeJob || !jobData) {
+      setCheckedTools([]); setCheckedShop([]); setExtraTools([]); setExtraShop([]);
+      return;
+    }
+    setCheckedTools(Array.isArray(jobData.checkedTools) ? jobData.checkedTools : []);
+    setCheckedShop(Array.isArray(jobData.checkedShop) ? jobData.checkedShop : []);
+    setExtraTools(Array.isArray(jobData.customTools) ? jobData.customTools : []);
+    setExtraShop(Array.isArray(jobData.customShop) ? jobData.customShop : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob?.id]);
+
+  // Merge guide-tab updates into the job's rooms blob. Uses the same
+  // serialized-write queue as workOrder toggles so a fast tap-add-tap
+  // can't race and clobber sibling state.
+  const persistGuide = (updates: {
+    checkedTools?: string[];
+    checkedShop?: string[];
+    customTools?: string[];
+    customShop?: { n: string; c: number; room?: string; trade?: string }[];
+  }) => {
+    if (!activeJob) return;
+    const targetId = activeJob.id;
+    enqueueRoomsWrite(async () => {
+      const fresh = useStore.getState().jobs.find((j) => j.id === targetId);
+      if (!fresh) return;
+      let freshData: Record<string, unknown> = {};
+      try {
+        freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
+      } catch { return; }
+      const merged = { ...freshData, ...updates };
+      await db.patch("jobs", targetId, { rooms: JSON.stringify(merged) });
+      await loadAll();
+    });
+  };
 
   // Today's schedule
   const today = new Date();
@@ -303,6 +354,124 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       await loadAll();
     });
     useStore.getState().showToast("Photo added", "success");
+  };
+
+  // ── Receipt upload (matches Jobs.tsx flow) ──────────────────────
+  // Crew on site at Home Depot can snap a receipt and have it scanned
+  // server-side. We default amount=0 and note="Receipt"; the AI scan in
+  // the background fills in vendor + items in the note, sums item prices
+  // to set the amount, and writes per-item rows into price_corrections so
+  // the quoting AI learns real supply costs.
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const uploadReceipt = async (file: File) => {
+    if (!activeJob) {
+      useStore.getState().showToast("Clock into a job first to attach a receipt", "warning");
+      return;
+    }
+    setUploadingReceipt(true);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${activeJob.id}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("receipts").upload(path, file);
+      if (error) {
+        useStore.getState().showToast("Receipt upload failed: " + error.message, "error");
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
+      const photo_url = urlData?.publicUrl || "";
+
+      // Pass org_id explicitly — same belt-and-suspenders pattern Jobs.tsx
+      // uses so the row isn't filtered out by org-scoped reads on refresh.
+      const result = await db.post<{ id: string }>("receipts", {
+        job_id: activeJob.id,
+        org_id: user.org_id,
+        note: "Receipt",
+        amount: 0,
+        receipt_date: new Date().toLocaleDateString(),
+        photo_url,
+      });
+      if (!result) return; // db.post toasted the underlying error
+      const newReceiptId = result[0]?.id;
+      await loadAll();
+      useStore.getState().showToast("Receipt added — scanning…", "success");
+
+      // Background scan; failures don't block the receipt save.
+      if (photo_url && newReceiptId) {
+        scanReceiptAndLearn(newReceiptId, photo_url, activeJob.id).catch((err) => {
+          console.error("receipt scan failed:", err);
+        });
+      }
+    } catch (err) {
+      useStore.getState().showToast(
+        "Error saving receipt: " + (err instanceof Error ? err.message : String(err)),
+        "error",
+      );
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
+  // Scan a receipt photo with AI: enrich note, set amount from item sum,
+  // and feed line items into price_corrections (ZIP-tagged for the quoter).
+  // Mirrors Jobs.tsx scanAndLearn — same shape, plus an amount update on
+  // the receipt row since WorkVision uploads default to amount=0.
+  const scanReceiptAndLearn = async (receiptId: string, photoUrl: string, jobId: string) => {
+    const res = await fetch("/api/ai/receipt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrl: photoUrl }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      useStore.getState().showToast("Receipt scan failed: " + (err?.error || res.statusText), "warning");
+      return;
+    }
+    const { data } = await res.json();
+    if (!data || !Array.isArray(data.items) || data.items.length === 0) return;
+
+    const vendor = (data.vendor as string | undefined)?.trim() || "";
+    const items = data.items as { name?: string; qty?: number; price?: number }[];
+
+    const itemSummary = items
+      .filter((it) => it?.name)
+      .slice(0, 5)
+      .map((it) => `${it.name}${it.price ? ` $${Number(it.price).toFixed(2)}` : ""}`)
+      .join(", ");
+    const more = items.length > 5 ? ` (+${items.length - 5} more)` : "";
+    const newNote = vendor
+      ? `Receipt — ${vendor}: ${itemSummary}${more}`
+      : `Receipt: ${itemSummary}${more}`;
+    const amountFromItems = items.reduce(
+      (sum, it) => sum + (typeof it.price === "number" && it.price > 0 ? Number(it.price) : 0),
+      0,
+    );
+    const patch: Record<string, unknown> = { note: newNote };
+    if (amountFromItems > 0) patch.amount = parseFloat(amountFromItems.toFixed(2));
+    await db.patch("receipts", receiptId, patch);
+
+    const job = jobs.find((j) => j.id === jobId);
+    const trade = job?.trade || "General";
+    const zip = extractZip(job?.property || "");
+    const logs = items
+      .filter((it) => it?.name && typeof it.price === "number" && it.price > 0)
+      .map((it) => ({
+        item_name: it.name!.slice(0, 120),
+        material_name: vendor ? `${vendor}: ${it.name}`.slice(0, 160) : it.name!.slice(0, 160),
+        original_mat_cost: 0,
+        corrected_mat_cost: Number(it.price),
+        original_hours: 0,
+        corrected_hours: 0,
+        trade,
+        zip,
+      }));
+    for (const entry of logs) {
+      await db.post("price_corrections", entry);
+    }
+    await loadAll();
+    useStore.getState().showToast(
+      `Scanned: ${logs.length} item${logs.length !== 1 ? "s" : ""} logged for AI learning`,
+      "success",
+    );
   };
 
   // ── AI render (finished-look preview) ──
@@ -606,13 +775,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             <div style={{ fontSize: 18, fontFamily: "Oswald", color: "var(--color-primary)" }}>{(activeJob.total_hrs || 0).toFixed(1)}</div>
           </div>
           <a
-            href={`https://www.google.com/maps/search/${encodeURIComponent(activeJob.property)}`}
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeJob.property)}`}
             target="_blank" rel="noopener noreferrer"
             className="cd"
-            style={{ flex: 1, padding: 10, textAlign: "center", textDecoration: "none", color: "var(--color-primary)" }}
+            style={{ flex: 1, padding: 10, textAlign: "center", textDecoration: "none", color: "var(--color-primary)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}
           >
-            <div style={{ fontSize: 20 }}>📍</div>
-            <div style={{ fontSize: 12 }}>Maps</div>
+            <Icon name="mapPin" size={20} color="var(--color-primary)" />
+            <div style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".04em", lineHeight: 1.1, textAlign: "center" }}>View on Map</div>
           </a>
           <div className="cd" onClick={() => setPage("troubleshoot")} style={{ flex: 1, padding: 10, textAlign: "center", cursor: "pointer" }}>
             <div style={{ fontSize: 20 }}>🔧</div>
@@ -838,23 +1007,38 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           ];
           const shopTotal = allShop.reduce((s, i) => s + (i.c || 0), 0);
           const shopRemaining = allShop.reduce(
-            (s, i, idx) => s + (checkedShop.has(idx) ? 0 : i.c || 0),
+            (s, i) => s + (checkedShop.includes(shopKey(i)) ? 0 : i.c || 0),
             0,
           );
-          const toggleTool = (tool: string) =>
-            setCheckedTools((prev) => {
-              const next = new Set(prev);
-              if (next.has(tool)) next.delete(tool);
-              else next.add(tool);
-              return next;
-            });
-          const toggleShop = (i: number) =>
-            setCheckedShop((prev) => {
-              const next = new Set(prev);
-              if (next.has(i)) next.delete(i);
-              else next.add(i);
-              return next;
-            });
+          // Toggle helpers — optimistic local update + persist into the
+          // job's rooms blob so the state survives remounts and the Jobs
+          // tab can read the same source of truth.
+          const toggleTool = (tool: string) => {
+            const next = checkedTools.includes(tool)
+              ? checkedTools.filter((x) => x !== tool)
+              : [...checkedTools, tool];
+            setCheckedTools(next);
+            persistGuide({ checkedTools: next });
+          };
+          const toggleShop = (item: { n: string; c: number; room?: string; trade?: string }) => {
+            const key = shopKey(item);
+            const next = checkedShop.includes(key)
+              ? checkedShop.filter((k) => k !== key)
+              : [...checkedShop, key];
+            setCheckedShop(next);
+            persistGuide({ checkedShop: next });
+          };
+          const addCustomTool = (tool: string) => {
+            if (!tool || extraTools.includes(tool)) return;
+            const next = [...extraTools, tool];
+            setExtraTools(next);
+            persistGuide({ customTools: next });
+          };
+          const addCustomShop = (item: { n: string; c: number; room?: string; trade?: string }) => {
+            const next = [...extraShop, item];
+            setExtraShop(next);
+            persistGuide({ customShop: next });
+          };
 
           return (
             <div>
@@ -866,14 +1050,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     {t("wv.toolsNeeded")} ({allTools.length})
                   </h4>
                   <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-                    {checkedTools.size}/{allTools.length} packed
+                    {checkedTools.length}/{allTools.length} packed
                   </span>
                 </div>
                 {allTools.length === 0 && (
                   <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>No tools listed.</div>
                 )}
                 {allTools.map((tool, i) => {
-                  const done = checkedTools.has(tool);
+                  const done = checkedTools.includes(tool);
                   return (
                     <div
                       key={i}
@@ -910,7 +1094,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     style={{ flex: 1, fontSize: 13, padding: "6px 10px" }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && newTool.trim()) {
-                        setExtraTools((prev) => [...prev, newTool.trim()]);
+                        addCustomTool(newTool.trim());
                         setNewTool("");
                       }
                     }}
@@ -918,7 +1102,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   <button
                     onClick={() => {
                       if (newTool.trim()) {
-                        setExtraTools((prev) => [...prev, newTool.trim()]);
+                        addCustomTool(newTool.trim());
                         setNewTool("");
                       }
                     }}
@@ -945,7 +1129,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>No shopping items.</div>
                 )}
                 {allShop.map((s, i) => {
-                  const done = checkedShop.has(i);
+                  const done = checkedShop.includes(shopKey(s));
                   const prevTrade = i > 0 ? allShop[i - 1].trade : null;
                   const curTrade = s.trade || "";
                   const showHeader = curTrade && curTrade !== prevTrade;
@@ -968,7 +1152,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         </div>
                       )}
                       <div
-                        onClick={() => toggleShop(i)}
+                        onClick={() => toggleShop(s)}
                         style={{
                           display: "flex", justifyContent: "space-between", alignItems: "center",
                           fontSize: 13, padding: "6px 0 6px 4px",
@@ -1014,12 +1198,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     style={{ width: 64, fontSize: 13, padding: "6px 8px" }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && newShopName.trim()) {
-                        setExtraShop((prev) => [...prev, {
+                        addCustomShop({
                           n: newShopName.trim(),
                           c: parseFloat(newShopCost) || 0,
                           room: "Custom",
                           trade: "Added on site",
-                        }]);
+                        });
                         setNewShopName("");
                         setNewShopCost("");
                       }
@@ -1028,12 +1212,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   <button
                     onClick={() => {
                       if (newShopName.trim()) {
-                        setExtraShop((prev) => [...prev, {
+                        addCustomShop({
                           n: newShopName.trim(),
                           c: parseFloat(newShopCost) || 0,
                           room: "Custom",
                           trade: "Added on site",
-                        }]);
+                        });
                         setNewShopName("");
                         setNewShopCost("");
                       }
@@ -1094,6 +1278,24 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 style={{ fontSize: 12, padding: "5px 10px" }}
               >
                 📁 {t("common.upload")}
+              </button>
+              {/* Receipt upload — snap a receipt at the supply store and the
+                  AI scans vendor + line items, enriches the note, sets the
+                  amount, and feeds price_corrections for the quoter. */}
+              <button
+                className="bo"
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file"; input.accept = "image/*"; input.capture = "environment";
+                  input.onchange = () => { if (input.files?.[0]) uploadReceipt(input.files[0]); };
+                  input.click();
+                }}
+                disabled={uploadingReceipt}
+                style={{ fontSize: 12, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 4, opacity: uploadingReceipt ? 0.5 : 1 }}
+                title="Snap a receipt photo — AI extracts vendor, items, and total"
+              >
+                <Icon name="receipt" size={13} />
+                {uploadingReceipt ? "…" : "Receipt"}
               </button>
             </div>
           </div>
