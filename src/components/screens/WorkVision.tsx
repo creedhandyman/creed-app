@@ -53,6 +53,23 @@ function resolveActiveJobId(jobs: Job[], address: string): string | undefined {
   return sorted[0]?.id;
 }
 
+// Photo entries on a job. The shape was originally {url,label,type} for
+// before/after/work uploads; rendered AI previews extend it with sourceUrl
+// (the photo this was generated from) + the prompt used + createdAt.
+type JobPhoto = {
+  url: string;
+  label: string;
+  type: string;
+  sourceUrl?: string;
+  prompt?: string;
+  createdAt?: string;
+};
+
+// Default prompt shown in the Render modal. Bernard can edit per-render;
+// this is the "standard turnover finish" he's optimizing for.
+const DEFAULT_RENDER_PROMPT =
+  "Photorealistic interior rendering. Same room, same camera angle, same fixtures and layout. Replace flooring with light gray luxury vinyl plank in a wide-plank format. Repaint walls in clean off-white. Show as freshly renovated, professionally cleaned, bright natural light, real-estate photography style.";
+
 export default function WorkVision({ setPage }: { setPage: (p: string) => void }) {
   const user = useStore((s) => s.user)!;
   const jobs = useStore((s) => s.jobs);
@@ -263,11 +280,96 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         freshData = freshJob ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {} : {};
       } catch { /* */ }
       if (!Array.isArray(freshData.photos)) freshData.photos = [];
-      (freshData.photos as Array<{ url: string; label: string; type: string }>).push({ url: publicUrl, label: "", type: "work" });
+      (freshData.photos as JobPhoto[]).push({ url: publicUrl, label: "", type: "work" });
       await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(freshData) });
       await loadAll();
     });
     useStore.getState().showToast("Photo added", "success");
+  };
+
+  // ── AI render (finished-look preview) ──
+  // Modal is open when renderTarget is set. The flow is:
+  //  1) tap ✨ on a photo → renderTarget = source url, prompt prefilled
+  //  2) tap Generate → POST /api/render → renderResult = generated url
+  //  3) tap Save → append to job.photos with type "rendered"
+  // The rendering is uploaded to storage server-side regardless of whether
+  // the user saves. Discarding leaves an orphan in the bucket — fine for V1.
+  const [renderTarget, setRenderTarget] = useState<string | null>(null);
+  const [renderPrompt, setRenderPrompt] = useState<string>(DEFAULT_RENDER_PROMPT);
+  const [rendering, setRendering] = useState(false);
+  const [renderResult, setRenderResult] = useState<string | null>(null);
+
+  const openRenderModal = (sourceUrl: string) => {
+    setRenderTarget(sourceUrl);
+    setRenderPrompt(DEFAULT_RENDER_PROMPT);
+    setRenderResult(null);
+    setRendering(false);
+  };
+
+  const closeRenderModal = () => {
+    setRenderTarget(null);
+    setRenderResult(null);
+    setRendering(false);
+  };
+
+  const generateRender = async () => {
+    if (!activeJob || !renderTarget || !renderPrompt.trim()) return;
+    setRendering(true);
+    setRenderResult(null);
+    try {
+      const res = await fetch("/api/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoUrl: renderTarget,
+          prompt: renderPrompt.trim(),
+          jobId: activeJob.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        useStore.getState().showToast(
+          `${t("wv.renderFailed")}: ${data.error || res.status}`,
+          "error"
+        );
+        setRendering(false);
+        return;
+      }
+      setRenderResult(data.url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      useStore.getState().showToast(`${t("wv.renderFailed")}: ${msg}`, "error");
+    }
+    setRendering(false);
+  };
+
+  const saveRender = async () => {
+    if (!activeJob || !renderResult || !renderTarget) return;
+    const url = renderResult;
+    const source = renderTarget;
+    const prompt = renderPrompt.trim();
+    await enqueueRoomsWrite(async () => {
+      const freshJob = useStore.getState().jobs.find((j) => j.id === activeJob.id);
+      let freshData: Record<string, unknown> = {};
+      try {
+        freshData = freshJob
+          ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {}
+          : {};
+      } catch { /* */ }
+      if (!Array.isArray(freshData.photos)) freshData.photos = [];
+      (freshData.photos as JobPhoto[]).push({
+        url,
+        label: prompt,
+        type: "rendered",
+        sourceUrl: source,
+        prompt,
+        createdAt: new Date().toISOString(),
+      });
+      await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(freshData) });
+      await loadAll();
+    });
+    useStore.getState().showToast(t("wv.renderSaved"), "success");
+    closeRenderModal();
   };
 
   // Complete job
@@ -953,25 +1055,346 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             💡 {t("wv.photosTip")}
           </div>
 
-          {jobData?.photos?.length > 0 ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-              {jobData.photos.map((p: { url: string; label: string; type: string }, i: number) => (
-                <div key={i} style={{ position: "relative" }}>
-                  <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: `1px solid ${border}` }} />
-                  {p.type && (
-                    <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: 9, padding: "1px 4px", borderRadius: 3, background: p.type === "before" ? "#ff8800" : p.type === "after" ? "#00cc66" : "#2E75B6", color: "#fff" }}>
-                      {p.type}
-                    </span>
+          {(() => {
+            const allPhotos: JobPhoto[] = jobData?.photos || [];
+            // Renderings live in their own section below — keep the main
+            // grid focused on real before/after/work shots.
+            const regular = allPhotos.filter((p) => p.type !== "rendered");
+            const rendered = allPhotos.filter((p) => p.type === "rendered");
+            return (
+              <>
+                {regular.length > 0 ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                    {regular.map((p, i) => (
+                      <div key={i} style={{ position: "relative" }}>
+                        <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: `1px solid ${border}` }} />
+                        {p.type && (
+                          <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: 9, padding: "1px 4px", borderRadius: 3, background: p.type === "before" ? "#ff8800" : p.type === "after" ? "#00cc66" : "#2E75B6", color: "#fff" }}>
+                            {p.type}
+                          </span>
+                        )}
+                        {/* Render-finished button — overlays each photo. Tap to
+                            open the AI render modal seeded with this photo. */}
+                        <button
+                          onClick={() => openRenderModal(p.url)}
+                          title={t("wv.renderFinished")}
+                          aria-label={t("wv.renderFinished")}
+                          style={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            width: 26,
+                            height: 26,
+                            borderRadius: "50%",
+                            background: "rgba(0, 0, 0, 0.6)",
+                            color: "#fff",
+                            border: "1px solid rgba(255,255,255,0.25)",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            lineHeight: "24px",
+                            padding: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          ✨
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="dim" style={{ textAlign: "center", padding: 16 }}>{t("wv.noPhotos")}</p>
+                )}
+
+                {/* ── Renderings section ── */}
+                <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${border}` }}>
+                  <h4 style={{ fontSize: 13, marginBottom: 8 }}>
+                    ✨ {t("wv.renderingsHeader")} ({rendered.length})
+                  </h4>
+                  {rendered.length === 0 ? (
+                    <p className="dim" style={{ fontSize: 12, textAlign: "center", padding: 12 }}>
+                      {t("wv.renderingsEmpty")}
+                    </p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {rendered.map((p, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: 6,
+                            border: `1px solid ${border}`,
+                            borderRadius: 10,
+                            padding: 6,
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 9, textTransform: "uppercase", color: "#888", marginBottom: 3, letterSpacing: ".05em" }}>
+                              {t("wv.renderSource")}
+                            </div>
+                            {p.sourceUrl ? (
+                              <img
+                                src={p.sourceUrl}
+                                alt=""
+                                style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 6 }}
+                              />
+                            ) : (
+                              <div style={{ aspectRatio: "1", background: darkMode ? "#222" : "#eee", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "#888", fontSize: 10 }}>
+                                —
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, textTransform: "uppercase", color: "#9b59b6", marginBottom: 3, letterSpacing: ".05em" }}>
+                              {t("wv.renderResult")}
+                            </div>
+                            <a href={p.url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={p.url}
+                                alt=""
+                                style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 6, cursor: "zoom-in" }}
+                              />
+                            </a>
+                          </div>
+                          {p.prompt && (
+                            <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#888", fontStyle: "italic", lineHeight: 1.4 }}>
+                              “{p.prompt}”
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="dim" style={{ textAlign: "center", padding: 16 }}>{t("wv.noPhotos")}</p>
-          )}
+              </>
+            );
+          })()}
         </div>
       )}
       </div>{/* end swipeable */}
+
+      {/* AI Render modal — finished-look preview */}
+      {renderTarget && (
+        <div
+          onClick={() => { if (!rendering) closeRenderModal(); }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9998,
+            background: "rgba(5, 5, 12, 0.78)",
+            backdropFilter: "blur(8px) saturate(120%)",
+            WebkitBackdropFilter: "blur(8px) saturate(120%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            animation: "fadeIn 0.22s cubic-bezier(0.22, 1, 0.36, 1)",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "linear-gradient(180deg, #14141e 0%, #12121a 100%)",
+              border: "1px solid #9b59b622",
+              borderTop: "3px solid #9b59b6",
+              borderRadius: 16,
+              padding: "20px 22px 18px",
+              width: "100%",
+              maxWidth: 520,
+              maxHeight: "92vh",
+              overflowY: "auto",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 0 32px #9b59b622",
+              animation: "modalIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)",
+            }}
+          >
+            <h3
+              style={{
+                fontFamily: "Oswald, sans-serif",
+                fontSize: 17,
+                textTransform: "uppercase",
+                color: "#9b59b6",
+                marginBottom: 14,
+                letterSpacing: ".05em",
+                fontWeight: 600,
+              }}
+            >
+              ✨ {t("wv.renderTitle")}
+            </h3>
+
+            {/* Source / Result preview */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 9, textTransform: "uppercase", color: "#888", marginBottom: 4, letterSpacing: ".05em" }}>
+                  {t("wv.renderSource")}
+                </div>
+                <img
+                  src={renderTarget}
+                  alt=""
+                  style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: "1px solid #2a2a3a" }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 9, textTransform: "uppercase", color: "#9b59b6", marginBottom: 4, letterSpacing: ".05em" }}>
+                  {t("wv.renderResult")}
+                </div>
+                {rendering ? (
+                  <div
+                    style={{
+                      width: "100%",
+                      aspectRatio: "1",
+                      borderRadius: 8,
+                      border: "1px dashed #9b59b655",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#9b59b6",
+                      fontSize: 11,
+                      textAlign: "center",
+                      padding: 8,
+                      animation: "pulse 1.6s ease-in-out infinite",
+                    }}
+                  >
+                    {t("wv.renderGenerating")}
+                  </div>
+                ) : renderResult ? (
+                  <img
+                    src={renderResult}
+                    alt=""
+                    style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: "1px solid #9b59b655" }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "100%",
+                      aspectRatio: "1",
+                      borderRadius: 8,
+                      border: "1px dashed #2a2a3a",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#555",
+                      fontSize: 28,
+                    }}
+                  >
+                    ✨
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Prompt textarea */}
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                textTransform: "uppercase",
+                color: "#aaa",
+                marginBottom: 6,
+                letterSpacing: ".05em",
+                fontFamily: "Oswald, sans-serif",
+              }}
+            >
+              {t("wv.renderPromptLabel")}
+            </label>
+            <textarea
+              value={renderPrompt}
+              onChange={(e) => setRenderPrompt(e.target.value)}
+              disabled={rendering}
+              rows={5}
+              style={{
+                width: "100%",
+                fontSize: 13,
+                padding: 10,
+                borderRadius: 8,
+                border: "1px solid #2a2a3a",
+                background: "#0e0e16",
+                color: "#ddd",
+                fontFamily: "Source Sans 3, sans-serif",
+                lineHeight: 1.45,
+                resize: "vertical",
+                marginBottom: 14,
+              }}
+            />
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                onClick={closeRenderModal}
+                disabled={rendering}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: 10,
+                  fontSize: 13,
+                  fontFamily: "Oswald, sans-serif",
+                  textTransform: "uppercase",
+                  letterSpacing: ".06em",
+                  background: "transparent",
+                  border: "1px solid #2a2a3a",
+                  color: "#aaa",
+                  cursor: rendering ? "not-allowed" : "pointer",
+                  opacity: rendering ? 0.5 : 1,
+                }}
+              >
+                {t("wv.renderDiscard")}
+              </button>
+              {!renderResult ? (
+                <button
+                  onClick={generateRender}
+                  disabled={rendering || !renderPrompt.trim()}
+                  style={{
+                    padding: "9px 22px",
+                    borderRadius: 10,
+                    fontSize: 13,
+                    fontFamily: "Oswald, sans-serif",
+                    textTransform: "uppercase",
+                    letterSpacing: ".06em",
+                    background: "linear-gradient(135deg, #9b59b6 0%, #6c3a87 100%)",
+                    color: "#fff",
+                    border: "none",
+                    cursor: rendering || !renderPrompt.trim() ? "not-allowed" : "pointer",
+                    boxShadow: "0 4px 16px #9b59b655",
+                    opacity: rendering || !renderPrompt.trim() ? 0.6 : 1,
+                  }}
+                >
+                  {rendering ? "…" : t("wv.renderGenerate")}
+                </button>
+              ) : (
+                <button
+                  onClick={saveRender}
+                  style={{
+                    padding: "9px 22px",
+                    borderRadius: 10,
+                    fontSize: 13,
+                    fontFamily: "Oswald, sans-serif",
+                    textTransform: "uppercase",
+                    letterSpacing: ".06em",
+                    background: "linear-gradient(135deg, #00cc66 0%, #009947 100%)",
+                    color: "#fff",
+                    border: "none",
+                    cursor: "pointer",
+                    boxShadow: "0 4px 16px #00cc6655",
+                  }}
+                >
+                  {t("wv.renderSave")}
+                </button>
+              )}
+            </div>
+          </div>
+          <style>{`
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes modalIn {
+              from { opacity: 0; transform: scale(0.94) translateY(-12px); }
+              to   { opacity: 1; transform: scale(1) translateY(0); }
+            }
+            @keyframes pulse {
+              0%, 100% { opacity: 0.7; }
+              50%      { opacity: 1; }
+            }
+          `}</style>
+        </div>
+      )}
 
       {/* Review-request modal — pops after a successful completeJob to
           capture the client's goodwill before we navigate away. Closing
