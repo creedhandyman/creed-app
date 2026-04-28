@@ -99,6 +99,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // so clock-out in either screen patches the same row instead of creating a new
   // entry and orphaning the original.
   const [activeId, setActiveId] = useState<string | null>(() => ld<string | null>("t_active_id", null));
+  // Picked-job FK for the current clock-in. Persisted so a refresh keeps the
+  // right job pinned when two share an address. Address-only fallback at the
+  // bottom of activeJob handles legacy rows that pre-date this state.
+  const [activeJobId, setActiveJobId] = useState<string | null>(() => ld<string | null>("t_active_job_id", null));
   // Which task in the work order is expanded to show materials / photos / comment
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
   // Guide tab: tap-to-check tools and shopping items, plus custom additions
@@ -116,6 +120,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   useEffect(() => sv("t_st", st), [st]);
   useEffect(() => sv("t_sj", sj), [sj]);
   useEffect(() => sv("t_active_id", activeId), [activeId]);
+  useEffect(() => sv("t_active_job_id", activeJobId), [activeJobId]);
 
   // Tick
   useEffect(() => {
@@ -126,8 +131,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return () => clearInterval(iv);
   }, [on, st]);
 
-  // Find the active job
-  const activeJob = jobs.find((j) => j.property === sj);
+  // Find the active job. Prefer the explicit FK we stamped at clock-in so two
+  // jobs at the same address don't collapse to whichever Array.find hits first.
+  // Fall back to address match for legacy clock-ins from before this state
+  // existed.
+  const activeJob =
+    (activeJobId ? jobs.find((j) => j.id === activeJobId) : undefined) ||
+    jobs.find((j) => j.property === sj);
   const jobData = (() => {
     try { return activeJob ? (typeof activeJob.rooms === "string" ? JSON.parse(activeJob.rooms) : activeJob.rooms) : null; }
     catch { return null; }
@@ -140,16 +150,20 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const todaySchedule = schedule.filter((s) => s.sched_date === todayStr);
 
   // Clock in: create an in-progress time_entries row so admins can see who's
-  // clocked in right now (same pattern Timer.tsx uses).
-  const clockIn = async (job: string) => {
+  // clocked in right now (same pattern Timer.tsx uses). When the caller knows
+  // exactly which job they meant (they tapped a row in the All-Jobs list),
+  // pass jobId so we don't have to disambiguate by address.
+  const clockIn = async (job: string, jobId?: string) => {
     const startedAt = Date.now();
+    const resolvedJobId = jobId || resolveActiveJobId(jobs, job);
     setSj(job);
     setSt(startedAt);
     setOn(true);
     setEl(0);
+    setActiveJobId(resolvedJobId || null);
     const result = await db.post<{ id: string }>("time_entries", {
       job: job || "General",
-      job_id: resolveActiveJobId(jobs, job),
+      job_id: resolvedJobId,
       entry_date: new Date().toLocaleDateString("en-US"),
       hours: 0,
       amount: 0,
@@ -166,7 +180,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // Auto-promote the matching job from "scheduled" to "active" so the
     // workload view reflects what's actually happening. Don't flip jobs
     // already in "complete"/"paid" backwards.
-    if (job) {
+    if (resolvedJobId) {
+      const matched = jobs.find((j) => j.id === resolvedJobId && j.status === "scheduled");
+      if (matched) await db.patch("jobs", matched.id, { status: "active" });
+    } else if (job) {
       const matched = jobs.find((j) => j.property === job && j.status === "scheduled");
       if (matched) await db.patch("jobs", matched.id, { status: "active" });
     }
@@ -226,6 +243,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setEl(0);
     setSj("");
     setActiveId(null);
+    setActiveJobId(null);
     await loadAll();
     useStore.getState().showToast(`Clocked out — ${hrs.toFixed(1)} hours logged`, "success");
   };
@@ -505,21 +523,44 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         {/* All Jobs */}
         <div className="cd">
           <h4 style={{ fontSize: 13, marginBottom: 8 }}>{t("wv.allActive")}</h4>
-          {jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status)).length === 0 ? (
-            <p className="dim" style={{ fontSize: 12 }}>{t("wv.noActive")}</p>
-          ) : (
-            jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status)).map((j) => (
-              <div key={j.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
-                <div>
-                  <b>{j.property}</b>
-                  <div className="dim" style={{ fontSize: 12 }}>{j.client} · ${(j.total || 0).toFixed(0)}</div>
+          {(() => {
+            const active = jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status));
+            if (active.length === 0) return <p className="dim" style={{ fontSize: 12 }}>{t("wv.noActive")}</p>;
+            // Count properties so we can show a "duplicate address" hint when
+            // two jobs share one — the status pill + short ref are always on,
+            // but the pink dot draws Bernard's eye to the rows that need care.
+            const propCount: Record<string, number> = {};
+            active.forEach((j) => { propCount[j.property] = (propCount[j.property] || 0) + 1; });
+            const statusColor = (s: string) =>
+              s === "active" ? "var(--color-success)" :
+              s === "scheduled" ? "var(--color-warning)" :
+              s === "accepted" ? "#ff8800" :
+              s === "lead" ? "#ff4d8d" :
+              "var(--color-accent-red)";
+            return active.map((j) => {
+              const dupe = propCount[j.property] > 1;
+              return (
+                <div key={j.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <b>{j.property}</b>
+                      {dupe && <span title="Multiple jobs at this address" style={{ width: 6, height: 6, borderRadius: 3, background: "#ff4d8d", flexShrink: 0 }} />}
+                    </div>
+                    <div className="dim" style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      <span>{j.client} · ${(j.total || 0).toFixed(0)}</span>
+                      <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 3, background: statusColor(j.status) + "22", color: statusColor(j.status), fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>
+                        {j.status}
+                      </span>
+                      <span style={{ fontFamily: "Oswald", fontSize: 11 }}>#{j.id.slice(-6).toUpperCase()}</span>
+                    </div>
+                  </div>
+                  <button className="bb" onClick={() => clockIn(j.property, j.id)} style={{ fontSize: 12, padding: "5px 12px", flexShrink: 0, marginLeft: 8 }}>
+                    ▶ Clock In
+                  </button>
                 </div>
-                <button className="bb" onClick={() => clockIn(j.property)} style={{ fontSize: 12, padding: "5px 12px" }}>
-                  ▶ Clock In
-                </button>
-              </div>
-            ))
-          )}
+              );
+            });
+          })()}
         </div>
       </div>
     );
@@ -535,7 +576,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             🟢 {t("wv.clockedIn")}
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{sj || "General"}</div>
-          {activeJob && <div className="dim" style={{ fontSize: 12 }}>{activeJob.client}</div>}
+          {activeJob && (
+            <div className="dim" style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <span>{activeJob.client}</span>
+              <span style={{ fontFamily: "Oswald", fontSize: 11 }}>#{activeJob.id.slice(-6).toUpperCase()}</span>
+            </div>
+          )}
         </div>
         <div style={{ fontSize: 28, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-success)" }}>
           {fmt(el)}
