@@ -108,6 +108,13 @@ src/
   unpaid, which is the correct state for any pre-migration entries
   the org has already paid out by hand. To retroactively flag those
   as paid: `UPDATE time_entries SET paid_at = NOW();`)
+- `ALTER TABLE time_entries ADD COLUMN job_id UUID;`
+  (Disambiguates time entries when two jobs share an address — e.g.
+  a callback at a property that's already had a prior job. New clock-
+  in rows stamp this from the active job; legacy rows have it NULL
+  and fall back to address-match against the OLDEST job at that
+  property. Without this column, hours from the original job leak
+  onto a new job at the same address.)
 
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices.)

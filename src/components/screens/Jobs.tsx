@@ -80,11 +80,29 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   }, [payHistory]);
 
   // Aggregate actual labor logged for a job — sums time_entries that match
-  // the job's property string AND adds back any deleted-but-paid hours
-  // recovered from pay_history. Used in the Hours card and the Time Logged
-  // breakdown so quotes can be compared to reality and the AI can learn.
-  const getJobLabor = (jobProp: string) => {
-    const entries = timeEntries.filter((e) => e.job === jobProp && (e.hours || 0) > 0);
+  // the job AND adds back any deleted-but-paid hours recovered from
+  // pay_history. Used in the Hours card and the Time Logged breakdown so
+  // quotes can be compared to reality and the AI can learn.
+  //
+  // Disambiguation when two jobs share an address (Bernard hit this on a
+  // 1436 N Piet callback): time_entries.job_id (added 2026-04) is the
+  // authoritative key. For entries that have it, only the matching job
+  // gets credit. Legacy entries (no job_id, pre-migration) fall back to
+  // address-match — but we only attribute them to the OLDEST job at that
+  // address so a second job at the same property starts clean instead of
+  // inheriting the prior job's history.
+  const getJobLabor = (thisJob: Job) => {
+    const jobProp = thisJob.property;
+    const sameAddressJobs = jobs.filter((j) => j.property === jobProp);
+    const isOldestAtAddress = sameAddressJobs.every(
+      (j) => (thisJob.created_at || "") <= (j.created_at || ""),
+    );
+    const entries = timeEntries.filter((e) => {
+      if ((e.hours || 0) <= 0) return false;
+      if (e.job_id) return e.job_id === thisJob.id;
+      // Legacy row with no job_id — only credit the oldest job at the address.
+      return e.job === jobProp && isOldestAtAddress;
+    });
     const loggedHrs = entries.reduce((s, e) => s + (e.hours || 0), 0);
     const loggedCost = entries.reduce((s, e) => s + (e.amount || 0), 0);
 
@@ -103,7 +121,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     // Recover the gap per user — historical (from pay_history) minus
     // live-paid (already in entries). Anything pre-fix shows up here
     // because livePaidByUser[uid] is 0 for those users on this job.
-    const histForJob = historicalByJobByUser[jobProp] || {};
+    // pay_history.details is keyed by address (no job_id), so apply the
+    // same oldest-at-address rule used for legacy time_entries above —
+    // a second job at the same property doesn't inherit the prior job's
+    // recovered hours.
+    const histForJob = isOldestAtAddress ? (historicalByJobByUser[jobProp] || {}) : {};
     const recoveredByUser: Record<string, { name: string; hrs: number; cost: number }> = {};
     let recoveredHrs = 0;
     let recoveredCost = 0;
@@ -372,7 +394,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     if (status === "complete") {
       const completedJob = jobs.find((j) => j.id === id);
       if (completedJob) {
-        const labor = getJobLabor(completedJob.property);
+        const labor = getJobLabor(completedJob);
         const quotedHrs = completedJob.total_hrs || 0;
         if (labor.totalHrs > 0 && quotedHrs > 0 && Math.abs(labor.totalHrs - quotedHrs) > 0.5) {
           const trade = completedJob.trade || "General";
@@ -891,7 +913,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
                   {/* Job info cards */}
                   {(() => {
-                    const labor = getJobLabor(j.property);
+                    const labor = getJobLabor(j);
                     const quoted = j.total_hrs || 0;
                     const variancePct = quoted > 0 ? ((labor.totalHrs - quoted) / quoted) * 100 : 0;
                     const overBudget = labor.totalHrs > quoted && quoted > 0;
@@ -930,7 +952,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
                   {/* Time Logged detail — only when entries exist */}
                   {(() => {
-                    const labor = getJobLabor(j.property);
+                    const labor = getJobLabor(j);
                     if (labor.totalHrs === 0) return null;
                     const isOpenSection = expandedSection === `time-${j.id}`;
                     return (

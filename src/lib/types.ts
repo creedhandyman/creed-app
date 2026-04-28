@@ -135,7 +135,16 @@ export interface Job {
 
 export interface TimeEntry {
   id: string;
+  /** Address text snapshot of the job at the time of clock-in. Kept for
+   *  display + back-compat; rollups should prefer job_id when present. */
   job: string;
+  /** Foreign key to jobs.id — added 2026-04. Disambiguates multiple jobs
+   *  at the same property (e.g. a callback job at an address that's
+   *  already had a prior job). Optional because legacy rows pre-migration
+   *  don't have it; rollups fall back to address-match for those, but
+   *  only attribute legacy entries to the OLDEST job at that address so
+   *  they don't double-roll into a newer job. */
+  job_id?: string;
   entry_date: string;
   hours: number;
   amount: number;

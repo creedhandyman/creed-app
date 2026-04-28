@@ -32,6 +32,27 @@ function woStableKey(w: { room?: string; detail?: string }): string {
   return `${(w.room || "").toLowerCase().trim()}|||${(w.detail || "").toLowerCase().trim()}`;
 }
 
+// Resolve a job_id from a property/address string when stamping a new
+// time_entries row. Disambiguates the case where two jobs share an address
+// (e.g. callback work at a property that's already had a prior job) by
+// preferring the most current one: active > scheduled > accepted > quoted >
+// complete > invoiced > paid, with most-recently-created winning ties.
+// Returns undefined if no match — caller should fall back to address-only.
+function resolveActiveJobId(jobs: Job[], address: string): string | undefined {
+  if (!address || address === "General") return undefined;
+  const matches = jobs.filter((j) => j.property === address);
+  if (matches.length === 0) return undefined;
+  if (matches.length === 1) return matches[0].id;
+  const order = ["active", "scheduled", "accepted", "quoted", "complete", "invoiced", "paid", "lead", "inspection"];
+  const sorted = [...matches].sort((a, b) => {
+    const oa = order.indexOf(a.status);
+    const ob = order.indexOf(b.status);
+    if (oa !== ob) return oa - ob;
+    return (b.created_at || "").localeCompare(a.created_at || "");
+  });
+  return sorted[0]?.id;
+}
+
 export default function WorkVision({ setPage }: { setPage: (p: string) => void }) {
   const user = useStore((s) => s.user)!;
   const jobs = useStore((s) => s.jobs);
@@ -111,6 +132,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setEl(0);
     const result = await db.post<{ id: string }>("time_entries", {
       job: job || "General",
+      job_id: resolveActiveJobId(jobs, job),
       entry_date: new Date().toLocaleDateString("en-US"),
       hours: 0,
       amount: 0,
@@ -166,6 +188,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           // No open row at all — last-resort: post a completed entry.
           await db.post("time_entries", {
             job: sj || "General",
+            job_id: resolveActiveJobId(jobs, sj),
             entry_date: new Date().toLocaleDateString("en-US"),
             hours: rounded,
             amount,

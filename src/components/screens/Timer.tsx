@@ -3,7 +3,28 @@ import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import type { Job } from "@/lib/types";
 import { Icon } from "../Icon";
+
+// Resolve a job_id from a property/address string when stamping a new
+// time_entries row. Disambiguates the case where two jobs share an
+// address (e.g. callback work) by preferring active > scheduled >
+// accepted > quoted > complete > invoiced > paid, with most-recently-
+// created winning ties. Mirrored in WorkVision.tsx — keep in sync.
+function resolveActiveJobId(jobs: Job[], address: string): string | undefined {
+  if (!address || address === "General") return undefined;
+  const matches = jobs.filter((j) => j.property === address);
+  if (matches.length === 0) return undefined;
+  if (matches.length === 1) return matches[0].id;
+  const order = ["active", "scheduled", "accepted", "quoted", "complete", "invoiced", "paid", "lead", "inspection"];
+  const sorted = [...matches].sort((a, b) => {
+    const oa = order.indexOf(a.status);
+    const ob = order.indexOf(b.status);
+    if (oa !== ob) return oa - ob;
+    return (b.created_at || "").localeCompare(a.created_at || "");
+  });
+  return sorted[0]?.id;
+}
 
 interface Props {
   setPage?: (p: string) => void;
@@ -122,6 +143,7 @@ export default function Timer({ setPage }: Props) {
         } else {
           await db.post("time_entries", {
             job: sj || "General",
+            job_id: resolveActiveJobId(jobs, sj),
             entry_date: new Date().toLocaleDateString(),
             hours: hrs, amount,
             user_id: user.id, user_name: user.name,
@@ -157,6 +179,7 @@ export default function Timer({ setPage }: Props) {
     setOn(true);
     const result = await db.post<{ id: string }>("time_entries", {
       job: sj || "General",
+      job_id: resolveActiveJobId(jobs, sj),
       entry_date: new Date().toLocaleDateString(),
       hours: 0,
       amount: 0,
@@ -200,6 +223,7 @@ export default function Timer({ setPage }: Props) {
       } else {
         await db.post("time_entries", {
           job: sj || "General",
+          job_id: resolveActiveJobId(jobs, sj),
           entry_date: new Date().toLocaleDateString(),
           hours: hrs,
           amount: Math.round(hrs * rate * 100) / 100,
@@ -231,6 +255,7 @@ export default function Timer({ setPage }: Props) {
     const targetRate = targetUser.rate || 55;
     await db.post("time_entries", {
       job: mj || "General",
+      job_id: resolveActiveJobId(jobs, mj),
       entry_date: mDate,
       hours: h,
       amount: Math.round(h * targetRate * 100) / 100,
