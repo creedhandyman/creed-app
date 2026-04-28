@@ -180,6 +180,32 @@ export function exportQuotePdf(opts: ExportOptions) {
   // Subtotal before markup/tax
   const subtotal = totalLabor + totalMat;
 
+  // Build the licensed-pro exclusion line dynamically. The boilerplate
+  // ("electrical panel work, major HVAC, gas lines are NOT included") read
+  // wrong on quotes that DID include some of that scope, so list only the
+  // categories we don't see in the line items. If everything's covered, drop
+  // the bullet entirely.
+  const scopeText = categories
+    .flatMap((c) =>
+      c.items.flatMap((it) => [
+        it.detail || "",
+        it.comment || "",
+        ...(it.materials || []).map((m) => m.n || ""),
+      ]),
+    )
+    .join(" ")
+    .toLowerCase();
+  const includesPanel = /breaker (panel|box)|electrical panel|sub.?panel|service upgrade|main panel|amperage upgrade|meter base/.test(scopeText);
+  const includesHvac = /furnace|condenser|heat pump|mini.?split|evaporator|air handler|new ductwork|ductwork install|hvac (replace|install|new|unit)/.test(scopeText);
+  const includesGas = /gas line|gas pipe|gas valve|gas connection|propane line|natural gas/.test(scopeText);
+  const excluded: string[] = [];
+  if (!includesPanel) excluded.push("electrical panel work");
+  if (!includesHvac) excluded.push("major HVAC");
+  if (!includesGas) excluded.push("gas lines");
+  const licensedDisclaimer = excluded.length
+    ? `<li>Items requiring licensed professionals (${excluded.join(", ")}) are NOT included unless noted.</li>`
+    : "";
+
   const body = `
 ${(client || clientEmail || clientPhone) ? `
 <section style="background:#f5f7fa;border-radius:8px;padding:14px 16px;margin-bottom:14px">
@@ -259,7 +285,7 @@ ${photos.length > 0 ? `
     <li>Materials priced at current Home Depot/Lowe's retail. All material quantities and unit prices listed per line item above.</li>
     <li>Quote valid <b>30 days</b> from issue date. <b>50% deposit</b> to begin; balance due on completion.</li>
     <li>Any unforeseen conditions (mold, hidden water damage, structural issues) will be documented and quoted as a separate change order before proceeding.</li>
-    <li>Items requiring licensed professionals (electrical panel work, major HVAC, gas lines) are NOT included unless noted.</li>
+    ${licensedDisclaimer}
   </ul>
 </div>
 
