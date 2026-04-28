@@ -328,13 +328,13 @@ Doors: pre-hung door=2-2.5h, bifold=1.25h, entry door=2.5-3h
 
 ## MATERIALS — LOW-END RETAIL PRICES
 Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung interior door=$90, pre-hung exterior/entry door=$275, bifold door=$50, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower head=$22, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, faucet=$55, toilet repair kit=$15, LVP=$2.00/sqft
-PAINT MATERIALS — calculate per room:
-- Small room (bathroom, closet): 1 gal paint ($16) + 1 qt primer ($10) = $26
-- Medium room (bedroom, kitchen): 2 gal paint ($32) + 1 gal primer ($16) = $48
-- Large room (living room, open concept): 3 gal paint ($48) + 1 gal primer ($16) = $64
-- Hallway/stairs: 2 gal paint ($32) + primer ($10) = $42
+PAINT MATERIALS — wall paint averages $28/gal, primer $22/gal, trim semigloss $32/gal, ceiling flat $22/gal. Calculate per room:
+- Small room (bathroom, closet): 1 gal paint ($28) + 1 qt primer ($8) = $36
+- Medium room (bedroom, kitchen): 2 gal paint ($56) + 1 gal primer ($22) = $78
+- Large room (living room, open concept): 3 gal paint ($84) + 1 gal primer ($22) = $106
+- Hallway/stairs: 2 gal paint ($56) + 1 qt primer ($8) = $64
 - Full unit supplies (tape, spackle, rollers, cloths, drop cloths): $30-50 total — list ONCE under "Paint Supplies"
-For a full 3-bed house paint: ~12-15 gallons paint ($190-240) + primer ($40-60) + supplies ($40) = $270-340 materials total.
+For a full 3-bed house paint: ~12-15 gallons paint ($336-420) + primer ($60-90) + supplies ($45) = $440-555 materials total.
 IMPORTANT: Do NOT list just "1 gal" for every room. Calculate based on room size.
 
 ## SPECIFIC DETAILS
