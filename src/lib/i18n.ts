@@ -12,7 +12,6 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.time": "Time",
     "nav.pay": "Pay",
     "nav.quest": "Quest",
-    "nav.site": "Site",
     "nav.ops": "Ops",
     "nav.home": "Home",
 
@@ -29,9 +28,6 @@ const translations: Record<Lang, Record<string, string>> = {
     "dash.trackTrips": "Track trips",
     "dash.troubleshoot": "Troubleshoot",
     "dash.aiDiagnosis": "AI diagnosis",
-    "dash.marketing": "Marketing & Website",
-    "dash.siteLive": "Your site is live — manage links & reviews",
-    "dash.buildSite": "Build a free website with AI in 60 seconds",
     "dash.gettingStarted": "Getting Started",
     "dash.complete": "complete",
 
@@ -324,7 +320,6 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.time": "Tiempo",
     "nav.pay": "Pago",
     "nav.quest": "Metas",
-    "nav.site": "Sitio",
     "nav.ops": "Ops",
     "nav.home": "Inicio",
 
@@ -341,9 +336,6 @@ const translations: Record<Lang, Record<string, string>> = {
     "dash.trackTrips": "Registrar viajes",
     "dash.troubleshoot": "Diagn\u00f3stico",
     "dash.aiDiagnosis": "Diagn\u00f3stico IA",
-    "dash.marketing": "Marketing y Sitio Web",
-    "dash.siteLive": "Tu sitio est\u00e1 activo — gestiona enlaces y rese\u00f1as",
-    "dash.buildSite": "Crea un sitio web gratis con IA en 60 segundos",
     "dash.gettingStarted": "Primeros Pasos",
     "dash.complete": "completado",
 

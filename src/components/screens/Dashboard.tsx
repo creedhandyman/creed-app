@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
+import { useMarketingTip } from "@/lib/marketing-tip";
 import { Icon } from "../Icon";
 
 interface Props {
@@ -12,7 +13,6 @@ interface Props {
 export default function Dashboard({ setPage, openSettings }: Props) {
   const user = useStore((s) => s.user)!;
   const isAdmin = user.role === "owner" || user.role === "manager";
-  const org = useStore((s) => s.org);
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
   const timeEntries = useStore((s) => s.timeEntries);
@@ -220,9 +220,8 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
       </div>
 
-      {/* Mileage + Marketing (admin only) — side by side. Non-admins
-          just see Mileage in column 1; column 2 stays empty. */}
-      <div className="g2 mb">
+      {/* Mileage */}
+      <div className="mb">
         <div className="cd" onClick={() => setPage("mileage")} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 12 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 10, flexShrink: 0,
@@ -236,23 +235,37 @@ export default function Dashboard({ setPage, openSettings }: Props) {
             <div className="dim" style={{ fontSize: 12 }}>{t("dash.trackTrips")}</div>
           </div>
         </div>
-
-        {isAdmin && (
-          <div className="cd" onClick={() => setPage("marketing")} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 12 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-              background: "var(--color-warning)" + "22",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <Icon name="marketing" size={20} color="var(--color-warning)" />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{t("dash.marketing")}</div>
-              <div className="dim" style={{ fontSize: 12 }}>{org?.site_content ? "Manage site" : "Build site"}</div>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Quick tip — admin only, AI-generated marketing recommendation */}
+      {isAdmin && <QuickTip />}
+    </div>
+  );
+}
+
+function QuickTip() {
+  const { tip, loading, refresh } = useMarketingTip();
+  return (
+    <div className="cd" style={{ borderLeft: "3px solid var(--color-warning)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <h4 style={{ fontSize: 13 }}>💡 Quick tip</h4>
+        <button
+          className="bo"
+          onClick={refresh}
+          disabled={loading}
+          aria-label="Refresh tip"
+          style={{ fontSize: 12, padding: "2px 8px" }}
+        >
+          {loading ? "…" : "🔄"}
+        </button>
+      </div>
+      {tip ? (
+        <div style={{ fontSize: 13, lineHeight: 1.55 }}>{tip}</div>
+      ) : loading ? (
+        <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>Thinking up a tip for you…</div>
+      ) : (
+        <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>Tap refresh for a marketing tip.</div>
+      )}
     </div>
   );
 }
