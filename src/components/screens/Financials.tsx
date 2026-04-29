@@ -43,24 +43,38 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
     try { return new Date(dateStr) >= rangeStart; } catch { return false; }
   };
 
-  // Filtered data
-  const rangeJobs = jobs.filter((j) => inRange(j.created_at || j.job_date));
-  const quoted = rangeJobs.filter((j) => j.status === "quoted");
-  const accepted = rangeJobs.filter((j) => j.status !== "quoted");
+  // Filtered data — anchor on job_date (work date) when set, fall back to
+  // created_at for unscheduled rows. This keeps a job's revenue in the
+  // period it was actually performed, not when its row was inserted.
+  // Archived jobs (cold quotes Bernard set aside) are excluded everywhere
+  // so they don't deflate close rate or inflate "quote value".
+  const rangeJobs = jobs.filter((j) => !j.archived && inRange(j.job_date || j.created_at));
+
+  // Status buckets. "Issued quotes" = anything past the lead/inspection
+  // intake stage (i.e. an actual estimate was sent or could be). "Accepted"
+  // = the customer said yes (anything from accepted onward). The previous
+  // version counted leads as accepted via `status !== "quoted"`, which
+  // double-inflated the close rate.
+  const ACCEPTED_STATUSES = ["accepted", "scheduled", "active", "complete", "invoiced", "paid"];
+  const issuedQuotes = rangeJobs.filter((j) => j.status !== "lead" && j.status !== "inspection");
+  const accepted = rangeJobs.filter((j) => ACCEPTED_STATUSES.includes(j.status));
   const completed = rangeJobs.filter((j) => ["complete", "invoiced", "paid"].includes(j.status));
   const paid = rangeJobs.filter((j) => j.status === "paid");
   const invoiced = rangeJobs.filter((j) => j.status === "invoiced");
+  const leads = rangeJobs.filter((j) => j.status === "lead");
 
   // Revenue
-  const totalQuoteValue = rangeJobs.reduce((s, j) => s + (j.total || 0), 0);
+  const totalQuoteValue = issuedQuotes.reduce((s, j) => s + (j.total || 0), 0);
   const completedRevenue = completed.reduce((s, j) => s + (j.total || 0), 0);
   const paidRevenue = paid.reduce((s, j) => s + (j.total || 0), 0);
   const outstandingInvoices = invoiced.reduce((s, j) => s + (j.total || 0), 0);
   const totalLaborCharged = completed.reduce((s, j) => s + (j.total_labor || 0), 0);
   const totalMaterials = completed.reduce((s, j) => s + (j.total_mat || 0), 0);
 
-  // Conversion funnel
-  const closeRate = rangeJobs.length > 0 ? Math.round((accepted.length / rangeJobs.length) * 100) : 0;
+  // Conversion funnel — close rate is "of quotes I actually sent, how many
+  // were accepted?". Denominator must be issuedQuotes, NOT rangeJobs (which
+  // would include leads that haven't been quoted yet).
+  const closeRate = issuedQuotes.length > 0 ? Math.round((accepted.length / issuedQuotes.length) * 100) : 0;
   const avgJobSize = completed.length > 0 ? Math.round(completedRevenue / completed.length) : 0;
 
   // Revenue by trade
@@ -101,6 +115,23 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   const crewCostPaid = rangeEntries.reduce((s, e) => s + (e.paid_at ? e.amount || 0 : 0), 0);
   const crewCostOwed = rangeEntries.reduce((s, e) => s + (!e.paid_at ? e.amount || 0 : 0), 0);
 
+  // Split crew cost by whether the underlying job is completed in this
+  // period. Without this split, profit looks bad mid-period because
+  // hours on still-active jobs reduce profit but the matching revenue
+  // hasn't been booked yet (revenue only counts complete/invoiced/paid).
+  // The fallback for entries without job_id (legacy rows) is to match
+  // by the entry's `job` address text against completed-job properties.
+  const completedJobIds = new Set(completed.map((j) => j.id));
+  const completedJobAddrs = new Set(completed.map((j) => (j.property || "").toLowerCase().trim()).filter(Boolean));
+  const isOnCompletedJob = (e: { job_id?: string; job?: string }) => {
+    if (e.job_id) return completedJobIds.has(e.job_id);
+    return completedJobAddrs.has((e.job || "").toLowerCase().trim());
+  };
+  const crewCostOnCompleted = rangeEntries
+    .filter(isOnCompletedJob)
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const crewCostOnActive = crewCost - crewCostOnCompleted;
+
   // Actual materials spend from receipts in the same period (real out-of-
   // pocket cost, vs. totalMaterials which is what was CHARGED to the
   // client). When receipts exist for the period we use actual; otherwise
@@ -109,18 +140,30 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   const actualMaterialsSpent = periodReceipts.reduce((s, r) => s + (r.amount || 0), 0);
   const materialsForProfit = actualMaterialsSpent > 0 ? actualMaterialsSpent : totalMaterials;
 
-  const profit = completedRevenue - materialsForProfit - crewCost;
+  // Profit on completed work = revenue from completed jobs - materials
+  // tied to the period - crew cost ON completed jobs only. Crew cost on
+  // still-active jobs is shown separately as work-in-progress so the
+  // headline profit reflects work that's actually finished.
+  const profit = completedRevenue - materialsForProfit - crewCostOnCompleted;
   const techEntries = Object.entries(byTech).sort((a, b) => b[1].hours - a[1].hours);
 
-  // Top clients
-  const byClient: Record<string, { revenue: number; jobs: number }> = {};
+  // Top clients — group by customer_id when the job is linked to a real
+  // Customer row (the new CRM entity), falling back to the free-text
+  // `client` name field for legacy / unlinked jobs. Two jobs with slightly
+  // different name spellings ("John Doe" vs "john doe") used to split into
+  // two rows; matching by id collapses those into one when both jobs are
+  // linked to the same customer.
+  const byClient: Record<string, { name: string; revenue: number; jobs: number }> = {};
   completed.forEach((j) => {
-    const c = j.client || "Walk-in";
-    if (!byClient[c]) byClient[c] = { revenue: 0, jobs: 0 };
-    byClient[c].revenue += j.total || 0;
-    byClient[c].jobs++;
+    const id = j.customer_id || `name:${(j.client || "Walk-in").toLowerCase().trim()}`;
+    const displayName = j.customer_id
+      ? customers.find((c) => c.id === j.customer_id)?.name || j.client || "Walk-in"
+      : j.client || "Walk-in";
+    if (!byClient[id]) byClient[id] = { name: displayName, revenue: 0, jobs: 0 };
+    byClient[id].revenue += j.total || 0;
+    byClient[id].jobs++;
   });
-  const clientEntries = Object.entries(byClient).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5);
+  const clientEntries = Object.values(byClient).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
   // Jobs per week (last 8 weeks)
   const weekBuckets: Record<string, number> = {};
@@ -132,7 +175,9 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   }
   rangeJobs.forEach((j) => {
     try {
-      const d = new Date(j.created_at || j.job_date);
+      // Prefer job_date so the chart reflects when work was performed,
+      // not when the row was inserted into the table.
+      const d = new Date(j.job_date || j.created_at);
       const weeksAgo = Math.floor((now.getTime() - d.getTime()) / (7 * 24 * 60 * 60 * 1000));
       if (weeksAgo >= 0 && weeksAgo < 8) {
         const wd = new Date(now);
@@ -243,7 +288,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
 </section>
 
 <div style="margin-top:24px;padding-top:12px;border-top:1px solid #ddd;font-size:11px;color:#888">
-  Generated ${today}. ${actualMaterialsSpent > 0 ? "Material costs reflect actual receipt data for the period." : "Material costs reflect amounts charged to clients (no receipt data for this period)."} Mileage at the IRS standard rate of $${IRS_RATE.toFixed(2)}/mi.
+  Generated ${today}. Cash-basis: revenue is from jobs marked complete/invoiced/paid in the period; direct labor reflects ALL crew hours logged in the period (including hours on jobs not yet finished). ${actualMaterialsSpent > 0 ? "Material costs reflect actual receipt data for the period." : "Material costs reflect amounts charged to clients (no receipt data for this period)."} Mileage at the IRS standard rate of $${IRS_RATE.toFixed(2)}/mi.${crewCostOnActive > 0 ? ` Of $${fmt$(crewCost).slice(1)} total labor, $${fmt$(crewCostOnActive).slice(1)} is on still-active jobs.` : ""}
 </div>
 `;
 
@@ -341,23 +386,34 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
       <div className="g2 mb">
         <div className="cd" style={{ padding: 14 }}>
           <h4 style={{ fontSize: 13, color: "var(--color-primary)", marginBottom: 10 }}>Quote Funnel</h4>
-          {[
-            { label: "Quoted", count: rangeJobs.length, color: "#888" },
-            { label: "Accepted", count: accepted.length, color: "var(--color-primary)" },
-            { label: "Completed", count: completed.length, color: "var(--color-warning)" },
-            { label: "Paid", count: paid.length, color: "var(--color-success)" },
-          ].map((s) => (
-            <div key={s.label} style={{ marginBottom: 6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
-                <span>{s.label}</span>
-                <span style={{ fontFamily: "Oswald", color: s.color }}>{s.count}</span>
+          {(() => {
+            // Bars are scaled to the largest stage so the visual is a true
+            // funnel. Lead is hidden when zero so a contractor with no
+            // online lead form doesn't see an empty bar.
+            const stages = [
+              { label: "Leads", count: leads.length, color: "#888", show: leads.length > 0 },
+              { label: "Quoted", count: issuedQuotes.length, color: "#aaa", show: true },
+              { label: "Accepted", count: accepted.length, color: "var(--color-primary)", show: true },
+              { label: "Completed", count: completed.length, color: "var(--color-warning)", show: true },
+              { label: "Paid", count: paid.length, color: "var(--color-success)", show: true },
+            ].filter((s) => s.show);
+            const maxStage = Math.max(1, ...stages.map((s) => s.count));
+            return stages.map((s) => (
+              <div key={s.label} style={{ marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+                  <span>{s.label}</span>
+                  <span style={{ fontFamily: "Oswald", color: s.color }}>{s.count}</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: border }}>
+                  <div style={{ height: "100%", borderRadius: 3, background: s.color, width: `${(s.count / maxStage) * 100}%`, transition: "width .3s" }} />
+                </div>
               </div>
-              <div style={{ height: 6, borderRadius: 3, background: border }}>
-                <div style={{ height: "100%", borderRadius: 3, background: s.color, width: `${rangeJobs.length ? (s.count / rangeJobs.length) * 100 : 0}%`, transition: "width .3s" }} />
-              </div>
-            </div>
-          ))}
-          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>Close rate: <b>{closeRate}%</b></div>
+            ));
+          })()}
+          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+            Close rate: <b>{closeRate}%</b>
+            <span style={{ marginLeft: 6, fontSize: 11 }}>(of {issuedQuotes.length} quotes sent)</span>
+          </div>
         </div>
 
         <div className="cd" style={{ padding: 14 }}>
@@ -382,12 +438,17 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${materialsForProfit.toLocaleString()}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span className="dim">Crew pay (actual hours)</span>
-              <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${crewCost.toLocaleString()}</span>
+              <span className="dim">Crew pay (on completed jobs)</span>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${crewCostOnCompleted.toLocaleString()}</span>
             </div>
+            {crewCostOnActive > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: 12, fontSize: 11 }}>
+                <span className="dim">↳ Plus ${crewCostOnActive.toLocaleString()} on active jobs (work-in-progress, not yet booked)</span>
+              </div>
+            )}
             {(crewCostPaid > 0 || crewCostOwed > 0) && (
               <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: 12, fontSize: 11 }}>
-                <span className="dim">↳ Paid ${crewCostPaid.toLocaleString()} · Owed ${crewCostOwed.toLocaleString()}</span>
+                <span className="dim">↳ Of ${crewCost.toLocaleString()} total: paid ${crewCostPaid.toLocaleString()} · owed ${crewCostOwed.toLocaleString()}</span>
                 <span className="dim" style={{ fontFamily: "Oswald" }}>
                   {crewCostOwed > 0 ? `${Math.round((crewCostOwed / crewCost) * 100)}% unpaid` : "all paid"}
                 </span>
@@ -528,10 +589,10 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
           {clientEntries.length === 0 ? (
             <p className="dim" style={{ fontSize: 12 }}>No completed jobs</p>
           ) : (
-            clientEntries.map(([name, data]) => (
-              <div key={name} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                <span>{name} ({data.jobs})</span>
-                <span style={{ fontFamily: "Oswald", color: "var(--color-success)" }}>${data.revenue.toLocaleString()}</span>
+            clientEntries.map((c) => (
+              <div key={c.name + c.jobs} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span>{c.name} ({c.jobs})</span>
+                <span style={{ fontFamily: "Oswald", color: "var(--color-success)" }}>${c.revenue.toLocaleString()}</span>
               </div>
             ))
           )}
