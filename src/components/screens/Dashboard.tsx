@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
+import UserGuideModal from "../UserGuideModal";
 
 interface Props {
   setPage: (p: string) => void;
@@ -72,6 +73,9 @@ export default function Dashboard({ setPage, openSettings }: Props) {
     if (!d) setGuideDismissed(false);
   }, []);
 
+  // Full user-guide modal — opens from the help button in the header.
+  const [showUserGuide, setShowUserGuide] = useState(false);
+
   // Check if user is clocked in (for Work Vision)
   const isClocked = (() => {
     try { return JSON.parse(localStorage.getItem("c_t_on") || "false"); } catch { return false; }
@@ -85,14 +89,27 @@ export default function Dashboard({ setPage, openSettings }: Props) {
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>{t("dash.welcome")}, {user.name}</h2>
-        <button
-          onClick={openSettings}
-          aria-label="Settings"
-          style={{ background: "none", padding: 6, color: darkMode ? "#888" : "#666", display: "inline-flex", alignItems: "center" }}
-        >
-          <Icon name="settings" size={20} />
-        </button>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <button
+            onClick={() => setShowUserGuide(true)}
+            aria-label="User guide"
+            title="User guide"
+            style={{ background: "none", padding: 6, color: darkMode ? "#888" : "#666", display: "inline-flex", alignItems: "center" }}
+          >
+            <Icon name="help" size={20} />
+          </button>
+          <button
+            onClick={openSettings}
+            aria-label="Settings"
+            title="Settings"
+            style={{ background: "none", padding: 6, color: darkMode ? "#888" : "#666", display: "inline-flex", alignItems: "center" }}
+          >
+            <Icon name="settings" size={20} />
+          </button>
+        </div>
       </div>
+
+      {showUserGuide && <UserGuideModal onClose={() => setShowUserGuide(false)} />}
 
       {/* Getting Started — only for new users */}
       {!guideDismissed && (
