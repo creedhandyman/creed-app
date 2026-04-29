@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material } from "@/lib/types";
@@ -1975,7 +1976,13 @@ function QuoteTab({
                       >
                         ${it.materials.reduce((s, m) => s + (m.c || 0), 0).toFixed(0)}
                       </div>
-                      {expandedMat === it.id && (<>
+                      {/* Portal the overlay+panel to <body> so position:fixed
+                          escapes the parent .fi animation's transform — without
+                          this, top:50% lands at the middle of the room list
+                          (not the viewport) and the modal can open below the
+                          fold. */}
+                      {expandedMat === it.id && typeof document !== "undefined" && createPortal(
+                        <>
                         <div onClick={() => setExpandedMat(null)} style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.4)" }} />
                         <div onClick={(e) => e.stopPropagation()} style={{
                           position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
@@ -2113,7 +2120,9 @@ function QuoteTab({
                             style={{ fontSize: 12, padding: "4px 0", width: "100%", marginTop: 8 }}
                           >Done</button>
                         </div>
-                      </>)}
+                        </>,
+                        document.body,
+                      )}
                     </div>
                     <div style={{ minWidth: 50, textAlign: "right" }}>
                       <div style={{ fontSize: 8 }} className="dim">TOT</div>
