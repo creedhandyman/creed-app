@@ -15,6 +15,7 @@
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "../Icon";
+import ShareCardPanel from "../ShareCardPanel";
 import type { CustomerType, Address, Job } from "@/lib/types";
 
 interface Props {
@@ -514,6 +515,20 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
           </div>
         )}
       </div>
+
+      {/* Share contractor's digital business card with this customer.
+          Different from the per-customer Portal Link above — this one
+          is the public, share-anywhere card that includes tap-to-call,
+          vCard, and QR. Useful for sending a returning customer a way
+          to reach you again or to forward to a referral. */}
+      <ShareCardPanel
+        customer={{
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+          primary_contact: customer.primary_contact,
+        }}
+      />
 
       {/* Addresses */}
       <div className="cd mb">

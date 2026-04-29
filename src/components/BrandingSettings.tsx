@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
+import ShareCardPanel from "./ShareCardPanel";
 import type { Organization } from "@/lib/types";
 
 /**
@@ -198,6 +199,12 @@ export default function BrandingSettings() {
           </div>
         ))}
       </div>
+
+      {/* Share-card / QR — surfaced here so the contractor sees it next
+          to logo + business info. ShareCardPanel resolves the URL from
+          org.site_slug and gracefully degrades to a "set your slug"
+          message when the slug isn't configured yet. */}
+      <ShareCardPanel />
     </>
   );
 }
