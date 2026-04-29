@@ -2,8 +2,8 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
-import { useMarketingTip } from "@/lib/marketing-tip";
 import { Icon } from "../Icon";
+import DashboardCardPreview from "../DashboardCardPreview";
 
 interface Props {
   setPage: (p: string) => void;
@@ -237,35 +237,11 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
       </div>
 
-      {/* Quick tip — admin only, AI-generated marketing recommendation */}
-      {isAdmin && <QuickTip />}
-    </div>
-  );
-}
-
-function QuickTip() {
-  const { tip, loading, refresh } = useMarketingTip();
-  return (
-    <div className="cd" style={{ borderLeft: "3px solid var(--color-warning)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <h4 style={{ fontSize: 13 }}>💡 Quick tip</h4>
-        <button
-          className="bo"
-          onClick={refresh}
-          disabled={loading}
-          aria-label="Refresh tip"
-          style={{ fontSize: 12, padding: "2px 8px" }}
-        >
-          {loading ? "…" : "🔄"}
-        </button>
-      </div>
-      {tip ? (
-        <div style={{ fontSize: 13, lineHeight: 1.55 }}>{tip}</div>
-      ) : loading ? (
-        <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>Thinking up a tip for you…</div>
-      ) : (
-        <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>Tap refresh for a marketing tip.</div>
-      )}
+      {/* Business card — replaces the old marketing-tip widget. Shows a
+          compact preview here on the dashboard; tap to open the full
+          QR + share modal. Admin only because the underlying card
+          settings (logo, slug) are admin-managed. */}
+      {isAdmin && <DashboardCardPreview />}
     </div>
   );
 }
