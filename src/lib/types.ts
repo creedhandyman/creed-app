@@ -216,6 +216,16 @@ export interface QuestPayout {
   created_at?: string;
 }
 
+export interface PortalToken {
+  id: string;
+  org_id: string;
+  customer_id: string;
+  token: string;
+  expires_at: string;
+  used_at?: string | null;
+  created_at?: string;
+}
+
 export interface Material {
   n: string;
   c: number;          // line total (= qty × unitPrice when both are set)
