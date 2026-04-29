@@ -567,13 +567,19 @@ export function validateQuote(rooms: Room[]): Room[] {
       if (/spackle|patch.*wall|wall.*patch|texture.*wall|ceiling.*paint/.test(s)) add("Painting", 6);
       if (/paint|primer|spackle|roller/.test(matNames) && !scores["Plumbing"]) add("Painting", 3);
 
-      // Flooring
-      if (/floor|carpet|lvp|laminate|tile.*floor|vinyl.*floor|transition.*strip|baseboard|quarter.*round|threshold|subfloor/.test(s)) add("Flooring", 10);
-      if (/carpet|lvp|laminate|flooring|baseboard|underlayment/.test(matNames)) add("Flooring", 5);
+      // Flooring — `\brug\b` covers "remove rug", "area rug", "throw rug"
+      // at a slightly elevated score so it wins over a tied Cleaning/Hauling
+      // match for the verb "remove" (rug-pull jobs are flooring work, not
+      // a junk haul-out).
+      if (/floor|carpet|lvp|laminate|tile.*floor|vinyl.*floor|transition.*strip|baseboard|quarter.*round|threshold|subfloor|\brug\b|area rug|throw rug/.test(s)) add("Flooring", 11);
+      if (/carpet|lvp|laminate|flooring|baseboard|underlayment|\brug\b/.test(matNames)) add("Flooring", 5);
 
-      // Electrical
-      if (/outlet|switch|wire|breaker|panel|gfci|light.*fixture|bulb|ceiling.*fan|recessed|dimmer|electrical|wiring/.test(s)) add("Electrical", 10);
-      if (/outlet|switch|bulb|fixture|wire|breaker|gfci/.test(matNames)) add("Electrical", 5);
+      // Electrical — bare `panel` was matching siding/fence/door panels.
+      // Replace with electrical-panel-specific forms. `wire` and `switch`
+      // get word boundaries so "barbed wire fence" / "switch out the rug"
+      // don't trip the classifier.
+      if (/outlet|\bswitch\b|\bwire\b|breaker|gfci|light.*fixture|\bbulb\b|ceiling.*fan|recessed|dimmer|\belectrical\b|wiring|breaker.*panel|electrical.*panel|electric.*panel|main.*panel|sub.?panel|service.*panel|circuit.*panel|panel.*box|panel.*main/.test(s)) add("Electrical", 10);
+      if (/outlet|switch|bulb|fixture|\bwire\b|breaker|gfci/.test(matNames)) add("Electrical", 5);
 
       // Safety
       if (/smoke.*alarm|co.*detect|fire.*ext|carbon.*monoxide|detector|fire.*alarm/.test(s)) add("Safety", 12);
@@ -587,8 +593,11 @@ export function validateQuote(rooms: Room[]): Room[] {
       // Appliances
       if (/oven|stove|dishwasher|fridge|refrigerator|washer|dryer|appliance|microwave|range.*hood|garbage.*disposal/.test(s)) add("Appliances", 10);
 
-      // Exterior
-      if (/exterior|fence|gate|gutter|downspout|porch|deck|siding|landscape|mailbox|stair.*rail|roof/.test(s)) add("Exterior", 10);
+      // Exterior — bump siding/fascia/soffit/hardiplank to 14 so a
+      // "siding panel" item lands here even if a stray keyword would
+      // tie elsewhere. These materials are unambiguous when present.
+      if (/\bsiding\b|hardi.?plank|cement.?board|\bfascia\b|\bsoffit\b|t1.?11|stucco/.test(s)) add("Exterior", 14);
+      if (/exterior|fence|gate|gutter|downspout|porch|deck|landscape|mailbox|stair.*rail|\broof\b|shingle/.test(s)) add("Exterior", 10);
 
       // Compliance — water heater, HVAC filter, doorbell, thermostat, breaker
       // panel inspections. Water heater / hot water tank lands here (not in
