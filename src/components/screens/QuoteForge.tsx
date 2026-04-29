@@ -731,14 +731,43 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const prevWO: WO[] = Array.isArray(prevData.workOrder) ? prevData.workOrder as WO[] : [];
     const prevWOByKey = new Map(prevWO.map((w) => [woKey(w), w]));
     const seenKeys = new Set<string>();
+    // Merge prior work-order items by (room, detail). Take EVERY editable
+    // field — room, detail, action, pri, hrs — from the new/incoming step
+    // `s` so user edits in this session actually persist on save. Inherit
+    // ONLY the completion-state field(s) from the prior saved item; `done`
+    // is owned by Tasks/WorkVision (no UI in QuoteForge), so it must
+    // survive an edit-save round trip. Same goes for any future timestamp
+    // we add alongside `done` (e.g. `completed_at`).
     const workOrder: WO[] = sourceSteps.map((s) => {
       const key = woKey(s);
       seenKeys.add(key);
-      const prior = prevWOByKey.get(key);
-      return {
-        room: s.room, detail: s.detail, action: s.action, pri: s.pri, hrs: s.hrs,
-        done: prior?.done ?? false,
+      const prior = prevWOByKey.get(key) as (WO & { completed_at?: string }) | undefined;
+      const next: WO & { completed_at?: string } = {
+        // editable fields — always from the new step
+        room: s.room,
+        detail: s.detail,
+        action: s.action,
+        pri: s.pri,
+        hrs: s.hrs,
+        // completion-state — inherit from prior, default to "not done" for
+        // freshly-keyed items
+        done: prior?.done === true,
       };
+      if (prior?.completed_at) next.completed_at = prior.completed_at;
+      // Diagnostic: surface when an in-session edit changed any editable
+      // field on a matched (key-stable) item. Helps catch a future
+      // regression where the merge silently reverts to prior values.
+      if (prior) {
+        const changed: string[] = [];
+        if (prior.action !== s.action) changed.push(`action: "${prior.action}" → "${s.action}"`);
+        if (prior.pri !== s.pri) changed.push(`pri: ${prior.pri} → ${s.pri}`);
+        if (prior.hrs !== s.hrs) changed.push(`hrs: ${prior.hrs} → ${s.hrs}`);
+        if (changed.length) {
+          // eslint-disable-next-line no-console
+          console.log(`[QuoteForge.saveJob] WO edit "${s.room} — ${s.detail}":`, changed.join(", "));
+        }
+      }
+      return next;
     });
     // Surface any previously-completed items that no longer exist in the new
     // quote — drop them but warn so we'd notice in the console if a save
