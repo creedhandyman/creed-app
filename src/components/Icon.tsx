@@ -37,6 +37,7 @@ import {
   AlertTriangle,
   Info,
   HelpCircle,
+  Contact,
   Play,
   Square,
   Pause,
@@ -119,6 +120,10 @@ const ICONS: Record<string, LucideIcon> = {
   warn: AlertTriangle,
   info: Info,
   help: HelpCircle,
+  // `card` = Lucide Contact icon: rectangle outlined like a business
+  // card with a person silhouette inside. Used by the dashboard's
+  // share-my-card preview tile.
+  card: Contact,
   start: Play,
   stop: Square,
   pause: Pause,
