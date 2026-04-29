@@ -17,16 +17,24 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Customer, Address, Job, Receipt, Organization } from "@/lib/types";
+import type { Customer, Address, Job, Receipt, Organization, Room } from "@/lib/types";
+import { exportQuotePdf } from "@/lib/export-pdf";
+import { exportJobReport } from "@/lib/export-job-report";
 
 const PRIMARY = "#2E75B6";
+
+type PortalOrg = Pick<
+  Organization,
+  | "id" | "name" | "phone" | "email" | "logo_url" | "address" | "license_num"
+  | "default_rate" | "markup_pct" | "tax_pct" | "trip_fee"
+>;
 
 interface PortalData {
   customer: Customer;
   addresses: Address[];
   jobs: Job[];
   receipts: Receipt[];
-  org: Pick<Organization, "id" | "name" | "phone" | "email" | "logo_url" | "address" | "license_num"> | null;
+  org: PortalOrg | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -234,6 +242,15 @@ export default function PortalPage() {
         ) : (
           <FlatSections jobs={data.jobs} receipts={data.receipts} />
         )}
+
+        {/* Documents — global, across every property. Each row is a
+            downloadable file (signed quote, job report, receipt). */}
+        <DocumentsSection jobs={data.jobs} org={data.org} />
+
+        {/* Project renderings — every photo across every job, surfaced
+            as a thumbnail grid. These are the AI/inspection/work photos
+            attached to the customer's jobs over time. */}
+        <RenderingsSection jobs={data.jobs} />
 
         {/* Footer */}
         <div style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 24 }}>
@@ -487,6 +504,314 @@ function PhotoStrip({ label, photos }: { label: string; photos: { url: string; l
           </a>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ─── Documents ─────────────────────────────────────────────────────
+ *
+ * One row per downloadable file across every job. Quote and Job Report
+ * regenerate the same print-ready PDF the contractor uses internally
+ * (no separate PDF storage — these files are template-driven). Receipts
+ * link to the existing /status page since that's where the signed
+ * approval, payment record, and worklist already live.
+ */
+type DocRow = {
+  id: string;
+  type: "quote" | "report" | "receipt";
+  label: string;
+  date: string;
+  job: Job;
+  total: number;
+};
+
+function buildDocRows(jobs: Job[]): DocRow[] {
+  const rows: DocRow[] = [];
+  for (const job of jobs) {
+    const dateBase =
+      job.signature_date ||
+      job.approved_at?.split("T")[0] ||
+      job.job_date ||
+      (job.created_at || "").split("T")[0] ||
+      "";
+
+    // Quote PDF — surfaced for any job past the lead stage. The signed
+    // version is implied when approved_at / client_signature is set; we
+    // label the row that way so the customer knows it's the executed
+    // copy, not a draft estimate.
+    if (job.status !== "lead" && (job.total > 0 || job.client_signature || job.approved_at)) {
+      const signed = !!(job.approved_at || job.client_signature);
+      rows.push({
+        id: `${job.id}:quote`,
+        type: "quote",
+        label: signed ? "Signed Quote" : "Estimate / Quote",
+        date: dateBase,
+        job,
+        total: job.total || 0,
+      });
+    }
+
+    // Job report — once work is complete or beyond.
+    if (["complete", "invoiced", "paid"].includes(job.status)) {
+      rows.push({
+        id: `${job.id}:report`,
+        type: "report",
+        label: "Job Completion Report",
+        date: dateBase,
+        job,
+        total: job.total || 0,
+      });
+    }
+
+    // Receipt / invoice — paid jobs link to /status (which renders the
+    // amount, paid date, and signed work order). Invoiced-but-unpaid
+    // jobs still get a row so the customer can find the invoice without
+    // hunting through Jobs.
+    if (job.status === "paid" || job.status === "invoiced") {
+      rows.push({
+        id: `${job.id}:receipt`,
+        type: "receipt",
+        label: job.status === "paid" ? "Receipt" : "Invoice",
+        date: dateBase,
+        job,
+        total: job.total || 0,
+      });
+    }
+  }
+  rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  return rows;
+}
+
+function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null }) {
+  const rows = useMemo(() => buildDocRows(jobs), [jobs]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const clearBusy = () => setTimeout(() => setBusyId(null), 1200);
+
+  if (rows.length === 0) return null;
+
+  const openQuote = (doc: DocRow) => {
+    const job = doc.job;
+    let rooms: Room[] = [];
+    let workers: { id: string; name: string }[] = [];
+    let photos: { url: string; label: string; type: string }[] = [];
+    try {
+      const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+      rooms = (data?.rooms || []) as Room[];
+      workers = (data?.workers || []).map((w: { id?: string; name?: string }) => ({
+        id: w.id || "",
+        name: w.name || "",
+      }));
+      photos = (data?.photos || []).map((p: { url?: string; label?: string; type?: string }) => ({
+        url: p.url || "",
+        label: p.label || "",
+        type: p.type || "",
+      }));
+    } catch { /* malformed rooms — render with defaults */ }
+
+    setBusyId(doc.id);
+    exportQuotePdf({
+      property: job.property,
+      client: job.client,
+      rooms,
+      rate: org?.default_rate || 55,
+      workers,
+      grandTotal: job.total || 0,
+      totalLabor: job.total_labor || 0,
+      totalMat: job.total_mat || 0,
+      totalHrs: job.total_hrs || 0,
+      trade: job.trade,
+      jobId: job.id,
+      orgName: org?.name,
+      orgPhone: org?.phone,
+      orgEmail: org?.email,
+      orgLicense: org?.license_num,
+      orgAddress: org?.address,
+      orgLogo: org?.logo_url,
+      photos,
+      markupPct: org?.markup_pct,
+      taxPct: org?.tax_pct,
+      tripFee: org?.trip_fee,
+      statusUrl: typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : "",
+    });
+    clearBusy();
+  };
+
+  const openReport = (doc: DocRow) => {
+    const job = doc.job;
+    let workerNames: string[] = [];
+    try {
+      const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+      workerNames = (data?.workers || [])
+        .map((w: { name?: string }) => w?.name || "")
+        .filter(Boolean);
+    } catch { /* */ }
+    setBusyId(doc.id);
+    exportJobReport({
+      job,
+      orgName: org?.name || "",
+      orgPhone: org?.phone || "",
+      orgEmail: org?.email || "",
+      orgLicense: org?.license_num || "",
+      orgAddress: org?.address || "",
+      orgLogo: org?.logo_url,
+      workerNames,
+    });
+    clearBusy();
+  };
+
+  return (
+    <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 12, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 4px" }}>
+        📄 Documents
+      </h3>
+      <div style={{ fontSize: 11, color: "#666", marginBottom: 10 }}>
+        Tap a row to open a printable PDF. Use your browser to save or share.
+      </div>
+      <div style={{ background: "#0a0a0f", border: "1px solid #1e1e2e", borderRadius: 8, overflow: "hidden" }}>
+        {rows.map((row, i) => {
+          const busy = busyId === row.id;
+          const tint =
+            row.type === "quote" ? PRIMARY :
+            row.type === "report" ? "#00cc66" :
+            "#9b59b6";
+          const icon = row.type === "quote" ? "📄" : row.type === "report" ? "📋" : "🧾";
+          return (
+            <div
+              key={row.id}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 12px",
+                borderTop: i === 0 ? "none" : "1px solid #1e1e2e",
+              }}
+            >
+              <div style={{
+                width: 32, height: 32, borderRadius: 6,
+                background: tint + "22", color: tint,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 14, flexShrink: 0,
+              }}>
+                {icon}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: "#e2e2e8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {row.label} — {row.job.property || "(no address)"}
+                </div>
+                <div style={{ fontSize: 11, color: "#666" }}>
+                  PDF · {row.date}
+                  {row.total > 0 && row.type !== "report" ? ` · ${fmtMoney(row.total)}` : ""}
+                </div>
+              </div>
+              {row.type === "quote" && (
+                <button
+                  onClick={() => openQuote(row)}
+                  disabled={busy}
+                  style={{
+                    flexShrink: 0,
+                    padding: "5px 12px", borderRadius: 6,
+                    border: `1px solid ${tint}`, background: "transparent",
+                    color: tint, fontSize: 11, fontFamily: "Oswald, sans-serif",
+                    textTransform: "uppercase", letterSpacing: ".06em",
+                    cursor: busy ? "wait" : "pointer", opacity: busy ? 0.5 : 1,
+                  }}
+                >
+                  {busy ? "Opening…" : "View"}
+                </button>
+              )}
+              {row.type === "report" && (
+                <button
+                  onClick={() => openReport(row)}
+                  disabled={busy}
+                  style={{
+                    flexShrink: 0,
+                    padding: "5px 12px", borderRadius: 6,
+                    border: `1px solid ${tint}`, background: "transparent",
+                    color: tint, fontSize: 11, fontFamily: "Oswald, sans-serif",
+                    textTransform: "uppercase", letterSpacing: ".06em",
+                    cursor: busy ? "wait" : "pointer", opacity: busy ? 0.5 : 1,
+                  }}
+                >
+                  {busy ? "Opening…" : "View"}
+                </button>
+              )}
+              {row.type === "receipt" && (
+                <a
+                  href={`/status?job=${row.job.id}`}
+                  style={{
+                    flexShrink: 0,
+                    padding: "5px 12px", borderRadius: 6,
+                    border: `1px solid ${tint}`, background: "transparent",
+                    color: tint, fontSize: 11, fontFamily: "Oswald, sans-serif",
+                    textTransform: "uppercase", letterSpacing: ".06em",
+                    textDecoration: "none",
+                  }}
+                >
+                  Open
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RenderingsSection({ jobs }: { jobs: Job[] }) {
+  // Project photos across every job. We treat them all as "renderings"
+  // here since to the customer they're all images of their property.
+  // We keep the per-job grouping so they can tell which property a
+  // shot belongs to when there are multiple.
+  const groups = useMemo(() => {
+    const out: { jobId: string; property: string; photos: { url: string; type: string; label?: string }[] }[] = [];
+    for (const j of jobs) {
+      const ps = extractPhotos(j);
+      if (ps.length) out.push({ jobId: j.id, property: j.property || "(no address)", photos: ps });
+    }
+    return out;
+  }, [jobs]);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 12, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 4px" }}>
+        🖼 Project Renderings
+      </h3>
+      <div style={{ fontSize: 11, color: "#666", marginBottom: 10 }}>
+        Photos from inspections, work-in-progress, and finished jobs. Tap any image to open it full-size.
+      </div>
+      {groups.map((g) => (
+        <div key={g.jobId} style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
+            {g.property}
+            <span style={{ color: "#555", marginLeft: 6 }}>· {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 6 }}>
+            {g.photos.map((p, i) => (
+              <a
+                key={i}
+                href={p.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={p.label || p.type || ""}
+                style={{ display: "block", borderRadius: 6, overflow: "hidden", border: "1px solid #1e1e2e", aspectRatio: "1", position: "relative" }}
+              >
+                <img
+                  src={p.url}
+                  alt={p.label || ""}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+                />
+                {(p.label || p.type) && (
+                  <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "10px 4px 3px", background: "linear-gradient(transparent, rgba(0,0,0,.85))", fontSize: 10, color: "#ddd", textAlign: "center" }}>
+                    {p.label || p.type}
+                  </div>
+                )}
+              </a>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
