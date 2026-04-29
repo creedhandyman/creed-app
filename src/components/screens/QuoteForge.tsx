@@ -568,6 +568,45 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     }
   };
 
+  /* ── customWorkOrder sync ──
+     When a path adds new items to `rooms` (AI Assist, manual Add Item),
+     extend `customWorkOrder` with the auto-generated work-order steps for
+     those new items. Without this, a `customWorkOrder` loaded from the
+     prior save shadows guide.steps in the Guide tab (line:
+     `workOrder={customWorkOrder ?? guide.steps}`), so the additions never
+     appear in the work order — and on save, `sourceSteps = customWorkOrder`
+     drops them from `data.workOrder` entirely. The user sees the items
+     in the Quote tab, edits hrs there, saves, and on next view the work
+     order is missing them. Bernard's repeat-bite repro:
+       1. Open existing job in QuoteForge edit mode (customWorkOrder loaded with N items)
+       2. Use "Additional Work" AI to describe new flooring
+       3. AI returns new rooms; setRooms appends — customWorkOrder is unchanged
+       4. Bernard tries to bump hrs on the new flooring item — either it
+          isn't visible in the Guide tab at all, or his edit doesn't make
+          it into the saved workOrder.
+     This helper appends only NEW (key-not-present) auto-generated steps,
+     so prior user customizations to existing steps are preserved. */
+  const woKeyOf = (s: { room?: string; detail?: string }) =>
+    `${(s.room || "").toLowerCase().trim()}|||${(s.detail || "").toLowerCase().trim()}`;
+  const extendCustomWorkOrderFromRooms = (newRooms: Room[], origin: string) => {
+    setCustomWorkOrder((curr) => {
+      // null = "use guide.steps", which is recomputed every render from
+      // rooms, so it auto-includes new items already. Nothing to do.
+      if (curr === null) return null;
+      const newGuide = makeGuide(newRooms);
+      const seen = new Set(curr.map(woKeyOf));
+      const additions = newGuide.steps.filter((s) => !seen.has(woKeyOf(s)));
+      if (additions.length) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[QuoteForge.${origin}] Appending ${additions.length} new step(s) to customWorkOrder so they survive save:`,
+          additions.map((a) => `${a.room} — ${a.detail} (${a.hrs}h)`),
+        );
+      }
+      return [...curr, ...additions];
+    });
+  };
+
   /* ── Add item ── */
   const addItem = () => {
     if (!nr || !nd) return;
@@ -580,15 +619,15 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       materials: [{ n: "Materials", c: parseFloat(nm) || 0 }],
     };
     const ex = rooms.find((r) => r.name === nr);
-    if (ex) {
-      setRooms(
-        rooms.map((r) =>
+    const newRooms = ex
+      ? rooms.map((r) =>
           r.name === nr ? { ...r, items: [...r.items, it] } : r
         )
-      );
-    } else {
-      setRooms([...rooms, { name: nr, items: [it] }]);
-    }
+      : [...rooms, { name: nr, items: [it] }];
+    setRooms(newRooms);
+    // Same reason as AI Assist: extend customWorkOrder so this new item
+    // shows in the Guide tab and persists into workOrder on save.
+    extendCustomWorkOrderFromRooms(newRooms, "addItem");
     // Track custom material for AI learning. Tag with the property's ZIP so
     // future quotes in the same area weight these prices over out-of-region.
     db.post("price_corrections", {
@@ -726,10 +765,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
     // Use custom work order if user edited it, otherwise auto-generate from guide
     const sourceSteps = customWorkOrder ?? guide.steps;
-    const woKey = (s: { room?: string; detail?: string }) =>
-      `${(s.room || "").toLowerCase().trim()}|||${(s.detail || "").toLowerCase().trim()}`;
     const prevWO: WO[] = Array.isArray(prevData.workOrder) ? prevData.workOrder as WO[] : [];
-    const prevWOByKey = new Map(prevWO.map((w) => [woKey(w), w]));
+    const prevWOByKey = new Map(prevWO.map((w) => [woKeyOf(w), w]));
     const seenKeys = new Set<string>();
     // Merge prior work-order items by (room, detail). Take EVERY editable
     // field — room, detail, action, pri, hrs — from the new/incoming step
@@ -739,7 +776,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // survive an edit-save round trip. Same goes for any future timestamp
     // we add alongside `done` (e.g. `completed_at`).
     const workOrder: WO[] = sourceSteps.map((s) => {
-      const key = woKey(s);
+      const key = woKeyOf(s);
       seenKeys.add(key);
       const prior = prevWOByKey.get(key) as (WO & { completed_at?: string }) | undefined;
       const next: WO & { completed_at?: string } = {
@@ -773,7 +810,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // quote — drop them but warn so we'd notice in the console if a save
     // unexpectedly nukes finished work.
     const droppedDone = prevWO
-      .filter((w) => w.done && !seenKeys.has(woKey(w)))
+      .filter((w) => w.done && !seenKeys.has(woKeyOf(w)))
       .map((w) => `${w.room} — ${w.detail}`);
     if (droppedDone.length) {
       console.warn(
@@ -1463,17 +1500,35 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 if (match) {
                   const parsed = JSON.parse(match[0]);
                   if (parsed.rooms?.length) {
-                    // Merge new rooms into existing
-                    const merged = [...rooms];
-                    parsed.rooms.forEach((newRoom: Room) => {
-                      const existing = merged.find((r) => r.name === newRoom.name);
-                      if (existing) {
-                        existing.items.push(...newRoom.items);
-                      } else {
-                        merged.push(newRoom);
-                      }
+                    // Merge new rooms into existing — IMMUTABLY. The prior
+                    // form did `existing.items.push(...newRoom.items)`, which
+                    // mutated the live `rooms` reference and could leak state
+                    // into other consumers reading the same object.
+                    const newRoomNames = new Set(parsed.rooms.map((r: Room) => r.name));
+                    const updated = rooms.map((r) => {
+                      if (!newRoomNames.has(r.name)) return r;
+                      const incoming = parsed.rooms.find((nr: Room) => nr.name === r.name);
+                      return incoming
+                        ? { ...r, items: [...r.items, ...incoming.items] }
+                        : r;
                     });
-                    setRooms(validateQuote(merged));
+                    const existingNames = new Set(rooms.map((r) => r.name));
+                    const newRooms = parsed.rooms.filter((r: Room) => !existingNames.has(r.name));
+                    const merged = [...updated, ...newRooms];
+                    const validated = validateQuote(merged);
+                    setRooms(validated);
+                    // Critical: customWorkOrder is a snapshot of the prior
+                    // saved workOrder. The Guide tab reads `customWorkOrder ??
+                    // guide.steps`, so if we leave customWorkOrder alone, the
+                    // newly-added rooms items are invisible there and the
+                    // saveJob merge (sourceSteps = customWorkOrder) drops
+                    // them from the saved workOrder entirely. Extend it now
+                    // so the additions show up AND survive save.
+                    extendCustomWorkOrderFromRooms(validated, "AIAssist");
+                    // eslint-disable-next-line no-console
+                    console.log(
+                      `[QuoteForge.AIAssist] AI returned ${parsed.rooms.length} room(s) with ${parsed.rooms.reduce((n: number, r: Room) => n + r.items.length, 0)} item(s); merged into existing quote.`,
+                    );
                     useStore.getState().showToast("AI added items to your quote", "success");
                   }
                 }
