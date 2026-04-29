@@ -600,13 +600,35 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const border = darkMode ? "#1e1e2e" : "#eee";
   const [section, setSection] = useState<"tasks" | "guide" | "notes" | "photos">("tasks");
 
-  // Swipe between tabs
+  // Swipe between tabs. The original implementation only tracked X and
+  // fired on >60px horizontal drift, which meant a casual scroll or a
+  // tap with a drift would randomly switch tabs (especially on the
+  // Guide tab where the user is reading and tapping checkboxes). We
+  // now require a clear horizontal-dominant gesture: ≥80px X drift,
+  // X drift ≥ 1.6× Y drift, started outside an interactive element,
+  // and finished within ~600ms so a slow page-scroll doesn't count.
   const sections: ("tasks" | "guide" | "notes" | "photos")[] = ["tasks", "guide", "notes", "photos"];
-  const touchStart = useRef<number>(0);
+  const touchStart = useRef<{ x: number; y: number; t: number; ok: boolean }>({ x: 0, y: 0, t: 0, ok: false });
   const swipeTab = (dir: number) => {
     const idx = sections.indexOf(section);
     const next = idx + dir;
     if (next >= 0 && next < sections.length) setSection(sections[next]);
+  };
+  const SWIPE_THRESHOLD_X = 80;
+  const SWIPE_AXIS_RATIO = 1.6;
+  const SWIPE_MAX_MS = 600;
+  // Skip swipe handling if the touch started on an interactive
+  // element — prevents tapping a checkbox / button / textarea from
+  // ever getting interpreted as the start of a swipe.
+  const isInteractiveTarget = (el: EventTarget | null): boolean => {
+    let n = el as HTMLElement | null;
+    while (n) {
+      const tag = n.tagName;
+      if (tag === "BUTTON" || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "A" || tag === "LABEL") return true;
+      if (n.getAttribute && n.getAttribute("role") === "button") return true;
+      n = n.parentElement;
+    }
+    return false;
   };
 
   // Sort work orders: HIGH first, then MED, then LOW, completed at bottom.
@@ -812,12 +834,31 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         ))}
       </div>
 
-      {/* Swipeable content area */}
+      {/* Swipeable content area — see swipe constants above for the
+          axis-lock + threshold rules that prevent stray taps from
+          switching tabs. */}
       <div
-        onTouchStart={(e) => { touchStart.current = e.touches[0].clientX; }}
+        onTouchStart={(e) => {
+          if (e.touches.length !== 1) { touchStart.current.ok = false; return; }
+          const t = e.touches[0];
+          touchStart.current = {
+            x: t.clientX,
+            y: t.clientY,
+            t: Date.now(),
+            ok: !isInteractiveTarget(e.target),
+          };
+        }}
         onTouchEnd={(e) => {
-          const diff = e.changedTouches[0].clientX - touchStart.current;
-          if (Math.abs(diff) > 60) swipeTab(diff < 0 ? 1 : -1);
+          const start = touchStart.current;
+          if (!start.ok) return;
+          const t = e.changedTouches[0];
+          const dx = t.clientX - start.x;
+          const dy = t.clientY - start.y;
+          const dt = Date.now() - start.t;
+          if (dt > SWIPE_MAX_MS) return;
+          if (Math.abs(dx) < SWIPE_THRESHOLD_X) return;
+          if (Math.abs(dx) < Math.abs(dy) * SWIPE_AXIS_RATIO) return;
+          swipeTab(dx < 0 ? 1 : -1);
         }}
       >
 
