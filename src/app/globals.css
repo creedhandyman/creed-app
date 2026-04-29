@@ -600,6 +600,12 @@ button:focus-visible {
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
+  /* In bottom-nav mode there's no top nav consuming visual space,
+     so the page H2 doesn't need the same generous top padding the
+     desktop / side-nav layouts use. body's env(safe-area-inset-top)
+     still clears the iOS notch — this just removes the extra
+     drift below it that pushed every screen's header low. */
+  padding-top: 4px;
 }
 
 /* ─── PRINT ────────────────────────────────────────── */
