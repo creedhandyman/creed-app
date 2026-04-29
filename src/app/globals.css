@@ -432,6 +432,19 @@ button:focus-visible {
 .scale-in { animation: scaleIn var(--t-base) var(--ease-spring) forwards; }
 
 /* ─── NAV ──────────────────────────────────────────── */
+
+/* Single source of truth for the bottom-nav clearance math. The nav
+   is `--nav-h` tall, plus iOS home-indicator safe area, plus the
+   `--nav-buffer` we want above the last bit of content. Both
+   `.nav-bottom .mc` margin-bottom AND `.sb` sticky-bottom offset
+   read these — without that, they drift apart and one ends up
+   clipped behind the nav (which is what bit Bernard's
+   Inspector/Quests screens). */
+:root {
+  --nav-h: 56px;
+  --nav-buffer: 24px;
+}
+
 .vnav {
   position: fixed;
   right: 0;
@@ -539,10 +552,10 @@ button:focus-visible {
    scrolls underneath. */
 .sb {
   position: sticky;
-  /* nav height (56) + iOS home indicator (env safe-area) + 16px gap.
-     The 16px matches the global .mc bottom buffer so the sticky pin
-     and the page's natural bottom edge land at the same level. */
-  bottom: calc(56px + env(safe-area-inset-bottom) + 16px);
+  /* Same math as .nav-bottom .mc margin-bottom so the sticky pin and
+     the page's natural bottom edge land at the same level. Read from
+     CSS vars so the two can't drift apart. */
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--nav-buffer));
   z-index: 5;
   padding: 10px 4px 6px;
   margin: 0 -4px;
@@ -573,7 +586,11 @@ button:focus-visible {
   left: 0;
   right: 0;
   width: 100%;
-  height: 56px;
+  /* Box-sizing is border-box, so adding padding-bottom: env(safe-area)
+     would eat from --nav-h and squish the button row on iOS PWA.
+     Add the safe-area to the box height instead so the 44px button
+     row always has its 44px regardless of home-indicator. */
+  height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   flex-direction: row;
   justify-content: center;
   padding: 0 8px env(safe-area-inset-bottom);
@@ -590,13 +607,24 @@ button:focus-visible {
   font-size: 9px;
   min-width: 44px;
 }
+/* Logo button carries an inline `width: 52, height: 52` for the
+   right-nav layout. In bottom-nav we need it to match the row's
+   44px button height — !important wins over the inline style. */
+.nav-bottom .vnav button[aria-label="Dashboard"] {
+  width: 44px !important;
+  height: 44px !important;
+}
 .nav-bottom .vnav img { width: 24px; height: 24px; }
+.nav-bottom .vnav button[aria-label="Dashboard"] img {
+  width: 22px;
+  height: 22px;
+}
 .nav-bottom .mc {
   margin-right: 0;
-  /* 56px nav + 16px buffer + safe-area for the home indicator.
-     Buffer prevents content (Save buttons, Add Task forms, sticky
-     tip lines) from sitting flush against the nav. */
-  margin-bottom: calc(56px + 16px + env(safe-area-inset-bottom));
+  /* Nav height + safe-area + buffer (see :root vars). Reads the same
+     numbers .sb does so a sticky-bottom pin and the page's natural
+     last-element clearance line up. */
+  margin-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--nav-buffer));
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
