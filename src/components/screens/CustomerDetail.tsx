@@ -60,6 +60,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
   const customer = useStore((s) => s.customers.find((c) => c.id === customerId));
   const allAddresses = useStore((s) => s.addresses);
   const jobs = useStore((s) => s.jobs);
+  const org = useStore((s) => s.org);
   const upsertCustomer = useStore((s) => s.upsertCustomer);
   const deleteCustomer = useStore((s) => s.deleteCustomer);
   const upsertAddress = useStore((s) => s.upsertAddress);
@@ -67,6 +68,100 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
   const showConfirm = useStore((s) => s.showConfirm);
   const showToast = useStore((s) => s.showToast);
   const darkMode = useStore((s) => s.darkMode);
+
+  // Portal magic-link generation. We hold the most recent link in
+  // local state so the user can text/email/copy it without a fresh
+  // round-trip — useful when they hit "Text" but their phone's SMS
+  // app fails to open and they want to fall back to email or copy.
+  const [portalLink, setPortalLink] = useState<string>("");
+  const [portalBusy, setPortalBusy] = useState(false);
+
+  const generatePortalLink = async (): Promise<string | null> => {
+    if (!customer || !org?.id) {
+      showToast("Missing customer or org context", "error");
+      return null;
+    }
+    setPortalBusy(true);
+    try {
+      const res = await fetch("/api/portal/send-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId: customer.id, orgId: org.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data?.error || "Couldn't generate portal link", "error");
+        return null;
+      }
+      const link = (data as { link?: string }).link || "";
+      setPortalLink(link);
+      return link;
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
+      return null;
+    } finally {
+      setPortalBusy(false);
+    }
+  };
+
+  const sendPortalSms = async () => {
+    if (!customer?.phone) {
+      showToast("No phone on file for this customer", "warning");
+      return;
+    }
+    const link = portalLink || (await generatePortalLink());
+    if (!link) return;
+    const orgName = org?.name || "us";
+    const message = `Your customer portal link from ${orgName}: ${link} (expires in 14 days)`;
+    try {
+      const res = await fetch("/api/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: customer.phone, body: message }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Twilio fail-open — fall back to opening the native SMS app
+        // so Bernard can still get the link to the customer.
+        window.location.href = `sms:${customer.phone}?body=${encodeURIComponent(message)}`;
+        showToast(data?.error || "Twilio send failed — opening SMS app", "warning");
+        return;
+      }
+      showToast(`Texted ${customer.name}`, "success");
+    } catch (e) {
+      window.location.href = `sms:${customer.phone}?body=${encodeURIComponent(message)}`;
+      showToast(e instanceof Error ? e.message : "Falling back to SMS app", "warning");
+    }
+  };
+
+  const sendPortalEmail = async () => {
+    if (!customer?.email) {
+      showToast("No email on file for this customer", "warning");
+      return;
+    }
+    const link = portalLink || (await generatePortalLink());
+    if (!link) return;
+    const orgName = org?.name || "us";
+    const subject = encodeURIComponent(`Your portal link from ${orgName}`);
+    const body = encodeURIComponent(
+      `Hi ${customer.primary_contact || customer.name},\n\n` +
+      `Here's your customer portal link — quotes, scheduled jobs, and history all in one place:\n\n${link}\n\n` +
+      `(This single-use link expires in 14 days. Tap it from any phone or computer.)\n\n` +
+      `— ${orgName}`,
+    );
+    window.location.href = `mailto:${customer.email}?subject=${subject}&body=${body}`;
+  };
+
+  const copyPortalLink = async () => {
+    const link = portalLink || (await generatePortalLink());
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast("Portal link copied", "success");
+    } catch {
+      showToast("Couldn't copy — long-press the link below to copy manually", "warning");
+    }
+  };
 
   const addresses = useMemo(
     () => allAddresses
@@ -365,6 +460,58 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
               style={{ width: "100%", minHeight: 60, fontSize: 13 }}
             />
           </>
+        )}
+      </div>
+
+      {/* Portal */}
+      <div className="cd mb">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <h4 style={{ fontSize: 13, margin: 0 }}>🔗 Portal Link</h4>
+          {portalBusy && <span className="dim" style={{ fontSize: 11 }}>Generating…</span>}
+        </div>
+        <p className="dim" style={{ fontSize: 12, margin: "0 0 10px" }}>
+          Single-use magic link (14-day expiry). Customer can view their quotes, scheduled jobs, completed work, and request new work — all under your branding.
+        </p>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button
+            className="bb"
+            onClick={sendPortalSms}
+            disabled={portalBusy || !customer.phone}
+            style={{ fontSize: 12, padding: "5px 10px", opacity: customer.phone ? 1 : 0.4 }}
+            title={customer.phone ? `Text ${customer.phone}` : "No phone on file"}
+          >
+            📱 Text {customer.phone ? `(${customer.phone})` : ""}
+          </button>
+          <button
+            className="bo"
+            onClick={sendPortalEmail}
+            disabled={portalBusy || !customer.email}
+            style={{ fontSize: 12, padding: "5px 10px", opacity: customer.email ? 1 : 0.4 }}
+            title={customer.email ? `Email ${customer.email}` : "No email on file"}
+          >
+            ✉ Email
+          </button>
+          <button
+            className="bo"
+            onClick={copyPortalLink}
+            disabled={portalBusy}
+            style={{ fontSize: 12, padding: "5px 10px" }}
+          >
+            📋 Copy
+          </button>
+        </div>
+        {portalLink && (
+          <div
+            style={{
+              marginTop: 10, padding: 8, borderRadius: 6,
+              background: darkMode ? "#0f0f18" : "#f7f7fa",
+              border: `1px solid ${border}`,
+              fontSize: 11, wordBreak: "break-all",
+              fontFamily: "monospace",
+            }}
+          >
+            {portalLink}
+          </div>
         )}
       </div>
 
