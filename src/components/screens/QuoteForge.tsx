@@ -48,7 +48,7 @@ async function compressImage(file: File, maxSize = 800): Promise<string> {
 function AiLoadingDisplay({ status }: { status: string }) {
   const steps = [
     { label: "Reading document", icon: "📄", match: /reading|rendering|render(ed|ing)/i },
-    { label: "Analyzing content", icon: "🔍", match: /analyz|sending|text|batch/i },
+    { label: "Analyzing content", icon: "🔍", match: /analyz|sending|text|batch|upload/i },
     { label: "Identifying repairs", icon: "🔧", match: /identify|photo|vision/i },
     { label: "Estimating costs", icon: "💰", match: /estimat|pric|cost/i },
     { label: "Building quote", icon: "📋", match: /build|generat|compil|merg/i },
@@ -64,14 +64,64 @@ function AiLoadingDisplay({ status }: { status: string }) {
   const stepRatio = stepTotal > 0 ? stepCur / stepTotal : 0;
   const isBatch = /batch/i.test(status);
   const isRender = /render/i.test(status);
+  const isMerging = /merg/i.test(status);
+  // The AI is the long, silent phase — the call's gone out and we won't
+  // hear back for tens of seconds (potentially minutes for big PDFs). We
+  // detect it by elimination: there's a status, but it's not one of the
+  // streaming-progress phases.
+  const isAiWait = !!status && !isRender && !isBatch && !isMerging;
 
   const activeIdx = steps.findIndex((s) => s.match.test(status));
   const currentStep = activeIdx >= 0 ? activeIdx : status ? 1 : 0;
 
+  // Remember the largest count we've seen this session — typically the PDF
+  // page count (or the Quick Quote photo count). After rendering wraps,
+  // the AI-wait phase gets no progress events; we use this number to size
+  // the time-based crawler so a 40-page PDF paces over ~2 min instead of
+  // racing to 99% in 20s.
+  //
+  // We pick up two shapes:
+  //   • "X of Y"   — the explicit progress format (PDF render, batch loops)
+  //   • "N page/photo(s)" — the post-render "Sending 40 pages…" / Quick Quote
+  //     "Preparing 12 photos…" cases where the total is announced once.
+  const countMatch = status.match(/(\d+)\s+(?:page|photo)/i);
+  const announcedCount = countMatch ? parseInt(countMatch[1]) : 0;
+  const [seenTotal, setSeenTotal] = useState(0);
+  useEffect(() => {
+    const candidate = Math.max(stepTotal, announcedCount);
+    if (candidate > seenTotal) setSeenTotal(candidate);
+  }, [stepTotal, announcedCount, seenTotal]);
+
+  // Mark the moment the AI-wait phase started so the crawler knows where
+  // to anchor. Reset whenever we drop back into a streaming-progress phase
+  // (e.g. inspection re-batches) so each AI call gets its own timer.
+  const aiStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (isAiWait && aiStartRef.current === null) {
+      aiStartRef.current = Date.now();
+    } else if ((isRender || isBatch) && aiStartRef.current !== null) {
+      aiStartRef.current = null;
+    }
+  }, [isAiWait, isRender, isBatch]);
+
+  // Tick every 200ms so time-derived calculations re-render.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(id);
+  }, []);
+
+  // Estimated AI-wait duration. Tuned from observation: ~3s per page on
+  // Anthropic's vision pipeline + ~15s baseline for the text-only call.
+  // 40 pages → ~135s, matching the ~2 min Bernard sees on real PDFs.
+  // Cap so a 100-page edge case doesn't stretch into stalled-feeling territory.
+  const expectedAiMs = Math.min(300_000, 15_000 + seenTotal * 3_000);
+  const aiElapsed = aiStartRef.current ? now - aiStartRef.current : 0;
+  const aiRatio = Math.min(1, aiElapsed / expectedAiMs);
+
   // Map progress to a meaningful range: rendering owns 0-30%, batching owns
-  // 30-90%, merging fills the rest. So the bar advances steadily through the
-  // whole pipeline rather than jumping.
-  const isMerging = /merg/i.test(status);
+  // 30-90%, merging fills the rest. The AI wait covers the 30→92 gap, paced
+  // over expectedAiMs so the bar reflects actual job size.
   let barPct: number;
   if (isMerging) {
     barPct = 95;
@@ -79,22 +129,22 @@ function AiLoadingDisplay({ status }: { status: string }) {
     barPct = stepRatio * 30;
   } else if (isBatch && stepTotal > 0) {
     barPct = 30 + stepRatio * 60;
+  } else if (isAiWait) {
+    // Time-paced from when the AI wait began. We stop at 92 (not 95) so
+    // the merging-step jump still feels like progress when results land.
+    barPct = 30 + aiRatio * 62;
   } else {
     barPct = ((currentStep + 1) / steps.length) * 100;
   }
   barPct = Math.max(5, Math.min(100, barPct));
 
-  // Auto-crawl toward 99% so the bar keeps moving during the static AI wait
-  // (after the doc renders, the next status update can be 15-30s away). Real
-  // progress overrides whenever it's ahead — we just take max() below.
-  const [crawl, setCrawl] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setCrawl((p) => Math.min(99, p + Math.max(0.15, (99 - p) * 0.012)));
-    }, 200);
-    return () => clearInterval(id);
-  }, []);
-  const displayPct = Math.min(99, Math.max(barPct, crawl));
+  // Safety crawler — guarantees the bar nudges forward even if status
+  // events stall entirely. Targets 90% over 4 min as a conservative ceiling
+  // so it never overtakes the real bar on normal jobs but keeps motion on
+  // the screen if something weird happens.
+  const startedRef = useRef(now);
+  const safetyCrawl = Math.min(90, ((now - startedRef.current) / 240_000) * 90);
+  const displayPct = Math.min(99, Math.max(barPct, safetyCrawl));
 
   return (
     <div style={{ padding: 20, textAlign: "center" }}>
@@ -148,9 +198,13 @@ function AiLoadingDisplay({ status }: { status: string }) {
       {/* Numeric percent + batch counter beneath the bar */}
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 4, color: "var(--color-primary)", fontFamily: "Oswald" }}>
         <span>{Math.round(displayPct)}%</span>
-        {stepTotal > 0 && (
+        {stepTotal > 0 ? (
           <span>{isBatch ? "Batch" : isRender ? "Page" : "Step"} {stepCur} of {stepTotal}</span>
-        )}
+        ) : isAiWait && seenTotal > 0 ? (
+          <span>
+            {seenTotal} pages · ~{Math.max(1, Math.round((expectedAiMs - aiElapsed) / 1000))}s
+          </span>
+        ) : null}
       </div>
 
       <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
