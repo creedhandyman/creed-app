@@ -14,6 +14,7 @@ import {
   calculateCost,
   validateQuote,
   extractZip,
+  uploadDataUriToBucket,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
@@ -357,34 +358,40 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setParseStatus("Analyzing with AI...");
 
     try {
-      // Render every PDF page / send every photo. aiParsePdf chunks images
-      // into batches under the Vercel 4.5MB body limit and merges the results.
+      // Render every PDF page / send every photo. We upload each PDF render
+      // to Supabase first and pass URLs to the AI — that dodges Vercel's
+      // 4.5 MB serverless body limit, so we can ship every page (up to
+      // Anthropic's per-call image cap) instead of dropping pages past 20.
       let images: string[] = [];
       if (file && file.name.endsWith(".pdf")) {
         setParseStatus("Rendering PDF pages...");
         try {
-          images = await renderPdfPages(file, Number.MAX_SAFE_INTEGER, 1.0,
+          const renders = await renderPdfPages(file, Number.MAX_SAFE_INTEGER, 1.0,
             (rendered, total) => setParseStatus(`Rendering PDF pages ${rendered} of ${total}...`));
-          setParseStatus(`Rendered ${images.length} page${images.length === 1 ? "" : "s"}, sending to AI...`);
+          setParseStatus(`Uploading ${renders.length} page${renders.length === 1 ? "" : "s"} for AI...`);
+          // Parallel upload — one HTTP RTT instead of N. Each upload that
+          // fails falls back to inline base64 (the original budget-limited
+          // path still works, it just caps at ~20 pages).
+          const uploaded = await Promise.all(renders.map((r) => uploadDataUriToBucket(r)));
+          images = uploaded.map((url, i) => url || renders[i]);
+          const urlCount = uploaded.filter(Boolean).length;
+          setParseStatus(`Rendered ${images.length} page${images.length === 1 ? "" : "s"} (${urlCount} via URL), sending to AI...`);
         } catch (e) {
           console.warn("Failed to render PDF pages:", e);
           setParseStatus("Sending text only to AI...");
         }
       } else if (quickPhotos.length > 0) {
-        // Photos are now URLs — fetch and convert to base64 for AI
-        setParseStatus(`Loading ${quickPhotos.length} photo${quickPhotos.length === 1 ? "" : "s"} for AI...`);
+        // Quick Quote photos are already public Supabase URLs — pass them
+        // straight through. Inlined data URIs (rare) get uploaded so they
+        // don't bloat the request body.
+        setParseStatus(`Preparing ${quickPhotos.length} photo${quickPhotos.length === 1 ? "" : "s"} for AI...`);
         for (const url of quickPhotos) {
-          try {
-            if (url.startsWith("data:")) { images.push(url); continue; }
-            const resp = await fetch(url);
-            const blob = await resp.blob();
-            const b64 = await new Promise<string>((res) => {
-              const reader = new FileReader();
-              reader.onloadend = () => res(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-            images.push(b64);
-          } catch { /* skip failed fetches */ }
+          if (url.startsWith("http")) { images.push(url); continue; }
+          if (url.startsWith("data:")) {
+            const uploaded = await uploadDataUriToBucket(url);
+            images.push(uploaded || url); // fall back to base64 path on upload fail
+            continue;
+          }
         }
         setParseStatus(`Sending text + ${images.length} photo${images.length === 1 ? "" : "s"} to AI...`);
       } else {

@@ -1,5 +1,5 @@
 import type { Room, RoomItem, Material, InspectionRoom } from "./types";
-import { db } from "./supabase";
+import { db, supabase } from "./supabase";
 import { MATERIALS_DB } from "./materials-db";
 
 /* ====== PDF LOADING ====== */
@@ -77,6 +77,34 @@ export async function readPdf(file: File): Promise<string> {
 }
 
 /* ====== PDF PAGE RENDERING ====== */
+
+// Upload a base64 `data:` URI to the public `receipts` bucket and return a
+// fetchable HTTPS URL. Used to swap inline base64 images for URL-sourced
+// images on the AI call so we dodge Vercel's 4.5 MB serverless body limit
+// and can ship every page of a long inspection PDF in one request. Falls
+// back to null on any failure — the caller should keep the original data
+// URI and let the (smaller) base64 path handle it.
+//
+// Note: these uploads are ephemeral by intent — orphans accumulate under
+// `ai-renders/` and can be swept by a periodic cleanup job. For Bernard's
+// scale (a handful of PDFs/day) the storage cost is rounding-error.
+export async function uploadDataUriToBucket(dataUri: string): Promise<string | null> {
+  try {
+    const match = dataUri.match(/^data:(image\/[\w+]+);base64,(.+)$/);
+    if (!match) return null;
+    const [, mime, b64] = match;
+    const ext = mime.split("/")[1].split("+")[0]; // "jpeg" from "image/jpeg"
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: mime });
+    const path = `ai-renders/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error } = await supabase.storage.from("receipts").upload(path, blob);
+    if (error) return null;
+    const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch {
+    return null;
+  }
+}
 
 export async function renderPdfPages(
   file: File,
@@ -310,19 +338,25 @@ PAINTING — hours for experienced painters (prep, patch, prime, 2 coats, cleanu
 IMPORTANT: A full-house repaint of a 3-bedroom home = 40-50 total paint hours. If your paint hours add up to less than 35h for a full house, increase them.
 
 FLOORING — create ONE line item per room. Do NOT split into separate demo/prep/install items.
-Hours INCLUDE old floor removal, subfloor prep, AND new floor installation:
-- LVP/Laminate: 1 hour per 40-50 sqft (example: 450 sqft = 10h total, NOT 24h split across 3 items)
-- Carpet: 1 hour per 60 sqft (includes pad)
+Hours INCLUDE old floor removal, subfloor prep, AND new floor installation. These are MINIMUMS — never quote fewer hours than the per-sqft formula gives you, regardless of labor rate:
+- LVP/Laminate (install only, existing subfloor good): 1 hour per 35 sqft
+- LVP/Laminate REPLACING old flooring (carpet rip, tear-out, or any demo): 1 hour per 28 sqft (tear-out + haul-out adds real time — do not skip it)
+- Carpet install: 1 hour per 50 sqft (includes pad)
 - Tile: 1 hour per 15-20 sqft
 - Baseboard per room: 1.5-2.5h
-FLOORING LABOR FLOOR: Total flooring labor for a room (hours × labor rate, in dollars) MUST average AT LEAST $2.50/sqft. If your hour estimate above produces less than $2.50/sqft of labor at the user's labor rate, RAISE the hours until the labor charge is ≥ $2.50/sqft × room sqft. (At a $55/hr labor rate this works out to ~1h per 22 sqft minimum for any flooring type; tile usually clears the floor naturally, LVP and carpet often need to be bumped up.)
+- Big rooms (≥600 sqft) lean toward the lower sqft-per-hour figure (more hours), not the higher one — straight runs are faster per plank but cuts at perimeter, transitions, and disposal scale linearly with area.
+EXAMPLES (apply BOTH the per-sqft minimum AND the dollar floor below, take whichever is HIGHER):
+- 450 sqft LVP, no demo: 450/35 = ~13h
+- 450 sqft LVP replacing carpet: 450/28 = ~16h
+- 920 sqft LVP replacing carpet: 920/28 = ~33h (NOT 17h — rip-out, disposal, and 920 sqft of cuts/transitions take real time)
+FLOORING DOLLAR FLOOR (additional check, AFTER the per-sqft minimum): Total flooring labor for a room (hours × labor rate) MUST also be ≥ $2.50/sqft. If at the user's labor rate the per-sqft hours produce less than that, RAISE hours until labor ≥ $2.50/sqft × room sqft. NEVER LOWER hours below the per-sqft minimum just because the dollar floor is already met — both rules are MINIMUMS, not targets.
 FLOORING MATERIALS — calculate from sqft:
 - LVP/Laminate: $2.00/sqft + 10% waste. Example: 450 sqft = 495 sqft × $2 = $990
 - Underlayment: $0.30/sqft. Example: 450 sqft = $135
 - Transition strips: $15 each × 2-4 per job = $30-60
 - Self-leveling compound: ONLY if report says "uneven subfloor". $35 per 50sqft.
 - Disposal/cleanup: $15 flat
-EXAMPLE: 450 sqft LVP = ONE item: 10h labor + $1,170 materials. NOT three separate items totaling $10,000.
+EXAMPLE: 450 sqft LVP replacing carpet = ONE item: ~16h labor + $1,170 materials. NOT three separate items totaling $10,000, and NOT 10h — that ignores the rip-out and disposal time.
 
 Doors: pre-hung door=2-2.5h, bifold=1.25h, entry door=2.5-3h
 
@@ -610,8 +644,16 @@ export function extractZip(address: string | undefined | null): string {
 // we aim for ~3 MB of image data so the system prompt + corrections + text +
 // JSON overhead all comfortably fit. The count ceiling is a safety net so a
 // flood of tiny thumbnails can't pile 100 images into one prompt.
+//
+// Only applies to inline base64 images. URL-sourced images (uploaded via
+// uploadDataUriToBucket → passed as `https://…`) cost essentially nothing in
+// the request body, so they bypass these caps and we can send all of them
+// up to Anthropic's per-request image limit (BATCH_MAX_URL_COUNT).
 const BATCH_TARGET_BYTES = 3 * 1024 * 1024;
 const BATCH_MAX_COUNT = 20;
+// Anthropic's documented per-request image cap. Plenty of headroom for any
+// inspection PDF Bernard's likely to upload.
+const BATCH_MAX_URL_COUNT = 100;
 
 /**
  * Merge multiple AiParseResult partials into one. Items grouped by trade name
@@ -656,18 +698,33 @@ export async function aiParsePdf(
   // varies per batch). Better to drop pages we can't fit than to ship
   // duplicated quotes. The room-level batching in aiParseInspection is
   // separate and safe — its per-batch text is restricted to those rooms.
-  const trimmed: string[] = [];
-  let totalBytes = 0;
-  for (const img of images) {
-    if (totalBytes + img.length > BATCH_TARGET_BYTES) break;
-    if (trimmed.length >= BATCH_MAX_COUNT) break;
-    trimmed.push(img);
-    totalBytes += img.length;
-  }
-  if (trimmed.length < images.length) {
-    const dropped = images.length - trimmed.length;
-    console.warn(`aiParsePdf: sending ${trimmed.length} of ${images.length} images (${dropped} dropped to fit one call)`);
-    onProgress?.(`Sending ${trimmed.length} of ${images.length} pages (${dropped} skipped to fit one call)...`);
+  //
+  // Two paths:
+  //  • URL-sourced images (`https://…`) — body stays tiny, Anthropic fetches
+  //    each image directly. We can send up to BATCH_MAX_URL_COUNT in one call.
+  //  • Inline base64 (`data:image/…`) — fits under Vercel's 4.5 MB body
+  //    limit; falls back to BATCH_TARGET_BYTES / BATCH_MAX_COUNT trim.
+  const allUrls = images.length > 0 && images.every((img) => img.startsWith("http"));
+  let trimmed: string[];
+  if (allUrls) {
+    trimmed = images.slice(0, BATCH_MAX_URL_COUNT);
+    if (trimmed.length < images.length) {
+      onProgress?.(`Sending ${trimmed.length} of ${images.length} pages (Anthropic per-call limit)...`);
+    }
+  } else {
+    trimmed = [];
+    let totalBytes = 0;
+    for (const img of images) {
+      if (totalBytes + img.length > BATCH_TARGET_BYTES) break;
+      if (trimmed.length >= BATCH_MAX_COUNT) break;
+      trimmed.push(img);
+      totalBytes += img.length;
+    }
+    if (trimmed.length < images.length) {
+      const dropped = images.length - trimmed.length;
+      console.warn(`aiParsePdf: sending ${trimmed.length} of ${images.length} images (${dropped} dropped to fit one call)`);
+      onProgress?.(`Sending ${trimmed.length} of ${images.length} pages (${dropped} skipped to fit one call)...`);
+    }
   }
   return aiParsePdfSingle(text, trimmed, laborRate, licensedTrades, propertyZip);
 }
@@ -790,14 +847,23 @@ async function aiParsePdfSingle(
       }
     } catch { /* corrections not available, continue without */ }
 
-    // Build content array with text + images
+    // Build content array with text + images. Each image is either a
+    // URL-sourced fetch (Anthropic pulls it directly) or inline base64 —
+    // we accept both shapes from the caller so the same path serves PDF
+    // page renders (URL'd via uploadDataUriToBucket) and ad-hoc base64
+    // (e.g. callers that haven't migrated yet).
     const content: Array<
       | { type: "text"; text: string }
       | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+      | { type: "image"; source: { type: "url"; url: string } }
     > = [];
 
     // Add images first so AI sees the visual context
     for (const img of images) {
+      if (img.startsWith("http")) {
+        content.push({ type: "image", source: { type: "url", url: img } });
+        continue;
+      }
       const [header, data] = img.split(",");
       const mediaType = header.match(/image\/([\w]+)/)?.[0] || "image/jpeg";
       content.push({
