@@ -8,6 +8,7 @@ import type { Job } from "@/lib/types";
 import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { Icon } from "../Icon";
+import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
@@ -174,6 +175,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
   const [jobTab, setJobTab] = useState<"active" | "billing" | "paid" | "archive">("active");
   const [open, setOpen] = useState<string | null>(null);
+  // Property typeahead query — drives both the dropdown suggestions
+  // (in <PropertySearch>) and the inline filter on the visible list,
+  // so the list and the typeahead stay in sync.
+  const [searchQuery, setSearchQuery] = useState("");
   // Drives the review-request modal. Set to a job when status transitions
   // to "complete" or "paid" AND the job hasn't had a review request yet.
   const [reviewJob, setReviewJob] = useState<Job | null>(null);
@@ -616,6 +621,43 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         );
       })()}
 
+      {/* Property / job typeahead — searches across the current tab's
+          jobs by property and client. Selecting a suggestion expands
+          that job's row and scrolls it into view. */}
+      <div style={{ marginBottom: 10 }}>
+        <PropertySearch<Job>
+          items={jobs.filter((j) =>
+            jobTab === "archive" ? j.archived
+            : jobTab === "active" ? !j.archived && j.status !== "inspection" && !["complete", "invoiced", "paid"].includes(j.status)
+            : jobTab === "billing" ? !j.archived && (j.status === "complete" || j.status === "invoiced")
+            : !j.archived && j.status === "paid"
+          )}
+          getKey={(j) => j.id}
+          match={(j) => `${j.property || ""} ${j.client || ""} ${j.trade || ""}`}
+          render={(j) => (
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <b>{j.property || "(no address)"}</b>
+                {j.client && <span className="dim"> · {j.client}</span>}
+              </span>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 11, flexShrink: 0 }}>
+                {j.status}
+              </span>
+            </div>
+          )}
+          onSelect={(j) => {
+            setOpen(j.id);
+            // Defer scroll until React commits the expanded row.
+            setTimeout(() => {
+              const el = document.getElementById(`job-row-${j.id}`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 50);
+          }}
+          onQueryChange={setSearchQuery}
+          placeholder="Search jobs by property, client, or trade…"
+        />
+      </div>
+
       {/* Billing tab header */}
       {jobTab === "billing" && jobs.some((j) => j.status === "complete" || j.status === "invoiced") && (
         <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)", padding: 12 }}>
@@ -645,16 +687,23 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
           : jobTab === "billing"
           ? jobs.filter((j) => !j.archived && (j.status === "complete" || j.status === "invoiced"))
           : jobs.filter((j) => !j.archived && j.status === "paid");
+        // Apply the typeahead query as an inline filter so the visible
+        // list narrows as the user types — keeps the dropdown and the
+        // list view in sync.
+        const q = searchQuery.toLowerCase();
+        const queryFiltered = q
+          ? baseFiltered.filter((j) => `${j.property || ""} ${j.client || ""} ${j.trade || ""}`.toLowerCase().includes(q))
+          : baseFiltered;
         // Within the active tab, leads bubble to the top — they're the
         // newest external work and need triage before older quotes.
         const filtered = jobTab === "active"
-          ? [...baseFiltered].sort((a, b) => {
+          ? [...queryFiltered].sort((a, b) => {
               const al = a.status === "lead" ? 0 : 1;
               const bl = b.status === "lead" ? 0 : 1;
               if (al !== bl) return al - bl;
               return (b.created_at || "").localeCompare(a.created_at || "");
             })
-          : baseFiltered;
+          : queryFiltered;
 
         if (!filtered.length) {
           return (
@@ -693,7 +742,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
           })();
 
           return (
-            <div key={j.id} className="cd mb" style={{ borderLeft: `4px solid ${statusColor(j.status)}` }}>
+            <div key={j.id} id={`job-row-${j.id}`} className="cd mb" style={{ borderLeft: `4px solid ${statusColor(j.status)}` }}>
               {/* Collapsed header */}
               <div
                 style={{

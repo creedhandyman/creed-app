@@ -8,6 +8,7 @@
  */
 import { useState } from "react";
 import { useStore } from "@/lib/store";
+import { Icon } from "./Icon";
 import ShareCardPanel from "./ShareCardPanel";
 
 export default function DashboardCardPreview() {
@@ -61,7 +62,10 @@ export default function DashboardCardPreview() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-            <h4 style={{ fontSize: 13, margin: 0 }}>📇 My business card</h4>
+            <h4 style={{ fontSize: 13, margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icon name="briefcase" size={15} color="var(--color-primary)" />
+              My business card
+            </h4>
             <span style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: ".06em" }}>
               {slug ? "Tap to share" : "Set slug"}
             </span>
@@ -109,7 +113,8 @@ export default function DashboardCardPreview() {
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 16, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em" }}>
+              <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 16, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <Icon name="briefcase" size={18} color="var(--color-primary)" />
                 Share my card
               </h3>
               <button

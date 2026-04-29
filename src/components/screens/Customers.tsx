@@ -14,6 +14,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "../Icon";
+import PropertySearch from "../PropertySearch";
 import type { CustomerType } from "@/lib/types";
 
 interface Props {
@@ -184,13 +185,35 @@ export default function Customers({ setPage, onSelect }: Props) {
         </div>
       )}
 
-      {/* Search */}
+      {/* Search — typeahead with live suggestions. Selecting a result
+          opens that customer's detail directly. The input also drives
+          the inline list filter so the row count narrows as you type. */}
       <div className="cd mb" style={{ padding: 8 }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, contact, phone, email..."
-          style={{ width: "100%", fontSize: 13 }}
+        <PropertySearch<typeof customers[number]>
+          items={customers}
+          getKey={(c) => c.id}
+          match={(c) => {
+            const addrs = addresses
+              .filter((a) => a.customer_id === c.id)
+              .map((a) => [a.label, a.street, a.city, a.state, a.zip].filter(Boolean).join(" "))
+              .join(" ");
+            return [c.name, c.primary_contact, c.phone, c.email, addrs].filter(Boolean).join(" ");
+          }}
+          render={(c) => (
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <b>{c.name}</b>
+                {c.primary_contact && <span className="dim"> · {c.primary_contact}</span>}
+                {c.phone && <span className="dim"> · {c.phone}</span>}
+              </span>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 11, flexShrink: 0 }}>
+                {c.type}
+              </span>
+            </div>
+          )}
+          onSelect={(c) => onSelect?.(c.id)}
+          onQueryChange={setSearch}
+          placeholder="Search by name, contact, phone, email…"
         />
       </div>
 

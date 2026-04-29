@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
+import { Phone, Mail, FileText, Home, Download, ScanLine } from "lucide-react";
 import { db } from "@/lib/supabase";
 import type { Organization } from "@/lib/types";
 
@@ -172,7 +173,7 @@ export default function CardPage() {
                 textDecoration: "none",
               }}
             >
-              📞 Call
+              <Phone size={16} strokeWidth={2} /> Call
             </a>
           )}
           {org.email && (
@@ -187,7 +188,7 @@ export default function CardPage() {
                 textDecoration: "none",
               }}
             >
-              ✉ Email
+              <Mail size={16} strokeWidth={2} /> Email
             </a>
           )}
         </div>
@@ -208,7 +209,7 @@ export default function CardPage() {
         <a
           href={`/lead/${slug}`}
           style={{
-            display: "block", textAlign: "center",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             padding: "13px", borderRadius: 10, marginBottom: 8,
             background: PRIMARY, color: "#fff",
             fontFamily: "Oswald, sans-serif", fontSize: 14,
@@ -216,12 +217,12 @@ export default function CardPage() {
             textDecoration: "none",
           }}
         >
-          📋 Request a quote
+          <FileText size={16} strokeWidth={2} /> Request a quote
         </a>
         <a
           href="/portal/login"
           style={{
-            display: "block", textAlign: "center",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             padding: "13px", borderRadius: 10, marginBottom: 14,
             background: "transparent", border: "1px solid #1e1e2e",
             color: "#e2e2e8",
@@ -230,14 +231,14 @@ export default function CardPage() {
             textDecoration: "none",
           }}
         >
-          🏠 Customer portal sign-in
+          <Home size={16} strokeWidth={2} /> Customer portal sign-in
         </a>
 
         {/* QR */}
         {cardUrl && (
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 18, marginBottom: 14, textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10 }}>
-              Scan to share
+            <div style={{ fontSize: 11, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <ScanLine size={13} strokeWidth={2} /> Scan to share
             </div>
             <div style={{ display: "inline-block", padding: 12, borderRadius: 10, background: "#fff" }}>
               <QRCodeSVG value={cardUrl} size={180} level="M" includeMargin={false} />
@@ -262,7 +263,7 @@ export default function CardPage() {
             cursor: "pointer",
           }}
         >
-          ⬇ Save contact (vCard)
+          <Download size={15} strokeWidth={2} /> Save contact (vCard)
         </button>
 
         <div style={{ textAlign: "center", color: "#555", fontSize: 10 }}>

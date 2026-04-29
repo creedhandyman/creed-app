@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { wrapPrint, openPrint } from "@/lib/print-template";
+import PropertySearch from "../PropertySearch";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 
 interface Props {
@@ -376,10 +377,40 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
         <Icon name="schedule" size={22} color="var(--color-primary)" />
         {t("sched.title")}
       </h2>
+
+      {/* Property typeahead — searches scheduled entries by job address.
+          Selecting a suggestion jumps the calendar to that entry's date
+          and highlights the day. */}
+      <div style={{ marginBottom: 10 }}>
+        <PropertySearch<typeof schedule[number]>
+          items={schedule}
+          getKey={(s) => s.id}
+          match={(s) => `${s.job || ""} ${s.note || ""}`}
+          render={(s) => (
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <b>{s.job || "(no address)"}</b>
+                {s.note && <span className="dim"> · {s.note.slice(0, 40)}</span>}
+              </span>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 11, flexShrink: 0 }}>
+                {s.sched_date}
+              </span>
+            </div>
+          )}
+          onSelect={(s) => {
+            const target = new Date(s.sched_date + "T12:00:00");
+            if (!isNaN(target.getTime())) {
+              setViewDate(target);
+              setSelectedDay(s.sched_date);
+            }
+          }}
+          placeholder="Search scheduled jobs by property…"
+        />
+      </div>
 
       {/* ── Quick Schedule: drag or tap-arm a job, then drop/tap a day ── */}
       {(() => {
