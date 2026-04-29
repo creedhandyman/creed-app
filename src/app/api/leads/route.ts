@@ -27,6 +27,9 @@ interface Body {
   zip?: string;
   description: string;
   photos?: string[];
+  /** Profile.id of the technician whose share-link / QR brought the
+   *  visitor here. Set by /card and /lead from ?tech=… or sessionStorage. */
+  referrer_tech_id?: string;
 }
 
 const trim = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
@@ -44,6 +47,11 @@ export async function POST(req: NextRequest) {
     const zip = trim(body.zip);
     const description = trim(body.description);
     const photos = Array.isArray(body.photos) ? body.photos.filter((p) => typeof p === "string") : [];
+    // referrer_tech_id is a UUID of a profile row. We don't validate it
+    // against the profiles table here — invalid values will simply not
+    // match anything when Quests/leaderboards filter by it. Trust-but-
+    // verify is fine because this is non-financial attribution data.
+    const referrerTechId = trim(body.referrer_tech_id);
 
     if (!slug || !name || !description) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -150,6 +158,7 @@ export async function POST(req: NextRequest) {
       total_hrs: 0,
       status: "lead",
       created_by: name,
+      ...(referrerTechId ? { referrer_tech_id: referrerTechId } : {}),
     });
     if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 });
 

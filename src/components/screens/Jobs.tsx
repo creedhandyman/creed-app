@@ -775,6 +775,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                   <div style={{ fontSize: 11 }} className="dim">
                     {j.client} · {j.job_date}
                     {w.length > 0 && " · 👷 " + w.map((x) => x.name).join(", ")}
+                    {j.referrer_tech_id && (() => {
+                      const ref = profiles.find((p) => p.id === j.referrer_tech_id);
+                      if (!ref) return null;
+                      return (
+                        <span style={{ marginLeft: 6, color: "var(--color-warning)", fontFamily: "Oswald", letterSpacing: ".04em" }}>
+                          · via {ref.name}
+                        </span>
+                      );
+                    })()}
                   </div>
                   {j.property && (
                     <a

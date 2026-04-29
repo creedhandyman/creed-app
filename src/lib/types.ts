@@ -131,6 +131,11 @@ export interface Job {
   // (via SMS / email / copy). Stops the auto-prompt from re-firing every
   // time the row re-renders after completion.
   review_requested_at?: string;
+  /** Profile.id of the technician whose QR code / share-link the lead
+   *  came in through. Set by /api/leads when the lead-intake URL had
+   *  ?tech=<id>. Powers Network Scout / referral credit so a tech who
+   *  shares the business card and wins a job gets attribution. */
+  referrer_tech_id?: string;
 }
 
 export interface TimeEntry {

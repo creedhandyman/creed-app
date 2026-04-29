@@ -9,8 +9,8 @@
  * dark gradient, Oswald headings, brand-blue accent. Mobile-first
  * since prospects are typically on a phone.
  */
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { db, supabase } from "@/lib/supabase";
 import type { Organization } from "@/lib/types";
 
@@ -37,8 +37,26 @@ const labelStyle: React.CSSProperties = {
   display: "block",
 };
 
-export default function LeadIntakePage() {
+function LeadIntakeInner() {
   const { slug } = useParams<{ slug: string }>();
+  const params = useSearchParams();
+  // Tech-attribution: prefer the URL param if present, otherwise fall
+  // back to the value /card/<slug> wrote into sessionStorage when the
+  // visitor first landed there. Either way it gets POSTed to /api/leads
+  // which writes it onto jobs.referrer_tech_id.
+  const [techId, setTechId] = useState("");
+  useEffect(() => {
+    const fromUrl = params.get("tech") || "";
+    if (fromUrl) {
+      setTechId(fromUrl);
+      try { sessionStorage.setItem("c_lead_tech", fromUrl); } catch { /* */ }
+      return;
+    }
+    try {
+      const stashed = sessionStorage.getItem("c_lead_tech");
+      if (stashed) setTechId(stashed);
+    } catch { /* */ }
+  }, [params]);
 
   const [org, setOrg] = useState<Organization | null>(null);
   const [orgLoading, setOrgLoading] = useState(true);
@@ -124,6 +142,7 @@ export default function LeadIntakePage() {
           zip: zip.trim(),
           description: description.trim(),
           photos,
+          referrer_tech_id: techId || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -354,5 +373,13 @@ export default function LeadIntakePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LeadIntakePage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0a0a0f" }} />}>
+      <LeadIntakeInner />
+    </Suspense>
   );
 }

@@ -11,8 +11,8 @@
  *
  * No auth, no tracking, no app shell — just the card.
  */
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { Phone, Mail, FileText, Home, Download, ScanLine } from "lucide-react";
 import { db } from "@/lib/supabase";
@@ -65,8 +65,14 @@ function downloadVCard(org: Organization, cardUrl: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export default function CardPage() {
+function CardPageInner() {
   const { slug } = useParams<{ slug: string }>();
+  const params = useSearchParams();
+  // Tech-attribution: when this card was shared from a specific tech's
+  // dashboard, the QR / share-link carries ?tech=<profile.id>. Persist
+  // it for the whole session so any lead the visitor submits later
+  // (even after navigating to /lead/<slug>) credits the right tech.
+  const techParam = params.get("tech") || "";
 
   const [org, setOrg] = useState<Organization | null>(null);
   const [content, setContent] = useState<SiteContent | null>(null);
@@ -75,9 +81,19 @@ export default function CardPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setCardUrl(window.location.origin + window.location.pathname);
+      // The QR encodes the canonical card URL — keep ?tech= in there so
+      // someone scanning the contractor's phone screen still attributes
+      // back to the contractor / tech displaying it.
+      const search = techParam ? `?tech=${encodeURIComponent(techParam)}` : "";
+      setCardUrl(window.location.origin + window.location.pathname + search);
+      // Persist the tech id so the /lead/<slug> page can read it from
+      // sessionStorage if the visitor opens that page directly without
+      // a tech param in its URL.
+      if (techParam) {
+        try { sessionStorage.setItem("c_lead_tech", techParam); } catch { /* */ }
+      }
     }
-  }, []);
+  }, [techParam]);
 
   useEffect(() => {
     if (!slug) { setLoading(false); return; }
@@ -207,7 +223,7 @@ export default function CardPage() {
 
         {/* CTAs */}
         <a
-          href={`/lead/${slug}`}
+          href={`/lead/${slug}${techParam ? `?tech=${encodeURIComponent(techParam)}` : ""}`}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             padding: "13px", borderRadius: 10, marginBottom: 8,
@@ -271,5 +287,13 @@ export default function CardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CardPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0a0a0f" }} />}>
+      <CardPageInner />
+    </Suspense>
   );
 }
