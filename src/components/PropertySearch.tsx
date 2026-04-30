@@ -229,13 +229,14 @@ export default function PropertySearch<T>({
             right: 0,
             marginTop: 4,
             background: popoverBg,
-            color: popoverColor,
+            // Empty-state copy is intentionally muted (#888) regardless
+            // of mode so it reads as secondary text, not a real result.
+            color: "#888",
             border: `1px solid ${popoverBorder}`,
             borderRadius: 8,
             zIndex: 50,
             padding: "10px 12px",
             fontSize: 12,
-            color: "#888",
           }}
         >
           No matches for &ldquo;{q}&rdquo;.
