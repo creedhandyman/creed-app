@@ -64,11 +64,13 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
                   filter: onDash ? "drop-shadow(0 0 6px rgba(255,255,255,0.45))" : "none",
                 }}
               />
-              {/* Match the standard nav button label positioning
-                  (marginTop: 2) instead of being pulled tight under
-                  the logo, and bump font from 9 → 11 so it reads as
-                  the visual anchor of the row. */}
-              <span style={{ fontSize: 11, marginTop: 2, fontWeight: 600 }}>{t("nav.home") || "Home"}</span>
+              {/* Aligned to the other nav labels' baseline. The button's
+                  flex content is center-justified, so a larger font here
+                  pushes the label visually lower (taller content row).
+                  fontSize 10 keeps the height delta to ~1px while still
+                  reading as the row anchor; marginTop 0 + bold pulls
+                  the label up to the same Y as Quote/Jobs/Sched/etc. */}
+              <span style={{ fontSize: 10, marginTop: 0, fontWeight: 700 }}>{t("nav.home") || "Home"}</span>
               {onDash && (
                 <span
                   aria-hidden
