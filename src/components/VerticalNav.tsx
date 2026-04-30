@@ -61,7 +61,15 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
                 style={{
                   width: 38,
                   height: 38,
-                  filter: onDash ? "drop-shadow(0 0 6px rgba(255,255,255,0.45))" : "none",
+                  // When the Home button is active the blue gradient
+                  // background made the multi-color crown-and-hammer
+                  // logo look muddy. brightness(0) flattens the logo
+                  // to black, invert(1) flips it to solid white — same
+                  // pattern Apple/Google nav icons use for selected
+                  // state. Drop-shadow stacks on top for the glow.
+                  filter: onDash
+                    ? "brightness(0) invert(1) drop-shadow(0 0 6px rgba(255,255,255,0.55))"
+                    : "none",
                 }}
               />
               {/* Aligned to the other nav labels' baseline. The button's
