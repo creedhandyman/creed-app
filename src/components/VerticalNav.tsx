@@ -59,26 +59,22 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
                 alt=""
                 onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
                 style={{
-                  width: 38,
-                  height: 38,
-                  // When the Home button is active the blue gradient
-                  // background made the multi-color crown-and-hammer
-                  // logo look muddy. brightness(0) flattens the logo
-                  // to black, invert(1) flips it to solid white — same
-                  // pattern Apple/Google nav icons use for selected
-                  // state. Drop-shadow stacks on top for the glow.
-                  filter: onDash
-                    ? "brightness(0) invert(1) drop-shadow(0 0 6px rgba(255,255,255,0.55))"
-                    : "none",
+                  // 20px in bottom-nav so the logo matches the visual
+                  // height of the Lucide icons (size={20}) used by
+                  // every other nav button — that keeps the centered
+                  // flex content the same height across all 7 buttons,
+                  // which is what aligns the label baseline. 38px in
+                  // side-nav where the logo is the visual anchor.
+                  width: navBottom ? 20 : 38,
+                  height: navBottom ? 20 : 38,
+                  filter: onDash ? "drop-shadow(0 0 6px rgba(255,255,255,0.45))" : "none",
                 }}
               />
-              {/* Aligned to the other nav labels' baseline. The button's
-                  flex content is center-justified, so a larger font here
-                  pushes the label visually lower (taller content row).
-                  fontSize 10 keeps the height delta to ~1px while still
-                  reading as the row anchor; marginTop 0 + bold pulls
-                  the label up to the same Y as Quote/Jobs/Sched/etc. */}
-              <span style={{ fontSize: 10, marginTop: 0, fontWeight: 700 }}>{t("nav.home") || "Home"}</span>
+              {/* Match the marginTop of the other nav labels (2px) so
+                  the gap between icon and label is identical. fontSize
+                  10 + bold keeps the Home label slightly heavier
+                  visually without changing the baseline. */}
+              <span style={{ fontSize: 10, marginTop: 2, fontWeight: 700 }}>{t("nav.home") || "Home"}</span>
               {onDash && (
                 <span
                   aria-hidden
