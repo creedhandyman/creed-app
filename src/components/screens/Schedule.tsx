@@ -403,10 +403,19 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           )}
           onSelect={(s) => {
             const target = new Date(s.sched_date + "T12:00:00");
-            if (!isNaN(target.getTime())) {
-              setViewDate(target);
-              setSelectedDay(s.sched_date);
-            }
+            if (isNaN(target.getTime())) return;
+            // Switch to month view first — week view only shows 7 days,
+            // so jumping to a date a few weeks out wouldn't show
+            // anything visible. Month always shows the picked date.
+            setView("month");
+            setViewDate(target);
+            setSelectedDay(s.sched_date);
+            // Defer scroll until React commits the day-detail panel
+            // (rendered conditionally on selectedDay being set).
+            setTimeout(() => {
+              const el = document.getElementById("schedule-day-detail");
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 60);
           }}
           placeholder="Search scheduled jobs by property…"
         />
@@ -854,7 +863,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           const dayDate = new Date(selectedDay + "T12:00:00");
           const dayLabel = dayDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
           return (
-            <div style={{ marginTop: 10, padding: 10, borderTop: `2px solid var(--color-primary)` }}>
+            <div id="schedule-day-detail" style={{ marginTop: 10, padding: 10, borderTop: `2px solid var(--color-primary)` }}>
               <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
                 <h4 style={{ fontSize: 13, color: "var(--color-primary)" }}>{dayLabel}</h4>
                 <span className="dim" style={{ fontSize: 10 }}>{dayItems.length} job{dayItems.length !== 1 ? "s" : ""}</span>

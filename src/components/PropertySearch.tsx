@@ -15,6 +15,7 @@
  * Keyboard: ↑↓ navigate, Enter selects, Esc closes.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "@/lib/store";
 import { Icon } from "./Icon";
 
 interface Props<T> {
@@ -48,6 +49,14 @@ export default function PropertySearch<T>({
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Read theme from the store so the dropdown picks the right card
+  // bg + text color. Hardcoding `--color-card-dark` made the suggestion
+  // text render dark-navy on dark-gray in light mode (page text color
+  // is dark in light mode, but we forced the dropdown bg to dark).
+  const darkMode = useStore((s) => s.darkMode);
+  const popoverBg = darkMode ? "var(--color-card-dark)" : "var(--color-card-light)";
+  const popoverBorder = darkMode ? "var(--color-border-dark)" : "var(--color-border-light)";
+  const popoverColor = darkMode ? "#e8e8ee" : "#1a1a2a";
 
   // Sync to parent on every keystroke so the parent's list reflects
   // the same filter the typeahead is using.
@@ -177,25 +186,31 @@ export default function PropertySearch<T>({
             left: 0,
             right: 0,
             marginTop: 4,
-            background: "var(--color-card-dark)",
-            border: "1px solid var(--color-border-dark)",
+            background: popoverBg,
+            color: popoverColor,
+            border: `1px solid ${popoverBorder}`,
             borderRadius: 8,
             boxShadow: "0 8px 24px rgba(0,0,0,.4)",
             zIndex: 50,
             overflow: "hidden",
           }}
-          className="dark-fallback"
         >
           {suggestions.map((item, i) => (
             <div
               key={getKey(item)}
+              // onMouseDown for desktop (fires before the input's blur,
+              // so the dropdown isn't gone before we register the
+              // selection). onClick as a backup for any environment
+              // where mousedown is suppressed (some embedded WebViews).
               onMouseDown={(e) => { e.preventDefault(); select(item); }}
+              onClick={() => select(item)}
               onMouseEnter={() => setHighlight(i)}
               style={{
                 padding: "8px 12px",
                 cursor: "pointer",
+                color: popoverColor,
                 background: i === highlight ? "var(--color-primary)" + "22" : "transparent",
-                borderTop: i === 0 ? "none" : "1px solid var(--color-border-dark)",
+                borderTop: i === 0 ? "none" : `1px solid ${popoverBorder}`,
                 fontSize: 13,
               }}
             >
@@ -213,8 +228,9 @@ export default function PropertySearch<T>({
             left: 0,
             right: 0,
             marginTop: 4,
-            background: "var(--color-card-dark)",
-            border: "1px solid var(--color-border-dark)",
+            background: popoverBg,
+            color: popoverColor,
+            border: `1px solid ${popoverBorder}`,
             borderRadius: 8,
             zIndex: 50,
             padding: "10px 12px",
