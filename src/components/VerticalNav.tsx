@@ -64,7 +64,11 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
                   filter: onDash ? "drop-shadow(0 0 6px rgba(255,255,255,0.45))" : "none",
                 }}
               />
-              <span style={{ fontSize: 9, marginTop: -3 }}>{t("nav.home") || "Home"}</span>
+              {/* Match the standard nav button label positioning
+                  (marginTop: 2) instead of being pulled tight under
+                  the logo, and bump font from 9 → 11 so it reads as
+                  the visual anchor of the row. */}
+              <span style={{ fontSize: 11, marginTop: 2, fontWeight: 600 }}>{t("nav.home") || "Home"}</span>
               {onDash && (
                 <span
                   aria-hidden
