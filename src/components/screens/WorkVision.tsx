@@ -105,6 +105,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [activeJobId, setActiveJobId] = useState<string | null>(() => ld<string | null>("t_active_job_id", null));
   // Which task in the work order is expanded to show materials / photos / comment
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
+  // Photo capture type. Defaults to "after" because the most common
+  // reason a tech is taking a photo while inside Work Vision is to
+  // document completed work — and the completeJob() gate down below
+  // only counts type==="after" photos as completion photos. Tech can
+  // flip this to "before" or "work" before snapping if needed.
+  const [photoType, setPhotoType] = useState<"before" | "work" | "after">("after");
   // Guide tab: tap-to-check tools and shopping items, plus custom additions.
   // Persisted into the job's `rooms` blob (same place workOrder lives) so
   // they survive remounts AND show up in the Jobs tab — Bernard wanted the
@@ -333,7 +339,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
   // Upload work photo. Same fresh-read + queue pattern so a photo upload
   // can't race with checkbox toggles or note edits and clobber the blob.
-  const uploadWorkPhoto = async (file: File) => {
+  // Type defaults to whatever is currently selected on the segmented
+  // control above (state-driven), but a caller can pin a specific type
+  // — e.g. when we ever wire up a "Before / Working / After" radio set.
+  const uploadWorkPhoto = async (file: File, typeOverride?: "before" | "work" | "after") => {
     if (!activeJob) return;
     const ext = file.name.split(".").pop() || "jpg";
     const path = `gallery/${activeJob.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
@@ -342,6 +351,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
     if (!urlData?.publicUrl) return;
     const publicUrl = urlData.publicUrl;
+    const tag = typeOverride ?? photoType;
     await enqueueRoomsWrite(async () => {
       const freshJob = useStore.getState().jobs.find((j) => j.id === activeJob.id);
       let freshData: Record<string, unknown> = {};
@@ -349,11 +359,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         freshData = freshJob ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {} : {};
       } catch { /* */ }
       if (!Array.isArray(freshData.photos)) freshData.photos = [];
-      (freshData.photos as JobPhoto[]).push({ url: publicUrl, label: "", type: "work" });
+      (freshData.photos as JobPhoto[]).push({ url: publicUrl, label: "", type: tag });
       await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(freshData) });
       await loadAll();
     });
-    useStore.getState().showToast("Photo added", "success");
+    const tagLabel = tag === "after" ? "Completion" : tag === "before" ? "Before" : "Work";
+    useStore.getState().showToast(`${tagLabel} photo saved`, "success");
   };
 
   // ── Receipt upload (matches Jobs.tsx flow) ──────────────────────
@@ -1288,7 +1299,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* ── PHOTOS TAB ── */}
       {section === "photos" && (
         <div className="cd">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
             <h4 style={{ fontSize: 13 }}>📸 {t("wv.jobPhotos")}</h4>
             <div className="row" style={{ gap: 4 }}>
               <button
@@ -1300,8 +1311,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   input.click();
                 }}
                 style={{ fontSize: 12, padding: "5px 10px" }}
+                title={`Photo will be saved as a ${photoType === "after" ? "completion" : photoType} photo`}
               >
-                📷 {t("common.takePhoto")}
+                📷 {photoType === "after" ? "Completion Photo" : photoType === "before" ? "Before Photo" : "Work Photo"}
               </button>
               <button
                 className="bo"
@@ -1338,6 +1350,45 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 <Icon name="receipt" size={13} />
                 {uploadingReceipt ? "…" : "Receipt"}
               </button>
+            </div>
+          </div>
+
+          {/* Photo-type segmented control. Default is "After"
+              (completion) because that's what most photos taken in
+              Work Vision are — and it's what the completeJob() gate
+              counts. Tech can flip to "Before" or "Work" before
+              snapping if they're documenting earlier phases. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>
+              Tag as:
+            </span>
+            <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: `1px solid ${border}` }}>
+              {(
+                [
+                  { key: "before" as const, label: "Before", color: "#ff8800" },
+                  { key: "work" as const, label: "Working", color: "#2E75B6" },
+                  { key: "after" as const, label: "After", color: "#00cc66" },
+                ]
+              ).map((opt) => {
+                const active = photoType === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => setPhotoType(opt.key)}
+                    style={{
+                      padding: "4px 10px", fontSize: 11,
+                      fontFamily: "Oswald, sans-serif", letterSpacing: ".05em",
+                      background: active ? opt.color : "transparent",
+                      color: active ? "#fff" : "#888",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                    aria-pressed={active}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
