@@ -230,7 +230,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
-  const [mode, setMode] = useState<null | "paste" | "manual" | "edit" | "inspect" | "quick">(null);
+  const [mode, setMode] = useState<null | "paste" | "manual" | "edit" | "inspect" | "inspect-edit" | "quick">(null);
+  // Set when the user taps ✏️ Edit on a saved inspection in
+  // SavedInspections. Hydrates the Inspector's `editing` prop so it
+  // opens with the saved record's rooms/items/photos already in place
+  // and saves back via db.patch instead of creating a duplicate.
+  const [editingInspection, setEditingInspection] = useState<{
+    id: string;
+    initialData: InspectionData;
+    linkedQuoteCount: number;
+  } | null>(null);
   const [text, setText] = useState("");
   const [prop, setProp] = useState("");
   const [client, setClient] = useState("");
@@ -329,6 +338,90 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     return defaultRate;
   };
   const rate = defaultRate; // fallback for non-trade-specific uses
+
+  /* ── Inspection edit: open + save handlers ── */
+  // Open the Inspector in edit mode for an already-saved inspection job.
+  // Reads the saved JSON blob, normalizes the legacy `comment` field back
+  // to InspectionData's `notes`, counts how many quotes were generated
+  // from this inspection (heuristic: same property + has data.inspection),
+  // and switches the screen into the inspect-edit mode.
+  const openInspectionEdit = (insp: { id: string; property?: string; client?: string; customer_id?: string; address_id?: string; rooms?: string | unknown }) => {
+    let parsed: Record<string, unknown> = {};
+    try { parsed = typeof insp.rooms === "string" ? JSON.parse(insp.rooms) : (insp.rooms as Record<string, unknown>) || {}; } catch { parsed = {}; }
+    const inspBlob = (parsed as { inspection?: { rooms?: { name: string; sqft?: number; width?: number; length?: number; items: { name: string; condition: string; comment?: string; notes?: string; photos?: string[] }[] }[] } }).inspection;
+    const initialData: InspectionData = {
+      rooms: (inspBlob?.rooms || []).map((r) => ({
+        name: r.name || "",
+        sqft: typeof r.sqft === "number" ? r.sqft : 0,
+        width: r.width,
+        length: r.length,
+        items: (r.items || []).map((it) => ({
+          name: it.name || "",
+          condition: it.condition || "S",
+          notes: it.notes ?? it.comment ?? "",
+          photos: it.photos || [],
+        })),
+      })),
+      property: insp.property || "",
+      client: insp.client || "",
+      customer_id: insp.customer_id,
+      address_id: insp.address_id,
+    };
+    // Heuristic linked-quote count: jobs at the same property that aren't
+    // themselves an inspection AND carry an inspection blob in their data.
+    // We don't have a hard FK from quote→inspection, so property-match +
+    // has-inspection-blob is the practical signal.
+    const linkedQuoteCount = jobs.filter((j) => {
+      if (j.id === insp.id) return false;
+      if (j.status === "inspection") return false;
+      if ((j.property || "") !== (insp.property || "")) return false;
+      try {
+        const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+        return !!d?.inspection;
+      } catch { return false; }
+    }).length;
+    setEditingInspection({ id: insp.id, initialData, linkedQuoteCount });
+    setMode("inspect-edit");
+  };
+
+  // Persist an inspection edit back to the original record. Updates only
+  // the inspection blob inside the rooms JSON; preserves any other top-
+  // level fields the saveJob path stamps on a quote (workOrder, photos,
+  // etc.) — though for an "inspection" status job those are typically
+  // empty. Stamps a `last_edited_at` inside the JSON so we don't depend
+  // on a schema change for the timestamp.
+  const handleInspectionEditSave = async (data: InspectionData) => {
+    if (!editingInspection) return;
+    let prevBlob: Record<string, unknown> = {};
+    const prevJob = jobs.find((j) => j.id === editingInspection.id);
+    try { prevBlob = prevJob ? (typeof prevJob.rooms === "string" ? JSON.parse(prevJob.rooms) : prevJob.rooms) || {} : {}; } catch { /* */ }
+    const merged = {
+      ...prevBlob,
+      inspection: {
+        rooms: data.rooms.map((r) => ({
+          name: r.name,
+          sqft: r.sqft,
+          width: r.width,
+          length: r.length,
+          items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
+        })),
+        property: data.property,
+        client: data.client,
+        last_edited_at: new Date().toISOString(),
+      },
+    };
+    await db.patch("jobs", editingInspection.id, {
+      property: data.property,
+      client: data.client,
+      ...(data.customer_id ? { customer_id: data.customer_id } : {}),
+      ...(data.address_id ? { address_id: data.address_id } : {}),
+      rooms: JSON.stringify(merged),
+    });
+    useStore.getState().showToast("Inspection updated", "success");
+    await loadAll();
+    setEditingInspection(null);
+    setMode(null);
+  };
 
   /* ── AI parse (vision + text) with regex fallback ── */
   /* ── Inspection complete handler ── */
@@ -1160,7 +1253,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           </div>
         </div>
 
-      <SavedInspections jobs={jobs} onQuote={handleInspectionComplete} onPrint={printInspection} onDelete={async (id) => { await db.del("jobs", id); loadAll(); }} />
+      <SavedInspections jobs={jobs} onQuote={handleInspectionComplete} onEdit={openInspectionEdit} onPrint={printInspection} onDelete={async (id) => { await db.del("jobs", id); loadAll(); }} />
     </div>
     );
   }
@@ -1174,6 +1267,16 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         darkMode={darkMode}
         onCancel={() => setMode(null)}
         onComplete={handleInspectionComplete}
+      />
+    );
+
+  if (mode === "inspect-edit" && editingInspection)
+    return (
+      <Inspector
+        darkMode={darkMode}
+        onCancel={() => { setEditingInspection(null); setMode(null); }}
+        onComplete={handleInspectionEditSave}
+        editing={editingInspection}
       />
     );
 
@@ -2858,7 +2961,7 @@ function PriorityBadge({ pri }: { pri: "HIGH" | "MED" | "LOW" }) {
 // Collapsed into a single toggle so saved inspections don't clutter the Start
 // screen; tap to expand and browse/quote/print/delete each one.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; onQuote: (data: any, existingId?: string) => void; onPrint: (insp: any, data: any, rooms: number, findings: number) => void; onDelete: (id: string) => void }) {
+function SavedInspections({ jobs, onQuote, onEdit, onPrint, onDelete }: { jobs: any[]; onQuote: (data: any, existingId?: string) => void; onEdit: (insp: any) => void; onPrint: (insp: any, data: any, rooms: number, findings: number) => void; onDelete: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const inspections = jobs.filter((j) => j.status === "inspection");
   if (!inspections.length) return null;
@@ -2932,6 +3035,9 @@ function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; o
                     onQuote(normalized, insp.id);
                   }} style={{ fontSize: 12, padding: "5px 10px" }}>
                     {t("qf.quoteThis")}
+                  </button>
+                  <button className="bo" onClick={() => onEdit(insp)} style={{ fontSize: 12, padding: "5px 10px" }}>
+                    ✏️ Edit
                   </button>
                   <button className="bo" onClick={() => onPrint(insp, inspData, roomCount, findingsCount)} style={{ fontSize: 12, padding: "5px 10px" }}>
                     {t("qf.print")}

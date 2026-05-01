@@ -133,37 +133,76 @@ interface Props {
   onComplete: (data: InspectionData) => void;
   onCancel: () => void;
   darkMode: boolean;
+  /** When set, Inspector mounts in edit mode for a saved inspection:
+   *  state is seeded from `editing.initialData` instead of localStorage,
+   *  the Resume banner is suppressed, the room-selection step is skipped,
+   *  the header reads "Edit Inspection", and the bottom action button
+   *  reads "Save Changes" instead of "Generate Quote". The parent decides
+   *  via this prop whether to db.patch the existing inspection record or
+   *  go through the new-inspection flow.
+   *  linkedQuoteCount > 0 → show a warning banner that edits won't auto-
+   *  flow into the existing quote. */
+  editing?: {
+    id: string;
+    initialData: InspectionData;
+    linkedQuoteCount: number;
+  };
 }
 
 type Step = "rooms" | "inspect" | "review";
 
-export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
-  // Load saved state from localStorage
+export default function Inspector({ onComplete, onCancel, darkMode, editing }: Props) {
+  const isEditing = !!editing;
+  // Load saved state from localStorage — but ONLY for fresh inspections.
+  // Edit mode seeds state from editing.initialData and never touches the
+  // localStorage resume slot (so an in-progress edit can't pollute a
+  // future fresh inspection's resume banner).
   const loadSaved = <T,>(key: string, fallback: T): T => {
+    if (isEditing) return fallback;
     try {
       const v = localStorage.getItem("c_inspect_" + key);
       return v ? JSON.parse(v) : fallback;
     } catch { return fallback; }
   };
 
-  const [step, setStep] = useState<Step>(() => loadSaved("step", "rooms" as Step));
-  const [selectedRooms, setSelectedRooms] = useState<string[]>(() => loadSaved("rooms", []));
+  const initialRooms = editing?.initialData.rooms ?? [];
+
+  // In edit mode, jump straight to the "inspect" step — rooms are already
+  // chosen and pre-populated from the saved record. The user navigates
+  // room-by-room exactly like a fresh inspection but with their data
+  // already in place.
+  const [step, setStep] = useState<Step>(() =>
+    isEditing ? "inspect" : loadSaved("step", "rooms" as Step)
+  );
+  const [selectedRooms, setSelectedRooms] = useState<string[]>(() =>
+    isEditing ? initialRooms.map((r) => r.name) : loadSaved("rooms", []),
+  );
   const [customRoom, setCustomRoom] = useState("");
-  const [property, setProperty] = useState(() => loadSaved("property", ""));
-  const [client, setClient] = useState(() => loadSaved("client", ""));
+  const [property, setProperty] = useState(() =>
+    isEditing ? editing!.initialData.property : loadSaved("property", ""),
+  );
+  const [client, setClient] = useState(() =>
+    isEditing ? editing!.initialData.client : loadSaved("client", ""),
+  );
   const [customerId, setCustomerId] = useState<string | undefined>(
-    () => loadSaved<string | undefined>("customerId", undefined)
+    () => isEditing ? editing!.initialData.customer_id : loadSaved<string | undefined>("customerId", undefined),
   );
   const [addressId, setAddressId] = useState<string | undefined>(
-    () => loadSaved<string | undefined>("addressId", undefined)
+    () => isEditing ? editing!.initialData.address_id : loadSaved<string | undefined>("addressId", undefined),
   );
-  const [currentRoomIdx, setCurrentRoomIdx] = useState(() => loadSaved("roomIdx", 0));
-  const [roomData, setRoomData] = useState<InspectionRoom[]>(() => loadSaved("roomData", []));
+  const [currentRoomIdx, setCurrentRoomIdx] = useState(() =>
+    isEditing ? 0 : loadSaved("roomIdx", 0),
+  );
+  const [roomData, setRoomData] = useState<InspectionRoom[]>(() =>
+    isEditing ? initialRooms : loadSaved("roomData", []),
+  );
   // uploading state replaced by uploadCount for non-blocking batch uploads
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [photoTarget, setPhotoTarget] = useState<{ room: number; item: number } | null>(null);
-  const [showResume, setShowResume] = useState(() => !!localStorage.getItem("c_inspect_roomData"));
+  const [showResume, setShowResume] = useState(() =>
+    isEditing ? false : !!localStorage.getItem("c_inspect_roomData"),
+  );
   // Per-room voice-walk overlay. When non-null, render the VoiceWalk
   // component in single-room mode for the room at this index. On Done,
   // its raw recording is processed asynchronously by processRoomVoice
@@ -175,8 +214,11 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   const [voiceProcessingStatus, setVoiceProcessingStatus] =
     useState<Record<string, VoiceWalkRoomStatus>>({});
 
-  // Auto-save to localStorage on every change
+  // Auto-save to localStorage on every change. Suppressed in edit mode so
+  // an in-progress edit can't overwrite the resume slot a fresh inspection
+  // is supposed to own.
   const save = useCallback((key: string, value: unknown) => {
+    if (isEditing) return;
     try {
       localStorage.setItem("c_inspect_" + key, JSON.stringify(value));
     } catch (e) {
@@ -187,7 +229,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         if (key !== "roomData") localStorage.setItem("c_inspect_" + key, JSON.stringify(value));
       } catch { /* give up */ }
     }
-  }, []);
+  }, [isEditing]);
 
   useEffect(() => save("step", step), [step, save]);
   useEffect(() => save("rooms", selectedRooms), [selectedRooms, save]);
@@ -343,6 +385,29 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   }, [property, client]);
 
   const startInspection = () => {
+    // In edit mode: do a DELTA. Preserve every existing room's items /
+    // photos / sqft / dimensions; initialize new rooms (added via the
+    // selection screen) with a fresh checklist; drop rooms the user
+    // un-selected. A bare reset would obliterate hours of inspection
+    // data the user is trying to extend.
+    if (isEditing) {
+      const existing = new Map(roomData.map((r) => [r.name, r]));
+      const data = selectedRooms.map((room) => {
+        const prior = existing.get(room);
+        if (prior) return prior;
+        const presetKey = Object.keys(ROOM_PRESETS).find(
+          (k) => k === room || room.startsWith(k.replace(/ \d+$/, "")),
+        );
+        const items = (presetKey ? ROOM_PRESETS[presetKey] : ["General"]).map(
+          (name) => ({ name, condition: "S", notes: "", photos: [] }),
+        );
+        return { name: room, sqft: 0, items };
+      });
+      setRoomData(data);
+      setCurrentRoomIdx(0);
+      setStep("inspect");
+      return;
+    }
     const data = selectedRooms.map((room) => {
       const presetKey = Object.keys(ROOM_PRESETS).find(
         (k) => k === room || room.startsWith(k.replace(/ \d+$/, ""))
@@ -452,7 +517,11 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
   );
 
   const handleGenerate = () => {
-    clearSaved();
+    // Don't clearSaved in edit mode — there's nothing in localStorage to
+    // clear (we never wrote there) and we don't want a stale fresh-
+    // inspection resume slot to get nuked just because someone edited
+    // a saved inspection.
+    if (!isEditing) clearSaved();
     onComplete({
       rooms: roomData,
       property,
@@ -469,11 +538,30 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => { clearSaved(); onCancel(); }}>←</button>
+          <button className="bo" onClick={() => { if (!isEditing) clearSaved(); onCancel(); }}>←</button>
           <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Icon name="search" size={18} color="var(--color-primary)" />New Inspection
+            <Icon name="search" size={18} color="var(--color-primary)" />{isEditing ? "Edit Inspection" : "New Inspection"}
           </h2>
         </div>
+
+        {/* Linked-quote warning — surfaces in edit mode when one or more
+            quotes were previously generated from this inspection. The
+            edit doesn't auto-update those quotes, so the user knows to
+            regenerate if they want the changes flowed through. */}
+        {isEditing && (editing?.linkedQuoteCount ?? 0) > 0 && (
+          <div
+            className="cd mb"
+            style={{
+              borderLeft: "3px solid var(--color-accent-red)",
+              padding: 10,
+            }}
+          >
+            <b style={{ fontSize: 13 }}>⚠ This inspection has {editing!.linkedQuoteCount} linked quote{editing!.linkedQuoteCount === 1 ? "" : "s"}</b>
+            <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+              Edits will not auto-update the existing quote{editing!.linkedQuoteCount === 1 ? "" : "s"} — regenerate from this inspection to flow the changes through.
+            </div>
+          </div>
+        )}
 
         {/* Resume banner */}
         {showResume && roomData.length > 0 && (
@@ -621,7 +709,7 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
             opacity: !selectedRooms.length || !property ? 0.5 : 1,
           }}
         >
-          Start Inspection ({selectedRooms.length} areas) →
+          {isEditing ? "Continue Editing" : "Start Inspection"} ({selectedRooms.length} areas) →
         </button>
         <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 6 }}>
           Each room has a Voice mic — tap it inside the inspection to record continuously and let AI fill the checklist.
@@ -1134,24 +1222,29 @@ export default function Inspector({ onComplete, onCancel, darkMode }: Props) {
         );
       })}
 
-      {/* Generate button — sticky above the bottom nav so it never gets
-          covered when the room list at the top of review scrolls long. */}
+      {/* Generate / Save button — sticky above the bottom nav so it never
+          gets covered when the room list at the top of review scrolls
+          long. Edit mode allows saving with zero findings (Bernard might
+          mark all rooms OK after a re-walk) so the disabled gate only
+          applies to fresh inspections. */}
       <div className="sb">
         <button
           className="bb"
           onClick={handleGenerate}
-          disabled={findingsCount === 0}
+          disabled={!isEditing && findingsCount === 0}
           style={{
             width: "100%",
             padding: 14,
             fontSize: 16,
-            background: findingsCount === 0 ? "#333" : "var(--color-primary)",
-            opacity: findingsCount === 0 ? 0.5 : 1,
+            background: !isEditing && findingsCount === 0 ? "#333" : "var(--color-primary)",
+            opacity: !isEditing && findingsCount === 0 ? 0.5 : 1,
           }}
         >
-          🤖 Generate Quote ({findingsCount} findings)
+          {isEditing
+            ? `💾 Save Changes (${findingsCount} finding${findingsCount === 1 ? "" : "s"})`
+            : `🤖 Generate Quote (${findingsCount} findings)`}
         </button>
-        {findingsCount === 0 && (
+        {!isEditing && findingsCount === 0 && (
           <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 6 }}>
             Mark at least one item as Fair, Poor, or Damaged to generate a quote
           </p>
