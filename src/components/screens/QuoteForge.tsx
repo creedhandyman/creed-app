@@ -911,6 +911,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const rms = inspData?.inspection?.rooms || [];
 
     let areasHtml = "";
+    let totalSqft = 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rms.forEach((r: any) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -922,7 +923,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           : "";
         return `<tr><td><b>${esc(it.name)}</b></td><td class="r"><span style="font-family:Oswald,sans-serif;font-size:10px;padding:2px 8px;border-radius:3px;background:${cc}22;color:${cc};letter-spacing:.06em">${cl}</span></td><td class="dim">${esc(it.comment || "")}</td><td>${photos}</td></tr>`;
       }).join("");
-      areasHtml += `<h3>${esc(r.name)}</h3>
+      // Surface room dimensions inline next to the heading. Inspector
+      // captures W×L → sqft on each room; previously the PDF never
+      // showed the number. With it present, the PDF doubles as a
+      // takeoff sheet for flooring/painting estimates and Bernard
+      // (or anyone re-uploading the PDF later) can see the area.
+      const sqft = r.sqft && r.sqft > 0 ? r.sqft : 0;
+      const w = r.width && r.width > 0 ? r.width : 0;
+      const l = r.length && r.length > 0 ? r.length : 0;
+      if (sqft > 0) totalSqft += sqft;
+      const dimsLabel = sqft > 0
+        ? `<span style="font-family:Oswald,sans-serif;font-size:11px;color:#2E75B6;font-weight:400;letter-spacing:.04em;margin-left:8px">${w && l ? `${w}&prime; × ${l}&prime; · ` : ""}${sqft.toLocaleString()} sqft</span>`
+        : `<span style="font-family:Source Sans 3,sans-serif;font-size:10px;color:#999;font-weight:400;margin-left:8px">(no dimensions captured)</span>`;
+      areasHtml += `<h3>${esc(r.name)}${dimsLabel}</h3>
 <table>
   <thead>
     <tr>
@@ -946,6 +959,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     <div style="font-family:Oswald,sans-serif;font-size:30px;font-weight:700;color:#ff8800;line-height:1">${findingsCount}</div>
     <div class="label" style="margin-top:6px">Findings</div>
   </div>
+  ${totalSqft > 0 ? `<div class="box" style="flex:1;text-align:center;padding:14px">
+    <div style="font-family:Oswald,sans-serif;font-size:30px;font-weight:700;color:#00cc66;line-height:1">${totalSqft.toLocaleString()}</div>
+    <div class="label" style="margin-top:6px">Total Sqft</div>
+  </div>` : ""}
 </section>
 
 <section class="grid-2" style="margin-bottom:14px">
