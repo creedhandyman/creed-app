@@ -1669,7 +1669,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <input
             value={quickDesc}
             onChange={(e) => setQuickDesc(e.target.value)}
-            placeholder="Describe additional work to add..."
+            placeholder="Add, change, or remove items in this quote..."
             style={{ flex: 1, fontSize: 13 }}
           />
           <button
@@ -1682,66 +1682,171 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               try {
                 const o = useStore.getState().org;
                 const licensedTrades = (() => { try { return o?.licensed_trades ? JSON.parse(o.licensed_trades) : []; } catch { return []; } })();
-                // Use the canonical AI_SYSTEM_PROMPT_BASE so AI Assist Add
-                // gets the same calibrated guidance as the inspection /
-                // quick / PDF paths: per-sqft flooring formulas, countertop
-                // tiers, material-binding rule, paint-math, the reference
-                // material price table, and the trade-categorization rules
-                // (interpolated inside §I of the base prompt). Adding a
-                // small "TYPE B / additional work" framing on top so the
-                // model knows we're extending an existing quote rather
-                // than parsing a fresh inspection.
+                // Build an existing-items snapshot so the AI can reference
+                // current line items by stable key (item.id) for update /
+                // remove operations. Detail strings could change in a patch,
+                // so keying by id is more reliable than by detail.
+                const existingItemsContext = rooms.flatMap((r) => r.items.map((it) => ({
+                  key: it.id,
+                  trade: r.name,
+                  detail: it.detail,
+                  condition: it.condition,
+                  comment: it.comment,
+                  laborHrs: it.laborHrs,
+                  materials: it.materials,
+                  ...((it as RoomItem & { sqft?: number }).sqft ? { sqft: (it as RoomItem & { sqft?: number }).sqft } : {}),
+                })));
+                // Use the canonical AI_SYSTEM_PROMPT_BASE so AI Assist
+                // inherits all the calibrated rules. Append an EDIT MODE
+                // addendum that overrides the OUTPUT FORMAT to a structured
+                // add/update/remove response shape — the model knows it's
+                // extending an existing quote, not parsing a fresh one.
+                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id). Decide which combination of add / update / remove operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ]\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
+                const userMsg =
+                  `Property: ${prop || "this property"}\n\n` +
+                  `EXISTING QUOTE LINE ITEMS (${existingItemsContext.length}):\n` +
+                  (existingItemsContext.length
+                    ? existingItemsContext.map((it) => `- ${JSON.stringify(it)}`).join("\n")
+                    : "(none yet)") +
+                  `\n\nUSER REQUEST: ${quickDesc}\n\n` +
+                  `Return the structured add/update/remove JSON described in the AI ASSIST EDIT MODE section.`;
                 const res = await fetch("/api/ai", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     model: "claude-sonnet-4-20250514",
                     max_tokens: 4000,
-                    messages: [{ role: "user", content: [{ type: "text", text: `Additional work request for ${prop || "this property"}: ${quickDesc}\n\nThis is a TYPE B input (free-form scope, not an inspection report). Apply the TYPE B rules from the system prompt: condition: "-" on every item, use stated values verbatim if any are given, group by trade category. We only consume the rooms[] array from your response — extra top-level fields (property, client, notes, crewSize, estDays) are fine but ignored.` }] }],
+                    messages: [{ role: "user", content: [{ type: "text", text: userMsg }] }],
                     system:
                       `Labor rate: $${rate || 55}.00/hour.\n\n` +
                       (licensedTrades.length
                         ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors.\n\n`
                         : "") +
-                      AI_SYSTEM_PROMPT_BASE,
+                      AI_SYSTEM_PROMPT_BASE +
+                      editModeAddendum,
                   }),
                 });
                 const data = await res.json();
                 const text = data.content?.[0]?.text || "";
                 const match = text.match(/\{[\s\S]*\}/);
-                if (match) {
-                  const parsed = JSON.parse(match[0]);
-                  if (parsed.rooms?.length) {
-                    // Merge new rooms into existing — IMMUTABLY. The prior
-                    // form did `existing.items.push(...newRoom.items)`, which
-                    // mutated the live `rooms` reference and could leak state
-                    // into other consumers reading the same object.
-                    const newRoomNames = new Set(parsed.rooms.map((r: Room) => r.name));
-                    const updated = rooms.map((r) => {
-                      if (!newRoomNames.has(r.name)) return r;
-                      const incoming = parsed.rooms.find((nr: Room) => nr.name === r.name);
-                      return incoming
-                        ? { ...r, items: [...r.items, ...incoming.items] }
-                        : r;
+                if (!match) {
+                  useStore.getState().showToast("AI returned no actions", "warning");
+                } else {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const parsed = JSON.parse(match[0]) as {
+                    add?: Array<{ trade?: string; detail: string; condition?: string; comment?: string; laborHrs?: number; materials?: Array<{ n: string; c: number }>; sqft?: number }>;
+                    update?: Array<{ key: string; patch: Partial<RoomItem & { trade?: string; sqft?: number }> }>;
+                    remove?: Array<{ key: string }>;
+                  };
+                  const adds = parsed.add ?? [];
+                  const updates = parsed.update ?? [];
+                  const removes = parsed.remove ?? [];
+
+                  // Apply in REMOVE → UPDATE → ADD order. Removing first
+                  // means an update that targets a key the user also asked
+                  // to remove just no-ops (instead of resurrecting the
+                  // item). Adding last means new items can land in trade
+                  // buckets that an update may have just created.
+                  let working = rooms;
+                  const removeKeys = new Set(removes.map((r) => r.key));
+                  if (removeKeys.size > 0) {
+                    working = working
+                      .map((r) => ({ ...r, items: r.items.filter((it) => !removeKeys.has(it.id)) }))
+                      .filter((r) => r.items.length > 0);
+                  }
+                  if (updates.length > 0) {
+                    // Build a key → (roomIdx, itemIdx) lookup once.
+                    const idx = new Map<string, { ri: number; ii: number }>();
+                    working.forEach((r, ri) => r.items.forEach((it, ii) => idx.set(it.id, { ri, ii })));
+                    // Bucket moves get queued so we don't mutate the array
+                    // we're iterating. Each move = (oldRi, ii, newTrade,
+                    // patchedItem).
+                    const moves: Array<{ oldRi: number; ii: number; newTrade: string; patched: RoomItem }> = [];
+                    const next = working.map((r) => ({ ...r, items: [...r.items] }));
+                    for (const u of updates) {
+                      const pos = idx.get(u.key);
+                      if (!pos) {
+                        console.warn(`[AIAssist] update key not found: ${u.key}`);
+                        continue;
+                      }
+                      const cur = next[pos.ri].items[pos.ii];
+                      const { trade: newTrade, ...itemPatch } = u.patch || {};
+                      const patched: RoomItem = {
+                        ...cur,
+                        ...itemPatch,
+                      } as RoomItem;
+                      if (newTrade && newTrade !== next[pos.ri].name) {
+                        moves.push({ oldRi: pos.ri, ii: pos.ii, newTrade, patched });
+                      } else {
+                        next[pos.ri].items[pos.ii] = patched;
+                      }
+                    }
+                    // Apply moves: remove from old room, append to (or
+                    // create) new trade bucket.
+                    if (moves.length > 0) {
+                      // Sort descending by ii so splices don't shift earlier
+                      // indices in the same room.
+                      const byRoom = new Map<number, number[]>();
+                      moves.forEach((m, mi) => {
+                        if (!byRoom.has(m.oldRi)) byRoom.set(m.oldRi, []);
+                        byRoom.get(m.oldRi)!.push(mi);
+                      });
+                      byRoom.forEach((mIndices, ri) => {
+                        const sorted = mIndices.sort((a, b) => moves[b].ii - moves[a].ii);
+                        sorted.forEach((mi) => {
+                          next[ri].items.splice(moves[mi].ii, 1);
+                        });
+                      });
+                      moves.forEach((m) => {
+                        const target = next.find((r) => r.name === m.newTrade);
+                        if (target) {
+                          target.items.push(m.patched);
+                        } else {
+                          next.push({ name: m.newTrade, items: [m.patched] });
+                        }
+                      });
+                    }
+                    working = next.filter((r) => r.items.length > 0);
+                  }
+                  if (adds.length > 0) {
+                    const newItems: Array<{ trade: string; item: RoomItem }> = adds.map((a) => ({
+                      trade: a.trade || "Carpentry",
+                      item: {
+                        id: crypto.randomUUID().slice(0, 8),
+                        detail: a.detail,
+                        condition: (a.condition as string) || "-",
+                        comment: a.comment || a.detail,
+                        laborHrs: a.laborHrs ?? 1,
+                        materials: a.materials?.length ? a.materials : [{ n: "Materials", c: 0 }],
+                        ...(a.sqft ? { sqft: a.sqft } : {}),
+                      } as RoomItem,
+                    }));
+                    const next = working.map((r) => ({ ...r, items: [...r.items] }));
+                    newItems.forEach(({ trade, item }) => {
+                      const target = next.find((r) => r.name === trade);
+                      if (target) {
+                        target.items.push(item);
+                      } else {
+                        next.push({ name: trade, items: [item] });
+                      }
                     });
-                    const existingNames = new Set(rooms.map((r) => r.name));
-                    const newRooms = parsed.rooms.filter((r: Room) => !existingNames.has(r.name));
-                    const merged = [...updated, ...newRooms];
-                    const validated = validateQuote(merged);
-                    setRooms(validated);
-                    // Critical: customWorkOrder is a snapshot of the prior
-                    // saved workOrder. The Guide tab reads `customWorkOrder ??
-                    // guide.steps`, so if we leave customWorkOrder alone, the
-                    // newly-added rooms items are invisible there and the
-                    // saveJob merge (sourceSteps = customWorkOrder) drops
-                    // them from the saved workOrder entirely. Extend it now
-                    // so the additions show up AND survive save.
-                    extendCustomWorkOrderFromRooms(validated, "AIAssist");
-                    // eslint-disable-next-line no-console
-                    console.log(
-                      `[QuoteForge.AIAssist] AI returned ${parsed.rooms.length} room(s) with ${parsed.rooms.reduce((n: number, r: Room) => n + r.items.length, 0)} item(s); merged into existing quote.`,
-                    );
-                    useStore.getState().showToast("AI added items to your quote", "success");
+                    working = next;
+                  }
+
+                  const validated = validateQuote(working);
+                  setRooms(validated);
+                  extendCustomWorkOrderFromRooms(validated, "AIAssist");
+
+                  const summary: string[] = [];
+                  if (adds.length) summary.push(`+${adds.length} added`);
+                  if (updates.length) summary.push(`${updates.length} updated`);
+                  if (removes.length) summary.push(`-${removes.length} removed`);
+                  // eslint-disable-next-line no-console
+                  console.log(`[QuoteForge.AIAssist] ${summary.join(", ") || "no changes"}; rooms now ${validated.length}/${validated.reduce((n, r) => n + r.items.length, 0)}.`);
+                  if (summary.length === 0) {
+                    useStore.getState().showToast("AI returned no actionable changes", "warning");
+                  } else {
+                    useStore.getState().showToast(`AI Assist: ${summary.join(", ")}`, "success");
                   }
                 }
               } catch (e) { console.error(e); useStore.getState().showToast("AI failed — try again", "error"); }
@@ -1751,7 +1856,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             }}
             style={{ fontSize: 12, padding: "6px 12px" }}
           >
-            {parsing ? "..." : "+ Add"}
+            {parsing ? "..." : "Apply"}
           </button>
         </div>
         {parseStatus && <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>{parseStatus}</div>}
