@@ -16,6 +16,7 @@ import {
   validateQuote,
   extractZip,
   uploadDataUriToBucket,
+  TRADE_CATEGORIES_PROMPT,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
@@ -1529,7 +1530,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     model: "claude-sonnet-4-20250514",
                     max_tokens: 4000,
                     messages: [{ role: "user", content: [{ type: "text", text: `Additional work for ${prop || "property"}: ${quickDesc}\n\nReturn JSON with rooms array only. Same format as before. Group by trade category.` }] }],
-                    system: `You are a field service quoting engine. Return ONLY valid JSON: {"rooms":[{"name":"Trade Category","items":[{"detail":"Brief description","condition":"-","comment":"Work description","laborHrs":1,"materials":[{"n":"Material","c":10}]}]}]}. Use realistic hours and material prices. Licensed trades: ${licensedTrades.join(", ") || "none"}.`,
+                    system: `You are a field service quoting engine. Return ONLY valid JSON: {"rooms":[{"name":"Trade Category","items":[{"detail":"Brief description","condition":"-","comment":"Work description","laborHrs":1,"materials":[{"n":"Material","c":10}]}]}]}. Use realistic hours and material prices. Licensed trades: ${licensedTrades.join(", ") || "none"}.
+
+The "name" field on each room object MUST be one of the trade categories below (Painting, Flooring, Carpentry, Plumbing, Electrical, Appliances, Safety, Compliance, Exterior, Cleaning/Hauling). Pick the bucket using these rules — DO NOT GUESS:
+
+${TRADE_CATEGORIES_PROMPT}`,
                   }),
                 });
                 const data = await res.json();
