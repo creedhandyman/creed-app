@@ -17,6 +17,7 @@ import {
   extractZip,
   uploadDataUriToBucket,
   TRADE_CATEGORIES_PROMPT,
+  TRADE_CATEGORY_LIST,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
@@ -292,11 +293,25 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   }, [editJobId, jobs, clearEditJob]);
 
   // Add-item form state
+  // nr  = trade bucket (Painting, Carpentry, Plumbing…) — picks the parent
+  //       Room object the item lands in
+  // na  = area / room location (Bedroom 1, Kitchen, Bathroom 2…) — gets
+  //       prefixed onto the detail so the QuoteTab + PDF show "Bedroom 1 —
+  //       Caulk and paint baseboards" the same way AI-generated items do
+  // nd  = item description (the actual scope)
+  // nc  = optional longer description / comment
+  // nh  = labor hours
+  // nm  = material cost (lump sum — additional materials editable per-item)
+  // nsq = sqft (optional, surfaces in the QuoteTab SQFT column)
+  // ncn = condition (D / P / F / -). Defaults to "-" (project-scope).
   const [nr, setNr] = useState("");
+  const [na, setNa] = useState("");
   const [nd, setNd] = useState("");
   const [nc, setNc] = useState("");
   const [nh, setNh] = useState("1");
   const [nm, setNm] = useState("20");
+  const [nsq, setNsq] = useState("");
+  const [ncn, setNcn] = useState<"D" | "P" | "F" | "-">("-");
 
   const fileRef = useRef<HTMLInputElement>(null);
   const org = useStore((s) => s.org);
@@ -621,21 +636,51 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
   /* ── Add item ── */
   const addItem = () => {
-    if (!nr || !nd) return;
-    const it: RoomItem = {
+    // Surface a toast instead of silently bailing — Bernard hit "the form
+    // does nothing when I click Add Item" because Trade or Item was empty
+    // and the prior return-without-feedback hid the reason.
+    if (!nr) {
+      useStore.getState().showToast("Pick a trade category", "warning");
+      return;
+    }
+    if (!nd.trim()) {
+      useStore.getState().showToast("Describe the item", "warning");
+      return;
+    }
+    // Build "Area — Item" detail when an area is provided, mirroring the
+    // AI-output convention ("Bedroom 1 — Caulk and paint baseboards").
+    // Without this, manually-added items showed up as bare "Caulk and
+    // paint baseboards" with no room context anywhere in the quote.
+    const areaPrefix = na.trim();
+    const itemText = nd.trim();
+    const detail = areaPrefix ? `${areaPrefix} — ${itemText}` : itemText;
+    // Default the comment to the item description when the user leaves the
+    // optional Description blank. The prior default of "Per scope" caused
+    // validateQuote's (room|comment) dedup to collapse multiple manual
+    // items in the same trade — they all hashed to "<trade>|per scope" and
+    // every item past the first got dropped on reload.
+    const comment = nc.trim() || itemText;
+    const it: RoomItem & { sqft?: number } = {
       id: crypto.randomUUID().slice(0, 8),
-      detail: nd,
-      condition: "-",
-      comment: nc || "Per scope",
+      detail,
+      condition: ncn,
+      comment,
       laborHrs: parseFloat(nh) || 1,
       materials: [{ n: "Materials", c: parseFloat(nm) || 0 }],
     };
+    const sqftNum = parseFloat(nsq);
+    if (!Number.isNaN(sqftNum) && sqftNum > 0) it.sqft = sqftNum;
     const ex = rooms.find((r) => r.name === nr);
-    const newRooms = ex
+    const merged = ex
       ? rooms.map((r) =>
           r.name === nr ? { ...r, items: [...r.items, it] } : r
         )
       : [...rooms, { name: nr, items: [it] }];
+    // Run validateQuote so manual additions go through the same dedup /
+    // material-cap pipeline as the AI flows. Reload-time validateQuote
+    // would otherwise be the first place to catch a bad shape, which is
+    // exactly when items started disappearing in the wild.
+    const newRooms = validateQuote(merged);
     setRooms(newRooms);
     // Same reason as AI Assist: extend customWorkOrder so this new item
     // shows in the Guide tab and persists into workOrder on save.
@@ -643,7 +688,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // Track custom material for AI learning. Tag with the property's ZIP so
     // future quotes in the same area weight these prices over out-of-region.
     db.post("price_corrections", {
-      item_name: nd,
+      item_name: itemText,
       original_hours: 0,
       corrected_hours: parseFloat(nh) || 1,
       original_mat_cost: 0,
@@ -652,10 +697,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       trade: nr,
       zip: extractZip(prop),
     });
+    setNa("");
     setNd("");
     setNc("");
     setNh("1");
     setNm("20");
+    setNsq("");
+    setNcn("-");
+    useStore.getState().showToast(`Added: ${detail}`, "success");
     if (mode !== "edit") setMode("edit");
   };
 
@@ -1405,9 +1454,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           />
         </div>
         <AddItemForm
-          nr={nr} setNr={setNr} nd={nd} setNd={setNd} nc={nc} setNc={setNc}
-          nh={nh} setNh={setNh} nm={nm} setNm={setNm} addItem={addItem}
-          rooms={rooms}
+          nr={nr} setNr={setNr} na={na} setNa={setNa} nd={nd} setNd={setNd}
+          nc={nc} setNc={setNc} nh={nh} setNh={setNh} nm={nm} setNm={setNm}
+          nsq={nsq} setNsq={setNsq} ncn={ncn} setNcn={setNcn}
+          addItem={addItem} rooms={rooms}
         />
       </div>
     );
@@ -1908,9 +1958,10 @@ ${TRADE_CATEGORIES_PROMPT}`,
       {/* ADD TAB */}
       {tab === "add" && (
         <AddItemForm
-          nr={nr} setNr={setNr} nd={nd} setNd={setNd} nc={nc} setNc={setNc}
-          nh={nh} setNh={setNh} nm={nm} setNm={setNm} addItem={addItem}
-          rooms={rooms}
+          nr={nr} setNr={setNr} na={na} setNa={setNa} nd={nd} setNd={setNd}
+          nc={nc} setNc={setNc} nh={nh} setNh={setNh} nm={nm} setNm={setNm}
+          nsq={nsq} setNsq={setNsq} ncn={ncn} setNcn={setNcn}
+          addItem={addItem} rooms={rooms}
         />
       )}
     </div>
@@ -2631,36 +2682,72 @@ function IssuesTab({
 }
 
 function AddItemForm({
-  nr, setNr, nd, setNd, nc, setNc, nh, setNh, nm, setNm, addItem, rooms,
+  nr, setNr, na, setNa, nd, setNd, nc, setNc, nh, setNh, nm, setNm,
+  nsq, setNsq, ncn, setNcn, addItem, rooms,
 }: {
   nr: string; setNr: (v: string) => void;
+  na: string; setNa: (v: string) => void;
   nd: string; setNd: (v: string) => void;
   nc: string; setNc: (v: string) => void;
   nh: string; setNh: (v: string) => void;
   nm: string; setNm: (v: string) => void;
+  nsq: string; setNsq: (v: string) => void;
+  ncn: "D" | "P" | "F" | "-"; setNcn: (v: "D" | "P" | "F" | "-") => void;
   addItem: () => void;
   rooms: Room[];
 }) {
+  // Suggest area names from the current quote: pull any "Bedroom 1 — …" or
+  // "Kitchen — …" prefixes from existing detail strings so the user can
+  // pick the same area they've used elsewhere instead of re-typing.
+  const areaSuggestions = Array.from(new Set(
+    rooms.flatMap((r) =>
+      r.items
+        .map((it) => it.detail.match(/^([^—\-:]+?)\s+—\s+/)?.[1]?.trim())
+        .filter((x): x is string => Boolean(x)),
+    ),
+  )).sort();
   return (
     <div className="cd">
       <div className="g2 mb">
         <div>
-          <label style={{ fontSize: 10 }} className="dim">Room</label>
-          <input value={nr} onChange={(e) => setNr(e.target.value)} list="rl" />
-          <datalist id="rl">
-            {rooms.map((r) => (
-              <option key={r.name} value={r.name} />
+          <label style={{ fontSize: 10 }} className="dim">Trade *</label>
+          <select value={nr} onChange={(e) => setNr(e.target.value)} style={{ fontSize: 13 }}>
+            <option value="">— pick a trade —</option>
+            {TRADE_CATEGORY_LIST.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 10 }} className="dim">Area / Room (optional)</label>
+          <input
+            value={na}
+            onChange={(e) => setNa(e.target.value)}
+            placeholder="e.g. Bedroom 1, Kitchen"
+            list="area-suggest"
+          />
+          <datalist id="area-suggest">
+            {areaSuggestions.map((a) => (
+              <option key={a} value={a} />
             ))}
           </datalist>
         </div>
-        <div>
-          <label style={{ fontSize: 10 }} className="dim">Item</label>
-          <input value={nd} onChange={(e) => setNd(e.target.value)} />
-        </div>
       </div>
       <div style={{ marginBottom: 8 }}>
-        <label style={{ fontSize: 10 }} className="dim">Description</label>
-        <input value={nc} onChange={(e) => setNc(e.target.value)} />
+        <label style={{ fontSize: 10 }} className="dim">Item *</label>
+        <input
+          value={nd}
+          onChange={(e) => setNd(e.target.value)}
+          placeholder="e.g. Caulk and paint baseboards"
+        />
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <label style={{ fontSize: 10 }} className="dim">Description (optional)</label>
+        <input
+          value={nc}
+          onChange={(e) => setNc(e.target.value)}
+          placeholder="Defaults to the item text — only override if you need more detail"
+        />
       </div>
       <div className="g2 mb">
         <div>
@@ -2681,6 +2768,32 @@ function AddItemForm({
             onChange={(e) => setNm(e.target.value)}
             min="0"
           />
+        </div>
+      </div>
+      <div className="g2 mb">
+        <div>
+          <label style={{ fontSize: 10 }} className="dim">SQFT (optional)</label>
+          <input
+            type="number"
+            value={nsq}
+            onChange={(e) => setNsq(e.target.value)}
+            min="0"
+            step="1"
+            placeholder="—"
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 10 }} className="dim">Condition</label>
+          <select
+            value={ncn}
+            onChange={(e) => setNcn(e.target.value as "D" | "P" | "F" | "-")}
+            style={{ fontSize: 13 }}
+          >
+            <option value="-">— project scope</option>
+            <option value="D">D — Damaged / urgent</option>
+            <option value="P">P — Poor / needed</option>
+            <option value="F">F — Fair / minor</option>
+          </select>
         </div>
       </div>
       <button className="bg" onClick={addItem}>Add Item</button>

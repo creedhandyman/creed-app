@@ -144,6 +144,16 @@ export async function renderPdfPages(
 /* ====== AI PARSE ====== */
 
 /**
+ * Canonical list of trade-bucket names. The single ordering used by:
+ *  - validateQuote's classifier (drops the per-function const that drifted)
+ *  - QuoteForge's manual Add Item form (Trade dropdown)
+ *  - AI prompt category names
+ * Keep this and TRADE_CATEGORIES_PROMPT below in sync — adding a bucket
+ * here means describing it in the prompt too.
+ */
+export const TRADE_CATEGORY_LIST = ["Painting", "Flooring", "Carpentry", "Plumbing", "Electrical", "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling"] as const;
+
+/**
  * Source-of-truth trade-categorization rules. Used by BOTH the inspection
  * parser (AI_SYSTEM_PROMPT_BASE) and the AI Assist Add flow in QuoteForge.
  * Anything that bins a line item into a trade bucket reads from here so
@@ -585,7 +595,7 @@ export function validateQuote(rooms: Room[]): Room[] {
   // "Electrical." Build the trade groups from scratch by classifying each
   // item against its detail+comment text. Skip only if the input was
   // already empty.
-  const TRADE_CATEGORIES = ["Painting", "Flooring", "Carpentry", "Plumbing", "Electrical", "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling"];
+  const TRADE_CATEGORIES = TRADE_CATEGORY_LIST;
 
   if (rooms.length > 0) {
     const tradeMap: Record<string, RoomItem[]> = {};
