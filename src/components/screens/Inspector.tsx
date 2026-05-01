@@ -41,7 +41,7 @@ function getPresets(itemName: string): string[] {
   if (/electric|light/.test(n))
     return ["Replace bulb", "Replace cover plate", "Replace fixture", "Replace switch", "Re-secure"];
   if (/floor/.test(n))
-    return ["Patch", "Replace plank", "Re-grout", "Refinish", "Deep clean"];
+    return ["Replace with LVP", "Replace with carpet", "Replace with tile", "Refinish hardwood", "Patch", "Repair plank"];
   if (/door|lock/.test(n) && !/window/.test(n))
     return ["Adjust", "Replace hardware", "Replace door", "Re-key", "Weatherstrip"];
   if (/window|blind/.test(n))
