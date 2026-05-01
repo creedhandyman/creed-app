@@ -302,7 +302,7 @@ Every material has a specific name. If you can't name what it is, don't include 
 ### I. Trade categorization (which bucket each item belongs in)
 - PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch ONLY. No knobs, no fixtures, no blinds.
 - FLOORING: LVP, carpet, tile, grout, cove base, transition strips, baseboards (sqft-priced).
-- CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, window screens, window panes, window glass, closet rods/shelving.
+- CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, countertops (laminate/butcher block/quartz/granite/solid surface — including demo, template, install, sink/faucet reset, edge profile), window screens, window panes, window glass, closet rods/shelving.
 - PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves, supply lines, dryer vents.
 - ELECTRICAL: outlets, switches, switch/outlet plates, light fixtures, bulbs, light covers, ceiling fans (electrical).
 - APPLIANCES: refrigerator, oven, stove, dishwasher, microwave, washer, dryer parts. NEVER condensers or HVAC parts.
@@ -310,7 +310,7 @@ Every material has a specific name. If you can't name what it is, don't include 
 - COMPLIANCE: water heater, HVAC filters, breaker panel inspection, doorbell, thermostat.
 - EXTERIOR: siding, roof, gutters, downspouts, fence, gates, exterior lights, landscaping, driveway/concrete repair, walkways, porches.
 - CLEANING/HAULING: junk removal, debris hauling, deep cleaning, interior trash-out (belongings left in unit), appliance deep clean.
-A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical.
+A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical. A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY.
 
 ### J. Material names describe MATERIALS, not addresses or job IDs
 Never put a property address, unit number, job code, or quote ID into the \`n\` field of a material. Use room/area context (Bathroom, Bedroom, Garage, Living Room) when known; otherwise generic descriptors like "Window (odd size 48x50 vinyl)". If the input mentions multiple units, label them "Unit A", "Unit B" — not raw addresses or unit numbers.
@@ -358,7 +358,7 @@ FLOORING MATERIALS — calculate from sqft:
 - Disposal/cleanup: $15 flat
 EXAMPLE: 450 sqft LVP replacing carpet = ONE item: ~16h labor + $1,170 materials. NOT three separate items totaling $10,000, and NOT 10h — that ignores the rip-out and disposal time.
 
-COUNTERTOPS — when the inspection's Counters row is condition D or P, the Flooring trade bucket OR a "Countertops" line under the appropriate room MUST contain a counter-replacement item. Treat similarly to flooring: demo + template + install + sink reset, priced per linear foot or square foot of counter (NOT room sqft — counters are 25" deep, so ~12 lf ≈ 25 sqft).
+COUNTERTOPS — when the inspection's Counters row is condition D or P, the CARPENTRY trade bucket MUST contain a counter-replacement line item. Counters are CARPENTRY, NEVER Flooring — they travel with cabinets, not with floors. Treat the SIZING similarly to flooring (per linear foot or square foot of counter, NOT room sqft — counters are 25" deep, so ~12 lf ≈ 25 sqft) but the line item itself goes under Carpentry: demo + template + install + sink/faucet reset.
 Default sizing if the report doesn't say:
 - Standard kitchen: ~12-14 linear ft (~25-30 sqft) of counter.
 - Galley/small kitchen: ~8-10 linear ft (~17-21 sqft).
