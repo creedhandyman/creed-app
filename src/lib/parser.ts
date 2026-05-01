@@ -359,6 +359,7 @@ PAINTING — hours for experienced painters (prep, patch, prime, 2 coats, cleanu
 IMPORTANT: A full-house repaint of a 3-bedroom home = 40-50 total paint hours. If your paint hours add up to less than 35h for a full house, increase them.
 
 FLOORING — create ONE line item PER ROOM, not one consolidated line item for the whole house. If 7 rooms have damaged flooring, the Flooring trade bucket must contain SEVEN line items (one per room). NEVER merge multiple rooms into a single "Flooring throughout home" line — Bernard prices, schedules, and tracks progress per room. Each room has its own sqft, its own labor hours, and its own materials line. The "GROUP BY TRADE" rule (rule 4 above) means line items live under trade-named room buckets ("Flooring", "Painting") — it does NOT mean consolidate multiple rooms into one item. Do NOT split a single room into separate demo/prep/install items.
+RESPECT THE USER'S MATERIAL CHOICE PER ROOM. The Comment field for each room's flooring finding may name a specific replacement material — "Replace with carpet", "Replace with LVP", "Replace with tile", "Refinish hardwood". When it does, you MUST use THAT material for that room's flooring line. Do NOT default to LVP just because LVP is the most common make-ready choice. Mixed-material houses are normal: bedrooms in carpet, kitchens/baths in LVP, basements in tile — each room is independent. If the comment is silent on material, you may default to LVP. If the comment names a material, that material is binding.
 Hours INCLUDE old floor removal, subfloor prep, AND new floor installation. These are MINIMUMS — never quote fewer hours than the per-sqft formula gives you, regardless of labor rate:
 - LVP/Laminate (install only, existing subfloor good): 1 hour per 35 sqft
 - LVP/Laminate REPLACING old flooring (carpet rip, tear-out, or any demo): 1 hour per 28 sqft (tear-out + haul-out adds real time — do not skip it)
@@ -1411,26 +1412,120 @@ export async function aiParseInspection(
 
       let fallbackItem;
       if (hasFlooring && sqft > 0) {
-        // 1h per 28 sqft (rip+install), $2.00/sqft material with 10%
-        // waste, $0.30/sqft underlayment, $30 transitions, $15 disposal.
-        const hrs = Math.max(2, Math.round((sqft / 28) * 10) / 10);
-        const matLvp = Math.round(sqft * 1.1 * 2.00);
-        const matUnder = Math.round(sqft * 0.30);
+        // Pick the flooring material from notes the user / chips left
+        // behind. Bernard hit a real bug where bedrooms with "Replace
+        // with carpet" notes still synthesized as LVP because the
+        // safety net hardcoded LVP regardless of input.
+        //
+        // Strategy: LAST MENTION WINS. Inspector chips append (and
+        // the chip-fix upgrades free-typed fragments to canonical
+        // chip text), so the most recent intent the user expressed
+        // is at the end of the string. If notes contain both "carpet"
+        // and "LVP", the later one is the user's actual decision.
+        const noteText = (findingNotes + " " + damagedFindings.map((f) => f.name).join(" ")).toLowerCase();
+        const lastIndexOf = (pattern: RegExp): number => {
+          const g = new RegExp(pattern.source, "g");
+          let last = -1;
+          let m;
+          while ((m = g.exec(noteText)) !== null) last = m.index;
+          return last;
+        };
+        const carpetIdx = lastIndexOf(/\bcarpet\b/);
+        const lvpIdx = lastIndexOf(/\b(lvp|vinyl plank|laminate)\b/);
+        const tileIdx = lastIndexOf(/\btile\b/);
+        const hardwoodIdx = lastIndexOf(/\b(hardwood|wood floor)\b/);
+        const refinishIdx = lastIndexOf(/\brefinish\b/);
+        const hardwoodRefinishIdx = (hardwoodIdx >= 0 && refinishIdx >= 0) ? Math.max(hardwoodIdx, refinishIdx) : -1;
+        type FloorKind = "carpet" | "lvp" | "tile" | "hardwoodRefinish";
+        const candidates: Array<{ kind: FloorKind; idx: number }> = [
+          { kind: "carpet" as FloorKind, idx: carpetIdx },
+          { kind: "lvp" as FloorKind, idx: lvpIdx },
+          { kind: "tile" as FloorKind, idx: tileIdx },
+          { kind: "hardwoodRefinish" as FloorKind, idx: hardwoodRefinishIdx },
+        ].filter((c) => c.idx >= 0);
+        const winner: FloorKind = candidates.length === 0
+          ? "lvp"
+          : candidates.reduce((a, b) => (b.idx > a.idx ? b : a)).kind;
+        const wantsCarpet = winner === "carpet";
+        const wantsTile = winner === "tile";
+        const wantsHardwoodRefinish = winner === "hardwoodRefinish";
         const baseComment = findingNotes
           || `Existing flooring is damaged and needs replacement.`;
-        fallbackItem = {
-          id: crypto.randomUUID().slice(0, 8),
-          detail: `${name} — Replace flooring (${sqft} sqft)`,
-          condition: "D",
-          comment: `${baseComment} Install new LVP across ${sqft} sqft, including existing-floor tear-out, subfloor prep, transition strips, and disposal.`,
-          laborHrs: Math.max(hrs, Math.ceil((sqft * 2.5) / rate * 10) / 10),
-          materials: [
-            { n: `LVP/Laminate ${sqft} sqft (10% waste)`, c: matLvp, qty: Math.round(sqft * 1.1), unitPrice: 2.00 },
-            { n: "Underlayment", c: matUnder },
-            { n: "Transition strips", c: 30 },
-            { n: "Disposal/cleanup", c: 15 },
-          ],
-        };
+        if (wantsCarpet) {
+          // Carpet: 1h per 50 sqft (includes pad). Material $1.75/sqft
+          // (carpet) + $0.65/sqft (pad) + $25 disposal. Conservative
+          // builder-grade pricing — Bernard tunes per market.
+          const hrs = Math.max(2, Math.round((sqft / 50) * 10) / 10);
+          const matCarpet = Math.round(sqft * 1.75);
+          const matPad = Math.round(sqft * 0.65);
+          fallbackItem = {
+            id: crypto.randomUUID().slice(0, 8),
+            detail: `${name} — Replace flooring (${sqft} sqft, carpet)`,
+            condition: "D",
+            comment: `${baseComment} Install new carpet and pad across ${sqft} sqft, including existing-floor tear-out and disposal.`,
+            laborHrs: Math.max(hrs, Math.ceil((sqft * 1.75) / rate * 10) / 10),
+            materials: [
+              { n: `Carpet ${sqft} sqft`, c: matCarpet, qty: sqft, unitPrice: 1.75 },
+              { n: `Carpet pad ${sqft} sqft`, c: matPad, qty: sqft, unitPrice: 0.65 },
+              { n: "Disposal/cleanup", c: 25 },
+            ],
+          };
+        } else if (wantsTile) {
+          // Tile: 1h per 18 sqft. Material $4/sqft + 10% waste +
+          // $0.75/sqft mortar/grout + $30 transitions + $25 disposal.
+          const hrs = Math.max(3, Math.round((sqft / 18) * 10) / 10);
+          const matTile = Math.round(sqft * 1.1 * 4.00);
+          const matMortar = Math.round(sqft * 0.75);
+          fallbackItem = {
+            id: crypto.randomUUID().slice(0, 8),
+            detail: `${name} — Replace flooring (${sqft} sqft, tile)`,
+            condition: "D",
+            comment: `${baseComment} Install new tile across ${sqft} sqft, including existing-floor tear-out, subfloor prep, mortar/grout, transitions, and disposal.`,
+            laborHrs: Math.max(hrs, Math.ceil((sqft * 3.5) / rate * 10) / 10),
+            materials: [
+              { n: `Tile ${sqft} sqft (10% waste)`, c: matTile, qty: Math.round(sqft * 1.1), unitPrice: 4.00 },
+              { n: "Thinset / grout", c: matMortar },
+              { n: "Transition strips", c: 30 },
+              { n: "Disposal/cleanup", c: 25 },
+            ],
+          };
+        } else if (wantsHardwoodRefinish) {
+          // Refinish only — no replacement material. 1h per 60 sqft.
+          // Sand + stain + poly ~ $1/sqft in materials.
+          const hrs = Math.max(3, Math.round((sqft / 60) * 10) / 10);
+          const matRefinish = Math.round(sqft * 1.00);
+          fallbackItem = {
+            id: crypto.randomUUID().slice(0, 8),
+            detail: `${name} — Refinish hardwood (${sqft} sqft)`,
+            condition: "D",
+            comment: `${baseComment} Sand existing hardwood across ${sqft} sqft, stain, apply 2-3 coats of polyurethane, and clean.`,
+            laborHrs: Math.max(hrs, Math.ceil((sqft * 1.5) / rate * 10) / 10),
+            materials: [
+              { n: `Sandpaper / stain / poly ${sqft} sqft`, c: matRefinish, qty: sqft, unitPrice: 1.00 },
+              { n: "Disposal/cleanup", c: 15 },
+            ],
+          };
+        } else {
+          // Default: LVP/Laminate. 1h per 28 sqft (rip+install),
+          // $2.00/sqft material with 10% waste, $0.30/sqft underlayment,
+          // $30 transitions, $15 disposal.
+          const hrs = Math.max(2, Math.round((sqft / 28) * 10) / 10);
+          const matLvp = Math.round(sqft * 1.1 * 2.00);
+          const matUnder = Math.round(sqft * 0.30);
+          fallbackItem = {
+            id: crypto.randomUUID().slice(0, 8),
+            detail: `${name} — Replace flooring (${sqft} sqft, LVP)`,
+            condition: "D",
+            comment: `${baseComment} Install new LVP across ${sqft} sqft, including existing-floor tear-out, subfloor prep, transition strips, and disposal.`,
+            laborHrs: Math.max(hrs, Math.ceil((sqft * 2.5) / rate * 10) / 10),
+            materials: [
+              { n: `LVP/Laminate ${sqft} sqft (10% waste)`, c: matLvp, qty: Math.round(sqft * 1.1), unitPrice: 2.00 },
+              { n: "Underlayment", c: matUnder },
+              { n: "Transition strips", c: 30 },
+              { n: "Disposal/cleanup", c: 15 },
+            ],
+          };
+        }
       } else if (hasFlooring) {
         // Damaged flooring but no sqft captured — emit a placeholder
         // that forces Bernard to set sqft before sending the quote.

@@ -1035,14 +1035,34 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   <button
                     key={preset}
                     onClick={() => {
-                      const current = item.notes;
+                      const current = (item.notes || "").trim();
+                      const lcCurrent = current.toLowerCase();
+                      const lcPreset = preset.toLowerCase();
+                      // Verbatim already there — no-op (avoid the
+                      // "Replace LVP. Replace LVP" duplication).
+                      if (lcCurrent.includes(lcPreset)) return;
+                      // Pull the chip's "intent" word — the last
+                      // non-filler word, usually the material noun
+                      // ("carpet" / "LVP" / "tile" / "hardwood").
+                      // If the existing notes already mention that
+                      // intent (a fragment the user free-typed like
+                      // "Replace carpet"), upgrade it to the
+                      // canonical chip text instead of appending and
+                      // creating "Replace carpet. Replace with carpet".
+                      const filler = new Set(["with", "and", "the", "or", "a", "to", "for"]);
+                      const significant = (lcPreset.match(/\b[\w/]+\b/g) || []).filter((w) => !filler.has(w));
+                      const intent = significant[significant.length - 1] || "";
+                      if (intent && lcCurrent.includes(intent)) {
+                        updateItem(currentRoomIdx, itemIdx, "notes", preset);
+                        return;
+                      }
                       const updated = current ? `${current}. ${preset}` : preset;
                       updateItem(currentRoomIdx, itemIdx, "notes", updated);
                     }}
                     style={{
                       fontSize: 11, padding: "2px 6px", borderRadius: 4,
                       background: "transparent", border: `1px solid ${border}`,
-                      color: item.notes?.includes(preset) ? "var(--color-primary)" : "#888",
+                      color: item.notes?.toLowerCase().includes(preset.toLowerCase()) ? "var(--color-primary)" : "#888",
                       cursor: "pointer",
                     }}
                   >
