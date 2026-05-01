@@ -358,6 +358,31 @@ FLOORING MATERIALS — calculate from sqft:
 - Disposal/cleanup: $15 flat
 EXAMPLE: 450 sqft LVP replacing carpet = ONE item: ~16h labor + $1,170 materials. NOT three separate items totaling $10,000, and NOT 10h — that ignores the rip-out and disposal time.
 
+COUNTERTOPS — when the inspection's Counters row is condition D or P, the Flooring trade bucket OR a "Countertops" line under the appropriate room MUST contain a counter-replacement item. Treat similarly to flooring: demo + template + install + sink reset, priced per linear foot or square foot of counter (NOT room sqft — counters are 25" deep, so ~12 lf ≈ 25 sqft).
+Default sizing if the report doesn't say:
+- Standard kitchen: ~12-14 linear ft (~25-30 sqft) of counter.
+- Galley/small kitchen: ~8-10 linear ft (~17-21 sqft).
+- L-shape / large kitchen with island: ~18-22 linear ft (~38-46 sqft).
+Material tiers — installed PRICE per sqft (material only; labor below). Pick a tier from the inspection language; if the report says nothing about material, default to LAMINATE (most common rental-grade replacement) and flag in notes.
+- LAMINATE (Wilsonart/Formica, post-form): $15/sqft material installed-grade, OR $120-180 per 8ft section pre-formed.
+- BUTCHER BLOCK (oak/maple): $35/sqft material.
+- SOLID SURFACE (Corian, Hi-Macs): $50/sqft material.
+- QUARTZ (engineered stone, e.g. Silestone): $60/sqft material.
+- GRANITE (slab, level 1-2): $65/sqft material.
+LABOR — countertop replace = demo old + template + install new + sink/faucet reset. Treat as a single line item per kitchen.
+- Laminate / butcher block (DIY-installable, no slab template): 4-6h total.
+- Solid surface (semi-pro, mostly drop-in): 6-8h.
+- Quartz / granite (slab, requires template + 1-2 week lead time, set with crew of 2): 8-10h on-site labor for install day; PLUS 1-2h for template appointment and sink reset. List as ~10h total in laborHrs and mention the lead time in the comment. For granite/quartz, also flag in `notes` that the slab itself is fabricator-supplied — Bernard typically subs the cut and just handles demo + install + reset.
+INCLUDE THESE IN THE LINE-ITEM PACKAGE (don't break out as separate items):
+- Sink reset (drop existing sink back in) OR sink replacement if "replace sink" is in the inspection.
+- Faucet reinstall (always — counter swap = pull faucet, reset on new top).
+- Edge profile (eased/bullnose/ogee — laminate post-form is included; stone has $5-10/lf upcharge for ogee — only call it out if mentioned).
+- Caulk + silicone seal at backsplash and around sink ($10 in materials, included in labor).
+- Disposal/haul of old top: $25 flat.
+EXAMPLE (laminate, standard kitchen, ~12 lf): ONE item: detail "Kitchen — Replace countertop (laminate, ~12 lf)", 5h labor, materials = laminate $360-420 + sink/faucet hardware ~$25 + disposal $25 = ~$430-470. Comment: "Demo old laminate, template, fabricate post-form replacement, reset sink and faucet, re-caulk backsplash."
+EXAMPLE (quartz, standard kitchen, ~28 sqft): ONE item: 10h labor + materials ~$1,680 (28 sqft × $60) + sink/faucet reset ~$25 + disposal $25 = ~$1,730. Comment must mention slab lead time (~1-2 wks) and that fabricator handles cut/template.
+NEVER quote countertops by counting backsplash tiles or breaking demo/install/reset into 3-5 separate line items. ONE item per kitchen.
+
 Doors: pre-hung door=2-2.5h, bifold=1.25h, entry door=2.5-3h
 
 ## MATERIALS — LOW-END RETAIL PRICES
@@ -1344,6 +1369,93 @@ export async function aiParseInspection(
     }
     merged.notes.push(
       `${missingRooms.length} room${missingRooms.length === 1 ? " was" : "s were"} flagged DAMAGED in the inspection but the AI didn't produce a line item — auto-added with conservative pricing. Verify: ${missingRooms.join(", ")}.`,
+    );
+  }
+
+  // Countertop safety net: if any room (typically Kitchen) has its Counters
+  // item flagged D or P in the inspection, the quote MUST include at least
+  // one countertop line item. The room-level safety net above only ensures
+  // the ROOM has *some* line; the AI sometimes produces a Kitchen item for
+  // sink/cabinet/appliance work but silently drops the counter replacement.
+  // Mirrors the flooring approach — synthesize a conservative laminate
+  // estimate so the bid never goes out missing the counter scope.
+  const counterRooms = inspection.rooms.filter((r) =>
+    r.items.some((it) =>
+      /counter/i.test(it.name) && (it.condition === "D" || it.condition === "P"),
+    ),
+  );
+  const counterMentioned = (text: string) => /counter/i.test(text);
+  const missingCounterRooms = counterRooms.filter((r) => {
+    const roomToken = r.name.toLowerCase().replace(/\s+/g, " ").trim();
+    return !merged.rooms.some((qr) => qr.items.some((it) => {
+      const detailRoom = it.detail.split(/\s+[—\-:]/)[0]?.toLowerCase().replace(/\s+/g, " ").trim();
+      const matNames = it.materials.map((m) => m.n).join(" ");
+      const text = `${it.detail} ${it.comment} ${matNames}`;
+      // Match if there's a countertop reference anywhere in this item AND
+      // (this item is in the same room as the counters finding, OR there's
+      // no obvious room prefix to compare against).
+      return counterMentioned(text) && (!detailRoom || detailRoom === roomToken);
+    }));
+  });
+  if (missingCounterRooms.length > 0) {
+    console.warn(`aiParseInspection: AI dropped countertop scope for ${missingCounterRooms.length} room(s); synthesizing fallback: ${missingCounterRooms.map((r) => r.name).join(", ")}`);
+    onProgress?.(`Adding ${missingCounterRooms.length} countertop line${missingCounterRooms.length === 1 ? "" : "s"}...`);
+    for (const room of missingCounterRooms) {
+      const counterFinding = room.items.find((it) =>
+        /counter/i.test(it.name) && (it.condition === "D" || it.condition === "P"),
+      );
+      const findingNotes = counterFinding?.notes?.trim() || "";
+      // Read material tier hint from the finding notes if user typed
+      // "quartz", "granite", etc. Default to laminate (most common
+      // rental-grade replacement and the safest cost floor).
+      const noteText = findingNotes.toLowerCase();
+      let tier: { name: string; matSqft: number; hrs: number } = { name: "laminate", matSqft: 15, hrs: 5 };
+      if (/quartz/.test(noteText)) tier = { name: "quartz", matSqft: 60, hrs: 10 };
+      else if (/granite/.test(noteText)) tier = { name: "granite", matSqft: 65, hrs: 10 };
+      else if (/butcher.?block|wood/.test(noteText)) tier = { name: "butcher block", matSqft: 35, hrs: 5 };
+      else if (/solid.?surface|corian/.test(noteText)) tier = { name: "solid surface", matSqft: 50, hrs: 7 };
+      // Parse explicit lf/sqft from the notes if the user captured it
+      // (e.g., "12 lf laminate", "~25 sqft"). Otherwise default to 12 lf
+      // ≈ 25 sqft of counter (standard kitchen).
+      const lfMatch = noteText.match(/(\d{1,3})\s*(?:lf|linear ?ft|linear ?feet|ft)\b/);
+      const sqftMatch = noteText.match(/(\d{1,3})\s*(?:sqft|sq\.?\s*ft|square ?feet|square ?ft)\b/);
+      let counterSqft = 25; // default
+      if (sqftMatch) counterSqft = Math.max(8, Math.min(80, parseInt(sqftMatch[1], 10)));
+      else if (lfMatch) counterSqft = Math.max(8, Math.min(80, Math.round(parseInt(lfMatch[1], 10) * 25 / 12)));
+      const matCost = Math.round(counterSqft * tier.matSqft);
+      const hardwareCost = 25; // sink/faucet reset hardware (clips, plumber's putty, supply lines)
+      const disposalCost = 25;
+      const baseComment = findingNotes ||
+        `Existing counters are damaged and need replacement.`;
+      const slabNote = (tier.name === "quartz" || tier.name === "granite")
+        ? ` Slab is fabricator-supplied; allow ~1-2 weeks lead time after template appointment.`
+        : "";
+      const fallbackItem = {
+        id: crypto.randomUUID().slice(0, 8),
+        detail: `${room.name} — Replace countertop (${tier.name}, ~${counterSqft} sqft)`,
+        condition: "D",
+        comment: `${baseComment} Demo existing top, template, fabricate and install ${tier.name} replacement, reset sink and faucet, re-caulk backsplash.${slabNote}`,
+        laborHrs: tier.hrs,
+        materials: [
+          { n: `${tier.name.charAt(0).toUpperCase()}${tier.name.slice(1)} countertop ${counterSqft} sqft`, c: matCost, qty: counterSqft, unitPrice: tier.matSqft },
+          { n: "Sink/faucet reset hardware", c: hardwareCost },
+          { n: "Disposal/haul old top", c: disposalCost },
+        ],
+      };
+      // Drop into Carpentry trade bucket if it exists, else create one.
+      // Bernard's parser bins counters under Carpentry already (cabinets +
+      // countertops travel together). validateQuote runs after this so
+      // the placement won't break dedup.
+      const tradeBucket = "Carpentry";
+      const existing = merged.rooms.find((r) => r.name === tradeBucket);
+      if (existing) {
+        existing.items.push(fallbackItem);
+      } else {
+        merged.rooms.push({ name: tradeBucket, items: [fallbackItem] });
+      }
+    }
+    merged.notes.push(
+      `${missingCounterRooms.length} room${missingCounterRooms.length === 1 ? "" : "s"} had Counters flagged D/P but the AI didn't include a countertop line — auto-added a conservative replacement (default laminate). Adjust tier/sqft before sending: ${missingCounterRooms.map((r) => r.name).join(", ")}.`,
     );
   }
 

@@ -57,7 +57,7 @@ function getPresets(itemName: string): string[] {
   if (/baseboard|trim|railing/.test(n))
     return ["Replace section", "Touch-up paint", "Re-nail", "Re-secure"];
   if (/counter/.test(n))
-    return ["Re-seal", "Polish", "Replace section"];
+    return ["Replace - laminate", "Replace - butcher block", "Replace - quartz", "Replace - granite", "Re-seal", "Polish"];
   if (/mirror|medicine/.test(n))
     return ["Replace", "Re-secure", "Replace hardware"];
   if (/towel|tp|paper holder/.test(n))
