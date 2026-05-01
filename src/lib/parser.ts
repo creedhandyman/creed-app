@@ -372,7 +372,7 @@ Material tiers — installed PRICE per sqft (material only; labor below). Pick a
 LABOR — countertop replace = demo old + template + install new + sink/faucet reset. Treat as a single line item per kitchen.
 - Laminate / butcher block (DIY-installable, no slab template): 4-6h total.
 - Solid surface (semi-pro, mostly drop-in): 6-8h.
-- Quartz / granite (slab, requires template + 1-2 week lead time, set with crew of 2): 8-10h on-site labor for install day; PLUS 1-2h for template appointment and sink reset. List as ~10h total in laborHrs and mention the lead time in the comment. For granite/quartz, also flag in `notes` that the slab itself is fabricator-supplied — Bernard typically subs the cut and just handles demo + install + reset.
+- Quartz / granite (slab, requires template + 1-2 week lead time, set with crew of 2): 8-10h on-site labor for install day; PLUS 1-2h for template appointment and sink reset. List as ~10h total in laborHrs and mention the lead time in the comment. For granite/quartz, also flag in the top-level notes array that the slab itself is fabricator-supplied — Bernard typically subs the cut and just handles demo + install + reset.
 INCLUDE THESE IN THE LINE-ITEM PACKAGE (don't break out as separate items):
 - Sink reset (drop existing sink back in) OR sink replacement if "replace sink" is in the inspection.
 - Faucet reinstall (always — counter swap = pull faucet, reset on new top).
