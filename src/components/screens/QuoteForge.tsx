@@ -660,13 +660,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // items in the same trade — they all hashed to "<trade>|per scope" and
     // every item past the first got dropped on reload.
     const comment = nc.trim() || itemText;
-    const it: RoomItem & { sqft?: number } = {
+    const it: RoomItem = {
       id: crypto.randomUUID().slice(0, 8),
       detail,
       condition: ncn,
       comment,
       laborHrs: parseFloat(nh) || 1,
       materials: [{ n: "Materials", c: parseFloat(nm) || 0 }],
+      // Sticky flag — validateQuote's classifier (and the deterministic
+      // override pass) MUST leave this item in the user-picked trade
+      // bucket. Without this, "Laminate countertop" lands in Flooring
+      // because the keyword scorer sees "laminate" → Flooring +11
+      // even though the user explicitly chose Carpentry.
+      userClassified: true,
     };
     const sqftNum = parseFloat(nsq);
     if (!Number.isNaN(sqftNum) && sqftNum > 0) it.sqft = sqftNum;

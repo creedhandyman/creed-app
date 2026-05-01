@@ -600,6 +600,60 @@ export function validateQuote(rooms: Room[]): Room[] {
   if (rooms.length > 0) {
     const tradeMap: Record<string, RoomItem[]> = {};
 
+    const TRADE_SET = new Set(TRADE_CATEGORIES.map((t) => t.toLowerCase()));
+
+    /**
+     * Deterministic override pass — runs BEFORE the keyword scorer and BEFORE
+     * any "respect existing trade" logic. Returns one of the canonical trade
+     * bucket names if the item text contains a high-confidence pattern that
+     * the keyword scorer has historically gotten wrong.
+     *
+     * Background: Bernard saw real production misroutes that the scorer
+     * couldn't fix because of single-word collisions:
+     *  - "Laminate countertop" → Flooring (because of "laminate") even
+     *     though the user explicitly picked Carpentry in manual add.
+     *  - "Demo rotten shower wall framing" with cement-board materials →
+     *     Exterior (because cement.?board scores Exterior +14) even though
+     *     it's interior bathroom carpentry.
+     *  - "General Construction — Caulking and finishing" → Cleaning/Hauling
+     *     (because of "finishing" / no caulk-specific scorer).
+     *
+     * The override patterns are deliberately narrow + high-confidence. Each
+     * rule fires only when the text unambiguously names the work; otherwise
+     * we fall through to the scorer. Returns null when nothing matches.
+     */
+    const overrideTrade = (item: RoomItem): string | null => {
+      const s = (item.detail + " " + item.comment).toLowerCase();
+      // Countertops are CARPENTRY (travel with cabinets, not floors).
+      // The keyword scorer doesn't even mention countertops; "laminate"
+      // alone steers it into Flooring.
+      if (/counter.?top|counter top|counter-top/.test(s)) return "Carpentry";
+      // Interior framing / studs / blocking / sistering — Carpentry.
+      // "shower wall framing" pulls Plumbing+10 from \bshower\b in the
+      // scorer; the framing pattern is more specific and wins.
+      if (/\bframing\b|re.?frame|reframe|\bstuds?\b|\bblocking\b|\bjoists?\b|\bheaders?\b|sistering|\bsister\b/.test(s)) return "Carpentry";
+      // Caulking / sealant lines → Painting per Bernard's prompt rule
+      // ("every caulk line goes here unless it's a plumbing fixture
+      // replacement that explicitly includes the bead"). Skip the
+      // override when the surrounding context names a plumbing fixture
+      // replacement so the scorer's Plumbing+8 caulk-fixture rule still
+      // wins — the override is for the cases where caulk was getting
+      // dumped into Cleaning/Hauling.
+      if (/\bcaulk\b|caulking|\bsealant\b|silicone bead/.test(s) &&
+          !/(replac|new).*(faucet|toilet|tub|shower head|sink|fixture)|fixture.*(replac|new)/.test(s)) {
+        return "Painting";
+      }
+      // Demo of carpentry-class items → Carpentry. The disposal portion
+      // (dump fee / debris bags / hauling time) belongs in Cleaning per
+      // the prompt; that's a separate line item the AI is responsible
+      // for splitting.
+      if (/\b(demo|tear.?out|rip.?out|remove)\b/.test(s) &&
+          /(countertop|cabinet|trim|frame|framing|stud|drywall|baseboard|\bdoor\b|\bwindow\b)/.test(s)) {
+        return "Carpentry";
+      }
+      return null;
+    };
+
     const classifyTrade = (item: RoomItem, roomName: string): string => {
       // Use detail + comment for classification (NOT materials — they can be misleading)
       const s = (item.detail + " " + item.comment).toLowerCase();
@@ -669,7 +723,36 @@ export function validateQuote(rooms: Room[]): Room[] {
 
     rooms.forEach((r) => {
       r.items.forEach((it) => {
-        const trade = classifyTrade(it, r.name);
+        // Pick the trade bucket using a precedence chain:
+        //   1. userClassified (manual Add Item) — sacred, never reclassify.
+        //   2. Deterministic override (countertop/framing/caulk/demo) —
+        //      catches the high-confidence patterns the keyword scorer
+        //      historically got wrong, regardless of whether the AI or
+        //      the scorer would otherwise place it.
+        //   3. Parent room is already a valid trade bucket — respect the
+        //      AI's choice; the scorer's job is to RESCUE bad buckets,
+        //      not second-guess correct ones. Without this, an AI item
+        //      correctly placed in Carpentry could still get rebucketed
+        //      into Flooring on a stray "laminate" or "baseboard" word.
+        //   4. Fall back to the keyword scorer (rescues "Electrical."
+        //      and other malformed AI outputs).
+        let trade: string;
+        if (it.userClassified === true && TRADE_SET.has(r.name.toLowerCase())) {
+          // Manual add already lands in a canonical trade — sacred, leave
+          // it alone. (Guarded by canonical check so a stale userClassified
+          // flag pointing at a non-canonical parent room can't get the
+          // item silently dropped by the final canonical-only rebuild.)
+          trade = r.name;
+        } else {
+          const override = overrideTrade(it);
+          if (override) {
+            trade = override;
+          } else if (TRADE_SET.has(r.name.toLowerCase())) {
+            trade = r.name;
+          } else {
+            trade = classifyTrade(it, r.name);
+          }
+        }
         // Prepend room name to detail if not already there
         const roomPrefix = r.name.replace(/\s*[:\/].*/g, "").trim();
         const alreadyHasRoom = TRADE_CATEGORIES.some((t) => it.detail.toLowerCase().startsWith(t.toLowerCase()));

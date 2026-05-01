@@ -265,6 +265,15 @@ export interface RoomItem {
   comment: string;
   laborHrs: number;
   materials: Material[];
+  /** Optional sqft soft-field surfaced in the QuoteTab's SQFT column.
+   *  Captured by the manual Add Item form and editable per-row. */
+  sqft?: number;
+  /** Stamped by the manual Add Item form. When true, validateQuote's
+   *  classifier and deterministic-override pass MUST leave the item's
+   *  parent trade bucket alone — the user picked it deliberately. The
+   *  classifier exists to rescue AI miscategorizations; manual entries
+   *  are sacred and should never get rebucketed by either pass. */
+  userClassified?: boolean;
 }
 
 export interface Room {
