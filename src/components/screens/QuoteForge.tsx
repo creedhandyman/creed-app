@@ -16,8 +16,8 @@ import {
   validateQuote,
   extractZip,
   uploadDataUriToBucket,
-  TRADE_CATEGORIES_PROMPT,
   TRADE_CATEGORY_LIST,
+  AI_SYSTEM_PROMPT_BASE,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
@@ -1682,18 +1682,28 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               try {
                 const o = useStore.getState().org;
                 const licensedTrades = (() => { try { return o?.licensed_trades ? JSON.parse(o.licensed_trades) : []; } catch { return []; } })();
+                // Use the canonical AI_SYSTEM_PROMPT_BASE so AI Assist Add
+                // gets the same calibrated guidance as the inspection /
+                // quick / PDF paths: per-sqft flooring formulas, countertop
+                // tiers, material-binding rule, paint-math, the reference
+                // material price table, and the trade-categorization rules
+                // (interpolated inside §I of the base prompt). Adding a
+                // small "TYPE B / additional work" framing on top so the
+                // model knows we're extending an existing quote rather
+                // than parsing a fresh inspection.
                 const res = await fetch("/api/ai", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     model: "claude-sonnet-4-20250514",
                     max_tokens: 4000,
-                    messages: [{ role: "user", content: [{ type: "text", text: `Additional work for ${prop || "property"}: ${quickDesc}\n\nReturn JSON with rooms array only. Same format as before. Group by trade category.` }] }],
-                    system: `You are a field service quoting engine. Return ONLY valid JSON: {"rooms":[{"name":"Trade Category","items":[{"detail":"Brief description","condition":"-","comment":"Work description","laborHrs":1,"materials":[{"n":"Material","c":10}]}]}]}. Use realistic hours and material prices. Licensed trades: ${licensedTrades.join(", ") || "none"}.
-
-The "name" field on each room object MUST be one of the trade categories below (Painting, Flooring, Carpentry, Plumbing, Electrical, Appliances, Safety, Compliance, Exterior, Cleaning/Hauling). Pick the bucket using these rules — DO NOT GUESS:
-
-${TRADE_CATEGORIES_PROMPT}`,
+                    messages: [{ role: "user", content: [{ type: "text", text: `Additional work request for ${prop || "this property"}: ${quickDesc}\n\nThis is a TYPE B input (free-form scope, not an inspection report). Apply the TYPE B rules from the system prompt: condition: "-" on every item, use stated values verbatim if any are given, group by trade category. We only consume the rooms[] array from your response — extra top-level fields (property, client, notes, crewSize, estDays) are fine but ignored.` }] }],
+                    system:
+                      `Labor rate: $${rate || 55}.00/hour.\n\n` +
+                      (licensedTrades.length
+                        ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors.\n\n`
+                        : "") +
+                      AI_SYSTEM_PROMPT_BASE,
                   }),
                 });
                 const data = await res.json();

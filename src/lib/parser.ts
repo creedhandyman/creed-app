@@ -174,7 +174,7 @@ export const TRADE_CATEGORIES_PROMPT = `- PAINTING: paint, primer, spackle, mesh
 - CLEANING/HAULING: ONLY debris removal, disposal/dump fees, final cleaning, interior trash-out (belongings left in unit), appliance deep clean. NEVER caulking. NEVER labor hours for demo, prep, or finish work — those belong with their trade. A line item like "demo and haul-away" should be SPLIT: the demo labor goes to the trade doing the demo (Carpentry for framing/cabinets/counters, Flooring for floor tear-out, Plumbing for fixture pull, etc.), and only the disposal portion (dump fee, debris bags, hauling time) lands in Cleaning/Hauling.
 A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical. A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER Exterior — it's Carpentry. Caulking is NEVER Cleaning/Hauling — it's Painting.`;
 
-const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You produce accurate, client-ready service estimates from whatever the user provides.
+export const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You produce accurate, client-ready service estimates from whatever the user provides.
 
 ## INPUT TYPES
 You accept TWO input types — detect which you're looking at and parse accordingly:
