@@ -316,7 +316,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
   /* ── AI parse (vision + text) with regex fallback ── */
   /* ── Inspection complete handler ── */
-  const handleInspectionComplete = async (data: InspectionData) => {
+  // existingInspectionId: when called from "Quote This" on an already-saved
+  // inspection, pass the inspection job's id so we DON'T create a duplicate
+  // standalone inspection record. Without this, every Quote This click
+  // appended a new copy to the saved-inspections list.
+  const handleInspectionComplete = async (data: InspectionData, existingInspectionId?: string) => {
     setParsing(true);
     setParseStatus("Reading inspection report...");
     setMode("edit");
@@ -327,35 +331,41 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setAddressId(data.address_id);
     setInspectionData(data);
 
-    // Save inspection as standalone record
-    try {
-      await db.post("jobs", {
-        property: data.property,
-        client: data.client,
-        ...(data.customer_id ? { customer_id: data.customer_id } : {}),
-        ...(data.address_id ? { address_id: data.address_id } : {}),
-        job_date: new Date().toISOString().split("T")[0],
-        rooms: JSON.stringify({
-          inspection: {
-            rooms: data.rooms.map((r) => ({
-              name: r.name,
-              sqft: r.sqft,
-              items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
-            })),
-            property: data.property,
-            client: data.client,
-          },
-        }),
-        total: 0,
-        total_labor: 0,
-        total_mat: 0,
-        total_hrs: 0,
-        status: "inspection",
-        created_by: user.name,
-      });
-    } catch { /* non-critical */ }
+    // Save inspection as standalone record only on first completion. When
+    // re-quoting an already-saved inspection, the record already exists.
+    if (!existingInspectionId) {
+      try {
+        await db.post("jobs", {
+          property: data.property,
+          client: data.client,
+          ...(data.customer_id ? { customer_id: data.customer_id } : {}),
+          ...(data.address_id ? { address_id: data.address_id } : {}),
+          job_date: new Date().toISOString().split("T")[0],
+          rooms: JSON.stringify({
+            inspection: {
+              rooms: data.rooms.map((r) => ({
+                name: r.name,
+                sqft: r.sqft,
+                items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
+              })),
+              property: data.property,
+              client: data.client,
+            },
+          }),
+          total: 0,
+          total_labor: 0,
+          total_mat: 0,
+          total_hrs: 0,
+          status: "inspection",
+          created_by: user.name,
+        });
+      } catch { /* non-critical */ }
+    }
 
-    // Collect all inspection photos and add to job gallery
+    // Collect all inspection photos and REPLACE the job gallery — appending
+    // here meant re-loading the same inspection (or quoting it twice in a
+    // session) doubled the gallery. Any in-progress photos from a previous
+    // unrelated quote shouldn't bleed in.
     const inspectionPhotos: { url: string; label: string; type: "before" | "after" | "work" }[] = [];
     (data.rooms || []).forEach((room) => {
       (room.items || []).forEach((item) => {
@@ -364,7 +374,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         });
       });
     });
-    if (inspectionPhotos.length) setJobPhotos((prev) => [...prev, ...inspectionPhotos]);
+    setJobPhotos(inspectionPhotos);
 
     try {
       const input: InspectionInput = {
@@ -894,6 +904,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setWorkers([]);
     setCustomWorkOrder(null);
     setEditingId(null);
+    // Clear inspection-driven state so the next quote starts clean and
+    // photos/inspection don't bleed forward into an unrelated session.
+    setJobPhotos([]);
+    setInspectionData(null);
     setPage("jobs");
   };
 
@@ -1418,7 +1432,13 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
     <div className="fi">
       {/* Header */}
       <div className="row mb">
-        <button className="bo" onClick={() => { setMode(null); setRooms([]); }}>←</button>
+        <button className="bo" onClick={() => {
+          setMode(null);
+          setRooms([]);
+          setJobPhotos([]);
+          setInspectionData(null);
+          setEditingId(null);
+        }}>←</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>⚡ Quote</h2>
         <span style={{ fontSize: 10 }} className="dim">${rate}/hr</span>
       </div>
@@ -2714,7 +2734,7 @@ function PriorityBadge({ pri }: { pri: "HIGH" | "MED" | "LOW" }) {
 // Collapsed into a single toggle so saved inspections don't clutter the Start
 // screen; tap to expand and browse/quote/print/delete each one.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; onQuote: (data: any) => void; onPrint: (insp: any, data: any, rooms: number, findings: number) => void; onDelete: (id: string) => void }) {
+function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; onQuote: (data: any, existingId?: string) => void; onPrint: (insp: any, data: any, rooms: number, findings: number) => void; onDelete: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const inspections = jobs.filter((j) => j.status === "inspection");
   if (!inspections.length) return null;
@@ -2761,7 +2781,32 @@ function SavedInspections({ jobs, onQuote, onPrint, onDelete }: { jobs: any[]; o
                   </div>
                 </div>
                 <div className="row" style={{ marginTop: 8, gap: 6 }}>
-                  <button className="bb" onClick={() => { if (inspection) onQuote(inspection); }} style={{ fontSize: 12, padding: "5px 10px" }}>
+                  <button className="bb" onClick={() => {
+                    if (!inspection) return;
+                    // Normalize the saved-inspection shape (which uses
+                    // `comment`) back into InspectionData (which uses
+                    // `notes`) — otherwise the AI sees blank notes and
+                    // every Quote This re-saves a duplicate inspection
+                    // record. Carry the existing id so the handler skips
+                    // the duplicate db.post.
+                    const normalized = {
+                      rooms: (inspection.rooms || []).map((r: any) => ({
+                        name: r.name || "",
+                        sqft: typeof r.sqft === "number" ? r.sqft : 0,
+                        items: (r.items || []).map((it: any) => ({
+                          name: it.name || "",
+                          condition: it.condition || "S",
+                          notes: it.notes ?? it.comment ?? "",
+                          photos: it.photos || [],
+                        })),
+                      })),
+                      property: insp.property || "",
+                      client: insp.client || "",
+                      customer_id: insp.customer_id || undefined,
+                      address_id: insp.address_id || undefined,
+                    };
+                    onQuote(normalized, insp.id);
+                  }} style={{ fontSize: 12, padding: "5px 10px" }}>
                     {t("qf.quoteThis")}
                   </button>
                   <button className="bo" onClick={() => onPrint(insp, inspData, roomCount, findingsCount)} style={{ fontSize: 12, padding: "5px 10px" }}>
