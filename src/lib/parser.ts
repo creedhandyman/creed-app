@@ -337,7 +337,7 @@ PAINTING — hours for experienced painters (prep, patch, prime, 2 coats, cleanu
 - Full unit paint (3-bed house, all rooms, spray+roll+trim): 40-50h total
 IMPORTANT: A full-house repaint of a 3-bedroom home = 40-50 total paint hours. If your paint hours add up to less than 35h for a full house, increase them.
 
-FLOORING — create ONE line item per room. Do NOT split into separate demo/prep/install items.
+FLOORING — create ONE line item PER ROOM, not one consolidated line item for the whole house. If 7 rooms have damaged flooring, the Flooring trade bucket must contain SEVEN line items (one per room). NEVER merge multiple rooms into a single "Flooring throughout home" line — Bernard prices, schedules, and tracks progress per room. Each room has its own sqft, its own labor hours, and its own materials line. The "GROUP BY TRADE" rule (rule 4 above) means line items live under trade-named room buckets ("Flooring", "Painting") — it does NOT mean consolidate multiple rooms into one item. Do NOT split a single room into separate demo/prep/install items.
 Hours INCLUDE old floor removal, subfloor prep, AND new floor installation. These are MINIMUMS — never quote fewer hours than the per-sqft formula gives you, regardless of labor rate:
 - LVP/Laminate (install only, existing subfloor good): 1 hour per 35 sqft
 - LVP/Laminate REPLACING old flooring (carpet rip, tear-out, or any demo): 1 hour per 28 sqft (tear-out + haul-out adds real time — do not skip it)
@@ -1270,6 +1270,16 @@ export async function aiParseInspection(
       const sqft = room.sqft && room.sqft > 0 ? room.sqft : 0;
       const rate = laborRate || 55;
 
+      // Build a client-clean comment from the inspection findings. The
+      // "auto-added by safety net" wording is a developer signal — it
+      // belongs in merged.notes (which Bernard sees in the quote header
+      // / work order), NOT in the line item comment that ends up on the
+      // printed estimate the customer reads.
+      const findingNotes = damagedFindings
+        .map((f) => f.notes && f.notes.trim() ? f.notes.trim() : "")
+        .filter(Boolean)
+        .join(" ");
+
       let fallbackItem;
       if (hasFlooring && sqft > 0) {
         // 1h per 28 sqft (rip+install), $2.00/sqft material with 10%
@@ -1277,11 +1287,13 @@ export async function aiParseInspection(
         const hrs = Math.max(2, Math.round((sqft / 28) * 10) / 10);
         const matLvp = Math.round(sqft * 1.1 * 2.00);
         const matUnder = Math.round(sqft * 0.30);
+        const baseComment = findingNotes
+          || `Existing flooring is damaged and needs replacement.`;
         fallbackItem = {
           id: crypto.randomUUID().slice(0, 8),
-          detail: `${name} — Replace flooring (~${sqft} sqft)`,
+          detail: `${name} — Replace flooring (${sqft} sqft)`,
           condition: "D",
-          comment: `${damagedFindings.map((f) => f.notes || f.name).filter(Boolean).join(". ")} — auto-added by safety net; verify scope and pricing.`,
+          comment: `${baseComment} Install new LVP across ${sqft} sqft, including existing-floor tear-out, subfloor prep, transition strips, and disposal.`,
           laborHrs: Math.max(hrs, Math.ceil((sqft * 2.5) / rate * 10) / 10),
           materials: [
             { n: `LVP/Laminate ${sqft} sqft (10% waste)`, c: matLvp, qty: Math.round(sqft * 1.1), unitPrice: 2.00 },
@@ -1291,24 +1303,31 @@ export async function aiParseInspection(
           ],
         };
       } else if (hasFlooring) {
-        // Damaged flooring but no sqft captured — emit a placeholder that
-        // forces the user to set sqft before sending the quote.
+        // Damaged flooring but no sqft captured — emit a placeholder
+        // that forces Bernard to set sqft before sending the quote.
+        const baseComment = findingNotes
+          || `Existing flooring is damaged and needs replacement.`;
         fallbackItem = {
           id: crypto.randomUUID().slice(0, 8),
-          detail: `${name} — Replace flooring (sqft TBD)`,
+          detail: `${name} — Replace flooring (sqft pending)`,
           condition: "D",
-          comment: `${damagedFindings.map((f) => f.notes || f.name).filter(Boolean).join(". ")} — set the room sqft to refine pricing. Auto-added by safety net.`,
+          comment: `${baseComment} Capture the room's W × L in Inspector to refine the labor and material estimate before sending.`,
           laborHrs: 4,
-          materials: [{ n: "Flooring + materials (tbd by sqft)", c: 250 }],
+          materials: [{ n: "Flooring + materials (price by sqft)", c: 250 }],
         };
       } else {
-        // Non-flooring damage with no AI line item — emit a generic
-        // review-required placeholder so the room appears in the quote.
+        // Non-flooring damage with no AI line item — generic review-
+        // required placeholder. Comment lists the inspection findings
+        // verbatim so Bernard has the context to re-quote manually.
+        const findingsList = damagedFindings
+          .map((f) => f.notes?.trim() || f.name)
+          .filter(Boolean)
+          .join("; ");
         fallbackItem = {
           id: crypto.randomUUID().slice(0, 8),
           detail: `${name} — Review damaged findings`,
           condition: "D",
-          comment: `${damagedFindings.map((f) => `${f.name}: ${f.notes || "damaged"}`).join("; ")} — auto-added by safety net because the AI did not produce a line item for this room. Re-quote manually.`,
+          comment: findingsList || "Damaged finding requires review on site.",
           laborHrs: 1,
           materials: [{ n: "Materials TBD", c: 50 }],
         };
