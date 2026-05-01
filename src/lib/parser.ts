@@ -398,6 +398,7 @@ Capture from report: paint colors, hardware finishes (brushed nickel, oil-rubbed
 }
 
 ## VERIFY BEFORE OUTPUT
+- EVERY ROOM WITH A D OR P FINDING MUST PRODUCE AT LEAST ONE LINE ITEM. Count the distinct rooms in the input that have any condition: "D" or "P" item. Count the distinct rooms represented in your output (the room prefix in detail field). The two counts must match. If you have 7 rooms with damaged findings but only 4 rooms in your output, you've dropped 3 rooms — go back and add them. NEVER skip a room because its sqft is missing or its photos didn't load — quote it from the text comment with a conservative estimate. NEVER skip a room because a similar item is quoted elsewhere — each room is its own line item.
 - RE-READ EVERY D AND P COMMENT after drafting your line items. For each comment, count the distinct sentences/clauses describing repairs and verify you have a line (or a material under an existing line) for each one. If a comment described 5 distinct issues but you have 3 line items for that room, you missed 2 — go back and add them. The most common drop pattern is sentence #2 or later, or the second clause after "and". Do this pass every time, not just on long comments.
 - Total hours: 40-70 for typical 3-bed full make-ready (including full paint). Under 30 for a full paint job = too low.
 - Total cost: $3,000-$6,000 typical. Over $8,000 = re-check.
@@ -462,17 +463,24 @@ export function validateQuote(rooms: Room[]): Room[] {
     }));
   }
 
-  // 3. Deduplicate items — check across ALL rooms, not just within one
+  // 3. Deduplicate items — check across ALL rooms, not just within one.
+  //
+  // Bug history: an earlier version used a regex that stripped room numbers
+  // ("Bedroom 1", "Bedroom 2", "Bedroom 3" all collapsed to "bedroom"), so
+  // a 7-room flooring make-ready where most rooms had similar damage
+  // comments saw Bedrooms 2 and 3 silently removed as "duplicates" of
+  // Bedroom 1. Now: dedup on the full detail string + comment so each
+  // unique room–task pair survives, but two AI batches that produced the
+  // exact same line item still collapse to one.
   const globalSeen = new Set<string>();
   rooms = rooms.map((r) => ({
     ...r,
     items: r.items.filter((it) => {
-      // Create a dedup key from the meaningful parts
-      const room = (it.detail.match(/^(\w[\w\s]*?)[\s—\-:]/)?.[1] || r.name).toLowerCase().trim();
-      const task = it.comment.toLowerCase().replace(/[^a-z\s]/g, "").trim().slice(0, 50);
-      const key = `${room}|${task}`;
+      const detailKey = it.detail.toLowerCase().replace(/\s+/g, " ").trim();
+      const taskKey = it.comment.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim().slice(0, 80);
+      const key = `${detailKey}|${taskKey}`;
       if (globalSeen.has(key)) {
-        console.warn(`VALIDATION: Global duplicate removed — "${it.detail}" (${task})`);
+        console.warn(`VALIDATION: Global duplicate removed — "${it.detail}"`);
         return false;
       }
       globalSeen.add(key);
@@ -1219,10 +1227,108 @@ export async function aiParseInspection(
   }
 
   if (partials.length === 0) return null;
-  if (partials.length === 1) return partials[0];
+  const merged = partials.length === 1
+    ? partials[0]
+    : (onProgress?.("Merging batches..."), mergeParseResults(partials));
 
-  onProgress?.("Merging batches...");
-  return mergeParseResults(partials);
+  // Safety net: every room that had at least one D or P finding in the
+  // inspection input MUST produce at least one line item in the quote.
+  // Bernard hit a real case (1021 S Hydraulic, 7 flooring-damaged rooms)
+  // where the AI silently dropped 3 of them. The fix in validateQuote
+  // prevents the over-aggressive dedup, but a misbehaving AI batch can
+  // still skip a room outright. If that happens, synthesize a fallback
+  // line item from the inspection finding so the room is never silently
+  // dropped — it shows up in the quote with a flag so Bernard can
+  // verify pricing.
+  const damagedRoomNames = inspection.rooms
+    .filter((r) => r.items.some((it) => it.condition === "D" || it.condition === "P"))
+    .map((r) => r.name);
+  const quotedRoomTokens = new Set<string>();
+  merged.rooms.forEach((r) => r.items.forEach((it) => {
+    // The detail starts with "Room Name — …". Pull the prefix as a token.
+    const prefix = it.detail.split(/\s+[—\-:]/)[0]?.toLowerCase().replace(/\s+/g, " ").trim();
+    if (prefix) quotedRoomTokens.add(prefix);
+  }));
+  const missingRooms = damagedRoomNames.filter((name) => {
+    const token = name.toLowerCase().replace(/\s+/g, " ").trim();
+    return !quotedRoomTokens.has(token);
+  });
+  if (missingRooms.length > 0) {
+    console.warn(`aiParseInspection: AI dropped ${missingRooms.length} damaged room(s); synthesizing fallback items: ${missingRooms.join(", ")}`);
+    onProgress?.(`Adding ${missingRooms.length} skipped room${missingRooms.length === 1 ? "" : "s"}...`);
+    for (const name of missingRooms) {
+      const room = inspection.rooms.find((r) => r.name === name);
+      if (!room) continue;
+      const damagedFindings = room.items.filter((it) => it.condition === "D" || it.condition === "P");
+      // If the room has known sqft AND any finding mentions floor/carpet/lvp,
+      // bias the fallback toward a flooring estimate (most common case in
+      // turnover work). Otherwise emit a generic "review needed" line so
+      // the room appears and the user can re-quote it manually.
+      const hasFlooring = damagedFindings.some((f) =>
+        /floor|carpet|lvp|laminate|vinyl|tile/i.test(f.name + " " + f.notes),
+      );
+      const sqft = room.sqft && room.sqft > 0 ? room.sqft : 0;
+      const rate = laborRate || 55;
+
+      let fallbackItem;
+      if (hasFlooring && sqft > 0) {
+        // 1h per 28 sqft (rip+install), $2.00/sqft material with 10%
+        // waste, $0.30/sqft underlayment, $30 transitions, $15 disposal.
+        const hrs = Math.max(2, Math.round((sqft / 28) * 10) / 10);
+        const matLvp = Math.round(sqft * 1.1 * 2.00);
+        const matUnder = Math.round(sqft * 0.30);
+        fallbackItem = {
+          id: crypto.randomUUID().slice(0, 8),
+          detail: `${name} — Replace flooring (~${sqft} sqft)`,
+          condition: "D",
+          comment: `${damagedFindings.map((f) => f.notes || f.name).filter(Boolean).join(". ")} — auto-added by safety net; verify scope and pricing.`,
+          laborHrs: Math.max(hrs, Math.ceil((sqft * 2.5) / rate * 10) / 10),
+          materials: [
+            { n: `LVP/Laminate ${sqft} sqft (10% waste)`, c: matLvp, qty: Math.round(sqft * 1.1), unitPrice: 2.00 },
+            { n: "Underlayment", c: matUnder },
+            { n: "Transition strips", c: 30 },
+            { n: "Disposal/cleanup", c: 15 },
+          ],
+        };
+      } else if (hasFlooring) {
+        // Damaged flooring but no sqft captured — emit a placeholder that
+        // forces the user to set sqft before sending the quote.
+        fallbackItem = {
+          id: crypto.randomUUID().slice(0, 8),
+          detail: `${name} — Replace flooring (sqft TBD)`,
+          condition: "D",
+          comment: `${damagedFindings.map((f) => f.notes || f.name).filter(Boolean).join(". ")} — set the room sqft to refine pricing. Auto-added by safety net.`,
+          laborHrs: 4,
+          materials: [{ n: "Flooring + materials (tbd by sqft)", c: 250 }],
+        };
+      } else {
+        // Non-flooring damage with no AI line item — emit a generic
+        // review-required placeholder so the room appears in the quote.
+        fallbackItem = {
+          id: crypto.randomUUID().slice(0, 8),
+          detail: `${name} — Review damaged findings`,
+          condition: "D",
+          comment: `${damagedFindings.map((f) => `${f.name}: ${f.notes || "damaged"}`).join("; ")} — auto-added by safety net because the AI did not produce a line item for this room. Re-quote manually.`,
+          laborHrs: 1,
+          materials: [{ n: "Materials TBD", c: 50 }],
+        };
+      }
+      // Drop into the appropriate trade bucket (Flooring if flooring,
+      // else "Review" — validateQuote will bucket it correctly later).
+      const tradeBucket = hasFlooring ? "Flooring" : "Review";
+      const existing = merged.rooms.find((r) => r.name === tradeBucket);
+      if (existing) {
+        existing.items.push(fallbackItem);
+      } else {
+        merged.rooms.push({ name: tradeBucket, items: [fallbackItem] });
+      }
+    }
+    merged.notes.push(
+      `${missingRooms.length} room${missingRooms.length === 1 ? " was" : "s were"} flagged DAMAGED in the inspection but the AI didn't produce a line item — auto-added with conservative pricing. Verify: ${missingRooms.join(", ")}.`,
+    );
+  }
+
+  return merged;
 }
 
 /* ====== VOICE WALK INSPECTION ====== */
