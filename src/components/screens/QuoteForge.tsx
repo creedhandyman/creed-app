@@ -264,6 +264,17 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [inspectionData, setInspectionData] = useState<InspectionData | null>(null);
   // Editable work order — null means "use auto-generated from guide.steps"
   const [customWorkOrder, setCustomWorkOrder] = useState<GuideStep[] | null>(null);
+  // Guide-tab persistent state — lifted out of GuideTab so adds survive
+  // save+reload. Bernard hit the bug where new shopping-list items
+  // disappeared on save: GuideTab held them in local component state that
+  // never made it into the job's rooms JSON. These four arrays are now
+  // sourced from / persisted to data.customTools / data.customShop /
+  // data.checkedTools / data.checkedShop, matching the keys WorkVision
+  // already writes — so adds and checks round-trip between the two views.
+  const [customTools, setCustomTools] = useState<string[]>([]);
+  const [customShop, setCustomShop] = useState<{ n: string; c: number; room?: string; trade?: string }[]>([]);
+  const [checkedTools, setCheckedTools] = useState<string[]>([]);
+  const [checkedShop, setCheckedShop] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -298,6 +309,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           room: s.room, detail: s.detail, action: s.action, pri: s.pri, hrs: s.hrs,
         })));
       }
+      // Guide-tab persistent state — same keys WorkVision uses, so
+      // shopping-list adds and checks survive across views.
+      setCustomTools(Array.isArray(data?.customTools) ? data.customTools : []);
+      setCustomShop(Array.isArray(data?.customShop) ? data.customShop : []);
+      setCheckedTools(Array.isArray(data?.checkedTools) ? data.checkedTools : []);
+      setCheckedShop(Array.isArray(data?.checkedShop) ? data.checkedShop : []);
     } catch {
       // rooms parse failed, start empty
     }
@@ -1008,6 +1025,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       }),
       photos: mergedPhotos,
       workOrder,
+      // Guide-tab state. Saved at the top level of the rooms blob using the
+      // same keys WorkVision writes — keeps shopping-list adds and checks
+      // in sync between the two views (and stops the
+      // shopping-additions-disappear-on-save bug Bernard hit).
+      customTools,
+      customShop,
+      checkedTools,
+      checkedShop,
       // Only overwrite `inspection` if the user just ran the inspector in
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
@@ -1064,6 +1089,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // photos/inspection don't bleed forward into an unrelated session.
     setJobPhotos([]);
     setInspectionData(null);
+    // Clear Guide-tab state too — without this, a previous job's custom
+    // tools / shop items would bleed into the next quote opened.
+    setCustomTools([]);
+    setCustomShop([]);
+    setCheckedTools([]);
+    setCheckedShop([]);
     setPage("jobs");
   };
 
@@ -1605,6 +1636,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setJobPhotos([]);
           setInspectionData(null);
           setEditingId(null);
+          setCustomTools([]);
+          setCustomShop([]);
+          setCheckedTools([]);
+          setCheckedShop([]);
         }}>←</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>⚡ Quote</h2>
         <span style={{ fontSize: 10 }} className="dim">${rate}/hr</span>
@@ -2055,6 +2090,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           }}
           onReset={() => setCustomWorkOrder(null)}
           darkMode={darkMode}
+          customTools={customTools}
+          setCustomTools={setCustomTools}
+          customShop={customShop}
+          setCustomShop={setCustomShop}
+          checkedTools={checkedTools}
+          setCheckedTools={setCheckedTools}
+          checkedShop={checkedShop}
+          setCheckedShop={setCheckedShop}
         />
       )}
 
@@ -2490,6 +2533,14 @@ function GuideTab({
   onAddStep,
   onReset,
   darkMode,
+  customTools,
+  setCustomTools,
+  customShop,
+  setCustomShop,
+  checkedTools,
+  setCheckedTools,
+  checkedShop,
+  setCheckedShop,
 }: {
   guide: ReturnType<typeof makeGuide>;
   workOrder: GuideStep[];
@@ -2499,14 +2550,25 @@ function GuideTab({
   onAddStep: (step: GuideStep) => void;
   onReset: () => void;
   darkMode: boolean;
+  // Lifted state — owned by QuoteForge so it survives save+reload.
+  // checkedShop is keyed by `n|||room|||trade` (matches WorkVision's
+  // shopKey) instead of by index, so reorders don't drift the checks.
+  customTools: string[];
+  setCustomTools: React.Dispatch<React.SetStateAction<string[]>>;
+  customShop: { n: string; c: number; room?: string; trade?: string }[];
+  setCustomShop: React.Dispatch<React.SetStateAction<{ n: string; c: number; room?: string; trade?: string }[]>>;
+  checkedTools: string[];
+  setCheckedTools: React.Dispatch<React.SetStateAction<string[]>>;
+  checkedShop: string[];
+  setCheckedShop: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
   const border = darkMode ? "#1e1e2e" : "#eee";
-  const [checkedTools, setCheckedTools] = useState<Set<string>>(() => new Set());
-  const [checkedShop, setCheckedShop] = useState<Set<number>>(() => new Set());
-  const [extraTools, setExtraTools] = useState<string[]>([]);
-  const [extraShop, setExtraShop] = useState<{ n: string; c: number; room: string }[]>([]);
   const [newTool, setNewTool] = useState("");
   const [newShopName, setNewShopName] = useState("");
+  // Stable identity for a shop item — same shape WorkVision uses so the
+  // two views stay in sync on the same job.
+  const shopKey = (s: { n: string; room?: string; trade?: string }) =>
+    `${(s.n || "").toLowerCase().trim()}|||${(s.room || "").toLowerCase().trim()}|||${(s.trade || "").toLowerCase().trim()}`;
   // New-task form state
   const [taskRoom, setTaskRoom] = useState("");
   const [taskDetail, setTaskDetail] = useState("");
@@ -2516,22 +2578,20 @@ function GuideTab({
   const workOrderHrs = workOrder.reduce((s, x) => s + (x.hrs || 0), 0);
   const [newShopCost, setNewShopCost] = useState("");
 
-  const allTools = [...guide.tools, ...extraTools];
-  const allShop = [...guide.shop, ...extraShop];
+  const allTools = [...guide.tools, ...customTools];
+  const allShop = [...guide.shop, ...customShop];
 
   const toggleTool = (t: string) =>
-    setCheckedTools((prev) => {
-      const next = new Set(prev);
-      next.has(t) ? next.delete(t) : next.add(t);
-      return next;
-    });
+    setCheckedTools((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+    );
 
-  const toggleShop = (i: number) =>
-    setCheckedShop((prev) => {
-      const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
-      return next;
-    });
+  const toggleShop = (s: { n: string; room?: string; trade?: string }) => {
+    const key = shopKey(s);
+    setCheckedShop((prev) =>
+      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key],
+    );
+  };
 
   return (
     <div>
@@ -2541,7 +2601,7 @@ function GuideTab({
             🧰 Tools ({allTools.length})
           </h4>
           {allTools.map((t, i) => {
-            const done = checkedTools.has(t);
+            const done = checkedTools.includes(t);
             return (
               <div
                 key={i}
@@ -2580,7 +2640,7 @@ function GuideTab({
               style={{ flex: 1, fontSize: 13, padding: "4px 8px" }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && newTool.trim()) {
-                  setExtraTools((prev) => [...prev, newTool.trim()]);
+                  setCustomTools((prev) => [...prev, newTool.trim()]);
                   setNewTool("");
                 }
               }}
@@ -2588,7 +2648,7 @@ function GuideTab({
             <button
               onClick={() => {
                 if (newTool.trim()) {
-                  setExtraTools((prev) => [...prev, newTool.trim()]);
+                  setCustomTools((prev) => [...prev, newTool.trim()]);
                   setNewTool("");
                 }
               }}
@@ -2605,7 +2665,7 @@ function GuideTab({
           </h4>
           <div>
             {allShop.map((s, i) => {
-              const done = checkedShop.has(i);
+              const done = checkedShop.includes(shopKey(s));
               // Show trade header when trade changes
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const prevTrade = i > 0 ? (allShop[i - 1] as any).trade : null;
@@ -2618,7 +2678,7 @@ function GuideTab({
                     <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-primary)", marginTop: i > 0 ? 10 : 0, marginBottom: 4 }}>{curTrade}</div>
                   )}
                   <div
-                    onClick={() => toggleShop(i)}
+                    onClick={() => toggleShop(s)}
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
@@ -2667,7 +2727,7 @@ function GuideTab({
             <button
               onClick={() => {
                 if (newShopName.trim()) {
-                  setExtraShop((prev) => [...prev, { n: newShopName.trim(), c: parseFloat(newShopCost) || 0, room: "Custom" }]);
+                  setCustomShop((prev) => [...prev, { n: newShopName.trim(), c: parseFloat(newShopCost) || 0, room: "Custom" }]);
                   setNewShopName("");
                   setNewShopCost("");
                 }
