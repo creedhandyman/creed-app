@@ -465,7 +465,14 @@ export interface AiParseResult {
 }
 
 /* ====== POST-PARSE VALIDATION ====== */
-export function validateQuote(rooms: Room[]): Room[] {
+export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Room[] {
+  // skipCaps suppresses the material-cost / labor-hours caps below. Use it
+  // when re-validating data the user has already reviewed and saved (e.g.,
+  // the editJobId reload path) — otherwise a Bernard-edited material that
+  // lifted past the conservative AI-defense cap gets silently scaled back
+  // down on the next render. Caps still fire on FRESH AI output, where
+  // they're catching hallucinated prices.
+  const skipCaps = opts?.skipCaps === true;
   // 0. Ensure every item has a stable id. Without this, saved quotes from
   //    older versions (or any item that lost its id in transit) would all
   //    have id===undefined, and editing one item's hours would patch every
@@ -540,46 +547,48 @@ export function validateQuote(rooms: Room[]): Room[] {
   // task. Project-scope items (condition "-") get loose caps because they
   // legitimately roll up multiple units (e.g. 16 windows across a triplex).
   const EXPENSIVE_KEYWORDS = /water heater|condenser|furnace|ac unit|mini.?split|garage door|countertop|tub|vanity|window|appliance|flooring|carpet/i;
-  rooms = rooms.map((r) => ({
-    ...r,
-    items: r.items.map((it) => {
-      const matTotal = it.materials.reduce((s, m) => s + (m.c || 0), 0);
-      const isExpensive = EXPENSIVE_KEYWORDS.test(it.detail + " " + it.comment);
-      const isProjectScope = it.condition === "-";
-      const cap = isProjectScope
-        ? (isExpensive ? 25000 : 10000)
-        : (isExpensive ? 2000 : 500);
-      if (matTotal > cap) {
-        console.warn(`VALIDATION: Material cost for "${it.detail}" is $${matTotal} (cap $${cap}). Resetting.`);
-        // Scale materials down proportionally to cap. Scale unitPrice
-        // alongside c so qty × unitPrice stays consistent.
-        const scale = cap / matTotal;
-        return { ...it, materials: it.materials.map((m) => ({
-          ...m,
-          c: Math.round(m.c * scale),
-          ...(m.unitPrice !== undefined ? { unitPrice: Math.round(m.unitPrice * scale * 100) / 100 } : {}),
-        })) };
-      }
-      return it;
-    }),
-  }));
+  if (!skipCaps) {
+    rooms = rooms.map((r) => ({
+      ...r,
+      items: r.items.map((it) => {
+        const matTotal = it.materials.reduce((s, m) => s + (m.c || 0), 0);
+        const isExpensive = EXPENSIVE_KEYWORDS.test(it.detail + " " + it.comment);
+        const isProjectScope = it.condition === "-";
+        const cap = isProjectScope
+          ? (isExpensive ? 25000 : 10000)
+          : (isExpensive ? 2000 : 500);
+        if (matTotal > cap) {
+          console.warn(`VALIDATION: Material cost for "${it.detail}" is $${matTotal} (cap $${cap}). Resetting.`);
+          // Scale materials down proportionally to cap. Scale unitPrice
+          // alongside c so qty × unitPrice stays consistent.
+          const scale = cap / matTotal;
+          return { ...it, materials: it.materials.map((m) => ({
+            ...m,
+            c: Math.round(m.c * scale),
+            ...(m.unitPrice !== undefined ? { unitPrice: Math.round(m.unitPrice * scale * 100) / 100 } : {}),
+          })) };
+        }
+        return it;
+      }),
+    }));
 
-  // 5. Cap unreasonable hours. Inspection items: 10h trip / 8h reset (no single
-  // repair task takes longer than that). Project-scope items: 200h trip / 100h
-  // reset (a multi-unit job can legitimately be 50-100 clock hours).
-  rooms = rooms.map((r) => ({
-    ...r,
-    items: r.items.map((it) => {
-      const isProjectScope = it.condition === "-";
-      const trip = isProjectScope ? 200 : 10;
-      const reset = isProjectScope ? 100 : 8;
-      if (it.laborHrs > trip) {
-        console.warn(`VALIDATION: Capped hours for "${it.detail}" from ${it.laborHrs}h to ${reset}h`);
-        return { ...it, laborHrs: reset };
-      }
-      return it;
-    }),
-  }));
+    // 5. Cap unreasonable hours. Inspection items: 10h trip / 8h reset (no single
+    // repair task takes longer than that). Project-scope items: 200h trip / 100h
+    // reset (a multi-unit job can legitimately be 50-100 clock hours).
+    rooms = rooms.map((r) => ({
+      ...r,
+      items: r.items.map((it) => {
+        const isProjectScope = it.condition === "-";
+        const trip = isProjectScope ? 200 : 10;
+        const reset = isProjectScope ? 100 : 8;
+        if (it.laborHrs > trip) {
+          console.warn(`VALIDATION: Capped hours for "${it.detail}" from ${it.laborHrs}h to ${reset}h`);
+          return { ...it, laborHrs: reset };
+        }
+        return it;
+      }),
+    }));
+  }
 
   // 5. Ensure materials have $0 fallback removed (no empty "Materials $0" entries)
   rooms = rooms.map((r) => ({

@@ -3,6 +3,11 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 
+// localStorage key for trial-banner dismissal. Keyed by the days-remaining
+// count so a dismiss at "7 days left" doesn't suppress the banner once we
+// drop to 6 — every new day's banner gets one fresh chance to be dismissed.
+const trialDismissKey = (daysLeft: number) => `c_trial_banner_dismissed_${daysLeft}`;
+
 const PLANS = [
   { key: "solo", name: "Solo", price: "$49", desc: "1 user", amount: 4900 },
   { key: "team", name: "Team", price: "$99", desc: "Up to 5 users", amount: 9900 },
@@ -32,47 +37,10 @@ export default function BillingGate({ children }: { children: React.ReactNode })
     const daysLeft = Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
     if (daysLeft > 0) {
-      // Still in trial — show banner but allow access
-      return (
-        <>
-          {daysLeft <= 7 && (
-            <div style={{
-              position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
-              background: daysLeft <= 3 ? "#C00000" : "#D4760A",
-              color: "#fff", textAlign: "center", padding: "6px 12px",
-              fontSize: 12, fontFamily: "Source Sans 3, sans-serif",
-            }}>
-              ⏳ Trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""} —{" "}
-              <span
-                onClick={async () => {
-                  setLoading(true);
-                  try {
-                    const res = await fetch("/api/billing", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        action: "create-checkout",
-                        orgId: org.id,
-                        orgName: org.name,
-                        email: user.email,
-                        plan: org.plan || "solo",
-                        returnUrl: window.location.origin,
-                      }),
-                    });
-                    const data = await res.json();
-                    if (data.url) window.location.href = data.url;
-                  } catch { /* */ }
-                  setLoading(false);
-                }}
-                style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 600 }}
-              >
-                Subscribe now
-              </span>
-            </div>
-          )}
-          {children}
-        </>
-      );
+      // Still in trial — show banner but allow access. Banner is
+      // dismissable per day (key includes daysLeft) so the user can
+      // close "7 days left" today and still see "6 days left" tomorrow.
+      return <TrialBanner daysLeft={daysLeft} org={org} user={user}>{children}</TrialBanner>;
     }
   }
 
@@ -206,5 +174,81 @@ export default function BillingGate({ children }: { children: React.ReactNode })
         </div>
       </div>
     </div>
+  );
+}
+
+// Sticky trial-ending banner with a per-day-count dismiss. Pulled out of
+// BillingGate so it can hold its own dismissed-state without re-rendering
+// the paywall on every state change.
+function TrialBanner({
+  daysLeft, org, user, children,
+}: {
+  daysLeft: number;
+  org: { id: string; name: string; plan?: string };
+  user: { email: string };
+  children: React.ReactNode;
+}) {
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return !!localStorage.getItem(trialDismissKey(daysLeft)); } catch { return false; }
+  });
+  const [loading, setLoading] = useState(false);
+  const showBanner = daysLeft <= 7 && !dismissed;
+  return (
+    <>
+      {showBanner && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
+          background: daysLeft <= 3 ? "#C00000" : "#D4760A",
+          color: "#fff", textAlign: "center", padding: "6px 32px 6px 12px",
+          fontSize: 12, fontFamily: "Source Sans 3, sans-serif",
+        }}>
+          ⏳ Trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""} —{" "}
+          <span
+            onClick={async () => {
+              if (loading) return;
+              setLoading(true);
+              try {
+                const res = await fetch("/api/billing", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "create-checkout",
+                    orgId: org.id,
+                    orgName: org.name,
+                    email: user.email,
+                    plan: org.plan || "solo",
+                    returnUrl: window.location.origin,
+                  }),
+                });
+                const data = await res.json();
+                if (data.url) window.location.href = data.url;
+              } catch { /* */ }
+              setLoading(false);
+            }}
+            style={{ textDecoration: "underline", cursor: loading ? "wait" : "pointer", fontWeight: 600 }}
+          >
+            Subscribe now
+          </span>
+          <button
+            onClick={() => {
+              try { localStorage.setItem(trialDismissKey(daysLeft), "1"); } catch { /* */ }
+              setDismissed(true);
+            }}
+            aria-label="Dismiss trial banner"
+            title="Dismiss"
+            style={{
+              position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+              background: "transparent", border: "none", color: "#fff",
+              fontSize: 14, lineHeight: 1, padding: "2px 6px", cursor: "pointer",
+              opacity: 0.85,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {children}
+    </>
   );
 }

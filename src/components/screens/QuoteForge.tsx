@@ -282,7 +282,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     try {
       const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
       if (data?.rooms?.length) {
-        setRooms(validateQuote(data.rooms));
+        // skipCaps on reload: the user has already reviewed and saved
+        // these items. The material/labor caps in validateQuote are an
+        // AI-defense layer; re-applying them here would scale a Bernard-
+        // edited material price back down to the cap (the bug Bernard
+        // hit where the materials list edit "didn't save").
+        setRooms(validateQuote(data.rooms, { skipCaps: true }));
       }
       if (data?.workers?.length) {
         setWorkers(data.workers.map((w: { id: string }) => w.id));
@@ -775,11 +780,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           r.name === nr ? { ...r, items: [...r.items, it] } : r
         )
       : [...rooms, { name: nr, items: [it] }];
-    // Run validateQuote so manual additions go through the same dedup /
-    // material-cap pipeline as the AI flows. Reload-time validateQuote
-    // would otherwise be the first place to catch a bad shape, which is
-    // exactly when items started disappearing in the wild.
-    const newRooms = validateQuote(merged);
+    // Run validateQuote so manual additions go through the same dedup
+    // pipeline as the AI flows. skipCaps because the existing items in
+    // `merged` are already user-reviewed and re-capping would scale
+    // their materials down (the materials-edit-not-saving bug). The
+    // newly-added item is freshly minted by the user — they typed the
+    // numbers, no need to second-guess them.
+    const newRooms = validateQuote(merged, { skipCaps: true });
     setRooms(newRooms);
     // Same reason as AI Assist: extend customWorkOrder so this new item
     // shows in the Guide tab and persists into workOrder on save.
@@ -1833,7 +1840,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     working = next;
                   }
 
-                  const validated = validateQuote(working);
+                  // skipCaps: existing items in `working` were already
+                  // user-reviewed (loaded from save). Re-applying the
+                  // AI-defense caps here would scale Bernard-edited
+                  // material prices back down on every AI Assist call.
+                  const validated = validateQuote(working, { skipCaps: true });
                   setRooms(validated);
                   extendCustomWorkOrderFromRooms(validated, "AIAssist");
 

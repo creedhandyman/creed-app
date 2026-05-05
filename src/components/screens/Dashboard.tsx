@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
@@ -66,12 +66,18 @@ export default function Dashboard({ setPage, openSettings }: Props) {
   });
   const earnedMonth = monthJobs.reduce((s, j) => s + (j.total || 0), 0);
 
-  // Getting Started guide
-  const [guideDismissed, setGuideDismissed] = useState(true);
-  useEffect(() => {
-    const d = localStorage.getItem("c_guide_dismissed");
-    if (!d) setGuideDismissed(false);
-  }, []);
+  // Getting Started guide. Lazy initializer reads localStorage during the
+  // first client-side render so the X dismiss persists immediately —
+  // previously a useState(true) + useEffect setter could re-show the
+  // banner if the effect ran before localStorage was inspected, and on
+  // remount (page navigation) state reset to true and only flipped to
+  // false if the flag was missing. The lazy init reads the flag once and
+  // any subsequent setGuideDismissed(true) call is sticky for the
+  // component's lifetime.
+  const [guideDismissed, setGuideDismissed] = useState(() => {
+    if (typeof window === "undefined") return true; // SSR: keep hidden
+    try { return !!localStorage.getItem("c_guide_dismissed"); } catch { return true; }
+  });
 
   // Full user-guide modal — opens from the help button in the header.
   const [showUserGuide, setShowUserGuide] = useState(false);
