@@ -246,23 +246,41 @@ export const useStore = create<AppState>((set, get) => ({
   loadAll: async () => {
     const orgId = get().user?.org_id;
     const orgFilter = orgId ? { org_id: orgId } : undefined;
+    // db.get already catches and resolves to [] on per-table failures,
+    // but use allSettled as a belt-and-suspenders so a thrown exception
+    // anywhere in the batch can never take out the rest of the load.
+    // If a table is missing (e.g. time_off_requests before the HR
+    // migration runs), the per-fetch toast fires inside db.get and this
+    // settles to []. The downstream selectors all default-to-empty.
+    const settle = <T,>(p: Promise<T[]>): Promise<T[]> =>
+      p.catch((err) => {
+        // Should never trip — db.get catches internally — but if it
+        // does, log and degrade to empty instead of crashing loadAll.
+        // eslint-disable-next-line no-console
+        console.error("[store] unexpected loadAll fetch rejection:", err);
+        return [];
+      });
+    const results = await Promise.all([
+      settle(db.get<Customer>("customers", orgFilter)),
+      settle(db.get<Address>("addresses", orgFilter)),
+      settle(db.get<Profile>("profiles", orgFilter)),
+      settle(db.get<Job>("jobs", orgFilter)),
+      settle(db.get<TimeEntry>("time_entries", orgFilter)),
+      settle(db.get<Review>("reviews", orgFilter)),
+      settle(db.get<Referral>("referrals", orgFilter)),
+      settle(db.get<ScheduleEntry>("schedule", orgFilter)),
+      settle(db.get<PayHistory>("pay_history", orgFilter, { limit: 500 })),
+      settle(db.get<Receipt>("receipts", orgFilter)),
+      settle(db.get<QuestPayout>("quest_payouts", orgFilter)),
+      settle(db.get<TimeOffRequest>("time_off_requests", orgFilter)),
+    ]);
     const [
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests,
-    ] = await Promise.all([
-      db.get<Customer>("customers", orgFilter),
-      db.get<Address>("addresses", orgFilter),
-      db.get<Profile>("profiles", orgFilter),
-      db.get<Job>("jobs", orgFilter),
-      db.get<TimeEntry>("time_entries", orgFilter),
-      db.get<Review>("reviews", orgFilter),
-      db.get<Referral>("referrals", orgFilter),
-      db.get<ScheduleEntry>("schedule", orgFilter),
-      db.get<PayHistory>("pay_history", orgFilter, { limit: 500 }),
-      db.get<Receipt>("receipts", orgFilter),
-      db.get<QuestPayout>("quest_payouts", orgFilter),
-      db.get<TimeOffRequest>("time_off_requests", orgFilter),
-    ]);
+    ] = results as [
+      Customer[], Address[], Profile[], Job[], TimeEntry[],
+      Review[], Referral[], ScheduleEntry[], PayHistory[], Receipt[], QuestPayout[], TimeOffRequest[],
+    ];
     set({
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests,

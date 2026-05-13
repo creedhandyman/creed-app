@@ -5,6 +5,15 @@ import { db } from "@/lib/supabase";
 import { Icon } from "../Icon";
 import type { TimeOffRequest, TimeOffKind } from "@/lib/types";
 
+/** Coerce anything to a finite number, falling back to 0. Postgres
+ *  NUMERIC columns come back as strings via supabase-js, and rows
+ *  loaded before the migration ran may simply not have the field —
+ *  so an unguarded `.toFixed(0)` will throw. */
+function num(x: unknown): number {
+  const n = typeof x === "number" ? x : parseFloat(String(x ?? ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * HR admin panel — lives inside Operations as a sub-tab. Owners and
  * managers manage time-off requests (approve/deny), see everyone's
@@ -15,15 +24,16 @@ import type { TimeOffRequest, TimeOffKind } from "@/lib/types";
  * uploads, onboarding checklists.
  */
 export default function HR() {
-  const user = useStore((s) => s.user)!;
-  const profiles = useStore((s) => s.profiles);
-  const timeOffRequests = useStore((s) => s.timeOffRequests);
+  const user = useStore((s) => s.user);
+  const profiles = useStore((s) => s.profiles) ?? [];
+  const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   const loadAll = useStore((s) => s.loadAll);
-  const isOwner = user.role === "owner" || user.role === "manager";
+  const isOwner = user?.role === "owner" || user?.role === "manager";
 
   // Non-admins shouldn't reach this view via Operations gating, but
   // belt-and-suspenders: render a read-only message if they somehow do.
-  if (!isOwner) {
+  // Also covers the brief window before `user` hydrates from localStorage.
+  if (!user || !isOwner) {
     return (
       <div className="cd">
         <p className="dim" style={{ fontSize: 13 }}>
@@ -33,14 +43,15 @@ export default function HR() {
     );
   }
 
+  const todayIso = new Date().toISOString().slice(0, 10);
   const pending = timeOffRequests
-    .filter((r) => r.status === "pending")
+    .filter((r) => r && r.status === "pending")
     .sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
   const upcoming = timeOffRequests
-    .filter((r) => r.status === "approved" && (r.end_date || "") >= new Date().toISOString().slice(0, 10))
+    .filter((r) => r && r.status === "approved" && (r.end_date || "") >= todayIso)
     .sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
   const past = timeOffRequests
-    .filter((r) => (r.status === "approved" && (r.end_date || "") < new Date().toISOString().slice(0, 10)) || r.status === "denied")
+    .filter((r) => r && ((r.status === "approved" && (r.end_date || "") < todayIso) || r.status === "denied"))
     .sort((a, b) => (b.start_date || "").localeCompare(a.start_date || ""))
     .slice(0, 20);
 
@@ -91,7 +102,7 @@ export default function HR() {
           upcoming.map((r) => (
             <div key={r.id} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
               <span>{r.user_name} <span className="dim">— {kindLabel(r.kind)}</span></span>
-              <span>{fmtRange(r.start_date, r.end_date)} <span className="dim">({r.hours.toFixed(0)}h)</span></span>
+              <span>{fmtRange(r.start_date, r.end_date)} <span className="dim">({num(r.hours).toFixed(0)}h)</span></span>
             </div>
           ))
         )}
@@ -116,10 +127,10 @@ export default function HR() {
                   color: r.status === "approved" ? "var(--color-success)" : "var(--color-accent-red)",
                   fontFamily: "Oswald",
                 }}>
-                  {r.status.toUpperCase()}
+                  {(r.status || "").toUpperCase()}
                 </span>
               </span>
-              <span>{fmtRange(r.start_date, r.end_date)} <span className="dim">({r.hours.toFixed(0)}h)</span></span>
+              <span>{fmtRange(r.start_date, r.end_date)} <span className="dim">({num(r.hours).toFixed(0)}h)</span></span>
             </div>
           ))
         )}
@@ -144,8 +155,9 @@ function RequestRow({
   // visually but not blocked — admins can choose to grant unpaid /
   // overdraw if needed.
   const balanceKey = req.kind === "sick" ? "sick_balance_hrs" : req.kind === "unpaid" ? null : "pto_balance_hrs";
-  const currentBalance = balanceKey && profile ? (profile[balanceKey] ?? 0) : null;
-  const afterBalance = currentBalance !== null ? currentBalance - req.hours : null;
+  const currentBalance = balanceKey && profile ? num(profile[balanceKey]) : null;
+  const reqHours = num(req.hours);
+  const afterBalance = currentBalance !== null ? currentBalance - reqHours : null;
   const wouldOverdraw = afterBalance !== null && afterBalance < 0;
 
   const decide = async (status: "approved" | "denied") => {
@@ -157,8 +169,8 @@ function RequestRow({
         decided_at: new Date().toISOString(),
       });
       // Deduct from balance on approve (skip for unpaid — that's the whole point).
-      if (status === "approved" && balanceKey && profile && req.hours > 0) {
-        const next = Math.max(0, (currentBalance ?? 0) - req.hours);
+      if (status === "approved" && balanceKey && profile && reqHours > 0) {
+        const next = Math.max(0, (currentBalance ?? 0) - reqHours);
         await db.patch("profiles", req.user_id, { [balanceKey]: next });
       }
       useStore.getState().showToast(`Request ${status}`, "success");
@@ -176,7 +188,7 @@ function RequestRow({
           <span className="dim" style={{ marginLeft: 6 }}>— {kindLabel(req.kind)}</span>
         </div>
         <div className="dim" style={{ fontSize: 11, fontFamily: "Oswald" }}>
-          {fmtRange(req.start_date, req.end_date)} · {req.hours.toFixed(0)}h
+          {fmtRange(req.start_date, req.end_date)} · {reqHours.toFixed(0)}h
         </div>
       </div>
       {req.reason && (
@@ -223,8 +235,8 @@ function BalanceRow({
   profile: { id: string; name: string; pto_balance_hrs?: number; sick_balance_hrs?: number };
   onChange: () => Promise<void>;
 }) {
-  const [pto, setPto] = useState(profile.pto_balance_hrs ?? 0);
-  const [sick, setSick] = useState(profile.sick_balance_hrs ?? 0);
+  const [pto, setPto] = useState(num(profile.pto_balance_hrs));
+  const [sick, setSick] = useState(num(profile.sick_balance_hrs));
   const [dirty, setDirty] = useState(false);
 
   const save = async () => {

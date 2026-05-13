@@ -5,6 +5,14 @@ import { db } from "@/lib/supabase";
 import { Icon } from "./Icon";
 import type { TimeOffRequest, TimeOffKind } from "@/lib/types";
 
+/** Coerce anything to a finite number, defaulting to 0. Same reasoning
+ *  as HR.tsx: Postgres NUMERIC ↔ string via supabase-js, and the HR
+ *  migration may not be run yet so the field may be absent. */
+function num(x: unknown): number {
+  const n = typeof x === "number" ? x : parseFloat(String(x ?? ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * Personal Time Off panel — rendered inside Settings so every user
  * (admin or employee) can submit their own request and see their own
@@ -12,21 +20,23 @@ import type { TimeOffRequest, TimeOffKind } from "@/lib/types";
  * managing requests across the team; this panel is the personal side.
  */
 export default function TimeOffSettings() {
-  const user = useStore((s) => s.user)!;
-  const profiles = useStore((s) => s.profiles);
-  const timeOffRequests = useStore((s) => s.timeOffRequests);
+  const user = useStore((s) => s.user);
+  const profiles = useStore((s) => s.profiles) ?? [];
+  const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   const loadAll = useStore((s) => s.loadAll);
 
   // Pull our own balances off the profiles list (server-of-truth). The
   // `user` object in the store is the auth user, which may not carry
   // the HR fields. The matching profile row does.
-  const myProfile = profiles.find((p) => p.id === user.id);
-  const ptoBalance = myProfile?.pto_balance_hrs ?? 0;
-  const sickBalance = myProfile?.sick_balance_hrs ?? 0;
+  const myProfile = user ? profiles.find((p) => p.id === user.id) : undefined;
+  const ptoBalance = num(myProfile?.pto_balance_hrs);
+  const sickBalance = num(myProfile?.sick_balance_hrs);
 
-  const myRequests = timeOffRequests
-    .filter((r) => r.user_id === user.id)
-    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+  const myRequests = user
+    ? timeOffRequests
+        .filter((r) => r && r.user_id === user.id)
+        .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+    : [];
 
   const [open, setOpen] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
@@ -53,6 +63,7 @@ export default function TimeOffSettings() {
   };
 
   const submit = async () => {
+    if (!user) return;
     if (!start || !end) {
       useStore.getState().showToast("Pick start and end dates", "warning");
       return;
@@ -85,6 +96,14 @@ export default function TimeOffSettings() {
       await loadAll();
     }
   };
+
+  if (!user) {
+    return (
+      <div className="cd">
+        <p className="dim" style={{ fontSize: 12 }}>Sign in to manage time off.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -196,7 +215,7 @@ export default function TimeOffSettings() {
             <div key={r.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "6px 0", flexWrap: "wrap", gap: 6 }}>
               <div style={{ flex: "1 1 140px" }}>
                 <span style={{ fontWeight: 600 }}>{kindLabel(r.kind)}</span>
-                <span className="dim" style={{ marginLeft: 6 }}>{fmtRange(r.start_date, r.end_date)} · {r.hours.toFixed(0)}h</span>
+                <span className="dim" style={{ marginLeft: 6 }}>{fmtRange(r.start_date, r.end_date)} · {num(r.hours).toFixed(0)}h</span>
                 {r.reason && <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>"{r.reason}"</div>}
               </div>
               <span style={{
@@ -212,7 +231,7 @@ export default function TimeOffSettings() {
                 fontFamily: "Oswald",
                 letterSpacing: ".05em",
               }}>
-                {r.status.toUpperCase()}
+                {(r.status || "").toUpperCase()}
               </span>
             </div>
           ))
