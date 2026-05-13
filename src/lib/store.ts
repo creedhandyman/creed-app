@@ -383,7 +383,9 @@ if (typeof window !== "undefined") {
     }
   });
 
-  // Let supabase.ts surface DB errors via our toast system
-  (window as unknown as { __dbToast?: (m: string, t: "error") => void }).__dbToast =
-    (msg: string, type: "error") => useStore.getState().showToast(msg, type);
+  // Let supabase.ts surface DB errors via our toast system. Type widened
+  // from "error" only so transient-network failures can surface as a
+  // quiet "Syncing data…" info toast instead of a wall of red noise.
+  (window as unknown as { __dbToast?: (m: string, t: "error" | "info" | "warning" | "success") => void }).__dbToast =
+    (msg: string, type) => useStore.getState().showToast(msg, type);
 }

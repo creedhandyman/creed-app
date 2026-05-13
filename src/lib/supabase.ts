@@ -46,14 +46,63 @@ function formatDbError(err: unknown): string {
   return String(err);
 }
 
-function reportDbError(table: string, op: string, err: unknown) {
-  const msg = formatDbError(err);
-  // eslint-disable-next-line no-console
-  console.error(`[db] ${op} ${table} failed:`, err);
-  if (typeof window !== "undefined") {
-    const toast = (window as unknown as { __dbToast?: (m: string, t: "error") => void }).__dbToast;
-    if (toast) toast(`${op} ${table} failed: ${msg}`, "error");
+/**
+ * Transient network errors fire when the browser aborts a request — most
+ * commonly because the tab was backgrounded, the device went to sleep, or
+ * there was a brief connectivity blip. They recover automatically on the
+ * next interaction (which triggers loadAll again). Bernard hit the case
+ * where coming back from app-switching surfaced a wall of red "TypeError:
+ * Failed to fetch" toasts, one per parallel db.get call in loadAll. Those
+ * aren't actionable — the user can't do anything except wait and the data
+ * loads itself moments later.
+ *
+ * Real database errors (RLS denials, constraint violations, missing
+ * columns) come back as PostgrestError with a `code` field — they're NOT
+ * transient and SHOULD still toast loudly so Bernard catches them.
+ */
+function isTransientNetworkError(err: unknown): boolean {
+  if (!err) return false;
+  // PostgrestError has a code; if it does, this is a real server response,
+  // not a transport failure.
+  if (typeof err === "object" && err !== null && "code" in (err as object)) {
+    const code = (err as { code?: string }).code;
+    if (code) return false;
   }
+  // Fetch's transport failure throws a TypeError with a small set of well-
+  // known messages across browsers. AbortError fires when the request was
+  // cancelled (background tab, page nav).
+  if (err instanceof TypeError) {
+    const msg = err.message || "";
+    if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) return true;
+  }
+  if (err && typeof err === "object") {
+    const e = err as { name?: string; message?: string };
+    if (e.name === "AbortError") return true;
+    if (e.message && /failed to fetch|networkerror|load failed|network request failed/i.test(e.message)) return true;
+  }
+  return false;
+}
+
+// Debounce the "Syncing data…" indicator so the 11 parallel db.get calls
+// in loadAll don't fire 11 toasts when the whole batch fails together.
+let lastSyncToastAt = 0;
+
+function reportDbError(table: string, op: string, err: unknown) {
+  const transient = isTransientNetworkError(err);
+  // eslint-disable-next-line no-console
+  console[transient ? "warn" : "error"](`[db] ${op} ${table} failed${transient ? " (transient — will retry on next interaction)" : ""}:`, err);
+  if (typeof window === "undefined") return;
+  const toast = (window as unknown as { __dbToast?: (m: string, t: "error" | "info") => void }).__dbToast;
+  if (!toast) return;
+  if (transient) {
+    const now = Date.now();
+    if (now - lastSyncToastAt < 5000) return; // debounce
+    lastSyncToastAt = now;
+    toast("Syncing data…", "info");
+    return;
+  }
+  const msg = formatDbError(err);
+  toast(`${op} ${table} failed: ${msg}`, "error");
 }
 
 export const db = {
