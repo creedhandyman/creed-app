@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import Payroll from "./Payroll";
@@ -12,6 +12,53 @@ import BrandingSettings from "../BrandingSettings";
 import HR from "./HR";
 import { Icon, type IconName } from "../Icon";
 import { t } from "@/lib/i18n";
+
+/**
+ * Catches render-time crashes inside an Ops sub-tab so the whole tab
+ * doesn't disappear behind Next's opaque "Application error" page.
+ * Surfaces the real exception + stack inline so Bernard (or anyone) can
+ * read the actual failure without devtools.
+ */
+class SubTabErrorBoundary extends Component<
+  { label: string; children: ReactNode },
+  { error: Error | null; info: string }
+> {
+  state: { error: Error | null; info: string } = { error: null, info: "" };
+  static getDerivedStateFromError(error: Error) {
+    return { error, info: "" };
+  }
+  componentDidCatch(error: Error, info: { componentStack?: string | null }) {
+    // eslint-disable-next-line no-console
+    console.error(`[Ops:${this.props.label}] render crash`, error, info);
+    this.setState({ error, info: info?.componentStack || "" });
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="cd" style={{ borderLeft: "3px solid var(--color-accent-red)" }}>
+        <h4 style={{ color: "var(--color-accent-red)", fontSize: 14, marginBottom: 8 }}>
+          {this.props.label} tab crashed
+        </h4>
+        <p style={{ fontSize: 12, marginBottom: 8 }}>
+          {String(this.state.error?.message || this.state.error)}
+        </p>
+        <details style={{ fontSize: 11, color: "#888" }}>
+          <summary style={{ cursor: "pointer" }}>Stack</summary>
+          <pre style={{ whiteSpace: "pre-wrap", marginTop: 6, fontSize: 10, fontFamily: "monospace" }}>
+            {(this.state.error?.stack || "") + "\n" + this.state.info}
+          </pre>
+        </details>
+        <button
+          className="bo"
+          onClick={() => this.setState({ error: null, info: "" })}
+          style={{ fontSize: 12, padding: "4px 10px", marginTop: 8 }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+}
 
 function OpsSettings() {
   const org = useStore((s) => s.org);
@@ -176,17 +223,31 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
         })}
       </div>
 
-      {tab === "payroll" && <Payroll />}
-      {tab === "financials" && <Financials setPage={setPage} />}
-      {tab === "customers" && (
-        selectedCustomerId
-          ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />
-          : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />
+      {tab === "payroll" && (
+        <SubTabErrorBoundary label="Payroll"><Payroll /></SubTabErrorBoundary>
       )}
-      {tab === "team" && <TeamStats />}
-      {tab === "hr" && <HR />}
-      {tab === "billing" && <BillingSettings />}
-      {tab === "settings" && <OpsSettings />}
+      {tab === "financials" && (
+        <SubTabErrorBoundary label="Financials"><Financials setPage={setPage} /></SubTabErrorBoundary>
+      )}
+      {tab === "customers" && (
+        <SubTabErrorBoundary label="Customers">
+          {selectedCustomerId
+            ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />
+            : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />}
+        </SubTabErrorBoundary>
+      )}
+      {tab === "team" && (
+        <SubTabErrorBoundary label="Team"><TeamStats /></SubTabErrorBoundary>
+      )}
+      {tab === "hr" && (
+        <SubTabErrorBoundary label="HR"><HR /></SubTabErrorBoundary>
+      )}
+      {tab === "billing" && (
+        <SubTabErrorBoundary label="Billing"><BillingSettings /></SubTabErrorBoundary>
+      )}
+      {tab === "settings" && (
+        <SubTabErrorBoundary label="Settings"><OpsSettings /></SubTabErrorBoundary>
+      )}
     </div>
   );
 }
