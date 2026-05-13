@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { applyPromoCode } from "@/lib/promo-codes";
 
 // localStorage key for trial-banner dismissal. Keyed by the days-remaining
 // count so a dismiss at "7 days left" doesn't suppress the banner once we
@@ -160,6 +161,11 @@ export default function BillingGate({ children }: { children: React.ReactNode })
                 </span>
               </div>
             )}
+
+            {/* Promo code escape hatch — for owners who hit the paywall
+                with a valid comp code in hand. Applies billing_enforced=
+                false and reloads so the gate's pass-through fires. */}
+            <PaywallPromoCode orgId={org.id} />
           </>
         ) : (
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 10, padding: 20 }}>
@@ -173,6 +179,77 @@ export default function BillingGate({ children }: { children: React.ReactNode })
           Powered by Creed App
         </div>
       </div>
+    </div>
+  );
+}
+
+// Paywall promo code entry. Hidden until the user clicks "Have a promo
+// code?". Valid codes flip billing_enforced=false on the org; on success
+// the page reloads so the gate's pre-paywall short-circuit fires.
+function PaywallPromoCode({ orgId }: { orgId: string }) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (!open) {
+    return (
+      <div style={{ marginTop: 8 }}>
+        <span
+          onClick={() => setOpen(true)}
+          style={{ color: "#888", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+        >
+          Have a promo code?
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 12, display: "flex", gap: 6, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        placeholder="Promo code"
+        style={{
+          fontSize: 13, padding: "6px 10px", borderRadius: 6,
+          border: "1px solid #2E75B6", background: "#0a0a0f", color: "#fff",
+          textTransform: "uppercase", minWidth: 180,
+        }}
+        autoFocus
+      />
+      <button
+        onClick={async () => {
+          if (!code.trim() || busy) return;
+          setBusy(true);
+          const result = await applyPromoCode(orgId, code);
+          if (result.ok) {
+            useStore.getState().showToast("Promo code applied", "success");
+            // Hard reload so the gate re-evaluates org.billing_enforced
+            // from a fresh fetch and passes through to the app.
+            window.location.reload();
+          } else {
+            useStore.getState().showToast(result.reason || "Invalid promo code", "error");
+            setBusy(false);
+          }
+        }}
+        disabled={busy || !code.trim()}
+        style={{
+          background: busy || !code.trim() ? "#333" : "#2E75B6", color: "#fff",
+          border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 13,
+          cursor: busy || !code.trim() ? "wait" : "pointer",
+        }}
+      >
+        {busy ? "..." : "Apply"}
+      </button>
+      <button
+        onClick={() => { setOpen(false); setCode(""); }}
+        style={{
+          background: "transparent", color: "#888", border: "none",
+          fontSize: 12, padding: "6px 8px", cursor: "pointer",
+        }}
+      >
+        Cancel
+      </button>
     </div>
   );
 }

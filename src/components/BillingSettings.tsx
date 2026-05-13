@@ -1,8 +1,10 @@
 "use client";
+import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { Icon } from "./Icon";
 import { t } from "@/lib/i18n";
+import { applyPromoCode } from "@/lib/promo-codes";
 import type { Organization } from "@/lib/types";
 
 /**
@@ -256,11 +258,92 @@ export default function BillingSettings() {
                     </select>
                   )}
                 </div>
+
+                {/* Promo code — only surfaced to owners and only when billing
+                    is still enforced (no need to show it once it's already
+                    been applied or trial/paywall is irrelevant). */}
+                {isOwner && org?.billing_enforced !== false && (
+                  <PromoCodeForm orgId={org!.id} />
+                )}
               </div>
             );
           })()}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Small form for entering a comp/promo code. On success, reloads org state
+ *  in place so the subscription badge flips to "Active" without a hard page
+ *  reload. */
+function PromoCodeForm({ orgId }: { orgId: string }) {
+  const setOrg = useStore((s) => s.setOrg);
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          background: "none",
+          color: "var(--color-primary)",
+          fontSize: 11,
+          padding: 0,
+          marginTop: 10,
+          textDecoration: "underline",
+          cursor: "pointer",
+        }}
+      >
+        Have a promo code?
+      </button>
+    );
+  }
+
+  return (
+    <div className="row" style={{ marginTop: 10, gap: 6, alignItems: "center" }}>
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        placeholder="Promo code"
+        style={{ flex: 1, fontSize: 12, padding: "4px 8px", textTransform: "uppercase" }}
+        autoFocus
+      />
+      <button
+        className="bb"
+        disabled={busy || !code.trim()}
+        onClick={async () => {
+          setBusy(true);
+          const result = await applyPromoCode(orgId, code);
+          if (result.ok) {
+            const orgs = await db.get<Organization>("organizations", { id: orgId });
+            if (orgs.length) setOrg(orgs[0]);
+            useStore.getState().showToast("Promo code applied", "success");
+            setCode("");
+            setOpen(false);
+          } else {
+            useStore.getState().showToast(result.reason || "Invalid promo code", "error");
+          }
+          setBusy(false);
+        }}
+        style={{ fontSize: 12, padding: "4px 10px" }}
+      >
+        {busy ? "..." : "Apply"}
+      </button>
+      <button
+        onClick={() => { setOpen(false); setCode(""); }}
+        style={{
+          background: "none",
+          color: "#888",
+          fontSize: 12,
+          padding: "4px 6px",
+          cursor: "pointer",
+        }}
+      >
+        Cancel
+      </button>
     </div>
   );
 }
