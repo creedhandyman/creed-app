@@ -162,9 +162,9 @@ export const TRADE_CATEGORY_LIST = ["Painting", "Flooring", "Carpentry", "Plumbi
  * Cleaning/Hauling) when AI Assist had its own miniature one-line system
  * prompt that didn't carry these rules.
  */
-export const TRADE_CATEGORIES_PROMPT = `- PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch, drywall mud + tape + finish prep, AND all caulking and sealant work (interior trim, baseboard, window, tub/shower bead, kitchen backsplash bead — every caulk line goes here unless it's a plumbing fixture replacement that explicitly includes the bead). No knobs, no fixtures, no blinds.
+export const TRADE_CATEGORIES_PROMPT = `- PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch, drywall mud + tape + finish prep, AND all caulking and sealant work (interior trim, baseboard, standalone window/door perimeter re-caulk on EXISTING windows/doors, tub/shower bead, kitchen backsplash bead — every caulk line goes here unless it's (a) a plumbing fixture replacement that explicitly includes the bead, or (b) part of a full window/door REPLACEMENT install, in which case the perimeter caulk travels with the carpentry line). No knobs, no fixtures, no blinds.
 - FLOORING: LVP, carpet, tile, grout, cove base, transition strips, baseboards (sqft-priced).
-- CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, countertops (laminate/butcher block/quartz/granite/solid surface — including demo, template, install, sink/faucet reset, edge profile), interior framing and re-framing (studs, blocking, headers, joists), shower wall framing and shower-pan blocking, drywall blocking for grab bars / cabinets / TVs, structural sistering, window screens, window panes, window glass, closet rods/shelving. Demo of carpentry items (rotted framing, old cabinets, old countertops) when it's labor-hours work goes here too — only the actual disposal/dump fee belongs under Cleaning/Hauling.
+- CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, countertops (laminate/butcher block/quartz/granite/solid surface — including demo, template, install, sink/faucet reset, edge profile), interior framing and re-framing (studs, blocking, headers, joists), shower wall framing and shower-pan blocking, drywall blocking for grab bars / cabinets / TVs, structural sistering, window screens, window panes, window glass, full window REPLACEMENTS (sash, frame, vinyl replacement windows, weatherstripping, interior/exterior trim + perimeter caulk when bundled with the install), full door REPLACEMENTS (slab, pre-hung, sliding patio, including weatherstripping + perimeter caulk when bundled with the install), closet rods/shelving. Demo of carpentry items (rotted framing, old cabinets, old countertops, old windows/doors being replaced) when it's labor-hours work goes here too — only the actual disposal/dump fee belongs under Cleaning/Hauling.
 - PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves, supply lines, dryer vents.
 - ELECTRICAL: outlets, switches, switch/outlet plates, light fixtures, bulbs, light covers, ceiling fans (electrical).
 - APPLIANCES: refrigerator, oven, stove, dishwasher, microwave, washer, dryer parts. NEVER condensers or HVAC parts.
@@ -172,7 +172,7 @@ export const TRADE_CATEGORIES_PROMPT = `- PAINTING: paint, primer, spackle, mesh
 - COMPLIANCE: water heater, HVAC filters, breaker panel inspection, doorbell, thermostat.
 - EXTERIOR: ONLY work physically on the exterior of the building — siding, roof, soffit, fascia, exterior trim, gutters, downspouts, fence, gates, exterior lights, exterior paint, landscaping, driveway/concrete repair, walkways, porches, decks. Interior structural work (interior framing, drywall, shower walls, bathroom re-framing) is NEVER Exterior — it's Carpentry. The test: if the worker is standing inside the unit doing the work, it's not Exterior.
 - CLEANING/HAULING: ONLY debris removal, disposal/dump fees, final cleaning, interior trash-out (belongings left in unit), appliance deep clean. NEVER caulking. NEVER labor hours for demo, prep, or finish work — those belong with their trade. A line item like "demo and haul-away" should be SPLIT: the demo labor goes to the trade doing the demo (Carpentry for framing/cabinets/counters, Flooring for floor tear-out, Plumbing for fixture pull, etc.), and only the disposal portion (dump fee, debris bags, hauling time) lands in Cleaning/Hauling.
-A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical. A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER Exterior — it's Carpentry. Caulking is NEVER Cleaning/Hauling — it's Painting.`;
+A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical. A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER Exterior — it's Carpentry. Caulking is NEVER Cleaning/Hauling — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry.`;
 
 export const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You produce accurate, client-ready service estimates from whatever the user provides.
 
@@ -642,6 +642,26 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       // "shower wall framing" pulls Plumbing+10 from \bshower\b in the
       // scorer; the framing pattern is more specific and wins.
       if (/\bframing\b|re.?frame|reframe|\bstuds?\b|\bblocking\b|\bjoists?\b|\bheaders?\b|sistering|\bsister\b/.test(s)) return "Carpentry";
+      // Full window / door REPLACEMENT — Carpentry, even when the comment
+      // describes trim painting or perimeter caulking that happens
+      // alongside the install. Bernard hit this in prod: "Replace large
+      // windows (new, full replacement)" landed in PAINTING because the
+      // AI followed the prompt's caulk-is-Painting rule and the scorer's
+      // Carpentry +10 on "window" couldn't beat Painting +10 on "paint"
+      // + extra spackle/etc. points. Goes BEFORE the caulk override so
+      // window/door perimeter caulk doesn't get pulled into Painting.
+      // Replacing a knob, hinge, lock, frame hardware, etc. is already
+      // Carpentry via the regular scorer; no carve-out needed.
+      if (
+        /\breplace\b[^.]{0,40}\bwindows?\b/.test(s) ||
+        /\bwindows?\b[^.]{0,40}\breplacement\b/.test(s) ||
+        /\binstall\b[^.]{0,40}\b(new\s+)?windows?\b/.test(s) ||
+        /\breplace\b[^.]{0,40}\bdoors?\b/.test(s) ||
+        /\bdoors?\b[^.]{0,40}\breplacement\b/.test(s) ||
+        /\binstall\b[^.]{0,40}\b(new\s+)?doors?\b/.test(s)
+      ) {
+        return "Carpentry";
+      }
       // Caulking / sealant lines → Painting per Bernard's prompt rule
       // ("every caulk line goes here unless it's a plumbing fixture
       // replacement that explicitly includes the bead"). Skip the
