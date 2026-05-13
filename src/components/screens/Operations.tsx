@@ -189,7 +189,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
   const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   const pendingTimeOffCount = timeOffRequests.filter((r) => r && r.status === "pending").length;
 
-  const tabs: { id: OpsTab; label: string; icon: IconName; adminOnly?: boolean; badge?: number }[] = [
+  const allTabs: { id: OpsTab; label: string; icon: IconName; adminOnly?: boolean; badge?: number }[] = [
     { id: "payroll",    label: t("ops.payroll"),    icon: "money" },
     { id: "financials", label: t("ops.financials"), icon: "trending" },
     { id: "customers",  label: "Customers",         icon: "clients" },
@@ -197,7 +197,8 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
     { id: "team",       label: t("ops.team"),       icon: "worker" },
     { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
     { id: "settings",   label: t("ops.settings"),   icon: "settings" },
-  ].filter((tb) => !tb.adminOnly || isAdmin);
+  ];
+  const tabs = allTabs.filter((tb) => !tb.adminOnly || isAdmin);
 
   return (
     <div className="fi">
