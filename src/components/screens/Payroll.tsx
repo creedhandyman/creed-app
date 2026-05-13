@@ -6,6 +6,127 @@ import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 
+/** Pure builder for the pay-stub HTML. Called both at process-pay time
+ *  (to save the rendered stub into pay_history.details) and from history
+ *  rows (to re-print / re-email / re-download without recomputing from
+ *  fresh state). Keeps generatePayStub out of the closure-trap.
+ */
+type StubJob = { job: string; hrs: number; amount: number };
+type StubBonus = { name: string; amount: number };
+type StubInput = {
+  empName: string;
+  empNum: string;
+  rate: number;
+  payDate: string;            // human label, e.g. "Apr 30, 2026"
+  stubNum: string;            // PS-XXXXXX
+  totalHrs: number;
+  laborPay: number;
+  totalBonus: number;
+  totalPay: number;
+  jobs: StubJob[];
+  bonuses: StubBonus[];
+  org: {
+    name?: string; phone?: string; email?: string;
+    address?: string; license_num?: string; logo_url?: string;
+  };
+};
+
+function buildStubHtml(s: StubInput): string {
+  const esc = (x: string) =>
+    String(x ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const jobRows = s.jobs
+    .map((j) =>
+      `<tr><td>${esc(j.job)}</td><td class="r">${j.hrs.toFixed(2)}</td><td class="r">$${j.amount.toFixed(2)}</td></tr>`,
+    )
+    .join("");
+  const bonusRows = s.bonuses
+    .map((b) =>
+      `<tr><td><span style="color:#9d4edd;font-weight:600">★ ${esc(b.name)}</span></td><td class="r dim">Bonus</td><td class="r">$${b.amount.toFixed(2)}</td></tr>`,
+    )
+    .join("");
+
+  const body = `
+<section style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
+  <div class="box">
+    <div class="label">Employee</div>
+    <div class="value">${esc(s.empName)}</div>
+  </div>
+  <div class="box">
+    <div class="label">Employee #</div>
+    <div class="value">${esc(s.empNum || "—")}</div>
+  </div>
+  <div class="box">
+    <div class="label">Hourly Rate</div>
+    <div class="value">$${s.rate}/hr</div>
+  </div>
+</section>
+
+<h2>Earnings Detail</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Job / Item</th>
+      <th class="r" style="width:90px">Hours</th>
+      <th class="r" style="width:110px">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${jobRows || '<tr><td colspan="3" class="dim">No labor entries</td></tr>'}
+    ${bonusRows}
+  </tbody>
+</table>
+
+<section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;padding:18px 22px;margin:18px 0;border-left:4px solid #2E75B6">
+  <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+    <span class="muted">Total Hours</span><span style="font-family:Oswald,sans-serif">${s.totalHrs.toFixed(2)}</span>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+    <span class="muted">Labor (${s.totalHrs.toFixed(2)} × $${s.rate}/hr)</span><span style="font-family:Oswald,sans-serif">$${s.laborPay.toFixed(2)}</span>
+  </div>
+  ${s.totalBonus > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#9d4edd"><span>★ Quest Bonuses (${s.bonuses.length})</span><span style="font-family:Oswald,sans-serif">$${s.totalBonus.toFixed(2)}</span></div>` : ""}
+  <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid #2E75B6;margin-top:10px;padding-top:12px">
+    <span style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#2E75B6">Net Pay</span>
+    <span style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:#2E75B6">$${s.totalPay.toFixed(2)}</span>
+  </div>
+</section>
+
+<div style="font-size:10.5px;color:#888;margin-top:12px;line-height:1.6">
+  <p>This statement reflects gross earnings only. It is not an official tax document. For tax purposes, refer to your W-2 or 1099.</p>
+</div>
+`;
+
+  return wrapPrint(
+    {
+      orgName: s.org.name || "Service Provider",
+      orgPhone: s.org.phone,
+      orgEmail: s.org.email,
+      orgAddress: s.org.address,
+      orgLicense: s.org.license_num,
+      orgLogo: s.org.logo_url,
+      docTitle: "Pay Stub",
+      docNumber: s.stubNum,
+      docDate: s.payDate,
+      docSubtitle: s.empName,
+    },
+    body,
+  );
+}
+
+/** Trigger a browser download of an HTML string as a .html file. Used by
+ *  the per-entry Download button so the employee can save the stub
+ *  locally and open / print / save-as-PDF on their own time. */
+function downloadHtmlFile(html: string, filename: string) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export default function Payroll() {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
@@ -98,6 +219,30 @@ export default function Payroll() {
   const [openPay, setOpenPay] = useState<string | number | null>(null);
   const processGuard = useRef(false);
 
+  // Build the StubInput for the *current* unpaid cycle. Used both to save
+  // the stub HTML at process-pay time and to populate the pre-pay
+  // notification email.
+  const buildCurrentStubInput = (): StubInput => ({
+    empName: selUser.name,
+    empNum: selUser.emp_num || "",
+    rate: selUser.rate || 55,
+    payDate: new Date().toLocaleDateString("en-US", {
+      year: "numeric", month: "long", day: "numeric",
+    }),
+    stubNum: "PS-" + Date.now().toString(36).toUpperCase().slice(-6),
+    totalHrs,
+    laborPay,
+    totalBonus,
+    totalPay,
+    jobs: Object.entries(byJob).map(([job, hrs]) => ({
+      job,
+      hrs,
+      amount: parseFloat((hrs * (selUser.rate || 55)).toFixed(2)),
+    })),
+    bonuses: approvedQuests.map((q) => ({ name: q.name, amount: q.bonus })),
+    org: org || {},
+  });
+
   const processPay = async () => {
     if (!entries.length) return;
 
@@ -109,11 +254,17 @@ export default function Payroll() {
       // Confirmation step
       const confirmed = await useStore.getState().showConfirm(
         "Process Payment",
-        `${selUser.name} — ${totalHrs.toFixed(1)} hrs × $${selUser.rate || 55}/hr = $${totalPay.toFixed(2)}${approvedQuests.length ? ` (includes $${totalBonus} approved bonus)` : ""}. Generate pay stub?`
+        `${selUser.name} — ${totalHrs.toFixed(1)} hrs × $${selUser.rate || 55}/hr = $${totalPay.toFixed(2)}${approvedQuests.length ? ` (includes $${totalBonus} approved bonus)` : ""}. Save pay stub?`
       );
       if (!confirmed) return;
 
       setProcessing(true);
+
+      // Generate the stub HTML once and persist it inside `details` so
+      // the row can be re-printed / re-downloaded / re-emailed later
+      // without recomputing from now-stale rate/jobs/bonuses state.
+      const stub = buildCurrentStubInput();
+      const stubHtml = buildStubHtml(stub);
 
       await db.post("pay_history", {
         user_id: sel,
@@ -123,12 +274,15 @@ export default function Payroll() {
         amount: totalPay,
         entries: entries.length,
         details: JSON.stringify({
-          jobs: Object.entries(byJob).map(([job, hrs]) => ({
-            job,
-            hrs,
-            amount: parseFloat((hrs * (selUser.rate || 55)).toFixed(2)),
-          })),
-          bonuses: approvedQuests.map((q) => ({ name: q.name, amount: q.bonus })),
+          jobs: stub.jobs,
+          bonuses: stub.bonuses,
+          rate: stub.rate,
+          stubNum: stub.stubNum,
+          // Frozen snapshot of the rendered stub so a re-print years later
+          // matches what was sent to the employee on payday. Skips a brittle
+          // re-render against org branding / quest names that may have
+          // changed since.
+          stubHtml,
         }),
       });
       // Mark these entries as paid instead of deleting them — Team
@@ -150,22 +304,14 @@ export default function Payroll() {
         });
       }
       setApprovedBonusKeys(new Set());
-      generatePayStub();
-      // Prompt to email pay stub
-      const empEmail = selUser.email;
-      if (empEmail && await useStore.getState().showConfirm("Email Pay Stub", `Email pay stub to ${selUser.name} (${empEmail})?`)) {
-        const subject = encodeURIComponent(`Pay Stub — ${new Date().toLocaleDateString()}`);
-        const body = encodeURIComponent(
-          `Hi ${selUser.name},\n\n` +
-          `Your pay has been processed.\n\n` +
-          `Hours: ${totalHrs.toFixed(1)}\n` +
-          `Rate: $${selUser.rate || 55}/hr\n` +
-          `Total: $${totalPay.toFixed(2)}\n\n` +
-          Object.entries(byJob).map(([job, hrs]) => `  ${job}: ${hrs.toFixed(1)}h → $${(hrs * (selUser.rate || 55)).toFixed(2)}`).join("\n") +
-          `\n\nThank you,\n${useStore.getState().org?.name || "Management"}\n`
-        );
-        window.open(`mailto:${empEmail}?subject=${subject}&body=${body}`, "_self");
-      }
+      // No auto-print, no auto-email — the saved row is now actionable from
+      // the Payment History list (Print / Download / Email buttons per row).
+      // Bernard hit cases where the auto-fire mailto stomped on his
+      // workflow and the stub print only happened once.
+      useStore.getState().showToast(
+        `Pay processed: ${selUser.name} — $${totalPay.toFixed(2)}. Use Payment History to print / download / email.`,
+        "success",
+      );
       await loadAll();
     } finally {
       setProcessing(false);
@@ -174,97 +320,38 @@ export default function Payroll() {
     }
   };
 
-  const generatePayStub = () => {
-    const esc = (s: string) =>
-      String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const today = new Date().toLocaleDateString("en-US", {
-      year: "numeric", month: "long", day: "numeric",
-    });
-    const stubNum = "PS-" + Date.now().toString(36).toUpperCase().slice(-6);
-    const orgName = org?.name || "Service Provider";
-
-    const jobRows = Object.entries(byJob)
-      .map(([job, hrs]) =>
-        `<tr><td>${esc(job)}</td><td class="r">${hrs.toFixed(2)}</td><td class="r">$${(hrs * (selUser.rate || 55)).toFixed(2)}</td></tr>`,
-      )
-      .join("");
-    const bonusRows = approvedQuests
-      .map(
-        (q) =>
-          `<tr><td><span style="color:#9d4edd;font-weight:600">★ ${esc(q.name)}</span></td><td class="r dim">Bonus</td><td class="r">$${q.bonus.toFixed(2)}</td></tr>`,
-      )
-      .join("");
-
-    const body = `
-<section style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
-  <div class="box">
-    <div class="label">Employee</div>
-    <div class="value">${esc(selUser.name)}</div>
-  </div>
-  <div class="box">
-    <div class="label">Employee #</div>
-    <div class="value">${esc(selUser.emp_num || "—")}</div>
-  </div>
-  <div class="box">
-    <div class="label">Hourly Rate</div>
-    <div class="value">$${selUser.rate || 55}/hr</div>
-  </div>
-</section>
-
-<h2>Earnings Detail</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Job / Item</th>
-      <th class="r" style="width:90px">Hours</th>
-      <th class="r" style="width:110px">Amount</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${jobRows || '<tr><td colspan="3" class="dim">No labor entries</td></tr>'}
-    ${bonusRows}
-  </tbody>
-</table>
-
-<section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;padding:18px 22px;margin:18px 0;border-left:4px solid #2E75B6">
-  <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
-    <span class="muted">Total Hours</span><span style="font-family:Oswald,sans-serif">${totalHrs.toFixed(2)}</span>
-  </div>
-  <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
-    <span class="muted">Labor (${totalHrs.toFixed(2)} × $${selUser.rate || 55}/hr)</span><span style="font-family:Oswald,sans-serif">$${laborPay.toFixed(2)}</span>
-  </div>
-  ${totalBonus > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#9d4edd"><span>★ Quest Bonuses (${approvedQuests.length})</span><span style="font-family:Oswald,sans-serif">$${totalBonus.toFixed(2)}</span></div>` : ""}
-  <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid #2E75B6;margin-top:10px;padding-top:12px">
-    <span style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#2E75B6">Net Pay</span>
-    <span style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:#2E75B6">$${totalPay.toFixed(2)}</span>
-  </div>
-</section>
-
-<div style="font-size:10.5px;color:#888;margin-top:12px;line-height:1.6">
-  <p>This statement reflects gross earnings only. It is not an official tax document. For tax purposes, refer to your W-2 or 1099.</p>
-</div>
-`;
-
-    const html = wrapPrint(
-      {
-        orgName,
-        orgPhone: org?.phone,
-        orgEmail: org?.email,
-        orgAddress: org?.address,
-        orgLicense: org?.license_num,
-        orgLogo: org?.logo_url,
-        docTitle: "Pay Stub",
-        docNumber: stubNum,
-        docDate: today,
-        docSubtitle: selUser.name,
-      },
-      body,
-    );
-    if (!openPrint(html)) {
-      useStore
-        .getState()
-        .showToast(`Processed: ${selUser.name} — $${totalPay.toFixed(2)}`, "success");
+  /** Fire a pre-pay notification email (mailto draft) so the employee
+   *  knows what's coming on the next payday — no pay_history record
+   *  created. Useful as a check-in before actually processing. */
+  const notifyUpcomingPay = () => {
+    if (!entries.length) return;
+    const empEmail = selUser.email;
+    if (!empEmail) {
+      useStore.getState().showToast("No email on file for this employee", "warning");
+      return;
     }
+    const stub = buildCurrentStubInput();
+    const subject = encodeURIComponent(`Upcoming pay — ${stub.payDate}`);
+    const lines = [
+      `Hi ${stub.empName},`,
+      ``,
+      `Here's a preview of your upcoming pay:`,
+      ``,
+      `Hours: ${stub.totalHrs.toFixed(1)}`,
+      `Rate: $${stub.rate}/hr`,
+      `Labor: $${stub.laborPay.toFixed(2)}`,
+      ...(stub.totalBonus > 0 ? [`Bonuses: $${stub.totalBonus.toFixed(2)}`] : []),
+      `Total: $${stub.totalPay.toFixed(2)}`,
+      ``,
+      `Job breakdown:`,
+      ...stub.jobs.map((j) => `  ${j.job}: ${j.hrs.toFixed(1)}h → $${j.amount.toFixed(2)}`),
+      ``,
+      `This is a preview only — your final pay stub will be available in the app once processed.`,
+      ``,
+      `Thank you,`,
+      `${useStore.getState().org?.name || "Management"}`,
+    ].join("\n");
+    window.open(`mailto:${empEmail}?subject=${subject}&body=${encodeURIComponent(lines)}`, "_self");
   };
 
   const userPayHistory = payHistory.filter((p) => p.user_id === sel);
@@ -375,18 +462,33 @@ export default function Payroll() {
           <h4 style={{ fontSize: 13 }}>{t("pay.byJob")}</h4>
           <div style={{ flex: 1 }} />
           {isOwner && (
-            <button
-              className="bg"
-              onClick={processPay}
-              disabled={processing || !entries.length}
-              style={{
-                fontSize: 12,
-                padding: "5px 12px",
-                opacity: processing || !entries.length ? 0.5 : 1,
-              }}
-            >
-              {processing ? "Processing..." : t("pay.processPay")}
-            </button>
+            <div className="row" style={{ gap: 6 }}>
+              <button
+                className="bo"
+                onClick={notifyUpcomingPay}
+                disabled={processing || !entries.length}
+                title="Email this employee a preview of what they're going to be paid (no pay stub generated yet)"
+                style={{
+                  fontSize: 12,
+                  padding: "5px 10px",
+                  opacity: processing || !entries.length ? 0.5 : 1,
+                }}
+              >
+                ✉ Notify
+              </button>
+              <button
+                className="bg"
+                onClick={processPay}
+                disabled={processing || !entries.length}
+                style={{
+                  fontSize: 12,
+                  padding: "5px 12px",
+                  opacity: processing || !entries.length ? 0.5 : 1,
+                }}
+              >
+                {processing ? "Processing..." : t("pay.processPay")}
+              </button>
+            </div>
           )}
         </div>
 
@@ -419,14 +521,84 @@ export default function Payroll() {
             const isOpen = openPay === p.id;
             let jobDetails: { job: string; hrs: number; amount: number }[] = [];
             let bonusDetails: { name: string; amount: number }[] = [];
+            let savedRate: number | undefined;
+            let savedStubNum: string | undefined;
+            let savedStubHtml: string | undefined;
             try {
               if (p.details) {
                 const parsed = JSON.parse(p.details);
-                // Support both old format (array) and new format (object with jobs+bonuses)
+                // Support both old format (array) and new format (object with jobs+bonuses+stubHtml)
                 if (Array.isArray(parsed)) jobDetails = parsed;
-                else { jobDetails = parsed.jobs || []; bonusDetails = parsed.bonuses || []; }
+                else {
+                  jobDetails = parsed.jobs || [];
+                  bonusDetails = parsed.bonuses || [];
+                  savedRate = parsed.rate;
+                  savedStubNum = parsed.stubNum;
+                  savedStubHtml = parsed.stubHtml;
+                }
               }
             } catch { /* ignore */ }
+
+            // Reconstruct stub HTML on the fly for legacy pay_history rows
+            // that don't have it saved. Uses the rate captured at process
+            // time when available, else the employee's current rate (best
+            // effort — older entries from before the schema change).
+            const rateForStub = savedRate ?? selUser.rate ?? 55;
+            const laborForStub = (p.hours || 0) * rateForStub;
+            const bonusForStub = bonusDetails.reduce((s, b) => s + (b.amount || 0), 0);
+            const stubInput: StubInput = {
+              empName: p.name || selUser.name,
+              empNum: selUser.emp_num || "",
+              rate: rateForStub,
+              payDate: p.pay_date || new Date().toLocaleDateString(),
+              stubNum: savedStubNum || ("PS-" + (p.id || "").slice(0, 6).toUpperCase()),
+              totalHrs: p.hours || 0,
+              laborPay: laborForStub,
+              totalBonus: bonusForStub,
+              totalPay: p.amount || 0,
+              jobs: jobDetails,
+              bonuses: bonusDetails,
+              org: org || {},
+            };
+            const stubHtml = () => savedStubHtml || buildStubHtml(stubInput);
+
+            const handlePrint = () => {
+              if (!openPrint(stubHtml())) {
+                useStore.getState().showToast("Allow popups to print pay stub", "error");
+              }
+            };
+            const handleDownload = () => {
+              const safe = stubInput.empName.replace(/[^\w\s-]/g, "").replace(/\s+/g, "-");
+              const datePart = (p.pay_date || "").replace(/[^\w-]/g, "-");
+              downloadHtmlFile(stubHtml(), `paystub-${safe}-${datePart}.html`);
+              useStore.getState().showToast("Pay stub downloaded", "success");
+            };
+            const handleEmail = () => {
+              const target = selUser.id === p.user_id ? selUser.email : profiles.find((u) => u.id === p.user_id)?.email;
+              if (!target) {
+                useStore.getState().showToast("No email on file for this employee", "warning");
+                return;
+              }
+              const subject = encodeURIComponent(`Pay Stub — ${p.pay_date}`);
+              const lines = [
+                `Hi ${stubInput.empName},`,
+                ``,
+                `Your pay stub for ${p.pay_date}:`,
+                ``,
+                `Hours: ${stubInput.totalHrs.toFixed(1)}`,
+                `Rate: $${stubInput.rate}/hr`,
+                `Total: $${stubInput.totalPay.toFixed(2)}`,
+                ``,
+                ...stubInput.jobs.map((j) => `  ${j.job}: ${j.hrs.toFixed(1)}h → $${j.amount.toFixed(2)}`),
+                ...(stubInput.bonuses.length ? ["", "Bonuses:", ...stubInput.bonuses.map((b) => `  ★ ${b.name}: $${b.amount.toFixed(2)}`)] : []),
+                ``,
+                `The full stub is saved in the app — you can also re-print or download it any time.`,
+                ``,
+                `Thank you,`,
+                `${useStore.getState().org?.name || "Management"}`,
+              ].join("\n");
+              window.open(`mailto:${target}?subject=${subject}&body=${encodeURIComponent(lines)}`, "_self");
+            };
 
             return (
               <div key={p.id} style={{ marginBottom: 4 }}>
@@ -481,6 +653,36 @@ export default function Payroll() {
                         ))}
                       </>
                     )}
+                    {/* Per-row actions: print / download / email. Available
+                        to admins (acting on an employee's stub) AND to
+                        employees on their own stubs (so they can grab a
+                        copy any time without admin involvement). */}
+                    <div className="row" style={{ marginTop: 10, gap: 6, flexWrap: "wrap" }}>
+                      <button
+                        className="bo"
+                        onClick={handlePrint}
+                        title="Open the pay stub in a print window"
+                        style={{ fontSize: 11, padding: "4px 10px" }}
+                      >
+                        🖨 Print
+                      </button>
+                      <button
+                        className="bo"
+                        onClick={handleDownload}
+                        title="Save the pay stub as an .html file (open / save-as-PDF locally)"
+                        style={{ fontSize: 11, padding: "4px 10px" }}
+                      >
+                        📥 Download
+                      </button>
+                      <button
+                        className="bo"
+                        onClick={handleEmail}
+                        title="Email the pay stub to the employee on file"
+                        style={{ fontSize: 11, padding: "4px 10px" }}
+                      >
+                        ✉ Email
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
