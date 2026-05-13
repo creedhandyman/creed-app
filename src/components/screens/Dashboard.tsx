@@ -4,7 +4,6 @@ import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
-import PendingTimeOffCard from "../PendingTimeOffCard";
 import UserGuideModal from "../UserGuideModal";
 
 interface Props {
@@ -139,10 +138,6 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           </div>
         </div>
       )}
-
-      {/* Pending time-off approvals — admin only, only renders when N>0.
-          High on the screen because it's an action item. */}
-      <PendingTimeOffCard />
 
       {/* 4 Stat Cards — forced 2x2: money row + job row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>

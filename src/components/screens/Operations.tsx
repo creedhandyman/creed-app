@@ -6,6 +6,7 @@ import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Customers from "./Customers";
 import CustomerDetail from "./CustomerDetail";
+import HR from "./HR";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
@@ -171,7 +172,7 @@ function OpsSettings() {
   );
 }
 
-type OpsTab = "payroll" | "financials" | "customers" | "team" | "billing" | "settings";
+type OpsTab = "payroll" | "financials" | "customers" | "hr" | "team" | "billing" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
   const [tab, setTab] = useState<OpsTab>("payroll");
@@ -183,14 +184,20 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
     if (tab !== "customers") setSelectedCustomerId(null);
   }, [tab]);
 
-  const tabs: { id: OpsTab; label: string; icon: IconName }[] = [
+  const user = useStore((s) => s.user);
+  const isAdmin = user?.role === "owner" || user?.role === "manager";
+  const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
+  const pendingTimeOffCount = timeOffRequests.filter((r) => r && r.status === "pending").length;
+
+  const tabs: { id: OpsTab; label: string; icon: IconName; adminOnly?: boolean; badge?: number }[] = [
     { id: "payroll",    label: t("ops.payroll"),    icon: "money" },
     { id: "financials", label: t("ops.financials"), icon: "trending" },
     { id: "customers",  label: "Customers",         icon: "clients" },
+    { id: "hr",         label: "HR",                icon: "worker", adminOnly: true, badge: pendingTimeOffCount },
     { id: "team",       label: t("ops.team"),       icon: "worker" },
     { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
     { id: "settings",   label: t("ops.settings"),   icon: "settings" },
-  ];
+  ].filter((tb) => !tb.adminOnly || isAdmin);
 
   return (
     <div className="fi">
@@ -216,6 +223,23 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
             >
               <Icon name={t.icon} size={14} strokeWidth={active ? 2 : 1.75} />
               {t.label}
+              {t.badge && t.badge > 0 ? (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "Oswald",
+                    background: active ? "#fff" : "var(--color-accent-red)",
+                    color: active ? "var(--color-primary)" : "#fff",
+                    padding: "0 6px",
+                    borderRadius: 8,
+                    minWidth: 18,
+                    textAlign: "center",
+                    letterSpacing: ".04em",
+                  }}
+                >
+                  {t.badge}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -233,6 +257,9 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
             ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />
             : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />}
         </SubTabErrorBoundary>
+      )}
+      {tab === "hr" && (
+        <SubTabErrorBoundary label="HR"><HR /></SubTabErrorBoundary>
       )}
       {tab === "team" && (
         <SubTabErrorBoundary label="Team"><TeamStats /></SubTabErrorBoundary>

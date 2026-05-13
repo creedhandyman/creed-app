@@ -2,47 +2,69 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
-import { Icon } from "./Icon";
+import { Icon } from "../Icon";
 import type { TimeOffKind, TimeOffRequest } from "@/lib/types";
 
-/** Coerce anything to a finite number for safe .toFixed. */
 function num(x: unknown): number {
   const n = typeof x === "number" ? x : parseFloat(String(x ?? ""));
   return Number.isFinite(n) ? n : 0;
 }
 
 /**
- * Compact admin notification surface for time-off requests. Renders
- * only for owners/managers and only when there is at least one pending
- * request — the rest of the time it stays out of the way. Approve/deny
- * are inline; once acted on the row disappears.
+ * Lightweight HR admin tab — lives inside Operations. v1 is just
+ * pending time-off requests with inline approve/deny. Future expansions
+ * (employee notes, contacts, documents) layer in as additional cards
+ * below — leave room in the layout.
  */
-export default function PendingTimeOffCard() {
+export default function HR() {
   const user = useStore((s) => s.user);
   const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   const loadAll = useStore((s) => s.loadAll);
-
   const isAdmin = user?.role === "owner" || user?.role === "manager";
+
+  if (!user || !isAdmin) {
+    return (
+      <div className="cd">
+        <p className="dim" style={{ fontSize: 13 }}>
+          HR is restricted to owners and managers. Submit your own time-off request from Settings → Time Off.
+        </p>
+      </div>
+    );
+  }
+
   const pending = timeOffRequests
     .filter((r) => r && r.status === "pending")
     .sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
 
-  if (!user || !isAdmin || pending.length === 0) return null;
-
   return (
-    <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)" }}>
-      <h4 style={{ fontSize: 13, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <Icon name="bell" size={14} color="var(--color-warning)" />
-        Pending Time Off ({pending.length})
-      </h4>
-      {pending.map((r) => (
-        <PendingRow key={r.id} req={r} actor={user.name} onChange={loadAll} />
-      ))}
+    <div>
+      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="worker" size={22} color="var(--color-primary)" />
+        HR
+      </h2>
+
+      <div className="cd mb">
+        <h4 style={{ fontSize: 13, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="bell" size={14} color="var(--color-warning)" />
+          Pending Time Off ({pending.length})
+        </h4>
+        {pending.length === 0 ? (
+          <p className="dim" style={{ fontSize: 12 }}>No pending requests.</p>
+        ) : (
+          pending.map((r) => (
+            <RequestRow key={r.id} req={r} actor={user.name} onChange={loadAll} />
+          ))
+        )}
+      </div>
+
+      <p className="dim" style={{ fontSize: 11 }}>
+        More HR features (employee notes, contacts, documents) coming soon.
+      </p>
     </div>
   );
 }
 
-function PendingRow({
+function RequestRow({
   req, actor, onChange,
 }: {
   req: TimeOffRequest;
