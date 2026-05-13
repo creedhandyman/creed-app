@@ -54,9 +54,8 @@ export default function Settings({ onClose }: Props) {
         ))}
       </div>
 
-      {/* Time Off tab — submit requests, see balances + history. Available
-          to all users (admins + employees); admins also have the broader
-          HR tab in Operations for managing the team. */}
+      {/* Time Off tab — submit requests and see your own status. Admins
+          see pending requests from a compact card on the Dashboard. */}
       {tab === "timeoff" && <TimeOffSettings />}
 
       {/* Account tab */}

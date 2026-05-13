@@ -249,9 +249,9 @@ export const useStore = create<AppState>((set, get) => ({
     // db.get already catches and resolves to [] on per-table failures,
     // but use allSettled as a belt-and-suspenders so a thrown exception
     // anywhere in the batch can never take out the rest of the load.
-    // If a table is missing (e.g. time_off_requests before the HR
-    // migration runs), the per-fetch toast fires inside db.get and this
-    // settles to []. The downstream selectors all default-to-empty.
+    // If a table is missing (e.g. time_off_requests before the migration
+    // runs), the per-fetch toast fires inside db.get and this settles to
+    // []. The downstream selectors all default-to-empty.
     const settle = <T,>(p: Promise<T[]>): Promise<T[]> =>
       p.catch((err) => {
         // Should never trip — db.get catches internally — but if it

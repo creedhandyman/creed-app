@@ -2,12 +2,10 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
-import { Icon } from "./Icon";
 import type { TimeOffRequest, TimeOffKind } from "@/lib/types";
 
-/** Coerce anything to a finite number, defaulting to 0. Same reasoning
- *  as HR.tsx: Postgres NUMERIC ↔ string via supabase-js, and the HR
- *  migration may not be run yet so the field may be absent. */
+/** Coerce anything to a finite number, defaulting to 0. Postgres NUMERIC
+ *  comes back as a string via supabase-js, so guard `.toFixed`. */
 function num(x: unknown): number {
   const n = typeof x === "number" ? x : parseFloat(String(x ?? ""));
   return Number.isFinite(n) ? n : 0;
@@ -16,21 +14,13 @@ function num(x: unknown): number {
 /**
  * Personal Time Off panel — rendered inside Settings so every user
  * (admin or employee) can submit their own request and see their own
- * balance + history. Admins also have the HR tab in Operations for
- * managing requests across the team; this panel is the personal side.
+ * status. Admins see and act on pending requests from a compact card
+ * on the Dashboard; there is no separate admin screen.
  */
 export default function TimeOffSettings() {
   const user = useStore((s) => s.user);
-  const profiles = useStore((s) => s.profiles) ?? [];
   const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   const loadAll = useStore((s) => s.loadAll);
-
-  // Pull our own balances off the profiles list (server-of-truth). The
-  // `user` object in the store is the auth user, which may not carry
-  // the HR fields. The matching profile row does.
-  const myProfile = user ? profiles.find((p) => p.id === user.id) : undefined;
-  const ptoBalance = num(myProfile?.pto_balance_hrs);
-  const sickBalance = num(myProfile?.sick_balance_hrs);
 
   const myRequests = user
     ? timeOffRequests
@@ -107,24 +97,6 @@ export default function TimeOffSettings() {
 
   return (
     <div>
-      {/* Balances */}
-      <div className="cd mb">
-        <h4 style={{ fontSize: 13, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Icon name="schedule" size={14} color="var(--color-primary)" />
-          Your Balances
-        </h4>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div className="cd" style={{ textAlign: "center", padding: 12 }}>
-            <div className="sl">PTO</div>
-            <div className="sv" style={{ color: "var(--color-primary)" }}>{ptoBalance.toFixed(0)}h</div>
-          </div>
-          <div className="cd" style={{ textAlign: "center", padding: 12 }}>
-            <div className="sl">Sick</div>
-            <div className="sv" style={{ color: "var(--color-warning)" }}>{sickBalance.toFixed(0)}h</div>
-          </div>
-        </div>
-      </div>
-
       {/* New request form (collapsible) */}
       <div className="cd mb">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
@@ -163,10 +135,10 @@ export default function TimeOffSettings() {
               <div>
                 <label style={{ fontSize: 10 }} className="dim">Kind</label>
                 <select value={kind} onChange={(e) => setKind(e.target.value as TimeOffKind)} style={{ fontSize: 13 }}>
-                  <option value="vacation">Vacation (deducts PTO)</option>
-                  <option value="personal">Personal (deducts PTO)</option>
-                  <option value="sick">Sick (deducts Sick)</option>
-                  <option value="unpaid">Unpaid (no deduction)</option>
+                  <option value="vacation">Vacation</option>
+                  <option value="personal">Personal</option>
+                  <option value="sick">Sick</option>
+                  <option value="unpaid">Unpaid</option>
                 </select>
               </div>
               <div>
@@ -199,7 +171,7 @@ export default function TimeOffSettings() {
               {busy ? "Submitting..." : "Submit Request"}
             </button>
             <p className="dim" style={{ fontSize: 11, marginTop: 6 }}>
-              Your manager will review the request and approve or deny it. Hours auto-deduct on approve.
+              Your manager will review the request and approve or deny it.
             </p>
           </div>
         )}
@@ -216,7 +188,7 @@ export default function TimeOffSettings() {
               <div style={{ flex: "1 1 140px" }}>
                 <span style={{ fontWeight: 600 }}>{kindLabel(r.kind)}</span>
                 <span className="dim" style={{ marginLeft: 6 }}>{fmtRange(r.start_date, r.end_date)} · {num(r.hours).toFixed(0)}h</span>
-                {r.reason && <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>"{r.reason}"</div>}
+                {r.reason && <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>&ldquo;{r.reason}&rdquo;</div>}
               </div>
               <span style={{
                 fontSize: 10,
