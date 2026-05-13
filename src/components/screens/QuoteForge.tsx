@@ -1108,7 +1108,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const orgN = org?.name || "Service Provider";
     const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-    const reportNum = "INS-" + (insp.id || "").slice(0, 6).toUpperCase();
+    const reportNum = "INS-" + String(insp.id ?? "").slice(0, 6).toUpperCase();
     const rms = inspData?.inspection?.rooms || [];
 
     let areasHtml = "";

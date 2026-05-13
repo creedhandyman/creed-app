@@ -551,7 +551,7 @@ export default function Payroll() {
               empNum: selUser.emp_num || "",
               rate: rateForStub,
               payDate: p.pay_date || new Date().toLocaleDateString(),
-              stubNum: savedStubNum || ("PS-" + (p.id || "").slice(0, 6).toUpperCase()),
+              stubNum: savedStubNum || ("PS-" + String(p.id ?? "").slice(0, 6).toUpperCase()),
               totalHrs: p.hours || 0,
               laborPay: laborForStub,
               totalBonus: bonusForStub,
