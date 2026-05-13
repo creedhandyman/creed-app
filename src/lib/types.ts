@@ -26,6 +26,14 @@ export interface Organization {
   trip_fee?: number;
   gallery_photos?: string; // JSON: [{url, caption}]
   site_theme?: string; // JSON: {primaryColor, showGallery, showReviews, showAbout, showServices, showWhyUs}
+  // Auto Payroll — server-side scheduled processing. Cron hits
+  // /api/payroll/auto-run; the endpoint reads these fields and fires
+  // payroll for any org whose schedule matches "now".
+  auto_payroll_enabled?: boolean;
+  auto_payroll_day?: number;       // 0=Sun ... 6=Sat (default 5 = Fri)
+  auto_payroll_hour?: number;      // 0-23 (default 17 = 5 PM)
+  auto_payroll_cadence?: "weekly" | "biweekly";
+  auto_payroll_last_run?: string;  // ISO timestamp
   created_at?: string;
 }
 

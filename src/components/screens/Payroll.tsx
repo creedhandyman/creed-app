@@ -363,6 +363,10 @@ export default function Payroll() {
         {t("pay.title")}
       </h2>
 
+      {/* Auto Payroll — server-side scheduled run (cron hits
+          /api/payroll/auto-run). Toggle, day/hour pickers, cadence. */}
+      {isOwner && <AutoPayrollPanel />}
+
       {/* Employee selector */}
       {isOwner && (
         <div className="cd mb">
@@ -689,6 +693,168 @@ export default function Payroll() {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Auto Payroll Panel ─────────────────────────────────────────────
+   Owner-only. Toggles auto_payroll_enabled and exposes day-of-week,
+   hour-of-day, and cadence. Persists onChange so Bernard can flip a
+   field and walk away without a Save button. Next-run preview is
+   computed locally; the actual fire happens server-side via
+   /api/payroll/auto-run (Vercel cron). */
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HOUR_PRESETS = [6, 9, 12, 17, 21];
+
+function fmtHour(h: number): string {
+  const ampm = h >= 12 ? "PM" : "AM";
+  const display = h % 12 === 0 ? 12 : h % 12;
+  return `${display}:00 ${ampm}`;
+}
+
+function computeNextRun(day: number, hour: number, cadence: "weekly" | "biweekly", lastRunIso?: string): Date {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(hour, 0, 0, 0);
+  // Days until target day (0..6)
+  let delta = (day - now.getDay() + 7) % 7;
+  if (delta === 0 && next <= now) delta = 7;
+  next.setDate(now.getDate() + delta);
+  // Biweekly: push forward another week if last run was less than 14 days ago
+  if (cadence === "biweekly" && lastRunIso) {
+    const last = new Date(lastRunIso);
+    const diffDays = (next.getTime() - last.getTime()) / 86_400_000;
+    if (diffDays < 14) next.setDate(next.getDate() + 7);
+  }
+  return next;
+}
+
+function AutoPayrollPanel() {
+  const org = useStore((s) => s.org);
+  const loadAll = useStore((s) => s.loadAll);
+  const [busy, setBusy] = useState(false);
+
+  if (!org) return null;
+
+  const enabled = org.auto_payroll_enabled === true;
+  const day = typeof org.auto_payroll_day === "number" ? org.auto_payroll_day : 5;
+  const hour = typeof org.auto_payroll_hour === "number" ? org.auto_payroll_hour : 17;
+  const cadence: "weekly" | "biweekly" = org.auto_payroll_cadence === "biweekly" ? "biweekly" : "weekly";
+  const lastRun = org.auto_payroll_last_run;
+
+  const patch = async (fields: Partial<typeof org>) => {
+    setBusy(true);
+    try {
+      await db.patch("organizations", org.id, fields);
+      await loadAll();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const nextRun = computeNextRun(day, hour, cadence, lastRun);
+  const nextRunStr = nextRun.toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+  }) + ", " + fmtHour(hour);
+  const lastRunStr = lastRun
+    ? new Date(lastRun).toLocaleDateString("en-US", {
+        weekday: "short", month: "short", day: "numeric",
+        hour: "numeric", minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <div className="cd mb" style={{ borderLeft: `3px solid ${enabled ? "var(--color-success)" : "#888"}` }}>
+      <div className="row" style={{ alignItems: "center", marginBottom: 8 }}>
+        <h4 style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          🤖 Auto Payroll
+        </h4>
+        <div style={{ flex: 1 }} />
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={busy}
+            onChange={(e) => patch({ auto_payroll_enabled: e.target.checked })}
+          />
+          <span style={{ fontSize: 12, color: enabled ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}>
+            {enabled ? "ON" : "OFF"}
+          </span>
+        </label>
+      </div>
+
+      <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
+        Runs payroll automatically on a schedule. Approve quest bonuses ahead of time — auto-runs include unpaid time entries only (no quest bonuses) for the configured day.
+      </div>
+
+      {enabled && (
+        <>
+          <div className="g2 mb">
+            <div>
+              <label className="sl">Day</label>
+              <select
+                value={day}
+                disabled={busy}
+                onChange={(e) => patch({ auto_payroll_day: parseInt(e.target.value, 10) })}
+                style={{ marginTop: 4, width: "100%" }}
+              >
+                {DAY_NAMES.map((n, i) => (
+                  <option key={i} value={i}>{n}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="sl">Time</label>
+              <select
+                value={hour}
+                disabled={busy}
+                onChange={(e) => patch({ auto_payroll_hour: parseInt(e.target.value, 10) })}
+                style={{ marginTop: 4, width: "100%" }}
+              >
+                {HOUR_PRESETS.map((h) => (
+                  <option key={h} value={h}>{fmtHour(h)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mb">
+            <label className="sl">Cadence</label>
+            <div className="row" style={{ gap: 6, marginTop: 4 }}>
+              {(["weekly", "biweekly"] as const).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => patch({ auto_payroll_cadence: c })}
+                  disabled={busy}
+                  style={{
+                    flex: 1,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                    fontFamily: "Oswald",
+                    borderRadius: 6,
+                    background: cadence === c ? "var(--color-primary)" : "transparent",
+                    color: cadence === c ? "#fff" : "#888",
+                    border: `1px solid ${cadence === c ? "var(--color-primary)" : "#ddd"}`,
+                    cursor: busy ? "default" : "pointer",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12 }}>
+            <div><span className="dim">Next run:</span> <b>{nextRunStr}</b></div>
+            {lastRunStr && (
+              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+                Last run: {lastRunStr}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
