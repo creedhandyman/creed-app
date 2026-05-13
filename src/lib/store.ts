@@ -14,6 +14,7 @@ import type {
   PayHistory,
   Receipt,
   QuestPayout,
+  TimeOffRequest,
 } from "./types";
 
 /* ── localStorage helpers ── */
@@ -73,6 +74,7 @@ interface AppState {
   payHistory: PayHistory[];
   receipts: Receipt[];
   questPayouts: QuestPayout[];
+  timeOffRequests: TimeOffRequest[];
   loading: boolean;
   loadAll: () => Promise<void>;
 
@@ -238,6 +240,7 @@ export const useStore = create<AppState>((set, get) => ({
   payHistory: [],
   receipts: [],
   questPayouts: [],
+  timeOffRequests: [],
   loading: true,
 
   loadAll: async () => {
@@ -245,7 +248,7 @@ export const useStore = create<AppState>((set, get) => ({
     const orgFilter = orgId ? { org_id: orgId } : undefined;
     const [
       customers, addresses, profiles, jobs, timeEntries,
-      reviews, referrals, schedule, payHistory, receipts, questPayouts,
+      reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests,
     ] = await Promise.all([
       db.get<Customer>("customers", orgFilter),
       db.get<Address>("addresses", orgFilter),
@@ -258,10 +261,11 @@ export const useStore = create<AppState>((set, get) => ({
       db.get<PayHistory>("pay_history", orgFilter, { limit: 500 }),
       db.get<Receipt>("receipts", orgFilter),
       db.get<QuestPayout>("quest_payouts", orgFilter),
+      db.get<TimeOffRequest>("time_off_requests", orgFilter),
     ]);
     set({
       customers, addresses, profiles, jobs, timeEntries,
-      reviews, referrals, schedule, payHistory, receipts, questPayouts,
+      reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests,
       loading: false,
     });
     // Also refresh org data (picks up Stripe changes, site updates, etc.).

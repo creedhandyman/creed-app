@@ -9,6 +9,7 @@ import CustomerDetail from "./CustomerDetail";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
+import HR from "./HR";
 import { Icon, type IconName } from "../Icon";
 import { t } from "@/lib/i18n";
 
@@ -124,7 +125,7 @@ function OpsSettings() {
   );
 }
 
-type OpsTab = "payroll" | "financials" | "customers" | "team" | "billing" | "settings";
+type OpsTab = "payroll" | "financials" | "customers" | "team" | "hr" | "billing" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
   const [tab, setTab] = useState<OpsTab>("payroll");
@@ -141,6 +142,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
     { id: "financials", label: t("ops.financials"), icon: "trending" },
     { id: "customers",  label: "Customers",         icon: "clients" },
     { id: "team",       label: t("ops.team"),       icon: "worker" },
+    { id: "hr",         label: "HR",                icon: "schedule" },
     { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
     { id: "settings",   label: t("ops.settings"),   icon: "settings" },
   ];
@@ -182,6 +184,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
           : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />
       )}
       {tab === "team" && <TeamStats />}
+      {tab === "hr" && <HR />}
       {tab === "billing" && <BillingSettings />}
       {tab === "settings" && <OpsSettings />}
     </div>

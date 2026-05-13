@@ -39,6 +39,13 @@ export interface Profile {
   start_date: string;
   emp_num: string;
   org_id: string;
+  /** Available paid-time-off balance in hours. Deducted automatically
+   *  when a time-off request is approved (kind=vacation/personal).
+   *  Admins can credit / adjust from the HR tab in Operations. */
+  pto_balance_hrs?: number;
+  /** Available sick-leave balance in hours. Deducted automatically
+   *  when a time-off request with kind=sick is approved. */
+  sick_balance_hrs?: number;
   created_at?: string;
 }
 
@@ -218,6 +225,31 @@ export interface QuestPayout {
   quest_key: string;
   bonus_amount: number;
   paid_date: string;
+  created_at?: string;
+}
+
+/**
+ * Time-off request submitted by an employee (or admin self-service).
+ * Approved requests deduct hours from the user's PTO or sick balance
+ * automatically; denied/pending ones don't move the balance.
+ */
+export type TimeOffKind = "vacation" | "sick" | "personal" | "unpaid";
+export type TimeOffStatus = "pending" | "approved" | "denied";
+
+export interface TimeOffRequest {
+  id: string;
+  user_id: string;
+  user_name: string;
+  org_id?: string;
+  start_date: string;    // YYYY-MM-DD
+  end_date: string;      // YYYY-MM-DD
+  hours: number;         // total requested hours (default 8 × business days)
+  kind: TimeOffKind;
+  reason?: string;
+  status: TimeOffStatus;
+  /** Who flipped status to approved/denied. Null while still pending. */
+  decided_by?: string;
+  decided_at?: string;
   created_at?: string;
 }
 

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import TimeOffSettings from "./TimeOffSettings";
 
 interface Props {
   onClose: () => void;
@@ -33,8 +34,8 @@ export default function Settings({ onClose }: Props) {
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-        {["account", "general"].map((tb) => (
+      <div style={{ display: "flex", gap: 4, marginBottom: 14, overflowX: "auto" }}>
+        {["account", "general", "timeoff"].map((tb) => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
@@ -42,15 +43,21 @@ export default function Settings({ onClose }: Props) {
               padding: "5px 12px",
               borderRadius: 6,
               fontSize: 13,
+              whiteSpace: "nowrap",
               background: tab === tb ? "var(--color-primary)" : "transparent",
               color: tab === tb ? "#fff" : "#888",
               fontFamily: "Oswald",
             }}
           >
-            {t(`settings.${tb}`)}
+            {tb === "timeoff" ? "Time Off" : t(`settings.${tb}`)}
           </button>
         ))}
       </div>
+
+      {/* Time Off tab — submit requests, see balances + history. Available
+          to all users (admins + employees); admins also have the broader
+          HR tab in Operations for managing the team. */}
+      {tab === "timeoff" && <TimeOffSettings />}
 
       {/* Account tab */}
       {tab === "account" && (

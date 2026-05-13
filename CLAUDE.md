@@ -115,6 +115,32 @@ src/
   and fall back to address-match against the OLDEST job at that
   property. Without this column, hours from the original job leak
   onto a new job at the same address.)
+- HR / time-off (v1):
+  ```
+  CREATE TABLE time_off_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    user_name TEXT NOT NULL,
+    org_id UUID,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    hours NUMERIC NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL DEFAULT 'vacation',
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    decided_by TEXT,
+    decided_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  ALTER TABLE profiles ADD COLUMN pto_balance_hrs NUMERIC DEFAULT 0;
+  ALTER TABLE profiles ADD COLUMN sick_balance_hrs NUMERIC DEFAULT 0;
+  ```
+  `kind` is one of vacation / sick / personal / unpaid. `status` is
+  one of pending / approved / denied. Approving a request deducts
+  `hours` from the matching balance (`pto_balance_hrs` for vacation
+  /personal, `sick_balance_hrs` for sick, no deduction for unpaid).
+  Admins manage from Operations → HR; employees submit from Settings
+  → Time Off.
 
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices.)
