@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
-import TimeOffSettings from "./TimeOffSettings";
 
 interface Props {
   onClose: () => void;
@@ -35,7 +34,7 @@ export default function Settings({ onClose }: Props) {
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, marginBottom: 14, overflowX: "auto" }}>
-        {["account", "general", "timeoff"].map((tb) => (
+        {["account", "general"].map((tb) => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
@@ -49,14 +48,14 @@ export default function Settings({ onClose }: Props) {
               fontFamily: "Oswald",
             }}
           >
-            {tb === "timeoff" ? "Time Off" : t(`settings.${tb}`)}
+            {t(`settings.${tb}`)}
           </button>
         ))}
       </div>
 
-      {/* Time Off tab — submit requests and see your own status. Admins
-          see pending requests from a compact card on the Dashboard. */}
-      {tab === "timeoff" && <TimeOffSettings />}
+      {/* Time Off moved to Ops → HR — single home for everything time-off
+          related (submission form + history for everyone, plus pending
+          queue for admins). Personal Settings is Account + General only. */}
 
       {/* Account tab */}
       {tab === "account" && (

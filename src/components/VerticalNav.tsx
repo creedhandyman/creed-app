@@ -12,7 +12,10 @@ interface NavItem {
 
 const NAV_ITEMS: (NavItem | "logo")[] = [
   { id: "quests", icon: "quest", labelKey: "nav.quest" },
-  { id: "ops", icon: "ops", labelKey: "nav.ops", adminOnly: true },
+  // Ops is open to everyone — non-admins land on the HR sub-tab (the
+  // consolidated time-off home). Admin-only sub-tabs are filtered out
+  // inside Operations.tsx.
+  { id: "ops", icon: "ops", labelKey: "nav.ops" },
   { id: "time", icon: "time", labelKey: "nav.time" },
   "logo",
   { id: "sched", icon: "schedule", labelKey: "nav.sched" },

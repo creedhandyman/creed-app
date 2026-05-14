@@ -32,8 +32,10 @@ export default function AppShell() {
   };
 
   const goToPage = (p: string) => {
-    // Block restricted pages for techs/apprentices
-    if (!isAdmin && ["payroll", "ops", "financials"].includes(p)) {
+    // Block restricted pages for techs/apprentices. Ops is NOT in this
+    // list anymore — it's the home of the HR sub-tab, which is open to
+    // everyone (per-sub-tab admin gating lives inside Operations.tsx).
+    if (!isAdmin && ["payroll", "financials"].includes(p)) {
       setPage("dash");
       return;
     }
@@ -67,7 +69,9 @@ export default function AppShell() {
       case "payroll":
         return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
       case "ops":
-        return isAdmin ? <Operations setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+        // Open to everyone — Operations.tsx filters its sub-tabs by role
+        // so non-admins only see HR (the consolidated time-off home).
+        return <Operations setPage={goToPage} />;
       case "workvision":
         return <WorkVision setPage={goToPage} />;
       case "quests":

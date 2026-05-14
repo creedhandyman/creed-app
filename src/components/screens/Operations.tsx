@@ -175,7 +175,19 @@ function OpsSettings() {
 type OpsTab = "payroll" | "financials" | "customers" | "hr" | "team" | "billing" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
-  const [tab, setTab] = useState<OpsTab>("payroll");
+  const user = useStore((s) => s.user);
+  const isAdmin = user?.role === "owner" || user?.role === "manager";
+  const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
+  // Pending badge is only meaningful to admins — non-admins can't act on
+  // it and shouldn't see a count of org-wide pending requests.
+  const pendingTimeOffCount = isAdmin
+    ? timeOffRequests.filter((r) => r && r.status === "pending").length
+    : 0;
+
+  // Non-admins land here only via the HR entry — default the sub-tab to
+  // "hr" so they don't briefly see an empty "payroll" surface before any
+  // filtering renders.
+  const [tab, setTab] = useState<OpsTab>(isAdmin ? "payroll" : "hr");
   // CustomerDetail is rendered inline within the customers sub-tab. Its
   // state lives here so switching to a different sub-tab and back resets
   // to the list view (rather than the user landing on a stale detail).
@@ -184,19 +196,19 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
     if (tab !== "customers") setSelectedCustomerId(null);
   }, [tab]);
 
-  const user = useStore((s) => s.user);
-  const isAdmin = user?.role === "owner" || user?.role === "manager";
-  const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
-  const pendingTimeOffCount = timeOffRequests.filter((r) => r && r.status === "pending").length;
-
+  // HR is the only sub-tab non-admins can see. The other Ops tabs are
+  // admin-only — they were implicitly gated by the page-level admin
+  // check, but now that the Ops route is open to everyone (so techs can
+  // reach HR), the per-tab gate has to be explicit. HR carries the
+  // pending-request badge for admins only.
   const allTabs: { id: OpsTab; label: string; icon: IconName; adminOnly?: boolean; badge?: number }[] = [
-    { id: "payroll",    label: t("ops.payroll"),    icon: "money" },
-    { id: "financials", label: t("ops.financials"), icon: "trending" },
-    { id: "customers",  label: "Customers",         icon: "clients" },
-    { id: "hr",         label: "HR",                icon: "worker", adminOnly: true, badge: pendingTimeOffCount },
-    { id: "team",       label: t("ops.team"),       icon: "worker" },
-    { id: "billing",    label: t("ops.billing"),    icon: "receipt" },
-    { id: "settings",   label: t("ops.settings"),   icon: "settings" },
+    { id: "payroll",    label: t("ops.payroll"),    icon: "money",    adminOnly: true },
+    { id: "financials", label: t("ops.financials"), icon: "trending", adminOnly: true },
+    { id: "customers",  label: "Customers",         icon: "clients",  adminOnly: true },
+    { id: "hr",         label: "HR",                icon: "worker", badge: pendingTimeOffCount },
+    { id: "team",       label: t("ops.team"),       icon: "worker",   adminOnly: true },
+    { id: "billing",    label: t("ops.billing"),    icon: "receipt",  adminOnly: true },
+    { id: "settings",   label: t("ops.settings"),   icon: "settings", adminOnly: true },
   ];
   const tabs = allTabs.filter((tb) => !tb.adminOnly || isAdmin);
 
