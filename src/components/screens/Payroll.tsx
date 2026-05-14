@@ -367,6 +367,17 @@ export default function Payroll() {
           /api/payroll/auto-run). Toggle, day/hour pickers, cadence. */}
       {isOwner && <AutoPayrollPanel />}
 
+      {/* Pay-run block — employee selector, stats, quest bonuses, by-job
+          breakdown, and the Run Payroll button. Collapsible (default
+          expanded since this is the primary action surface). Collapsed
+          header shows the selected employee + total so the at-a-glance
+          number is still visible without expanding. */}
+      <PayrollSection
+        title="📋 Current Pay"
+        subtitle={`${selUser.name} · ${totalHrs.toFixed(1)}h · $${totalPay.toFixed(2)}`}
+        storageKey="payroll.main.collapsed"
+        defaultCollapsed={false}
+      >
       {/* Employee selector */}
       {isOwner && (
         <div className="cd mb">
@@ -516,11 +527,17 @@ export default function Payroll() {
           ))
         )}
       </div>
+      </PayrollSection>
 
-      {/* Payment History */}
+      {/* Payment History — collapsible, default collapsed (reference data
+          for re-printing / re-emailing past stubs, not the primary surface). */}
       {userPayHistory.length > 0 && (
-        <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 6 }}>{t("pay.history")}</h4>
+        <PayrollSection
+          title={t("pay.history")}
+          subtitle={`${userPayHistory.length} ${userPayHistory.length === 1 ? "stub" : "stubs"}`}
+          storageKey="payroll.timelogs.collapsed"
+          defaultCollapsed={true}
+        >
           {userPayHistory.map((p) => {
             const isOpen = openPay === p.id;
             let jobDetails: { job: string; hrs: number; amount: number }[] = [];
@@ -692,7 +709,7 @@ export default function Payroll() {
               </div>
             );
           })}
-        </div>
+        </PayrollSection>
       )}
     </div>
   );
@@ -734,6 +751,7 @@ function AutoPayrollPanel() {
   const org = useStore((s) => s.org);
   const loadAll = useStore((s) => s.loadAll);
   const [busy, setBusy] = useState(false);
+  const [collapsed, toggleCollapsed] = useCollapsed("payroll.autopayroll.collapsed", true);
 
   if (!org) return null;
 
@@ -763,99 +781,226 @@ function AutoPayrollPanel() {
         hour: "numeric", minute: "2-digit",
       })
     : null;
+  // Compact schedule string for the collapsed header badge — "Sun 6 AM
+  // weekly" rather than the verbose next-run sentence. Drops minutes
+  // since the picker only offers on-the-hour presets.
+  const badgeLabel = enabled
+    ? `ON · ${DAY_NAMES[day]} ${fmtHourCompact(hour)} ${cadence}`
+    : "OFF";
 
   return (
     <div className="cd mb" style={{ borderLeft: `3px solid ${enabled ? "var(--color-success)" : "#888"}` }}>
-      <div className="row" style={{ alignItems: "center", marginBottom: 8 }}>
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        className="row"
+        aria-expanded={!collapsed}
+        style={{
+          width: "100%",
+          background: "transparent",
+          border: 0,
+          padding: 0,
+          textAlign: "left",
+          alignItems: "center",
+          cursor: "pointer",
+          color: "inherit",
+        }}
+      >
         <h4 style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
           🤖 Auto Payroll
         </h4>
+        <span
+          style={{
+            fontSize: 10,
+            padding: "2px 8px",
+            borderRadius: 8,
+            background: enabled ? "var(--color-success)22" : "#88888822",
+            color: enabled ? "var(--color-success)" : "#888",
+            fontFamily: "Oswald",
+            letterSpacing: ".05em",
+            marginLeft: 8,
+            whiteSpace: "nowrap",
+            textTransform: "uppercase",
+          }}
+        >
+          {badgeLabel}
+        </span>
         <div style={{ flex: 1 }} />
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={busy}
-            onChange={(e) => patch({ auto_payroll_enabled: e.target.checked })}
-          />
-          <span style={{ fontSize: 12, color: enabled ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}>
-            {enabled ? "ON" : "OFF"}
-          </span>
-        </label>
-      </div>
+        <Icon name={collapsed ? "expand" : "collapse"} size={16} color="#888" />
+      </button>
 
-      <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
-        Runs payroll automatically on a schedule. Approve quest bonuses ahead of time — auto-runs include unpaid time entries only (no quest bonuses) for the configured day.
-      </div>
+      {!collapsed && (
+        <div style={{ marginTop: 10 }}>
+          <label
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", marginBottom: 8 }}
+          >
+            <input
+              type="checkbox"
+              checked={enabled}
+              disabled={busy}
+              onChange={(e) => patch({ auto_payroll_enabled: e.target.checked })}
+            />
+            <span style={{ fontSize: 12, color: enabled ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}>
+              {enabled ? "ENABLED" : "DISABLED"}
+            </span>
+          </label>
 
-      {enabled && (
-        <>
-          <div className="g2 mb">
-            <div>
-              <label className="sl">Day</label>
-              <select
-                value={day}
-                disabled={busy}
-                onChange={(e) => patch({ auto_payroll_day: parseInt(e.target.value, 10) })}
-                style={{ marginTop: 4, width: "100%" }}
-              >
-                {DAY_NAMES.map((n, i) => (
-                  <option key={i} value={i}>{n}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="sl">Time</label>
-              <select
-                value={hour}
-                disabled={busy}
-                onChange={(e) => patch({ auto_payroll_hour: parseInt(e.target.value, 10) })}
-                style={{ marginTop: 4, width: "100%" }}
-              >
-                {HOUR_PRESETS.map((h) => (
-                  <option key={h} value={h}>{fmtHour(h)}</option>
-                ))}
-              </select>
-            </div>
+          <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
+            Runs payroll automatically on a schedule. Approve quest bonuses ahead of time — auto-runs include unpaid time entries only (no quest bonuses) for the configured day.
           </div>
 
-          <div className="mb">
-            <label className="sl">Cadence</label>
-            <div className="row" style={{ gap: 6, marginTop: 4 }}>
-              {(["weekly", "biweekly"] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => patch({ auto_payroll_cadence: c })}
-                  disabled={busy}
-                  style={{
-                    flex: 1,
-                    padding: "6px 10px",
-                    fontSize: 12,
-                    fontFamily: "Oswald",
-                    borderRadius: 6,
-                    background: cadence === c ? "var(--color-primary)" : "transparent",
-                    color: cadence === c ? "#fff" : "#888",
-                    border: `1px solid ${cadence === c ? "var(--color-primary)" : "#ddd"}`,
-                    cursor: busy ? "default" : "pointer",
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ fontSize: 12 }}>
-            <div><span className="dim">Next run:</span> <b>{nextRunStr}</b></div>
-            {lastRunStr && (
-              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
-                Last run: {lastRunStr}
+          {enabled && (
+            <>
+              <div className="g2 mb">
+                <div>
+                  <label className="sl">Day</label>
+                  <select
+                    value={day}
+                    disabled={busy}
+                    onChange={(e) => patch({ auto_payroll_day: parseInt(e.target.value, 10) })}
+                    style={{ marginTop: 4, width: "100%" }}
+                  >
+                    {DAY_NAMES.map((n, i) => (
+                      <option key={i} value={i}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="sl">Time</label>
+                  <select
+                    value={hour}
+                    disabled={busy}
+                    onChange={(e) => patch({ auto_payroll_hour: parseInt(e.target.value, 10) })}
+                    style={{ marginTop: 4, width: "100%" }}
+                  >
+                    {HOUR_PRESETS.map((h) => (
+                      <option key={h} value={h}>{fmtHour(h)}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            )}
-          </div>
-        </>
+
+              <div className="mb">
+                <label className="sl">Cadence</label>
+                <div className="row" style={{ gap: 6, marginTop: 4 }}>
+                  {(["weekly", "biweekly"] as const).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => patch({ auto_payroll_cadence: c })}
+                      disabled={busy}
+                      style={{
+                        flex: 1,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        fontFamily: "Oswald",
+                        borderRadius: 6,
+                        background: cadence === c ? "var(--color-primary)" : "transparent",
+                        color: cadence === c ? "#fff" : "#888",
+                        border: `1px solid ${cadence === c ? "var(--color-primary)" : "#ddd"}`,
+                        cursor: busy ? "default" : "pointer",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12 }}>
+                <div><span className="dim">Next run:</span> <b>{nextRunStr}</b></div>
+                {lastRunStr && (
+                  <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+                    Last run: {lastRunStr}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       )}
+    </div>
+  );
+}
+
+/** Persist a section's collapsed/expanded state across reloads. Returns
+ *  [collapsed, toggle]. Storage key should namespace the section, e.g.
+ *  "payroll.autopayroll.collapsed". Safe on SSR — falls back to the
+ *  default if window/localStorage isn't available. */
+function useCollapsed(storageKey: string, defaultCollapsed: boolean): [boolean, () => void] {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return defaultCollapsed;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored === "true") return true;
+      if (stored === "false") return false;
+    } catch { /* localStorage may be unavailable (private mode, etc.) */ }
+    return defaultCollapsed;
+  });
+  const toggle = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem(storageKey, String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  return [collapsed, toggle];
+}
+
+/** Compact hour label for the collapsed Auto Payroll badge — "6 AM",
+ *  "5 PM". The full picker uses fmtHour ("6:00 AM") with minutes. */
+function fmtHourCompact(h: number): string {
+  const ampm = h >= 12 ? "PM" : "AM";
+  const display = h % 12 === 0 ? 12 : h % 12;
+  return `${display} ${ampm}`;
+}
+
+/** Collapsible section wrapper for the page-level Payroll cards. Renders
+ *  a click-toggleable header (title + optional subtitle/badge + chevron)
+ *  and shows children only when expanded. Used for the main pay-run
+ *  block and the payment history list. */
+function PayrollSection({
+  title,
+  subtitle,
+  storageKey,
+  defaultCollapsed,
+  children,
+}: {
+  title: string;
+  subtitle?: React.ReactNode;
+  storageKey: string;
+  defaultCollapsed: boolean;
+  children: React.ReactNode;
+}) {
+  const [collapsed, toggle] = useCollapsed(storageKey, defaultCollapsed);
+  return (
+    <div className="cd mb">
+      <button
+        type="button"
+        onClick={toggle}
+        className="row"
+        aria-expanded={!collapsed}
+        style={{
+          width: "100%",
+          background: "transparent",
+          border: 0,
+          padding: 0,
+          textAlign: "left",
+          alignItems: "center",
+          cursor: "pointer",
+          color: "inherit",
+        }}
+      >
+        <h4 style={{ fontSize: 13 }}>{title}</h4>
+        {subtitle && (
+          <span className="dim" style={{ fontSize: 11, marginLeft: 8, fontFamily: "Oswald", letterSpacing: ".04em" }}>
+            {subtitle}
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        <Icon name={collapsed ? "expand" : "collapse"} size={16} color="#888" />
+      </button>
+      {!collapsed && <div style={{ marginTop: 10 }}>{children}</div>}
     </div>
   );
 }
