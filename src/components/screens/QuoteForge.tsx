@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
-import type { Room, RoomItem, Material } from "@/lib/types";
+import type { Room, RoomItem, Material, JobDiscount } from "@/lib/types";
 import {
   readPdf,
   renderPdfPages,
@@ -265,6 +265,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [inspectionData, setInspectionData] = useState<InspectionData | null>(null);
   // Editable work order — null means "use auto-generated from guide.steps"
   const [customWorkOrder, setCustomWorkOrder] = useState<GuideStep[] | null>(null);
+  // Per-quote discount. Lives on the rooms JSON blob (no schema change).
+  // null = no discount; on save, persisted as `data.discount` so reloads
+  // round-trip.
+  const [discount, setDiscount] = useState<JobDiscount | null>(null);
   // Guide-tab persistent state — lifted out of GuideTab so adds survive
   // save+reload. Bernard hit the bug where new shopping-list items
   // disappeared on save: GuideTab held them in local component state that
@@ -316,6 +320,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCustomShop(Array.isArray(data?.customShop) ? data.customShop : []);
       setCheckedTools(Array.isArray(data?.checkedTools) ? data.checkedTools : []);
       setCheckedShop(Array.isArray(data?.checkedShop) ? data.checkedShop : []);
+      // Per-quote discount (lives on the rooms JSON blob; absent = none).
+      const d = data?.discount as Partial<JobDiscount> | null | undefined;
+      if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
+        setDiscount({ type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined });
+      } else {
+        setDiscount(null);
+      }
     } catch {
       // rooms parse failed, start empty
     }
@@ -923,7 +934,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const subtotal = all.reduce((s, i) => s + i.tot, 0);
   // Trip fee is a service charge added before tax — tax applies to the
   // combined work + trip-fee base.
-  const taxableBase = subtotal + tripFee;
+  const preDiscountBase = subtotal + tripFee;
+  // Per-quote discount (Feature 1). Applied BEFORE tax so the customer
+  // doesn't pay tax on the discounted portion. Capped at the base so a
+  // fixed discount larger than the bill can't drive the total negative.
+  const discountAmount = discount && discount.value > 0
+    ? (discount.type === "percent"
+        ? Math.round(preDiscountBase * (discount.value / 100) * 100) / 100
+        : Math.min(preDiscountBase, discount.value))
+    : 0;
+  const taxableBase = Math.max(0, Math.round((preDiscountBase - discountAmount) * 100) / 100);
   const taxAmount = taxPct > 0 ? Math.round(taxableBase * (taxPct / 100) * 100) / 100 : 0;
   const gt = Math.round((taxableBase + taxAmount) * 100) / 100;
   const tl = all.reduce((s, i) => s + i.lc, 0);
@@ -1044,6 +1064,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       customShop,
       checkedTools,
       checkedShop,
+      // Per-quote discount. Persist explicitly (not via spread) so
+      // clearing it actually clears the saved value instead of inheriting
+      // prevData's stale entry.
+      discount: discount,
       // Only overwrite `inspection` if the user just ran the inspector in
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
@@ -1106,6 +1130,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setCustomShop([]);
     setCheckedTools([]);
     setCheckedShop([]);
+    setDiscount(null);
     setPage("jobs");
   };
 
@@ -1681,6 +1706,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setCustomShop([]);
           setCheckedTools([]);
           setCheckedShop([]);
+          setDiscount(null);
         }}>←</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>⚡ Quote</h2>
         <span style={{ fontSize: 10 }} className="dim">${rate}/hr</span>
@@ -1725,6 +1751,104 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         </div>
       </div>
 
+      {/* Per-quote discount. Lives on the rooms JSON blob (no schema
+          change). Empty discount value means "no discount applied". */}
+      <div className="cd mb" style={{ padding: 10 }}>
+        <div
+          className="row"
+          style={{ gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              color: "#888",
+              fontFamily: "Oswald",
+              textTransform: "uppercase",
+              letterSpacing: ".06em",
+            }}
+          >
+            Discount
+          </span>
+          <div style={{ display: "inline-flex", borderRadius: 6, overflow: "hidden", border: "1px solid #2E75B655" }}>
+            {([
+              { key: "off", label: "None" },
+              { key: "percent", label: "%" },
+              { key: "fixed", label: "$" },
+            ] as const).map((opt) => {
+              const active =
+                (opt.key === "off" && !discount) ||
+                (opt.key !== "off" && discount?.type === opt.key);
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => {
+                    if (opt.key === "off") setDiscount(null);
+                    else setDiscount({
+                      type: opt.key,
+                      value: discount?.value || 0,
+                      label: discount?.label,
+                    });
+                  }}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    fontFamily: "Oswald",
+                    background: active ? "var(--color-primary)" : "transparent",
+                    color: active ? "#fff" : "#888",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {discount ? (
+            <>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder={discount.type === "percent" ? "10" : "200"}
+                value={discount.value || ""}
+                onChange={(e) =>
+                  setDiscount({
+                    ...discount,
+                    value: parseFloat(e.target.value) || 0,
+                  })
+                }
+                style={{ width: 70, padding: "4px 6px", fontSize: 13, textAlign: "center" }}
+              />
+              <span style={{ fontSize: 11, color: "#888" }}>
+                {discount.type === "percent" ? "%" : "off"}
+              </span>
+              <input
+                type="text"
+                placeholder="Label (optional)"
+                value={discount.label || ""}
+                onChange={(e) =>
+                  setDiscount({ ...discount, label: e.target.value || undefined })
+                }
+                style={{ flex: "1 1 140px", minWidth: 100, padding: "4px 8px", fontSize: 12 }}
+              />
+              {discountAmount > 0 && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontFamily: "Oswald",
+                    color: "var(--color-accent-red)",
+                    fontWeight: 600,
+                  }}
+                >
+                  −${discountAmount.toFixed(2)}
+                </span>
+              )}
+            </>
+          ) : null}
+        </div>
+      </div>
+
       {/* Stats */}
       <div className="g4 mb">
         {[
@@ -1732,6 +1856,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           { l: markupPct > 0 ? `Mat +${markupPct}%` : "Materials", v: "$" + tm.toFixed(0), c: "var(--color-warning)" },
           { l: "Hours", v: th.toFixed(1), c: "var(--color-highlight)" },
           ...(tripFee > 0 ? [{ l: "Trip Fee", v: "$" + tripFee.toFixed(0), c: "var(--color-success)" }] : []),
+          ...(discountAmount > 0 ? [{
+            l: discount?.type === "percent" ? `Discount ${discount.value}%` : "Discount",
+            v: "-$" + discountAmount.toFixed(0),
+            c: "var(--color-accent-red)",
+          }] : []),
           ...(taxPct > 0 ? [{ l: `Tax ${taxPct}%`, v: "$" + taxAmount.toFixed(0), c: "var(--color-accent-red)" }] : []),
         ].map((x, i) => (
           <div key={i} className="cd" style={{ textAlign: "center", padding: 8 }}>
@@ -2062,6 +2191,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 taxPct,
                 taxAmount,
                 tripFee,
+                discount,
               });
             })()
           }

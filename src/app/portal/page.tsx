@@ -594,6 +594,8 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
     let rooms: Room[] = [];
     let workers: { id: string; name: string }[] = [];
     let photos: { url: string; label: string; type: string }[] = [];
+    // Pull per-quote discount off the rooms JSON blob (Feature 1).
+    let discount: import("@/lib/types").JobDiscount | null = null;
     try {
       const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
       rooms = (data?.rooms || []) as Room[];
@@ -606,6 +608,10 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
         label: p.label || "",
         type: p.type || "",
       }));
+      const d = data?.discount;
+      if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
+        discount = { type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined };
+      }
     } catch { /* malformed rooms — render with defaults */ }
 
     setBusyId(doc.id);
@@ -631,6 +637,7 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
       markupPct: org?.markup_pct,
       taxPct: org?.tax_pct,
       tripFee: org?.trip_fee,
+      discount,
       statusUrl: typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : "",
     });
     clearBusy();

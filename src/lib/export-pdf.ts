@@ -1,4 +1,4 @@
-import type { Room, RoomItem } from "./types";
+import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 
 interface ExportOptions {
@@ -27,6 +27,9 @@ interface ExportOptions {
   taxPct?: number;
   taxAmount?: number;
   tripFee?: number;
+  /** Per-quote discount (Feature 1). Rendered as a -$XXX.XX line in the
+   *  totals table between Trip Fee and Tax. Null/undefined = none. */
+  discount?: JobDiscount | null;
 }
 
 const esc = (s: string) =>
@@ -59,6 +62,23 @@ export function exportQuotePdf(opts: ExportOptions) {
   const taxAmount = opts.taxAmount || 0;
   const tripFee = opts.tripFee || 0;
   const jobId = opts.jobId || "";
+  const discount = opts.discount && opts.discount.value > 0 ? opts.discount : null;
+  // Pre-discount, pre-tax base (mirrors QuoteForge's preDiscountBase). The
+  // line items already include material markup, so subtotal + trip fee is
+  // the right base for the discount.
+  const _preDiscountBase = (opts.totalLabor || 0) + (opts.totalMat || 0) + tripFee;
+  const discountAmount = discount
+    ? (discount.type === "percent"
+        ? Math.round(_preDiscountBase * (discount.value / 100) * 100) / 100
+        : Math.min(_preDiscountBase, discount.value))
+    : 0;
+  const discountLabel = discount
+    ? (discount.label && discount.label.trim()
+        ? discount.label.trim()
+        : (discount.type === "percent"
+            ? `Discount (${discount.value}%)`
+            : `Discount ($${discount.value.toFixed(2)} off)`))
+    : "";
 
   const quoteNum = jobId
     ? "QT-" + jobId.slice(0, 6).toUpperCase()
@@ -251,10 +271,11 @@ ${(client || clientEmail || clientPhone) ? `
   </tbody>
 </table>
 
-${(markupPct > 0 || taxPct > 0 || tripFee > 0) ? `
+${(markupPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
 <table style="width:auto;margin-left:auto;font-size:12px;margin-bottom:14px">
   ${markupPct > 0 ? `<tr><td class="dim">Material Markup (${markupPct}%)</td><td class="r" style="padding-left:24px">Included in materials</td></tr>` : ""}
   ${tripFee > 0 ? `<tr><td class="dim">Trip Fee</td><td class="r" style="padding-left:24px">$${tripFee.toFixed(2)}</td></tr>` : ""}
+  ${discount ? `<tr style="color:#C00000"><td>${esc(discountLabel)}</td><td class="r" style="padding-left:24px">-$${discountAmount.toFixed(2)}</td></tr>` : ""}
   ${taxPct > 0 ? `<tr><td class="dim">Tax (${taxPct}%)</td><td class="r" style="padding-left:24px">$${taxAmount.toFixed(2)}</td></tr>` : ""}
   <tr style="font-weight:700;font-size:16px;color:#2E75B6;font-family:Oswald,sans-serif">
     <td>GRAND TOTAL</td>

@@ -23,6 +23,9 @@ function StatusContent() {
   const [org, setOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
   const [workOrder, setWorkOrder] = useState<{ room: string; detail: string; done: boolean }[]>([]);
+  // Per-quote discount surfaced from the rooms JSON blob — so customers
+  // see "$200 off" or "10% return-customer discount" right above the total.
+  const [discount, setDiscount] = useState<{ type: "percent" | "fixed"; value: number; label?: string } | null>(null);
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return; }
@@ -30,12 +33,16 @@ function StatusContent() {
       if (jobs.length) {
         const j = jobs[0];
         setJob(j);
-        // Parse work order
+        // Parse work order + discount off the rooms JSON blob
         try {
           const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
           setWorkOrder((data?.workOrder || []).map((w: { room: string; detail: string; done: boolean }) => ({
             room: w.room, detail: w.detail, done: w.done,
           })));
+          const d = data?.discount;
+          if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
+            setDiscount({ type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined });
+          }
         } catch { /* */ }
         // Load org
         if (j.org_id) {
@@ -318,6 +325,15 @@ function StatusContent() {
             <div style={{ fontSize: 28, fontFamily: "Oswald", fontWeight: 700, color: job.status === "paid" ? "#00cc66" : "#2E75B6" }}>
               ${job.total.toLocaleString()}
             </div>
+            {discount && (
+              <div style={{ fontSize: 12, color: "#00cc66", marginTop: 6, fontFamily: "Source Sans 3" }}>
+                ✓ {discount.label && discount.label.trim()
+                  ? discount.label.trim()
+                  : (discount.type === "percent"
+                      ? `${discount.value}% discount applied`
+                      : `$${discount.value.toFixed(2)} discount applied`)}
+              </div>
+            )}
           </div>
         )}
 

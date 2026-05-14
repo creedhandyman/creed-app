@@ -328,3 +328,13 @@ export interface Room {
   name: string;
   items: RoomItem[];
 }
+
+/** Per-quote price adjustment stored on the rooms JSON blob as
+ *  `data.discount`. Applied to (subtotal + trip fee) BEFORE tax. A
+ *  null/undefined value on the blob means no discount.
+ *  Lives in the blob — no schema change required. */
+export interface JobDiscount {
+  type: "percent" | "fixed";
+  value: number;
+  label?: string;
+}
