@@ -10,9 +10,9 @@ import { applyPromoCode } from "@/lib/promo-codes";
 const trialDismissKey = (daysLeft: number) => `c_trial_banner_dismissed_${daysLeft}`;
 
 const PLANS = [
-  { key: "solo", name: "Solo", price: "$49", desc: "1 user", amount: 4900 },
-  { key: "team", name: "Team", price: "$99", desc: "Up to 5 users", amount: 9900 },
-  { key: "business", name: "Business", price: "$149", desc: "Up to 10 users", amount: 14900 },
+  { key: "solo", name: "Solo", price: "$19", desc: "1 user", amount: 1900 },
+  { key: "crew", name: "Crew", price: "$49", desc: "Up to 8 users", amount: 4900 },
+  { key: "pro",  name: "Pro",  price: "$99", desc: "Unlimited users", amount: 9900 },
 ];
 
 export default function BillingGate({ children }: { children: React.ReactNode }) {
@@ -30,7 +30,21 @@ export default function BillingGate({ children }: { children: React.ReactNode })
   // Active subscription — pass through
   if (org.subscription_status === "active") return <>{children}</>;
 
-  // Check trial
+  // Stripe-confirmed trial (post-Checkout). trial_ends_at is authoritative
+  // here, set by the webhook on subscription.created/updated. We still
+  // surface the trial banner so the days-left countdown is visible.
+  if (org.subscription_status === "trialing") {
+    const trialEnd = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
+    const daysLeft = trialEnd
+      ? Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : 30;
+    if (daysLeft > 0) {
+      return <TrialBanner daysLeft={daysLeft} org={org} user={user}>{children}</TrialBanner>;
+    }
+  }
+
+  // Pre-Stripe trial (signed up but hasn't hit Stripe Checkout yet) —
+  // we compute from trial_start, the org-create timestamp.
   if (org.trial_start) {
     const trialStart = new Date(org.trial_start);
     const trialEnd = new Date(trialStart);
@@ -52,17 +66,15 @@ export default function BillingGate({ children }: { children: React.ReactNode })
     if (!isOwner) return;
     setLoading(true);
     try {
-      // Save selected plan
-      await db.patch("organizations", org.id, { plan: selectedPlan });
+      // Save selected plan, then hand off to the Stripe Checkout endpoint
+      // that uses STRIPE_PRICE_<PLAN> env vars + a 30-day trial.
+      await db.patch("organizations", org.id, { plan: selectedPlan, subscription_plan: selectedPlan });
 
-      const res = await fetch("/api/billing", {
+      const res = await fetch("/api/stripe/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "create-checkout",
           orgId: org.id,
-          orgName: org.name,
-          email: user.email,
           plan: selectedPlan,
           returnUrl: window.location.origin,
         }),
@@ -73,7 +85,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
       } else {
         useStore.getState().showToast("Error: " + (data.error || "Could not start checkout"), "error");
       }
-    } catch (e) {
+    } catch {
       useStore.getState().showToast("Failed to start checkout", "error");
     }
     setLoading(false);
@@ -143,11 +155,10 @@ export default function BillingGate({ children }: { children: React.ReactNode })
               <div style={{ marginTop: 12 }}>
                 <span
                   onClick={async () => {
-                    const res = await fetch("/api/billing", {
+                    const res = await fetch("/api/stripe/portal", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        action: "create-portal",
                         orgId: org.id,
                         returnUrl: window.location.origin,
                       }),
@@ -286,15 +297,12 @@ function TrialBanner({
               if (loading) return;
               setLoading(true);
               try {
-                const res = await fetch("/api/billing", {
+                const res = await fetch("/api/stripe/create-checkout-session", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    action: "create-checkout",
                     orgId: org.id,
-                    orgName: org.name,
-                    email: user.email,
-                    plan: org.plan || "solo",
+                    plan: org.plan || "crew",
                     returnUrl: window.location.origin,
                   }),
                 });

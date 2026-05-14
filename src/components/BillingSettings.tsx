@@ -126,14 +126,29 @@ export default function BillingSettings() {
           </h4>
           {(() => {
             const status = org?.subscription_status || "trial";
-            const trialStart = org?.trial_start ? new Date(org.trial_start) : new Date();
-            const trialEnd = new Date(trialStart);
-            trialEnd.setDate(trialEnd.getDate() + 30);
+            // Prefer Stripe's authoritative trial_ends_at (written by
+            // the webhook); fall back to the org-create trial_start + 30
+            // days for trials that pre-date Stripe wiring.
+            const trialEnd = org?.trial_ends_at
+              ? new Date(org.trial_ends_at)
+              : (() => {
+                  const t = new Date(org?.trial_start || new Date());
+                  t.setDate(t.getDate() + 30);
+                  return t;
+                })();
             const daysLeft = Math.max(
               0,
               Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
             );
-            const plan = org?.plan || "solo";
+            const plan = org?.subscription_plan || org?.plan || "solo";
+            const planLabel =
+              plan === "pro"  ? "Pro $99/mo"
+            : plan === "crew" ? "Crew $49/mo"
+            : plan === "solo" ? "Solo $19/mo"
+            // legacy values still surfaced from older orgs
+            : plan === "business" ? "Business $149/mo"
+            : plan === "team" ? "Team $99/mo"
+            : `${plan}`;
 
             return (
               <div>
@@ -154,62 +169,50 @@ export default function BillingSettings() {
                       background:
                         status === "active"
                           ? "var(--color-success)" + "22"
-                          : status === "trial"
+                          : status === "trial" || status === "trialing"
                           ? "var(--color-warning)" + "22"
                           : "var(--color-accent-red)" + "22",
                       color:
                         status === "active"
                           ? "var(--color-success)"
-                          : status === "trial"
+                          : status === "trial" || status === "trialing"
                           ? "var(--color-warning)"
                           : "var(--color-accent-red)",
                     }}
                   >
                     {status === "active"
                       ? "Active"
-                      : status === "trial"
-                      ? `Trial — ${daysLeft} days left`
+                      : status === "trial" || status === "trialing"
+                      ? `Trial — ${daysLeft} day${daysLeft === 1 ? "" : "s"} left`
+                      : status === "past_due"
+                      ? "Past due"
+                      : status === "canceled"
+                      ? "Canceled"
                       : status}
                   </span>
                   <span className="dim" style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-                    {plan === "business"
-                      ? "Business $149/mo"
-                      : plan === "team"
-                      ? "Team $99/mo"
-                      : "Solo $49/mo"}
+                    {planLabel}
                   </span>
                 </div>
 
-                {status === "trial" && (
+                {(status === "trial" || status === "trialing") && (
                   <div className="dim" style={{ fontSize: 13, marginBottom: 10, lineHeight: 1.45 }}>
                     Your free trial {daysLeft > 0 ? `ends ${trialEnd.toLocaleDateString()}` : "has ended"}. Subscribe to keep all features.
                   </div>
                 )}
 
                 <div className="row">
-                  {status !== "active" && (
+                  {/* "Subscribe Now" — only shown when there's no Stripe
+                      customer yet (i.e. a pre-Stripe trial that never
+                      hit Checkout). Bounces back through /onboarding so
+                      the owner re-enters the plan picker + Checkout
+                      flow with the same wizard the new-signup funnel
+                      uses. Owners with a customer record always see the
+                      "Manage Subscription" button instead. */}
+                  {!org?.stripe_customer_id && status !== "active" && (
                     <button
                       className="bb"
-                      onClick={async () => {
-                        const res = await fetch("/api/billing", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            action: "create-checkout",
-                            orgId: org?.id,
-                            orgName: org?.name,
-                            email: user.email,
-                            plan,
-                            returnUrl: window.location.origin,
-                          }),
-                        });
-                        const data = await res.json();
-                        if (data.url) window.location.href = data.url;
-                        else
-                          useStore
-                            .getState()
-                            .showToast(data.error || "Failed to start checkout", "error");
-                      }}
+                      onClick={() => { window.location.href = "/onboarding?step=plan"; }}
                       style={{ fontSize: 13, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
                     >
                       <Icon name="money" size={14} />
@@ -220,11 +223,10 @@ export default function BillingSettings() {
                     <button
                       className="bo"
                       onClick={async () => {
-                        const res = await fetch("/api/billing", {
+                        const res = await fetch("/api/stripe/portal", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                            action: "create-portal",
                             orgId: org?.id,
                             returnUrl: window.location.origin,
                           }),
@@ -238,23 +240,26 @@ export default function BillingSettings() {
                       }}
                       style={{ fontSize: 13, padding: "6px 14px" }}
                     >
-                      Manage Billing
+                      Manage Subscription
                     </button>
                   )}
-                  {status === "trial" && (
+                  {(status === "trial" || status === "trialing") && !org?.stripe_customer_id && (
+                    // Pre-Stripe trials can still pick a plan locally —
+                    // it surfaces back in /onboarding's plan picker when
+                    // the owner returns to finish checkout.
                     <select
                       value={plan}
                       onChange={async (e) => {
                         if (!org) return;
-                        await db.patch("organizations", org.id, { plan: e.target.value });
+                        await db.patch("organizations", org.id, { plan: e.target.value, subscription_plan: e.target.value });
                         const orgs = await db.get<Organization>("organizations", { id: org.id });
                         if (orgs.length) setOrg(orgs[0]);
                       }}
                       style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
                     >
-                      <option value="solo">Solo — $49/mo (1 user)</option>
-                      <option value="team">Team — $99/mo (up to 5)</option>
-                      <option value="business">Business — $149/mo (up to 10)</option>
+                      <option value="solo">Solo — $19/mo (1 user)</option>
+                      <option value="crew">Crew — $49/mo (up to 8)</option>
+                      <option value="pro">Pro — $99/mo (unlimited)</option>
                     </select>
                   )}
                 </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,113 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+/**
+ * Resolve a Stripe price ID back to one of our plan names. We compare
+ * against the three STRIPE_PRICE_* env vars Bernard sets on Vercel.
+ * Falls back to the subscription's metadata.plan when the env-var
+ * comparison fails (e.g. price IDs were rotated since the trial start).
+ */
+function planFromSubscription(sub: Stripe.Subscription): string | null {
+  const priceId = sub.items?.data?.[0]?.price?.id;
+  if (priceId) {
+    if (priceId === process.env.STRIPE_PRICE_SOLO) return "solo";
+    if (priceId === process.env.STRIPE_PRICE_CREW) return "crew";
+    if (priceId === process.env.STRIPE_PRICE_PRO)  return "pro";
+  }
+  const fromMeta = (sub.metadata as Record<string, string> | undefined)?.plan;
+  if (fromMeta === "solo" || fromMeta === "crew" || fromMeta === "pro") return fromMeta;
+  return null;
+}
+
+/**
+ * Map Stripe subscription.status to our org.subscription_status.
+ * - trialing  → "trialing"   (during the 30-day free trial)
+ * - active    → "active"
+ * - past_due  → "past_due"
+ * - unpaid    → "past_due"   (treat the same way — billing failed)
+ * - canceled  → "canceled"
+ * - incomplete / incomplete_expired / paused → "past_due"
+ *
+ * Kept narrow on purpose: the BillingGate component reads these strings,
+ * so adding a status here means adding a case there too.
+ */
+function statusFromStripe(s: Stripe.Subscription.Status): string {
+  switch (s) {
+    case "active":   return "active";
+    case "trialing": return "trialing";
+    case "canceled": return "canceled";
+    case "past_due":
+    case "unpaid":
+    case "incomplete":
+    case "incomplete_expired":
+    case "paused":
+      return "past_due";
+    default: return "active";
+  }
+}
+
+/**
+ * Find an org id for a subscription event using whatever identifier
+ * we have. Tries metadata first (cheapest, fired by us), then
+ * subscription_id, then customer_id. Returns null if nothing matches —
+ * the caller logs and skips the write.
+ */
+async function findOrgIdForSub(sub: Stripe.Subscription): Promise<string | null> {
+  const fromMeta = (sub.metadata as Record<string, string> | undefined)?.org_id;
+  if (fromMeta) return fromMeta;
+
+  const { data: bySubId } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("stripe_subscription_id", sub.id)
+    .single();
+  if (bySubId) return bySubId.id;
+
+  if (sub.customer) {
+    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+    const { data: byCust } = await supabase
+      .from("organizations")
+      .select("id")
+      .eq("stripe_customer_id", customerId)
+      .single();
+    if (byCust) return byCust.id;
+  }
+  return null;
+}
+
+/**
+ * Single source of truth for subscription → org sync. Handles both the
+ * created and updated lifecycle events so we don't have two near-duplicate
+ * code paths drifting from each other.
+ */
+async function syncSubscriptionToOrg(sub: Stripe.Subscription): Promise<void> {
+  const orgId = await findOrgIdForSub(sub);
+  if (!orgId) {
+    console.warn("[stripe webhook] no org found for subscription", sub.id);
+    return;
+  }
+
+  const status = statusFromStripe(sub.status);
+  const plan = planFromSubscription(sub);
+  const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+
+  // Mirror to legacy `plan` column too — old UI (BillingGate paywall plan
+  // cards, the Operations admin dashboard) still reads `plan` rather than
+  // `subscription_plan`. Writing both keeps a single source of truth
+  // until the legacy reads are migrated.
+  const update: Record<string, unknown> = {
+    subscription_status: status,
+    stripe_subscription_id: sub.id,
+  };
+  if (plan) {
+    update.subscription_plan = plan;
+    update.plan = plan;
+  }
+  if (trialEnd !== null) update.trial_ends_at = trialEnd;
+
+  await supabase.from("organizations").update(update).eq("id", orgId);
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,82 +141,51 @@ export async function POST(req: NextRequest) {
 
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object;
-        const orgId = session.metadata?.org_id;
+        const session = event.data.object as Stripe.Checkout.Session;
+        const orgId = (session.metadata as Record<string, string> | null)?.org_id;
         if (orgId && session.subscription) {
-          await supabase.from("organizations").update({
-            subscription_status: "active",
-            stripe_subscription_id: session.subscription,
-          }).eq("id", orgId);
+          const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+          // Pull the full subscription so we can sync plan + trial_ends_at
+          // in one place instead of duplicating that logic per event.
+          const sub = await stripe.subscriptions.retrieve(subId);
+          await syncSubscriptionToOrg(sub);
         }
         break;
       }
 
+      case "customer.subscription.created":
       case "customer.subscription.updated": {
-        const sub = event.data.object;
-        // Find org by subscription ID or customer ID
-        const status = sub.status; // active, past_due, canceled, unpaid, etc.
-        const mapped = status === "active" ? "active"
-          : status === "past_due" ? "past_due"
-          : status === "canceled" ? "canceled"
-          : status === "unpaid" ? "past_due"
-          : "active";
-
-        // Try by subscription ID first
-        const { data: bySubId } = await supabase
-          .from("organizations")
-          .select("id")
-          .eq("stripe_subscription_id", sub.id)
-          .single();
-
-        if (bySubId) {
-          await supabase.from("organizations").update({
-            subscription_status: mapped,
-          }).eq("id", bySubId.id);
-        } else {
-          // Fallback: find by customer ID
-          const { data: byCust } = await supabase
-            .from("organizations")
-            .select("id")
-            .eq("stripe_customer_id", sub.customer)
-            .single();
-          if (byCust) {
-            await supabase.from("organizations").update({
-              subscription_status: mapped,
-              stripe_subscription_id: sub.id,
-            }).eq("id", byCust.id);
-          }
-        }
+        await syncSubscriptionToOrg(event.data.object as Stripe.Subscription);
         break;
       }
 
       case "customer.subscription.deleted": {
-        const sub = event.data.object;
-        const { data: org } = await supabase
-          .from("organizations")
-          .select("id")
-          .eq("stripe_subscription_id", sub.id)
-          .single();
-        if (org) {
-          await supabase.from("organizations").update({
-            subscription_status: "canceled",
-          }).eq("id", org.id);
+        const sub = event.data.object as Stripe.Subscription;
+        const orgId = await findOrgIdForSub(sub);
+        if (orgId) {
+          await supabase
+            .from("organizations")
+            .update({ subscription_status: "canceled" })
+            .eq("id", orgId);
         }
         break;
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object;
-        const customerId = invoice.customer;
-        const { data: org } = await supabase
-          .from("organizations")
-          .select("id")
-          .eq("stripe_customer_id", customerId)
-          .single();
-        if (org) {
-          await supabase.from("organizations").update({
-            subscription_status: "past_due",
-          }).eq("id", org.id);
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+        if (customerId) {
+          const { data: org } = await supabase
+            .from("organizations")
+            .select("id")
+            .eq("stripe_customer_id", customerId)
+            .single();
+          if (org) {
+            await supabase
+              .from("organizations")
+              .update({ subscription_status: "past_due" })
+              .eq("id", org.id);
+          }
         }
         break;
       }

@@ -92,7 +92,15 @@ export default function OnboardingPage() {
     return p === "solo" || p === "crew" || p === "pro" ? p : "crew";
   }, []);
 
-  const [step, setStep] = useState<Step>("business");
+  // Honor ?step= so Stripe's cancel_url can deep-link back to the plan
+  // picker, and `/onboarding?step=plan` works from the email/verify
+  // round-trip without losing the visitor's prior progress.
+  const initialStep = useMemo<Step>(() => {
+    if (typeof window === "undefined") return "business";
+    const s = new URLSearchParams(window.location.search).get("step");
+    return s === "business" || s === "logo" || s === "slug" || s === "plan" || s === "checkout" ? s : "business";
+  }, []);
+  const [step, setStep] = useState<Step>(initialStep);
 
   // Local form state mirrors the org row so unsaved typing doesn't lose
   // on a re-render. Re-seeds once when org first lands.
@@ -171,12 +179,29 @@ export default function OnboardingPage() {
         await refreshOrg();
         setStep("checkout");
       } else if (step === "checkout") {
-        // Stripe wiring lands in the next commit. For now we route the
-        // owner into the app — they're still in their 30-day trial and
-        // BillingGate will pass them through.
+        // Hand off to Stripe Checkout. The /api endpoint reads
+        // STRIPE_PRICE_<PLAN>, creates/reuses the Stripe Customer for
+        // this org, and returns the redirect URL. We persist the chosen
+        // plan first so it survives a Stripe-side cancel (the cancel_url
+        // routes back here with ?step=plan).
         await db.patch("organizations", org.id, { plan });
-        await refreshOrg();
-        window.location.href = "/";
+        const res = await fetch("/api/stripe/create-checkout-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orgId: org.id,
+            plan,
+            returnUrl: window.location.origin,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) {
+          setErr(data?.error || "Couldn't reach Stripe — please try again or contact support.");
+          setSavingStep(false);
+          return;
+        }
+        window.location.href = data.url;
+        return;
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Something went wrong saving");

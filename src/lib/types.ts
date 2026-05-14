@@ -18,7 +18,17 @@ export interface Organization {
   subscription_status?: string; // trial | active | past_due | canceled
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
-  plan?: string; // solo | team
+  /** Canonical plan name written by the Stripe webhook on every
+   *  subscription event. One of "solo" | "crew" | "pro". The legacy
+   *  `plan` column is kept in sync for back-compat with older UI that
+   *  still reads it; new code should prefer `subscription_plan`. */
+  subscription_plan?: string;
+  /** ISO timestamp of when the Stripe trial ends. Written by the
+   *  webhook on subscription.created/updated. Null/absent when no
+   *  Stripe subscription exists yet (e.g. owner is mid-onboarding). */
+  trial_ends_at?: string;
+  plan?: string; // legacy — mirrors subscription_plan; preserved for
+                 // older Operations/Admin UIs that still read `plan`.
   billing_enforced?: boolean;
   site_content?: string;
   site_published?: boolean;
