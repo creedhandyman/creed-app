@@ -52,7 +52,7 @@ const TIERS: Tier[] = [
   {
     id: "crew",
     name: "Crew",
-    price: 50,
+    price: 49,
     tagline: "For growing crews",
     cap: "Up to 8 users · 200 inspections/mo",
     featured: true,
@@ -71,7 +71,7 @@ const TIERS: Tier[] = [
   {
     id: "pro",
     name: "Pro",
-    price: 100,
+    price: 99,
     tagline: "For full operations",
     cap: "Unlimited users · 500 inspections/mo",
     ctaLabel: "Get Started",
