@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { runPayrollForUser, type RunPayrollResult } from "@/lib/payroll-runner";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,14 @@ export const dynamic = "force-dynamic";
  * scheduled day-of-week + (optionally) hour-of-day, and whether the
  * cadence (weekly vs biweekly) says it's time to run again.
  *
- * For each matching org this stamps auto_payroll_last_run so we don't
- * double-fire within the same window, and (TODO) triggers the actual
- * payroll-process logic.
+ * For each matching org, iterates through every profile with rate > 0
+ * and calls runPayrollForUser (src/lib/payroll-runner.ts) — the same
+ * helper the manual "Run Payroll" button uses. Quest bonuses are NOT
+ * auto-approved: the cron passes approvedBonuses=[] so pending quests
+ * stay pending until a human reviews them. Only the base hours roll
+ * up automatically. auto_payroll_last_run is stamped only if at least
+ * one user actually got paid, so a day-match with zero unpaid hours
+ * doesn't burn the cadence window.
  *
  * On Vercel Hobby plans, cron jobs are limited to one fire per day —
  * so even though we accept an auto_payroll_hour preference, the
@@ -27,11 +33,47 @@ export const dynamic = "force-dynamic";
 interface OrgRow {
   id: string;
   name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  license_num?: string;
+  logo_url?: string;
   auto_payroll_enabled?: boolean;
   auto_payroll_day?: number;
   auto_payroll_hour?: number;
   auto_payroll_cadence?: string;
   auto_payroll_last_run?: string | null;
+}
+
+interface ProfileRow {
+  id: string;
+  name: string;
+  rate: number;
+  emp_num?: string | null;
+}
+
+interface UserResult {
+  userId: string;
+  userName: string;
+  totalHrs: number;
+  totalPay: number;
+  entriesPaid: number;
+  payHistoryId?: string;
+}
+
+interface UserSkip {
+  userId: string;
+  userName: string;
+  reason: string;
+}
+
+interface FiredOrg {
+  id: string;
+  name?: string;
+  paid: UserResult[];
+  skipped: UserSkip[];
+  errors: { userId: string; userName: string; error: string }[];
+  stamped: boolean;
 }
 
 function isAuthorized(req: NextRequest): boolean {
@@ -62,7 +104,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, name, auto_payroll_enabled, auto_payroll_day, auto_payroll_hour, auto_payroll_cadence, auto_payroll_last_run")
+    .select("id, name, phone, email, address, license_num, logo_url, auto_payroll_enabled, auto_payroll_day, auto_payroll_hour, auto_payroll_cadence, auto_payroll_last_run")
     .eq("auto_payroll_enabled", true);
 
   if (error) {
@@ -73,7 +115,7 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const today = now.getDay();
   const nowHour = now.getHours();
-  const fired: { id: string; name?: string }[] = [];
+  const fired: FiredOrg[] = [];
   const skipped: { id: string; name?: string; reason: string }[] = [];
 
   for (const org of orgs) {
@@ -90,7 +132,6 @@ export async function GET(req: NextRequest) {
     // org's preferred hour. On a daily cron, this is usually true (we
     // schedule the cron near the most common preferred hour).
     if (Math.abs(nowHour - hour) > 1) {
-      skipped.push({ id: org.id, name: org.name, reason: `hour mismatch (now=${nowHour}, org=${hour})` });
       // Don't skip — Vercel hobby fires daily and may not hit the
       // org's exact hour. Treat hour as advisory: still process if
       // day matches. Comment kept so a future hourly switch is just
@@ -110,26 +151,108 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // TODO: actually run payroll for this org.
-    //
-    // The manual flow lives in Payroll.tsx (processPay): it pulls every
-    // unpaid time_entries row for each profile, builds a pay stub HTML,
-    // inserts pay_history, and patches time_entries.paid_at. That logic
-    // is currently entangled with React state (selUser, approvedQuests,
-    // org branding for the stub PDF). Lift the pure parts into a shared
-    // helper in src/lib/ and call it here per-profile per-org.
-    //
-    // For v1, the toggle + scheduler + last-run stamp work; the
-    // automatic processing is stubbed so Bernard can validate the
-    // schedule fires correctly first.
+    // Fetch this org's payable profiles. rate=0 are skipped (apprentices
+    // not on payroll yet, contractors paid outside the app, etc.).
+    const { data: profileRows, error: profErr } = await supabase
+      .from("profiles")
+      .select("id, name, rate, emp_num")
+      .eq("org_id", org.id)
+      .gt("rate", 0);
 
-    const stampedAt = now.toISOString();
-    await supabase
-      .from("organizations")
-      .update({ auto_payroll_last_run: stampedAt })
-      .eq("id", org.id);
+    if (profErr) {
+      skipped.push({ id: org.id, name: org.name, reason: `profile query failed: ${profErr.message}` });
+      continue;
+    }
 
-    fired.push({ id: org.id, name: org.name });
+    const profiles: ProfileRow[] = profileRows || [];
+    const paid: UserResult[] = [];
+    const userSkipped: UserSkip[] = [];
+    const userErrors: FiredOrg["errors"] = [];
+
+    // Use ONE paidAt for the whole batch so every entry in this run
+    // shares a timestamp — easier to audit / rollback as a group.
+    const paidAt = now.toISOString();
+
+    for (const p of profiles) {
+      let result: RunPayrollResult;
+      try {
+        result = await runPayrollForUser({
+          supabase,
+          orgId: org.id,
+          userId: p.id,
+          userName: p.name,
+          rate: p.rate,
+          empNum: p.emp_num || undefined,
+          paidAt,
+          // Auto-run NEVER auto-approves quest bonuses. Pending quests
+          // stay pending in the Payroll UI until a human reviews them.
+          approvedBonuses: [],
+          org: {
+            name: org.name,
+            phone: org.phone,
+            email: org.email,
+            address: org.address,
+            license_num: org.license_num,
+            logo_url: org.logo_url,
+          },
+          // Cron-side: name-fallback off. Two profiles with the same
+          // display name could otherwise steal each other's nameless
+          // legacy entries. Manual flow opts in for its own self-view.
+          includeLegacyNameMatch: false,
+        });
+      } catch (e) {
+        userErrors.push({
+          userId: p.id,
+          userName: p.name,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        continue;
+      }
+
+      if (!result.ok) {
+        userErrors.push({
+          userId: p.id,
+          userName: p.name,
+          error: result.error || "unknown error",
+        });
+      } else if (result.skipped) {
+        userSkipped.push({
+          userId: p.id,
+          userName: p.name,
+          reason: result.reason || "skipped",
+        });
+      } else {
+        paid.push({
+          userId: p.id,
+          userName: p.name,
+          totalHrs: result.totalHrs,
+          totalPay: result.totalPay,
+          entriesPaid: result.entriesPaid,
+          payHistoryId: result.payHistoryId,
+        });
+      }
+    }
+
+    // Stamp last_run only when somebody actually got paid. Otherwise
+    // an org with zero unpaid hours would burn its cadence window on
+    // a no-op fire and have to wait another full cycle.
+    let stamped = false;
+    if (paid.length > 0) {
+      const stampRes = await supabase
+        .from("organizations")
+        .update({ auto_payroll_last_run: paidAt })
+        .eq("id", org.id);
+      stamped = !stampRes.error;
+    }
+
+    fired.push({
+      id: org.id,
+      name: org.name,
+      paid,
+      skipped: userSkipped,
+      errors: userErrors,
+      stamped,
+    });
   }
 
   return NextResponse.json({

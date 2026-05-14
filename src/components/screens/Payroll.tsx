@@ -1,116 +1,11 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { db } from "@/lib/supabase";
+import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
-import { wrapPrint, openPrint } from "@/lib/print-template";
-
-/** Pure builder for the pay-stub HTML. Called both at process-pay time
- *  (to save the rendered stub into pay_history.details) and from history
- *  rows (to re-print / re-email / re-download without recomputing from
- *  fresh state). Keeps generatePayStub out of the closure-trap.
- */
-type StubJob = { job: string; hrs: number; amount: number };
-type StubBonus = { name: string; amount: number };
-type StubInput = {
-  empName: string;
-  empNum: string;
-  rate: number;
-  payDate: string;            // human label, e.g. "Apr 30, 2026"
-  stubNum: string;            // PS-XXXXXX
-  totalHrs: number;
-  laborPay: number;
-  totalBonus: number;
-  totalPay: number;
-  jobs: StubJob[];
-  bonuses: StubBonus[];
-  org: {
-    name?: string; phone?: string; email?: string;
-    address?: string; license_num?: string; logo_url?: string;
-  };
-};
-
-function buildStubHtml(s: StubInput): string {
-  const esc = (x: string) =>
-    String(x ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const jobRows = s.jobs
-    .map((j) =>
-      `<tr><td>${esc(j.job)}</td><td class="r">${j.hrs.toFixed(2)}</td><td class="r">$${j.amount.toFixed(2)}</td></tr>`,
-    )
-    .join("");
-  const bonusRows = s.bonuses
-    .map((b) =>
-      `<tr><td><span style="color:#9d4edd;font-weight:600">★ ${esc(b.name)}</span></td><td class="r dim">Bonus</td><td class="r">$${b.amount.toFixed(2)}</td></tr>`,
-    )
-    .join("");
-
-  const body = `
-<section style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
-  <div class="box">
-    <div class="label">Employee</div>
-    <div class="value">${esc(s.empName)}</div>
-  </div>
-  <div class="box">
-    <div class="label">Employee #</div>
-    <div class="value">${esc(s.empNum || "—")}</div>
-  </div>
-  <div class="box">
-    <div class="label">Hourly Rate</div>
-    <div class="value">$${s.rate}/hr</div>
-  </div>
-</section>
-
-<h2>Earnings Detail</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Job / Item</th>
-      <th class="r" style="width:90px">Hours</th>
-      <th class="r" style="width:110px">Amount</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${jobRows || '<tr><td colspan="3" class="dim">No labor entries</td></tr>'}
-    ${bonusRows}
-  </tbody>
-</table>
-
-<section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;padding:18px 22px;margin:18px 0;border-left:4px solid #2E75B6">
-  <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
-    <span class="muted">Total Hours</span><span style="font-family:Oswald,sans-serif">${s.totalHrs.toFixed(2)}</span>
-  </div>
-  <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
-    <span class="muted">Labor (${s.totalHrs.toFixed(2)} × $${s.rate}/hr)</span><span style="font-family:Oswald,sans-serif">$${s.laborPay.toFixed(2)}</span>
-  </div>
-  ${s.totalBonus > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#9d4edd"><span>★ Quest Bonuses (${s.bonuses.length})</span><span style="font-family:Oswald,sans-serif">$${s.totalBonus.toFixed(2)}</span></div>` : ""}
-  <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid #2E75B6;margin-top:10px;padding-top:12px">
-    <span style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#2E75B6">Net Pay</span>
-    <span style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:#2E75B6">$${s.totalPay.toFixed(2)}</span>
-  </div>
-</section>
-
-<div style="font-size:10.5px;color:#888;margin-top:12px;line-height:1.6">
-  <p>This statement reflects gross earnings only. It is not an official tax document. For tax purposes, refer to your W-2 or 1099.</p>
-</div>
-`;
-
-  return wrapPrint(
-    {
-      orgName: s.org.name || "Service Provider",
-      orgPhone: s.org.phone,
-      orgEmail: s.org.email,
-      orgAddress: s.org.address,
-      orgLicense: s.org.license_num,
-      orgLogo: s.org.logo_url,
-      docTitle: "Pay Stub",
-      docNumber: s.stubNum,
-      docDate: s.payDate,
-      docSubtitle: s.empName,
-    },
-    body,
-  );
-}
+import { openPrint } from "@/lib/print-template";
+import { buildStubHtml, runPayrollForUser, type StubInput } from "@/lib/payroll-runner";
 
 /** Trigger a browser download of an HTML string as a .html file. Used by
  *  the per-entry Download button so the employee can save the stub
@@ -245,6 +140,7 @@ export default function Payroll() {
 
   const processPay = async () => {
     if (!entries.length) return;
+    if (!org?.id) return;
 
     // Double-submit guard — lock BEFORE the await so rapid double-clicks don't both pass
     if (processGuard.current) return;
@@ -260,56 +156,44 @@ export default function Payroll() {
 
       setProcessing(true);
 
-      // Generate the stub HTML once and persist it inside `details` so
-      // the row can be re-printed / re-downloaded / re-emailed later
-      // without recomputing from now-stale rate/jobs/bonuses state.
-      const stub = buildCurrentStubInput();
-      const stubHtml = buildStubHtml(stub);
-
-      await db.post("pay_history", {
-        user_id: sel,
-        name: selUser.name,
-        pay_date: new Date().toLocaleDateString(),
-        hours: totalHrs,
-        amount: totalPay,
-        entries: entries.length,
-        details: JSON.stringify({
-          jobs: stub.jobs,
-          bonuses: stub.bonuses,
-          rate: stub.rate,
-          stubNum: stub.stubNum,
-          // Frozen snapshot of the rendered stub so a re-print years later
-          // matches what was sent to the employee on payday. Skips a brittle
-          // re-render against org branding / quest names that may have
-          // changed since.
-          stubHtml,
-        }),
+      // Shared runner handles: atomic claim of unpaid time_entries,
+      // pay_history row insert (with frozen stub HTML snapshot in
+      // details), and quest_payouts inserts for approved bonuses.
+      // The cron at /api/payroll/auto-run calls the same helper —
+      // see src/lib/payroll-runner.ts.
+      const result = await runPayrollForUser({
+        supabase,
+        orgId: org.id,
+        userId: sel,
+        userName: selUser.name,
+        rate: selUser.rate || 55,
+        empNum: selUser.emp_num,
+        approvedBonuses: approvedQuests,
+        org: org || {},
+        // Manual flow preserves the legacy fallback so an owner viewing
+        // their own pay still sees pre-user_id rows roll into the run.
+        includeLegacyNameMatch: sel === user.id,
       });
-      // Mark these entries as paid instead of deleting them — Team
-      // Stats reads ALL time_entries (paid + unpaid) for lifetime
-      // career totals. Filtering on `paid_at` above keeps them out
-      // of future pay cycles.
-      const paidAt = new Date().toISOString();
-      for (const entry of entries) {
-        await db.patch("time_entries", entry.id, { paid_at: paidAt });
+
+      if (!result.ok) {
+        useStore.getState().showToast(
+          `Pay processing failed: ${result.error || "unknown error"}`,
+          "error",
+        );
+        return;
       }
-      // Record only the admin-approved quest payouts so the others remain pending
-      // (still showing as "pending review" next cycle).
-      for (const quest of approvedQuests) {
-        await db.post("quest_payouts", {
-          user_id: sel,
-          quest_key: quest.key,
-          bonus_amount: quest.bonus,
-          paid_date: new Date().toLocaleDateString(),
-        });
+      if (result.skipped) {
+        useStore.getState().showToast("No unpaid entries to process", "info");
+        return;
       }
+
       setApprovedBonusKeys(new Set());
       // No auto-print, no auto-email — the saved row is now actionable from
       // the Payment History list (Print / Download / Email buttons per row).
       // Bernard hit cases where the auto-fire mailto stomped on his
       // workflow and the stub print only happened once.
       useStore.getState().showToast(
-        `Pay processed: ${selUser.name} — $${totalPay.toFixed(2)}. Use Payment History to print / download / email.`,
+        `Pay processed: ${selUser.name} — $${result.totalPay.toFixed(2)}. Use Payment History to print / download / email.`,
         "success",
       );
       await loadAll();
