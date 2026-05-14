@@ -186,6 +186,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const [ra, setRa] = useState("");
   const [rPhoto, setRPhoto] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  // Receipt scan state — once a photo is attached we upload + AI-scan
+  // immediately so the form can auto-fill before the user hits Add.
+  const [scanning, setScanning] = useState(false);
+  const [scannedPhotoUrl, setScannedPhotoUrl] = useState("");
+  const [scannedItems, setScannedItems] = useState<{ name?: string; qty?: number; price?: number }[]>([]);
+  const [scannedVendor, setScannedVendor] = useState("");
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
   const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number } | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
@@ -261,14 +267,94 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     return data.publicUrl;
   };
 
+  const resetReceiptForm = () => {
+    setRn("");
+    setRa("");
+    setRPhoto(null);
+    setScannedPhotoUrl("");
+    setScannedItems([]);
+    setScannedVendor("");
+    if (photoRef.current) photoRef.current.value = "";
+  };
+
+  // Fired the moment a photo is attached. Uploads to storage, then hits
+  // /api/ai/receipt to extract vendor / total / items. Auto-fills the
+  // note and $ inputs so the user can review and tap Add. Items are kept
+  // in state to feed price_corrections on save.
+  const handlePhotoAttach = async (file: File, jobId: string) => {
+    setRPhoto(file);
+    setScannedItems([]);
+    setScannedVendor("");
+    setScannedPhotoUrl("");
+    setScanning(true);
+    try {
+      const photoUrl = await uploadPhoto(file, jobId);
+      setScannedPhotoUrl(photoUrl);
+
+      const res = await fetch("/api/ai/receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: photoUrl }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        useStore.getState().showToast(
+          "Scan failed — fill in manually: " + (err?.error || res.statusText),
+          "warning",
+        );
+        return;
+      }
+      const { data } = await res.json();
+      if (!data) return;
+
+      const vendor = (data.vendor as string | undefined)?.trim() || "";
+      const items = (Array.isArray(data.items) ? data.items : []) as {
+        name?: string; qty?: number; price?: number;
+      }[];
+      const total = typeof data.total === "number" ? data.total : 0;
+
+      setScannedVendor(vendor);
+      setScannedItems(items);
+
+      if (total > 0) setRa(total.toFixed(2));
+
+      const itemSummary = items
+        .filter((it) => it?.name)
+        .slice(0, 4)
+        .map((it) => it.name)
+        .join(", ");
+      const more = items.length > 4 ? ` (+${items.length - 4} more)` : "";
+      const note = vendor
+        ? `${vendor}${itemSummary ? ` — ${itemSummary}${more}` : ""}`
+        : `${itemSummary}${more}`;
+      if (note.trim()) setRn(note);
+
+      useStore.getState().showToast(
+        total > 0
+          ? `Scanned: $${total.toFixed(2)}${vendor ? ` at ${vendor}` : ""} — review & Add`
+          : "Scanned — review fields & Add",
+        "success",
+      );
+    } catch (err) {
+      console.error("receipt scan error:", err);
+      useStore.getState().showToast(
+        "Scan failed — fill in manually: " + (err instanceof Error ? err.message : String(err)),
+        "warning",
+      );
+    }
+    setScanning(false);
+  };
+
   const addReceipt = async (jobId: string) => {
     if (!rn.trim()) { useStore.getState().showToast("Enter a receipt note", "warning"); return; }
     const amt = parseFloat(ra);
     if (!amt || amt <= 0) { useStore.getState().showToast("Enter a valid amount", "warning"); return; }
     setUploading(true);
     try {
-      let photo_url = "";
-      if (rPhoto) {
+      // Photo was uploaded the moment the user attached it. Fall back to
+      // a fresh upload if scanning was skipped or failed mid-upload.
+      let photo_url = scannedPhotoUrl;
+      if (rPhoto && !photo_url) {
         photo_url = await uploadPhoto(rPhoto, jobId);
       }
       // Pass org_id explicitly rather than relying on db.post's localStorage
@@ -278,7 +364,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         job_id: jobId,
         org_id: user.org_id,
         note: rn,
-        amount: parseFloat(ra),
+        amount: amt,
         receipt_date: new Date().toLocaleDateString(),
         photo_url,
       });
@@ -287,24 +373,35 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         // clearing the form so the user can retry.
         return;
       }
-      const newReceiptId = result[0]?.id;
-      setRn("");
-      setRa("");
-      setRPhoto(null);
-      if (photoRef.current) photoRef.current.value = "";
+
+      // Feed each scanned line item into price_corrections so the quote AI
+      // picks up actual supply costs. ZIP-tagged so same-area pricing wins.
+      if (scannedItems.length > 0) {
+        const job = jobs.find((j) => j.id === jobId);
+        const trade = job?.trade || "General";
+        const zip = extractZip(job?.property || "");
+        const logs = scannedItems
+          .filter((it) => it?.name && typeof it.price === "number" && it.price > 0)
+          .map((it) => ({
+            item_name: it.name!.slice(0, 120),
+            material_name: scannedVendor
+              ? `${scannedVendor}: ${it.name}`.slice(0, 160)
+              : it.name!.slice(0, 160),
+            original_mat_cost: 0,
+            corrected_mat_cost: Number(it.price),
+            original_hours: 0,
+            corrected_hours: 0,
+            trade,
+            zip,
+          }));
+        for (const entry of logs) {
+          await db.post("price_corrections", entry);
+        }
+      }
+
+      resetReceiptForm();
       await loadAll();
       useStore.getState().showToast("Receipt added", "success");
-
-      // Auto-scan the receipt image in the background so we can enrich the
-      // note with vendor + line items and feed material prices into
-      // price_corrections for future quote accuracy. Fires after the initial
-      // loadAll so the UI has already updated; errors here don't block the
-      // receipt save.
-      if (photo_url && newReceiptId) {
-        scanAndLearn(newReceiptId, photo_url, jobId).catch((err) => {
-          console.error("receipt scan failed:", err);
-        });
-      }
     } catch (err) {
       console.error(err);
       useStore.getState().showToast(
@@ -313,66 +410,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       );
     }
     setUploading(false);
-  };
-
-  // Scan a receipt photo with AI and write material prices into
-  // price_corrections so the quoting engine learns actual supply costs.
-  const scanAndLearn = async (receiptId: string, photoUrl: string, jobId: string) => {
-    useStore.getState().showToast("Scanning receipt...", "info");
-    const res = await fetch("/api/ai/receipt", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageUrl: photoUrl }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      useStore.getState().showToast("Receipt scan failed: " + (err?.error || res.statusText), "warning");
-      return;
-    }
-    const { data } = await res.json();
-    if (!data || !Array.isArray(data.items) || data.items.length === 0) return;
-
-    const vendor = (data.vendor as string | undefined)?.trim() || "";
-    const items = data.items as { name?: string; qty?: number; price?: number }[];
-
-    // Enrich the receipt note so the user sees what was scanned at a glance.
-    const itemSummary = items
-      .filter((it) => it?.name)
-      .slice(0, 5)
-      .map((it) => `${it.name}${it.price ? ` $${Number(it.price).toFixed(2)}` : ""}`)
-      .join(", ");
-    const more = items.length > 5 ? ` (+${items.length - 5} more)` : "";
-    const newNote = vendor
-      ? `${rn || "Receipt"} — ${vendor}: ${itemSummary}${more}`
-      : `${rn || "Receipt"}: ${itemSummary}${more}`;
-    await db.patch("receipts", receiptId, { note: newNote });
-
-    // Feed each line item into price_corrections so the quote AI picks up
-    // actual supply costs. Trade and ZIP are inferred from the job when
-    // available — ZIP lets the AI weight same-area pricing for future quotes.
-    const job = jobs.find((j) => j.id === jobId);
-    const trade = job?.trade || "General";
-    const zip = extractZip(job?.property || "");
-    const logs = items
-      .filter((it) => it?.name && typeof it.price === "number" && it.price > 0)
-      .map((it) => ({
-        item_name: it.name!.slice(0, 120),
-        material_name: vendor ? `${vendor}: ${it.name}`.slice(0, 160) : it.name!.slice(0, 160),
-        original_mat_cost: 0,
-        corrected_mat_cost: Number(it.price),
-        original_hours: 0,
-        corrected_hours: 0,
-        trade,
-        zip,
-      }));
-    for (const entry of logs) {
-      await db.post("price_corrections", entry);
-    }
-    await loadAll();
-    useStore.getState().showToast(
-      `Scanned: ${logs.length} item${logs.length !== 1 ? "s" : ""} logged for AI learning`,
-      "success",
-    );
   };
 
   const setStatus = async (id: string, status: string): Promise<void> => {
@@ -1595,15 +1632,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                       <input
                         value={rn}
                         onChange={(e) => setRn(e.target.value)}
-                        placeholder="Note"
+                        placeholder={scanning ? "Scanning…" : "Note"}
                         style={{ flex: 1 }}
+                        disabled={scanning}
                       />
                       <input
                         type="number"
                         value={ra}
                         onChange={(e) => setRa(e.target.value)}
-                        placeholder="$"
+                        placeholder={scanning ? "…" : "$"}
                         style={{ width: 60 }}
+                        disabled={scanning}
                       />
                       <button
                         className="bg"
@@ -1612,25 +1651,30 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           addReceipt(j.id);
                         }}
                         style={{ fontSize: 12, padding: "5px 10px" }}
-                        disabled={uploading}
+                        disabled={uploading || scanning}
                       >
                         {uploading ? "..." : "Add"}
                       </button>
                     </div>
                     <div className="row" style={{ marginTop: 6 }}>
                       <label
-                        onClick={(e) => { e.stopPropagation(); photoRef.current?.click(); }}
+                        onClick={(e) => { e.stopPropagation(); if (!scanning) photoRef.current?.click(); }}
                         style={{
                           fontSize: 13,
-                          color: "var(--color-primary)",
-                          cursor: "pointer",
+                          color: scanning ? "var(--color-warning)" : "var(--color-primary)",
+                          cursor: scanning ? "wait" : "pointer",
                           display: "flex",
                           alignItems: "center",
                           gap: 4,
                         }}
                       >
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                          <Icon name="camera" size={13} />{rPhoto ? rPhoto.name : "Attach photo"}
+                          <Icon name="camera" size={13} />
+                          {scanning
+                            ? "Scanning receipt…"
+                            : rPhoto
+                              ? rPhoto.name
+                              : "Attach photo (auto-scan)"}
                         </span>
                       </label>
                       <input
@@ -1642,14 +1686,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
                           e.stopPropagation();
-                          setRPhoto(e.target.files?.[0] || null);
+                          const f = e.target.files?.[0];
+                          if (f) handlePhotoAttach(f, j.id);
                         }}
                       />
-                      {rPhoto && (
+                      {rPhoto && !scanning && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setRPhoto(null);
+                            setScannedPhotoUrl("");
+                            setScannedItems([]);
+                            setScannedVendor("");
                             if (photoRef.current) photoRef.current.value = "";
                           }}
                           style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: 0 }}
@@ -1715,25 +1763,75 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         </div>
       )}
 
-      {/* Photo viewer overlay */}
+      {/* Photo viewer overlay — full-screen lightbox with close button.
+          touch-action:pinch-zoom lets the browser handle pinch-to-zoom on
+          mobile; double-tap on iOS / Android also zooms by default. */}
       {viewPhoto && (
         <div
           onClick={() => setViewPhoto(null)}
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.85)",
+            background: "rgba(0,0,0,0.95)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 999,
+            zIndex: 9999,
             cursor: "pointer",
+            overflow: "auto",
           }}
         >
+          <button
+            onClick={(e) => { e.stopPropagation(); setViewPhoto(null); }}
+            aria-label="Close"
+            style={{
+              position: "fixed",
+              top: 12,
+              right: 12,
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              background: "rgba(255,255,255,0.15)",
+              border: "1px solid rgba(255,255,255,0.3)",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              zIndex: 10000,
+              padding: 0,
+            }}
+          >
+            <Icon name="close" size={20} color="#fff" />
+          </button>
+          <a
+            href={viewPhoto}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "fixed",
+              top: 16,
+              left: 16,
+              fontSize: 12,
+              color: "rgba(255,255,255,0.7)",
+              textDecoration: "underline",
+              zIndex: 10000,
+            }}
+          >
+            Open original
+          </a>
           <img
             src={viewPhoto}
             alt="Receipt"
-            style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 8 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "100vw",
+              maxHeight: "100vh",
+              objectFit: "contain",
+              touchAction: "pinch-zoom",
+              cursor: "default",
+            }}
           />
         </div>
       )}
