@@ -1939,7 +1939,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <input
             value={quickDesc}
             onChange={(e) => setQuickDesc(e.target.value)}
-            placeholder="Add, change, or remove items in this quote..."
+            placeholder="Add/edit/remove items, set labor rate, apply a discount..."
             style={{ flex: 1, fontSize: 13 }}
           />
           <button
@@ -1971,15 +1971,23 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 // addendum that overrides the OUTPUT FORMAT to a structured
                 // add/update/remove response shape — the model knows it's
                 // extending an existing quote, not parsing a fresh one.
-                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id). Decide which combination of add / update / remove operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ]\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
+                // Snapshot of the current pricing meta so the model can
+                // see what's already set and only echo deltas. Helps it
+                // distinguish "clear the discount" from "leave it alone".
+                const currentMetaContext = {
+                  laborRate: laborRate || null,
+                  discount: discount || null,
+                };
+                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" }\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\` and \`setDiscount\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  OMIT these fields entirely if the user did not mention rate or discount. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
                 const userMsg =
                   `Property: ${prop || "this property"}\n\n` +
                   `EXISTING QUOTE LINE ITEMS (${existingItemsContext.length}):\n` +
                   (existingItemsContext.length
                     ? existingItemsContext.map((it) => `- ${JSON.stringify(it)}`).join("\n")
                     : "(none yet)") +
-                  `\n\nUSER REQUEST: ${quickDesc}\n\n` +
-                  `Return the structured add/update/remove JSON described in the AI ASSIST EDIT MODE section.`;
+                  `\n\nCURRENT PRICING META: ${JSON.stringify(currentMetaContext)}\n\n` +
+                  `USER REQUEST: ${quickDesc}\n\n` +
+                  `Return the structured add/update/remove/setLaborRate/setDiscount JSON described in the AI ASSIST EDIT MODE section.`;
                 const res = await fetch("/api/ai", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
@@ -2007,6 +2015,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     add?: Array<{ trade?: string; detail: string; condition?: string; comment?: string; laborHrs?: number; materials?: Array<{ n: string; c: number }>; sqft?: number }>;
                     update?: Array<{ key: string; patch: Partial<RoomItem & { trade?: string; sqft?: number }> }>;
                     remove?: Array<{ key: string }>;
+                    setLaborRate?: number | null;
+                    setDiscount?: { type?: string; value?: number; label?: string } | null;
                   };
                   const adds = parsed.add ?? [];
                   const updates = parsed.update ?? [];
@@ -2111,7 +2121,35 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   setRooms(validated);
                   extendCustomWorkOrderFromRooms(validated, "AIAssist");
 
+                  // Pricing meta ops (Feature 2b). Only apply when the
+                  // field is PRESENT in the response — `undefined` means
+                  // "no change", `null` means "clear the override".
                   const summary: string[] = [];
+                  if (Object.prototype.hasOwnProperty.call(parsed, "setLaborRate")) {
+                    const nr = parsed.setLaborRate;
+                    if (nr === null || nr === 0) {
+                      setLaborRate(null);
+                      summary.push("rate cleared");
+                    } else if (typeof nr === "number" && nr > 0) {
+                      setLaborRate(nr);
+                      summary.push(`rate → $${nr}/hr`);
+                    }
+                  }
+                  if (Object.prototype.hasOwnProperty.call(parsed, "setDiscount")) {
+                    const sd = parsed.setDiscount;
+                    if (sd === null) {
+                      setDiscount(null);
+                      summary.push("discount cleared");
+                    } else if (sd && (sd.type === "percent" || sd.type === "fixed") && typeof sd.value === "number" && sd.value > 0) {
+                      setDiscount({
+                        type: sd.type,
+                        value: sd.value,
+                        label: typeof sd.label === "string" && sd.label.trim() ? sd.label.trim() : undefined,
+                      });
+                      summary.push(sd.type === "percent" ? `discount ${sd.value}%` : `discount $${sd.value} off`);
+                    }
+                  }
+
                   if (adds.length) summary.push(`+${adds.length} added`);
                   if (updates.length) summary.push(`${updates.length} updated`);
                   if (removes.length) summary.push(`-${removes.length} removed`);
