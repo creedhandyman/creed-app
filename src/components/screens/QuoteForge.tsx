@@ -27,6 +27,7 @@ import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { wrapPrint, openPrint } from "@/lib/print-template";
+import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 
 // Compress image for AI processing — aggressive for mobile (S23 Ultra = 200MP)
 async function compressImage(file: File, maxSize = 800): Promise<string> {
@@ -491,6 +492,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           created_by: user.name,
         });
       } catch { /* non-critical */ }
+      // Bump the monthly usage counter. Non-blocking — the inspection
+      // itself was already saved above. Counter failure just means the
+      // org's "X left this month" toast will under-count; the start-
+      // gate check still runs on every new inspection.
+      if (org?.id) {
+        try {
+          const plan = org.subscription_plan || org.plan || "solo";
+          await incrementUsage(org.id, plan);
+        } catch { /* logged inside the helper */ }
+      }
     }
 
     // Collect all inspection photos and REPLACE the job gallery — appending
@@ -1233,9 +1244,39 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             </div>
           </div>
 
-          {/* Inspect */}
+          {/* Inspect — gated by plan + monthly usage cap. Solo orgs see
+              an "Upgrade to Crew" toast; Crew/Pro at-cap orgs see a
+              "buy overage" toast; orgs at >= 80% of cap see a quiet
+              "X inspections left this month" info nudge but are still
+              allowed to start. */}
           <div
-            onClick={() => setMode("inspect")}
+            onClick={async () => {
+              const plan = org?.subscription_plan || org?.plan || "solo";
+              if (!org?.id) { setMode("inspect"); return; }
+              const usage = await getUsage(org.id, plan);
+              if (usage.blocked) {
+                const showToast = useStore.getState().showToast;
+                if (usage.cap === 0) {
+                  showToast(
+                    "AI inspections require the Crew plan or higher. Upgrade in Ops → Billing.",
+                    "warning",
+                  );
+                } else {
+                  showToast(
+                    `You've used all ${usage.cap} inspections this month. Upgrade or pay $0.50 / overage in Ops → Billing.`,
+                    "warning",
+                  );
+                }
+                return;
+              }
+              if (usage.warning) {
+                useStore.getState().showToast(
+                  `${usage.remaining} inspection${usage.remaining === 1 ? "" : "s"} left this month`,
+                  "info",
+                );
+              }
+              setMode("inspect");
+            }}
             style={{
               background: darkMode ? "#12121a" : "#fff",
               border: `2px solid var(--color-success)`,

@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { Icon } from "./Icon";
 import { t } from "@/lib/i18n";
 import { applyPromoCode } from "@/lib/promo-codes";
+import { getUsage, getCap, type UsageInfo } from "@/lib/inspection-usage";
 import type { Organization } from "@/lib/types";
 
 /**
@@ -264,6 +265,16 @@ export default function BillingSettings() {
                   )}
                 </div>
 
+                {/* Monthly inspection usage — only meaningful on the
+                    plans that have a cap (Crew = 200, Pro = 500).
+                    Solo orgs already see the "Upgrade to Crew" toast
+                    when they try to start an inspection, so we hide
+                    this row there to avoid drawing attention to a
+                    bullet they don't have. */}
+                {org && getCap(plan) > 0 && (
+                  <InspectionUsageRow orgId={org.id} plan={plan} />
+                )}
+
                 {/* Promo code — only surfaced to owners and only when billing
                     is still enforced (no need to show it once it's already
                     been applied or trial/paywall is irrelevant). */}
@@ -273,6 +284,47 @@ export default function BillingSettings() {
               </div>
             );
           })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Read-only inspection-usage display: "127 / 200 inspections used this
+ * month". Color shifts to amber at >= 80% and red at >= 100% so the
+ * owner can spot pressure on the cap at a glance.
+ */
+function InspectionUsageRow({ orgId, plan }: { orgId: string; plan: string }) {
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getUsage(orgId, plan).then((u) => { if (!cancelled) setUsage(u); });
+    return () => { cancelled = true; };
+  }, [orgId, plan]);
+  if (!usage) return null;
+  const pct = usage.cap > 0 ? Math.min(100, Math.round((usage.count / usage.cap) * 100)) : 0;
+  const color = usage.blocked
+    ? "var(--color-accent-red)"
+    : usage.warning
+    ? "var(--color-warning)"
+    : "var(--color-success)";
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed #1e1e2e" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+        <span className="dim" style={{ fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}>
+          Inspections this month
+        </span>
+        <span style={{ color, fontFamily: "Oswald" }}>
+          {usage.count} / {usage.cap}
+        </span>
+      </div>
+      <div style={{ marginTop: 6, height: 4, background: "#1e1e2e", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: color, transition: "width .25s" }} />
+      </div>
+      {usage.blocked && (
+        <div style={{ fontSize: 11, color: "var(--color-accent-red)", marginTop: 6 }}>
+          Cap reached. New inspections will be blocked until next month — upgrade or contact support for overage billing.
         </div>
       )}
     </div>
