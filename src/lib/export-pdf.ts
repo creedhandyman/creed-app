@@ -9,10 +9,14 @@ interface ExportOptions {
   rooms: Room[];
   rate: number;
   workers: { id: string; name: string }[];
-  grandTotal: number;
-  totalLabor: number;
-  totalMat: number;
-  totalHrs: number;
+  /** Ignored — the PDF recomputes labor/material/hour totals from
+   *  `rooms` × the current `rate` so a stale saved value (e.g. org rate
+   *  changed after the quote was created) doesn't leak into the print.
+   *  Kept on the type for backward-compat with existing call sites. */
+  grandTotal?: number;
+  totalLabor?: number;
+  totalMat?: number;
+  totalHrs?: number;
   trade?: string;
   jobId?: string;
   orgName?: string;
@@ -41,10 +45,6 @@ export function exportQuotePdf(opts: ExportOptions) {
     client,
     rooms,
     rate,
-    grandTotal,
-    totalLabor,
-    totalMat,
-    totalHrs,
   } = opts;
 
   const orgName = opts.orgName || "Service Provider";
@@ -59,14 +59,32 @@ export function exportQuotePdf(opts: ExportOptions) {
   const photos = opts.photos || [];
   const markupPct = opts.markupPct || 0;
   const taxPct = opts.taxPct || 0;
-  const taxAmount = opts.taxAmount || 0;
   const tripFee = opts.tripFee || 0;
   const jobId = opts.jobId || "";
   const discount = opts.discount && opts.discount.value > 0 ? opts.discount : null;
-  // Pre-discount, pre-tax base (mirrors QuoteForge's preDiscountBase). The
-  // line items already include material markup, so subtotal + trip fee is
-  // the right base for the discount.
-  const _preDiscountBase = (opts.totalLabor || 0) + (opts.totalMat || 0) + tripFee;
+
+  // Recompute totals from the rooms blob using the caller-supplied rate
+  // (resolution: per-quote laborRate → current org default → $55). This
+  // keeps the per-section labor rows, the SUBTOTAL row, the discount, the
+  // tax line, and the Grand Total consistent with each other even when
+  // the org's default rate changed AFTER the quote was saved — the saved
+  // job.total_labor/job.total would be stale, but the PDF should reflect
+  // the LATEST rate at generation time.
+  const allItems = rooms.flatMap((r) => r.items);
+  const totalHrs = allItems.reduce((s, it) => s + it.laborHrs, 0);
+  const totalLabor = Math.round(totalHrs * rate * 100) / 100;
+  // Material markup is applied per-item (matching QuoteForge.tm) so the
+  // SUBTOTAL value matches the "Material Markup (X%) included in
+  // materials" disclaimer below.
+  const totalMat = allItems.reduce((s, it) => {
+    const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
+    return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+  }, 0);
+
+  // Pre-discount, pre-tax base. Line item material costs already include
+  // markup (applied at quote save / edit time), so subtotal + trip fee is
+  // the correct discount base.
+  const _preDiscountBase = totalLabor + totalMat + tripFee;
   const discountAmount = discount
     ? (discount.type === "percent"
         ? Math.round(_preDiscountBase * (discount.value / 100) * 100) / 100
@@ -79,6 +97,10 @@ export function exportQuotePdf(opts: ExportOptions) {
             ? `Discount (${discount.value}%)`
             : `Discount ($${discount.value.toFixed(2)} off)`))
     : "";
+
+  const taxableBase = Math.max(0, Math.round((_preDiscountBase - discountAmount) * 100) / 100);
+  const taxAmount = taxPct > 0 ? Math.round(taxableBase * (taxPct / 100) * 100) / 100 : 0;
+  const grandTotal = Math.round((taxableBase + taxAmount) * 100) / 100;
 
   const quoteNum = jobId
     ? "QT-" + jobId.slice(0, 6).toUpperCase()

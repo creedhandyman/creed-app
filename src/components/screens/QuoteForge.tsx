@@ -366,7 +366,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
   const fileRef = useRef<HTMLInputElement>(null);
   const org = useStore((s) => s.org);
-  const defaultRate = user.rate || 55;
+  // Org's published labor rate is the authoritative default for quotes.
+  // Previously this read `user.rate` (the logged-in tech's payroll rate),
+  // which meant changing the rate in Ops → Settings never reached the
+  // quote — Settings writes `organizations.default_rate`, not the user's
+  // profile. Resolution order: per-quote override → org default → $55.
+  const defaultRate = org?.default_rate || 55;
 
   // Get trade-specific rate or fall back to user rate
   const tradeRates: Record<string, number> = (() => {
