@@ -160,6 +160,15 @@ export default function PricingPage() {
   const [modalPlan, setModalPlan] = useState<Plan | null>(null);
   const [modalPM, setModalPM] = useState(false);
 
+  // Tier CTAs now route into the real signup funnel. The PM add-on
+  // callout still opens the waitlist modal — add-on billing isn't wired
+  // to Stripe yet, so we capture interest there.
+  const startSignup = (plan: Plan) => {
+    if (typeof window !== "undefined") {
+      window.location.href = `/signup?plan=${plan}`;
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: BG, color: "#e2e2e8" }}>
       <div style={{ maxWidth: 1080, margin: "0 auto", padding: "32px 18px 60px" }}>
@@ -242,7 +251,7 @@ export default function PricingPage() {
           }}
         >
           {TIERS.map((t) => (
-            <PricingCard key={t.id} tier={t} onCta={() => setModalPlan(t.id)} />
+            <PricingCard key={t.id} tier={t} onCta={() => startSignup(t.id)} />
           ))}
         </div>
 
