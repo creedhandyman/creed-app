@@ -594,8 +594,10 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
     let rooms: Room[] = [];
     let workers: { id: string; name: string }[] = [];
     let photos: { url: string; label: string; type: string }[] = [];
-    // Pull per-quote discount off the rooms JSON blob (Feature 1).
+    // Pull per-quote pricing overrides off the rooms JSON blob
+    // (discount = Feature 1, laborRate = Feature 2).
     let discount: import("@/lib/types").JobDiscount | null = null;
+    let laborRateOverride: number | null = null;
     try {
       const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
       rooms = (data?.rooms || []) as Room[];
@@ -612,6 +614,9 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
       if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
         discount = { type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined };
       }
+      if (typeof data?.laborRate === "number" && data.laborRate > 0) {
+        laborRateOverride = data.laborRate;
+      }
     } catch { /* malformed rooms — render with defaults */ }
 
     setBusyId(doc.id);
@@ -619,7 +624,7 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
       property: job.property,
       client: job.client,
       rooms,
-      rate: org?.default_rate || 55,
+      rate: laborRateOverride || org?.default_rate || 55,
       workers,
       grandTotal: job.total || 0,
       totalLabor: job.total_labor || 0,

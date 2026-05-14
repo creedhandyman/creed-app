@@ -269,6 +269,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // null = no discount; on save, persisted as `data.discount` so reloads
   // round-trip.
   const [discount, setDiscount] = useState<JobDiscount | null>(null);
+  // Per-quote labor-rate override (Feature 2). null = use the org/user
+  // default; a positive number overrides for THIS quote only. Lives on
+  // the rooms JSON blob as `data.laborRate` (no schema change).
+  const [laborRate, setLaborRate] = useState<number | null>(null);
   // Guide-tab persistent state — lifted out of GuideTab so adds survive
   // save+reload. Bernard hit the bug where new shopping-list items
   // disappeared on save: GuideTab held them in local component state that
@@ -327,6 +331,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       } else {
         setDiscount(null);
       }
+      // Per-quote labor-rate override (Feature 2). Absent / non-positive
+      // = use org default.
+      const lr = data?.laborRate;
+      setLaborRate(typeof lr === "number" && lr > 0 ? lr : null);
     } catch {
       // rooms parse failed, start empty
     }
@@ -365,13 +373,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     try { return org?.trade_rates ? JSON.parse(org.trade_rates) : {}; } catch { return {}; }
   })();
   const getRateForRoom = (roomName: string): number => {
+    // Per-quote labor-rate override (Feature 2) wins over trade-specific
+    // rates AND the user/org default — it's an explicit "this job bills
+    // at $X/hr" decision the user made for this quote.
+    if (laborRate && laborRate > 0) return laborRate;
     // Check if room name matches a trade
     for (const [trade, r] of Object.entries(tradeRates)) {
       if (roomName.toLowerCase().includes(trade.toLowerCase())) return r;
     }
     return defaultRate;
   };
-  const rate = defaultRate; // fallback for non-trade-specific uses
+  // Effective non-trade rate. Used for the PDF labor line + the
+  // "Labor rate: $X.00/hour" line in the AI Assist system prompt.
+  const rate = laborRate && laborRate > 0 ? laborRate : defaultRate;
 
   /* ── Inspection edit: open + save handlers ── */
   // Open the Inspector in edit mode for an already-saved inspection job.
@@ -1064,10 +1078,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       customShop,
       checkedTools,
       checkedShop,
-      // Per-quote discount. Persist explicitly (not via spread) so
-      // clearing it actually clears the saved value instead of inheriting
-      // prevData's stale entry.
+      // Per-quote discount + labor-rate override. Persist explicitly
+      // (not via spread) so clearing them actually clears the saved
+      // value instead of inheriting prevData's stale entry.
       discount: discount,
+      laborRate: laborRate,
       // Only overwrite `inspection` if the user just ran the inspector in
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
@@ -1131,6 +1146,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setCheckedTools([]);
     setCheckedShop([]);
     setDiscount(null);
+    setLaborRate(null);
     setPage("jobs");
   };
 
@@ -1707,9 +1723,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setCheckedTools([]);
           setCheckedShop([]);
           setDiscount(null);
+          setLaborRate(null);
         }}>←</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>⚡ Quote</h2>
-        <span style={{ fontSize: 10 }} className="dim">${rate}/hr</span>
+        <span style={{ fontSize: 10 }} className="dim">
+          ${rate}/hr{laborRate && laborRate > 0 ? " (override)" : ""}
+        </span>
       </div>
 
       {/* Property + Total */}
@@ -1751,13 +1770,52 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         </div>
       </div>
 
-      {/* Per-quote discount. Lives on the rooms JSON blob (no schema
-          change). Empty discount value means "no discount applied". */}
+      {/* Pricing adjustments — per-quote labor-rate override + discount.
+          Both live on the rooms JSON blob (no schema change). Empty
+          labor-rate input falls back to the org default; empty discount
+          value means "no discount applied". */}
       <div className="cd mb" style={{ padding: 10 }}>
         <div
           className="row"
           style={{ gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}
         >
+          <span
+            style={{
+              fontSize: 10,
+              color: "#888",
+              fontFamily: "Oswald",
+              textTransform: "uppercase",
+              letterSpacing: ".06em",
+            }}
+          >
+            Labor $/hr
+          </span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            placeholder={`${org?.default_rate || defaultRate || 55}`}
+            value={laborRate ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setLaborRate(v === "" ? null : parseFloat(v) || null);
+            }}
+            style={{ width: 64, padding: "4px 6px", fontSize: 13, textAlign: "center" }}
+            title="Override the labor rate for THIS quote only. Leave empty to use the org default."
+          />
+          {laborRate && laborRate > 0 ? (
+            <button
+              onClick={() => setLaborRate(null)}
+              className="bo"
+              style={{ fontSize: 10, padding: "2px 8px" }}
+              title="Clear labor-rate override"
+            >
+              ×
+            </button>
+          ) : null}
+
+          <span style={{ width: 1, height: 18, background: "#444", margin: "0 4px" }} />
+
           <span
             style={{
               fontSize: 10,
