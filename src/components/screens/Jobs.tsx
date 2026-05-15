@@ -629,30 +629,34 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         const paidJobs = jobs.filter((j) => !j.archived && j.status === "paid");
         const archivedJobs = jobs.filter((j) => j.archived);
         const tabs = [
-          { id: "active" as const, l: `🔨 ${t("jobs.active")} (${activeJobs.length})`, c: "var(--color-primary)" },
-          { id: "billing" as const, l: `🧾 ${t("jobs.billing")} (${billingJobs.length})`, c: "var(--color-warning)" },
-          { id: "paid" as const, l: `✅ ${t("jobs.paid")} (${paidJobs.length})`, c: "var(--color-success)" },
+          { id: "active" as const, icon: "hammer", label: t("jobs.active"), count: activeJobs.length, c: "var(--color-primary)" },
+          { id: "billing" as const, icon: "receipt", label: t("jobs.billing"), count: billingJobs.length, c: "var(--color-warning)" },
+          { id: "paid" as const, icon: "checkCircle", label: t("jobs.paid"), count: paidJobs.length, c: "var(--color-success)" },
           ...(archivedJobs.length > 0
-            ? [{ id: "archive" as const, l: `📦 Archive (${archivedJobs.length})`, c: "#888" }]
+            ? [{ id: "archive" as const, icon: "package", label: "Archive", count: archivedJobs.length, c: "#888" }]
             : []),
         ];
         return (
           <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
-            {tabs.map((t) => (
+            {tabs.map((tab) => (
               <button
-                key={t.id}
-                onClick={() => setJobTab(t.id)}
+                key={tab.id}
+                onClick={() => setJobTab(tab.id)}
                 style={{
                   padding: "5px 12px",
                   borderRadius: 6,
                   fontSize: 13,
-                  background: jobTab === t.id ? t.c : "transparent",
-                  color: jobTab === t.id ? "#fff" : "#888",
+                  background: jobTab === tab.id ? tab.c : "transparent",
+                  color: jobTab === tab.id ? "#fff" : "#888",
                   fontFamily: "Oswald",
-                  border: `1px solid ${jobTab === t.id ? t.c : darkMode ? "#1e1e2e" : "#ddd"}`,
+                  border: `1px solid ${jobTab === tab.id ? tab.c : darkMode ? "#1e1e2e" : "#ddd"}`,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
                 }}
               >
-                {t.l}
+                <Icon name={tab.icon} size={14} />
+                {tab.label} ({tab.count})
               </button>
             ))}
           </div>
@@ -795,7 +799,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                   : "No archived jobs."}
               </p>
               {jobTab === "active" && (
-                <button className="bb mt" onClick={() => setPage("qf")}>⚡ Start Quote</button>
+                <button className="bb mt" onClick={() => setPage("qf")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Icon name="quote" size={14} />Start Quote
+                </button>
               )}
             </div>
           );
@@ -851,7 +857,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                   </h4>
                   <div style={{ fontSize: 11 }} className="dim">
                     {j.client} · {j.job_date}
-                    {w.length > 0 && " · 👷 " + w.map((x) => x.name).join(", ")}
+                    {w.length > 0 && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4 }}>
+                        · <Icon name="worker" size={11} />{w.map((x) => x.name).join(", ")}
+                      </span>
+                    )}
                     {j.referrer_tech_id && (() => {
                       const ref = profiles.find((p) => p.id === j.referrer_tech_id);
                       if (!ref) return null;
@@ -959,12 +969,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                   {/* Quick action buttons — clean row */}
                   <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
                     {onEditJob && (
-                      <button className="bb" onClick={(e) => { e.stopPropagation(); onEditJob(j.id); }} style={{ fontSize: 12, padding: "6px 14px" }}>
-                        {j.status === "lead" ? "⚡ Build Quote" : `✏️ ${t("jobs.editQuote")}`}
+                      <button className="bb" onClick={(e) => { e.stopPropagation(); onEditJob(j.id); }} style={{ fontSize: 12, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <Icon name={j.status === "lead" ? "quote" : "edit"} size={13} />
+                        {j.status === "lead" ? "Build Quote" : t("jobs.editQuote")}
                       </button>
                     )}
-                    <button className="bb" onClick={(e) => { e.stopPropagation(); if (onScheduleJob) onScheduleJob(j.property); else setPage("sched"); }} style={{ fontSize: 12, padding: "6px 14px" }}>
-                      📅 {t("jobs.scheduleThis")}
+                    <button className="bb" onClick={(e) => { e.stopPropagation(); if (onScheduleJob) onScheduleJob(j.property); else setPage("sched"); }} style={{ fontSize: 12, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Icon name="schedule" size={13} />
+                      {t("jobs.scheduleThis")}
                     </button>
                     <button className="bo" onClick={(e) => {
                       e.stopPropagation();
@@ -974,8 +986,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                         : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
                       navigator.clipboard.writeText(msg);
                       useStore.getState().showToast("Message copied! Paste & send to client.", "success");
-                    }} style={{ fontSize: 12, padding: "6px 14px" }}>
-                      📤 Send Job to Client
+                    }} style={{ fontSize: 12, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Icon name="send" size={13} />
+                      Send Job to Client
                     </button>
                     {/* Twilio SMS templates — only show on the statuses where
                         each makes sense in the job lifecycle. Bernard hits
@@ -1000,7 +1013,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                         }}
                         title={j.review_requested_at ? "Already requested — tap to send another" : "Send a review request to this client"}
                       >
-                        {j.review_requested_at ? "📨 Review Sent" : "⭐ Request Review"}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <Icon name={j.review_requested_at ? "mail" : "star"} size={13} />
+                          {j.review_requested_at ? "Review Sent" : "Request Review"}
+                        </span>
                       </button>
                     )}
                     {/* Archive / Restore — for jobs the client never accepted
@@ -1018,10 +1034,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           });
                           loadAll();
                         }}
-                        style={{ fontSize: 12, padding: "6px 10px", color: "#888" }}
+                        style={{ fontSize: 12, padding: "6px 10px", color: "#888", display: "inline-flex", alignItems: "center", gap: 6 }}
                         title="Hide this quote from active jobs without deleting it"
                       >
-                        📦 Archive
+                        <Icon name="package" size={13} />
+                        Archive
                       </button>
                     )}
                     {j.archived && (
@@ -1035,14 +1052,16 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           });
                           loadAll();
                         }}
-                        style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-success)" }}
+                        style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-success)", display: "inline-flex", alignItems: "center", gap: 6 }}
                         title="Restore this job to its original status"
                       >
-                        ↩ Restore
+                        <Icon name="refresh" size={13} />
+                        Restore
                       </button>
                     )}
-                    <button className="bo" onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }} style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-accent-red)" }}>
-                      🗑 {t("jobs.delete")}
+                    <button className="bo" onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }} style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-accent-red)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Icon name="delete" size={13} />
+                      {t("jobs.delete")}
                     </button>
                   </div>
 
@@ -1097,7 +1116,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           onClick={(e) => { e.stopPropagation(); setExpandedSection(isOpenSection ? null : `time-${j.id}`); }}
                           style={{ fontSize: 12, padding: "4px 10px", width: "100%", textAlign: "left" }}
                         >
-                          ⏱ Time Logged: {labor.totalHrs.toFixed(1)}h · ${labor.totalCost.toFixed(0)} ({labor.byPerson.length} crew) {isOpenSection ? "▼" : "▶"}
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <Icon name="time" size={13} />
+                            Time Logged: {labor.totalHrs.toFixed(1)}h · ${labor.totalCost.toFixed(0)} ({labor.byPerson.length} crew)
+                            <Icon name={isOpenSection ? "expand" : "next"} size={12} />
+                          </span>
                         </button>
                         {isOpenSection && (
                           <div style={{ marginTop: 6, padding: 8, background: darkMode ? "#0f0f18" : "#f7f7fa", borderRadius: 6 }}>
@@ -1105,7 +1128,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                               .sort((a, b) => b.hrs - a.hrs)
                               .map((p) => (
                                 <div key={p.name} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                                  <span>👷 {p.name}</span>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <Icon name="worker" size={12} />{p.name}
+                                  </span>
                                   <span style={{ color: "var(--color-highlight)", fontFamily: "Oswald" }}>{p.hrs.toFixed(1)}h</span>
                                   <span style={{ color: "var(--color-success)", fontFamily: "Oswald", minWidth: 60, textAlign: "right" }}>${p.cost.toFixed(0)}</span>
                                 </div>
@@ -1144,7 +1169,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                               onClick={(e) => { e.stopPropagation(); setExpandedSection(expandedSection === `insp-${j.id}` ? null : `insp-${j.id}`); }}
                               style={{ flex: 1, fontSize: 12, padding: "6px 10px", textAlign: "left" }}
                             >
-                              📋 Inspection ({findingsCount} findings) {expandedSection === `insp-${j.id}` ? "▲" : "▼"}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                <Icon name="list" size={13} />
+                                Inspection ({findingsCount} findings)
+                                <Icon name={expandedSection === `insp-${j.id}` ? "collapse" : "expand"} size={12} />
+                              </span>
                             </button>
                           )}
                           {hasWorkOrder && (
@@ -1153,7 +1182,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                               onClick={(e) => { e.stopPropagation(); setExpandedSection(expandedSection === `wo-${j.id}` ? null : `wo-${j.id}`); }}
                               style={{ flex: 1, fontSize: 12, padding: "6px 10px", textAlign: "left" }}
                             >
-                              ✅ Work Order ({woDone}/{woTotal}) {expandedSection === `wo-${j.id}` ? "▲" : "▼"}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                <Icon name="checkCircle" size={13} />
+                                Work Order ({woDone}/{woTotal})
+                                <Icon name={expandedSection === `wo-${j.id}` ? "collapse" : "expand"} size={12} />
+                              </span>
                             </button>
                           )}
                         </div>
@@ -1250,7 +1283,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           }}
                           style={{ fontSize: 12, padding: "5px 12px" }}
                         >
-                          💳 Send Link
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                            <Icon name="link" size={14} />Send Link
+                          </span>
                         </button>
                         <button
                           className="bb"
@@ -1280,7 +1315,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           }}
                           style={{ fontSize: 12, padding: "5px 12px" }}
                         >
-                          📱 Collect Now
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                            <Icon name="qr" size={14} />Collect Now
+                          </span>
                         </button>
                       </>)}
                       {j.status === "invoiced" && (
@@ -1391,7 +1428,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
                   {/* Recurring */}
                   <div className="row" style={{ marginTop: 6 }}>
-                    <span className="dim" style={{ fontSize: 12 }}>🔄 Recurring:</span>
+                    <span className="dim" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <Icon name="refresh" size={12} />Recurring:
+                    </span>
                     <select
                       value={j.recurrence_rule || ""}
                       onClick={(e) => e.stopPropagation()}
@@ -1419,7 +1458,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     return (
                       <div style={{ marginTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`, paddingTop: 8 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>📸 Completion Photos</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <Icon name="camera" size={14} />Completion Photos
+                          </span>
                           <div className="row" style={{ gap: 4 }}>
                             <button
                               className="bo"
@@ -1498,9 +1539,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                                   const win = window.open("", "_blank");
                                   if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
                                 }}
-                                style={{ fontSize: 12, padding: "3px 8px" }}
+                                style={{ fontSize: 12, padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: 6 }}
                               >
-                                📸 Photo Report
+                                <Icon name="photo" size={13} />Photo Report
                               </button>
                             )}
                           </div>
@@ -1584,7 +1625,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                                 display: "flex", alignItems: "center", justifyContent: "center",
                                 fontSize: 12, color: "#fff",
                               }}>
-                                {w.done && "✓"}
+                                {w.done && <Icon name="check" size={12} color="#fff" />}
                               </span>
                               <div style={{ flex: 1, fontSize: 11 }}>
                                 <span style={{
@@ -1656,9 +1697,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                                   loadAll();
                                 }
                               }}
-                              style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, padding: 0 }}
+                              style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center" }}
                             >
-                              ✕
+                              <Icon name="close" size={14} />
                             </button>
                           </div>
                         ))}
