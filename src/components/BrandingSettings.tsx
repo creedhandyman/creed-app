@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
@@ -8,8 +8,8 @@ import type { Organization } from "@/lib/types";
 
 /**
  * Branding & Business Info — logo upload + the org's name/phone/email/
- * address/license number. Org-level config; admin-only. Lives in
- * Operations → Settings.
+ * address/license number + the public URL slug. Org-level config;
+ * admin-only. Lives in Operations → Settings.
  */
 export default function BrandingSettings() {
   const user = useStore((s) => s.user)!;
@@ -21,12 +21,67 @@ export default function BrandingSettings() {
   // Bumps when we successfully save a new logo so the inline preview
   // refetches the URL even though Supabase served it cached before.
   const [logoBust, setLogoBust] = useState(0);
+  // Slug edit — mirrors onboarding's validation so a slug picked here
+  // can't conflict with one picked there.
+  const [slugDraft, setSlugDraft] = useState(org?.site_slug || "");
+  const [savingSlug, setSavingSlug] = useState(false);
+
+  // Keep the slug draft in sync if the org reloads from elsewhere (e.g.
+  // after an onboarding edit, refresh, or another tab).
+  useEffect(() => {
+    setSlugDraft(org?.site_slug || "");
+  }, [org?.site_slug]);
 
   if (!isOwner || !org) return null;
 
   const refreshOrg = async () => {
     const orgs = await db.get<Organization>("organizations", { id: org.id });
     if (orgs.length) setOrg(orgs[0]);
+  };
+
+  const normalizeSlug = (raw: string) =>
+    raw
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+  const saveSlug = async () => {
+    const normalized = normalizeSlug(slugDraft);
+    if (normalized === (org.site_slug || "")) {
+      // No change — but if the user typed garbage that normalized to the
+      // same value, reflect that back so they see what actually saved.
+      setSlugDraft(normalized);
+      return;
+    }
+    if (!normalized) {
+      useStore.getState().showToast("Pick a URL slug", "error");
+      setSlugDraft(org.site_slug || "");
+      return;
+    }
+    if (normalized.length < 3 || normalized.length > 32) {
+      useStore.getState().showToast("Slug must be 3–32 characters", "error");
+      setSlugDraft(org.site_slug || "");
+      return;
+    }
+    setSavingSlug(true);
+    try {
+      // Uniqueness check — any other org claiming this slug blocks the save.
+      const existing = await db.get<Organization>("organizations", { site_slug: normalized });
+      const taken = existing.some((o) => o.id !== org.id);
+      if (taken) {
+        useStore.getState().showToast("That slug is taken, try another", "error");
+        setSlugDraft(org.site_slug || "");
+        return;
+      }
+      await db.patch("organizations", org.id, { site_slug: normalized });
+      setSlugDraft(normalized);
+      await refreshOrg();
+      useStore.getState().showToast("Public URL updated", "success");
+    } finally {
+      setSavingSlug(false);
+    }
   };
 
   const onLogoFile = async (file: File) => {
@@ -177,24 +232,53 @@ export default function BrandingSettings() {
           { label: "Email", field: "email", value: org.email },
           { label: "Address", field: "address", value: org.address },
           { label: "License #", field: "license_num", value: org.license_num },
-        ].map((f) => (
-          <div key={f.field} style={{ marginBottom: 6 }}>
-            <label className="sl" style={{ fontSize: 12 }}>
-              {f.label}
-            </label>
-            <input
-              key={`${f.field}-${f.value}`}
-              defaultValue={f.value || ""}
-              onBlur={async (e) => {
-                const val = e.target.value.trim();
-                if (val !== (f.value || "")) {
-                  await db.patch("organizations", org.id, { [f.field]: val });
-                  await refreshOrg();
-                  useStore.getState().showToast(`${f.label} updated`, "success");
-                }
-              }}
-              style={{ fontSize: 13 }}
-            />
+        ].map((f, i) => (
+          <div key={f.field}>
+            <div style={{ marginBottom: 6 }}>
+              <label className="sl" style={{ fontSize: 12 }}>
+                {f.label}
+              </label>
+              <input
+                key={`${f.field}-${f.value}`}
+                defaultValue={f.value || ""}
+                onBlur={async (e) => {
+                  const val = e.target.value.trim();
+                  if (val !== (f.value || "")) {
+                    await db.patch("organizations", org.id, { [f.field]: val });
+                    await refreshOrg();
+                    useStore.getState().showToast(`${f.label} updated`, "success");
+                  }
+                }}
+                style={{ fontSize: 13 }}
+              />
+            </div>
+            {/* Slug sits right under Business Name — it's the public-facing
+                URL handle so it pairs with the business identity. */}
+            {i === 0 && (
+              <div style={{ marginBottom: 6 }}>
+                <label className="sl" style={{ fontSize: 12 }}>
+                  Public URL slug
+                </label>
+                <input
+                  value={slugDraft}
+                  onChange={(e) => setSlugDraft(e.target.value)}
+                  onBlur={saveSlug}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  disabled={savingSlug}
+                  placeholder="your-business"
+                  style={{ fontSize: 13 }}
+                />
+                <div className="dim" style={{ fontSize: 10, marginTop: 4 }}>
+                  Your card: www.creedhm.com/card/
+                  <span style={{ color: "var(--color-primary)" }}>
+                    {normalizeSlug(slugDraft) || "your-slug"}
+                  </span>
+                  {" · "}lowercase, letters/numbers/hyphens, 3–32 chars
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
