@@ -80,7 +80,7 @@ export default function DashboardCardPreview() {
             </div>
           ) : (
             <div style={{ fontSize: 11, color: "var(--color-warning)", marginTop: 2 }}>
-              Pick a URL slug under Marketing → Website to unlock the card.
+              Pick a URL slug under Operations → Settings to unlock the card.
             </div>
           )}
         </div>

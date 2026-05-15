@@ -61,7 +61,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
       <div className="cd mb">
         {!noTitle && <h4 style={{ fontSize: 13, marginBottom: 6 }}>📇 Share my card</h4>}
         <p className="dim" style={{ fontSize: 12, margin: 0 }}>
-          Set a custom URL slug under Marketing → Website first, then this card unlocks at <code style={{ fontSize: 11 }}>creedhm.com/card/&lt;slug&gt;</code>.
+          Set a custom URL slug under Operations → Settings first, then this card unlocks at <code style={{ fontSize: 11 }}>creedhm.com/card/&lt;slug&gt;</code>.
         </p>
       </div>
     );
