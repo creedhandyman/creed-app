@@ -195,6 +195,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
   const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number } | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [connectingStripe, setConnectingStripe] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
 
   // Auto-create recurring jobs that are due
@@ -706,10 +707,49 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
               </div>
             </div>
             {!org?.stripe_connected && (
-              <button className="bb" onClick={() => {
-                useStore.getState().showToast("Go to Settings → Payments to connect Stripe", "info");
-              }} style={{ fontSize: 12, padding: "5px 10px" }}>
-                {t("jobs.connectStripe")} →
+              <button
+                className="bb"
+                disabled={connectingStripe}
+                onClick={async () => {
+                  setConnectingStripe(true);
+                  try {
+                    const res = await fetch("/api/stripe/connect", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        orgId: user.org_id,
+                        orgName: org?.name,
+                        email: user.email,
+                        returnUrl: window.location.origin,
+                      }),
+                    });
+                    if (!res.ok) {
+                      const text = await res.text();
+                      useStore.getState().showToast("Stripe error (" + res.status + "): " + text, "error");
+                      setConnectingStripe(false);
+                      return;
+                    }
+                    const data = await res.json();
+                    if (data.url) {
+                      await db.patch("organizations", user.org_id, {
+                        stripe_account_id: data.accountId,
+                      });
+                      window.location.href = data.url;
+                    } else {
+                      useStore.getState().showToast("Error: " + (data.error || "Could not start Stripe setup"), "error");
+                      setConnectingStripe(false);
+                    }
+                  } catch (e) {
+                    useStore.getState().showToast(
+                      "Failed to start Stripe setup: " + (e instanceof Error ? e.message : "Network error"),
+                      "error",
+                    );
+                    setConnectingStripe(false);
+                  }
+                }}
+                style={{ fontSize: 12, padding: "5px 10px" }}
+              >
+                {connectingStripe ? "Connecting…" : `${t("jobs.connectStripe")} →`}
               </button>
             )}
           </div>
