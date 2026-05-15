@@ -919,6 +919,25 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     <option value="invoiced">{t("status.invoiced")}</option>
                     <option value="paid">{t("status.paid")}</option>
                   </select>
+                  {isOpen && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }}
+                      title={t("jobs.delete")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 4,
+                        marginLeft: 2,
+                        color: "var(--color-accent-red)",
+                        cursor: "pointer",
+                        opacity: 0.6,
+                        display: "inline-flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Icon name="delete" size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -966,63 +985,82 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     </div>
                   )}
 
-                  {/* Quick action buttons — clean row */}
-                  <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                  {/* Primary actions — Edit + Schedule. Equal-weight, full-width
+                      split. These are the two most-tapped actions on any job. */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 6 }}>
                     {onEditJob && (
-                      <button className="bb" onClick={(e) => { e.stopPropagation(); onEditJob(j.id); }} style={{ fontSize: 12, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        <Icon name={j.status === "lead" ? "quote" : "edit"} size={13} />
-                        {j.status === "lead" ? "Build Quote" : t("jobs.editQuote")}
+                      <button
+                        className="bb"
+                        onClick={(e) => { e.stopPropagation(); onEditJob(j.id); }}
+                        style={{ fontSize: 12, padding: "8px 12px", width: "100%" }}
+                      >
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                          <Icon name={j.status === "lead" ? "quote" : "edit"} size={14} />
+                          {j.status === "lead" ? "Build Quote" : t("jobs.editQuote")}
+                        </span>
                       </button>
                     )}
-                    <button className="bb" onClick={(e) => { e.stopPropagation(); if (onScheduleJob) onScheduleJob(j.property); else setPage("sched"); }} style={{ fontSize: 12, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <Icon name="schedule" size={13} />
-                      {t("jobs.scheduleThis")}
+                    <button
+                      className="bb"
+                      onClick={(e) => { e.stopPropagation(); if (onScheduleJob) onScheduleJob(j.property); else setPage("sched"); }}
+                      style={{ fontSize: 12, padding: "8px 12px", width: "100%" }}
+                    >
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                        <Icon name="schedule" size={14} />
+                        {t("jobs.scheduleThis")}
+                      </span>
                     </button>
-                    <button className="bo" onClick={(e) => {
-                      e.stopPropagation();
-                      const url = `${window.location.origin}/status?job=${j.id}`;
-                      const msg = j.status === "quoted" || j.status === "accepted"
-                        ? `Hi! Here's your quote from ${org?.name || "us"} for ${j.property}:\n\nTotal: $${(j.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
-                        : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
-                      navigator.clipboard.writeText(msg);
-                      useStore.getState().showToast("Message copied! Paste & send to client.", "success");
-                    }} style={{ fontSize: 12, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <Icon name="send" size={13} />
-                      Send Job to Client
+                  </div>
+
+                  {/* Job lifecycle row — secondary actions for moving a job
+                      forward (send to client, ask for review, notify SMS, job
+                      complete SMS, archive). All ghost-style and uniform size
+                      so none of them visually compete with the primary pair. */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 8 }}>
+                    <button
+                      className="bo"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const url = `${window.location.origin}/status?job=${j.id}`;
+                        const msg = j.status === "quoted" || j.status === "accepted"
+                          ? `Hi! Here's your quote from ${org?.name || "us"} for ${j.property}:\n\nTotal: $${(j.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
+                          : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
+                        navigator.clipboard.writeText(msg);
+                        useStore.getState().showToast("Message copied! Paste & send to client.", "success");
+                      }}
+                      style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
+                    >
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                        <Icon name="send" size={13} />Send Job to Client
+                      </span>
                     </button>
-                    {/* Twilio SMS templates — only show on the statuses where
-                        each makes sense in the job lifecycle. Bernard hits
-                        "On the way / Late" when leaving for or at a job, and
-                        "Job complete" right before flipping status. */}
-                    {(j.status === "scheduled" || j.status === "active" || j.status === "complete") && (
-                      <div style={{ flexBasis: "100%" }}>
-                        <SmsNotifyButtons jobId={j.id} />
-                      </div>
-                    )}
-                    {/* Manual review-request — appears on completed/paid jobs.
-                        Useful for re-sending if the auto-prompt was dismissed
-                        or if you want to ping a client weeks after the job. */}
+                    {/* Manual review-request — appears on completed/paid jobs. */}
                     {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (
                       <button
                         className="bo"
                         onClick={(e) => { e.stopPropagation(); setReviewJob(j); }}
                         style={{
                           fontSize: 12,
-                          padding: "6px 14px",
+                          padding: "7px 10px",
+                          width: "100%",
                           color: j.review_requested_at ? "#888" : "var(--color-highlight)",
                         }}
                         title={j.review_requested_at ? "Already requested — tap to send another" : "Send a review request to this client"}
                       >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
                           <Icon name={j.review_requested_at ? "mail" : "star"} size={13} />
                           {j.review_requested_at ? "Review Sent" : "Request Review"}
                         </span>
                       </button>
                     )}
-                    {/* Archive / Restore — for jobs the client never accepted
-                        (or any job worth quietly setting aside). Status field
-                        is preserved so a Restore returns the job to its
-                        previous state with no data loss. */}
+                    {/* Twilio SMS templates — collapsed into a "Notify ▾"
+                        dropdown + standalone "Job complete" button. Only the
+                        statuses where each makes sense in the lifecycle. */}
+                    {(j.status === "scheduled" || j.status === "active" || j.status === "complete") && (
+                      <SmsNotifyButtons jobId={j.id} variant="grid" />
+                    )}
+                    {/* Archive / Restore — preserves status field so Restore
+                        returns the job to its prior state with no data loss. */}
                     {!j.archived && (j.status === "quoted" || j.status === "accepted") && (
                       <button
                         className="bo"
@@ -1034,11 +1072,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           });
                           loadAll();
                         }}
-                        style={{ fontSize: 12, padding: "6px 10px", color: "#888", display: "inline-flex", alignItems: "center", gap: 6 }}
+                        style={{ fontSize: 12, padding: "7px 10px", width: "100%", color: "#888" }}
                         title="Hide this quote from active jobs without deleting it"
                       >
-                        <Icon name="package" size={13} />
-                        Archive
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                          <Icon name="package" size={13} />Archive
+                        </span>
                       </button>
                     )}
                     {j.archived && (
@@ -1052,18 +1091,121 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                           });
                           loadAll();
                         }}
-                        style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-success)", display: "inline-flex", alignItems: "center", gap: 6 }}
+                        style={{ fontSize: 12, padding: "7px 10px", width: "100%", color: "var(--color-success)" }}
                         title="Restore this job to its original status"
                       >
-                        <Icon name="refresh" size={13} />
-                        Restore
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                          <Icon name="refresh" size={13} />Restore
+                        </span>
                       </button>
                     )}
-                    <button className="bo" onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }} style={{ fontSize: 12, padding: "6px 10px", color: "var(--color-accent-red)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <Icon name="delete" size={13} />
-                      {t("jobs.delete")}
-                    </button>
                   </div>
+
+                  {/* Payment actions — appears once a job is in the
+                      billable lifecycle (complete / invoiced / paid). Same
+                      grid weight as the lifecycle row so the eye treats this
+                      as a sibling group, not a louder layer. */}
+                  {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 8 }}>
+                      <button
+                        className="bb"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          generateInvoice(j);
+                          if (j.status === "complete") {
+                            setStatus(j.id, "invoiced");
+                          }
+                        }}
+                        style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
+                      >
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                          <Icon name="receipt" size={14} />
+                          {j.status === "complete" ? t("jobs.generateInvoice") : t("jobs.viewInvoice")}
+                        </span>
+                      </button>
+                      {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && org?.stripe_connected && (<>
+                        <button
+                          className="bb"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await fetch("/api/checkout", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  jobId: j.id,
+                                  property: j.property,
+                                  client: j.client,
+                                  amount: j.total,
+                                  orgName: org?.name || "Service Provider",
+                                  stripeAccountId: org?.stripe_account_id || "",
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.url) {
+                                navigator.clipboard.writeText(data.url);
+                                useStore.getState().showToast("Payment link copied! Send it to the client.", "success");
+                                if (j.status === "complete") setStatus(j.id, "invoiced");
+                              } else {
+                                useStore.getState().showToast("Error: " + (data.error || "Could not create payment link"), "error");
+                              }
+                            } catch { useStore.getState().showToast("Failed to create payment link", "error"); }
+                          }}
+                          style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
+                        >
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                            <Icon name="link" size={14} />Send Link
+                          </span>
+                        </button>
+                        <button
+                          className="bb"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await fetch("/api/checkout", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  jobId: j.id,
+                                  property: j.property,
+                                  client: j.client,
+                                  amount: j.total,
+                                  orgName: org?.name || "Service Provider",
+                                  stripeAccountId: org?.stripe_account_id || "",
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.url) {
+                                setPayQR({ url: data.url, jobId: j.id, amount: j.total });
+                                if (j.status === "complete") setStatus(j.id, "invoiced");
+                              } else {
+                                useStore.getState().showToast("Error: " + (data.error || "Could not create payment"), "error");
+                              }
+                            } catch { useStore.getState().showToast("Failed to create payment", "error"); }
+                          }}
+                          style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
+                        >
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                            <Icon name="qr" size={14} />Collect Now
+                          </span>
+                        </button>
+                      </>)}
+                      {j.status === "invoiced" && (
+                        <button
+                          className="bg"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setStatus(j.id, "paid");
+                          }}
+                          style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
+                        >
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                            <Icon name="check" size={14} />Mark Paid
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Job info cards */}
                   {(() => {
@@ -1229,223 +1371,220 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     } catch { return null; }
                   })()}
 
+                  {/* Work Order Checklist — expanded via button above */}
+                  {expandedSection === `wo-${j.id}` && (() => {
+                    try {
+                      const jobData = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+                      const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[] = jobData?.workOrder || [];
+                      if (!workOrder.length) return null;
+
+                      const completedCount = workOrder.filter((w) => w.done).length;
+                      const totalCount = workOrder.length;
+
+                      return (
+                        <div className="mt">
+                          {/* Progress bar */}
+                          <div style={{ height: 4, background: darkMode ? "#1e1e2e" : "#eee", borderRadius: 2, marginBottom: 6 }}>
+                            <div style={{ height: 4, background: completedCount === totalCount ? "var(--color-success)" : "var(--color-primary)", borderRadius: 2, width: `${(completedCount / totalCount) * 100}%`, transition: "width 0.3s" }} />
+                          </div>
+                          {workOrder.map((w, wi) => (
+                            <div
+                              key={wi}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Read fresh blob from the store at save-time
+                                // (the render closure can be stale if a prior
+                                // toggle's loadAll hasn't completed). Match
+                                // the clicked task by (room, detail) so a
+                                // mid-flight reorder can't redirect the toggle
+                                // to the wrong row.
+                                const targetKey = woStableKey(w);
+                                const nextDone = !w.done;
+                                enqueueRoomsWrite(async () => {
+                                  const fresh = useStore.getState().jobs.find((x) => x.id === j.id);
+                                  if (!fresh) return;
+                                  let freshData: Record<string, unknown> = {};
+                                  try {
+                                    freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
+                                  } catch { return; }
+                                  const freshWO = Array.isArray(freshData.workOrder)
+                                    ? (freshData.workOrder as { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[])
+                                    : [];
+                                  const matchIdx = freshWO.findIndex((x) => woStableKey(x) === targetKey);
+                                  if (matchIdx < 0) return;
+                                  const updatedWO = [...freshWO];
+                                  updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
+                                  await db.patch("jobs", j.id, {
+                                    rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }),
+                                  });
+                                  await loadAll();
+                                });
+                              }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 6, padding: "3px 0",
+                                borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
+                                cursor: "pointer", opacity: w.done ? 0.5 : 1,
+                                textDecoration: w.done ? "line-through" : "none",
+                              }}
+                            >
+                              <span style={{
+                                width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                                border: `2px solid ${w.done ? "var(--color-success)" : "#555"}`,
+                                background: w.done ? "var(--color-success)" : "transparent",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: 12, color: "#fff",
+                              }}>
+                                {w.done && "✓"}
+                              </span>
+                              <div style={{ flex: 1, fontSize: 11 }}>
+                                <span style={{
+                                  fontSize: 13, padding: "1px 4px", borderRadius: 3, marginRight: 4,
+                                  background: w.pri === "HIGH" ? "#C0000033" : w.pri === "MED" ? "#ff880033" : "#00cc6633",
+                                  color: w.pri === "HIGH" ? "var(--color-accent-red)" : w.pri === "MED" ? "var(--color-warning)" : "var(--color-success)",
+                                }}>
+                                  {w.pri}
+                                </span>
+                                <b style={{ color: "var(--color-primary)" }}>{w.room}</b> — {w.detail}
+                                <div className="dim" style={{ fontSize: 10 }}>{w.action}</div>
+                              </div>
+                              <span className="dim" style={{ fontSize: 9 }}>{w.hrs}h</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    } catch { return null; }
+                  })()}
+
                   {/* Job Notes */}
                   <div style={{ marginTop: 8 }}>
                     <JobNotesInput job={j} />
                   </div>
 
-                  {/* Invoice */}
-                  {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (
-                    <div className="row" style={{ marginTop: 8 }}>
-                      <button
-                        className="bb"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          generateInvoice(j);
-                          if (j.status === "complete") {
-                            setStatus(j.id, "invoiced");
-                          }
-                        }}
-                        style={{ fontSize: 12, padding: "5px 12px" }}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                          <Icon name="receipt" size={14} />
-                          {j.status === "complete" ? t("jobs.generateInvoice") : t("jobs.viewInvoice")}
-                        </span>
-                      </button>
-                      {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && org?.stripe_connected && (<>
-                        <button
-                          className="bb"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const res = await fetch("/api/checkout", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  jobId: j.id,
-                                  property: j.property,
-                                  client: j.client,
-                                  amount: j.total,
-                                  orgName: org?.name || "Service Provider",
-                                  stripeAccountId: org?.stripe_account_id || "",
-                                }),
-                              });
-                              const data = await res.json();
-                              if (data.url) {
-                                navigator.clipboard.writeText(data.url);
-                                useStore.getState().showToast("Payment link copied! Send it to the client.", "success");
-                                if (j.status === "complete") setStatus(j.id, "invoiced");
-                              } else {
-                                useStore.getState().showToast("Error: " + (data.error || "Could not create payment link"), "error");
-                              }
-                            } catch { useStore.getState().showToast("Failed to create payment link", "error"); }
-                          }}
-                          style={{ fontSize: 12, padding: "5px 12px" }}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                            <Icon name="link" size={14} />Send Link
-                          </span>
-                        </button>
-                        <button
-                          className="bb"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const res = await fetch("/api/checkout", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  jobId: j.id,
-                                  property: j.property,
-                                  client: j.client,
-                                  amount: j.total,
-                                  orgName: org?.name || "Service Provider",
-                                  stripeAccountId: org?.stripe_account_id || "",
-                                }),
-                              });
-                              const data = await res.json();
-                              if (data.url) {
-                                setPayQR({ url: data.url, jobId: j.id, amount: j.total });
-                                if (j.status === "complete") setStatus(j.id, "invoiced");
-                              } else {
-                                useStore.getState().showToast("Error: " + (data.error || "Could not create payment"), "error");
-                              }
-                            } catch { useStore.getState().showToast("Failed to create payment", "error"); }
-                          }}
-                          style={{ fontSize: 12, padding: "5px 12px" }}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                            <Icon name="qr" size={14} />Collect Now
-                          </span>
-                        </button>
-                      </>)}
-                      {j.status === "invoiced" && (
-                        <button
-                          className="bg"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setStatus(j.id, "paid");
-                          }}
-                          style={{ fontSize: 12, padding: "5px 12px" }}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                            <Icon name="check" size={14} />Mark Paid
-                          </span>
-                        </button>
-                      )}
+                  {/* Job Properties — form-style settings (not actions).
+                      2-col grid: label on the left, control on the right.
+                      Section divider above pulls these visually away from
+                      the Job Notes textarea so they read as metadata. */}
+                  <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
+                    <div style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".08em", textTransform: "uppercase", color: "#888", marginBottom: 8 }}>
+                      Job Properties
                     </div>
-                  )}
-
-                  {/* Trade + Callback */}
-                  <div className="row" style={{ marginTop: 8 }}>
-                    <span className="dim" style={{ fontSize: 11 }}>Trade:</span>
-                    <select
-                      value={j.trade || ""}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={async (e) => {
-                        e.stopPropagation();
-                        await db.patch("jobs", j.id, { trade: e.target.value });
-                        loadAll();
-                      }}
-                      style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
-                    >
-                      <option value="">None</option>
-                      <option value="Plumbing">Plumbing</option>
-                      <option value="Electrical">Electrical</option>
-                      <option value="Carpentry">Carpentry</option>
-                      <option value="HVAC">HVAC</option>
-                      <option value="Painting">Painting</option>
-                      <option value="Flooring">Flooring</option>
-                      <option value="General">General</option>
-                    </select>
-                    <label
+                    <div
                       onClick={(e) => e.stopPropagation()}
                       style={{
-                        display: "flex",
+                        display: "grid",
+                        gridTemplateColumns: "auto 1fr",
+                        gap: "6px 10px",
                         alignItems: "center",
-                        gap: 4,
-                        fontSize: 13,
-                        cursor: "pointer",
-                        color: j.callback ? "var(--color-accent-red)" : "#888",
+                        fontSize: 12,
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={j.callback || false}
+                      <span className="dim">Trade</span>
+                      <select
+                        value={j.trade || ""}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={async (e) => {
                           e.stopPropagation();
-                          await db.patch("jobs", j.id, { callback: e.target.checked });
+                          await db.patch("jobs", j.id, { trade: e.target.value });
                           loadAll();
                         }}
-                        style={{ width: "auto", accentColor: "var(--color-accent-red)" }}
-                      />
-                      Callback
-                    </label>
-                    <label
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        fontSize: 13,
-                        cursor: "pointer",
-                        color: j.is_upsell ? "var(--color-success)" : "#888",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={j.is_upsell || false}
-                        onChange={async (e) => {
-                          e.stopPropagation();
-                          await db.patch("jobs", j.id, { is_upsell: e.target.checked });
-                          loadAll();
-                        }}
-                        style={{ width: "auto", accentColor: "var(--color-success)" }}
-                      />
-                      Upsell
-                    </label>
-                  </div>
-                  {/* Requested Tech */}
-                  <div className="row" style={{ marginTop: 4 }}>
-                    <span className="dim" style={{ fontSize: 11 }}>Client requested:</span>
-                    <select
-                      value={j.requested_tech || ""}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={async (e) => {
-                        e.stopPropagation();
-                        await db.patch("jobs", j.id, { requested_tech: e.target.value });
-                        loadAll();
-                      }}
-                      style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
-                    >
-                      <option value="">No one specific</option>
-                      {profiles.map((p) => (
-                        <option key={p.id} value={p.name}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                        style={{ width: "100%", fontSize: 12, padding: "3px 6px" }}
+                      >
+                        <option value="">None</option>
+                        <option value="Plumbing">Plumbing</option>
+                        <option value="Electrical">Electrical</option>
+                        <option value="Carpentry">Carpentry</option>
+                        <option value="HVAC">HVAC</option>
+                        <option value="Painting">Painting</option>
+                        <option value="Flooring">Flooring</option>
+                        <option value="General">General</option>
+                      </select>
 
-                  {/* Recurring */}
-                  <div className="row" style={{ marginTop: 6 }}>
-                    <span className="dim" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <Icon name="refresh" size={12} />Recurring:
-                    </span>
-                    <select
-                      value={j.recurrence_rule || ""}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => { e.stopPropagation(); toggleRecurring(j, e.target.value); }}
-                      style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
-                    >
-                      <option value="">Off</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="biweekly">Biweekly</option>
-                      <option value="monthly">Monthly</option>
-                      <option value="quarterly">Quarterly</option>
-                    </select>
-                    {j.is_recurring && j.next_due && (
-                      <span className="dim" style={{ fontSize: 12 }}>Next: {j.next_due}</span>
-                    )}
+                      <span className="dim">Client requested</span>
+                      <select
+                        value={j.requested_tech || ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={async (e) => {
+                          e.stopPropagation();
+                          await db.patch("jobs", j.id, { requested_tech: e.target.value });
+                          loadAll();
+                        }}
+                        style={{ width: "100%", fontSize: 12, padding: "3px 6px" }}
+                      >
+                        <option value="">No one specific</option>
+                        {profiles.map((p) => (
+                          <option key={p.id} value={p.name}>{p.name}</option>
+                        ))}
+                      </select>
+
+                      <span className="dim">Recurring</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <select
+                          value={j.recurrence_rule || ""}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => { e.stopPropagation(); toggleRecurring(j, e.target.value); }}
+                          style={{ flex: 1, fontSize: 12, padding: "3px 6px" }}
+                        >
+                          <option value="">Off</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="biweekly">Biweekly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="quarterly">Quarterly</option>
+                        </select>
+                        {j.is_recurring && j.next_due && (
+                          <span className="dim" style={{ fontSize: 11, whiteSpace: "nowrap" }}>Next: {j.next_due}</span>
+                        )}
+                      </div>
+
+                      <span className="dim">Callback</span>
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 12,
+                          cursor: "pointer",
+                          color: j.callback ? "var(--color-accent-red)" : "#888",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={j.callback || false}
+                          onChange={async (e) => {
+                            e.stopPropagation();
+                            await db.patch("jobs", j.id, { callback: e.target.checked });
+                            loadAll();
+                          }}
+                          style={{ width: "auto", accentColor: "var(--color-accent-red)" }}
+                        />
+                        Mark as callback
+                      </label>
+
+                      <span className="dim">Upsell</span>
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 12,
+                          cursor: "pointer",
+                          color: j.is_upsell ? "var(--color-success)" : "#888",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={j.is_upsell || false}
+                          onChange={async (e) => {
+                            e.stopPropagation();
+                            await db.patch("jobs", j.id, { is_upsell: e.target.checked });
+                            loadAll();
+                          }}
+                          style={{ width: "auto", accentColor: "var(--color-success)" }}
+                        />
+                        Mark as upsell
+                      </label>
+                    </div>
                   </div>
 
                   {/* Before/After Photos */}
@@ -1456,11 +1595,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     const afterPhotos = photos.filter((p) => p.type === "after");
 
                     return (
-                      <div style={{ marginTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`, paddingTop: 8 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                            <Icon name="camera" size={14} />Completion Photos
-                          </span>
+                      <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                          <span style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".08em", textTransform: "uppercase", color: "#888" }}>Completion Photos</span>
                           <div className="row" style={{ gap: 4 }}>
                             <button
                               className="bo"
@@ -1562,153 +1699,72 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     );
                   })()}
 
-                  {/* Work Order Checklist — expanded via button above */}
-                  {expandedSection === `wo-${j.id}` && (() => {
-                    try {
-                      const jobData = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-                      const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[] = jobData?.workOrder || [];
-                      if (!workOrder.length) return null;
-
-                      const completedCount = workOrder.filter((w) => w.done).length;
-                      const totalCount = workOrder.length;
-
-                      return (
-                        <div className="mt">
-                          {/* Progress bar */}
-                          <div style={{ height: 4, background: darkMode ? "#1e1e2e" : "#eee", borderRadius: 2, marginBottom: 6 }}>
-                            <div style={{ height: 4, background: completedCount === totalCount ? "var(--color-success)" : "var(--color-primary)", borderRadius: 2, width: `${(completedCount / totalCount) * 100}%`, transition: "width 0.3s" }} />
-                          </div>
-                          {workOrder.map((w, wi) => (
+                  {/* Receipts — existing list + Add Receipt form, grouped
+                      under a single section divider/label. */}
+                  <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
+                    <div style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".08em", textTransform: "uppercase", color: "#888", marginBottom: 8 }}>
+                      Receipts
+                    </div>
+                    {receipts.filter((r) => r.job_id === j.id).length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        {receipts
+                          .filter((r) => r.job_id === j.id)
+                          .map((r) => (
                             <div
-                              key={wi}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Read fresh blob from the store at save-time
-                                // (the render closure can be stale if a prior
-                                // toggle's loadAll hasn't completed). Match
-                                // the clicked task by (room, detail) so a
-                                // mid-flight reorder can't redirect the toggle
-                                // to the wrong row.
-                                const targetKey = woStableKey(w);
-                                const nextDone = !w.done;
-                                enqueueRoomsWrite(async () => {
-                                  const fresh = useStore.getState().jobs.find((x) => x.id === j.id);
-                                  if (!fresh) return;
-                                  let freshData: Record<string, unknown> = {};
-                                  try {
-                                    freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
-                                  } catch { return; }
-                                  const freshWO = Array.isArray(freshData.workOrder)
-                                    ? (freshData.workOrder as { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[])
-                                    : [];
-                                  const matchIdx = freshWO.findIndex((x) => woStableKey(x) === targetKey);
-                                  if (matchIdx < 0) return;
-                                  const updatedWO = [...freshWO];
-                                  updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
-                                  await db.patch("jobs", j.id, {
-                                    rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }),
-                                  });
-                                  await loadAll();
-                                });
-                              }}
+                              key={r.id}
+                              className="sep"
                               style={{
-                                display: "flex", alignItems: "center", gap: 6, padding: "3px 0",
-                                borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
-                                cursor: "pointer", opacity: w.done ? 0.5 : 1,
-                                textDecoration: w.done ? "line-through" : "none",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                fontSize: 12,
+                                gap: 8,
                               }}
                             >
-                              <span style={{
-                                width: 16, height: 16, borderRadius: 3, flexShrink: 0,
-                                border: `2px solid ${w.done ? "var(--color-success)" : "#555"}`,
-                                background: w.done ? "var(--color-success)" : "transparent",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 12, color: "#fff",
-                              }}>
-                                {w.done && <Icon name="check" size={12} color="#fff" />}
-                              </span>
-                              <div style={{ flex: 1, fontSize: 11 }}>
-                                <span style={{
-                                  fontSize: 13, padding: "1px 4px", borderRadius: 3, marginRight: 4,
-                                  background: w.pri === "HIGH" ? "#C0000033" : w.pri === "MED" ? "#ff880033" : "#00cc6633",
-                                  color: w.pri === "HIGH" ? "var(--color-accent-red)" : w.pri === "MED" ? "var(--color-warning)" : "var(--color-success)",
-                                }}>
-                                  {w.pri}
-                                </span>
-                                <b style={{ color: "var(--color-primary)" }}>{w.room}</b> — {w.detail}
-                                <div className="dim" style={{ fontSize: 10 }}>{w.action}</div>
+                              <div style={{ flex: 1 }}>
+                                <span>{r.note || "Receipt"}</span>
+                                <span className="dim" style={{ marginLeft: 6 }}>{r.receipt_date}</span>
                               </div>
-                              <span className="dim" style={{ fontSize: 9 }}>{w.hrs}h</span>
+                              <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
+                                ${(r.amount || 0).toFixed(2)}
+                              </span>
+                              {r.photo_url && (
+                                <img
+                                  src={r.photo_url}
+                                  alt="receipt"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewPhoto(r.photo_url);
+                                  }}
+                                  style={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 4,
+                                    objectFit: "cover",
+                                    cursor: "pointer",
+                                    border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
+                                  }}
+                                />
+                              )}
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (await useStore.getState().showConfirm("Delete Receipt", "Delete receipt?")) {
+                                    await db.del("receipts", r.id);
+                                    loadAll();
+                                  }
+                                }}
+                                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, padding: 0 }}
+                              >
+                                ✕
+                              </button>
                             </div>
                           ))}
-                        </div>
-                      );
-                    } catch { return null; }
-                  })()}
+                      </div>
+                    )}
 
-                  {/* Existing Receipts */}
-                  {receipts.filter((r) => r.job_id === j.id).length > 0 && (
-                    <div className="mt">
-                      <h5 style={{ fontSize: 12, marginBottom: 4 }}>Receipts</h5>
-                      {receipts
-                        .filter((r) => r.job_id === j.id)
-                        .map((r) => (
-                          <div
-                            key={r.id}
-                            className="sep"
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              fontSize: 12,
-                              gap: 8,
-                            }}
-                          >
-                            <div style={{ flex: 1 }}>
-                              <span>{r.note || "Receipt"}</span>
-                              <span className="dim" style={{ marginLeft: 6 }}>{r.receipt_date}</span>
-                            </div>
-                            <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
-                              ${(r.amount || 0).toFixed(2)}
-                            </span>
-                            {r.photo_url && (
-                              <img
-                                src={r.photo_url}
-                                alt="receipt"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setViewPhoto(r.photo_url);
-                                }}
-                                style={{
-                                  width: 36,
-                                  height: 36,
-                                  borderRadius: 4,
-                                  objectFit: "cover",
-                                  cursor: "pointer",
-                                  border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-                                }}
-                              />
-                            )}
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (await useStore.getState().showConfirm("Delete Receipt", "Delete receipt?")) {
-                                  await db.del("receipts", r.id);
-                                  loadAll();
-                                }
-                              }}
-                              style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center" }}
-                            >
-                              <Icon name="close" size={14} />
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-
-                  {/* Add Receipt */}
-                  <div className="mt">
-                    <h5 style={{ fontSize: 12, marginBottom: 4 }}>Add Receipt</h5>
+                    {/* Add Receipt — form (recent AI-scan flow lives here). */}
+                    <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>Add receipt</div>
                     <div className="row">
                       <input
                         value={rn}
