@@ -273,6 +273,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // default; a positive number overrides for THIS quote only. Lives on
   // the rooms JSON blob as `data.laborRate` (no schema change).
   const [laborRate, setLaborRate] = useState<number | null>(null);
+  // Per-quote minimum-labor-hours override. null = use the org default
+  // (organizations.min_labor_hours, falling back to 1). Persisted on the
+  // rooms JSON blob as `data.minLaborHours`. 0 is a valid value (disables
+  // the minimum for this quote); only `null` means "inherit".
+  const [minLaborHours, setMinLaborHours] = useState<number | null>(null);
   // Guide-tab persistent state — lifted out of GuideTab so adds survive
   // save+reload. Bernard hit the bug where new shopping-list items
   // disappeared on save: GuideTab held them in local component state that
@@ -335,6 +340,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // = use org default.
       const lr = data?.laborRate;
       setLaborRate(typeof lr === "number" && lr > 0 ? lr : null);
+      // Per-quote minimum-labor-hours override. Stored as a non-negative
+      // number (0 = disabled for this quote). Anything else (undefined,
+      // non-number, negative) means "inherit org default".
+      const mh = data?.minLaborHours;
+      setMinLaborHours(typeof mh === "number" && mh >= 0 ? mh : null);
     } catch {
       // rooms parse failed, start empty
     }
@@ -950,7 +960,34 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       return { room: r.name, ...i, ...cost };
     })
   );
-  const subtotal = all.reduce((s, i) => s + i.tot, 0);
+  const subtotalRaw = all.reduce((s, i) => s + i.tot, 0);
+  const tlRaw = all.reduce((s, i) => s + i.lc, 0);
+  const tm = all.reduce((s, i) => s + i.mc, 0);
+  const thRaw = all.reduce((s, i) => s + i.laborHrs, 0);
+
+  // Minimum-labor-hours floor. Resolution order matches the labor-rate
+  // and discount fields: per-quote override → org default → 1 hour
+  // fallback. Per-quote override of 0 is honored (disables the minimum
+  // for this quote). The floor only kicks in for quotes that already
+  // have some labor on them — a pure materials quote (0 hrs total)
+  // shouldn't get a phantom service charge tacked on.
+  const effectiveMinHrs =
+    minLaborHours !== null && minLaborHours >= 0
+      ? minLaborHours
+      : (typeof org?.min_labor_hours === "number" && org.min_labor_hours >= 0
+          ? org.min_labor_hours
+          : 1);
+  const minApplies = effectiveMinHrs > 0 && thRaw > 0 && thRaw < effectiveMinHrs;
+  // When the minimum applies, the labor total switches to
+  // effectiveMinHrs × rate (the effective non-trade rate). We surface
+  // BOTH numbers downstream — `tl`/`th` are the billed values used in
+  // every subtotal/tax/grand-total cascade; `tlRaw`/`thRaw` stay around
+  // for the "actually X hr of work" debug line.
+  const tl = minApplies ? Math.round(effectiveMinHrs * rate * 100) / 100 : tlRaw;
+  const th = minApplies ? effectiveMinHrs : thRaw;
+  const subtotal = minApplies
+    ? Math.round((subtotalRaw + (tl - tlRaw)) * 100) / 100
+    : subtotalRaw;
   // Trip fee is a service charge added before tax — tax applies to the
   // combined work + trip-fee base.
   const preDiscountBase = subtotal + tripFee;
@@ -965,9 +1002,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const taxableBase = Math.max(0, Math.round((preDiscountBase - discountAmount) * 100) / 100);
   const taxAmount = taxPct > 0 ? Math.round(taxableBase * (taxPct / 100) * 100) / 100 : 0;
   const gt = Math.round((taxableBase + taxAmount) * 100) / 100;
-  const tl = all.reduce((s, i) => s + i.lc, 0);
-  const tm = all.reduce((s, i) => s + i.mc, 0);
-  const th = all.reduce((s, i) => s + i.laborHrs, 0);
   const issues = classify(rooms);
   const guide = makeGuide(rooms);
 
@@ -1083,11 +1117,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       customShop,
       checkedTools,
       checkedShop,
-      // Per-quote discount + labor-rate override. Persist explicitly
-      // (not via spread) so clearing them actually clears the saved
-      // value instead of inheriting prevData's stale entry.
+      // Per-quote discount + labor-rate override + min-labor-hours
+      // override. Persist explicitly (not via spread) so clearing them
+      // actually clears the saved value instead of inheriting prevData's
+      // stale entry.
       discount: discount,
       laborRate: laborRate,
+      minLaborHours: minLaborHours,
       // Only overwrite `inspection` if the user just ran the inspector in
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
@@ -1152,6 +1188,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setCheckedShop([]);
     setDiscount(null);
     setLaborRate(null);
+    setMinLaborHours(null);
     setPage("jobs");
   };
 
@@ -1719,6 +1756,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setCheckedShop([]);
           setDiscount(null);
           setLaborRate(null);
+          setMinLaborHours(null);
         }}>←</button>
         <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>⚡ Quote</h2>
         <span style={{ fontSize: 10 }} className="dim">
@@ -1923,6 +1961,32 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         ))}
       </div>
 
+      {/* Minimum service-charge note. Only renders when the floor
+          actually kicked in — i.e. the quote had < min hours of labor
+          and was billed up to the minimum. Pure-materials quotes don't
+          trigger this. */}
+      {minApplies && (
+        <div
+          className="cd mb"
+          style={{
+            padding: "8px 12px",
+            fontSize: 12,
+            color: "var(--color-warning)",
+            background: "var(--color-warning)15",
+            border: "1px solid var(--color-warning)55",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <Icon name="info" size={14} />
+          <span>
+            Minimum service charge applied — {effectiveMinHrs} hr min
+            (actual labor: {thRaw.toFixed(2)} hr).
+          </span>
+        </div>
+      )}
+
       {/* AI Re-quote */}
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -1972,8 +2036,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 const currentMetaContext = {
                   laborRate: laborRate || null,
                   discount: discount || null,
+                  minLaborHours: minLaborHours,
                 };
-                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" }\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\` and \`setDiscount\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  OMIT these fields entirely if the user did not mention rate or discount. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
+                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" },\n  "setMinLaborHours": 2\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\`, \`setDiscount\`, \`setMinLaborHours\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  - "setMinLaborHours": <number> — per-quote override of the minimum-billable-labor-hours floor. The org has an org-wide default (shown in CURRENT PRICING META as minLaborHours when set on this quote, otherwise the floor is inherited from org settings). Examples:\n      "set the minimum to 2 hours for this job" → setMinLaborHours: 2\n      "drop the minimum to 0.5 hours" → setMinLaborHours: 0.5\n      "remove the minimum on this quote" / "no minimum on this job" → setMinLaborHours: 0\n      "reset minimum to the org default" / "inherit the org minimum" → setMinLaborHours: null\n    Numeric value 0 means "disable the floor for THIS quote" (still recorded as an override). null means "inherit the org default again".\n  OMIT these fields entirely if the user did not mention rate, discount, or minimum hours. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
                 const userMsg =
                   `Property: ${prop || "this property"}\n\n` +
                   `EXISTING QUOTE LINE ITEMS (${existingItemsContext.length}):\n` +
@@ -2012,6 +2077,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     remove?: Array<{ key: string }>;
                     setLaborRate?: number | null;
                     setDiscount?: { type?: string; value?: number; label?: string } | null;
+                    setMinLaborHours?: number | null;
                   };
                   const adds = parsed.add ?? [];
                   const updates = parsed.update ?? [];
@@ -2142,6 +2208,18 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                         label: typeof sd.label === "string" && sd.label.trim() ? sd.label.trim() : undefined,
                       });
                       summary.push(sd.type === "percent" ? `discount ${sd.value}%` : `discount $${sd.value} off`);
+                    }
+                  }
+                  if (Object.prototype.hasOwnProperty.call(parsed, "setMinLaborHours")) {
+                    const mh = parsed.setMinLaborHours;
+                    if (mh === null) {
+                      // Inherit org default
+                      setMinLaborHours(null);
+                      summary.push("min hrs → org default");
+                    } else if (typeof mh === "number" && mh >= 0) {
+                      // Numeric override (0 disables the floor for THIS quote)
+                      setMinLaborHours(mh);
+                      summary.push(mh === 0 ? "min hrs disabled" : `min hrs → ${mh}`);
                     }
                   }
 
@@ -2283,6 +2361,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 taxAmount,
                 tripFee,
                 discount,
+                minLaborHours: effectiveMinHrs,
               });
             })()
           }

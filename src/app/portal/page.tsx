@@ -26,7 +26,7 @@ const PRIMARY = "#2E75B6";
 type PortalOrg = Pick<
   Organization,
   | "id" | "name" | "phone" | "email" | "logo_url" | "address" | "license_num"
-  | "default_rate" | "markup_pct" | "tax_pct" | "trip_fee"
+  | "default_rate" | "markup_pct" | "tax_pct" | "trip_fee" | "min_labor_hours"
 >;
 
 interface PortalData {
@@ -598,6 +598,8 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
     // (discount = Feature 1, laborRate = Feature 2).
     let discount: import("@/lib/types").JobDiscount | null = null;
     let laborRateOverride: number | null = null;
+    // Per-quote minimum-labor-hours override. null = inherit org default.
+    let minLaborHoursOverride: number | null = null;
     try {
       const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
       rooms = (data?.rooms || []) as Room[];
@@ -617,7 +619,16 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
       if (typeof data?.laborRate === "number" && data.laborRate > 0) {
         laborRateOverride = data.laborRate;
       }
+      if (typeof data?.minLaborHours === "number" && data.minLaborHours >= 0) {
+        minLaborHoursOverride = data.minLaborHours;
+      }
     } catch { /* malformed rooms — render with defaults */ }
+    // Resolve the effective floor: per-quote override → org default → 1.
+    const orgMin = org?.min_labor_hours;
+    const effectiveMinLaborHours =
+      minLaborHoursOverride !== null
+        ? minLaborHoursOverride
+        : (typeof orgMin === "number" && orgMin >= 0 ? orgMin : 1);
 
     setBusyId(doc.id);
     exportQuotePdf({
@@ -643,6 +654,7 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
       taxPct: org?.tax_pct,
       tripFee: org?.trip_fee,
       discount,
+      minLaborHours: effectiveMinLaborHours,
       statusUrl: typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : "",
     });
     clearBusy();

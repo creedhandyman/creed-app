@@ -34,6 +34,11 @@ interface ExportOptions {
   /** Per-quote discount (Feature 1). Rendered as a -$XXX.XX line in the
    *  totals table between Trip Fee and Tax. Null/undefined = none. */
   discount?: JobDiscount | null;
+  /** Effective minimum-labor-hours floor. When the sum of line-item
+   *  labor hours falls below this, the PDF rebills labor at
+   *  `minLaborHours × rate` and adds a "minimum service charge" note
+   *  under the labor line. 0 / null / undefined = no floor. */
+  minLaborHours?: number | null;
 }
 
 const esc = (s: string) =>
@@ -62,6 +67,9 @@ export function exportQuotePdf(opts: ExportOptions) {
   const tripFee = opts.tripFee || 0;
   const jobId = opts.jobId || "";
   const discount = opts.discount && opts.discount.value > 0 ? opts.discount : null;
+  const minLaborHours = typeof opts.minLaborHours === "number" && opts.minLaborHours > 0
+    ? opts.minLaborHours
+    : 0;
 
   // Recompute totals from the rooms blob using the caller-supplied rate
   // (resolution: per-quote laborRate → current org default → $55). This
@@ -71,7 +79,12 @@ export function exportQuotePdf(opts: ExportOptions) {
   // job.total_labor/job.total would be stale, but the PDF should reflect
   // the LATEST rate at generation time.
   const allItems = rooms.flatMap((r) => r.items);
-  const totalHrs = allItems.reduce((s, it) => s + it.laborHrs, 0);
+  const rawTotalHrs = allItems.reduce((s, it) => s + it.laborHrs, 0);
+  // Minimum-labor-hours floor (matches the QuoteForge live preview).
+  // Only kicks in when the quote already has SOME labor on it — pure
+  // material quotes don't trigger the floor.
+  const minApplies = minLaborHours > 0 && rawTotalHrs > 0 && rawTotalHrs < minLaborHours;
+  const totalHrs = minApplies ? minLaborHours : rawTotalHrs;
   const totalLabor = Math.round(totalHrs * rate * 100) / 100;
   // Material markup is applied per-item (matching QuoteForge.tm) so the
   // SUBTOTAL value matches the "Material Markup (X%) included in
@@ -142,6 +155,19 @@ export function exportQuotePdf(opts: ExportOptions) {
     );
     return { name: cat.name, hrs, labor, mat, total: labor + mat, itemCount: cat.items.length };
   });
+
+  // Virtual "Minimum service charge" row inserted between per-trade rows
+  // and the SUBTOTAL. It bridges the gap between the actual sum of
+  // section labors (= rawTotalHrs × rate) and the floored total
+  // (= totalHrs × rate) so the column-sum math is self-consistent on
+  // the printed estimate.
+  const minRow = minApplies
+    ? (() => {
+        const deltaHrs = Math.round((minLaborHours - rawTotalHrs) * 100) / 100;
+        const deltaLabor = Math.round(deltaHrs * rate * 100) / 100;
+        return { hrs: deltaHrs, labor: deltaLabor };
+      })()
+    : null;
 
   // Build detailed breakdown sections — consolidate duplicate materials
   // across ALL items in the category by (normalized name + rounded unit
@@ -283,6 +309,7 @@ ${(client || clientEmail || clientPhone) ? `
           `<tr><td>${esc(r.name)}</td><td class="r">${r.hrs.toFixed(1)}</td><td class="r">$${r.labor.toFixed(2)}</td><td class="r">$${r.mat.toFixed(2)}</td><td class="r">$${r.total.toFixed(2)}</td></tr>`,
       )
       .join("")}
+    ${minRow ? `<tr style="color:#666;font-style:italic"><td>Minimum service charge</td><td class="r">${minRow.hrs.toFixed(1)}</td><td class="r">$${minRow.labor.toFixed(2)}</td><td class="r">—</td><td class="r">$${minRow.labor.toFixed(2)}</td></tr>` : ""}
     <tr style="font-weight:700;background:#f0f4f8;border-top:2px solid #2E75B6;color:#2E75B6">
       <td>SUBTOTAL</td>
       <td class="r">${totalHrs.toFixed(1)}</td>
@@ -325,6 +352,7 @@ ${photos.length > 0 ? `
 <div style="font-size:12px;color:#444;line-height:1.8">
   <ul style="padding-left:20px">
     <li>Labor rate: <b>$${rate}.00/man-hour</b>. Man-hours = clock hours × crew size (2-man crew tasks billed at 2× clock time).</li>
+    ${minRow ? `<li><b>Minimum service charge applied — ${minLaborHours} hr min.</b> Actual labor on this scope is ${rawTotalHrs.toFixed(2)} hr; quotes never bill less than ${minLaborHours} hr to cover trip time and overhead.</li>` : ""}
     <li>Materials priced at current Home Depot/Lowe's retail. All material quantities and unit prices listed per line item above.</li>
     <li>Quote valid <b>30 days</b> from issue date. <b>50% deposit</b> to begin; balance due on completion.</li>
     <li>Any unforeseen conditions (mold, hidden water damage, structural issues) will be documented and quoted as a separate change order before proceeding.</li>

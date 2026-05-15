@@ -34,6 +34,11 @@ export interface Organization {
   site_published?: boolean;
   site_slug?: string;
   trip_fee?: number;
+  /** Org-wide minimum billable labor hours per quote. If the sum of all
+   *  line-item hours falls below this, the quote bills at
+   *  min_labor_hours × effective rate instead. Per-quote override lives
+   *  on the rooms JSON blob as `data.minLaborHours`. Default 1. */
+  min_labor_hours?: number;
   gallery_photos?: string; // JSON: [{url, caption}]
   site_theme?: string; // JSON: {primaryColor, showGallery, showReviews, showAbout, showServices, showWhyUs}
   // Auto Payroll — server-side scheduled processing. Cron hits

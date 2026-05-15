@@ -142,6 +142,25 @@ function OpsSettings() {
               onBlur={async (e) => { await db.patch("organizations", org.id, { trip_fee: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
             <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.tripFeeHelp")}</div>
           </div>
+          <div>
+            <label className="sl">{t("ops.minLaborHours")}</label>
+            <input
+              type="number"
+              key={`mh-${org.min_labor_hours ?? 1}`}
+              defaultValue={org.min_labor_hours ?? 1}
+              min="0"
+              step="0.25"
+              placeholder="1"
+              style={{ marginTop: 4 }}
+              onBlur={async (e) => {
+                const v = parseFloat(e.target.value);
+                const next = Number.isFinite(v) && v >= 0 ? v : 0;
+                await db.patch("organizations", org.id, { min_labor_hours: next });
+                refreshOrg();
+              }}
+            />
+            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.minLaborHoursHelp")}</div>
+          </div>
         </div>
       </div>
 
