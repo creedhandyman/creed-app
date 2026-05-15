@@ -1290,32 +1290,22 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             </div>
           </div>
 
-          {/* Inspect — gated by plan + monthly usage cap. Solo orgs see
-              an "Upgrade to Crew" toast; Crew/Pro at-cap orgs see a
-              "buy overage" toast; orgs at >= 80% of cap see a quiet
-              "X inspections left this month" info nudge but are still
-              allowed to start. */}
+          {/* Inspect — every plan can run inspections; the cap controls
+              what's included vs. overage. At-cap orgs see an "Upgrade or
+              pay overage" toast but are still allowed to proceed (overage
+              billing kicks in via Stripe). Orgs at >= 80% of cap see a
+              quiet "X inspections left this month" info nudge. */}
           <div
             onClick={async () => {
               const plan = org?.subscription_plan || org?.plan || "solo";
               if (!org?.id) { setMode("inspect"); return; }
               const usage = await getUsage(org.id, plan);
               if (usage.blocked) {
-                const showToast = useStore.getState().showToast;
-                if (usage.cap === 0) {
-                  showToast(
-                    "AI inspections require the Crew plan or higher. Upgrade in Ops → Billing.",
-                    "warning",
-                  );
-                } else {
-                  showToast(
-                    `You've used all ${usage.cap} inspections this month. Upgrade or pay $0.50 / overage in Ops → Billing.`,
-                    "warning",
-                  );
-                }
-                return;
-              }
-              if (usage.warning) {
+                useStore.getState().showToast(
+                  `You've used all ${usage.cap} included inspections this month — extras bill at $0.50 each. Manage in Ops → Billing.`,
+                  "warning",
+                );
+              } else if (usage.warning) {
                 useStore.getState().showToast(
                   `${usage.remaining} inspection${usage.remaining === 1 ? "" : "s"} left this month`,
                   "info",

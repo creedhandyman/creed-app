@@ -1,13 +1,14 @@
 /**
  * Inspection cap tracking + plan-gate helpers.
  *
- * Voice Walk / Inspector inspections are billable units on Crew and Pro
- * plans (and not included at all on Solo). This module owns the
- * "what's my org's current month usage" query, the "should I let this
- * inspection start" decision, and the "increment counter on completion"
- * write. Reads are best-effort: a transient network error never blocks
- * an inspection from starting, since the counter is soft-gating, not
- * accounting.
+ * Voice Walk / Inspector inspections are billable units across all
+ * paid tiers (Solo 50, Crew 200, Pro 500 per month). Solo is NOT
+ * locked out — it's the wedge feature of the product. This module
+ * owns the "what's my org's current month usage" query, the "should
+ * I let this inspection start" decision, and the "increment counter
+ * on completion" write. Reads are best-effort: a transient network
+ * error never blocks an inspection from starting, since the counter
+ * is soft-gating, not accounting.
  *
  * Underlying table — Bernard runs this migration once:
  *
@@ -25,23 +26,23 @@ import { supabase } from "./supabase";
 
 export interface UsageInfo {
   plan: string;
-  cap: number;       // 0 = no inspections included on this tier (Solo)
+  cap: number;       // monthly included quota; 0 only for unknown/legacy plans
   count: number;     // inspections used this calendar month
   remaining: number; // max(cap - count, 0)
-  blocked: boolean;  // hit-or-exceeded the cap (or cap is zero)
+  blocked: boolean;  // hit-or-exceeded the cap (overage prompt — not a hard block)
   warning: boolean;  // >= 80% of the cap used — surface a toast
   ym: string;        // YYYY-MM bucket the counter is keyed by
 }
 
-/** Monthly cap by plan. Solo gets zero — Voice Walk is a Crew+ feature. */
+/** Monthly included inspection quota by plan. All tiers get a quota; over-cap
+ *  usage rolls to $0.50/inspection overage rather than being blocked. */
 export function getCap(plan: string | null | undefined): number {
   if (plan === "pro") return 500;
   if (plan === "crew") return 200;
-  // solo, undefined, legacy names ("team"/"business") all fall through
-  // to zero — those legacy tiers don't have a defined cap in the new
-  // pricing, and treating them as blocked surfaces an upgrade prompt
-  // instead of letting them silently pile up usage.
-  return 0;
+  if (plan === "solo") return 50;
+  // undefined / legacy names ("team"/"business") fall back to the Solo
+  // quota so they don't get accidentally blocked.
+  return 50;
 }
 
 /** YYYY-MM bucket (UTC-local doesn't matter — month boundaries land in
@@ -76,7 +77,7 @@ export async function getUsage(orgId: string, plan: string): Promise<UsageInfo> 
   }
 
   const remaining = Math.max(cap - count, 0);
-  const blocked = cap === 0 || count >= cap;
+  const blocked = cap > 0 && count >= cap;
   const warning = cap > 0 && count >= Math.floor(cap * 0.8);
   return { plan, cap, count, remaining, blocked, warning, ym };
 }

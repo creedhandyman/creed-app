@@ -265,12 +265,10 @@ export default function BillingSettings() {
                   )}
                 </div>
 
-                {/* Monthly inspection usage — only meaningful on the
-                    plans that have a cap (Crew = 200, Pro = 500).
-                    Solo orgs already see the "Upgrade to Crew" toast
-                    when they try to start an inspection, so we hide
-                    this row there to avoid drawing attention to a
-                    bullet they don't have. */}
+                {/* Monthly inspection usage — shown for every tier
+                    (Solo 50, Crew 200, Pro 500). Over-cap usage rolls
+                    to $0.50/inspection overage rather than being
+                    blocked. */}
                 {org && getCap(plan) > 0 && (
                   <InspectionUsageRow orgId={org.id} plan={plan} />
                 )}
@@ -324,7 +322,7 @@ function InspectionUsageRow({ orgId, plan }: { orgId: string; plan: string }) {
       </div>
       {usage.blocked && (
         <div style={{ fontSize: 11, color: "var(--color-accent-red)", marginTop: 6 }}>
-          Cap reached. New inspections will be blocked until next month — upgrade or contact support for overage billing.
+          Included quota used. Additional inspections this month bill at $0.50 each — upgrade for a larger included pool.
         </div>
       )}
     </div>
