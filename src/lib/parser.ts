@@ -2725,98 +2725,201 @@ export function makeGuide(rooms: Room[]): Guide {
     .flatMap((r) => r.items.map((it) => (it.comment + " " + it.detail).toLowerCase()))
     .join(" ");
 
-  // Only add base tools that are relevant to the job
-  tools.add("PPE");
-  tools.add("Tape measure");
-  if (/mount|hang|screw|install|secure|bracket|shelf|anchor|towel|tp holder|door|hinge|blind|fixture|replace/.test(allText))
-    tools.add("Drill/driver");
-  if (/level|mount|hang|shelf|mirror|blind|cabinet/.test(allText))
-    tools.add("Level");
-  if (/cut|trim|carpet|vinyl|lvp|screen|caulk|flooring/.test(allText))
-    tools.add("Utility knife");
-  if (/caulk|seal|gap/.test(allText))
-    tools.add("Caulk gun");
-  if (/patch|spackle|drywall|hole|nail pop/.test(allText))
-    tools.add("Putty knife");
-  if (/ceiling|high|smoke|detector|light|fan|bulb/.test(allText))
-    tools.add("Step ladder");
-  if (/dust|sand|demo|tile|drywall|debris/.test(allText))
-    tools.add("Shop vac");
+  // Less is more — only add a tool if the task genuinely can't be done
+  // without it. The prior version dumped a full trade kit on every job
+  // (e.g. "Repair running toilet" → 9 tools incl. basin wrench, drill,
+  // closet bolts wrench). Field crews carry the basics; this list should
+  // only surface what's unusual or job-specific. This is rule-based, not
+  // an LLM prompt — keep the regexes specific.
+  const has = (re: RegExp) => re.test(allText);
 
-  // Job-specific tool sets — POWER TOOLS + HAND TOOLS
-  if (/paint|repaint|touch.?up|prime/.test(allText)) {
+  // ── Generic add-ons (only when actually needed) ──
+  if (has(/cut|trim|carpet|vinyl|lvp|screen|caulk|flooring|drywall/))
+    tools.add("Utility knife");
+  if (has(/caulk|seal|gap/))
+    tools.add("Caulk gun");
+  if (has(/patch|spackle|drywall.*(hole|crack)|nail pop/))
+    tools.add("Putty knife");
+  if (has(/ceiling|smoke|detector|chandelier|crown molding/) || has(/(install|mount|hang).*fan/) || has(/gutter|fascia|soffit/))
+    tools.add("Step ladder");
+  if (has(/demo|tear out|rip out|tile.*remove|sand.*drywall/))
+    tools.add("Shop vac");
+  // Tape measure — only for cutting/fitting/laying out, not every job
+  if (has(/cut|install|trim|baseboard|tile|cabinet|shelf|countertop|window|door|hang|mount|crown|flooring|frame/))
+    tools.add("Tape measure");
+  // Level — only when something has to be plumb
+  if (has(/level|hang|shelf|mirror|blind|cabinet|crown|baseboard|countertop|door.*install/))
+    tools.add("Level");
+  // Drill/driver — only for fasteners going into a substrate (mounts /
+  // installs / heavy fixtures), not generic "replace" work
+  if (has(/mount|anchor|bracket|cabinet|shelf|fixture|pre.?hung|deck.*screw|frame.*wall|stud/) || has(/install.*(fan|light|chandelier|hardware|bracket|cabinet|shelf|towel|tp holder|grab bar|blind)/))
+    tools.add("Drill/driver");
+  // PPE — only for dust, chemicals, sharp/hot work, or bowl-water contact
+  if (has(/sand|demo|grind|cut.*tile|tile.*cut|cement|mortar|spray|chemical|acid|saw|blade|wax ring|sewer|insulation|fiberglass/))
+    tools.add("PPE");
+
+  // ── PAINT ──
+  if (has(/paint|repaint|touch.?up|prime/)) {
     ["Roller+covers", "Angled brush", "Drop cloths", "Painters tape", "Paint tray"].forEach((x) => tools.add(x));
-    if (/patch|spackle|hole|nail pop|drywall/.test(allText))
+    if (has(/patch|spackle|hole|nail pop|drywall/))
       tools.add("Spackle knife");
-    if (/sand|smooth|prep/.test(allText))
+    if (has(/sand|smooth|prep/))
       ["Sanding block", "Orbital sander"].forEach((x) => tools.add(x));
-    if (/spray|sprayer/.test(allText))
+    if (has(/spray|sprayer/))
       tools.add("Paint sprayer");
-    if (/scrape|peel/.test(allText))
+    if (has(/scrape|peel/))
       tools.add("Paint scraper");
   }
-  if (/tile|grout/.test(allText)) {
-    ["Tile cutter", "Notched trowel", "Grout float", "Tile spacers", "Sponge", "Mixing bucket"].forEach((x) => tools.add(x));
-    if (/remove|demo|tear/.test(allText))
+
+  // ── TILE ──
+  if (has(/tile|grout/)) {
+    ["Notched trowel", "Grout float", "Tile spacers", "Sponge", "Mixing bucket"].forEach((x) => tools.add(x));
+    if (has(/cut|trim/))
+      tools.add("Tile cutter");
+    if (has(/remove|demo|tear/))
       ["Oscillating multi-tool", "Cold chisel"].forEach((x) => tools.add(x));
   }
-  if (/plumb|shower|toilet|faucet|sink|drain|pipe|valve|sprayer|supply line|water/.test(allText)) {
-    ["Adjustable wrench", "Plumbers tape", "Channel locks", "Basin wrench", "Bucket"].forEach((x) => tools.add(x));
-    if (/toilet/.test(allText)) tools.add("Closet bolts wrench");
-    if (/pipe|cut/.test(allText)) tools.add("Pipe cutter");
-    if (/drain|clog/.test(allText)) tools.add("Drain snake/auger");
+
+  // ── PLUMBING — granular by task type ──
+  // The big change: no more "every plumbing task gets the whole kit". A
+  // running toilet needs ~3 tools; a wax-ring re-set needs a different ~4.
+  if (has(/plumb|shower|toilet|faucet|sink|drain|pipe|valve|sprayer|supply line|water/)) {
+    let plumbingMatched = false;
+    // Toilet — split light fixes from heavy resets
+    if (has(/toilet/)) {
+      if (has(/wax ring|re.?set|re.?seat|remove.*toilet|new toilet|replace.*toilet|leak.*base/)) {
+        // Heavy: pulling the bowl
+        ["Channel locks", "Closet bolts wrench", "Putty knife", "Bucket"].forEach((x) => tools.add(x));
+        tools.add("PPE");
+      } else if (has(/running|fill valve|flapper|flush valve|chain|float|handle|tank/)) {
+        // Light: tank-internals swap — minimal kit
+        ["Adjustable wrench", "Plumbers tape", "Bucket"].forEach((x) => tools.add(x));
+      } else {
+        // Other toilet work — modest kit
+        ["Adjustable wrench", "Channel locks", "Plumbers tape", "Bucket"].forEach((x) => tools.add(x));
+      }
+      plumbingMatched = true;
+    }
+    // Faucet — basin wrench is genuinely needed here, only here
+    if (has(/faucet|sprayer|aerator/)) {
+      ["Basin wrench", "Channel locks", "Plumbers tape", "Bucket"].forEach((x) => tools.add(x));
+      plumbingMatched = true;
+    }
+    // Drain / clog
+    if (has(/drain|clog|p.?trap/)) {
+      ["Channel locks", "Bucket"].forEach((x) => tools.add(x));
+      if (has(/clog|snake|auger/)) tools.add("Drain snake/auger");
+      plumbingMatched = true;
+    }
+    // Pipe work
+    if (has(/pipe|copper|pex|pvc/)) {
+      ["Adjustable wrench", "Pipe cutter", "Bucket"].forEach((x) => tools.add(x));
+      plumbingMatched = true;
+    }
+    // Supply line / shut-off / angle stop
+    if (has(/supply.*line|shut.?off|angle stop/)) {
+      ["Adjustable wrench", "Plumbers tape", "Bucket"].forEach((x) => tools.add(x));
+      plumbingMatched = true;
+    }
+    // Shower / tub valves
+    if (has(/shower|tub|cartridge|diverter/)) {
+      ["Adjustable wrench", "Channel locks", "Plumbers tape"].forEach((x) => tools.add(x));
+      plumbingMatched = true;
+    }
+    // Fallback only if no specific plumbing branch hit
+    if (!plumbingMatched) {
+      ["Adjustable wrench", "Channel locks", "Bucket"].forEach((x) => tools.add(x));
+    }
   }
-  if (/electric|outlet|switch|wire|gfci|light|fan|fixture/.test(allText)) {
-    ["Voltage tester", "Wire strippers", "Wire nuts", "Electrical tape"].forEach((x) => tools.add(x));
-    if (/fan|fixture|heavy/.test(allText)) tools.add("Stud finder");
-    if (/wire|run|fish/.test(allText)) tools.add("Fish tape");
+
+  // ── ELECTRICAL — granular ──
+  // Fixture-only swaps don't need a full splicing kit
+  if (has(/electric|outlet|switch|wire|gfci|chandelier|sconce/) || has(/(install|replace).*(light|fan)/)) {
+    tools.add("Voltage tester");
+    tools.add("Screwdriver");
+    if (has(/run.*wire|new circuit|gfci|rewire|splice|junction/)) {
+      ["Wire strippers", "Wire nuts", "Electrical tape"].forEach((x) => tools.add(x));
+    }
+    if (has(/fan|chandelier/) || has(/heavy.*fixture|mount.*ceiling/)) {
+      ["Drill/driver", "Step ladder"].forEach((x) => tools.add(x));
+    }
+    if (has(/wire.*run|fish.*wire/)) tools.add("Fish tape");
   }
-  if (/door|hinge|knob|deadbolt|strike|latch/.test(allText)) {
-    ["Chisel", "Hammer", "Stud finder"].forEach((x) => tools.add(x));
-    if (/pre.?hung|replace|new|install/.test(allText))
-      ["Circular saw", "Shims", "Level (4ft)"].forEach((x) => tools.add(x));
+
+  // ── DOORS / HARDWARE — granular by scope ──
+  if (has(/door|hinge|knob|deadbolt|strike|latch/)) {
+    const newDoor = has(/pre.?hung|new door|replace.*door[^k]|hang.*door|install.*door/);
+    // Knob / deadbolt / lever swap — really just a screwdriver
+    if (has(/knob|deadbolt|lockset|lever/) && !newDoor) {
+      tools.add("Screwdriver");
+    } else if (has(/hinge|strike|latch|mortise/) && !newDoor) {
+      // Hinge / strike adjust
+      ["Screwdriver", "Chisel", "Hammer"].forEach((x) => tools.add(x));
+    }
+    if (newDoor) {
+      ["Circular saw", "Shims", "Level (4ft)", "Drill/driver", "Hammer", "Stud finder"].forEach((x) => tools.add(x));
+    }
   }
-  if (/carpet|flooring|lvp|laminate|vinyl/.test(allText)) {
-    ["Knee kicker", "Seam roller", "Tapping block", "Rubber mallet", "Pull bar", "Spacers"].forEach((x) => tools.add(x));
-    if (/transition|trim|baseboard|cut/.test(allText))
+
+  // ── FLOORING ──
+  if (has(/carpet|flooring|lvp|laminate|vinyl/)) {
+    ["Tapping block", "Rubber mallet", "Pull bar", "Spacers"].forEach((x) => tools.add(x));
+    if (has(/carpet/)) ["Knee kicker", "Seam roller"].forEach((x) => tools.add(x));
+    if (has(/transition|trim|baseboard|cut/))
       ["Miter saw", "Circular saw"].forEach((x) => tools.add(x));
-    if (/lvp|laminate|plank/.test(allText))
+    if (has(/lvp|laminate|plank/))
       tools.add("Jigsaw");
-    if (/demo|remove|tear|rip/.test(allText))
+    if (has(/demo|remove|tear|rip/))
       ["Pry bar", "Floor scraper"].forEach((x) => tools.add(x));
   }
-  if (/drywall|sheetrock/.test(allText)) {
-    ["Drywall saw", "Drywall knife (6\")", "Drywall knife (12\")", "Mud pan", "Sanding block", "T-square"].forEach((x) => tools.add(x));
-    if (/large|sheet|hang/.test(allText))
-      ["Drywall lift", "Screw gun"].forEach((x) => tools.add(x));
+
+  // ── DRYWALL — split patch vs. hang ──
+  if (has(/drywall|sheetrock/)) {
+    if (has(/patch|hole|small|crack/) && !has(/sheet|hang|large/)) {
+      // Patch only — minimal
+      ["Drywall knife (6\")", "Mud pan", "Sanding block"].forEach((x) => tools.add(x));
+      if (has(/large|big|fist/)) tools.add("Drywall saw");
+    } else {
+      ["Drywall saw", "Drywall knife (6\")", "Drywall knife (12\")", "Mud pan", "Sanding block", "T-square"].forEach((x) => tools.add(x));
+      if (has(/large|sheet|hang/))
+        ["Drywall lift", "Screw gun"].forEach((x) => tools.add(x));
+    }
   }
-  if (/baseboard|trim|molding|crown/.test(allText)) {
+
+  // ── TRIM / BASEBOARD / CROWN ──
+  if (has(/baseboard|trim|molding|crown/)) {
     ["Miter saw", "Brad nailer", "Nail set", "Wood filler"].forEach((x) => tools.add(x));
   }
-  if (/cabinet|counter|shelf|shelving/.test(allText)) {
+
+  // ── CABINETS / COUNTERTOPS / SHELVES ──
+  if (has(/cabinet|counter|shelf|shelving/)) {
     ["Stud finder", "Clamps"].forEach((x) => tools.add(x));
-    if (/cut|modify/.test(allText))
+    if (has(/cut|modify/))
       ["Circular saw", "Jigsaw"].forEach((x) => tools.add(x));
   }
-  if (/caulk|seal|grout/.test(allText))
+
+  // ── MISC ──
+  if (has(/caulk|seal|grout/))
     tools.add("Caulk finishing tool");
-  if (/screen|window screen/.test(allText))
+  if (has(/screen|window screen/))
     tools.add("Screen roller");
-  if (/demo|remove|tear out|rip out/.test(allText)) {
+  if (has(/demo|tear out|rip out/)) {
     ["Pry bar", "Hammer", "Reciprocating saw"].forEach((x) => tools.add(x));
   }
-  if (/exterior|gutter|downspout|siding|fascia|soffit/.test(allText))
+  if (has(/exterior|gutter|downspout|siding|fascia|soffit/))
     ["Extension ladder", "Tin snips"].forEach((x) => tools.add(x));
-  if (/mirror|glass/.test(allText))
+  if (has(/mirror|glass/))
     tools.add("Suction cups");
-  if (/fence|gate|deck|post/.test(allText))
+  if (has(/fence|gate|deck|post/))
     ["Post level", "Circular saw", "Impact driver"].forEach((x) => tools.add(x));
-  if (/concrete|mortar|cement/.test(allText))
+  if (has(/concrete|mortar|cement/))
     ["Mixing drill + paddle", "Trowel", "Float"].forEach((x) => tools.add(x));
-  // General power tools based on scope
-  if (/cut|saw|trim/.test(allText) && !tools.has("Circular saw") && !tools.has("Miter saw"))
+
+  // Specialty power tools only when actually called for
+  if (has(/cut|saw|trim/) && !tools.has("Circular saw") && !tools.has("Miter saw") && !tools.has("Tile cutter") && !tools.has("Jigsaw"))
     tools.add("Oscillating multi-tool");
-  if (/screw|mount|install|secure/.test(allText))
+  // Impact driver is only really needed for heavy fasteners
+  if (has(/deck|lag bolt|frame|exterior|fence|post|heavy/) && !tools.has("Impact driver"))
     tools.add("Impact driver");
 
   rooms.forEach((r) =>
