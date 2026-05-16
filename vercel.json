@@ -8,6 +8,10 @@
     {
       "path": "/api/recurring/fire",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/reviews/dispatch",
+      "schedule": "0 * * * *"
     }
   ]
 }
