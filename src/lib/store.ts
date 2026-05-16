@@ -15,6 +15,7 @@ import type {
   Receipt,
   QuestPayout,
   TimeOffRequest,
+  ReviewRequest,
 } from "./types";
 
 /* ── localStorage helpers ── */
@@ -75,6 +76,7 @@ interface AppState {
   receipts: Receipt[];
   questPayouts: QuestPayout[];
   timeOffRequests: TimeOffRequest[];
+  reviewRequests: ReviewRequest[];
   loading: boolean;
   loadAll: () => Promise<void>;
 
@@ -241,6 +243,7 @@ export const useStore = create<AppState>((set, get) => ({
   receipts: [],
   questPayouts: [],
   timeOffRequests: [],
+  reviewRequests: [],
   loading: true,
 
   loadAll: async () => {
@@ -273,17 +276,18 @@ export const useStore = create<AppState>((set, get) => ({
       settle(db.get<Receipt>("receipts", orgFilter)),
       settle(db.get<QuestPayout>("quest_payouts", orgFilter)),
       settle(db.get<TimeOffRequest>("time_off_requests", orgFilter)),
+      settle(db.get<ReviewRequest>("review_requests", orgFilter)),
     ]);
     const [
       customers, addresses, profiles, jobs, timeEntries,
-      reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests,
+      reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, reviewRequests,
     ] = results as [
       Customer[], Address[], Profile[], Job[], TimeEntry[],
-      Review[], Referral[], ScheduleEntry[], PayHistory[], Receipt[], QuestPayout[], TimeOffRequest[],
+      Review[], Referral[], ScheduleEntry[], PayHistory[], Receipt[], QuestPayout[], TimeOffRequest[], ReviewRequest[],
     ];
     set({
       customers, addresses, profiles, jobs, timeEntries,
-      reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests,
+      reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, reviewRequests,
       loading: false,
     });
     // Also refresh org data (picks up Stripe changes, site updates, etc.).
