@@ -21,6 +21,7 @@ import {
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { exportQuotePdf } from "@/lib/export-pdf";
+import { computeTax, resolveTaxMode, type TaxMode } from "@/lib/tax";
 import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
@@ -278,6 +279,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // rooms JSON blob as `data.minLaborHours`. 0 is a valid value (disables
   // the minimum for this quote); only `null` means "inherit".
   const [minLaborHours, setMinLaborHours] = useState<number | null>(null);
+  // Per-quote tax-mode override. null = inherit org default
+  // (organizations.tax_mode, falling back to "total" for legacy rows).
+  // Persisted on the rooms JSON blob as `data.taxMode`.
+  const [taxMode, setTaxMode] = useState<TaxMode | null>(null);
   // Guide-tab persistent state — lifted out of GuideTab so adds survive
   // save+reload. Bernard hit the bug where new shopping-list items
   // disappeared on save: GuideTab held them in local component state that
@@ -345,6 +350,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // non-number, negative) means "inherit org default".
       const mh = data?.minLaborHours;
       setMinLaborHours(typeof mh === "number" && mh >= 0 ? mh : null);
+      // Per-quote tax-mode override. Valid values: "total" / "materials"
+      // / "none". Anything else means "inherit org default".
+      const tm = data?.taxMode;
+      setTaxMode(tm === "total" || tm === "materials" || tm === "none" ? tm : null);
     } catch {
       // rooms parse failed, start empty
     }
@@ -999,9 +1008,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         ? Math.round(preDiscountBase * (discount.value / 100) * 100) / 100
         : Math.min(preDiscountBase, discount.value))
     : 0;
-  const taxableBase = Math.max(0, Math.round((preDiscountBase - discountAmount) * 100) / 100);
-  const taxAmount = taxPct > 0 ? Math.round(taxableBase * (taxPct / 100) * 100) / 100 : 0;
-  const gt = Math.round((taxableBase + taxAmount) * 100) / 100;
+  // Resolve tax-mode: per-quote override → org default → "total" (legacy).
+  const effectiveTaxMode: TaxMode = taxMode ?? resolveTaxMode(org?.tax_mode);
+  const baseAfterDiscount = Math.max(0, Math.round((preDiscountBase - discountAmount) * 100) / 100);
+  const taxCalc = computeTax({
+    labor: tl,
+    materials: tm,
+    tripFee,
+    discountAmount,
+    taxPct,
+    taxMode: effectiveTaxMode,
+  });
+  const taxAmount = taxCalc.taxAmount;
+  const gt = Math.round((baseAfterDiscount + taxAmount) * 100) / 100;
   const issues = classify(rooms);
   const guide = makeGuide(rooms);
 
@@ -1118,12 +1137,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       checkedTools,
       checkedShop,
       // Per-quote discount + labor-rate override + min-labor-hours
-      // override. Persist explicitly (not via spread) so clearing them
-      // actually clears the saved value instead of inheriting prevData's
-      // stale entry.
+      // override + tax-mode override. Persist explicitly (not via spread)
+      // so clearing them actually clears the saved value instead of
+      // inheriting prevData's stale entry.
       discount: discount,
       laborRate: laborRate,
       minLaborHours: minLaborHours,
+      taxMode: taxMode,
       // Only overwrite `inspection` if the user just ran the inspector in
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
@@ -1937,6 +1957,53 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               )}
             </>
           ) : null}
+
+          <span style={{ width: 1, height: 18, background: "#444", margin: "0 4px" }} />
+
+          <span
+            style={{
+              fontSize: 10,
+              color: "#888",
+              fontFamily: "Oswald",
+              textTransform: "uppercase",
+              letterSpacing: ".06em",
+            }}
+            title="How tax applies on this quote. Default inherits from org settings."
+          >
+            Tax
+          </span>
+          <div style={{ display: "inline-flex", borderRadius: 6, overflow: "hidden", border: "1px solid #2E75B655" }}>
+            {([
+              { key: null, label: "Default" },
+              { key: "materials" as const, label: "Mat only" },
+              { key: "total" as const, label: "L + M" },
+              { key: "none" as const, label: "None" },
+            ]).map((opt) => {
+              const active = taxMode === opt.key;
+              return (
+                <button
+                  key={String(opt.key)}
+                  onClick={() => setTaxMode(opt.key)}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    fontFamily: "Oswald",
+                    background: active ? "var(--color-primary)" : "transparent",
+                    color: active ? "#fff" : "#888",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {taxMode === null && (
+            <span style={{ fontSize: 10, color: "#888", fontFamily: "Oswald" }}>
+              → {effectiveTaxMode === "materials" ? "mat only" : effectiveTaxMode === "none" ? "no tax" : "L + M"}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1952,7 +2019,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             v: "-$" + discountAmount.toFixed(0),
             c: "var(--color-accent-red)",
           }] : []),
-          ...(taxPct > 0 ? [{ l: `Tax ${taxPct}%`, v: "$" + taxAmount.toFixed(0), c: "var(--color-accent-red)" }] : []),
+          ...(taxPct > 0 && effectiveTaxMode !== "none" ? [{
+            l: effectiveTaxMode === "materials" ? `Tax ${taxPct}% (mat)` : `Tax ${taxPct}%`,
+            v: "$" + taxAmount.toFixed(0),
+            c: "var(--color-accent-red)",
+          }] : []),
         ].map((x, i) => (
           <div key={i} className="cd" style={{ textAlign: "center", padding: 8 }}>
             <div className="sl">{x.l}</div>
@@ -2037,8 +2108,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   laborRate: laborRate || null,
                   discount: discount || null,
                   minLaborHours: minLaborHours,
+                  taxMode: taxMode,
+                  orgTaxMode: resolveTaxMode(org?.tax_mode),
                 };
-                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" },\n  "setMinLaborHours": 2\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\`, \`setDiscount\`, \`setMinLaborHours\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  - "setMinLaborHours": <number> — per-quote override of the minimum-billable-labor-hours floor. The org has an org-wide default (shown in CURRENT PRICING META as minLaborHours when set on this quote, otherwise the floor is inherited from org settings). Examples:\n      "set the minimum to 2 hours for this job" → setMinLaborHours: 2\n      "drop the minimum to 0.5 hours" → setMinLaborHours: 0.5\n      "remove the minimum on this quote" / "no minimum on this job" → setMinLaborHours: 0\n      "reset minimum to the org default" / "inherit the org minimum" → setMinLaborHours: null\n    Numeric value 0 means "disable the floor for THIS quote" (still recorded as an override). null means "inherit the org default again".\n  OMIT these fields entirely if the user did not mention rate, discount, or minimum hours. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
+                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" },\n  "setMinLaborHours": 2,\n  "setTaxMode": "materials"\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\`, \`setDiscount\`, \`setMinLaborHours\`, \`setTaxMode\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  - "setMinLaborHours": <number> — per-quote override of the minimum-billable-labor-hours floor. The org has an org-wide default (shown in CURRENT PRICING META as minLaborHours when set on this quote, otherwise the floor is inherited from org settings). Examples:\n      "set the minimum to 2 hours for this job" → setMinLaborHours: 2\n      "drop the minimum to 0.5 hours" → setMinLaborHours: 0.5\n      "remove the minimum on this quote" / "no minimum on this job" → setMinLaborHours: 0\n      "reset minimum to the org default" / "inherit the org minimum" → setMinLaborHours: null\n    Numeric value 0 means "disable the floor for THIS quote" (still recorded as an override). null means "inherit the org default again".\n  - "setTaxMode": "total" | "materials" | "none" — per-quote override of how tax applies. CURRENT PRICING META exposes both the per-quote override (taxMode, null when inheriting) and the org default (orgTaxMode). Examples:\n      "tax materials only" / "only tax the materials" → setTaxMode: "materials"\n      "tax everything" / "tax labor and materials" → setTaxMode: "total"\n      "no tax on this one" / "tax-exempt" / "skip the tax" → setTaxMode: "none"\n      "reset tax mode to default" / "inherit the org tax setting" → setTaxMode: null\n    null clears the per-quote override (inherits the org default).\n  OMIT these fields entirely if the user did not mention rate, discount, minimum hours, or tax mode. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
                 const userMsg =
                   `Property: ${prop || "this property"}\n\n` +
                   `EXISTING QUOTE LINE ITEMS (${existingItemsContext.length}):\n` +
@@ -2078,6 +2151,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     setLaborRate?: number | null;
                     setDiscount?: { type?: string; value?: number; label?: string } | null;
                     setMinLaborHours?: number | null;
+                    setTaxMode?: TaxMode | null;
                   };
                   const adds = parsed.add ?? [];
                   const updates = parsed.update ?? [];
@@ -2222,6 +2296,20 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                       summary.push(mh === 0 ? "min hrs disabled" : `min hrs → ${mh}`);
                     }
                   }
+                  if (Object.prototype.hasOwnProperty.call(parsed, "setTaxMode")) {
+                    const tmRaw = parsed.setTaxMode;
+                    if (tmRaw === null) {
+                      setTaxMode(null);
+                      summary.push("tax → org default");
+                    } else if (tmRaw === "total" || tmRaw === "materials" || tmRaw === "none") {
+                      setTaxMode(tmRaw);
+                      summary.push(
+                        tmRaw === "materials" ? "tax → materials only"
+                        : tmRaw === "none" ? "tax → none"
+                        : "tax → labor + materials",
+                      );
+                    }
+                  }
 
                   if (adds.length) summary.push(`+${adds.length} added`);
                   if (updates.length) summary.push(`${updates.length} updated`);
@@ -2362,6 +2450,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 tripFee,
                 discount,
                 minLaborHours: effectiveMinHrs,
+                taxMode: effectiveTaxMode,
               });
             })()
           }

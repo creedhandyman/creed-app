@@ -131,8 +131,29 @@ function OpsSettings() {
           </div>
           <div>
             <label className="sl">{t("ops.tax")}</label>
-            <input type="number" key={`tx-${org.tax_pct}`} defaultValue={org.tax_pct || 0} min="0" step="0.1" placeholder="0" style={{ marginTop: 4 }}
-              onBlur={async (e) => { await db.patch("organizations", org.id, { tax_pct: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
+            <div className="row" style={{ gap: 6, marginTop: 4, alignItems: "stretch" }}>
+              <input
+                type="number"
+                key={`tx-${org.tax_pct}`}
+                defaultValue={org.tax_pct || 0}
+                min="0"
+                step="0.1"
+                placeholder="0"
+                style={{ flex: "0 0 80px" }}
+                onBlur={async (e) => { await db.patch("organizations", org.id, { tax_pct: parseFloat(e.target.value) || 0 }); refreshOrg(); }}
+              />
+              <select
+                key={`txm-${org.tax_mode || "total"}`}
+                defaultValue={org.tax_mode || "total"}
+                onChange={async (e) => { await db.patch("organizations", org.id, { tax_mode: e.target.value }); refreshOrg(); }}
+                style={{ flex: 1, fontSize: 12 }}
+                title={t("ops.taxModeHelp")}
+              >
+                <option value="materials">{t("ops.taxMode.materials")}</option>
+                <option value="total">{t("ops.taxMode.total")}</option>
+                <option value="none">{t("ops.taxMode.none")}</option>
+              </select>
+            </div>
             <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.taxHelp")}</div>
           </div>
         </div>

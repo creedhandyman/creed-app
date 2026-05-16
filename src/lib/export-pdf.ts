@@ -1,5 +1,6 @@
 import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
+import { computeTax, resolveTaxMode, type TaxMode } from "./tax";
 
 interface ExportOptions {
   property: string;
@@ -39,6 +40,11 @@ interface ExportOptions {
    *  `minLaborHours × rate` and adds a "minimum service charge" note
    *  under the labor line. 0 / null / undefined = no floor. */
   minLaborHours?: number | null;
+  /** Resolved tax mode for this quote. Caller should pre-resolve the
+   *  per-quote override against the org default; the PDF treats this
+   *  as authoritative. Defaults to "total" (legacy behavior) when
+   *  undefined. */
+  taxMode?: TaxMode;
 }
 
 const esc = (s: string) =>
@@ -111,9 +117,19 @@ export function exportQuotePdf(opts: ExportOptions) {
             : `Discount ($${discount.value.toFixed(2)} off)`))
     : "";
 
-  const taxableBase = Math.max(0, Math.round((_preDiscountBase - discountAmount) * 100) / 100);
-  const taxAmount = taxPct > 0 ? Math.round(taxableBase * (taxPct / 100) * 100) / 100 : 0;
-  const grandTotal = Math.round((taxableBase + taxAmount) * 100) / 100;
+  const taxMode = resolveTaxMode(opts.taxMode);
+  const baseAfterDiscount = Math.max(0, Math.round((_preDiscountBase - discountAmount) * 100) / 100);
+  const taxCalc = computeTax({
+    labor: totalLabor,
+    materials: totalMat,
+    tripFee,
+    discountAmount,
+    taxPct,
+    taxMode,
+  });
+  const taxAmount = taxCalc.taxAmount;
+  const taxLabel = taxCalc.taxLabel;
+  const grandTotal = Math.round((baseAfterDiscount + taxAmount) * 100) / 100;
 
   const quoteNum = jobId
     ? "QT-" + jobId.slice(0, 6).toUpperCase()
@@ -325,7 +341,7 @@ ${(markupPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
   ${markupPct > 0 ? `<tr><td class="dim">Material Markup (${markupPct}%)</td><td class="r" style="padding-left:24px">Included in materials</td></tr>` : ""}
   ${tripFee > 0 ? `<tr><td class="dim">Trip Fee</td><td class="r" style="padding-left:24px">$${tripFee.toFixed(2)}</td></tr>` : ""}
   ${discount ? `<tr style="color:#C00000"><td>${esc(discountLabel)}</td><td class="r" style="padding-left:24px">-$${discountAmount.toFixed(2)}</td></tr>` : ""}
-  ${taxPct > 0 ? `<tr><td class="dim">Tax (${taxPct}%)</td><td class="r" style="padding-left:24px">$${taxAmount.toFixed(2)}</td></tr>` : ""}
+  ${taxPct > 0 && taxMode !== "none" ? `<tr><td class="dim">${esc(taxLabel)}</td><td class="r" style="padding-left:24px">$${taxAmount.toFixed(2)}</td></tr>` : ""}
   <tr style="font-weight:700;font-size:16px;color:#2E75B6;font-family:Oswald,sans-serif">
     <td>GRAND TOTAL</td>
     <td class="r" style="padding-left:24px">$${grandTotal.toFixed(2)}</td>

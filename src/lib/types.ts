@@ -9,6 +9,12 @@ export interface Organization {
   default_rate: number;
   markup_pct: number;
   tax_pct: number;
+  /** Tax computation mode. "total" = tax (labor + materials − discount)
+   *  — the pre-feature behavior; "materials" = tax materials only with
+   *  discount allocated proportionally; "none" = tax-exempt. Resolved
+   *  via `resolveTaxMode()` in src/lib/tax.ts which falls back to
+   *  "total" when the column is missing (legacy rows pre-migration). */
+  tax_mode?: "total" | "materials" | "none";
   trade_rates?: string; // JSON: { "Plumbing": 65, "Electrical": 70, ... }
   licensed_trades?: string; // JSON array: ["Electrical","Plumbing","HVAC","Roofing"]
   quest_config?: string;
