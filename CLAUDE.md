@@ -144,6 +144,36 @@ src/
   fresh `jobs` row (status "scheduled"), then recomputes `next_fire_at`
   using `computeNextFire()` in `src/lib/recurring.ts`. Manual test:
   `curl -H "x-admin-token: $ADMIN_PASSWORD" 'https://<host>/api/recurring/fire?force=1&id=<row_id>'`.
+- Review-Request automation (v1):
+  ```
+  CREATE TABLE IF NOT EXISTS review_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    job_id UUID NOT NULL,
+    customer_id UUID,
+    scheduled_for TIMESTAMPTZ NOT NULL,
+    channel TEXT NOT NULL CHECK (channel IN ('sms','email','both')),
+    status TEXT NOT NULL DEFAULT 'scheduled'
+      CHECK (status IN ('scheduled','sent','failed','cancelled')),
+    sent_at TIMESTAMPTZ,
+    error TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_review_requests_pending
+    ON review_requests(scheduled_for) WHERE status = 'scheduled';
+  ALTER TABLE organizations ADD COLUMN review_request_enabled BOOLEAN DEFAULT TRUE;
+  ALTER TABLE organizations ADD COLUMN review_request_delay_hours INTEGER DEFAULT 24;
+  ALTER TABLE organizations ADD COLUMN review_request_channel TEXT DEFAULT 'sms';
+  ALTER TABLE organizations ADD COLUMN review_request_message TEXT;
+  ALTER TABLE organizations ADD COLUMN google_review_url TEXT;
+  ```
+  When `/api/verify-payment` flips a job to "paid", it inserts a row in
+  `review_requests` scheduled for `now() + delay_hours` (idempotent —
+  one row per job_id). Hourly Vercel cron `/api/reviews/dispatch`
+  picks up rows where `scheduled_for <= now() AND status='scheduled'`,
+  sends the message via Twilio (and Resend if `RESEND_API_KEY` is set
+  for email channel), and updates `status` + `sent_at`. Manual
+  "Request Review Now" cancels any pending row for the same job.
 - HR / time-off (v1):
   ```
   CREATE TABLE time_off_requests (

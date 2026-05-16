@@ -55,6 +55,20 @@ export interface Organization {
   auto_payroll_hour?: number;      // 0-23 (default 17 = 5 PM)
   auto_payroll_cadence?: "weekly" | "biweekly";
   auto_payroll_last_run?: string;  // ISO timestamp
+  // Review-Request automation. When a Stripe-paid job lands (verified
+  // server-side in /api/verify-payment), we schedule a row in
+  // review_requests for review_request_delay_hours later. Hourly cron
+  // /api/reviews/dispatch picks pending rows up and sends them.
+  review_request_enabled?: boolean;
+  review_request_delay_hours?: number;        // default 24
+  review_request_channel?: "sms" | "email" | "both"; // default "sms"
+  /** Custom template. Supports {customer_name}, {business_name},
+   *  {job_property}, {review_link}. Falls back to a default if null. */
+  review_request_message?: string;
+  /** Public Google review URL the message points the customer at. If
+   *  unset, the template uses a generic "reply with a star rating 1-5"
+   *  fallback. */
+  google_review_url?: string;
   created_at?: string;
 }
 
@@ -205,6 +219,26 @@ export interface Review {
   rating: number;
   created_at?: string;
   employee_names?: string;
+}
+
+/** Scheduled review-request automation row. One row per (org, job)
+ *  pair — created when a job's status flips to "paid" via the Stripe
+ *  verify-payment route, picked up later by the hourly dispatch cron.
+ *  Manual review requests cancel any pending row for the same job. */
+export type ReviewRequestChannel = "sms" | "email" | "both";
+export type ReviewRequestStatus = "scheduled" | "sent" | "failed" | "cancelled";
+
+export interface ReviewRequest {
+  id: string;
+  org_id: string;
+  job_id: string;
+  customer_id?: string;
+  scheduled_for: string;   // ISO timestamp
+  channel: ReviewRequestChannel;
+  status: ReviewRequestStatus;
+  sent_at?: string;
+  error?: string;
+  created_at?: string;
 }
 
 export interface Referral {
