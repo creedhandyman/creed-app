@@ -7,6 +7,7 @@ import Financials from "./Financials";
 import Customers from "./Customers";
 import CustomerDetail from "./CustomerDetail";
 import HR from "./HR";
+import Recurring from "./Recurring";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
@@ -191,7 +192,7 @@ function OpsSettings() {
   );
 }
 
-type OpsTab = "payroll" | "financials" | "customers" | "hr" | "team" | "billing" | "settings";
+type OpsTab = "payroll" | "financials" | "customers" | "recurring" | "hr" | "team" | "billing" | "settings";
 
 export default function Operations({ setPage }: { setPage: (p: string) => void }) {
   const user = useStore((s) => s.user);
@@ -224,6 +225,7 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
     { id: "payroll",    label: t("ops.payroll"),    icon: "money",    adminOnly: true },
     { id: "financials", label: t("ops.financials"), icon: "trending", adminOnly: true },
     { id: "customers",  label: "Customers",         icon: "clients",  adminOnly: true },
+    { id: "recurring",  label: t("ops.recurring"),  icon: "refresh",  adminOnly: true },
     { id: "hr",         label: "HR",                icon: "worker", badge: pendingTimeOffCount },
     { id: "team",       label: t("ops.team"),       icon: "worker",   adminOnly: true },
     { id: "billing",    label: t("ops.billing"),    icon: "receipt",  adminOnly: true },
@@ -289,6 +291,9 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
             ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />
             : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />}
         </SubTabErrorBoundary>
+      )}
+      {tab === "recurring" && (
+        <SubTabErrorBoundary label="Recurring"><Recurring /></SubTabErrorBoundary>
       )}
       {tab === "hr" && (
         <SubTabErrorBoundary label="HR"><HR /></SubTabErrorBoundary>

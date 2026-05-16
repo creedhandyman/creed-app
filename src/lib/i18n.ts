@@ -224,6 +224,7 @@ const translations: Record<Lang, Record<string, string>> = {
     // Operations tabs + sections
     "ops.payroll": "Payroll",
     "ops.financials": "Financials",
+    "ops.recurring": "Recurring",
     "ops.team": "Team",
     "ops.billing": "Billing",
     "ops.settings": "Settings",
@@ -534,6 +535,7 @@ const translations: Record<Lang, Record<string, string>> = {
     // Operations tabs + sections
     "ops.payroll": "N\u00f3mina",
     "ops.financials": "Finanzas",
+    "ops.recurring": "Recurrentes",
     "ops.team": "Equipo",
     "ops.billing": "Facturaci\u00f3n",
     "ops.settings": "Configuraci\u00f3n",
