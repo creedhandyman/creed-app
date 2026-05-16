@@ -187,7 +187,7 @@ function OpsSettings() {
       </div>
 
       {/* Trade Rates */}
-      <div className="cd">
+      <div className="cd mb">
         <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="money" size={16} color="var(--color-primary)" />
           {t("ops.customRates")}
@@ -209,6 +209,143 @@ function OpsSettings() {
           </div>
         ))}
       </div>
+
+      {/* Review Automation — auto-schedules a review-request SMS / email
+          N hours after a Stripe-paid invoice. Wires the gamification quest
+          flywheel without the owner having to remember. */}
+      <ReviewAutomationCard org={org} refreshOrg={refreshOrg} />
+    </div>
+  );
+}
+
+/** Owner-facing controls for the Review Automation pipeline. The
+ *  enable toggle / channel / delay / template / Google review URL all
+ *  live on the organizations row; the cron at /api/reviews/dispatch
+ *  reads them at send time. Defaults match what the migration sets. */
+function ReviewAutomationCard({
+  org,
+  refreshOrg,
+}: {
+  org: NonNullable<ReturnType<typeof useStore.getState>["org"]>;
+  refreshOrg: () => Promise<void>;
+}) {
+  const enabled = org.review_request_enabled !== false; // default TRUE
+  const delayHours = typeof org.review_request_delay_hours === "number" ? org.review_request_delay_hours : 24;
+  const channel = (org.review_request_channel as "sms" | "email" | "both") || "sms";
+  const template = org.review_request_message ?? "";
+  const reviewUrl = org.google_review_url ?? "";
+
+  const defaultTemplate = "Hi {customer_name}, thanks for choosing {business_name} for your {job_property} project. If we earned it, we'd love a quick Google review: {review_link}";
+
+  return (
+    <div className="cd">
+      <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Icon name="star" size={16} color="var(--color-primary)" />
+        Review Automation
+      </h4>
+      <div className="dim" style={{ fontSize: 12, marginBottom: 12 }}>
+        Auto-send a review request after a paid invoice. Closes the loop on the gamification quests and drives Google reviews without you having to remember.
+      </div>
+
+      {/* Enable toggle — primary affordance, pinned to the top so the
+          owner can flip the whole automation on/off in one tap. */}
+      <label className="row" style={{ gap: 8, marginBottom: 12, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={async (e) => {
+            await db.patch("organizations", org.id, { review_request_enabled: e.target.checked });
+            refreshOrg();
+          }}
+          style={{ width: 16, height: 16, cursor: "pointer" }}
+        />
+        <span style={{ fontSize: 13, fontWeight: 500 }}>
+          {enabled ? "Enabled" : "Disabled"} — automatically request a review after payment
+        </span>
+      </label>
+
+      {enabled && (
+        <>
+          <div className="g2 mb">
+            <div>
+              <label className="sl">Delay after payment (hours)</label>
+              <input
+                type="number"
+                key={`rrd-${delayHours}`}
+                defaultValue={delayHours}
+                min="1"
+                max="168"
+                step="1"
+                style={{ marginTop: 4 }}
+                onBlur={async (e) => {
+                  const v = parseInt(e.target.value, 10);
+                  const next = Number.isFinite(v) && v >= 1 && v <= 168 ? v : 24;
+                  await db.patch("organizations", org.id, { review_request_delay_hours: next });
+                  refreshOrg();
+                }}
+              />
+              <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+                How long to wait so you don&apos;t bombard the customer at payment.
+              </div>
+            </div>
+            <div>
+              <label className="sl">Channel</label>
+              <select
+                value={channel}
+                onChange={async (e) => {
+                  await db.patch("organizations", org.id, { review_request_channel: e.target.value });
+                  refreshOrg();
+                }}
+                style={{ marginTop: 4 }}
+              >
+                <option value="sms">SMS only</option>
+                <option value="email">Email only</option>
+                <option value="both">Both</option>
+              </select>
+              <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+                Email needs RESEND_API_KEY on Vercel to actually send.
+              </div>
+            </div>
+          </div>
+
+          <div className="mb">
+            <label className="sl">Google review URL</label>
+            <input
+              type="url"
+              key={`gr-${reviewUrl}`}
+              defaultValue={reviewUrl}
+              placeholder="https://g.page/r/..."
+              style={{ marginTop: 4 }}
+              onBlur={async (e) => {
+                await db.patch("organizations", org.id, { google_review_url: e.target.value.trim() || null });
+                refreshOrg();
+              }}
+            />
+            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+              The link the message points the customer at. Leave blank to fall back to a generic &quot;reply with a star rating 1-5&quot; message.
+            </div>
+          </div>
+
+          <div>
+            <label className="sl">Message template</label>
+            <textarea
+              key={`tpl-${template.slice(0, 20)}`}
+              defaultValue={template}
+              placeholder={defaultTemplate}
+              rows={4}
+              style={{ marginTop: 4, width: "100%", fontSize: 12, fontFamily: "inherit" }}
+              onBlur={async (e) => {
+                const v = e.target.value.trim();
+                await db.patch("organizations", org.id, { review_request_message: v || null });
+                refreshOrg();
+              }}
+            />
+            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+              Variables: <code>{"{customer_name}"}</code>, <code>{"{business_name}"}</code>, <code>{"{job_property}"}</code>, <code>{"{review_link}"}</code>. Leave blank for the default.
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

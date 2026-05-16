@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
-import { db } from "@/lib/supabase";
+import { db, supabase } from "@/lib/supabase";
 import type { Job, Customer } from "@/lib/types";
 
 interface Props {
@@ -57,9 +57,23 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
 
   // Persist review_requested_at so we don't re-prompt on the next status
   // change or row re-render. Best-effort patch; we don't block the action.
+  // Also cancel any pending automated review-request row for this job —
+  // the user just sent the message manually, so the cron shouldn't
+  // double-ping the customer an hour later.
   const markRequested = async () => {
     try {
       await db.patch("jobs", job.id, { review_requested_at: new Date().toISOString() });
+      // Cancel pending automated request, if any. Direct supabase update
+      // (not db.patch) because we filter by job_id + status, not by id.
+      // Best-effort — failure here just means the cron may still fire,
+      // which is a soft duplicate, not a data integrity issue.
+      try {
+        await supabase
+          .from("review_requests")
+          .update({ status: "cancelled" })
+          .eq("job_id", job.id)
+          .eq("status", "scheduled");
+      } catch { /* non-critical */ }
       onSent?.();
     } catch { /* non-critical */ }
   };
