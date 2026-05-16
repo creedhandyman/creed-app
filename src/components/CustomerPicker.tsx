@@ -64,6 +64,10 @@ export default function CustomerPicker({
   const [newAddrLabel, setNewAddrLabel] = useState("");
   const [creatingAddress, setCreatingAddress] = useState(false);
 
+  // Live filter for the unlinked customer dropdown. Hidden until the list
+  // grows past a handful of entries — short lists scroll fine without it.
+  const [custQuery, setCustQuery] = useState("");
+
   // If customerId points at a customer that no longer exists (deleted in
   // another tab), gracefully fall back to free text rather than render a
   // dead state.
@@ -261,17 +265,60 @@ export default function CustomerPicker({
   }
 
   // ── Free-text mode ────────────────────────────────────────────────
+  const filteredCustomers = (() => {
+    const needle = custQuery.trim().toLowerCase();
+    if (!needle) return customers;
+    return customers.filter((c) =>
+      (c.name || "").toLowerCase().includes(needle) ||
+      (c.phone || "").toLowerCase().includes(needle) ||
+      (c.email || "").toLowerCase().includes(needle),
+    );
+  })();
   return (
     <div>
+      {customers.length > 6 && (
+        <div style={{ position: "relative", marginBottom: 6 }}>
+          <input
+            value={custQuery}
+            onChange={(e) => setCustQuery(e.target.value)}
+            placeholder={`Search ${customers.length} customers…`}
+            style={{ fontSize, width: "100%", paddingRight: custQuery ? 28 : 10 }}
+            aria-label="Filter customers"
+          />
+          {custQuery && (
+            <button
+              onClick={() => setCustQuery("")}
+              aria-label="Clear search"
+              style={{
+                position: "absolute",
+                right: 6,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "transparent",
+                border: "none",
+                color: "#888",
+                fontSize: 13,
+                padding: 2,
+                cursor: "pointer",
+                lineHeight: 1,
+              }}
+            >×</button>
+          )}
+        </div>
+      )}
       <select
         value=""
         onChange={(e) => pickCustomerById(e.target.value)}
         style={{ fontSize, color: "var(--color-primary)", marginBottom: 6, width: "100%" }}
       >
         <option value="">🔗 Link to customer...</option>
-        {customers.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
+        {filteredCustomers.length === 0 ? (
+          <option disabled>No matches</option>
+        ) : (
+          filteredCustomers.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))
+        )}
         <option value="__NEW__">+ New customer...</option>
       </select>
 

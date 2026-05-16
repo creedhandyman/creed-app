@@ -103,6 +103,19 @@ export default function Timer({ setPage }: Props) {
   const [expandedCrew, setExpandedCrew] = useState<string | null>(null);
   // Re-render every minute on the Crew tab so live durations tick
   const [tick, setTick] = useState(0);
+  // Live filter for the clock-in + manual-entry job dropdowns. Substring
+  // match against property/client/status, case-insensitive.
+  const [clockJobQuery, setClockJobQuery] = useState("");
+  const [manualJobQuery, setManualJobQuery] = useState("");
+  const filterJobs = (q: string) => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return jobs;
+    return jobs.filter((j) =>
+      (j.property || "").toLowerCase().includes(needle) ||
+      (j.client || "").toLowerCase().includes(needle) ||
+      (j.status || "").toLowerCase().includes(needle),
+    );
+  };
 
   const rate = user.rate || 55;
 
@@ -395,17 +408,51 @@ export default function Timer({ setPage }: Props) {
         >
           {fmt(el)}
         </div>
+        {jobs.length > 6 && (
+          <div style={{ position: "relative", maxWidth: 300, margin: "8px auto 0" }}>
+            <input
+              value={clockJobQuery}
+              onChange={(e) => setClockJobQuery(e.target.value)}
+              placeholder={`${t("common.search")} jobs…`}
+              style={{ width: "100%", fontSize: 12, paddingRight: clockJobQuery ? 28 : 10 }}
+              aria-label="Filter jobs"
+            />
+            {clockJobQuery && (
+              <button
+                onClick={() => setClockJobQuery("")}
+                aria-label="Clear search"
+                style={{
+                  position: "absolute",
+                  right: 6,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "transparent",
+                  border: "none",
+                  color: "#888",
+                  fontSize: 13,
+                  padding: 2,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                }}
+              >×</button>
+            )}
+          </div>
+        )}
         <select
           value={sj}
           onChange={(e) => setSj(e.target.value)}
           style={{ maxWidth: 300, margin: "10px auto", display: "block" }}
         >
           <option value="">{t("timer.general")}</option>
-          {jobs.map((j) => (
-            <option key={j.id} value={j.property}>
-              {j.property} ({j.status})
-            </option>
-          ))}
+          {(() => {
+            const filtered = filterJobs(clockJobQuery);
+            if (filtered.length === 0) return <option disabled>No matches</option>;
+            return filtered.map((j) => (
+              <option key={j.id} value={j.property}>
+                {j.property} ({j.status})
+              </option>
+            ));
+          })()}
         </select>
         {!on ? (
           <button
@@ -449,6 +496,36 @@ export default function Timer({ setPage }: Props) {
               ))}
             </select>
           </div>
+          {jobs.length > 6 && (
+            <div style={{ position: "relative", marginBottom: 6 }}>
+              <input
+                value={manualJobQuery}
+                onChange={(e) => setManualJobQuery(e.target.value)}
+                placeholder={`${t("common.search")} jobs…`}
+                style={{ width: "100%", fontSize: 12, paddingRight: manualJobQuery ? 28 : 10 }}
+                aria-label="Filter jobs"
+              />
+              {manualJobQuery && (
+                <button
+                  onClick={() => setManualJobQuery("")}
+                  aria-label="Clear search"
+                  style={{
+                    position: "absolute",
+                    right: 6,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "transparent",
+                    border: "none",
+                    color: "#888",
+                    fontSize: 13,
+                    padding: 2,
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >×</button>
+              )}
+            </div>
+          )}
           <div className="row" style={{ marginBottom: 6 }}>
             <input
               type="date"
@@ -462,11 +539,15 @@ export default function Timer({ setPage }: Props) {
               style={{ flex: 1 }}
             >
               <option value="">{t("timer.general")}</option>
-              {jobs.map((j) => (
-                <option key={j.id} value={j.property}>
-                  {j.property}
-                </option>
-              ))}
+              {(() => {
+                const filtered = filterJobs(manualJobQuery);
+                if (filtered.length === 0) return <option disabled>No matches</option>;
+                return filtered.map((j) => (
+                  <option key={j.id} value={j.property}>
+                    {j.property}
+                  </option>
+                ));
+              })()}
             </select>
           </div>
           <div className="row">

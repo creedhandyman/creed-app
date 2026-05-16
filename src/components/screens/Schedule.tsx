@@ -57,6 +57,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   // grow a mile long once dozens of jobs accumulate.
   const [allOpen, setAllOpen] = useState(false);
   const [showPast, setShowPast] = useState(false);
+  // Live-filter the drag-and-drop palette and the Add-to-Schedule job picker.
+  // Substring match against the property string, case-insensitive.
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [addJobQuery, setAddJobQuery] = useState("");
 
   // When a job is armed via the drag palette, re-run the day-suggestion
   // logic so the user immediately sees a "schedule near nearby work" hint.
@@ -429,10 +433,18 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         // Archived jobs are excluded. Sorted accepted → scheduled → active
         // so the newest work is what the user sees first.
         const STATUS_ORDER: Record<string, number> = { accepted: 0, scheduled: 1, active: 2 };
-        const palette = jobs
+        const fullPalette = jobs
           .filter((j) => !j.archived && (j.status === "accepted" || j.status === "scheduled" || j.status === "active"))
           .sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
-        if (palette.length === 0) return null;
+        if (fullPalette.length === 0) return null;
+        const q = paletteQuery.trim().toLowerCase();
+        const palette = q
+          ? fullPalette.filter((j) =>
+              (j.property || "").toLowerCase().includes(q) ||
+              (j.client || "").toLowerCase().includes(q) ||
+              (j.status || "").toLowerCase().includes(q),
+            )
+          : fullPalette;
         const acceptedCount = palette.filter((j) => j.status === "accepted").length;
         const scheduledCount = palette.filter((j) => j.status === "scheduled").length;
         const activeCount = palette.filter((j) => j.status === "active").length;
@@ -453,8 +465,42 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 </span>
               )}
             </h4>
+            {fullPalette.length > 4 && (
+              <div style={{ position: "relative", marginBottom: 6 }}>
+                <input
+                  value={paletteQuery}
+                  onChange={(e) => setPaletteQuery(e.target.value)}
+                  placeholder={`${t("common.search")} ${fullPalette.length} jobs…`}
+                  style={{ width: "100%", fontSize: 12, paddingRight: paletteQuery ? 28 : 10 }}
+                  aria-label="Filter palette"
+                />
+                {paletteQuery && (
+                  <button
+                    onClick={() => setPaletteQuery("")}
+                    aria-label="Clear search"
+                    style={{
+                      position: "absolute",
+                      right: 6,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "transparent",
+                      border: "none",
+                      color: "#888",
+                      fontSize: 13,
+                      padding: 2,
+                      cursor: "pointer",
+                      lineHeight: 1,
+                    }}
+                  >×</button>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-              {palette.map((j) => {
+              {palette.length === 0 ? (
+                <span className="dim" style={{ fontSize: 11 }}>
+                  No matches for &ldquo;{paletteQuery}&rdquo;.
+                </span>
+              ) : palette.map((j) => {
                 const isArmed = armedJob === j.property;
                 const isScheduled = j.status === "scheduled";
                 const isActive = j.status === "active";
@@ -647,6 +693,36 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
       {/* Add to Schedule */}
       <div className="cd mb">
         <h4 style={{ fontSize: 13, marginBottom: 8 }}>Add to Schedule</h4>
+        {jobs.length > 6 && (
+          <div style={{ position: "relative", marginBottom: 6 }}>
+            <input
+              value={addJobQuery}
+              onChange={(e) => setAddJobQuery(e.target.value)}
+              placeholder={`${t("common.search")} jobs by address, client, status…`}
+              style={{ width: "100%", fontSize: 12, paddingRight: addJobQuery ? 28 : 10 }}
+              aria-label="Filter jobs"
+            />
+            {addJobQuery && (
+              <button
+                onClick={() => setAddJobQuery("")}
+                aria-label="Clear search"
+                style={{
+                  position: "absolute",
+                  right: 6,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "transparent",
+                  border: "none",
+                  color: "#888",
+                  fontSize: 13,
+                  padding: 2,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                }}
+              >×</button>
+            )}
+          </div>
+        )}
         <div className="row">
           <input
             type="date"
@@ -664,11 +740,24 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             style={{ flex: 1 }}
           >
             <option value="">{t("sched.selectJob")}</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.property}>
-                {j.property} ({j.status})
-              </option>
-            ))}
+            {(() => {
+              const q = addJobQuery.trim().toLowerCase();
+              const filtered = q
+                ? jobs.filter((j) =>
+                    (j.property || "").toLowerCase().includes(q) ||
+                    (j.client || "").toLowerCase().includes(q) ||
+                    (j.status || "").toLowerCase().includes(q),
+                  )
+                : jobs;
+              if (filtered.length === 0) {
+                return <option disabled>No matches</option>;
+              }
+              return filtered.map((j) => (
+                <option key={j.id} value={j.property}>
+                  {j.property} ({j.status})
+                </option>
+              ));
+            })()}
           </select>
           <button
             className="bg"
