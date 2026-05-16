@@ -35,6 +35,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const receipts = useStore((s) => s.receipts);
   const timeEntries = useStore((s) => s.timeEntries);
   const payHistory = useStore((s) => s.payHistory);
+  const reviewRequests = useStore((s) => s.reviewRequests);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
@@ -1167,6 +1168,75 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                       )}
                     </div>
                   )}
+
+                  {/* Review-Request automation status — paid jobs only.
+                      Reads the latest review_requests row for this job and
+                      renders a one-line badge. Three states:
+                        scheduled → "Review request in Xh"
+                        sent / failed → "Review request sent on <date>"
+                        none + disabled → "Review request off (disabled in Settings)" */}
+                  {j.status === "paid" && (() => {
+                    const rrows = reviewRequests
+                      .filter((r) => r.job_id === j.id)
+                      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+                    const rr = rrows[0];
+                    const automationOn = org?.review_request_enabled !== false; // default TRUE
+                    let label: string;
+                    let color: string;
+                    let icon: "star" | "mail" | "info" = "star";
+                    if (rr?.status === "scheduled") {
+                      const diffMs = new Date(rr.scheduled_for).getTime() - Date.now();
+                      const hoursOut = Math.max(0, Math.round(diffMs / 3600 / 1000));
+                      label = hoursOut <= 0
+                        ? "Review request queued — sending shortly"
+                        : `Review request scheduled in ${hoursOut}h`;
+                      color = "var(--color-highlight)";
+                      icon = "star";
+                    } else if (rr?.status === "sent") {
+                      const sentDate = rr.sent_at ? new Date(rr.sent_at).toLocaleDateString() : "—";
+                      label = `Review request sent on ${sentDate}`;
+                      color = "var(--color-success)";
+                      icon = "mail";
+                    } else if (rr?.status === "failed") {
+                      label = `Review request failed${rr.error ? `: ${rr.error}` : ""}`;
+                      color = "var(--color-accent-red)";
+                      icon = "info";
+                    } else if (rr?.status === "cancelled") {
+                      label = "Review request cancelled (manual send)";
+                      color = "#888";
+                      icon = "mail";
+                    } else if (!automationOn) {
+                      label = "Review request off (disabled in Settings)";
+                      color = "#888";
+                      icon = "info";
+                    } else {
+                      // No row, automation enabled — legacy paid job from
+                      // before automation shipped, or the schedule insert
+                      // hasn't run yet. Stay silent rather than imply state.
+                      return null;
+                    }
+                    return (
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 11,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          background: darkMode ? "#0f0f18" : "#f5f5f8",
+                          color,
+                          marginBottom: 8,
+                          fontFamily: "Oswald",
+                          letterSpacing: ".02em",
+                        }}
+                        title={rr?.error || label}
+                      >
+                        <Icon name={icon} size={12} color={color} />
+                        {label}
+                      </div>
+                    );
+                  })()}
 
                   {/* Job info cards */}
                   {(() => {
