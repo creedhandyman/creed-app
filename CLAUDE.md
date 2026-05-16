@@ -115,6 +115,35 @@ src/
   and fall back to address-match against the OLDEST job at that
   property. Without this column, hours from the original job leak
   onto a new job at the same address.)
+- Recurring jobs (template-driven service schedules):
+  ```
+  CREATE TABLE IF NOT EXISTS recurring_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    customer_id UUID,
+    address_id UUID,
+    property TEXT,
+    client TEXT,
+    template_rooms JSONB NOT NULL,
+    title TEXT,
+    cadence TEXT NOT NULL CHECK (cadence IN ('weekly','biweekly','monthly','quarterly','semiannual','annual')),
+    day_of_week INTEGER,
+    day_of_month INTEGER,
+    hour INTEGER DEFAULT 9,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_fired_at TIMESTAMPTZ,
+    next_fire_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_recurring_jobs_org_active ON recurring_jobs(org_id) WHERE is_active = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_recurring_jobs_next_fire ON recurring_jobs(next_fire_at) WHERE is_active = TRUE;
+  ```
+  Server-side cron fires daily at 09:00 UTC (`/api/recurring/fire`,
+  registered in `vercel.json`). Each fire copies `template_rooms` into a
+  fresh `jobs` row (status "scheduled"), then recomputes `next_fire_at`
+  using `computeNextFire()` in `src/lib/recurring.ts`. Manual test:
+  `curl -H "x-admin-token: $ADMIN_PASSWORD" 'https://<host>/api/recurring/fire?force=1&id=<row_id>'`.
 - HR / time-off (v1):
   ```
   CREATE TABLE time_off_requests (

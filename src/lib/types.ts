@@ -250,6 +250,50 @@ export interface QuestPayout {
 }
 
 /**
+ * Recurring job template. One row = one cadence-driven schedule that
+ * spawns a new `jobs` row each time the cron fires. The `template_rooms`
+ * blob is copied verbatim into the new job's `rooms` field, so any
+ * line-items, work order, and totals on the source quote travel forward
+ * to every recurrence. Server-side cron in /api/recurring/fire.
+ */
+export type RecurringCadence =
+  | "weekly"
+  | "biweekly"
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual";
+
+export interface RecurringJob {
+  id: string;
+  org_id: string;
+  customer_id?: string | null;
+  address_id?: string | null;
+  /** Denormalized — kept on the row so list rendering doesn't have to
+   *  resolve customer_id/address_id joins on every refresh. */
+  property?: string | null;
+  client?: string | null;
+  /** The full rooms/data/workOrder blob copied to each spawned job.
+   *  Stored as JSONB in Supabase, so the client receives a parsed object;
+   *  the cron re-stringifies it before insert (jobs.rooms is TEXT). */
+  template_rooms: unknown;
+  title?: string | null;
+  cadence: RecurringCadence;
+  /** 0=Sun..6=Sat — only used for weekly/biweekly. */
+  day_of_week?: number | null;
+  /** 1..28 — used for monthly+. Clamped to 28 so Feb is safe. */
+  day_of_month?: number | null;
+  /** Hour-of-day (0..23). Cron is daily so this is advisory until the
+   *  Vercel plan supports hourly. */
+  hour?: number | null;
+  is_active: boolean;
+  last_fired_at?: string | null;
+  next_fire_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
  * Time-off request submitted by an employee (or admin self-service).
  * Approve/deny is a status flip — no balance tracking; we just log
  * what was asked for and what the admin decided.
