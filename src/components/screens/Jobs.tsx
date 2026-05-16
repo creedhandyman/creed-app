@@ -12,6 +12,14 @@ import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
+import {
+  CADENCES,
+  CADENCE_LABELS,
+  DAY_OF_WEEK_LABELS,
+  computeNextFire,
+  formatNextFire,
+  type Cadence,
+} from "@/lib/recurring";
 
 interface Props {
   setPage: (p: string) => void;
@@ -198,57 +206,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const [connectingStripe, setConnectingStripe] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
 
-  // Auto-create recurring jobs that are due
-  useEffect(() => {
-    const createDueRecurring = async () => {
-      const today = new Date().toISOString().split("T")[0];
-      const recurring = jobs.filter((j) => j.is_recurring && j.next_due && j.next_due <= today && j.status === "paid");
-      for (const template of recurring) {
-        // Clone the job
-        await db.post("jobs", {
-          property: template.property,
-          client: template.client,
-          job_date: today,
-          rooms: template.rooms,
-          total: template.total,
-          total_labor: template.total_labor,
-          total_mat: template.total_mat,
-          total_hrs: template.total_hrs,
-          status: "quoted",
-          created_by: user.name,
-          trade: template.trade,
-          parent_job_id: template.id,
-        });
-        // Calculate next due date
-        const nextDue = new Date(template.next_due!);
-        if (template.recurrence_rule === "weekly") nextDue.setDate(nextDue.getDate() + 7);
-        else if (template.recurrence_rule === "biweekly") nextDue.setDate(nextDue.getDate() + 14);
-        else if (template.recurrence_rule === "monthly") nextDue.setMonth(nextDue.getMonth() + 1);
-        else if (template.recurrence_rule === "quarterly") nextDue.setMonth(nextDue.getMonth() + 3);
-        await db.patch("jobs", template.id, { next_due: nextDue.toISOString().split("T")[0] });
-      }
-      if (recurring.length > 0) {
-        loadAll();
-        useStore.getState().showToast(`${recurring.length} recurring job${recurring.length > 1 ? "s" : ""} created`, "info");
-      }
-    };
-    createDueRecurring();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const toggleRecurring = async (job: Job, rule: string) => {
-    if (!rule) {
-      await db.patch("jobs", job.id, { is_recurring: false, recurrence_rule: "", next_due: "" });
-    } else {
-      const nextDue = new Date();
-      if (rule === "weekly") nextDue.setDate(nextDue.getDate() + 7);
-      else if (rule === "biweekly") nextDue.setDate(nextDue.getDate() + 14);
-      else if (rule === "monthly") nextDue.setMonth(nextDue.getMonth() + 1);
-      else if (rule === "quarterly") nextDue.setMonth(nextDue.getMonth() + 3);
-      await db.patch("jobs", job.id, { is_recurring: true, recurrence_rule: rule, next_due: nextDue.toISOString().split("T")[0] });
-    }
-    loadAll();
-  };
+  // Modal state for "Make recurring" from a job's expanded row. Holds the
+  // source job so the modal can show context (address / client) and copy
+  // its rooms blob into the new recurring_jobs row.
+  const [recurringFrom, setRecurringFrom] = useState<Job | null>(null);
 
   const getWorkers = (j: typeof jobs[0]): { id: string; name: string }[] => {
     try {
@@ -1518,21 +1479,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
                       <span className="dim">Recurring</span>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <select
-                          value={j.recurrence_rule || ""}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => { e.stopPropagation(); toggleRecurring(j, e.target.value); }}
-                          style={{ flex: 1, fontSize: 12, padding: "3px 6px" }}
+                        <button
+                          className="bo"
+                          onClick={(e) => { e.stopPropagation(); setRecurringFrom(j); }}
+                          style={{ fontSize: 12, padding: "3px 10px" }}
                         >
-                          <option value="">Off</option>
-                          <option value="weekly">Weekly</option>
-                          <option value="biweekly">Biweekly</option>
-                          <option value="monthly">Monthly</option>
-                          <option value="quarterly">Quarterly</option>
-                        </select>
-                        {j.is_recurring && j.next_due && (
-                          <span className="dim" style={{ fontSize: 11, whiteSpace: "nowrap" }}>Next: {j.next_due}</span>
-                        )}
+                          <Icon name="refresh" size={12} /> Make recurring…
+                        </button>
+                        <span className="dim" style={{ fontSize: 11 }}>Manage in Ops → Recurring</span>
                       </div>
 
                       <span className="dim">Callback</span>
@@ -1980,6 +1934,176 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         onClose={() => setReviewJob(null)}
         onSent={() => loadAll()}
       />
+
+      {/* Make-recurring modal — converts a one-off job into a recurring
+          template by inserting a recurring_jobs row. Original job is
+          left untouched; the cron at /api/recurring/fire spawns fresh
+          jobs from the template on cadence. */}
+      {recurringFrom && (
+        <MakeRecurringModal
+          job={recurringFrom}
+          orgId={user.org_id}
+          onClose={() => setRecurringFrom(null)}
+          onCreated={async () => {
+            setRecurringFrom(null);
+            await loadAll();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function MakeRecurringModal({
+  job,
+  orgId,
+  onClose,
+  onCreated,
+}: {
+  job: Job;
+  orgId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [cadence, setCadence] = useState<Cadence>("monthly");
+  const [dayOfWeek, setDayOfWeek] = useState<number>(1);
+  const [dayOfMonth, setDayOfMonth] = useState<number>(1);
+  const [hour, setHour] = useState<number>(9);
+  const [title, setTitle] = useState<string>(job.property || "");
+  const [saving, setSaving] = useState(false);
+
+  const isWeekly = cadence === "weekly" || cadence === "biweekly";
+
+  const save = async () => {
+    setSaving(true);
+    let templateRooms: unknown = {};
+    try {
+      templateRooms = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+    } catch {
+      templateRooms = {};
+    }
+    const nextFire = computeNextFire(new Date(), cadence, {
+      dayOfWeek: isWeekly ? dayOfWeek : undefined,
+      dayOfMonth: !isWeekly ? dayOfMonth : undefined,
+      hour,
+    });
+    await db.post("recurring_jobs", {
+      org_id: orgId,
+      customer_id: job.customer_id ?? null,
+      address_id: job.address_id ?? null,
+      property: job.property,
+      client: job.client,
+      template_rooms: templateRooms,
+      title: title.trim() || job.property || "Recurring service",
+      cadence,
+      day_of_week: isWeekly ? dayOfWeek : null,
+      day_of_month: !isWeekly ? dayOfMonth : null,
+      hour,
+      is_active: true,
+      next_fire_at: nextFire.toISOString(),
+    });
+    setSaving(false);
+    useStore.getState().showToast("Recurring template created — manage in Ops → Recurring", "success");
+    onCreated();
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 1500,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      }}
+    >
+      <div
+        className="cd"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 480 }}
+      >
+        <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ fontSize: 15 }}>Make recurring</h3>
+          <button className="bo" onClick={onClose} style={{ padding: "2px 8px" }}>
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+
+        <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>
+          From <strong>{job.property}</strong>{job.client ? ` · ${job.client}` : ""}.
+          A new scheduled job will be created on every fire, with the same line items + work order.
+        </div>
+
+        <div className="g2 mb" style={{ gap: 8 }}>
+          <div>
+            <label className="sl">Title</label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Lawn maintenance"
+              style={{ marginTop: 4 }}
+            />
+          </div>
+          <div>
+            <label className="sl">Cadence</label>
+            <select
+              value={cadence}
+              onChange={(e) => setCadence(e.target.value as Cadence)}
+              style={{ marginTop: 4 }}
+            >
+              {CADENCES.map((c) => (
+                <option key={c} value={c}>{CADENCE_LABELS[c]}</option>
+              ))}
+            </select>
+          </div>
+          {isWeekly ? (
+            <div>
+              <label className="sl">Day of week</label>
+              <select
+                value={dayOfWeek}
+                onChange={(e) => setDayOfWeek(parseInt(e.target.value, 10))}
+                style={{ marginTop: 4 }}
+              >
+                {DAY_OF_WEEK_LABELS.map((lbl, i) => (
+                  <option key={i} value={i}>{lbl}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="sl">Day of month (1-28)</label>
+              <input
+                type="number"
+                min={1}
+                max={28}
+                value={dayOfMonth}
+                onChange={(e) => setDayOfMonth(parseInt(e.target.value, 10) || 1)}
+                style={{ marginTop: 4 }}
+              />
+            </div>
+          )}
+          <div>
+            <label className="sl">Hour (0-23)</label>
+            <input
+              type="number"
+              min={0}
+              max={23}
+              value={hour}
+              onChange={(e) => setHour(parseInt(e.target.value, 10) || 0)}
+              style={{ marginTop: 4 }}
+            />
+          </div>
+        </div>
+
+        <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+          First fire: <strong>{formatNextFire(computeNextFire(new Date(), cadence, { dayOfWeek: isWeekly ? dayOfWeek : undefined, dayOfMonth: !isWeekly ? dayOfMonth : undefined, hour }).toISOString())}</strong>
+        </div>
+
+        <div className="row" style={{ marginTop: 12, gap: 6 }}>
+          <button className="bb" onClick={save} disabled={saving} style={{ fontSize: 12 }}>
+            {saving ? "Saving…" : "Create"}
+          </button>
+          <button className="bo" onClick={onClose} style={{ fontSize: 12 }}>Cancel</button>
+        </div>
+      </div>
     </div>
   );
 }
