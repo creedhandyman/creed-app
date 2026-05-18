@@ -6,6 +6,7 @@ import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
 import { t } from "@/lib/i18n";
+import { statusColor } from "@/lib/status";
 import { extractZip } from "@/lib/parser";
 import { Icon } from "../Icon";
 import PropertySearch from "../PropertySearch";
@@ -458,25 +459,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     if (await useStore.getState().showConfirm("Delete Job", "Delete this job?")) {
       await db.del("jobs", id);
       loadAll();
-    }
-  };
-
-  const statusColor = (s: string) => {
-    // ROYGBIV progression from quoted → paid. Lead sits before quoted
-    // (the "quote-not-yet-built" state from a public intake) and gets
-    // a hot pink so it visually outranks even red — these are the
-    // newest things needing attention.
-    switch (s) {
-      case "lead":       return "#ff3d6e"; // hot pink — new prospect
-      case "quoted":     return "#C00000"; // red
-      case "accepted":   return "#ff8800"; // orange
-      case "scheduled":  return "#ffcc00"; // yellow
-      case "active":     return "#00cc66"; // green
-      case "complete":   return "#2E75B6"; // blue
-      case "invoiced":   return "#6a3de8"; // indigo
-      case "paid":       return "#9d4edd"; // violet
-      case "inspection": return "#888";    // neutral
-      default:           return "#888";
     }
   };
 

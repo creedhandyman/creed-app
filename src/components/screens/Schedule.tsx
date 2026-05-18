@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import PropertySearch from "../PropertySearch";
@@ -422,39 +423,55 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             )}
             {/* Draggable chips for the first two jobs of the day. Drag to a
                 different day cell to reschedule. Long names truncate so the
-                chip stays inside the cell on narrow viewports. */}
-            {items.slice(0, 2).map((it) => (
-              <div
-                key={it.id}
-                draggable
-                onDragStart={(e) => {
-                  e.stopPropagation();
-                  e.dataTransfer.setData("text/plain", `move:${it.id}`);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onClick={(e) => {
-                  // Tap = open inline-edit modal (full title + actions).
-                  // Drag is still wired to reschedule across days.
-                  e.stopPropagation();
-                  openEdit(it);
-                }}
-                title={`${it.job}${it.note ? " — " + it.note : ""} (tap to edit)`}
-                style={{
-                  fontSize: 9,
-                  padding: "2px 4px",
-                  borderRadius: 3,
-                  background: "var(--color-primary)" + "22",
-                  color: "var(--color-primary)",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  cursor: "pointer",
-                  border: "1px solid var(--color-primary)33",
-                }}
-              >
-                {it.job}
-              </div>
-            ))}
+                chip stays inside the cell on narrow viewports. Background
+                is tinted with the linked job's status color (same palette
+                as the Jobs tab pills) so a glance at the calendar tells you
+                what state each scheduled job is in. Falls back to neutral
+                gray for freeform entries that don't map to a saved job.
+                Tap to open the inline-edit modal; drag still reschedules. */}
+            {items.slice(0, 2).map((it) => {
+              // Match the schedule entry's free-text property back to a real
+              // job. Multiple jobs can share an address (callbacks, repeat
+              // visits) — newest non-archived wins, same rule the day-detail
+              // panel below uses.
+              const linkedJob = jobs
+                .filter((j) => j.property === it.job && !j.archived)
+                .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+              const c = linkedJob ? statusColor(linkedJob.status) : "#888";
+              return (
+                <div
+                  key={it.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    e.dataTransfer.setData("text/plain", `move:${it.id}`);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onClick={(e) => {
+                    // Tap = open inline-edit modal (full title + actions).
+                    // Drag is still wired to reschedule across days.
+                    e.stopPropagation();
+                    openEdit(it);
+                  }}
+                  title={`${it.job}${linkedJob ? ` [${linkedJob.status}]` : ""}${it.note ? " — " + it.note : ""} (tap to edit)`}
+                  style={{
+                    fontSize: 9,
+                    padding: "2px 4px",
+                    borderRadius: 3,
+                    background: c + "33",
+                    color: c,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    cursor: "pointer",
+                    border: `1px solid ${c}66`,
+                    fontWeight: 600,
+                  }}
+                >
+                  {it.job}
+                </div>
+              );
+            })}
             {items.length > 2 && (
               <div style={{ fontSize: 8, color: "var(--color-primary)", textAlign: "center" }}>
                 +{items.length - 2} more
