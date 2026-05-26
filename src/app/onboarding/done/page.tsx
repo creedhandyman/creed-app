@@ -1,14 +1,21 @@
 "use client";
 /**
  * /onboarding/done — Stripe's success_url. Lands the new owner here
- * right after the Checkout completes. The Stripe webhook is racing us
- * to update org.subscription_status; we don't need to wait for it
- * because the trial is already 30 days and BillingGate will let the
- * owner in regardless of whether the webhook has landed yet.
+ * right after the Checkout completes.
  *
- * We pause for a beat so the success copy reads as a real moment
- * (rather than a flash), then bounce to "/" — the AppShell takes over
- * from there.
+ * We fire a webhook-INDEPENDENT subscription sync here
+ * (/api/stripe/verify-subscription) using the session_id from the URL.
+ * The Stripe webhook normally writes org.subscription_status, but if
+ * webhook delivery fails (wrong-domain endpoint, transient outage) the
+ * subscription would never activate. This server-side verify guarantees
+ * the org is synced the moment the owner lands here. It's idempotent —
+ * if the webhook also lands, whichever writes first wins and the other
+ * is a harmless no-op.
+ *
+ * We don't BLOCK the redirect on it: the 30-day trial means BillingGate
+ * lets the owner in regardless, and the sync completes in the
+ * background. We pause for a beat so the success copy reads as a real
+ * moment, then bounce to "/".
  */
 import { useEffect } from "react";
 
@@ -18,6 +25,19 @@ const BG = "linear-gradient(135deg, #0a0a0f, #0d1530)";
 
 export default function OnboardingDonePage() {
   useEffect(() => {
+    // Fire-and-forget subscription sync from the session_id Stripe
+    // appended to success_url. Doesn't block the redirect.
+    try {
+      const sessionId = new URLSearchParams(window.location.search).get("session_id");
+      if (sessionId) {
+        fetch("/api/stripe/verify-subscription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        }).catch(() => { /* trial covers us; webhook is the backup */ });
+      }
+    } catch { /* no-op */ }
+
     const t = setTimeout(() => { window.location.href = "/"; }, 2400);
     return () => clearTimeout(t);
   }, []);
