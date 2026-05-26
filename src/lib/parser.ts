@@ -526,15 +526,38 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
   // Bedroom 1. Now: dedup on the full detail string + comment so each
   // unique room–task pair survives, but two AI batches that produced the
   // exact same line item still collapse to one.
+  // Key on detail + the item's NORMALIZED material-name set rather than
+  // detail + comment. Two AI batches that quoted the same task often
+  // phrase the comment differently ("repaint ceiling" vs "ceiling needs
+  // repainting"), so a comment-based key let those duplicates through.
+  // The material set is stable: normalize each name by stripping
+  // parenthetical/numeric/unit noise ("Ceiling flat paint (3 gal)" →
+  // "ceiling flat paint", "LVP flooring (235.2 sqft + 10% waste)" →
+  // "lvp flooring") then sort. Same detail + same materials = the same
+  // line, regardless of wording. Distinct tasks in the same room have
+  // different details (the room prefix + task differ), so unique
+  // room–task pairs still survive — no regression on the 7-bedroom
+  // make-ready case that drove the original comment-based key.
+  const normMatName = (n: string) =>
+    n.toLowerCase()
+      .replace(/\([^)]*\)/g, " ")      // drop "(3 gal)", "(235 sqft + 10% waste)"
+      .replace(/[0-9]/g, " ")           // drop stray numbers
+      .replace(/[^a-z\s]/g, " ")        // drop punctuation/units symbols
+      .replace(/\s+/g, " ")
+      .trim();
   const globalSeen = new Set<string>();
   rooms = rooms.map((r) => ({
     ...r,
     items: r.items.filter((it) => {
       const detailKey = it.detail.toLowerCase().replace(/\s+/g, " ").trim();
-      const taskKey = it.comment.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim().slice(0, 80);
-      const key = `${detailKey}|${taskKey}`;
+      const matKey = it.materials
+        .map((m) => normMatName(m.n))
+        .filter(Boolean)
+        .sort()
+        .join("+");
+      const key = `${detailKey}|${matKey}`;
       if (globalSeen.has(key)) {
-        console.warn(`VALIDATION: Global duplicate removed — "${it.detail}"`);
+        console.warn(`VALIDATION: Global duplicate removed — "${it.detail}" [${matKey}]`);
         return false;
       }
       globalSeen.add(key);
@@ -634,10 +657,29 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
      */
     const overrideTrade = (item: RoomItem): string | null => {
       const s = (item.detail + " " + item.comment).toLowerCase();
+      const mats = item.materials.map((m) => m.n.toLowerCase()).join(" ");
       // Countertops are CARPENTRY (travel with cabinets, not floors).
       // The keyword scorer doesn't even mention countertops; "laminate"
       // alone steers it into Flooring.
       if (/counter.?top|counter top|counter-top/.test(s)) return "Carpentry";
+      // Unambiguous FLOORING work → Flooring, even when the AI dumped it
+      // into another canonical bucket. The AI likes to group a room's
+      // flooring line with that room's cabinet / door work and emit the
+      // whole thing under Carpentry (Bernard hit this on 2248 Horseshoe:
+      // Dining-Room LVP and Entry stair carpet both landed in Carpentry).
+      // Without this, the "respect the AI's canonical bucket" rule in the
+      // classifier never lets the scorer rescue them. LVP, carpet,
+      // underlayment, carpet pad, and transition strips are flooring-only
+      // materials — if they dominate the line AND the text is about
+      // floors/carpet/treads, it's Flooring. Counter guard keeps laminate
+      // countertops out.
+      if (
+        /\b(lvp|luxury vinyl|vinyl plank|laminate floor|carpet|underlayment|carpet pad|tack strip|stair tread)\b/.test(mats) &&
+        /\b(floor|flooring|carpet|lvp|vinyl|laminate|subfloor|underlayment|stair tread|tread|riser)\b/.test(s) &&
+        !/counter/.test(s)
+      ) {
+        return "Flooring";
+      }
       // Interior framing / studs / blocking / sistering — Carpentry.
       // "shower wall framing" pulls Plumbing+10 from \bshower\b in the
       // scorer; the framing pattern is more specific and wins.
@@ -1344,14 +1386,21 @@ export async function aiParseInspection(
       continue;
     }
     if (roomPhotos.length > PHOTOS_PER_BATCH) {
-      // Single room with too many photos — flush, then split this room
-      flush();
-      for (let i = 0; i < roomPhotos.length; i += PHOTOS_PER_BATCH) {
-        batches.push({
-          rooms: [room],
-          photos: roomPhotos.slice(i, i + PHOTOS_PER_BATCH),
-        });
-      }
+      // A single room with more photos than fit in one call. We used to
+      // SPLIT the room across batches — but each sub-batch carried the
+      // room's FULL text, so the AI quoted the room's entire scope once
+      // per sub-batch, producing 2-3× near-duplicate line items (the
+      // phrasing varied just enough per batch to survive dedup). This
+      // is exactly the Living-Room/Bedroom-1 duplication Bernard hit on
+      // 2248 Horseshoe (voice walk = many photos per room).
+      //
+      // Fix: keep the room WHOLE in a single batch and cap its photos at
+      // the batch size. The room's text findings carry the full repair
+      // scope; photos past the cap are supplementary for the quote (they
+      // still live on the inspection record and report). One room → one
+      // AI call → one set of line items.
+      if (curRooms.length || curPhotos.length) flush();
+      batches.push({ rooms: [room], photos: roomPhotos.slice(0, PHOTOS_PER_BATCH) });
       continue;
     }
     if (curPhotos.length + roomPhotos.length > PHOTOS_PER_BATCH) {
