@@ -175,8 +175,13 @@ export function foldLegacyTrade(name: string | undefined | null): string {
   if (n === "appliances" || /appliance/.test(n)) return "General";
   if (n === "exterior" || /exterior|siding|gutter|fence|landscape|roof/.test(n)) return "General";
   if (n === "cleaning/hauling" || n === "cleaning" || /hauling|debris|cleanup|junk/.test(n)) return "General";
-  if (n === "compliance") return "General"; // The classifier reroutes WH→HVAC, breaker/CO→Electrical at item level.
-  if (/hvac|condenser|furnace|thermostat|water heater|hot water tank/.test(n)) return "HVAC";
+  if (n === "compliance") return "General"; // The classifier reroutes WH→Plumbing, breaker/CO→Electrical, HVAC parts→HVAC at item level.
+  // Water heater is PLUMBING by trade convention. Don't lump it under
+  // HVAC — was a Round-1 mistake that put hot-water tanks in the wrong
+  // bucket. HVAC is heating/ventilation/AC (furnace, condenser, AC,
+  // thermostat, ductwork). Water heaters are water-supply work.
+  if (/water heater|hot water tank|hot.water.heater/.test(n)) return "Plumbing";
+  if (/hvac|condenser|furnace|thermostat/.test(n)) return "HVAC";
   // Truly unknown → General (better than discarding the work).
   return "General";
 }
@@ -196,22 +201,23 @@ export function foldLegacyTrade(name: string | undefined | null): string {
 // these exact 7 names — foldLegacyTrade() rescues stragglers, but the
 // prompt is the front line of defense.
 export const TRADE_CATEGORIES_PROMPT = `THE ONLY 7 VALID TRADE NAMES — use these EXACTLY, never invent others:
-- PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves, supply lines, water-line resealing at wall penetrations, dryer vents.
+- PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves, supply lines, water-line resealing at wall penetrations, dryer vents, AND water heaters / hot-water tanks (tank, tankless, gas, electric — install, replace, drain, anode, T&P valve, expansion tank).
 - ELECTRICAL: outlets, switches, switch/outlet plates, GFCI, light fixtures, bulbs, light covers, ceiling fans (electrical), breaker panel inspection, smoke alarms, CO detectors, fire extinguishers, doorbells/chimes.
 - CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, countertops (laminate/butcher block/quartz/granite/solid surface — including demo, template, install, sink/faucet reset, edge profile), interior framing and re-framing (studs, blocking, headers, joists), shower wall framing, drywall blocking for grab bars / cabinets / TVs, structural sistering, window screens, window panes/glass, full window REPLACEMENTS (sash, frame, vinyl replacement windows, weatherstripping, interior/exterior trim + perimeter caulk when bundled), full door REPLACEMENTS (slab, pre-hung, sliding patio, including weatherstripping + perimeter caulk when bundled), closet rods/shelving. Demo of carpentry items (rotted framing, old cabinets, old countertops, old windows/doors being replaced) when it's labor work goes here.
-- HVAC: water heater, hot-water tank, HVAC condenser unit, furnace, mini-split, range hood vented to exterior, HVAC filter change, thermostat replacement, ductwork.
+- HVAC: HVAC condenser unit, furnace, mini-split, range hood vented to exterior, HVAC filter change, thermostat replacement, ductwork. (Water heaters are PLUMBING — see above.)
 - PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch, drywall mud + tape + finish prep, AND all caulking and sealant work (interior trim, baseboard, standalone window/door perimeter re-caulk on EXISTING windows/doors, tub/shower bead, kitchen backsplash bead — every caulk line goes here unless it's (a) a plumbing fixture replacement that explicitly includes the bead, or (b) part of a full window/door REPLACEMENT install, in which case the perimeter caulk travels with the carpentry line). No knobs, no fixtures, no blinds.
 - FLOORING: LVP, carpet, tile, grout, cove base, transition strips, baseboards (sqft-priced), stair treads/risers.
 - GENERAL: anything that doesn't clearly fit the six trades above — siding/gutter/fence/landscape/exterior cosmetic, appliance repair (oven/stove/dishwasher/microwave/fridge/washer/dryer parts — but range hoods that vent outside go to HVAC), disposal/dump fees, debris bags, hauling time, final cleaning, interior trash-out, water softener service.
 
 FOLD-DOWN RULES (for items that used to have their own bucket):
-- Water heater, HVAC filter, thermostat, condenser unit → HVAC.
+- Water heater / hot-water tank → PLUMBING.
+- HVAC filter, thermostat, condenser unit, furnace, mini-split → HVAC.
 - Smoke/CO detector, fire extinguisher, doorbell, breaker panel → ELECTRICAL.
 - Range hood (vented to exterior) → HVAC. Microwave / oven / dishwasher / fridge / washer / dryer parts → GENERAL.
 - Siding, gutters, downspouts, fence, gates, exterior lights, landscaping, driveway → GENERAL.
 - Debris removal, dump fees, final cleaning, interior trash-out → GENERAL.
 
-A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater is HVAC, not Electrical or Plumbing. A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER General — it's Carpentry. Caulking is NEVER General — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry. If a line truly fits nowhere, choose GENERAL — do NOT invent a new trade name.`;
+A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater / hot-water tank is PLUMBING, not HVAC or Electrical (HVAC is heating/AC/ventilation, not hot water). A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER General — it's Carpentry. Caulking is NEVER General — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry. If a line truly fits nowhere, choose GENERAL — do NOT invent a new trade name.`;
 
 export const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You produce accurate, client-ready service estimates from whatever the user provides.
 
@@ -790,7 +796,10 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       const add = (trade: string, pts: number) => { scores[trade] = (scores[trade] || 0) + pts; };
 
       // Plumbing — check FIRST with strong keywords (prevents paint from stealing plumbing items).
-      // Water heater / tank intentionally NOT here — those belong to Compliance.
+      // Water heater / hot-water tank lives HERE (was Compliance, then briefly HVAC in round 1
+      // — both wrong, water heaters are plumbing by trade convention).
+      if (/water.*heater|water.*tank|hot.*water.*tank|hot.*water.*heater|tankless|\bwh\b.*replace|\banode\b|t\W?p valve|expansion tank/.test(s)) add("Plumbing", 12);
+      if (/water heater|tankless|hot water tank|anode rod|t.?p valve|expansion tank/.test(matNames)) add("Plumbing", 6);
       if (/faucet|toilet|sink|tub|drain|p.?trap|disposal|supply.*line|shut.*off|sprayer|stopper|sump|sewage|valve|pipe|aerator|diverter|dryer.*vent/.test(s)) add("Plumbing", 10);
       if (/\bshower\b/.test(s) && !/shower.*rod|shower.*curtain/.test(s)) add("Plumbing", 10);
       if (/caulk.*(tub|shower|sink|bath)|re.?caulk/.test(s)) add("Plumbing", 8);
@@ -826,12 +835,11 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       if (/towel.*bar|tp.*holder|rod|handle|latch|strike|cabinet/.test(s)) add("Carpentry", 8);
       if (/door|knob|hinge|blind|screen|mirror|shelf/.test(matNames)) add("Carpentry", 5);
 
-      // HVAC — water heater, condenser, furnace, thermostat, ductwork,
-      // HVAC filter. Range hood VENTED to exterior is HVAC too. Was
-      // split across the old "Compliance" + "Appliances" buckets; lands
-      // here in the canonical 7.
-      if (/water.*heater|water.*tank|hot.*water|condenser.*unit|condenser\b|\bfurnace\b|hvac|mini.?split|ductwork|duct\b|thermostat|hvac.*filter|heater.*filter|filter.*hvac|range.*hood.*vent|exhaust.*vent.*roof/.test(s)) add("HVAC", 12);
-      if (/water.*heater|condenser|furnace|hvac|thermostat|hvac.*filter/.test(matNames)) add("HVAC", 6);
+      // HVAC — condenser, furnace, mini-split, thermostat, ductwork,
+      // HVAC filter. Range hood VENTED to exterior is HVAC too. Water
+      // heaters are NOT here — see the Plumbing block above.
+      if (/condenser.*unit|condenser\b|\bfurnace\b|hvac|mini.?split|ductwork|duct\b|thermostat|hvac.*filter|heater.*filter|filter.*hvac|range.*hood.*vent|exhaust.*vent.*roof/.test(s)) add("HVAC", 12);
+      if (/condenser|furnace|hvac|thermostat|hvac.*filter/.test(matNames)) add("HVAC", 6);
 
       // General — siding/gutter/fence/landscape/exterior cosmetic,
       // appliance repair, disposal/cleanup, water softener service, etc.
