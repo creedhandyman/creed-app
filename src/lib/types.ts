@@ -419,6 +419,17 @@ export interface RoomItem {
    *  subtotal and shows them as a separate "Optional add-ons" line so
    *  the base quote reflects required work only. */
   optional?: boolean;
+  /** Time-and-materials / assessment-first scope. The AI emits this
+   *  for inspector comments with evaluate / investigate / assess /
+   *  "may need" / "further damage" / "underlying" language — work
+   *  whose real scope can't be known without a hands-on look.
+   *  The line carries a small assessment fee (typical 0.5-1h on-site
+   *  inspect time) and a clear T&M caveat in the comment; actual
+   *  repair pricing happens after the visit. QuoteForge surfaces a
+   *  "T&M (N)" stat tile so the owner sees how much of the quote is
+   *  inspect-first vs fixed-bid. The fee DOES roll into base subtotal
+   *  (the visit itself is billable). */
+  tnm?: boolean;
 }
 
 export interface Room {

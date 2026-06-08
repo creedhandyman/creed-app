@@ -322,6 +322,20 @@ The test before you emit a multi-clause line: does every clause belong to the sa
 
 7a. OPTIONAL FIELD. When a line is an upsell/recommendation (per rule 7), include "optional": true in the item JSON. Default is false / omitted for base-quote items. Examples that go optional=true: "Install doorbell (currently no doorbell)", "Add window screen where none present", "Recommended deep-clean of unit prior to move-in". Examples that stay base (optional=false / omitted): "Replace existing broken doorbell", "Repair torn window screen", "Final cleaning required after construction".
 
+7b. T&M / ASSESSMENT-FIRST LINES. When the inspector comment uses scope-unknown language (evaluate, investigate, assess, "may need", "further damage", "underlying", "to be determined", "scope TBD", "depending on what's found", "could require", "potentially") — the real repair scope can't be known without a hands-on look. DO NOT invent a fixed hours/materials estimate that will be wrong either way. Instead:
+- Set "tnm": true on the item.
+- laborHrs: 0.5–1.0 (the on-site assessment time only — NOT a guess at the repair).
+- materials: empty array [] or a single tiny "Diagnostic supplies" line under $20. NO speculative big-ticket items (water heater, drywall sheets, etc.) on a T&M line.
+- comment: lead with "ASSESSMENT REQUIRED — " and explicitly state that the line covers the diagnostic visit only; actual repair will be quoted as a change order after the visit.
+- detail: prefix the task with "[T&M] " so it reads "Bathroom — [T&M] Evaluate tub surround for hidden rot".
+Examples that go tnm=true: "Investigate boards behind tub for underlying damage", "Water heater assessment to determine if replacement is required", "Assess subfloor for further damage after carpet removal", "Evaluate and re-caulk tub surround; repair or replace as needed". Examples that stay fixed (tnm=false / omitted): "Re-caulk tub surround" (scope is known), "Replace water heater" (scope is known), "Patch subfloor around toilet flange" (scope is known).
+
+7c. ROOM SQFT PROPAGATION (CRITICAL for area-driven work). The inspection text gives each room's sqft on the "Room Size: N square feet" line under the room header. When you emit a Flooring or Painting (wall/ceiling/full-repaint) line for that room, you MUST set "sqft": N on the line item with the room's sqft value. This populates the editor's SQFT column and grounds the per-sqft labor/materials math in real area. Examples:
+- Inspection: "=== Living Room === Room Size: 235 square feet" + "Flooring: POOR — Replace with LVP" → emit Flooring item with "sqft": 235.
+- Inspection: "=== Bedroom 1 === Room Size: 168 square feet" + "Walls/Ceiling: P — Full repaint walls and ceiling" → emit Painting item with "sqft": 168.
+- Room with no Room Size line (sqft unknown to the inspector) → omit the sqft field; note "(sqft TBD on site)" in the comment so the owner knows the hours are an estimate.
+The sqft you put on the item should match the room's stated sqft. Don't divide it across multiple line items in the same room — each flooring/painting line in that room gets the same sqft (the room area), not a fraction.
+
 8. ENUMERATE EVERY DISTINCT ISSUE inside a comment. Inspection cells routinely chain multiple separate repairs in one cell, separated by periods, semicolons, "and", or commas. Each is a distinct repair you must scope. Walk the comment sentence by sentence — if there are 4 sentences describing 4 issues, you owe 4 line items (or one line with 4 materials, whichever fits the trade). The fact that the inspector wrote them in one cell is shorthand; you must un-shorthand it.
 - Example: "All blinds missing, four 28x64 needed. Broken window pane, needs replacement." → blinds (qty 4) AND a window pane material. Never just the blinds.
 - Example: "Replace entry door, deadbolt, and lock" → THREE materials: 36" pre-hung door, deadbolt set, lock cylinder. Never just the deadbolt.

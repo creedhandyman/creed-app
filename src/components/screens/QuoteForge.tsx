@@ -979,6 +979,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const base = all.filter((i) => !i.optional);
   const optionalItems = all.filter((i) => i.optional);
   const optionalSubtotal = Math.round(optionalItems.reduce((s, i) => s + i.tot, 0) * 100) / 100;
+  // F5 — T&M / assessment-first lines. These DO roll into base
+  // subtotal (the assessment visit itself is billable), but we surface
+  // the count + dollar amount on its own stat tile so the owner sees
+  // how much of the headline number is "inspect first, then quote
+  // real scope" vs fixed-bid. Important when the customer asks
+  // "is this the final price?" — anything T&M is explicitly not.
+  const tnmItems = base.filter((i) => i.tnm);
+  const tnmSubtotal = Math.round(tnmItems.reduce((s, i) => s + i.tot, 0) * 100) / 100;
   const subtotalRaw = base.reduce((s, i) => s + i.tot, 0);
   const tlRaw = base.reduce((s, i) => s + i.lc, 0);
   const tm = base.reduce((s, i) => s + i.mc, 0);
@@ -2032,6 +2040,17 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             l: `Optional (${optionalItems.length})`,
             v: "+ $" + optionalSubtotal.toFixed(0),
             c: "#9d4edd",
+          }] : []),
+          // F5 — T&M / Assessment-first stat tile. The fee IS in the
+          // base subtotal (assessment visit is billable), but we flag
+          // count + amount so the owner can clearly tell the customer
+          // "$X of this quote is a diagnostic visit; the actual repair
+          // is quoted after we see it." Orange because it's a yellow-
+          // flag scope, not an upsell.
+          ...(tnmItems.length > 0 ? [{
+            l: `T&M (${tnmItems.length})`,
+            v: "$" + tnmSubtotal.toFixed(0),
+            c: "var(--color-warning)",
           }] : []),
           ...(discountAmount > 0 ? [{
             l: discount?.type === "percent" ? `Discount ${discount.value}%` : "Discount",
