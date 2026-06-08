@@ -84,6 +84,8 @@ import {
   Calculator,
   Folder,
   Mic,
+  Layers,
+  Leaf,
   type LucideIcon,
 } from "lucide-react";
 
@@ -173,6 +175,8 @@ const ICONS: Record<string, LucideIcon> = {
   fire: Flame,
   bell: Bell,
   mic: Mic,
+  layers: Layers,
+  leaf: Leaf,
   cart: ShoppingCart,
   calc: Calculator,
   folder: Folder,

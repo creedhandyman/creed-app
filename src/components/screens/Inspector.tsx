@@ -156,7 +156,8 @@ const STRUCTURAL_PRESETS: Record<string, string[]> = {
 interface InspectionTypeConfig {
   id: InspectionType;
   label: string;
-  emoji: string;
+  /** Lucide icon name registered in src/components/Icon.tsx. */
+  icon: string;
   description: string;
   /** Areas suggested in the room-selection chip grid. Switching types
    *  re-renders the grid against this list AND filters the current
@@ -183,7 +184,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
   {
     id: "move-out",
     label: "Move Out",
-    emoji: "📦",
+    icon: "package",
     description: "Standard move-out walkthrough — condition per item across every area.",
     suggestedRooms: ROOM_ORDER,
     itemsForRoom: moveOutItems,
@@ -191,7 +192,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
   {
     id: "flooring",
     label: "Flooring Only",
-    emoji: "🪵",
+    icon: "layers",
     description: "Floor-only inspection — sqft + condition per room.",
     // Skip non-floor areas (Compliance/Exterior have no flooring to track).
     suggestedRooms: ROOM_ORDER.filter((r) => !["Compliance", "Exterior"].includes(r)),
@@ -200,7 +201,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
   {
     id: "painting",
     label: "Painting Only",
-    emoji: "🎨",
+    icon: "paint",
     description: "Painted-surface inspection — walls, ceilings, trim, doors.",
     suggestedRooms: ROOM_ORDER.filter((r) => !["Compliance", "Exterior"].includes(r)),
     itemsForRoom: () => PAINTING_ITEMS,
@@ -208,7 +209,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
   {
     id: "yard",
     label: "Yard Cutting",
-    emoji: "🌿",
+    icon: "leaf",
     description: "Recurring lawn/landscape service — task checklist per area.",
     suggestedRooms: YARD_AREAS,
     itemsForRoom: (r) => YARD_PRESETS[r] || ["Mow", "Cleanup"],
@@ -216,7 +217,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
   {
     id: "initial",
     label: "Initial Walkthrough",
-    emoji: "🔍",
+    icon: "list",
     description: "Comprehensive first visit — interior rooms + structural/MEP baseline.",
     suggestedRooms: [...ROOM_ORDER, ...STRUCTURAL_AREAS],
     itemsForRoom: (r) => STRUCTURAL_PRESETS[r] || moveOutItems(r),
@@ -800,9 +801,17 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                     border: `1px solid var(--color-primary)`,
                     cursor: "pointer",
                     whiteSpace: "nowrap",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
                   }}
                 >
-                  <span style={{ marginRight: 4 }}>{t.emoji}</span>
+                  <Icon
+                    name={t.icon}
+                    size={14}
+                    color={active ? "#fff" : "var(--color-primary)"}
+                    strokeWidth={2}
+                  />
                   {t.label}
                 </button>
               );
