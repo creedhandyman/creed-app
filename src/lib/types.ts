@@ -411,6 +411,14 @@ export interface RoomItem {
    *  classifier exists to rescue AI miscategorizations; manual entries
    *  are sacred and should never get rebucketed by either pass. */
   userClassified?: boolean;
+  /** Upsell / recommended add-on, not part of the base quote. The AI
+   *  emits this for inspector rows that flag an item as "not present /
+   *  could not test / recommended" rather than required maintenance
+   *  (e.g. "Install doorbell — currently no doorbell present"). The
+   *  QuoteForge editor excludes optional items from the headline
+   *  subtotal and shows them as a separate "Optional add-ons" line so
+   *  the base quote reflects required work only. */
+  optional?: boolean;
 }
 
 export interface Room {

@@ -296,11 +296,25 @@ ALWAYS keep c = qty × unitPrice when you set both.
    Plumbing, Electrical, Carpentry, HVAC, Painting, Flooring, General
    Anything that doesn't obviously fit the first six trades goes in General. NEVER invent new trade names (no "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling" — see fold-down rules in the trade-categories section).
 
-5. COMBINE RELATED ITEMS in the same room. "Replace outlet cover" + "replace switch plate" in Kitchen = one Electrical line item. "Touch up wall paint" + "patch holes" = one Painting line item.
+5. COMBINE RELATED ITEMS in the same room ONLY when they're the same trade and the same task. "Replace outlet cover" + "replace switch plate" in Kitchen = one Electrical line item (both Electrical, both finish-trim). "Touch up wall paint" + "patch holes" = one Painting line item (both Painting). DO NOT combine ACROSS TRADES — see rule 5a.
 
-6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "General Supplies" item under Painting, NOT duplicated per room.
+5a. ONE LINE = ONE TASK = ONE TRADE. When a single inspector comment spans two trades, SPLIT it into two line items (one per trade). Do not bury cross-trade work inside one line. Examples:
+- "Replace window blind and repair cracked interior window pane" → TWO lines, both Carpentry (covering vs glazing): one "Replace window blind", one "Repair cracked window pane".
+- "Patch drywall, repaint walls" → TWO lines: Carpentry "Drywall patch" + Painting "Repaint walls" (drywall mud belongs with the patch under Carpentry; finish paint is Painting).
+- "Caulk window trim and missing frame/screen" → TWO lines: Painting "Caulk window trim" + Carpentry "Replace missing window screen".
+- "Evaluate and re-caulk tub surround; repair or replace" → TWO lines: Plumbing "Re-caulk tub surround" + (if a repair/replace scope is described) Carpentry "Tub-surround repair/replace" (tile/cement-board carpentry).
+The test before you emit a multi-clause line: does every clause belong to the same trade? If yes, one line. If no, split.
 
-7. ONLY QUOTE MAINTENANCE ITEMS. Skip a row ONLY when BOTH condition is "S" AND action is "None". A row with condition P / F / D is still a maintenance item even if the inspector mistakenly wrote "Action: None" — the CONDITION RATING IS AUTHORITATIVE. Inspectors occasionally tag a damaged item with action None by mistake (e.g. Driveway/Floor — P — None — "Cracked driveway throughout, repairs needed"). Do not let that drop the line — quote it from the comment.
+6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "Whole property — Painting Supplies" item under Painting. CRITICAL: This is a materials-only line — laborHrs MUST be 0. Supplies are consumables, not a labor task. Same rule for any other shared-consumables line you create (drywall mud kit, miscellaneous fasteners, etc.). NEVER duplicate supplies per room.
+
+7. ACTIONS-COLUMN POLICY. Each summary-table row carries an "Action" value (Maintenance / None) plus a Comment. Apply this precedence:
+- Action = Maintenance → ALWAYS emit a line. (Skip only when BOTH condition is "S" AND action is "None" — see end of this rule.)
+- Action = None AND comment has an explicit install/replace/repair verb → emit a line (the inspector mistagged).
+- Action = None AND comment is an absence/recommendation ("Not present", "Could not test but appears operable", "Recommended", "No closet present", "No garbage disposal present", "Optional upgrade") → emit a line BUT set "optional": true on the item JSON so it lands in the Optional Add-Ons bucket, NOT the base quote. The owner can promote it to base with one click in the editor.
+- Action = None AND condition = "S" with no actionable comment → SKIP (no line).
+- A row with condition P / F / D is still a maintenance item even if the inspector mistakenly wrote "Action: None" — the CONDITION RATING IS AUTHORITATIVE. Inspectors occasionally tag a damaged item with action None by mistake (e.g. Driveway/Floor — P — None — "Cracked driveway throughout, repairs needed"). Do not let that drop the line — quote it from the comment.
+
+7a. OPTIONAL FIELD. When a line is an upsell/recommendation (per rule 7), include "optional": true in the item JSON. Default is false / omitted for base-quote items. Examples that go optional=true: "Install doorbell (currently no doorbell)", "Add window screen where none present", "Recommended deep-clean of unit prior to move-in". Examples that stay base (optional=false / omitted): "Replace existing broken doorbell", "Repair torn window screen", "Final cleaning required after construction".
 
 8. ENUMERATE EVERY DISTINCT ISSUE inside a comment. Inspection cells routinely chain multiple separate repairs in one cell, separated by periods, semicolons, "and", or commas. Each is a distinct repair you must scope. Walk the comment sentence by sentence — if there are 4 sentences describing 4 issues, you owe 4 line items (or one line with 4 materials, whichever fits the trade). The fact that the inspector wrote them in one cell is shorthand; you must un-shorthand it.
 - Example: "All blinds missing, four 28x64 needed. Broken window pane, needs replacement." → blinds (qty 4) AND a window pane material. Never just the blinds.
@@ -885,6 +899,26 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
         if (!alreadyHasRoom && !it.detail.includes(" — ") && !it.detail.includes(" - ") && roomPrefix) {
           it.detail = `${roomPrefix} — ${it.detail}`;
         }
+        // F6 location-fallback fix: if `detail` starts with a TRADE name
+        // followed by an em-dash/dash (e.g. "Painting — General Supplies",
+        // "Compliance — Compliance — XYZ"), the editor parses the trade
+        // name as the room/location, so the LOCATION column displays
+        // "Painting" / "Compliance". Replace that leading trade-as-
+        // location with "Whole property" so shared/no-room items render
+        // sensibly. Idempotent: re-running on "Whole property — ..." is a
+        // no-op since "Whole property" isn't in TRADE_CATEGORIES.
+        const tradeAsLocPrefix = TRADE_CATEGORIES.find((t) => {
+          const lc = it.detail.toLowerCase();
+          return lc.startsWith(t.toLowerCase() + " —") || lc.startsWith(t.toLowerCase() + " -");
+        });
+        if (tradeAsLocPrefix) {
+          // Strip the leading "Trade — " (any number of repeats — handles
+          // "Painting — Painting — General Supplies" from a stale run).
+          it.detail = it.detail.replace(
+            new RegExp(`^(?:(?:${TRADE_CATEGORIES.join("|")})\\s*[—\\-]\\s*)+`, "i"),
+            "Whole property — "
+          );
+        }
         if (!tradeMap[trade]) tradeMap[trade] = [];
         tradeMap[trade].push(it);
       });
@@ -1285,7 +1319,10 @@ async function aiParsePdfSingle(
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    // Add IDs to items
+    // Add IDs to items. We `...it` spread first so any extra fields the
+    // AI emitted (notably `optional: true` for upsell rows per the
+    // Actions-column policy) survive into the RoomItem. Subsequent
+    // explicit fields (laborHrs, materials) override the spread.
     const rooms: Room[] = (parsed.rooms || []).map(
       (r: { name: string; items: Array<Omit<RoomItem, "id">> }) => ({
         name: r.name,
