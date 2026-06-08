@@ -572,6 +572,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         rooms: data.rooms,
         property: data.property,
         client: data.client,
+        inspectionType: data.inspection_type,
       };
       let licensedTradesInsp: string[] = [];
       try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }

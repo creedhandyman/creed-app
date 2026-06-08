@@ -1410,18 +1410,39 @@ export interface InspectionInput {
   }[];
   property: string;
   client: string;
+  /** The inspection flavor the user picked at the start
+   *  ("move-out" | "flooring" | "painting" | "yard" | "initial").
+   *  Optional — older saved inspections don't carry it; default
+   *  behavior is the same as move-out. The AI prompt uses this to
+   *  scope which kinds of line items to emit (single-trade survey
+   *  vs comprehensive walk vs recurring yard service). */
+  inspectionType?: string;
 }
 
 /** Compile a subset of inspection rooms into the structured text the AI expects. */
 function compileInspectionText(
   rooms: InspectionInput["rooms"],
   property: string,
-  client: string
+  client: string,
+  inspectionType?: string,
 ): string {
   let text = `PROPERTY INSPECTION REPORT\n`;
   text += `Property: ${property}\n`;
   text += `Client: ${client}\n`;
-  text += `Date: ${new Date().toLocaleDateString()}\n\n`;
+  text += `Date: ${new Date().toLocaleDateString()}\n`;
+  // Surface the inspection type so the AI knows what kind of scope to
+  // emit. Move-out (default) = standard comprehensive quote. The other
+  // four types narrow / shift the scope per the brief below.
+  if (inspectionType && inspectionType !== "move-out") {
+    const brief: Record<string, string> = {
+      flooring: "FLOORING-ONLY survey — quote ONLY flooring work (LVP, carpet, tile, sqft-priced baseboards/cove base). Every line item MUST be in the Flooring trade bucket. Skip any non-flooring findings even if mentioned in passing.",
+      painting: "PAINTING-ONLY survey — quote ONLY painted-surface work (wall paint, ceiling paint, trim/baseboard paint, door paint, window-casing paint, drywall patch + paint, caulking). Every line item MUST be in the Painting trade bucket.",
+      yard: "RECURRING YARD/GROUNDS service — this is NOT a one-time repair quote. Quote a recurring service (per-visit pricing for mow/edge/trim/cleanup tasks). Group line items under the General trade bucket. Do not include carpentry, plumbing, electrical, or HVAC items.",
+      initial: "INITIAL BASELINE walkthrough — comprehensive scope across interior rooms AND structural/MEP areas (foundation, roof, drainage, electrical panel, HVAC, plumbing, water heater). Treat this as a property-condition baseline; surface every meaningful finding even when it's data-capture rather than required repair (e.g. note Panel Brand, HVAC tonnage, water-heater age). Use the standard 7-trade taxonomy.",
+    };
+    text += `Inspection Type: ${inspectionType}\n${brief[inspectionType] || ""}\n`;
+  }
+  text += `\n`;
 
   rooms.forEach((room) => {
     text += `=== ${room.name} ===\n`;
@@ -1534,7 +1555,7 @@ export async function aiParseInspection(
   // No rooms at all — single text-only call.
   if (batches.length === 0) {
     onProgress?.("Identifying repairs from findings...");
-    const text = compileInspectionText(inspection.rooms, inspection.property, inspection.client);
+    const text = compileInspectionText(inspection.rooms, inspection.property, inspection.client, inspection.inspectionType);
     return aiParsePdf(text, [], laborRate, licensedTrades, zip);
   }
 
@@ -1548,7 +1569,7 @@ export async function aiParseInspection(
       ? `${b.photos.length} photo${b.photos.length === 1 ? "" : "s"}`
       : "text only";
     onProgress?.(`${prefix}analyzing ${photoLabel}...`);
-    const text = compileInspectionText(b.rooms, inspection.property, inspection.client);
+    const text = compileInspectionText(b.rooms, inspection.property, inspection.client, inspection.inspectionType);
     const imageData = b.photos.length ? await fetchPhotosAsBase64(b.photos) : [];
     const r = await aiParsePdf(text, imageData, laborRate, licensedTrades, zip);
     if (r) partials.push(r);

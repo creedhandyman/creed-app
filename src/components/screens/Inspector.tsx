@@ -105,6 +105,124 @@ const ROOM_ORDER = [
   "Exterior", "Compliance",
 ];
 
+/* ── Inspection types ───────────────────────────────────────────────
+   Five entry-flow flavors. The user picks one before selecting areas;
+   the choice controls which areas appear in the chip grid AND which
+   item checklist each area walks through. The choice also gets
+   stamped on the resulting InspectionData so the AI parser knows
+   what kind of work to scope. */
+
+export type InspectionType = "move-out" | "flooring" | "painting" | "yard" | "initial";
+
+const PAINTING_ITEMS = ["Walls", "Ceiling", "Trim/Baseboards", "Doors", "Window Casings"];
+const FLOORING_ITEMS = ["Flooring"];
+
+// Yard/landscape areas — used by the Yard Cutting type. Each area has
+// its own item preset focused on recurring grounds tasks rather than
+// repair conditions.
+const YARD_AREAS = [
+  "Front Yard", "Back Yard", "Side Yard", "Driveway",
+  "Walkways", "Fence", "Landscaping Beds",
+];
+
+const YARD_PRESETS: Record<string, string[]> = {
+  "Front Yard": ["Mow", "Edge", "Trim Shrubs", "Cleanup", "Debris Haul"],
+  "Back Yard":  ["Mow", "Edge", "Trim Shrubs", "Cleanup", "Debris Haul"],
+  "Side Yard":  ["Mow", "Edge", "Trim", "Cleanup"],
+  "Driveway":   ["Blow Off Debris", "Weed Control", "Edge"],
+  "Walkways":   ["Blow Off", "Edge", "Weed Control"],
+  "Fence":      ["Visual Check", "Weed/Vine Clear", "Stain Touch-up"],
+  "Landscaping Beds": ["Mulch Refresh", "Weed Pull", "Plant Trim", "Pest Check"],
+};
+
+// Structural / MEP areas — used by the Initial Walkthrough type to
+// capture a comprehensive baseline (foundation/roof/HVAC/etc.) beyond
+// the standard interior rooms.
+const STRUCTURAL_AREAS = [
+  "Foundation", "Roof", "Drainage",
+  "Electrical Panel", "HVAC System", "Plumbing", "Water Heater",
+];
+
+const STRUCTURAL_PRESETS: Record<string, string[]> = {
+  "Foundation":      ["Cracks", "Water Pooling", "Settling/Bowing"],
+  "Roof":            ["Shingle Condition", "Flashing", "Age / Material", "Visible Water Pooling"],
+  "Drainage":        ["Gutter Attached", "Downspout Extension", "Grade Slope"],
+  "Electrical Panel": ["Main Breaker Amp", "Brand", "Open Slots", "Aluminum Wiring"],
+  "HVAC System":     ["Fuel Source", "Tonnage / BTU", "Manufacture Date", "Filter Size"],
+  "Plumbing":        ["Supply Line Material", "Visible Corrosion", "Slow Drains"],
+  "Water Heater":    ["Capacity (gal)", "Power Source", "Manufacture Date", "T&P Valve"],
+};
+
+interface InspectionTypeConfig {
+  id: InspectionType;
+  label: string;
+  emoji: string;
+  description: string;
+  /** Areas suggested in the room-selection chip grid. Switching types
+   *  re-renders the grid against this list AND filters the current
+   *  selection down to areas the new type recognizes (so a yard
+   *  inspection never carries over "Kitchen" silently). */
+  suggestedRooms: string[];
+  /** Per-area item checklist override. When omitted, the type uses the
+   *  standard ROOM_PRESETS lookup. Flooring/Painting Only override to
+   *  a fixed item set per room. Yard uses YARD_PRESETS. Initial extends
+   *  ROOM_PRESETS with STRUCTURAL_PRESETS for the structural areas. */
+  itemsForRoom: (room: string) => string[];
+}
+
+const moveOutItems = (room: string): string[] => {
+  const exact = ROOM_PRESETS[room];
+  if (exact) return exact;
+  const baseKey = Object.keys(ROOM_PRESETS).find(
+    (k) => room.startsWith(k.replace(/ \d+$/, "")),
+  );
+  return baseKey ? ROOM_PRESETS[baseKey] : ["General"];
+};
+
+export const INSPECTION_TYPES: InspectionTypeConfig[] = [
+  {
+    id: "move-out",
+    label: "Move Out",
+    emoji: "📦",
+    description: "Standard move-out walkthrough — condition per item across every area.",
+    suggestedRooms: ROOM_ORDER,
+    itemsForRoom: moveOutItems,
+  },
+  {
+    id: "flooring",
+    label: "Flooring Only",
+    emoji: "🪵",
+    description: "Floor-only inspection — sqft + condition per room.",
+    // Skip non-floor areas (Compliance/Exterior have no flooring to track).
+    suggestedRooms: ROOM_ORDER.filter((r) => !["Compliance", "Exterior"].includes(r)),
+    itemsForRoom: () => FLOORING_ITEMS,
+  },
+  {
+    id: "painting",
+    label: "Painting Only",
+    emoji: "🎨",
+    description: "Painted-surface inspection — walls, ceilings, trim, doors.",
+    suggestedRooms: ROOM_ORDER.filter((r) => !["Compliance", "Exterior"].includes(r)),
+    itemsForRoom: () => PAINTING_ITEMS,
+  },
+  {
+    id: "yard",
+    label: "Yard Cutting",
+    emoji: "🌿",
+    description: "Recurring lawn/landscape service — task checklist per area.",
+    suggestedRooms: YARD_AREAS,
+    itemsForRoom: (r) => YARD_PRESETS[r] || ["Mow", "Cleanup"],
+  },
+  {
+    id: "initial",
+    label: "Initial Walkthrough",
+    emoji: "🔍",
+    description: "Comprehensive first visit — interior rooms + structural/MEP baseline.",
+    suggestedRooms: [...ROOM_ORDER, ...STRUCTURAL_AREAS],
+    itemsForRoom: (r) => STRUCTURAL_PRESETS[r] || moveOutItems(r),
+  },
+];
+
 const CONDITIONS = [
   { code: "S", label: "OK", color: "var(--color-success)", bg: "#00cc6622" },
   { code: "F", label: "Fair", color: "var(--color-highlight)", bg: "#ffcc0022" },
@@ -127,6 +245,13 @@ export interface InspectionData {
    *  of truth. */
   customer_id?: string;
   address_id?: string;
+  /** Which inspection flavor the user picked at the start (move-out /
+   *  flooring / painting / yard / initial). Stamped here so QuoteForge
+   *  can pass it to the AI parser and downstream code knows whether
+   *  this is a comprehensive inspection, a single-trade survey, or a
+   *  recurring yard-cutting log. Optional / defaults to "move-out"
+   *  for backward compatibility with saved data. */
+  inspection_type?: InspectionType;
 }
 
 interface Props {
@@ -190,6 +315,16 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   const [addressId, setAddressId] = useState<string | undefined>(
     () => isEditing ? editing!.initialData.address_id : loadSaved<string | undefined>("addressId", undefined),
   );
+  // The active inspection type drives which areas + items per area get
+  // suggested. Default to "move-out" so existing saved inspections that
+  // don't have a type field land on the right preset.
+  const [inspectionType, setInspectionType] = useState<InspectionType>(() =>
+    isEditing
+      ? (editing!.initialData.inspection_type || "move-out")
+      : loadSaved("inspectionType", "move-out" as InspectionType),
+  );
+  const activeTypeConfig =
+    INSPECTION_TYPES.find((t) => t.id === inspectionType) || INSPECTION_TYPES[0];
   const [currentRoomIdx, setCurrentRoomIdx] = useState(() =>
     isEditing ? 0 : loadSaved("roomIdx", 0),
   );
@@ -238,6 +373,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   useEffect(() => save("customerId", customerId), [customerId, save]);
   useEffect(() => save("addressId", addressId), [addressId, save]);
   useEffect(() => save("roomIdx", currentRoomIdx), [currentRoomIdx, save]);
+  useEffect(() => save("inspectionType", inspectionType), [inspectionType, save]);
   // Save roomData but limit photo URLs to prevent localStorage overflow
   useEffect(() => {
     try {
@@ -390,15 +526,19 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     // selection screen) with a fresh checklist; drop rooms the user
     // un-selected. A bare reset would obliterate hours of inspection
     // data the user is trying to extend.
+    // Type-aware item picker. Falls back to the standard ROOM_PRESETS
+    // for any area the active type doesn't have an override for.
+    const itemsFor = (room: string): string[] => {
+      const fromType = activeTypeConfig.itemsForRoom(room);
+      return fromType.length > 0 ? fromType : ["General"];
+    };
+
     if (isEditing) {
       const existing = new Map(roomData.map((r) => [r.name, r]));
       const data = selectedRooms.map((room) => {
         const prior = existing.get(room);
         if (prior) return prior;
-        const presetKey = Object.keys(ROOM_PRESETS).find(
-          (k) => k === room || room.startsWith(k.replace(/ \d+$/, "")),
-        );
-        const items = (presetKey ? ROOM_PRESETS[presetKey] : ["General"]).map(
+        const items = itemsFor(room).map(
           (name) => ({ name, condition: "S", notes: "", photos: [] }),
         );
         return { name: room, sqft: 0, items };
@@ -409,10 +549,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
       return;
     }
     const data = selectedRooms.map((room) => {
-      const presetKey = Object.keys(ROOM_PRESETS).find(
-        (k) => k === room || room.startsWith(k.replace(/ \d+$/, ""))
-      );
-      const items = (presetKey ? ROOM_PRESETS[presetKey] : ["General"]).map(
+      const items = itemsFor(room).map(
         (name) => ({ name, condition: "S", notes: "", photos: [] })
       );
       return { name: room, sqft: 0, items };
@@ -528,6 +665,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
       client,
       customer_id: customerId,
       address_id: addressId,
+      inspection_type: inspectionType,
     });
   };
 
@@ -623,11 +761,63 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           />
         </div>
 
+        {/* Inspection-type chip strip. Five flavors; the active one
+            drives both the suggested-rooms grid below AND the per-area
+            item checklist each room walks through. Switching types
+            filters the current selection to areas the new type
+            recognizes (never auto-discards picks the new type still
+            supports — Move-Out → Flooring keeps Kitchen/Living Room
+            etc.; Move-Out → Yard drops them because Yard has its own
+            area set). */}
+        <div className="cd mb" style={{ padding: 10 }}>
+          <h4 style={{ fontSize: 13, marginBottom: 6 }}>Inspection Type</h4>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+            {INSPECTION_TYPES.map((t) => {
+              const active = t.id === inspectionType;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    if (t.id === inspectionType) return;
+                    setInspectionType(t.id);
+                    // Filter the current selection down to areas the
+                    // new type knows about. Move-Out → Flooring keeps
+                    // shared rooms; Move-Out → Yard drops everything.
+                    setSelectedRooms((prev) =>
+                      prev.filter((r) => t.suggestedRooms.includes(r)),
+                    );
+                  }}
+                  title={t.description}
+                  style={{
+                    flexShrink: 0,
+                    padding: "6px 12px",
+                    borderRadius: 16,
+                    fontSize: 12,
+                    fontFamily: "Oswald",
+                    letterSpacing: ".04em",
+                    background: active ? "var(--color-primary)" : "transparent",
+                    color: active ? "#fff" : "var(--color-primary)",
+                    border: `1px solid var(--color-primary)`,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span style={{ marginRight: 4 }}>{t.emoji}</span>
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="dim" style={{ fontSize: 11, margin: "6px 0 0" }}>
+            {activeTypeConfig.description}
+          </p>
+        </div>
+
         {/* Room checklist */}
         <div className="cd mb">
           <h4 style={{ fontSize: 13, marginBottom: 8 }}>Select Areas to Inspect</h4>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-            {ROOM_ORDER.map((room) => {
+            {activeTypeConfig.suggestedRooms.map((room) => {
               const checked = selectedRooms.includes(room);
               return (
                 <label
