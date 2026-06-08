@@ -53,7 +53,15 @@ export default function Home() {
       startAutoRefresh();
       return () => stopAutoRefresh();
     }
-  }, [user, startAutoRefresh, stopAutoRefresh]);
+    // Key on user.id, NOT the user object reference. The previous
+    // `[user, ...]` dep fired this effect twice per visit: once from the
+    // localStorage-rehydrated cached user, then again when initAuth
+    // re-set the same user with a fresh object reference. Each re-fire
+    // ran startAutoRefresh → loadAll, which pulled all 14 tables a
+    // second time. ~30 redundant Supabase queries per visit. Keying on
+    // user?.id collapses that to a single fire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, startAutoRefresh, stopAutoRefresh]);
 
   // Don't render until client-side to avoid hydration mismatch
   if (!mounted) {

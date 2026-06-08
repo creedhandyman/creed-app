@@ -19,6 +19,12 @@ import type {
   ReviewRequest,
 } from "./types";
 
+// Tracks the currently-running loadAll() promise so overlapping callers
+// share one batch of queries instead of each spawning their own 14-table
+// fetch. Module-level (not store state) so the in-flight tracking doesn't
+// trigger re-renders. Cleared in the finally() after the batch resolves.
+let loadAllInFlight: Promise<void> | null = null;
+
 /* ── localStorage helpers ── */
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -250,6 +256,17 @@ export const useStore = create<AppState>((set, get) => ({
   loading: true,
 
   loadAll: async () => {
+    // Concurrency guard. Many event handlers (Jobs, Quests, Branding,
+    // HR, Stripe redirect, the 15s auto-refresh interval, the
+    // startAutoRefresh trigger in page.tsx) all call loadAll and can
+    // overlap — e.g. user lands on a page that just toggled a job
+    // status milliseconds before the auto-refresh interval fires.
+    // Without this guard each caller spawns its own batch of 14
+    // queries. With it, overlapping callers share the in-flight
+    // promise and we run the batch exactly once. Module-level (vs
+    // store state) so the guard doesn't trigger re-renders.
+    if (loadAllInFlight) return loadAllInFlight;
+    loadAllInFlight = (async () => {
     const orgId = get().user?.org_id;
     const orgFilter = orgId ? { org_id: orgId } : undefined;
     // db.get already catches and resolves to [] on per-table failures,
@@ -302,6 +319,8 @@ export const useStore = create<AppState>((set, get) => ({
       const orgs = await db.get<Organization>("organizations", { id: orgId });
       if (orgs.length) { set({ org: orgs[0] }); sv("org", orgs[0]); }
     }
+    })().finally(() => { loadAllInFlight = null; });
+    return loadAllInFlight;
   },
 
   /* ── Customer + Address helpers ──────────────────────────────────
