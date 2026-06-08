@@ -151,7 +151,35 @@ export async function renderPdfPages(
  * Keep this and TRADE_CATEGORIES_PROMPT below in sync — adding a bucket
  * here means describing it in the prompt too.
  */
-export const TRADE_CATEGORY_LIST = ["Painting", "Flooring", "Carpentry", "Plumbing", "Electrical", "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling"] as const;
+// Canonical 7-trade taxonomy. Matches the Job.trade UI enum
+// (Operations.tsx + Jobs.tsx dropdown). The parser used to emit 10
+// buckets (Safety / Appliances / Exterior / Compliance / Cleaning/Hauling
+// in addition) and that drift caused downstream filtering/rollup to
+// silently miss line items. Anything outside the 7 is folded into one
+// of these via foldLegacyTrade() — most fall to "General".
+export const TRADE_CATEGORY_LIST = ["Plumbing", "Electrical", "Carpentry", "HVAC", "Painting", "Flooring", "General"] as const;
+
+/** Map any non-canonical trade name (the AI's 10-bucket legacy
+ *  emissions, or anything the model invents) into one of the 7
+ *  canonical buckets. Case-insensitive. Returns null when the input
+ *  is already canonical so the caller can leave it untouched. */
+export function foldLegacyTrade(name: string | undefined | null): string {
+  if (!name) return "General";
+  const n = name.trim().toLowerCase();
+  // Already canonical — preserve exact casing from the canonical list.
+  for (const c of TRADE_CATEGORY_LIST) {
+    if (c.toLowerCase() === n) return c;
+  }
+  // Legacy 10-bucket names and common AI-invented variants.
+  if (n === "safety" || /smoke|co.*detect|fire.*ext|carbon.*monox|alarm|extinguisher/.test(n)) return "Electrical";
+  if (n === "appliances" || /appliance/.test(n)) return "General";
+  if (n === "exterior" || /exterior|siding|gutter|fence|landscape|roof/.test(n)) return "General";
+  if (n === "cleaning/hauling" || n === "cleaning" || /hauling|debris|cleanup|junk/.test(n)) return "General";
+  if (n === "compliance") return "General"; // The classifier reroutes WH→HVAC, breaker/CO→Electrical at item level.
+  if (/hvac|condenser|furnace|thermostat|water heater|hot water tank/.test(n)) return "HVAC";
+  // Truly unknown → General (better than discarding the work).
+  return "General";
+}
 
 /**
  * Source-of-truth trade-categorization rules. Used by BOTH the inspection
@@ -162,17 +190,28 @@ export const TRADE_CATEGORY_LIST = ["Painting", "Flooring", "Carpentry", "Plumbi
  * Cleaning/Hauling) when AI Assist had its own miniature one-line system
  * prompt that didn't carry these rules.
  */
-export const TRADE_CATEGORIES_PROMPT = `- PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch, drywall mud + tape + finish prep, AND all caulking and sealant work (interior trim, baseboard, standalone window/door perimeter re-caulk on EXISTING windows/doors, tub/shower bead, kitchen backsplash bead — every caulk line goes here unless it's (a) a plumbing fixture replacement that explicitly includes the bead, or (b) part of a full window/door REPLACEMENT install, in which case the perimeter caulk travels with the carpentry line). No knobs, no fixtures, no blinds.
-- FLOORING: LVP, carpet, tile, grout, cove base, transition strips, baseboards (sqft-priced).
-- CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, countertops (laminate/butcher block/quartz/granite/solid surface — including demo, template, install, sink/faucet reset, edge profile), interior framing and re-framing (studs, blocking, headers, joists), shower wall framing and shower-pan blocking, drywall blocking for grab bars / cabinets / TVs, structural sistering, window screens, window panes, window glass, full window REPLACEMENTS (sash, frame, vinyl replacement windows, weatherstripping, interior/exterior trim + perimeter caulk when bundled with the install), full door REPLACEMENTS (slab, pre-hung, sliding patio, including weatherstripping + perimeter caulk when bundled with the install), closet rods/shelving. Demo of carpentry items (rotted framing, old cabinets, old countertops, old windows/doors being replaced) when it's labor-hours work goes here too — only the actual disposal/dump fee belongs under Cleaning/Hauling.
-- PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves, supply lines, dryer vents.
-- ELECTRICAL: outlets, switches, switch/outlet plates, light fixtures, bulbs, light covers, ceiling fans (electrical).
-- APPLIANCES: refrigerator, oven, stove, dishwasher, microwave, washer, dryer parts. NEVER condensers or HVAC parts.
-- SAFETY: smoke alarms, CO detectors, fire extinguishers.
-- COMPLIANCE: water heater, HVAC filters, breaker panel inspection, doorbell, thermostat.
-- EXTERIOR: ONLY work physically on the exterior of the building — siding, roof, soffit, fascia, exterior trim, gutters, downspouts, fence, gates, exterior lights, exterior paint, landscaping, driveway/concrete repair, walkways, porches, decks. Interior structural work (interior framing, drywall, shower walls, bathroom re-framing) is NEVER Exterior — it's Carpentry. The test: if the worker is standing inside the unit doing the work, it's not Exterior.
-- CLEANING/HAULING: ONLY debris removal, disposal/dump fees, final cleaning, interior trash-out (belongings left in unit), appliance deep clean. NEVER caulking. NEVER labor hours for demo, prep, or finish work — those belong with their trade. A line item like "demo and haul-away" should be SPLIT: the demo labor goes to the trade doing the demo (Carpentry for framing/cabinets/counters, Flooring for floor tear-out, Plumbing for fixture pull, etc.), and only the disposal portion (dump fee, debris bags, hauling time) lands in Cleaning/Hauling.
-A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater NEVER goes in Electrical. A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER Exterior — it's Carpentry. Caulking is NEVER Cleaning/Hauling — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry.`;
+// 7 canonical trades. Items that used to live in Safety / Appliances /
+// Exterior / Compliance / Cleaning/Hauling now fold into the 7 per the
+// mapping table at the bottom of this prompt. The AI MUST use one of
+// these exact 7 names — foldLegacyTrade() rescues stragglers, but the
+// prompt is the front line of defense.
+export const TRADE_CATEGORIES_PROMPT = `THE ONLY 7 VALID TRADE NAMES — use these EXACTLY, never invent others:
+- PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves, supply lines, water-line resealing at wall penetrations, dryer vents.
+- ELECTRICAL: outlets, switches, switch/outlet plates, GFCI, light fixtures, bulbs, light covers, ceiling fans (electrical), breaker panel inspection, smoke alarms, CO detectors, fire extinguishers, doorbells/chimes.
+- CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, countertops (laminate/butcher block/quartz/granite/solid surface — including demo, template, install, sink/faucet reset, edge profile), interior framing and re-framing (studs, blocking, headers, joists), shower wall framing, drywall blocking for grab bars / cabinets / TVs, structural sistering, window screens, window panes/glass, full window REPLACEMENTS (sash, frame, vinyl replacement windows, weatherstripping, interior/exterior trim + perimeter caulk when bundled), full door REPLACEMENTS (slab, pre-hung, sliding patio, including weatherstripping + perimeter caulk when bundled), closet rods/shelving. Demo of carpentry items (rotted framing, old cabinets, old countertops, old windows/doors being replaced) when it's labor work goes here.
+- HVAC: water heater, hot-water tank, HVAC condenser unit, furnace, mini-split, range hood vented to exterior, HVAC filter change, thermostat replacement, ductwork.
+- PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch, drywall mud + tape + finish prep, AND all caulking and sealant work (interior trim, baseboard, standalone window/door perimeter re-caulk on EXISTING windows/doors, tub/shower bead, kitchen backsplash bead — every caulk line goes here unless it's (a) a plumbing fixture replacement that explicitly includes the bead, or (b) part of a full window/door REPLACEMENT install, in which case the perimeter caulk travels with the carpentry line). No knobs, no fixtures, no blinds.
+- FLOORING: LVP, carpet, tile, grout, cove base, transition strips, baseboards (sqft-priced), stair treads/risers.
+- GENERAL: anything that doesn't clearly fit the six trades above — siding/gutter/fence/landscape/exterior cosmetic, appliance repair (oven/stove/dishwasher/microwave/fridge/washer/dryer parts — but range hoods that vent outside go to HVAC), disposal/dump fees, debris bags, hauling time, final cleaning, interior trash-out, water softener service.
+
+FOLD-DOWN RULES (for items that used to have their own bucket):
+- Water heater, HVAC filter, thermostat, condenser unit → HVAC.
+- Smoke/CO detector, fire extinguisher, doorbell, breaker panel → ELECTRICAL.
+- Range hood (vented to exterior) → HVAC. Microwave / oven / dishwasher / fridge / washer / dryer parts → GENERAL.
+- Siding, gutters, downspouts, fence, gates, exterior lights, landscaping, driveway → GENERAL.
+- Debris removal, dump fees, final cleaning, interior trash-out → GENERAL.
+
+A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater is HVAC, not Electrical or Plumbing. A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER General — it's Carpentry. Caulking is NEVER General — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry. If a line truly fits nowhere, choose GENERAL — do NOT invent a new trade name.`;
 
 export const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You produce accurate, client-ready service estimates from whatever the user provides.
 
@@ -253,8 +292,9 @@ ALWAYS keep c = qty × unitPrice when you set both.
 
 3. CONSISTENT ROOM NAMES. Use title case. Normalize names from the inspection (e.g. "Bathroom 2 : Master bathroom" → "Bathroom 2 (Master)").
 
-4. GROUP BY TRADE, NOT BY ROOM. Valid categories:
-   Painting, Flooring, Carpentry, Plumbing, Electrical, Safety, Appliances, Exterior, Compliance, Cleaning/Hauling
+4. GROUP BY TRADE, NOT BY ROOM. The ONLY 7 valid trade names are:
+   Plumbing, Electrical, Carpentry, HVAC, Painting, Flooring, General
+   Anything that doesn't obviously fit the first six trades goes in General. NEVER invent new trade names (no "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling" — see fold-down rules in the trade-categories section).
 
 5. COMBINE RELATED ITEMS in the same room. "Replace outlet cover" + "replace switch plate" in Kitchen = one Electrical line item. "Touch up wall paint" + "patch holes" = one Painting line item.
 
@@ -761,36 +801,43 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       if (/outlet|\bswitch\b|\bwire\b|breaker|gfci|light.*fixture|\bbulb\b|ceiling.*fan|recessed|dimmer|\belectrical\b|wiring|breaker.*panel|electrical.*panel|electric.*panel|main.*panel|sub.?panel|service.*panel|circuit.*panel|panel.*box|panel.*main/.test(s)) add("Electrical", 10);
       if (/outlet|switch|bulb|fixture|\bwire\b|breaker|gfci/.test(matNames)) add("Electrical", 5);
 
-      // Safety
-      if (/smoke.*alarm|co.*detect|fire.*ext|carbon.*monoxide|detector|fire.*alarm/.test(s)) add("Safety", 12);
-      if (/smoke.*alarm|co.*detect|fire.*ext|battery/.test(matNames)) add("Safety", 5);
+      // Safety devices (smoke/CO/fire ext) → ELECTRICAL in the 7-trade
+      // taxonomy. These are electrical wiring devices in practice
+      // (hardwired smoke alarms, GFCI tests, etc.).
+      if (/smoke.*alarm|co.*detect|fire.*ext|carbon.*monoxide|detector|fire.*alarm/.test(s)) add("Electrical", 12);
+      if (/smoke.*alarm|co.*detect|fire.*ext|battery/.test(matNames)) add("Electrical", 5);
 
       // Carpentry — doors, windows, hardware, trim
       if (/\bdoor\b|knob|hinge|lock|deadbolt|bifold|pocket.*door|barn.*door|blind|window|screen|mirror|closet|shelf|shelving/.test(s)) add("Carpentry", 10);
       if (/towel.*bar|tp.*holder|rod|handle|latch|strike|cabinet/.test(s)) add("Carpentry", 8);
       if (/door|knob|hinge|blind|screen|mirror|shelf/.test(matNames)) add("Carpentry", 5);
 
-      // Appliances
-      if (/oven|stove|dishwasher|fridge|refrigerator|washer|dryer|appliance|microwave|range.*hood|garbage.*disposal/.test(s)) add("Appliances", 10);
+      // HVAC — water heater, condenser, furnace, thermostat, ductwork,
+      // HVAC filter. Range hood VENTED to exterior is HVAC too. Was
+      // split across the old "Compliance" + "Appliances" buckets; lands
+      // here in the canonical 7.
+      if (/water.*heater|water.*tank|hot.*water|condenser.*unit|condenser\b|\bfurnace\b|hvac|mini.?split|ductwork|duct\b|thermostat|hvac.*filter|heater.*filter|filter.*hvac|range.*hood.*vent|exhaust.*vent.*roof/.test(s)) add("HVAC", 12);
+      if (/water.*heater|condenser|furnace|hvac|thermostat|hvac.*filter/.test(matNames)) add("HVAC", 6);
 
-      // Exterior — bump siding/fascia/soffit/hardiplank to 14 so a
-      // "siding panel" item lands here even if a stray keyword would
-      // tie elsewhere. These materials are unambiguous when present.
-      if (/\bsiding\b|hardi.?plank|cement.?board|\bfascia\b|\bsoffit\b|t1.?11|stucco/.test(s)) add("Exterior", 14);
-      if (/exterior|fence|gate|gutter|downspout|porch|deck|landscape|mailbox|stair.*rail|\broof\b|shingle/.test(s)) add("Exterior", 10);
+      // General — siding/gutter/fence/landscape/exterior cosmetic,
+      // appliance repair, disposal/cleanup, water softener service, etc.
+      // (Was Exterior / Appliances / Cleaning/Hauling in the old 10.)
+      if (/\bsiding\b|hardi.?plank|cement.?board|\bfascia\b|\bsoffit\b|t1.?11|stucco/.test(s)) add("General", 10);
+      if (/exterior|fence|gate|gutter|downspout|porch|deck|landscape|mailbox|stair.*rail|\broof\b|shingle/.test(s)) add("General", 8);
+      if (/oven|stove|dishwasher|fridge|refrigerator|washer|dryer|appliance|microwave|garbage.*disposal|water.*softener/.test(s) &&
+          !/range.*hood.*vent/.test(s)) add("General", 8);
+      if (/clean|haul|trash|debris|junk|removal|dump.*fee/.test(s)) add("General", 8);
 
-      // Compliance — water heater, HVAC filter, doorbell, thermostat, breaker
-      // panel inspections. Water heater / hot water tank lands here (not in
-      // Plumbing) so the trade buckets match the prompt's categorization.
-      if (/water.*heater|water.*tank|hot.*water|doorbell|chime|filter|compliance|hvac.*filter|thermostat|heater.*filter|breaker.*box|breaker.*panel|electrical.*panel/.test(s)) add("Compliance", 12);
-
-      // Cleaning
-      if (/clean|haul|trash|debris|junk|removal/.test(s)) add("Cleaning/Hauling", 10);
+      // Doorbells used to live in "Compliance". They're low-voltage
+      // electrical work — Electrical wins, slightly above HVAC/General.
+      if (/doorbell|chime/.test(s)) add("Electrical", 12);
+      // Breaker panel / sub-panel inspection: Electrical, not HVAC.
+      if (/breaker.*box|breaker.*panel|electrical.*panel|electric.*panel|main.*panel|sub.?panel|service.*panel|circuit.*panel|panel.*box|panel.*main/.test(s)) add("Electrical", 10);
 
       // Return highest scoring trade
       const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
       if (sorted.length > 0 && sorted[0][1] > 0) return sorted[0][0];
-      return "Carpentry"; // default fallback
+      return "General"; // default fallback — was Carpentry; General is safer for "I don't know".
     };
 
     rooms.forEach((r) => {
@@ -824,6 +871,13 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
           } else {
             trade = classifyTrade(it, r.name);
           }
+        }
+        // Final safety net — guarantee every emitted bucket is one of the
+        // canonical 7. Catches a stray legacy name from any branch above
+        // (e.g. AI emits "Compliance" and the parent-room check happens
+        // to miss it). Idempotent on already-canonical names.
+        if (!TRADE_SET.has(trade.toLowerCase())) {
+          trade = foldLegacyTrade(trade);
         }
         // Prepend room name to detail if not already there
         const roomPrefix = r.name.replace(/\s*[:\/].*/g, "").trim();
@@ -1187,6 +1241,13 @@ async function aiParsePdfSingle(
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 16000,
+        // Deterministic extraction. Quote categorization is structured
+        // pattern-matching against the inspection — not a creative
+        // generation task — so temperature=0 stops same-room-same-item
+        // drifting into different trades between two runs of the same
+        // PDF (e.g. "cove base" landing in Carpentry one run, Flooring
+        // the next).
+        temperature: 0,
         system: `Labor rate: $${laborRate || 55}.00/hour.\n\n` +
           (licensedTrades?.length
             ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors. Include labor, materials, and hours for all ${licensedTrades.join("/")} work.\n\n`
@@ -1881,6 +1942,10 @@ Output ONLY valid JSON of this shape:
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
       max_tokens: 4000,
+      // Deterministic per-room voice-walk extraction — same reasoning as
+      // the inspection PDF parser. Inspection→item structured mapping is
+      // not a creative task.
+      temperature: 0,
       system,
       messages: [{ role: "user", content }],
     }),
