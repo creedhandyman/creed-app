@@ -115,16 +115,32 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const today = now.getDay();
   const nowHour = now.getHours();
+  // `force=1` bypasses the day-of-week and cadence-debounce skips so an
+  // owner can validate auto-payroll on demand without waiting for the
+  // scheduled day. Same pattern /api/recurring/fire uses. Requires the
+  // same auth as the cron itself (Vercel cron header, CRON_SECRET, or
+  // x-admin-token), gated by isAuthorized() above.
+  const force = new URL(req.url).searchParams.get("force") === "1";
   const fired: FiredOrg[] = [];
-  const skipped: { id: string; name?: string; reason: string }[] = [];
+  // Skip payload now carries the org's actual config + last_run so a
+  // ?force=0 hit lets the owner see "is my config what I think it is?"
+  // and "when did it last actually fire?" without digging through DB.
+  type SkipRow = {
+    id: string;
+    name?: string;
+    reason: string;
+    config: { day: number; hour: number; cadence: string; last_run: string | null };
+  };
+  const skipped: SkipRow[] = [];
 
   for (const org of orgs) {
     const day = typeof org.auto_payroll_day === "number" ? org.auto_payroll_day : 5;
     const hour = typeof org.auto_payroll_hour === "number" ? org.auto_payroll_hour : 17;
     const cadence = org.auto_payroll_cadence === "biweekly" ? "biweekly" : "weekly";
+    const cfg = { day, hour, cadence, last_run: org.auto_payroll_last_run ?? null };
 
-    if (day !== today) {
-      skipped.push({ id: org.id, name: org.name, reason: `day mismatch (today=${today}, org=${day})` });
+    if (!force && day !== today) {
+      skipped.push({ id: org.id, name: org.name, reason: `day mismatch (today=${today}, org=${day})`, config: cfg });
       continue;
     }
     // Hour check: only enforce if the cron is firing more than once
@@ -141,12 +157,12 @@ export async function GET(req: NextRequest) {
     // Debounce by cadence. Weekly = at least 6 days since last_run
     // (allows for a small early margin in case of clock drift / DST).
     // Biweekly = at least 13 days.
-    if (org.auto_payroll_last_run) {
+    if (!force && org.auto_payroll_last_run) {
       const last = new Date(org.auto_payroll_last_run);
       const diffDays = (now.getTime() - last.getTime()) / 86_400_000;
       const minDays = cadence === "biweekly" ? 13 : 6;
       if (diffDays < minDays) {
-        skipped.push({ id: org.id, name: org.name, reason: `cadence debounce (${diffDays.toFixed(1)}d < ${minDays}d)` });
+        skipped.push({ id: org.id, name: org.name, reason: `cadence debounce (${diffDays.toFixed(1)}d < ${minDays}d)`, config: cfg });
         continue;
       }
     }
@@ -160,7 +176,7 @@ export async function GET(req: NextRequest) {
       .gt("rate", 0);
 
     if (profErr) {
-      skipped.push({ id: org.id, name: org.name, reason: `profile query failed: ${profErr.message}` });
+      skipped.push({ id: org.id, name: org.name, reason: `profile query failed: ${profErr.message}`, config: cfg });
       continue;
     }
 
@@ -258,6 +274,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     timestamp: now.toISOString(),
+    force,
+    today,
     enabledOrgs: orgs.length,
     fired,
     skipped,

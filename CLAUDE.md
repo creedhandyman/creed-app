@@ -99,6 +99,17 @@ src/
 - `ALTER TABLE price_corrections ADD COLUMN zip TEXT;`
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
+- Auto Payroll columns (cron at `/api/payroll/auto-run` reads these,
+  Payroll.tsx's AutoPayrollPanel writes them):
+  ```sql
+  ALTER TABLE organizations ADD COLUMN auto_payroll_enabled BOOLEAN DEFAULT FALSE;
+  ALTER TABLE organizations ADD COLUMN auto_payroll_day INTEGER DEFAULT 5;     -- 0=Sun…6=Sat
+  ALTER TABLE organizations ADD COLUMN auto_payroll_hour INTEGER DEFAULT 17;   -- advisory on Hobby (daily cron)
+  ALTER TABLE organizations ADD COLUMN auto_payroll_cadence TEXT DEFAULT 'weekly';
+  ALTER TABLE organizations ADD COLUMN auto_payroll_last_run TIMESTAMPTZ;
+  ```
+  Test-fire on demand (bypasses day-of-week + cadence debounce):
+  `curl -H "x-admin-token: $ADMIN_PASSWORD" 'https://<host>/api/payroll/auto-run?force=1'`
 - `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
 - `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
 - `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;`
