@@ -304,8 +304,10 @@ ALWAYS keep c = qty × unitPrice when you set both.
 
 5. COMBINE RELATED ITEMS in the same room ONLY when they're the same trade and the same task. "Replace outlet cover" + "replace switch plate" in Kitchen = one Electrical line item (both Electrical, both finish-trim). "Touch up wall paint" + "patch holes" = one Painting line item (both Painting). DO NOT combine ACROSS TRADES — see rule 5a.
 
-5a. ONE LINE = ONE TASK = ONE TRADE. When a single inspector comment spans two trades, SPLIT it into two line items (one per trade). Do not bury cross-trade work inside one line. Examples:
-- "Replace window blind and repair cracked interior window pane" → TWO lines, both Carpentry (covering vs glazing): one "Replace window blind", one "Repair cracked window pane".
+5a. ONE LINE = ONE TASK = ONE TRADE. When a single inspector comment spans two trades, SPLIT it into two line items (one per trade). Do not bury cross-trade work inside one line. CRITICAL — splitting also applies WITHIN A TRADE when two distinct sub-scopes are bundled. Two Carpentry tasks that use different materials and different skills (e.g. window blind vs window pane) are TWO Carpentry lines, never one. Examples:
+- "Replace window blind and repair cracked interior window pane" → TWO Carpentry lines: (a) "Install replacement window blind" — materials: blind; (b) "Replace broken window pane (glazing)" — materials: glass pane, glazing compound. NEVER one combined line. Window pane / glass / glazing NEVER bundles with a blind, screen, curtain, or any window covering — different material (vinyl/aluminum vs glass), different skill (handyman vs glazier), different pricing. A blind line should have NO glass material in it; a pane line should have NO blind material in it.
+- Same rule: "Replace two broken panes and install 33-inch blind" → THREE materials across TWO lines: pane line has qty: 2 panes; blind line has qty: 1 33-inch blind. Don't roll the blind into the pane line.
+- "Missing screen and broken pane" → TWO Carpentry lines: "Install replacement window screen" + "Replace broken window pane". Screen ≠ glass.
 - "Patch drywall, repaint walls" → TWO lines: Carpentry "Drywall patch" + Painting "Repaint walls" (drywall mud belongs with the patch under Carpentry; finish paint is Painting).
 - "Caulk window trim and missing frame/screen" → TWO lines: Painting "Caulk window trim" + Carpentry "Replace missing window screen".
 - "Evaluate and re-caulk tub surround; repair or replace" → TWO lines: Plumbing "Re-caulk tub surround" + (if a repair/replace scope is described) Carpentry "Tub-surround repair/replace" (tile/cement-board carpentry).
@@ -694,6 +696,26 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
     })),
   }));
 
+  // 5a. Force laborHrs: 0 on supplies-only items. The AI prompt says
+  // shared supplies lines must have laborHrs 0 (they're consumables
+  // burned during the per-room labor lines, not a separate task), but
+  // the model occasionally still emits 0.5h. Detect by detail naming a
+  // "supplies" line — "Whole property — Painting Supplies", "General
+  // Supplies", "Drywall Supplies", etc. — and zero the hours out so
+  // they don't double-bill.
+  rooms = rooms.map((r) => ({
+    ...r,
+    items: r.items.map((it) => {
+      const lc = it.detail.toLowerCase();
+      const isSuppliesLine =
+        /\bsupplies\b/.test(lc) && !/install|repair|replace|patch|paint(?:ing)?\s+(?:wall|ceiling|room|trim|door|baseboard)/.test(lc);
+      if (isSuppliesLine && it.laborHrs > 0) {
+        return { ...it, laborHrs: 0 };
+      }
+      return it;
+    }),
+  }));
+
   // 6. RE-CLASSIFY EACH ITEM BY TRADE (always). Even when the AI returned
   // trade-named buckets, individual items can be in the wrong one — e.g. a
   // door knob inside the "Painting" bucket, a water heater inside
@@ -785,6 +807,23 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       // dumped into Cleaning/Hauling.
       if (/\bcaulk\b|caulking|\bsealant\b|silicone bead/.test(s) &&
           !/(replac|new).*(faucet|toilet|tub|shower head|sink|fixture)|fixture.*(replac|new)/.test(s)) {
+        return "Painting";
+      }
+      // PAINT a door / window / trim / cabinet / baseboard → PAINTING,
+      // not Carpentry. The verb is what defines the trade — even when
+      // the noun is a carpentry-class item. Bernard hit "Paint new six-
+      // panel door" landing in Carpentry: the scorer ties at 10 (paint
+      // = Painting +10) vs (door = Carpentry +10), and the parent-room
+      // respect step then locks Carpentry in when the AI happened to
+      // pick that bucket. This override fires BEFORE the parent respect
+      // step, so a paint-the-noun item ends up in Painting regardless
+      // of what the AI guessed. The full-replace door/window override
+      // above runs first; that's the case where the install IS Carpentry
+      // (the paint is bundled into the install line per prompt rules).
+      if (
+        /\b(paint|repaint|prime|primer|touch.?up.*paint)\b/.test(s) &&
+        /\b(door|window|trim|cabinet|baseboard|casing|sash)\b/.test(s)
+      ) {
         return "Painting";
       }
       // Demo of carpentry-class items → Carpentry. The disposal portion
@@ -921,13 +960,23 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
         }
         // F6 location-fallback fix: if `detail` starts with a TRADE name
         // followed by an em-dash/dash (e.g. "Painting — General Supplies",
-        // "Compliance — Compliance — XYZ"), the editor parses the trade
-        // name as the room/location, so the LOCATION column displays
-        // "Painting" / "Compliance". Replace that leading trade-as-
-        // location with "Whole property" so shared/no-room items render
-        // sensibly. Idempotent: re-running on "Whole property — ..." is a
-        // no-op since "Whole property" isn't in TRADE_CATEGORIES.
-        const tradeAsLocPrefix = TRADE_CATEGORIES.find((t) => {
+        // "Compliance — Patch above breaker box"), the editor parses the
+        // trade name as the room/location, so the LOCATION column shows
+        // the trade. Replace that leading trade-as-location with "Whole
+        // property" so shared/no-room items render sensibly.
+        //
+        // We catch BOTH the canonical 7-trade names AND the legacy
+        // 10-bucket names ("Compliance", "Appliances", "Safety",
+        // "Exterior", "Cleaning/Hauling") because the AI still
+        // occasionally emits them as prefixes from training inertia even
+        // after the 7-trade prompt change. foldLegacyTrade rebuckets the
+        // item itself; this rewrites the rendered prefix to match.
+        // Idempotent: "Whole property — …" doesn't match any of these.
+        const TRADE_LOC_PREFIXES = [
+          ...TRADE_CATEGORIES,
+          "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling",
+        ];
+        const tradeAsLocPrefix = TRADE_LOC_PREFIXES.find((t) => {
           const lc = it.detail.toLowerCase();
           return lc.startsWith(t.toLowerCase() + " —") || lc.startsWith(t.toLowerCase() + " -");
         });
@@ -935,7 +984,7 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
           // Strip the leading "Trade — " (any number of repeats — handles
           // "Painting — Painting — General Supplies" from a stale run).
           it.detail = it.detail.replace(
-            new RegExp(`^(?:(?:${TRADE_CATEGORIES.join("|")})\\s*[—\\-]\\s*)+`, "i"),
+            new RegExp(`^(?:(?:${TRADE_LOC_PREFIXES.join("|")})\\s*[—\\-]\\s*)+`, "i"),
             "Whole property — "
           );
         }
