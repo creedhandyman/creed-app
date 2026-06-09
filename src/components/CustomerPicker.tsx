@@ -8,8 +8,14 @@
  * free-text inputs when no customer is chosen, preserving the old
  * flow exactly. Inline "+ New customer" / "+ New address" forms let
  * the user create entities without leaving the screen.
+ *
+ * The native <select> pickers were replaced with searchable inline
+ * panels so the user can type to filter instead of scrolling a long
+ * list, and create-flows now dedupe by name (customer) or street
+ * (address) so re-entering an existing address never adds a duplicate
+ * row.
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import type { Address, CustomerType } from "@/lib/types";
 
@@ -35,6 +41,11 @@ const addressOptionLabel = (a: Address): string => {
   if (a.label && a.street) return `${a.label} — ${a.street}`;
   return a.label || formatAddressLine(a);
 };
+
+/** Loose string match — strips punctuation and whitespace so
+ *  "123 Main St." matches "123 main st" matches "123, MAIN ST". */
+const norm = (s: string | undefined | null): string =>
+  (s || "").toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
 
 export default function CustomerPicker({
   prop,
@@ -64,9 +75,12 @@ export default function CustomerPicker({
   const [newAddrLabel, setNewAddrLabel] = useState("");
   const [creatingAddress, setCreatingAddress] = useState(false);
 
-  // Live filter for the unlinked customer dropdown. Hidden until the list
-  // grows past a handful of entries — short lists scroll fine without it.
-  const [custQuery, setCustQuery] = useState("");
+  // Search-panel state. `customerSearchOpen`/`addressSearchOpen` toggle the
+  // inline picker panel; the matching `…Q` (query) string filters the list.
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [customerQ, setCustomerQ] = useState("");
+  const [addressSearchOpen, setAddressSearchOpen] = useState(false);
+  const [addressQ, setAddressQ] = useState("");
 
   // If customerId points at a customer that no longer exists (deleted in
   // another tab), gracefully fall back to free text rather than render a
@@ -80,11 +94,30 @@ export default function CustomerPicker({
     ? addresses.filter((a) => a.customer_id === customerId)
     : [];
 
+  // Filtered lists driven by the search query. Match on customer name +
+  // phone for customers; on label + street for addresses.
+  const filteredCustomers = useMemo(() => {
+    const q = norm(customerQ);
+    if (!q) return customers;
+    return customers.filter((c) =>
+      norm(c.name).includes(q) ||
+      norm(c.phone).includes(q) ||
+      norm(c.email).includes(q),
+    );
+  }, [customers, customerQ]);
+
+  const filteredAddresses = useMemo(() => {
+    const q = norm(addressQ);
+    if (!q) return customerAddresses;
+    return customerAddresses.filter((a) =>
+      norm(a.street).includes(q) ||
+      norm(a.label).includes(q) ||
+      norm(a.city).includes(q) ||
+      norm(a.zip).includes(q),
+    );
+  }, [customerAddresses, addressQ]);
+
   const pickCustomerById = (id: string) => {
-    if (id === "__NEW__") {
-      setShowNewCustomer(true);
-      return;
-    }
     if (!id) {
       setCustomerId(undefined);
       setAddressId(undefined);
@@ -104,13 +137,11 @@ export default function CustomerPicker({
     } else {
       setAddressId(undefined);
     }
+    setCustomerSearchOpen(false);
+    setCustomerQ("");
   };
 
   const pickAddressById = (id: string) => {
-    if (id === "__NEW__") {
-      setShowNewAddress(true);
-      return;
-    }
     if (!id) {
       setAddressId(undefined);
       return;
@@ -119,16 +150,38 @@ export default function CustomerPicker({
     if (!a) return;
     setAddressId(a.id);
     setProp(formatAddressLine(a));
+    setAddressSearchOpen(false);
+    setAddressQ("");
   };
 
   const createCustomer = async () => {
-    if (!newCustomerName.trim()) {
+    const name = newCustomerName.trim();
+    if (!name) {
       showToast("Enter customer name", "warning");
+      return;
+    }
+    // Dedup — if a customer with the same normalized name already
+    // exists, link to that one instead of inserting a duplicate row.
+    // Phone match wins outright (most reliable identifier).
+    const phoneNorm = norm(newCustomerPhone);
+    const existingByPhone = phoneNorm
+      ? customers.find((c) => norm(c.phone) === phoneNorm)
+      : undefined;
+    const existing =
+      existingByPhone ||
+      customers.find((c) => norm(c.name) === norm(name));
+    if (existing) {
+      pickCustomerById(existing.id);
+      setShowNewCustomer(false);
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setNewCustomerType("individual");
+      showToast(`Linked to existing customer "${existing.name}"`, "info");
       return;
     }
     setCreatingCustomer(true);
     const created = await upsertCustomer({
-      name: newCustomerName.trim(),
+      name,
       type: newCustomerType,
       phone: newCustomerPhone.trim() || undefined,
     });
@@ -146,14 +199,31 @@ export default function CustomerPicker({
 
   const createAddress = async () => {
     if (!customerId) return;
-    if (!newAddrStreet.trim()) {
+    const street = newAddrStreet.trim();
+    if (!street) {
       showToast("Enter street address", "warning");
+      return;
+    }
+    // Dedup — if this customer already has an address with the same
+    // normalized street, link to that one instead of inserting a
+    // duplicate row. Catches "1234 Main St" vs "1234 Main St." vs
+    // "1234 main st" vs " 1234  Main St ".
+    const existing = customerAddresses.find(
+      (a) => norm(a.street) === norm(street),
+    );
+    if (existing) {
+      setAddressId(existing.id);
+      setProp(formatAddressLine(existing));
+      setShowNewAddress(false);
+      setNewAddrStreet("");
+      setNewAddrLabel("");
+      showToast(`Using existing address`, "info");
       return;
     }
     setCreatingAddress(true);
     const created = await upsertAddress({
       customer_id: customerId,
-      street: newAddrStreet.trim(),
+      street,
       label: newAddrLabel.trim() || undefined,
       // First address auto-flagged primary so the next quote on this
       // customer auto-picks it.
@@ -176,6 +246,106 @@ export default function CustomerPicker({
 
   const fontSize = compact ? 12 : 13;
 
+  /** Shared inline panel UI for the customer + address pickers. A text
+   *  input filters the list as the user types; each row is a tappable
+   *  button that selects + closes. A "+ New …" row at the bottom lets
+   *  the user create a new entity if no match is found. */
+  const PickerPanel = ({
+    placeholder,
+    q,
+    setQ,
+    items,
+    onPick,
+    onNew,
+    onCancel,
+    emptyLabel,
+  }: {
+    placeholder: string;
+    q: string;
+    setQ: (v: string) => void;
+    items: { id: string; label: string; sub?: string }[];
+    onPick: (id: string) => void;
+    onNew: () => void;
+    onCancel: () => void;
+    emptyLabel: string;
+  }) => (
+    <div
+      style={{
+        marginBottom: 6,
+        padding: 8,
+        borderRadius: 6,
+        border: "1px solid var(--color-primary)",
+        background: "var(--color-card-dark, #12121a)",
+      }}
+    >
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={placeholder}
+        autoFocus
+        style={{ fontSize, width: "100%", marginBottom: 6 }}
+      />
+      <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 6 }}>
+        {items.length === 0 ? (
+          <div style={{ fontSize: 11, color: "#888", padding: "6px 4px" }}>
+            {emptyLabel}
+          </div>
+        ) : (
+          items.map((it) => (
+            <button
+              key={it.id}
+              onClick={() => onPick(it.id)}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "6px 8px",
+                marginBottom: 2,
+                fontSize: 12,
+                background: "transparent",
+                color: "#e2e2e8",
+                border: "1px solid transparent",
+                borderRadius: 4,
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "var(--color-primary)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "transparent";
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>{it.label}</div>
+              {it.sub && (
+                <div style={{ fontSize: 10, color: "#888", marginTop: 1 }}>
+                  {it.sub}
+                </div>
+              )}
+            </button>
+          ))
+        )}
+      </div>
+      <div className="row">
+        <button
+          className="bo"
+          onClick={onNew}
+          style={{ fontSize: 11, padding: "4px 10px", color: "var(--color-primary)" }}
+        >
+          + New
+        </button>
+        <button
+          className="bo"
+          onClick={onCancel}
+          style={{ fontSize: 11, padding: "4px 10px", marginLeft: "auto" }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
   // ── Linked mode ───────────────────────────────────────────────────
   if (isLinked) {
     return (
@@ -193,17 +363,53 @@ export default function CustomerPicker({
           </button>
         </div>
 
-        <select
-          value={addressId || ""}
-          onChange={(e) => pickAddressById(e.target.value)}
-          style={{ fontSize, marginBottom: 6, width: "100%" }}
-        >
-          <option value="">Select address...</option>
-          {customerAddresses.map((a) => (
-            <option key={a.id} value={a.id}>{addressOptionLabel(a)}</option>
-          ))}
-          <option value="__NEW__">+ New address...</option>
-        </select>
+        {/* Address picker — button + inline search panel */}
+        {!addressSearchOpen && !showNewAddress && (
+          <button
+            onClick={() => setAddressSearchOpen(true)}
+            style={{
+              width: "100%",
+              textAlign: "left",
+              padding: "6px 10px",
+              fontSize,
+              background: "transparent",
+              color: addressId ? "#e2e2e8" : "#888",
+              border: "1px solid var(--color-border-dark, #2a2a3a)",
+              borderRadius: 4,
+              marginBottom: 6,
+              cursor: "pointer",
+            }}
+          >
+            {addressId
+              ? addressOptionLabel(addresses.find((a) => a.id === addressId)!)
+              : `Select address (${customerAddresses.length})…`}
+          </button>
+        )}
+
+        {addressSearchOpen && (
+          <PickerPanel
+            placeholder="Search address by street, label, city, zip…"
+            q={addressQ}
+            setQ={setAddressQ}
+            items={filteredAddresses.map((a) => ({
+              id: a.id,
+              label: addressOptionLabel(a),
+              sub: a.city || a.zip ? [a.city, a.state, a.zip].filter(Boolean).join(", ") : undefined,
+            }))}
+            onPick={pickAddressById}
+            onNew={() => {
+              setAddressSearchOpen(false);
+              setNewAddrStreet(addressQ);
+              setAddressQ("");
+              setShowNewAddress(true);
+            }}
+            onCancel={() => {
+              setAddressSearchOpen(false);
+              setAddressQ("");
+            }}
+            emptyLabel="No matching addresses. Tap + New to add."
+          />
+        )}
 
         {showNewAddress && (
           <div
@@ -265,62 +471,53 @@ export default function CustomerPicker({
   }
 
   // ── Free-text mode ────────────────────────────────────────────────
-  const filteredCustomers = (() => {
-    const needle = custQuery.trim().toLowerCase();
-    if (!needle) return customers;
-    return customers.filter((c) =>
-      (c.name || "").toLowerCase().includes(needle) ||
-      (c.phone || "").toLowerCase().includes(needle) ||
-      (c.email || "").toLowerCase().includes(needle),
-    );
-  })();
   return (
     <div>
-      {customers.length > 6 && (
-        <div style={{ position: "relative", marginBottom: 6 }}>
-          <input
-            value={custQuery}
-            onChange={(e) => setCustQuery(e.target.value)}
-            placeholder={`Search ${customers.length} customers…`}
-            style={{ fontSize, width: "100%", paddingRight: custQuery ? 28 : 10 }}
-            aria-label="Filter customers"
-          />
-          {custQuery && (
-            <button
-              onClick={() => setCustQuery("")}
-              aria-label="Clear search"
-              style={{
-                position: "absolute",
-                right: 6,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "transparent",
-                border: "none",
-                color: "#888",
-                fontSize: 13,
-                padding: 2,
-                cursor: "pointer",
-                lineHeight: 1,
-              }}
-            >×</button>
-          )}
-        </div>
+      {/* Customer picker — button + inline search panel */}
+      {!customerSearchOpen && !showNewCustomer && (
+        <button
+          onClick={() => setCustomerSearchOpen(true)}
+          style={{
+            width: "100%",
+            textAlign: "left",
+            padding: "6px 10px",
+            fontSize,
+            background: "transparent",
+            color: "var(--color-primary)",
+            border: "1px solid var(--color-primary)",
+            borderRadius: 4,
+            marginBottom: 6,
+            cursor: "pointer",
+          }}
+        >
+          🔗 Link to customer ({customers.length})…
+        </button>
       )}
-      <select
-        value=""
-        onChange={(e) => pickCustomerById(e.target.value)}
-        style={{ fontSize, color: "var(--color-primary)", marginBottom: 6, width: "100%" }}
-      >
-        <option value="">🔗 Link to customer...</option>
-        {filteredCustomers.length === 0 ? (
-          <option disabled>No matches</option>
-        ) : (
-          filteredCustomers.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))
-        )}
-        <option value="__NEW__">+ New customer...</option>
-      </select>
+
+      {customerSearchOpen && (
+        <PickerPanel
+          placeholder="Search customers by name, phone, email…"
+          q={customerQ}
+          setQ={setCustomerQ}
+          items={filteredCustomers.map((c) => ({
+            id: c.id,
+            label: c.name,
+            sub: [c.phone, c.email].filter(Boolean).join(" · ") || undefined,
+          }))}
+          onPick={pickCustomerById}
+          onNew={() => {
+            setCustomerSearchOpen(false);
+            setNewCustomerName(customerQ);
+            setCustomerQ("");
+            setShowNewCustomer(true);
+          }}
+          onCancel={() => {
+            setCustomerSearchOpen(false);
+            setCustomerQ("");
+          }}
+          emptyLabel="No matching customers. Tap + New to add."
+        />
+      )}
 
       {showNewCustomer && (
         <div
