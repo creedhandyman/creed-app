@@ -1489,11 +1489,20 @@ async function fetchPhotosAsBase64(urls: string[]): Promise<string[]> {
   return out;
 }
 
-// Each AI call gets at most this many photos so the request body stays under
-// Vercel's 4.5 MB serverless limit. Compressed inspection photos are ~150 KB,
-// so 10 × 1.33 (base64 overhead) ≈ 2 MB — leaves headroom for the system
-// prompt and inspection text.
+// Photos-per-batch caps. Two tiers because cost depends on transport mode:
+// - BASE64 (legacy fallback): each photo is inlined as base64 in the request
+//   body; that body has to fit Vercel's 4.5 MB serverless limit. ~150 KB
+//   compressed × 1.33 base64 overhead × 10 photos ≈ 2 MB.
+// - URL: photos pass as `https://…` strings; Anthropic fetches them
+//   directly. The request body stays tiny regardless of photo count, so
+//   we can pack many more per call. Anthropic's documented per-request
+//   image cap is ~100; 50 keeps headroom for retries / system prompt.
+//
+// Inspector + Voice Walk photos always go through Supabase storage on
+// capture (public URLs), so the URL tier is the default path. The base64
+// path remains for safety if a future caller hands us inline data URIs.
 const PHOTOS_PER_BATCH = 10;
+const PHOTOS_PER_BATCH_URLS = 50;
 
 export async function aiParseInspection(
   inspection: InspectionInput,
@@ -1503,11 +1512,19 @@ export async function aiParseInspection(
 ): Promise<AiParseResult | null> {
   const zip = extractZip(inspection.property);
 
-  // Pack rooms into batches so each AI call carries at most PHOTOS_PER_BATCH
-  // photos. Rooms with no photos ride along with whichever batch is currently
-  // open — the AI still needs their text findings to quote them. A single
-  // room whose photo count exceeds the batch size is split across multiple
-  // batches, each carrying that room's full text but a slice of its photos.
+  // Detect once whether every photo in the inspection is a URL. If yes,
+  // use the URL tier — bigger batches, no needless base64 fetch round-
+  // trip through the client. Mixed sets fall back to the conservative
+  // base64 tier so we never overflow a request body.
+  const allPhotos = inspection.rooms.flatMap((r) => r.items.flatMap((it) => it.photos));
+  const usingUrls = allPhotos.length > 0 && allPhotos.every((u) => typeof u === "string" && u.startsWith("http"));
+  const photosPerBatch = usingUrls ? PHOTOS_PER_BATCH_URLS : PHOTOS_PER_BATCH;
+
+  // Pack rooms into batches so each AI call carries at most photosPerBatch
+  // photos (10 base64 / 50 URL). Rooms with no photos ride along with
+  // whichever batch is currently open — the AI still needs their text
+  // findings to quote them. A single room whose photo count exceeds the
+  // batch size used to be split; now we keep it whole and cap (see below).
   type Batch = { rooms: InspectionInput["rooms"]; photos: string[] };
   const batches: Batch[] = [];
   let curRooms: InspectionInput["rooms"] = [];
@@ -1526,7 +1543,7 @@ export async function aiParseInspection(
       curRooms.push(room);
       continue;
     }
-    if (roomPhotos.length > PHOTOS_PER_BATCH) {
+    if (roomPhotos.length > photosPerBatch) {
       // A single room with more photos than fit in one call. We used to
       // SPLIT the room across batches — but each sub-batch carried the
       // room's FULL text, so the AI quoted the room's entire scope once
@@ -1539,12 +1556,13 @@ export async function aiParseInspection(
       // the batch size. The room's text findings carry the full repair
       // scope; photos past the cap are supplementary for the quote (they
       // still live on the inspection record and report). One room → one
-      // AI call → one set of line items.
+      // AI call → one set of line items. With URL mode the cap is 50,
+      // so this rarely fires in practice anymore.
       if (curRooms.length || curPhotos.length) flush();
-      batches.push({ rooms: [room], photos: roomPhotos.slice(0, PHOTOS_PER_BATCH) });
+      batches.push({ rooms: [room], photos: roomPhotos.slice(0, photosPerBatch) });
       continue;
     }
-    if (curPhotos.length + roomPhotos.length > PHOTOS_PER_BATCH) {
+    if (curPhotos.length + roomPhotos.length > photosPerBatch) {
       flush();
     }
     curRooms.push(room);
@@ -1570,7 +1588,15 @@ export async function aiParseInspection(
       : "text only";
     onProgress?.(`${prefix}analyzing ${photoLabel}...`);
     const text = compileInspectionText(b.rooms, inspection.property, inspection.client, inspection.inspectionType);
-    const imageData = b.photos.length ? await fetchPhotosAsBase64(b.photos) : [];
+    // URL mode: pass the public Supabase URLs straight through.
+    // aiParsePdf detects them (`every(img => img.startsWith("http"))`),
+    // routes to its URL path, and Anthropic fetches each image directly.
+    // Body stays tiny so we can pack 50 per batch instead of 10.
+    // Fallback base64 mode: client-side fetch + base64-encode for inline
+    // delivery, capped lower to fit Vercel's 4.5 MB serverless limit.
+    const imageData = b.photos.length
+      ? (usingUrls ? b.photos : await fetchPhotosAsBase64(b.photos))
+      : [];
     const r = await aiParsePdf(text, imageData, laborRate, licensedTrades, zip);
     if (r) partials.push(r);
   }
