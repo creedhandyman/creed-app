@@ -54,11 +54,35 @@ export default function Quests() {
     try { return new Date(dateStr) >= cycleStart; } catch { return false; }
   };
 
-  // Computed stats — filtered to current 6-month cycle
-  const cycleJobs = jobs.filter((j) => inCycle(j.created_at));
+  // PER-USER QUEST FILTERING. Quests track the logged-in user's
+  // progress, not the whole org — Bernard wanted each tech to see
+  // their own bonuses. The "this user worked on this job" join is
+  // built from time_entries (the most reliable signal — every clock-in
+  // / manual entry stamps user_id and job_id). Fallback to job-name
+  // matching covers legacy time_entries with NULL job_id.
+  const userTimeEntries = timeEntries.filter((e) => e.user_id === user.id);
+  const userJobIds = new Set(
+    userTimeEntries.map((e) => e.job_id).filter((id): id is string => !!id),
+  );
+  const userJobNames = new Set(
+    userTimeEntries.map((e) => e.job).filter((n): n is string => !!n && n !== "General"),
+  );
+  const isUserJob = (j: { id: string; property?: string }) =>
+    userJobIds.has(j.id) || (!!j.property && userJobNames.has(j.property));
+  const userNameLc = user.name.toLowerCase();
+  const reviewTagsUser = (r: { employee_names?: string }) => {
+    if (!r.employee_names) return false;
+    return r.employee_names.toLowerCase().split(",").map((s) => s.trim()).includes(userNameLc);
+  };
+
+  // Computed stats — filtered to current 6-month cycle AND to this user.
+  const cycleJobs = jobs.filter((j) => inCycle(j.created_at) && isUserJob(j));
   const completedJobs = cycleJobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
-  const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3 && inCycle(r.created_at)).length;
-  const fiveStarReviews = reviews.filter((r) => r.rating === 5 && inCycle(r.created_at)).length;
+  const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3 && inCycle(r.created_at) && reviewTagsUser(r)).length;
+  const fiveStarReviews = reviews.filter((r) => r.rating === 5 && inCycle(r.created_at) && reviewTagsUser(r)).length;
+  // Referrals don't currently carry an employee tag — keep org-wide for
+  // now (everyone's "Network Scout" quest credits any converted lead).
+  // When referrals gain a `referred_by_user_id`, filter to it.
   const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at)).length;
 
   // Group jobs by client to find repeat clients with 5+ jobs (cycle).
@@ -69,13 +93,17 @@ export default function Quests() {
   });
   const repeatClients = Object.values(jobsByClient).filter((c) => c >= 5).length;
 
-  // Big jobs (24+ hours, cycle)
+  // Big jobs (24+ hours, cycle) — counts a user-worked job whose total
+  // org-wide hours hit 24; their own share of that contribution is
+  // already captured by isUserJob.
   const bigJobs = cycleJobs.filter((j) => (j.status === "complete" || j.status === "paid") && (j.total_hrs || 0) >= 24).length;
 
-  // Total hours logged
-  const totalHours = timeEntries.reduce((s, e) => s + (e.hours || 0), 0);
+  // Total hours logged — THIS USER's hours in cycle only.
+  const totalHours = userTimeEntries
+    .filter((e) => inCycle(e.entry_date))
+    .reduce((s, e) => s + (e.hours || 0), 0);
 
-  // Skill Mastery: count completed jobs per trade (cycle)
+  // Skill Mastery: completed jobs per trade — only user's jobs.
   const jobsByTrade: Record<string, number> = {};
   cycleJobs.filter((j) => (j.status === "complete" || j.status === "paid") && j.trade).forEach((j) => {
     jobsByTrade[j.trade] = (jobsByTrade[j.trade] || 0) + 1;
@@ -83,7 +111,7 @@ export default function Quests() {
   const tradesMastered = Object.values(jobsByTrade).filter((c) => c >= 10).length;
   const bestTradeCount = Math.max(0, ...Object.values(jobsByTrade));
 
-  // Zero Callback: consecutive completed jobs with no callback (cycle)
+  // Zero Callback streak — over the user's own completed jobs.
   const completedJobsSorted = cycleJobs
     .filter((j) => j.status === "complete" || j.status === "paid")
     .sort((a, b) => (a.created_at > b.created_at ? -1 : 1));
@@ -93,7 +121,7 @@ export default function Quests() {
     zeroCallbackStreak++;
   }
 
-  // Mr.Speed: days with 5+ completed jobs (cycle)
+  // Mr.Speed: user days with 5+ completed jobs.
   const jobsByDate: Record<string, number> = {};
   cycleJobs.filter((j) => j.status === "complete" || j.status === "paid").forEach((j) => {
     const d = j.job_date || j.created_at?.split("T")[0] || "";
@@ -101,16 +129,25 @@ export default function Quests() {
   });
   const speedDays = Object.values(jobsByDate).filter((c) => c >= 5).length;
 
-  // Deal Closer: upsell jobs (cycle)
+  // Deal Closer: user's upsell jobs.
   const upsellCount = cycleJobs.filter((j) => j.is_upsell).length;
 
-  // Repeat Machine: unique techs requested by 3+ different clients (cycle)
-  const requestsByTech: Record<string, Set<string>> = {};
-  cycleJobs.filter((j) => j.requested_tech && j.client).forEach((j) => {
-    if (!requestsByTech[j.requested_tech]) requestsByTech[j.requested_tech] = new Set();
-    requestsByTech[j.requested_tech].add(j.client);
-  });
-  const techsRequestedByName = Object.values(requestsByTech).filter((clients) => clients.size >= 3).length;
+  // Repeat Machine: how many distinct clients requested THIS user
+  // specifically (was: how many techs in the whole org cleared the
+  // 3-client bar). Now this user's progress is just their own
+  // requested-by-name client count.
+  const myRequestClients = new Set<string>();
+  jobs
+    .filter((j) => inCycle(j.created_at) && j.requested_tech && j.client)
+    .forEach((j) => {
+      if (j.requested_tech!.toLowerCase() === userNameLc) {
+        myRequestClients.add(j.client!);
+      }
+    });
+  // Carried over to keep the HandyKing aggregate working: "this user
+  // qualifies for Repeat Machine" (1 if 3+ distinct clients requested
+  // them by name, else 0).
+  const techsRequestedByName = myRequestClients.size >= 3 ? 1 : 0;
 
   // HandyKing: count how many of the other 11 quests are complete
   const handyKingProgress = [
@@ -156,7 +193,7 @@ export default function Quests() {
         qEnabled("network_scout") && { name: "Network Scout", desc: "Secure new jobs from clients", bonus: "$" + qBonus("network_scout"), progress: convertedReferrals, goal: 1, unit: "secured", tier: "T2", tierColor: "var(--color-success)" },
         qEnabled("critical_referral") && { name: "Critical Referral", desc: "Turn 1 client into 5 jobs", bonus: "$" + qBonus("critical_referral"), progress: Math.min(repeatClients, 1), goal: 1, unit: "client", tier: "T2", tierColor: "var(--color-success)" },
         qEnabled("deal_closer") && { name: "Deal Closer", desc: `Upsell on existing jobs — ${upsellCount} logged`, bonus: "$" + qBonus("deal_closer"), progress: Math.min(upsellCount, 1), goal: 1, unit: "upsells", tier: "T2", tierColor: "var(--color-success)" },
-        qEnabled("repeat_machine") && { name: "Repeat Machine", desc: `3 clients request tech by name${Object.keys(requestsByTech).length ? " (" + Object.entries(requestsByTech).map(([t, c]) => `${t}: ${c.size}`).join(", ") + ")" : ""}`, bonus: "$" + qBonus("repeat_machine"), progress: Math.min(techsRequestedByName, 1), goal: 1, unit: "techs", tier: "T2", tierColor: "var(--color-success)" },
+        qEnabled("repeat_machine") && { name: "Repeat Machine", desc: `3 distinct clients request YOU by name (${myRequestClients.size} so far)`, bonus: "$" + qBonus("repeat_machine"), progress: Math.min(myRequestClients.size, 3), goal: 3, unit: "clients", tier: "T2", tierColor: "var(--color-success)" },
       ].filter(Boolean) as Quest[],
     },
     {
