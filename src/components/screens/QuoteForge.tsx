@@ -970,28 +970,22 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       return { room: r.name, ...i, ...cost };
     })
   );
-  // F4 from the quoting diagnosis: items the AI tagged `optional: true`
-  // (and items the owner manually flagged optional via the editor) are
-  // upsells / recommendations, not part of the base quote. They DON'T
-  // roll into subtotal / labor totals / tax base. We surface their
-  // aggregate as a separate "Optional Add-Ons" line in the editor and
-  // PDF so the customer can see what's available without it inflating
-  // the price they signed off on.
-  const base = all.filter((i) => !i.optional);
-  const optionalItems = all.filter((i) => i.optional);
-  const optionalSubtotal = Math.round(optionalItems.reduce((s, i) => s + i.tot, 0) * 100) / 100;
-  // F5 — T&M / assessment-first lines. These DO roll into base
+  // F5 — T&M / assessment-first lines. These roll into the headline
   // subtotal (the assessment visit itself is billable), but we surface
   // the count + dollar amount on its own stat tile so the owner sees
-  // how much of the headline number is "inspect first, then quote
-  // real scope" vs fixed-bid. Important when the customer asks
-  // "is this the final price?" — anything T&M is explicitly not.
-  const tnmItems = base.filter((i) => i.tnm);
+  // how much of the headline is "inspect first, then quote real scope"
+  // vs fixed-bid. Important when the customer asks "is this the final
+  // price?" — anything T&M is explicitly not.
+  // (The Optional/upsell bucket from F4 was removed at Bernard's
+  // request — every emitted line now rolls into the base subtotal.
+  // The RoomItem.optional field stays on the schema for backward
+  // compat but is no longer filtered or surfaced anywhere.)
+  const tnmItems = all.filter((i) => i.tnm);
   const tnmSubtotal = Math.round(tnmItems.reduce((s, i) => s + i.tot, 0) * 100) / 100;
-  const subtotalRaw = base.reduce((s, i) => s + i.tot, 0);
-  const tlRaw = base.reduce((s, i) => s + i.lc, 0);
-  const tm = base.reduce((s, i) => s + i.mc, 0);
-  const thRaw = base.reduce((s, i) => s + i.laborHrs, 0);
+  const subtotalRaw = all.reduce((s, i) => s + i.tot, 0);
+  const tlRaw = all.reduce((s, i) => s + i.lc, 0);
+  const tm = all.reduce((s, i) => s + i.mc, 0);
+  const thRaw = all.reduce((s, i) => s + i.laborHrs, 0);
 
   // Minimum-labor-hours floor. Resolution order matches the labor-rate
   // and discount fields: per-quote override → org default → 1 hour
@@ -2033,15 +2027,6 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           { l: markupPct > 0 ? `Mat +${markupPct}%` : "Materials", v: "$" + tm.toFixed(0), c: "var(--color-warning)" },
           { l: "Hours", v: th.toFixed(1), c: "var(--color-highlight)" },
           ...(tripFee > 0 ? [{ l: "Trip Fee", v: "$" + tripFee.toFixed(0), c: "var(--color-success)" }] : []),
-          // F4 — Optional Add-Ons stat tile. Sums upsells/recommendations
-          // the AI tagged optional=true (or the owner flagged manually).
-          // Not included in the labor / hours / materials cards above
-          // (those reflect base scope only).
-          ...(optionalItems.length > 0 ? [{
-            l: `Optional (${optionalItems.length})`,
-            v: "+ $" + optionalSubtotal.toFixed(0),
-            c: "#9d4edd",
-          }] : []),
           // F5 — T&M / Assessment-first stat tile. The fee IS in the
           // base subtotal (assessment visit is billable), but we flag
           // count + amount so the owner can clearly tell the customer

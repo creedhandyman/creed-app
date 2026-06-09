@@ -314,13 +314,11 @@ The test before you emit a multi-clause line: does every clause belong to the sa
 6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "Whole property — Painting Supplies" item under Painting. CRITICAL: This is a materials-only line — laborHrs MUST be 0. Supplies are consumables, not a labor task. Same rule for any other shared-consumables line you create (drywall mud kit, miscellaneous fasteners, etc.). NEVER duplicate supplies per room.
 
 7. ACTIONS-COLUMN POLICY. Each summary-table row carries an "Action" value (Maintenance / None) plus a Comment. Apply this precedence:
-- Action = Maintenance → ALWAYS emit a line. (Skip only when BOTH condition is "S" AND action is "None" — see end of this rule.)
+- Action = Maintenance → ALWAYS emit a line.
 - Action = None AND comment has an explicit install/replace/repair verb → emit a line (the inspector mistagged).
-- Action = None AND comment is an absence/recommendation ("Not present", "Could not test but appears operable", "Recommended", "No closet present", "No garbage disposal present", "Optional upgrade") → emit a line BUT set "optional": true on the item JSON so it lands in the Optional Add-Ons bucket, NOT the base quote. The owner can promote it to base with one click in the editor.
+- Action = None AND comment is an absence/recommendation ("Not present", "Could not test but appears operable", "Recommended", "No closet present", "No garbage disposal present", "Optional upgrade") → SKIP. The owner only wants required work in the quote; "nice to have" / "they don't currently have one" rows don't earn a line.
 - Action = None AND condition = "S" with no actionable comment → SKIP (no line).
 - A row with condition P / F / D is still a maintenance item even if the inspector mistakenly wrote "Action: None" — the CONDITION RATING IS AUTHORITATIVE. Inspectors occasionally tag a damaged item with action None by mistake (e.g. Driveway/Floor — P — None — "Cracked driveway throughout, repairs needed"). Do not let that drop the line — quote it from the comment.
-
-7a. OPTIONAL FIELD. When a line is an upsell/recommendation (per rule 7), include "optional": true in the item JSON. Default is false / omitted for base-quote items. Examples that go optional=true: "Install doorbell (currently no doorbell)", "Add window screen where none present", "Recommended deep-clean of unit prior to move-in". Examples that stay base (optional=false / omitted): "Replace existing broken doorbell", "Repair torn window screen", "Final cleaning required after construction".
 
 7b. T&M / ASSESSMENT-FIRST LINES. When the inspector comment uses scope-unknown language (evaluate, investigate, assess, "may need", "further damage", "underlying", "to be determined", "scope TBD", "depending on what's found", "could require", "potentially") — the real repair scope can't be known without a hands-on look. DO NOT invent a fixed hours/materials estimate that will be wrong either way. Instead:
 - Set "tnm": true on the item.
