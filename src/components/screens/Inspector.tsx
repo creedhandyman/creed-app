@@ -115,7 +115,18 @@ const ROOM_ORDER = [
 export type InspectionType = "move-out" | "flooring" | "painting" | "yard" | "initial";
 
 const PAINTING_ITEMS = ["Walls", "Ceiling", "Trim/Baseboards", "Doors", "Window Casings"];
-const FLOORING_ITEMS = ["Flooring"];
+// Floor-only inspection items. Was a single "Flooring" line per room
+// (too thin to capture demo / transition / baseboard scope); expanded
+// to walk the inspector through every sqft-priced sub-task that the
+// quoting AI needs separate signal for.
+const FLOORING_ITEMS = [
+  "Flooring (condition)",
+  "Sqft",
+  "Subfloor",
+  "Transitions/Thresholds",
+  "Baseboards",
+  "Tear-out/Haul-away",
+];
 
 // Yard/landscape areas — used by the Yard Cutting type. Each area has
 // its own item preset focused on recurring grounds tasks rather than
@@ -144,13 +155,13 @@ const STRUCTURAL_AREAS = [
 ];
 
 const STRUCTURAL_PRESETS: Record<string, string[]> = {
-  "Foundation":      ["Cracks", "Water Pooling", "Settling/Bowing"],
-  "Roof":            ["Shingle Condition", "Flashing", "Age / Material", "Visible Water Pooling"],
-  "Drainage":        ["Gutter Attached", "Downspout Extension", "Grade Slope"],
-  "Electrical Panel": ["Main Breaker Amp", "Brand", "Open Slots", "Aluminum Wiring"],
-  "HVAC System":     ["Fuel Source", "Tonnage / BTU", "Manufacture Date", "Filter Size"],
-  "Plumbing":        ["Supply Line Material", "Visible Corrosion", "Slow Drains"],
-  "Water Heater":    ["Capacity (gal)", "Power Source", "Manufacture Date", "T&P Valve"],
+  "Foundation":      ["Cracks", "Settling/Movement", "Moisture/Water intrusion", "Grading/Drainage"],
+  "Roof":            ["Shingles/Surface", "Flashing", "Sagging", "Gutters/Downspouts", "Age/Material"],
+  "Drainage":        ["Gutter Attached", "Downspout Extension", "Grade Slope", "Pooling/Standing Water"],
+  "Electrical Panel": ["Brand/Age", "Capacity (Amp)", "Double-taps", "Labeling", "GFCI/AFCI"],
+  "HVAC System":     ["Age", "Condition", "Refrigerant Leaks", "Function (heat + cool)", "Filter Size"],
+  "Plumbing":        ["Age", "Supply Line Material", "Visible Leaks", "Function (pressure + drain)", "Visible Corrosion"],
+  "Water Heater":    ["Age", "Capacity (gal)", "Leaks", "Function", "T&P Valve"],
 };
 
 interface InspectionTypeConfig {
@@ -335,7 +346,15 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   // uploading state replaced by uploadCount for non-blocking batch uploads
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [photoTarget, setPhotoTarget] = useState<{ room: number; item: number } | null>(null);
+  // Photo target uses a REF, not state, so its value is captured
+  // synchronously at the moment the camera/gallery button is tapped
+  // and read back when the file input's onChange fires. With useState
+  // the update is async; a second tap on a different item's camera
+  // button before the first React re-render could swap the target out
+  // from under the in-flight file picker, attaching the photo to the
+  // wrong item. Refs update synchronously so the race is gone, and we
+  // don't need to re-render anything when the target changes.
+  const photoTargetRef = useRef<{ room: number; item: number } | null>(null);
   const [showResume, setShowResume] = useState(() =>
     isEditing ? false : !!localStorage.getItem("c_inspect_roomData"),
   );
@@ -625,10 +644,15 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   // Batch upload — multiple files at once, non-blocking
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files?.length || !photoTarget) return;
+    // Read the target the user intended at click-time (set on the ref
+    // immediately before `.click()`). Reading the ref instead of state
+    // guarantees we get the value the user actually targeted, not a
+    // stale value from a previous tap or an interleaved re-render.
+    const target = photoTargetRef.current;
+    if (!files?.length || !target) return;
     // Upload all files concurrently
     Array.from(files).forEach((file) => {
-      uploadPhoto(file, photoTarget.room, photoTarget.item);
+      uploadPhoto(file, target.room, target.item);
     });
     if (cameraRef.current) cameraRef.current.value = "";
     if (fileRef.current) fileRef.current.value = "";
@@ -949,6 +973,14 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             // checklist / audio-bucket to all key off the wrong room.
             rooms={[voiceRoom.name]}
             singleRoom
+            // Single source of truth — the same `type × area` checklist
+            // the Inspector form uses. Without this, VoiceWalk falls
+            // back to the legacy move-out ROOM_PRESETS map and shows
+            // Kitchen voice prompts even on a Painting/Yard/Initial
+            // inspection. Threading the active type's items function
+            // here keeps the voice "things to mention" list in lockstep
+            // with what the user sees on the inspection form.
+            itemsForRoom={activeTypeConfig.itemsForRoom}
             roomStatuses={voiceProcessingStatus}
             onComplete={(result) => {
               // Capture the index AND name BEFORE we mutate state —
@@ -1163,7 +1195,11 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               <div style={{ display: "flex", gap: 2 }}>
                 <button
                   onClick={() => {
-                    setPhotoTarget({ room: currentRoomIdx, item: itemIdx });
+                    // Stamp the target synchronously so the file input's
+                    // onChange reads the room/item the user just tapped,
+                    // even if another item's button gets tapped before
+                    // the picker is dismissed.
+                    photoTargetRef.current = { room: currentRoomIdx, item: itemIdx };
                     cameraRef.current?.click();
                   }}
                   disabled={uploadCount > 0}
@@ -1180,7 +1216,8 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 </button>
                 <button
                   onClick={() => {
-                    setPhotoTarget({ room: currentRoomIdx, item: itemIdx });
+                    // Same synchronous stamp as the camera button.
+                    photoTargetRef.current = { room: currentRoomIdx, item: itemIdx };
                     fileRef.current?.click();
                   }}
                   disabled={uploadCount > 0}

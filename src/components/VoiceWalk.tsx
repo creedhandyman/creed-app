@@ -91,6 +91,9 @@ function itemKeywords(itemName: string): string[] {
     .filter((p) => p.length >= 3);
 }
 
+// Legacy ROOM_PRESETS-based lookup. Used as a fallback when the parent
+// didn't pass an `itemsForRoom` prop (e.g. older callers). The
+// type-aware path is preferred — see the wrapper inside the component.
 function presetItemsFor(room: string): string[] {
   const exact = ROOM_PRESETS[room];
   if (exact) return exact;
@@ -199,9 +202,17 @@ interface Props {
   /** Statuses for OTHER rooms in the inspection that the parent is
    *  processing in the background. Lights up the strip with ⏳/✓. */
   roomStatuses?: Record<string, VoiceWalkRoomStatus>;
+  /** Per-area item checklist — single source of truth shared with the
+   *  Inspector form. When provided, the "things to mention" list and
+   *  auto-tick keywords are derived from this. When omitted, falls back
+   *  to the legacy ROOM_PRESETS lookup (move-out behavior). Inspector
+   *  passes its active type's `itemsForRoom` here so Painting Only /
+   *  Yard Cutting / Initial Walkthrough surface the same checklist on
+   *  both the form and the voice screen. */
+  itemsForRoom?: (room: string) => string[];
 }
 
-export default function VoiceWalk({ property, client: _client, rooms, onComplete, onCancel, darkMode, singleRoom, roomStatuses }: Props) {
+export default function VoiceWalk({ property, client: _client, rooms, onComplete, onCancel, darkMode, singleRoom, roomStatuses, itemsForRoom }: Props) {
   void property; void _client; // (used only by the parent's processRoomVoice now)
   const isSingleRoom = singleRoom || rooms.length === 1;
 
@@ -261,6 +272,24 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   const currentRoom = rooms[currentIdx] || rooms[0] || null;
   const currentRoomRef = useRef<string | null>(currentRoom);
   useEffect(() => { currentRoomRef.current = currentRoom; }, [currentRoom]);
+
+  /**
+   * Single source of truth for "what items should the user mention in
+   * this area" — same checklist the Inspector form shows. When the
+   * parent passes `itemsForRoom` (the active inspection type's
+   * type × area config), use that. Otherwise fall back to the legacy
+   * ROOM_PRESETS lookup (move-out behavior, kept for back-compat).
+   * Used by the auto-tick keyword matcher, the room-strip badges, and
+   * the "things to mention" chip grid below the camera.
+   */
+  const itemsFor = (room: string | null): string[] => {
+    if (!room) return [];
+    if (itemsForRoom) {
+      const fromType = itemsForRoom(room);
+      if (fromType.length > 0) return fromType;
+    }
+    return presetItemsFor(room);
+  };
 
   const border = darkMode ? "#1e1e2e" : "#eee";
 
@@ -633,7 +662,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
     const fallbackText = supported ? "" : pendingTyped.toLowerCase();
     const text = `${speechText} ${fallbackText}`.trim();
     if (!text) return;
-    const items = presetItemsFor(currentRoom);
+    const items = itemsFor(currentRoom);
     const found: string[] = [];
     const already = mentioned[currentRoom] || new Set<string>();
     for (const item of items) {
@@ -788,7 +817,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
 
   /* ── Render ────────────────────────────────────────────────────── */
 
-  const items = currentRoom ? presetItemsFor(currentRoom) : [];
+  const items = itemsFor(currentRoom);
   const checkedSet = currentRoom ? mentioned[currentRoom] || new Set<string>() : new Set<string>();
   const currentRec = currentRoom ? roomRecordings[currentRoom] : undefined;
   const thisRoomPhotos = currentRec?.photos || [];
@@ -850,7 +879,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
             // Status from parent's background processing — renders the
             // ⏳/✓/✕ indicator on each room's chip in the strip.
             const status = roomStatuses?.[r];
-            const total = presetItemsFor(r).length;
+            const total = itemsFor(r).length;
             const checked = mentioned[r]?.size || 0;
             const photoCount = (roomRecordings[r]?.photos.length) || 0;
             const c = statusColor(status);
