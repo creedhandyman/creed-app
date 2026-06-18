@@ -8,7 +8,12 @@ the handoff doc, not user-facing copy.
 A Next.js 15 + React 19 + TypeScript app for handyman / field-service
 crews. Multi-tenant. Customers run quotes, schedule, clock in, get paid
 via Stripe. Backend is Supabase (Postgres + Auth + Storage + RLS).
-Hosted on Vercel — `main` auto-deploys.
+Hosted on Vercel (**Pro** plan) — `main` auto-deploys. All 3
+`vercel.json` crons run, including the **hourly** `reviews/dispatch`:
+Hobby caps cron frequency at once/day (an hourly schedule fails the
+build), so hourly needs Pro. The old 2-cron Hobby *count* cap was
+removed Jan 2026 (now 100/project on every plan), so the count is a
+non-issue regardless of plan.
 
 ## Where things live
 
