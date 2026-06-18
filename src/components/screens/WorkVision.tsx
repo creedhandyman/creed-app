@@ -5,6 +5,7 @@ import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip } from "@/lib/parser";
 import type { Job } from "@/lib/types";
+import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
 import ReviewRequestModal from "../ReviewRequestModal";
 
@@ -733,12 +734,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             // but the pink dot draws Bernard's eye to the rows that need care.
             const propCount: Record<string, number> = {};
             active.forEach((j) => { propCount[j.property] = (propCount[j.property] || 0) + 1; });
-            const statusColor = (s: string) =>
-              s === "active" ? "var(--color-success)" :
-              s === "scheduled" ? "var(--color-warning)" :
-              s === "accepted" ? "#ff8800" :
-              s === "lead" ? "#ff4d8d" :
-              "var(--color-accent-red)";
             return active.map((j) => {
               const dupe = propCount[j.property] > 1;
               return (

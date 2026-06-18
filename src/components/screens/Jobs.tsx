@@ -5,8 +5,8 @@ import { db, supabase } from "@/lib/supabase";
 import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
-import { t } from "@/lib/i18n";
 import { statusColor } from "@/lib/status";
+import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { Icon } from "../Icon";
 import PropertySearch from "../PropertySearch";
@@ -461,6 +461,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       loadAll();
     }
   };
+
 
   const escapeHtml = (s: string) =>
     String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

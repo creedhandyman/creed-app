@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "../Icon";
 import type { CustomerType, Address, Job } from "@/lib/types";
+import { statusColor } from "@/lib/status";
 
 interface Props {
   customerId: string;
@@ -32,17 +33,6 @@ const TYPE_COLOR: Record<CustomerType, string> = {
   individual: "var(--color-primary)",
   business: "var(--color-success)",
   property_manager: "var(--color-warning)",
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  quoted: "var(--color-accent-red)",
-  accepted: "#ff8800",
-  scheduled: "var(--color-highlight)",
-  active: "var(--color-success)",
-  complete: "var(--color-primary)",
-  invoiced: "#5a5af0",
-  paid: "#9b59b6",
-  inspection: "#888",
 };
 
 const formatAddressLine = (a: Address) => {
@@ -660,7 +650,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
               <div className="dim" style={{
                 fontSize: 10, fontFamily: "Oswald", letterSpacing: ".06em",
                 textTransform: "uppercase", marginBottom: 4,
-                color: STATUS_COLOR[status] || "#888",
+                color: statusColor(status),
               }}>
                 {status} ({statusJobs.length})
               </div>

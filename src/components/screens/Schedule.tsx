@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
-import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import PropertySearch from "../PropertySearch";
@@ -58,21 +57,6 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   // grow a mile long once dozens of jobs accumulate.
   const [allOpen, setAllOpen] = useState(false);
   const [showPast, setShowPast] = useState(false);
-  // Live-filter the drag-and-drop palette and the Add-to-Schedule job picker.
-  // Substring match against the property string, case-insensitive.
-  const [paletteQuery, setPaletteQuery] = useState("");
-  const [addJobQuery, setAddJobQuery] = useState("");
-  // Inline-edit modal: tapping a calendar chip opens this with the entry's
-  // current date / time / workers / notes so the user can reschedule,
-  // reassign, edit note, mark complete, or remove without leaving the
-  // calendar. `editId` holds the schedule row's id; modal state is loaded
-  // from the row when opened and written back on save.
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editDate, setEditDate] = useState("");
-  const [editTime, setEditTime] = useState("");
-  const [editWorkers, setEditWorkers] = useState<string[]>([]);
-  const [editNote, setEditNote] = useState("");
-  const [editSaving, setEditSaving] = useState(false);
 
   // When a job is armed via the drag palette, re-run the day-suggestion
   // logic so the user immediately sees a "schedule near nearby work" hint.
@@ -120,91 +104,6 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
       }
     }
     setSuggestion(null);
-  };
-
-  // Parse a schedule-row note back into structured time / workers / free-text
-  // notes. The note format is "🕐 09:30 · 👷 Alice, Bob · free-text". Used to
-  // pre-fill the inline-edit modal so existing values aren't wiped on save.
-  const parseNote = (note: string | undefined) => {
-    const n = note || "";
-    const time = n.match(/🕐\s*(\d{1,2}:\d{2})/)?.[1] || "";
-    const workersStr = n.match(/👷\s*([^·]+?)(?:\s*·|$)/)?.[1]?.trim() || "";
-    const workers = workersStr ? workersStr.split(/,\s*/).filter(Boolean) : [];
-    const free = n
-      .replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/g, "")
-      .replace(/👷\s*[^·]+?(?:\s*·|$)/g, "")
-      .trim();
-    return { time, workers, free };
-  };
-  const buildNote = (time: string, workers: string[], free: string) => {
-    const parts: string[] = [];
-    if (time) parts.push(`🕐 ${time}`);
-    if (workers.length) parts.push(`👷 ${workers.join(", ")}`);
-    if (free) parts.push(free);
-    return parts.join(" · ");
-  };
-
-  // Open the inline-edit modal for a schedule entry — hydrates the form from
-  // the row's current values.
-  const openEdit = (s: { id: string; sched_date: string; note?: string }) => {
-    const { time, workers, free } = parseNote(s.note);
-    setEditId(s.id);
-    setEditDate(s.sched_date);
-    setEditTime(time);
-    setEditWorkers(workers);
-    setEditNote(free);
-  };
-  const closeEdit = () => {
-    setEditId(null);
-    setEditDate("");
-    setEditTime("");
-    setEditWorkers([]);
-    setEditNote("");
-    setEditSaving(false);
-  };
-  const saveEdit = async () => {
-    if (!editId) return;
-    setEditSaving(true);
-    await db.patch("schedule", editId, {
-      sched_date: editDate,
-      note: buildNote(editTime, editWorkers, editNote),
-    });
-    await loadAll();
-    useStore.getState().showToast("Updated", "success");
-    closeEdit();
-  };
-  const completeEdit = async () => {
-    const entry = schedule.find((s) => s.id === editId);
-    if (!entry) return;
-    // Find the linked job by property + status (prefer scheduled/active).
-    // Mirrors the lookup at the bottom of the day-detail panel.
-    const linkedJob = jobs
-      .filter((j) => j.property === entry.job && !j.archived)
-      .sort((a, b) => {
-        const order = ["active", "scheduled", "accepted", "quoted", "complete", "invoiced", "paid"];
-        return order.indexOf(a.status) - order.indexOf(b.status);
-      })[0];
-    if (!linkedJob) {
-      useStore.getState().showToast("No matching job to mark complete", "warning");
-      return;
-    }
-    if (!await useStore.getState().showConfirm(
-      "Mark Complete",
-      `Mark "${linkedJob.property}" as complete?`,
-    )) return;
-    setEditSaving(true);
-    await db.patch("jobs", linkedJob.id, { status: "complete" });
-    await loadAll();
-    useStore.getState().showToast("Marked complete", "success");
-    closeEdit();
-  };
-  const removeEdit = async () => {
-    if (!editId) return;
-    if (!await useStore.getState().showConfirm("Remove Entry", "Remove from schedule?")) return;
-    setEditSaving(true);
-    await db.del("schedule", editId);
-    await loadAll();
-    closeEdit();
   };
 
   // Quick-add used by the drag/drop + tap-to-arm flow — writes a schedule
@@ -423,55 +322,34 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             )}
             {/* Draggable chips for the first two jobs of the day. Drag to a
                 different day cell to reschedule. Long names truncate so the
-                chip stays inside the cell on narrow viewports. Background
-                is tinted with the linked job's status color (same palette
-                as the Jobs tab pills) so a glance at the calendar tells you
-                what state each scheduled job is in. Falls back to neutral
-                gray for freeform entries that don't map to a saved job.
-                Tap to open the inline-edit modal; drag still reschedules. */}
-            {items.slice(0, 2).map((it) => {
-              // Match the schedule entry's free-text property back to a real
-              // job. Multiple jobs can share an address (callbacks, repeat
-              // visits) — newest non-archived wins, same rule the day-detail
-              // panel below uses.
-              const linkedJob = jobs
-                .filter((j) => j.property === it.job && !j.archived)
-                .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
-              const c = linkedJob ? statusColor(linkedJob.status) : "#888";
-              return (
-                <div
-                  key={it.id}
-                  draggable
-                  onDragStart={(e) => {
-                    e.stopPropagation();
-                    e.dataTransfer.setData("text/plain", `move:${it.id}`);
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                  onClick={(e) => {
-                    // Tap = open inline-edit modal (full title + actions).
-                    // Drag is still wired to reschedule across days.
-                    e.stopPropagation();
-                    openEdit(it);
-                  }}
-                  title={`${it.job}${linkedJob ? ` [${linkedJob.status}]` : ""}${it.note ? " — " + it.note : ""} (tap to edit)`}
-                  style={{
-                    fontSize: 9,
-                    padding: "2px 4px",
-                    borderRadius: 3,
-                    background: c + "33",
-                    color: c,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    cursor: "pointer",
-                    border: `1px solid ${c}66`,
-                    fontWeight: 600,
-                  }}
-                >
-                  {it.job}
-                </div>
-              );
-            })}
+                chip stays inside the cell on narrow viewports. */}
+            {items.slice(0, 2).map((it) => (
+              <div
+                key={it.id}
+                draggable
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  e.dataTransfer.setData("text/plain", `move:${it.id}`);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onClick={(e) => e.stopPropagation()}
+                title={`${it.job}${it.note ? " — " + it.note : ""}`}
+                style={{
+                  fontSize: 9,
+                  padding: "2px 4px",
+                  borderRadius: 3,
+                  background: "var(--color-primary)" + "22",
+                  color: "var(--color-primary)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  cursor: "grab",
+                  border: "1px solid var(--color-primary)33",
+                }}
+              >
+                {it.job}
+              </div>
+            ))}
             {items.length > 2 && (
               <div style={{ fontSize: 8, color: "var(--color-primary)", textAlign: "center" }}>
                 +{items.length - 2} more
@@ -551,18 +429,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         // Archived jobs are excluded. Sorted accepted → scheduled → active
         // so the newest work is what the user sees first.
         const STATUS_ORDER: Record<string, number> = { accepted: 0, scheduled: 1, active: 2 };
-        const fullPalette = jobs
+        const palette = jobs
           .filter((j) => !j.archived && (j.status === "accepted" || j.status === "scheduled" || j.status === "active"))
           .sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
-        if (fullPalette.length === 0) return null;
-        const q = paletteQuery.trim().toLowerCase();
-        const palette = q
-          ? fullPalette.filter((j) =>
-              (j.property || "").toLowerCase().includes(q) ||
-              (j.client || "").toLowerCase().includes(q) ||
-              (j.status || "").toLowerCase().includes(q),
-            )
-          : fullPalette;
+        if (palette.length === 0) return null;
         const acceptedCount = palette.filter((j) => j.status === "accepted").length;
         const scheduledCount = palette.filter((j) => j.status === "scheduled").length;
         const activeCount = palette.filter((j) => j.status === "active").length;
@@ -583,42 +453,8 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 </span>
               )}
             </h4>
-            {fullPalette.length > 4 && (
-              <div style={{ position: "relative", marginBottom: 6 }}>
-                <input
-                  value={paletteQuery}
-                  onChange={(e) => setPaletteQuery(e.target.value)}
-                  placeholder={`${t("common.search")} ${fullPalette.length} jobs…`}
-                  style={{ width: "100%", fontSize: 12, paddingRight: paletteQuery ? 28 : 10 }}
-                  aria-label="Filter palette"
-                />
-                {paletteQuery && (
-                  <button
-                    onClick={() => setPaletteQuery("")}
-                    aria-label="Clear search"
-                    style={{
-                      position: "absolute",
-                      right: 6,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "transparent",
-                      border: "none",
-                      color: "#888",
-                      fontSize: 13,
-                      padding: 2,
-                      cursor: "pointer",
-                      lineHeight: 1,
-                    }}
-                  >×</button>
-                )}
-              </div>
-            )}
             <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-              {palette.length === 0 ? (
-                <span className="dim" style={{ fontSize: 11 }}>
-                  No matches for &ldquo;{paletteQuery}&rdquo;.
-                </span>
-              ) : palette.map((j) => {
+              {palette.map((j) => {
                 const isArmed = armedJob === j.property;
                 const isScheduled = j.status === "scheduled";
                 const isActive = j.status === "active";
@@ -808,233 +644,9 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         </div>
       )}
 
-      {/* ── Inline Edit Modal — opens when a calendar chip or day-detail
-          row is tapped. Shows the full untruncated address plus quick
-          actions: reschedule (date), retime (time), reassign (workers),
-          add/edit note, mark complete, view in Jobs, or remove. ── */}
-      {editId && (() => {
-        const entry = schedule.find((s) => s.id === editId);
-        if (!entry) return null;
-        const linkedJob = jobs
-          .filter((j) => j.property === entry.job && !j.archived)
-          .sort((a, b) => {
-            const order = ["active", "scheduled", "accepted", "quoted", "complete", "invoiced", "paid"];
-            return order.indexOf(a.status) - order.indexOf(b.status);
-          })[0];
-        return (
-          <div
-            onClick={closeEdit}
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 199,
-              background: "rgba(0,0,0,.5)",
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "center",
-              padding: "6vh 16px",
-              overflowY: "auto",
-              WebkitOverflowScrolling: "touch",
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                zIndex: 200,
-                width: "100%",
-                maxWidth: 420,
-                background: darkMode ? "#12121a" : "#fff",
-                border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-                borderRadius: 12,
-                padding: 18,
-                boxShadow: "0 8px 32px rgba(0,0,0,.5)",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
-                <h4 style={{ fontSize: 14, color: "var(--color-primary)", margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <Icon name="edit" size={14} color="var(--color-primary)" />
-                  Edit scheduled job
-                </h4>
-                <button
-                  onClick={closeEdit}
-                  aria-label="Close"
-                  style={{ background: "transparent", border: "none", color: "#888", fontSize: 18, padding: 0, lineHeight: 1, cursor: "pointer" }}
-                >
-                  ×
-                </button>
-              </div>
-
-              {/* Full job title — no truncation */}
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "var(--color-primary)",
-                  marginBottom: 4,
-                  wordBreak: "break-word",
-                }}
-              >
-                📍 {entry.job}
-              </div>
-              {linkedJob && (
-                <div className="dim" style={{ fontSize: 11, marginBottom: 12 }}>
-                  Status: <b>{linkedJob.status}</b>{linkedJob.client ? ` · ${linkedJob.client}` : ""}
-                </div>
-              )}
-
-              <div className="g2" style={{ marginBottom: 10 }}>
-                <div>
-                  <label className="sl" style={{ fontSize: 11 }}>Date</label>
-                  <input
-                    type="date"
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
-                    style={{ marginTop: 4, color: "var(--color-accent-red)", fontWeight: 600, width: "100%" }}
-                  />
-                </div>
-                <div>
-                  <label className="sl" style={{ fontSize: 11 }}>{t("sched.time")}</label>
-                  <input
-                    type="time"
-                    value={editTime}
-                    onChange={(e) => setEditTime(e.target.value)}
-                    style={{ marginTop: 4, color: "var(--color-primary)", fontWeight: 600, width: "100%" }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 10 }}>
-                <label className="sl" style={{ fontSize: 11 }}>{t("sched.workers")}</label>
-                <div className="row" style={{ marginTop: 4, flexWrap: "wrap" }}>
-                  {profiles.map((p) => {
-                    const sel = editWorkers.includes(p.name);
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => setEditWorkers((prev) => sel ? prev.filter((n) => n !== p.name) : [...prev, p.name])}
-                        style={{
-                          padding: "3px 10px",
-                          borderRadius: 16,
-                          fontSize: 12,
-                          background: sel ? "var(--color-primary)" + "33" : "transparent",
-                          color: sel ? "var(--color-primary)" : "#888",
-                          border: `1px solid ${sel ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
-                        }}
-                      >
-                        {sel ? "✓ " : ""}{p.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                <label className="sl" style={{ fontSize: 11 }}>{t("sched.notes")}</label>
-                <input
-                  value={editNote}
-                  onChange={(e) => setEditNote(e.target.value)}
-                  placeholder={t("sched.optional")}
-                  style={{ marginTop: 4 }}
-                />
-              </div>
-
-              {/* Primary action row */}
-              <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-                <button
-                  onClick={closeEdit}
-                  className="bo"
-                  disabled={editSaving}
-                  style={{ flex: 1, fontSize: 12 }}
-                >
-                  {t("common.cancel")}
-                </button>
-                <button
-                  onClick={saveEdit}
-                  className="bg"
-                  disabled={editSaving || !editDate}
-                  style={{ flex: 2, fontSize: 13 }}
-                >
-                  {editSaving ? "…" : t("common.save")}
-                </button>
-              </div>
-
-              {/* Secondary actions */}
-              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                {linkedJob && linkedJob.status !== "complete" && linkedJob.status !== "paid" && linkedJob.status !== "invoiced" && (
-                  <button
-                    onClick={completeEdit}
-                    className="bb"
-                    disabled={editSaving}
-                    style={{ fontSize: 11, padding: "4px 10px", flex: 1, minWidth: 110 }}
-                  >
-                    ✓ Mark complete
-                  </button>
-                )}
-                {linkedJob && (
-                  <button
-                    onClick={() => { closeEdit(); setPage("jobs"); }}
-                    className="bo"
-                    style={{ fontSize: 11, padding: "4px 10px", flex: 1, minWidth: 110 }}
-                  >
-                    View in Jobs →
-                  </button>
-                )}
-                <button
-                  onClick={removeEdit}
-                  disabled={editSaving}
-                  style={{
-                    fontSize: 11,
-                    padding: "4px 10px",
-                    flex: 1,
-                    minWidth: 110,
-                    background: "transparent",
-                    color: "var(--color-accent-red)",
-                    border: `1px solid var(--color-accent-red)`,
-                    borderRadius: 6,
-                    cursor: "pointer",
-                  }}
-                >
-                  Remove from schedule
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Add to Schedule */}
       <div className="cd mb">
         <h4 style={{ fontSize: 13, marginBottom: 8 }}>Add to Schedule</h4>
-        {jobs.length > 6 && (
-          <div style={{ position: "relative", marginBottom: 6 }}>
-            <input
-              value={addJobQuery}
-              onChange={(e) => setAddJobQuery(e.target.value)}
-              placeholder={`${t("common.search")} jobs by address, client, status…`}
-              style={{ width: "100%", fontSize: 12, paddingRight: addJobQuery ? 28 : 10 }}
-              aria-label="Filter jobs"
-            />
-            {addJobQuery && (
-              <button
-                onClick={() => setAddJobQuery("")}
-                aria-label="Clear search"
-                style={{
-                  position: "absolute",
-                  right: 6,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "transparent",
-                  border: "none",
-                  color: "#888",
-                  fontSize: 13,
-                  padding: 2,
-                  cursor: "pointer",
-                  lineHeight: 1,
-                }}
-              >×</button>
-            )}
-          </div>
-        )}
         <div className="row">
           <input
             type="date"
@@ -1052,24 +664,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             style={{ flex: 1 }}
           >
             <option value="">{t("sched.selectJob")}</option>
-            {(() => {
-              const q = addJobQuery.trim().toLowerCase();
-              const filtered = q
-                ? jobs.filter((j) =>
-                    (j.property || "").toLowerCase().includes(q) ||
-                    (j.client || "").toLowerCase().includes(q) ||
-                    (j.status || "").toLowerCase().includes(q),
-                  )
-                : jobs;
-              if (filtered.length === 0) {
-                return <option disabled>No matches</option>;
-              }
-              return filtered.map((j) => (
-                <option key={j.id} value={j.property}>
-                  {j.property} ({j.status})
-                </option>
-              ));
-            })()}
+            {jobs.map((j) => (
+              <option key={j.id} value={j.property}>
+                {j.property} ({j.status})
+              </option>
+            ))}
           </select>
           <button
             className="bg"
@@ -1283,7 +882,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   return (
                     <div key={s.id} className="sep" style={{ fontSize: 12, padding: "8px 0" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: linkedJob ? 6 : 0, gap: 6 }}>
-                        <div style={{ minWidth: 0, flex: 1 }}>
+                        <div>
                           <b
                             onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
                             style={{ color: "var(--color-primary)", cursor: "pointer" }}
@@ -1291,23 +890,13 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                           >📍 {s.job}</b>
                           {s.note && <div className="dim" style={{ fontSize: 10 }}>{s.note}</div>}
                         </div>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          <button
-                            className="bo"
-                            onClick={() => openEdit(s)}
-                            style={{ fontSize: 12, padding: "3px 8px" }}
-                            title="Edit / reschedule"
-                          >
-                            <Icon name="edit" size={12} />
-                          </button>
-                          <button
-                            className="bb"
-                            onClick={() => setPage("time")}
-                            style={{ fontSize: 13, padding: "3px 8px" }}
-                          >
-                            ⏱ Start
-                          </button>
-                        </div>
+                        <button
+                          className="bb"
+                          onClick={() => setPage("time")}
+                          style={{ fontSize: 13, padding: "3px 8px" }}
+                        >
+                          ⏱ Start
+                        </button>
                       </div>
                       {linkedJob && <SmsNotifyButtons jobId={linkedJob.id} compact />}
                     </div>

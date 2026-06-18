@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import type { Customer, Address, Job, Receipt, Organization, Room } from "@/lib/types";
 import { exportQuotePdf } from "@/lib/export-pdf";
 import { exportJobReport } from "@/lib/export-job-report";
+import { statusColor } from "@/lib/status";
 
 const PRIMARY = "#2E75B6";
 
@@ -47,17 +48,6 @@ const STATUS_LABEL: Record<string, string> = {
   invoiced: "Invoiced",
   paid: "Paid",
   inspection: "Inspection",
-};
-const STATUS_COLOR: Record<string, string> = {
-  lead: "#888",
-  quoted: "#C00000",
-  accepted: "#ff8800",
-  scheduled: "#ffcc00",
-  active: "#00cc66",
-  complete: PRIMARY,
-  invoiced: "#5a5af0",
-  paid: "#9b59b6",
-  inspection: "#888",
 };
 
 const fmtMoney = (n: number) => `$${(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -379,7 +369,7 @@ function Section({ title, tint, children }: { title: string; tint: string; child
 }
 
 function statusBadge(status: string) {
-  const color = STATUS_COLOR[status] || "#888";
+  const color = statusColor(status);
   return (
     <span
       style={{

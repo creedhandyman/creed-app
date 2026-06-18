@@ -193,7 +193,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   /* ── UI Preferences ── */
-  darkMode: ld("dk", false),
+  darkMode: ld("dk", true),
   navLeft: ld("navl", false),
   navBottom: ld("navb", true),
 
