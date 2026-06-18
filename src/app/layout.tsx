@@ -18,6 +18,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // viewport-fit=cover is the linchpin for the whole safe-area system:
+  // without it iOS resolves every env(safe-area-inset-*) to 0, which
+  // silently no-ops the bottom-nav height, the .mc bottom margin, and
+  // the .sb sticky offset in globals.css. With it, all of that activates.
+  viewportFit: "cover",
   themeColor: "#0a0a0f",
 };
 
