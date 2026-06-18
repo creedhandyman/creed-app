@@ -333,7 +333,8 @@ Examples that go tnm=true: "Investigate boards behind tub for underlying damage"
 7c. ROOM SQFT PROPAGATION (CRITICAL for area-driven work). The inspection text gives each room's sqft on the "Room Size: N square feet" line under the room header. When you emit a Flooring or Painting (wall/ceiling/full-repaint) line for that room, you MUST set "sqft": N on the line item with the room's sqft value. This populates the editor's SQFT column and grounds the per-sqft labor/materials math in real area. Examples:
 - Inspection: "=== Living Room === Room Size: 235 square feet" + "Flooring: POOR — Replace with LVP" → emit Flooring item with "sqft": 235.
 - Inspection: "=== Bedroom 1 === Room Size: 168 square feet" + "Walls/Ceiling: P — Full repaint walls and ceiling" → emit Painting item with "sqft": 168.
-- Room with no Room Size line (sqft unknown to the inspector) → omit the sqft field; note "(sqft TBD on site)" in the comment so the owner knows the hours are an estimate.
+- Room whose Room Size line says "(ESTIMATED from room type)" → treat that number as the room's sqft and STILL set "sqft": N on flooring/painting lines for it, so the SQFT column populates and the math is grounded. Do NOT add an "estimated" disclaimer to the comment — the owner is flagged about unmeasured rooms separately.
+- Room with no Room Size line at all (sqft unknown to the inspector) → omit the sqft field; note "(sqft TBD on site)" in the comment so the owner knows the hours are an estimate.
 The sqft you put on the item should match the room's stated sqft. Don't divide it across multiple line items in the same room — each flooring/painting line in that room gets the same sqft (the room area), not a fraction.
 
 8. ENUMERATE EVERY DISTINCT ISSUE inside a comment. Inspection cells routinely chain multiple separate repairs in one cell, separated by periods, semicolons, "and", or commas. Each is a distinct repair you must scope. Walk the comment sentence by sentence — if there are 4 sentences describing 4 issues, you owe 4 line items (or one line with 4 materials, whichever fits the trade). The fact that the inspector wrote them in one cell is shorthand; you must un-shorthand it.
@@ -1466,6 +1467,52 @@ export interface InspectionInput {
   inspectionType?: string;
 }
 
+/* Typical interior-room areas (sqft) used ONLY as an estimate when the
+   inspector didn't capture a room's W×L (sqft stays 0). A real
+   measurement always wins; the estimate is tagged everywhere it surfaces
+   so the owner knows to verify on site. Keyword-matched, most-specific
+   first. */
+const ROOM_SQFT_DEFAULTS: { test: RegExp; sqft: number }[] = [
+  { test: /(master|primary).*(bath|en-?suite)/, sqft: 80 },
+  { test: /(master|primary).*(bed|suite)/, sqft: 224 },
+  { test: /half|powder/, sqft: 25 },
+  { test: /bath|restroom|washroom/, sqft: 50 },
+  { test: /bed|nursery|guest\s*room/, sqft: 144 },
+  { test: /kitchen/, sqft: 120 },
+  { test: /(living|family|great)\s*room|lounge/, sqft: 256 },
+  { test: /dining/, sqft: 144 },
+  { test: /hall|corridor|stair|landing/, sqft: 60 },
+  { test: /closet|pantry/, sqft: 25 },
+  { test: /laundry|utility|mud\s*room/, sqft: 40 },
+  { test: /garage/, sqft: 400 },
+  { test: /basement/, sqft: 600 },
+  { test: /attic/, sqft: 300 },
+  { test: /office|study|\bden\b/, sqft: 120 },
+  { test: /entry|foyer/, sqft: 50 },
+  { test: /sun\s*room|bonus|loft|rec\s*room|play\s*room|flex/, sqft: 200 },
+];
+
+/* Names that are NOT sqft-floored rooms — structural / MEP / exterior /
+   pseudo-areas that show up in initial-walkthrough + yard inspections.
+   These get NO estimate so we never print a bogus "Room Size" on an
+   electrical panel or a lawn. */
+const NON_ROOM_SQFT = /panel|breaker|hvac|furnace|condenser|water\s*heater|foundation|\broof\b|gutter|drainage|crawl|exterior|siding|grounds|yard|lawn|landscap|driveway|fence|\bdeck\b|patio|porch|whole\s*property/;
+
+/** Effective sqft for pricing / reporting. A real W×L measurement
+ *  (room.sqft > 0) always wins. Otherwise fall back to a typical size by
+ *  room type so the SQFT column and flooring math are never blank;
+ *  `estimated:true` tells callers to tag the value "verify on site".
+ *  Structural / exterior / pseudo areas return 0 (no estimate). */
+export function effectiveSqft(room: { name: string; sqft?: number }): { sqft: number; estimated: boolean } {
+  if (typeof room.sqft === "number" && room.sqft > 0) return { sqft: room.sqft, estimated: false };
+  const name = (room.name || "").toLowerCase();
+  if (NON_ROOM_SQFT.test(name)) return { sqft: 0, estimated: false };
+  for (const d of ROOM_SQFT_DEFAULTS) {
+    if (d.test.test(name)) return { sqft: d.sqft, estimated: true };
+  }
+  return { sqft: 150, estimated: true };
+}
+
 /** Compile a subset of inspection rooms into the structured text the AI expects. */
 function compileInspectionText(
   rooms: InspectionInput["rooms"],
@@ -1493,8 +1540,11 @@ function compileInspectionText(
 
   rooms.forEach((room) => {
     text += `=== ${room.name} ===\n`;
-    if (room.sqft && room.sqft > 0) {
-      text += `Room Size: ${room.sqft} square feet\n`;
+    const eff = effectiveSqft(room);
+    if (eff.sqft > 0) {
+      text += eff.estimated
+        ? `Room Size: ~${eff.sqft} square feet (ESTIMATED from room type — verify on site)\n`
+        : `Room Size: ${eff.sqft} square feet\n`;
     }
     room.items.forEach((item) => {
       const condLabel =
@@ -1689,7 +1739,10 @@ export async function aiParseInspection(
       const hasFlooring = damagedFindings.some((f) =>
         /floor|carpet|lvp|laminate|vinyl|tile/i.test(f.name + " " + f.notes),
       );
-      const sqft = room.sqft && room.sqft > 0 ? room.sqft : 0;
+      // Real W×L wins; otherwise a room-type estimate so flooring math
+      // isn't stranded on the "sqft pending" placeholder. Unmeasured
+      // rooms are listed for the owner in merged.notes below.
+      const sqft = effectiveSqft(room).sqft;
       const rate = laborRate || 55;
 
       // Build a client-clean comment from the inspection findings. The
@@ -1860,6 +1913,26 @@ export async function aiParseInspection(
     }
     merged.notes.push(
       `${missingRooms.length} room${missingRooms.length === 1 ? " was" : "s were"} flagged DAMAGED in the inspection but the AI didn't produce a line item — auto-added with conservative pricing. Verify: ${missingRooms.join(", ")}.`,
+    );
+  }
+
+  // Owner-facing checklist (notes only, never the customer line item):
+  // real rooms the inspector never measured but that carry flooring /
+  // painting findings — their area, and therefore the labor/material
+  // math, is a room-type estimate until W×L is captured.
+  const estimatedAreaRooms = inspection.rooms
+    .filter((r) =>
+      !(r.sqft && r.sqft > 0) &&
+      effectiveSqft(r).estimated &&
+      r.items.some((it) =>
+        (it.condition === "D" || it.condition === "P") &&
+        /floor|carpet|lvp|laminate|vinyl|tile|wall|ceiling|paint|repaint|baseboard/i.test(`${it.name} ${it.notes}`),
+      ),
+    )
+    .map((r) => r.name);
+  if (estimatedAreaRooms.length) {
+    merged.notes.push(
+      `${estimatedAreaRooms.length} room${estimatedAreaRooms.length === 1 ? "" : "s"} had no W×L measurement — flooring/painting priced off a room-type area estimate. Measure to firm up: ${estimatedAreaRooms.join(", ")}.`,
     );
   }
 
