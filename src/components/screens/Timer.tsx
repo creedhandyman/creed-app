@@ -111,6 +111,7 @@ export default function Timer({ setPage }: Props) {
   const myUnpaid = timeEntries.filter((e) => (e.user_id === user.id || (!e.user_id && e.user_name === user.name)) && !e.paid_at);
   const checkHrs = myUnpaid.reduce((s, e) => s + (e.hours || 0), 0);
   const checkPay = checkHrs * rate;
+  const initials = (name: string) => (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
 
   // Persist timer state
   useEffect(() => sv("t_on", on), [on]);
@@ -681,24 +682,33 @@ export default function Timer({ setPage }: Props) {
 
               const isExpanded = expandedCrew === p.id;
               const rRate = p.rate || 55;
+              const activeEntry = activeSessions.find((e) => e.user_id === p.id || (!e.user_id && e.user_name === p.name));
+              const isActive = !!activeEntry;
+              const activeElapsed = activeEntry?.start_time ? elapsedFrom(activeEntry.start_time, activeEntry.entry_date) : "";
               return (
                 <div key={p.id} style={{ padding: "8px 0", borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
                   <div
-                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
                     onClick={() => setExpandedCrew(isExpanded ? null : p.id)}
                   >
-                    <div>
-                      <span style={{ fontSize: 11, marginRight: 4 }}>{isExpanded ? "▼" : "▶"}</span>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
-                      <span className="dim" style={{ marginLeft: 6, fontSize: 12 }}>{p.role} · ${rRate}/hr</span>
+                    {/* Avatar + live status dot */}
+                    <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#cdd6e6", flexShrink: 0 }}>
+                      {initials(p.name)}
+                      <span style={{ position: "absolute", right: -1, bottom: -1, width: 11, height: 11, borderRadius: "50%", border: `2px solid ${darkMode ? "#16161f" : "#fff"}`, background: isActive ? "var(--color-success)" : "#555" }} />
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      {todayHrs > 0 ? (
-                        <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 15 }}>{todayHrs.toFixed(1)}h {t("timer.todayLabel").toLowerCase()}</span>
-                      ) : (
-                        <span className="dim" style={{ fontSize: 13 }}>{t("timer.notClockedIn")}</span>
-                      )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".3px" }}>{p.name}</div>
+                      <div className="dim" style={{ fontSize: 10.5 }}>{p.role} · ${rRate}/hr</div>
                     </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: isActive ? "var(--color-success)" : todayHrs > 0 ? "inherit" : "var(--color-dim)" }}>
+                        {isActive && activeElapsed ? activeElapsed : todayHrs > 0 ? `${todayHrs.toFixed(1)}h` : "—"}
+                      </div>
+                      <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 1, background: isActive ? "rgba(0,204,102,.16)" : "var(--color-card-dark-2)", color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
+                        {isActive ? "On the clock" : "Off"}
+                      </span>
+                    </div>
+                    <Icon name={isExpanded ? "collapse" : "expand"} size={14} color="#888" />
                   </div>
                   {/* Detail row */}
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 12 }}>
