@@ -832,7 +832,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
               <span className="lf"><span className="ic"><Icon name="list" size={15} /></span> Work order</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
             </div>
-            <div className="linkrow" onClick={() => useStore.getState().showToast("Receipts & photos screen lands in Phase 3", "info")}>
+            <div className="linkrow" onClick={() => setSubScreen({ id: dj.id, kind: "receipts" })}>
               <span className="lf"><span className="ic" style={{ color: "var(--color-warning)" }}><Icon name="receipt" size={15} /></span> Receipts &amp; photos</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
             </div>
@@ -1025,11 +1025,74 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
         })()}
 
         {subScreen.kind === "receipts" && (
-          <div className="section">
-            <div style={{ fontSize: 12, color: "var(--color-dim)", padding: "12px 0", textAlign: "center" }}>
-              Receipts &amp; photos — building next.
+          <>
+            {/* Add receipt — attach a photo to auto-scan (vendor/amount/items
+                via AI -> price_corrections), or type the note + amount. */}
+            <div className="section">
+              <div className="seclabel"><Icon name="camera" size={13} /> Add receipt</div>
+              <label
+                onClick={() => { if (!scanning) photoRef.current?.click(); }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 12, border: "1.5px dashed var(--color-border-dark-2)", color: scanning ? "var(--color-warning)" : "var(--color-primary)", cursor: scanning ? "wait" : "pointer", fontFamily: "Oswald", fontSize: 13, marginTop: 8 }}
+              >
+                <Icon name="camera" size={15} />
+                {scanning ? "Scanning receipt…" : rPhoto ? rPhoto.name : "Attach photo · auto-scan"}
+              </label>
+              <input
+                ref={photoRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: "none" }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoAttach(f, sj.id); }}
+              />
+              <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
+                <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={scanning ? "Scanning…" : "Note / vendor"} style={{ flex: 1 }} disabled={scanning} />
+                <input type="number" value={ra} onChange={(e) => setRa(e.target.value)} placeholder="$" style={{ width: 72 }} disabled={scanning} />
+                <button className="bg" onClick={() => addReceipt(sj.id)} style={{ fontSize: 12, padding: "6px 12px" }} disabled={uploading || scanning}>
+                  {uploading ? "…" : "Add"}
+                </button>
+              </div>
+              {rPhoto && !scanning && (
+                <button
+                  onClick={() => { setRPhoto(null); setScannedPhotoUrl(""); setScannedItems([]); setScannedVendor(""); if (photoRef.current) photoRef.current.value = ""; }}
+                  style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 12, padding: "8px 0 0", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
+                  <Icon name="close" size={12} /> Remove photo
+                </button>
+              )}
             </div>
-          </div>
+
+            {/* Receipt list */}
+            <div className="section">
+              <div className="seclabel"><Icon name="receipt" size={13} /> Receipts</div>
+              {receipts.filter((r) => r.job_id === sj.id).length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--color-dim)", padding: "10px 0", textAlign: "center" }}>No receipts on this job yet.</div>
+              ) : (
+                receipts.filter((r) => r.job_id === sj.id).map((r) => (
+                  <div key={r.id} className="drow">
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      {r.photo_url && (
+                        <img src={r.photo_url} alt="" onClick={() => setViewPhoto(r.photo_url)} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", cursor: "pointer", flexShrink: 0, border: "1px solid var(--color-border-dark)" }} />
+                      )}
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ fontSize: 12.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.note || "Receipt"}</span>
+                        <span className="dim" style={{ fontSize: 10 }}>{r.receipt_date}</span>
+                      </span>
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                      <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 13 }}>${(r.amount || 0).toFixed(2)}</span>
+                      <button
+                        onClick={async () => { if (await useStore.getState().showConfirm("Delete Receipt", "Delete receipt?")) { await db.del("receipts", r.id); loadAll(); } }}
+                        style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 13, cursor: "pointer", padding: 0 }}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
         )}
       </>
     );
