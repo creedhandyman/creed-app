@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
@@ -657,6 +657,17 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const priColor = (pri: string) => pri === "HIGH" ? "var(--color-accent-red)" : pri === "MED" ? "var(--color-warning)" : "var(--color-success)";
   const priLabel = (pri: string) => pri === "HIGH" ? t("wv.urgent") : pri === "MED" ? t("wv.needed") : t("wv.minor");
 
+  // Group tasks by trade/area for the Tasks tab (the work-order `room` field is
+  // QuoteForge's "Trade / Area"), so the list reads like the mockup: a colored
+  // trade header with its items beneath. Stable sort by room preserves the
+  // done-last / priority-first order from sortedWO within each group.
+  const groupedWO = [...sortedWO].sort((a, b) => (a.room || "").localeCompare(b.room || ""));
+  const TRADE_DOT: Record<string, string> = {
+    plumbing: "#3aa0ff", electrical: "#ffcc00", carpentry: "#ff8800", hvac: "#9d4edd",
+    painting: "#00cc66", flooring: "#ff5b5b", general: "#8a8a99", drywall: "#06b6d4",
+  };
+  const tradeDot = (room: string) => TRADE_DOT[(room || "").toLowerCase().trim()] || "var(--color-primary)";
+
   // Pull the rich detail for a work-order task: matching quote item (so we
   // can show its materials and original inspection comment), plus any
   // inspection photos that captured the area before work started. Crews on
@@ -818,26 +829,32 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         </div>
       )}
 
-      {/* Section tabs */}
-      <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
-        {[
-          { id: "tasks" as const, label: `✅ ${t("wv.tasks")} (${workOrder.filter((w) => !w.done).length})`, count: workOrder.length },
-          { id: "guide" as const, label: `🛒 ${t("wv.guide")}`, count: 0 },
-          { id: "notes" as const, label: `📝 ${t("common.notes")}`, count: 0 },
-          { id: "photos" as const, label: `📸 ${t("common.photos")} (${jobData?.photos?.length || 0})`, count: 0 },
-        ].map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setSection(s.id)}
-            style={{
-              flex: 1, padding: "6px 4px", borderRadius: 6, fontSize: 12,
-              background: section === s.id ? "var(--color-primary)" : "transparent",
-              color: section === s.id ? "#fff" : "#888", fontFamily: "Oswald",
-            }}
-          >
-            {s.label}
-          </button>
-        ))}
+      {/* Section tabs — segmented control (icon + label) */}
+      <div style={{ display: "flex", gap: 5, marginBottom: 12 }}>
+        {([
+          { id: "tasks" as const, icon: "list" as const, label: t("wv.tasks") },
+          { id: "guide" as const, icon: "cart" as const, label: t("wv.guide") },
+          { id: "notes" as const, icon: "edit" as const, label: t("common.notes") },
+          { id: "photos" as const, icon: "photo" as const, label: t("common.photos") },
+        ]).map((s) => {
+          const on = section === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setSection(s.id)}
+              style={{
+                flex: 1, padding: "8px 2px", borderRadius: 10, fontSize: 10.5, fontFamily: "Oswald",
+                letterSpacing: ".04em", display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                background: on ? "var(--color-primary)" : "var(--color-card-dark-2)",
+                color: on ? "#fff" : "var(--color-dim)",
+                border: `1px solid ${on ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+              }}
+            >
+              <Icon name={s.icon} size={15} color={on ? "#fff" : "var(--color-dim)"} />
+              {s.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Swipeable content area — see swipe constants above for the
@@ -883,7 +900,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
               {/* Priority sorted work order — tap body to expand for materials,
                   inspection comment, and before-photos. Tap the box to mark done. */}
-              {sortedWO.map((w) => {
+              {groupedWO.map((w, gi) => {
                 const isOpen = expandedTask === w._idx;
                 const enriched = enrichTask(w);
                 const matTotal = enriched.materials.reduce((s, m) => s + (m.c || 0), 0);
@@ -891,9 +908,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   enriched.condition === "D" ? t("wv.damaged") :
                   enriched.condition === "P" ? t("wv.poor") :
                   enriched.condition === "F" ? t("wv.fair") : "";
+                const showHeader = gi === 0 || groupedWO[gi - 1].room !== w.room;
                 return (
+                  <Fragment key={w._idx}>
+                  {showHeader && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "10px 2px 6px", fontFamily: "Oswald", fontWeight: 600, fontSize: 10.5, letterSpacing: ".1em", color: "var(--color-dim)", textTransform: "uppercase" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: tradeDot(w.room), flexShrink: 0 }} />
+                      {w.room || "General"}
+                    </div>
+                  )}
                   <div
-                    key={w._idx}
                     style={{
                       marginBottom: 6,
                       borderRadius: 10,
@@ -934,6 +958,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                                 {priLabel(w.pri)}
                               </span>
                             )}
+                            <label onClick={(e) => e.stopPropagation()} title="Add photo" style={{ width: 26, height: 26, borderRadius: 7, background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                              <Icon name="camera" size={13} color="#7fb6ff" />
+                              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadWorkPhoto(f, "work"); e.currentTarget.value = ""; }} />
+                            </label>
                             <Icon name={isOpen ? "collapse" : "expand"} size={14} color="#888" />
                           </div>
                         </div>
@@ -1028,6 +1056,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       </div>
                     )}
                   </div>
+                  </Fragment>
                 );
               })}
             </>
