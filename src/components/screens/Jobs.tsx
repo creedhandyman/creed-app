@@ -848,21 +848,36 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                       e.stopPropagation();
                       setStatus(j.id, e.target.value);
                     }}
+                    aria-label="Job status"
                     style={{
-                      fontSize: 12,
-                      padding: "2px 6px",
+                      WebkitAppearance: "none",
+                      MozAppearance: "none",
+                      appearance: "none",
+                      fontFamily: "Oswald",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: ".06em",
+                      color: statusColor(j.status),
+                      backgroundColor: statusColor(j.status) + "1f",
+                      border: `1px solid ${statusColor(j.status)}66`,
+                      borderRadius: 999,
+                      padding: "3px 20px 3px 10px",
                       width: "auto",
-                      background: statusColor(j.status) + "22",
+                      cursor: "pointer",
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath fill='${encodeURIComponent(statusColor(j.status))}' d='M0 0 L8 0 L4 5 Z'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: "no-repeat",
+                      backgroundPosition: "right 8px center",
                     }}
                   >
-                    <option value="lead">Lead</option>
-                    <option value="quoted">{t("status.quoted")}</option>
-                    <option value="accepted">{t("status.accepted")}</option>
-                    <option value="scheduled">{t("status.scheduled")}</option>
-                    <option value="active">{t("status.active")}</option>
-                    <option value="complete">{t("status.complete")}</option>
-                    <option value="invoiced">{t("status.invoiced")}</option>
-                    <option value="paid">{t("status.paid")}</option>
+                    <option value="lead"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>Lead</option>
+                    <option value="quoted"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.quoted")}</option>
+                    <option value="accepted"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.accepted")}</option>
+                    <option value="scheduled" style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.scheduled")}</option>
+                    <option value="active"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.active")}</option>
+                    <option value="complete"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.complete")}</option>
+                    <option value="invoiced"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.invoiced")}</option>
+                    <option value="paid"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.paid")}</option>
                   </select>
                   {isOpen && (
                     <button
