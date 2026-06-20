@@ -255,6 +255,20 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Nav per-tab colors + morphing More slot; dashboard "next check"**:
+  `VerticalNav.tsx` colors the active tab in its signature hue (Home blue,
+  Quote yellow/gold, Jobs red, Time green, Quests purple, … — `TAB_COLOR`
+  map + `textOn()` luminance-based label color live in the file; active =
+  filled in that color, overriding the `.act` gradient). The **More** slot
+  morphs into whatever overflow tab is active (its icon + label + color via
+  `OVERFLOW_TABS`) and still taps through to the More hub so you can switch.
+  The dashboard pay figure — tech **"Your next check"** hero + admin
+  **"My check"** tile — now shows **all unpaid hours × rate**, i.e. exactly
+  what Run Payroll will pay (no calendar-week window), so it always
+  reconciles with the actual check. Approved quest bonuses are added at
+  payout, not previewed. The old "vs last week" comparison + progress bar
+  were retired with the week window; the `lib/dates.ts` `parseEntryDate`
+  helper (from the TZ-bucketing fix) is now only used by Financials.
 - **Notifications (in-app feed v1)**: dashboard topbar **bell** with an
   unread badge → `NotificationsPanel.tsx` (overlay list, tap a row to mark
   read + deep-link to the job). Source of truth is the `notifications`

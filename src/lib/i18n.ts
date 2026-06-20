@@ -15,11 +15,16 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.ops": "Ops",
     "nav.home": "Home",
     "nav.more": "More",
+    "nav.mileage": "Mileage",
+    "nav.financials": "Money",
+    "nav.work": "Work",
+    "nav.help": "Help",
 
     // Dashboard
     "dash.welcome": "Welcome",
     "dash.nextJob": "Next Job",
     "dash.noNextJob": "Nothing scheduled",
+    "dash.nextCheck": "Your next check",
     "dash.closestQuest": "Closest Quest",
     "dash.earnedMonth": "Earned This Month",
     "dash.netPay": "Net Pay This Week",
@@ -344,11 +349,16 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.ops": "Ops",
     "nav.home": "Inicio",
     "nav.more": "Más",
+    "nav.mileage": "Millaje",
+    "nav.financials": "Dinero",
+    "nav.work": "Trabajo",
+    "nav.help": "Ayuda",
 
     // Dashboard
     "dash.welcome": "Bienvenido",
     "dash.nextJob": "Pr\u00f3ximo Trabajo",
     "dash.noNextJob": "Nada agendado",
+    "dash.nextCheck": "Tu pr\u00f3ximo cheque",
     "dash.closestQuest": "Meta M\u00e1s Cercana",
     "dash.earnedMonth": "Ganado Este Mes",
     "dash.netPay": "Pago Neto Esta Semana",

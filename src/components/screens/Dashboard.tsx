@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
-import { parseEntryDate } from "@/lib/dates";
 import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
 import UserGuideModal from "../UserGuideModal";
@@ -22,6 +21,7 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
   const schedule = useStore((s) => s.schedule);
   const timeEntries = useStore((s) => s.timeEntries);
   const reviews = useStore((s) => s.reviews);
+  const payHistory = useStore((s) => s.payHistory);
   const notifications = useStore((s) => s.notifications);
   const unreadCount = notifications.filter((n) => !n.read_at).length;
 
@@ -33,26 +33,23 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
     .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
   const nextJob = upcoming[0];
 
-  // ── This week's pay (this user) + last week, for the tech hero card ──
-  const ws = new Date(now);
-  ws.setDate(now.getDate() - now.getDay());
-  ws.setHours(0, 0, 0, 0);
-  const lastWs = new Date(ws);
-  lastWs.setDate(ws.getDate() - 7);
-  // Parse via the shared local-date helper. Manual entries store "YYYY-MM-DD",
-  // which the old inline parser read as UTC midnight and bucketed into the
-  // previous day's week — the "couple hours off" pay drift. See lib/dates.ts.
-  const entryDate = (e: { entry_date?: string }): Date | null => parseEntryDate(e.entry_date);
-  const mine = timeEntries.filter((e) => e.user_id === user.id || e.user_name === user.name);
-  const weekEntries = mine.filter((e) => { const d = entryDate(e); return d ? d >= ws : false; });
-  const lastWeekEntries = mine.filter((e) => { const d = entryDate(e); return d ? d >= lastWs && d < ws : false; });
+  // ── Your next check (this user) ──
+  // Mirrors what Run Payroll actually pays: every UNPAID time entry × rate,
+  // with NO week window — so the dashboard number always agrees with the
+  // check (payroll pays all unpaid hours, not a calendar week). Approved
+  // quest bonuses are added by the admin at payout time, so they're
+  // intentionally not previewed here. The user-match mirrors payroll's
+  // self-run claim (by id, or legacy name when the row predates the
+  // user_id column) so the same entries are counted.
   const rate = user.rate || 55;
-  const weekHrs = weekEntries.reduce((s, e) => s + (e.hours || 0), 0);
-  const weekPay = weekHrs * rate;
-  const lastWeekPay = lastWeekEntries.reduce((s, e) => s + (e.hours || 0), 0) * rate;
-  const daysIn = new Set(weekEntries.map((e) => e.entry_date)).size;
-  const toBeat = Math.max(0, lastWeekPay - weekPay);
-  const weekProgress = lastWeekPay > 0 ? Math.min(100, (weekPay / lastWeekPay) * 100) : (weekPay > 0 ? 100 : 0);
+  const mine = timeEntries.filter((e) => e.user_id === user.id || (!e.user_id && e.user_name === user.name));
+  const unpaidMine = mine.filter((e) => !e.paid_at);
+  const checkHrs = unpaidMine.reduce((s, e) => s + (e.hours || 0), 0);
+  const checkPay = checkHrs * rate;
+  // Most recent payout (store loads pay_history newest-first) labels the
+  // period — the unpaid entries are exactly everything since that date.
+  const myPays = payHistory.filter((p) => p.user_id === user.id);
+  const lastPayDate = myPays.length ? myPays[0].pay_date : null;
 
   // ── Closest Quest ──
   const completedJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
@@ -214,7 +211,7 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
             </div>
             <div className="cd" style={{ display: "flex", padding: "13px 0" }}>
               {[
-                { l: "This week", v: `$${weekPay.toFixed(0)}`, green: true },
+                { l: "My check", v: `$${checkPay.toFixed(0)}`, green: true },
                 { l: "This month", v: `$${earnedMonth.toLocaleString()}`, green: false },
                 { l: "Pipeline", v: pipeline >= 1000 ? `$${(pipeline / 1000).toFixed(1)}k` : `$${pipeline.toFixed(0)}`, green: false },
               ].map((m, i) => (
@@ -228,27 +225,19 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
           </>
         ) : (
           <>
-            {/* Tech hero — this week's pay growing */}
+            {/* Tech hero — your next check: all unpaid hours × rate */}
             <div className="cd" style={{ background: "rgba(0,204,102,.09)", border: "1px solid rgba(0,204,102,.4)", borderRadius: 18, padding: 16, boxShadow: "0 0 30px -14px rgba(0,204,102,.5)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <div style={{ fontSize: 10, letterSpacing: ".15em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>This week&apos;s pay</div>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}>${weekPay.toFixed(0)}</div>
+                  <div style={{ fontSize: 10, letterSpacing: ".15em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}>${checkPay.toFixed(0)}</div>
                 </div>
-                {lastWeekPay > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
-                    <Icon name="trending" size={12} color="#3ee08f" /> {toBeat > 0 ? "keep going" : "ahead of last week"}
-                  </span>
-                )}
+                <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+                  <Icon name="time" size={12} color="#3ee08f" /> {checkHrs.toFixed(1)} hrs
+                </span>
               </div>
-              <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>{weekHrs.toFixed(1)} hrs · ${rate}/hr{daysIn > 0 ? ` · ${daysIn} ${daysIn === 1 ? "day" : "days"} in` : ""}</div>
-              <div style={{ height: 8, background: "rgba(255,255,255,.07)", borderRadius: 5, overflow: "hidden", marginTop: 12 }}>
-                <div style={{ height: "100%", width: `${weekProgress}%`, background: "var(--color-success)", borderRadius: 5, boxShadow: "0 0 12px -1px var(--color-success)" }} />
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginTop: 5 }}>
-                <span>Mon–Sun</span>
-                <span>{lastWeekPay > 0 ? (toBeat > 0 ? `$${toBeat.toFixed(0)} to beat last week ($${lastWeekPay.toFixed(0)})` : "Beat last week!") : "Build your streak"}</span>
-              </div>
+              <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>${rate}/hr · {unpaidMine.length} {unpaidMine.length === 1 ? "entry" : "entries"} unpaid</div>
+              <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 6 }}>{lastPayDate ? `Since last payout · ${lastPayDate}` : "Awaiting first payout"}</div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{clockCta}{quoteCta}</div>

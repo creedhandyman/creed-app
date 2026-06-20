@@ -23,6 +23,52 @@ const NAV_ITEMS: NavItem[] = [
   { id: "qf", icon: "quote", labelKey: "nav.quote" },
 ];
 
+// The 4 fixed tabs. Anything else (the More hub + every overflow page) is
+// represented by the morphing More slot.
+const BASE_TAB_IDS = ["qf", "jobs", "dash", "time"];
+
+// Overflow pages the More slot can morph into when one is active. Keyed by
+// AppShell page id → the icon + label to show in the slot.
+const OVERFLOW_TABS: Record<string, { icon: IconName; labelKey: string }> = {
+  sched: { icon: "schedule", labelKey: "nav.sched" },
+  quests: { icon: "quest", labelKey: "nav.quest" },
+  ops: { icon: "ops", labelKey: "nav.ops" },
+  mileage: { icon: "mileage", labelKey: "nav.mileage" },
+  financials: { icon: "money", labelKey: "nav.financials" },
+  payroll: { icon: "pay", labelKey: "nav.pay" },
+  workvision: { icon: "worker", labelKey: "nav.work" },
+  troubleshoot: { icon: "troubleshoot", labelKey: "nav.help" },
+};
+
+// Per-tab signature color, shown only when that tab is the active one.
+// Base tabs get distinct hues; overflow tabs colour the morphed More slot
+// (they're never shown side-by-side, so reused hues are fine).
+const TAB_COLOR: Record<string, string> = {
+  qf: "#f5b400",          // Quote — yellow/gold
+  jobs: "#ef4444",        // Jobs — red
+  dash: "#2e8bff",        // Home — blue
+  time: "#13c06a",        // Time — green
+  more: "#14b8a6",        // More hub — teal
+  sched: "#ff8a3d",       // Schedule — orange
+  quests: "#9d4edd",      // Quests — purple
+  ops: "#06b6d4",         // Ops — cyan
+  mileage: "#14b8a6",     // Mileage — teal
+  financials: "#10b981",  // Money — emerald
+  payroll: "#22c55e",     // Payroll — green
+  workvision: "#13c06a",  // Work mode — green
+  troubleshoot: "#94a3b8",// Help — slate
+};
+
+// White or near-black label, whichever reads better on the tab color — keeps
+// the light tabs (e.g. the yellow Quote tab) legible when filled.
+function textOn(hex: string): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16);
+  const g = parseInt(c.slice(2, 4), 16);
+  const b = parseInt(c.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#1a1a1a" : "#fff";
+}
+
 interface Props {
   page: string;
   setPage: (p: string) => void;
@@ -37,22 +83,41 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
     s.jobs.filter((j) => j.status === "lead" && !j.archived).length
   );
   const items = navBottom ? [...NAV_ITEMS].reverse() : NAV_ITEMS;
+  // We're on an overflow page (or the hub itself) whenever the current page
+  // isn't one of the 4 base tabs — that's when the More slot lights up.
+  const onOverflow = !BASE_TAB_IDS.includes(page);
+
   return (
     <div className="vnav">
       {items.map((item, i) => {
         if (item.adminOnly && !isAdmin) return null;
-        const active = page === item.id;
+
+        // The More slot morphs into whatever overflow tab is active so the
+        // bar reflects where you are, and still taps through to the hub so
+        // you can switch tabs.
+        const isMore = item.id === "more";
+        const morph = isMore && page !== "more" ? OVERFLOW_TABS[page] : null;
+        const iconName: IconName = morph ? morph.icon : item.icon;
+        const label = morph ? t(morph.labelKey) : t(item.labelKey);
+        const active = isMore ? onOverflow : page === item.id;
+        const color = isMore ? (TAB_COLOR[page] || TAB_COLOR.more) : (TAB_COLOR[item.id] || TAB_COLOR.dash);
         const showLeadDot = item.id === "jobs" && leadCount > 0;
+        // Active = filled in the tab's signature color (overrides the .act
+        // gradient); inactive falls back to the default class styling.
+        const activeStyle = active
+          ? { background: color, color: textOn(color), boxShadow: `0 4px 16px ${color}73` }
+          : {};
+
         return (
           <button
             key={i}
             className={active ? "act" : ""}
-            onClick={() => setPage(item.id)}
-            aria-label={t(item.labelKey)}
-            style={{ position: "relative" }}
+            onClick={() => setPage(isMore ? "more" : item.id)}
+            aria-label={label}
+            style={{ position: "relative", ...activeStyle }}
           >
-            <Icon name={item.icon} size={20} strokeWidth={active ? 2 : 1.75} />
-            <span style={{ fontSize: 9, marginTop: 2 }}>{t(item.labelKey)}</span>
+            <Icon name={iconName} size={20} strokeWidth={active ? 2 : 1.75} />
+            <span style={{ fontSize: 9, marginTop: 2 }}>{label}</span>
             {showLeadDot && (
               <span
                 aria-label={`${leadCount} new ${leadCount === 1 ? "lead" : "leads"}`}
