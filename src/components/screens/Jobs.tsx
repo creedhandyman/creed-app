@@ -597,6 +597,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
           };
         } catch { return null; }
       })() : null;
+      // Editable job number + notes live in the rooms blob (no schema
+      // migration), same pattern as jobNotes / workOrder.
+      let djRoomsData: Record<string, unknown> = {};
+      try { djRoomsData = typeof dj.rooms === "string" ? JSON.parse(dj.rooms) : (dj.rooms || {}); } catch { djRoomsData = {}; }
+      const djJobNumber = typeof djRoomsData.jobNumber === "string" ? djRoomsData.jobNumber : "";
       return (
         <>
           {/* Topbar — back · JOB · print */}
@@ -612,6 +617,27 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
           {/* Detail header */}
           <div className="dhead">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".1em", textTransform: "uppercase", color: "#9db4d6", flexShrink: 0 }}>Job #</span>
+              <input
+                key={dj.id}
+                defaultValue={djJobNumber}
+                placeholder="—"
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  enqueueRoomsWrite(async () => {
+                    const fresh = useStore.getState().jobs.find((x) => x.id === dj.id);
+                    if (!fresh) return;
+                    let fd: Record<string, unknown> = {};
+                    try { fd = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {}); } catch { return; }
+                    if (((fd.jobNumber as string) || "") === val) return;
+                    await db.patch("jobs", dj.id, { rooms: JSON.stringify({ ...fd, jobNumber: val }) });
+                    await loadAll();
+                  });
+                }}
+                style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid #243a5e", borderRadius: 6, padding: "3px 8px", fontFamily: "Oswald", fontSize: 13, color: "inherit", maxWidth: 150 }}
+              />
+            </div>
             <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".4px" }}>
               {dj.property || "(no address)"}
             </div>
@@ -717,6 +743,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
             <div className="drow">
               <span className="l">Created</span>
               <span className="v">{dj.job_date || (dj.created_at ? dj.created_at.slice(0, 10) : "—")}</span>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="section">
+            <div className="seclabel"><Icon name="edit" size={13} /> Notes</div>
+            <div style={{ paddingTop: 6 }}>
+              <JobNotesInput job={dj} />
             </div>
           </div>
 
