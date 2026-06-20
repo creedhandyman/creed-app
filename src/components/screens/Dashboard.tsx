@@ -5,19 +5,24 @@ import { t } from "@/lib/i18n";
 import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
 import UserGuideModal from "../UserGuideModal";
+import NotificationsPanel from "../NotificationsPanel";
 
 interface Props {
   setPage: (p: string) => void;
   openSettings: () => void;
+  /** Deep-link to a job's detail screen — used when a notification is tapped. */
+  openJob?: (jobId: string) => void;
 }
 
-export default function Dashboard({ setPage, openSettings }: Props) {
+export default function Dashboard({ setPage, openSettings, openJob }: Props) {
   const user = useStore((s) => s.user)!;
   const isAdmin = user.role === "owner" || user.role === "manager";
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
   const timeEntries = useStore((s) => s.timeEntries);
   const reviews = useStore((s) => s.reviews);
+  const notifications = useStore((s) => s.notifications);
+  const unreadCount = notifications.filter((n) => !n.read_at).length;
 
   // ── Next Job on Schedule ──
   const now = new Date();
@@ -83,6 +88,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
     try { return !!localStorage.getItem("c_guide_dismissed"); } catch { return true; }
   });
   const [showUserGuide, setShowUserGuide] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
 
   // ── Shared building blocks ──
   const Cta = ({ glow, icon, title, sub, onClick }: { glow: "blue" | "red" | "green"; icon: IconName; title: string; sub: string; onClick: () => void }) => {
@@ -155,11 +161,20 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".8px", textTransform: "uppercase" }}>{user.name}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setShowNotifs(true)} aria-label="Notifications" title="Notifications" className="iconbtn" style={{ position: "relative" }}>
+            <Icon name="bell" size={18} />
+            {unreadCount > 0 && (
+              <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, border: "1.5px solid var(--color-dark-bg)" }}>
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </button>
           <button onClick={() => setShowUserGuide(true)} aria-label="User guide" title="User guide" className="iconbtn"><Icon name="help" size={18} /></button>
           <button onClick={openSettings} aria-label="Settings" title="Settings" className="iconbtn"><Icon name="settings" size={18} /></button>
         </div>
       </div>
 
+      {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} onOpenJob={openJob} />}
       {showUserGuide && <UserGuideModal onClose={() => setShowUserGuide(false)} />}
 
       {!guideDismissed && (

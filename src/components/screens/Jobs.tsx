@@ -26,9 +26,14 @@ interface Props {
   setPage: (p: string) => void;
   onEditJob?: (jobId: string) => void;
   onScheduleJob?: (jobName: string) => void;
+  /** Open straight to this job's detail screen (notification deep-link).
+   *  Seeds detail state on mount; clearInitialDetail resets the parent so a
+   *  later plain nav to Jobs lands on the list. */
+  initialDetailJobId?: string | null;
+  clearInitialDetail?: () => void;
 }
 
-export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
+export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJobId, clearInitialDetail }: Props) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
@@ -186,7 +191,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const [jobTab, setJobTab] = useState<"active" | "billing" | "paid" | "archive">("active");
   // Phase 2 redesign: id of the job shown in the separate detail screen
   // (null = the Jobs list). Set by tapping a card; cleared by the Back button.
-  const [detailJobId, setDetailJobId] = useState<string | null>(null);
+  const [detailJobId, setDetailJobId] = useState<string | null>(initialDetailJobId ?? null);
+  // Consume the deep-link target once: reset the parent so navigating back
+  // to Jobs via the nav tab later opens the list, not this job again.
+  useEffect(() => {
+    if (initialDetailJobId) clearInitialDetail?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Phase 3: sub-screen opened from the detail's Work section (work order /
   // receipts). null = show the detail (or the list). Back clears it.
   const [subScreen, setSubScreen] = useState<{ id: string; kind: "workorder" | "receipts" } | null>(null);
@@ -733,7 +744,26 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
               <span className="l">Requested tech</span>
               <select
                 value={dj.requested_tech || ""}
-                onChange={async (e) => { await db.patch("jobs", dj.id, { requested_tech: e.target.value }); loadAll(); }}
+                onChange={async (e) => {
+                  const techName = e.target.value;
+                  const prev = dj.requested_tech || "";
+                  await db.patch("jobs", dj.id, { requested_tech: techName });
+                  loadAll();
+                  // Notify the newly-assigned tech. Skip clears ("Anyone"),
+                  // re-selecting the same tech, and self-assignment. Fire-and-
+                  // forget — the assignment itself already succeeded above.
+                  if (techName && techName !== prev) {
+                    const tech = profiles.find((p) => p.name === techName);
+                    const orgId = user.org_id || org?.id;
+                    if (tech && orgId && tech.id !== user.id) {
+                      fetch("/api/notify", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ type: "job_assigned", orgId, jobId: dj.id, recipientId: tech.id, techName, actorId: user.id }),
+                      }).catch(() => { /* non-blocking */ });
+                    }
+                  }
+                }}
                 style={{ background: "transparent", color: "inherit", border: "none", fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", textAlign: "right" }}
               >
                 <option value="">Anyone</option>

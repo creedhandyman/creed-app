@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import type { Profile } from "@/lib/types";
 
 interface Props {
   onClose: () => void;
@@ -22,8 +23,16 @@ export default function Settings({ onClose }: Props) {
 
   const [tab, setTab] = useState("account");
   const [newPassword, setNewPassword] = useState("");
+  const [phone, setPhone] = useState(user.phone || "");
 
   const isOwner = user.role === "owner" || user.role === "manager";
+
+  // Persist a notification-pref change to the profile + keep the in-memory
+  // user (and its localStorage cache) in sync so the toggles reflect at once.
+  const saveNotif = async (updates: Partial<Profile>) => {
+    await db.patch("profiles", user.id, updates);
+    useStore.getState().setUser({ ...user, ...updates });
+  };
 
   return (
     <div className="fi" style={{ maxWidth: 500, margin: "0 auto", padding: "16px 12px" }}>
@@ -78,6 +87,46 @@ export default function Settings({ onClose }: Props) {
                 <span className="dim">{f.label}:</span> {f.value || "—"}
               </div>
             ))}
+          </div>
+
+          {/* Notifications — phone + per-event prefs. In-app alerts (the
+              dashboard bell) are always on; these gate the SMS channel and
+              which events reach you. */}
+          <div className="cd mb">
+            <h4 style={{ fontSize: 14, marginBottom: 4 }}>🔔 {t("settings.notifications")}</h4>
+            <div className="dim" style={{ fontSize: 11.5, marginBottom: 10 }}>{t("settings.notifDesc")}</div>
+            <div className="row" style={{ marginBottom: 2 }}>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder={t("settings.phoneNumber")}
+              />
+              <button
+                className="bb"
+                onClick={async () => {
+                  await saveNotif({ phone: phone.trim() });
+                  useStore.getState().showToast(t("settings.saved"), "success");
+                }}
+              >
+                {t("settings.save")}
+              </button>
+            </div>
+            {([
+              { key: "notify_assigned", label: t("settings.notifyAssigned") },
+              { key: "notify_leads", label: t("settings.notifyLeads") },
+              { key: "notify_sms", label: t("settings.notifySms") },
+            ] as { key: "notify_assigned" | "notify_leads" | "notify_sms"; label: string }[]).map((row) => {
+              const on = user[row.key] !== false; // undefined = opted in (default)
+              return (
+                <div key={row.key} className="sep row" style={{ justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 13 }}>{row.label}</span>
+                  <div onClick={() => saveNotif({ [row.key]: !on } as Partial<Profile>)} style={{ width: 44, height: 24, borderRadius: 12, background: on ? "var(--color-primary)" : "#ccc", position: "relative", cursor: "pointer" }}>
+                    <div style={{ width: 18, height: 18, borderRadius: 9, background: "#fff", position: "absolute", top: 3, left: on ? 23 : 3, transition: "0.3s" }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="cd mb">

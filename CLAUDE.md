@@ -100,6 +100,10 @@ src/
   flow (MediaRecorder → Whisper → AI). Without it, Voice Walk falls
   back to Web Speech transcripts (incomplete on iOS Safari but
   functional on desktop Chrome).
+- `NOTIFY_SMS_ENABLED` — set to `"1"` to turn ON the SMS channel for
+  notifications (job-assigned / new-lead). Unset/`"0"` = in-app feed only
+  (the v1 default — texting is the fast-follow). Reuses the existing
+  `TWILIO_*` creds. `src/lib/notify-server.ts` reads it.
 - (Stripe / Supabase keys per existing setup.)
 
 ## Schema migrations the user should run in Supabase
@@ -219,12 +223,58 @@ src/
   /personal, `sick_balance_hrs` for sick, no deduction for unpaid).
   Admins manage from Operations → HR; employees submit from Settings
   → Time Off.
+- Notifications (in-app feed v1):
+  ```
+  CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    user_id UUID NOT NULL,                 -- recipient profile id
+    type TEXT NOT NULL CHECK (type IN ('job_assigned','new_lead')),
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    job_id UUID,                           -- deep-link target (nullable)
+    read_at TIMESTAMPTZ,                   -- NULL = unread
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_notifications_user        ON notifications(user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id) WHERE read_at IS NULL;
+
+  ALTER TABLE profiles ADD COLUMN phone TEXT;
+  ALTER TABLE profiles ADD COLUMN notify_sms      BOOLEAN DEFAULT TRUE; -- master "text me"
+  ALTER TABLE profiles ADD COLUMN notify_assigned BOOLEAN DEFAULT TRUE; -- event: assigned to me
+  ALTER TABLE profiles ADD COLUMN notify_leads    BOOLEAN DEFAULT TRUE; -- event: new lead
+  ```
+  Same RLS posture as the rest of the app (no policies added; the client
+  reads scoped by `user_id` in loadAll, server writes via service-role).
+  Defaults are TRUE = opt-out model. Existing logged-in sessions read the
+  new pref fields as `undefined` until the user re-logs / initAuth runs;
+  the UI + send path treat `undefined` as opted-in so that's harmless.
 
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices.)
 
 ## Big systems shipped recently (for context)
 
+- **Notifications (in-app feed v1)**: dashboard topbar **bell** with an
+  unread badge → `NotificationsPanel.tsx` (overlay list, tap a row to mark
+  read + deep-link to the job). Source of truth is the `notifications`
+  table (per-user; loaded in `store.loadAll` scoped by `user_id`, capped
+  50; `markNotificationRead` / `markAllNotificationsRead` actions).
+  **Triggers**: (1) *job assigned* — Jobs detail → Requested-tech dropdown
+  `onChange` POSTs `/api/notify` (skips clears / re-select / self-assign);
+  (2) *new lead* — created server-side inside `/api/leads` after the job
+  insert, to owners+managers **and** the referring tech (`referrer_tech_id`),
+  best-effort so it never fails lead capture. Both paths go through
+  `src/lib/notify-server.ts` `dispatchNotifications()`, which always writes
+  the in-app rows and **only texts when `NOTIFY_SMS_ENABLED="1"`** (the
+  SMS send path is built but flag-gated off — flip the env var to go live,
+  no deploy needed). Deep-link: `AppShell.goToJob` → `Jobs` seeds
+  `detailJobId` from `initialDetailJobId`, then clears the parent.
+  **Prefs** (Settings → Account → Notifications): `phone` + `notify_sms`
+  (master) + `notify_assigned` + `notify_leads`, all on `profiles`,
+  default-TRUE opt-out. Not done: web push (PWA/VAPID — no service worker
+  yet), a bell outside the dashboard, realtime (feed refreshes via the 15s
+  `loadAll`).
 - **Jobs tab redesign (list → detail → sub-screens)**: `Jobs.tsx` is no
   longer one screen with inline-expanding cards. It renders three levels
   gated by state — the **list** (two-row triage cards; status is a
@@ -285,11 +335,14 @@ src/
 
 ## Things that still bug me / open follow-ups
 
-- **Notifications (planned next)**: wire the dashboard topbar bell. Want
-  staff alerts when a job is assigned to a tech and when a new lead comes
-  in. App already has Twilio SMS (`/api/reviews/dispatch`, SMS-notify
-  buttons) so SMS-first is likely simplest; web push (PWA + VAPID) is the
-  fancier option. Needs per-user prefs + a phone field (check `profiles`).
+- **Notifications follow-ups**: the in-app feed shipped (see "Big systems"
+  above). Remaining: (a) flip `NOTIFY_SMS_ENABLED=1` on Vercel + verify a
+  real text lands once a tech has a phone on file; (b) web push (PWA +
+  VAPID) for in-app pop alerts — needs a service worker + manifest, none
+  exists yet; (c) bell only lives on the dashboard — add to MoreHub /
+  other topbars if wanted; (d) feed is poll-based (15s `loadAll`) — could
+  move to Supabase realtime; (e) more event types (status changes, review
+  landed, payment received).
 - Dashboard fill-height `min-height: calc(100dvh - 150px)` is an estimate
   — nudge the `150px` if it scrolls or leaves a sliver.
 - More hub shows every tile to everyone; Customers / admin Operations

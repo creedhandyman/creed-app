@@ -319,6 +319,18 @@ const translations: Record<Lang, Record<string, string>> = {
     // Schedule
     "sched.addToSchedule": "Add to Schedule",
     "sched.pastDate": "Past Date",
+
+    // Notifications
+    "notif.title": "Notifications",
+    "notif.empty": "You're all caught up",
+    "notif.markAll": "Mark all read",
+    "settings.notifications": "Notifications",
+    "settings.notifDesc": "In-app alerts are always on. Add your number to also get texts.",
+    "settings.phoneNumber": "Phone number",
+    "settings.notifyAssigned": "When a job is assigned to me",
+    "settings.notifyLeads": "When a new lead comes in",
+    "settings.notifySms": "Also text me (SMS)",
+    "settings.saved": "Saved",
   },
 
   es: {
@@ -636,6 +648,18 @@ const translations: Record<Lang, Record<string, string>> = {
     // Schedule
     "sched.addToSchedule": "Agregar a Agenda",
     "sched.pastDate": "Fecha Pasada",
+
+    // Notifications
+    "notif.title": "Notificaciones",
+    "notif.empty": "Estás al día",
+    "notif.markAll": "Marcar todo leído",
+    "settings.notifications": "Notificaciones",
+    "settings.notifDesc": "Las alertas en la app siempre están activas. Agrega tu número para recibir también mensajes.",
+    "settings.phoneNumber": "Número de teléfono",
+    "settings.notifyAssigned": "Cuando me asignan un trabajo",
+    "settings.notifyLeads": "Cuando llega un nuevo prospecto",
+    "settings.notifySms": "También enviarme un texto (SMS)",
+    "settings.saved": "Guardado",
   },
 };
 

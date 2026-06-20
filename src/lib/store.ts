@@ -17,6 +17,7 @@ import type {
   TimeOffRequest,
   RecurringJob,
   ReviewRequest,
+  AppNotification,
 } from "./types";
 
 // Tracks the currently-running loadAll() promise so overlapping callers
@@ -85,8 +86,16 @@ interface AppState {
   timeOffRequests: TimeOffRequest[];
   recurringJobs: RecurringJob[];
   reviewRequests: ReviewRequest[];
+  notifications: AppNotification[];
   loading: boolean;
   loadAll: () => Promise<void>;
+
+  /** Notifications — the dashboard-bell feed. Rows are written server-side;
+   *  the client only reads (in loadAll, scoped to the current user) and
+   *  marks read. Both helpers patch local state in place so the badge
+   *  updates without waiting for the next loadAll. */
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
 
   /** Upsert helpers — write to Supabase, then patch the local state in
    *  place so the UI updates immediately without a full loadAll().
@@ -253,6 +262,7 @@ export const useStore = create<AppState>((set, get) => ({
   timeOffRequests: [],
   recurringJobs: [],
   reviewRequests: [],
+  notifications: [],
   loading: true,
 
   loadAll: async () => {
@@ -268,6 +278,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (loadAllInFlight) return loadAllInFlight;
     loadAllInFlight = (async () => {
     const orgId = get().user?.org_id;
+    const userId = get().user?.id;
     const orgFilter = orgId ? { org_id: orgId } : undefined;
     // db.get already catches and resolves to [] on per-table failures,
     // but use allSettled as a belt-and-suspenders so a thrown exception
@@ -298,17 +309,23 @@ export const useStore = create<AppState>((set, get) => ({
       settle(db.get<TimeOffRequest>("time_off_requests", orgFilter)),
       settle(db.get<RecurringJob>("recurring_jobs", orgFilter)),
       settle(db.get<ReviewRequest>("review_requests", orgFilter)),
+      // Notifications are per-user, not per-org — scope to the current
+      // user and cap so the feed query stays light on every 15s refresh.
+      settle(userId ? db.get<AppNotification>("notifications", { user_id: userId }, { limit: 50 }) : Promise.resolve([])),
     ]);
     const [
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
+      notifications,
     ] = results as [
       Customer[], Address[], Profile[], Job[], TimeEntry[],
       Review[], Referral[], ScheduleEntry[], PayHistory[], Receipt[], QuestPayout[], TimeOffRequest[], RecurringJob[], ReviewRequest[],
+      AppNotification[],
     ];
     set({
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
+      notifications,
       loading: false,
     });
     // Also refresh org data (picks up Stripe changes, site updates, etc.).
@@ -405,6 +422,31 @@ export const useStore = create<AppState>((set, get) => ({
     await db.del("addresses", id);
     set({ addresses: get().addresses.filter((a) => a.id !== id) });
     return true;
+  },
+
+  /* ── Notifications ── */
+  markNotificationRead: async (id) => {
+    const now = new Date().toISOString();
+    // Optimistic local update so the badge drops immediately.
+    set({ notifications: get().notifications.map((n) => (n.id === id ? { ...n, read_at: now } : n)) });
+    await db.patch("notifications", id, { read_at: now });
+  },
+
+  markAllNotificationsRead: async () => {
+    const userId = get().user?.id;
+    if (!userId) return;
+    const now = new Date().toISOString();
+    set({ notifications: get().notifications.map((n) => (n.read_at ? n : { ...n, read_at: now })) });
+    // Bulk update in one round-trip rather than N patches.
+    const { error } = await supabase
+      .from("notifications")
+      .update({ read_at: now })
+      .eq("user_id", userId)
+      .is("read_at", null);
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error("[store] markAllNotificationsRead failed:", error.message);
+    }
   },
 
   /* ── Auto-refresh ── */

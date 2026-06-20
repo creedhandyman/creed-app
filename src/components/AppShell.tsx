@@ -22,6 +22,10 @@ export default function AppShell() {
   const [showSettings, setShowSettings] = useState(false);
   const [editJobId, setEditJobId] = useState<string | null>(null);
   const [scheduleJobName, setScheduleJobName] = useState<string | null>(null);
+  // Deep-link target for the Jobs detail screen (tapping a notification on
+  // the dashboard opens that job). Jobs seeds its detail state from this on
+  // mount, then clears it so a later plain nav to Jobs opens the list.
+  const [jobDetailId, setJobDetailId] = useState<string | null>(null);
   // Deep-link target sub-tab for Operations (the More hub's Customers tile
   // opens Operations on its customers sub-tab).
   const [opsInitialTab, setOpsInitialTab] = useState<string | null>(null);
@@ -56,6 +60,12 @@ export default function AppShell() {
     goToPage("ops");
   };
 
+  // Open a specific job's detail screen (from a notification).
+  const goToJob = (jobId: string) => {
+    setJobDetailId(jobId);
+    goToPage("jobs");
+  };
+
   if (showSettings) {
     return (
       <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
@@ -67,17 +77,17 @@ export default function AppShell() {
   const renderPage = () => {
     switch (page) {
       case "dash":
-        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} />;
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
-        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string) => { setScheduleJobName(name); goToPage("sched"); }} />;
+        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string) => { setScheduleJobName(name); goToPage("sched"); }} initialDetailJobId={jobDetailId} clearInitialDetail={() => setJobDetailId(null)} />;
       case "sched":
         return <Schedule setPage={goToPage} preSelectJob={scheduleJobName} />;
       case "time":
         return <TimerScreen setPage={goToPage} />;
       case "payroll":
-        return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+        return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} />;
       case "ops":
         // Open to everyone — Operations.tsx filters its sub-tabs by role
         // so non-admins only see HR (the consolidated time-off home).
@@ -91,11 +101,11 @@ export default function AppShell() {
       case "troubleshoot":
         return <Troubleshoot setPage={goToPage} />;
       case "financials":
-        return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+        return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} />;
       case "more":
         return <MoreHub setPage={goToPage} openSettings={() => setShowSettings(true)} openOps={goToOps} />;
       default:
-        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} />;
     }
   };
 

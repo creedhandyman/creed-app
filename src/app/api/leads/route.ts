@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { dispatchNotifications } from "@/lib/notify-server";
 
 export const dynamic = "force-dynamic";
 
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
     // so existing print templates and Jobs-list rendering work unchanged.
     // The structured link lives at customer_id / address_id.
     const today = new Date().toISOString().split("T")[0];
-    const { error: jobErr } = await supabase.from("jobs").insert({
+    const { data: jobRow, error: jobErr } = await supabase.from("jobs").insert({
       org_id: orgId,
       property: addressLine || street || "(address pending)",
       client: name,
@@ -159,8 +160,53 @@ export async function POST(req: NextRequest) {
       status: "lead",
       created_by: name,
       ...(referrerTechId ? { referrer_tech_id: referrerTechId } : {}),
-    });
+    }).select("id").single();
     if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 });
+
+    // Notify the team a new lead landed. Owners/managers triage leads; the
+    // referring tech (if the lead came in via their share link) gets it too
+    // for attribution. Best-effort — never fail the lead capture if this
+    // throws (the lead is the thing that matters).
+    try {
+      const recipientIds = new Set<string>();
+      const { data: admins } = await supabase
+        .from("profiles")
+        .select("id, phone, notify_sms, notify_leads")
+        .eq("org_id", orgId)
+        .in("role", ["owner", "manager"]);
+      const recipients = (admins || []).map((p) => {
+        recipientIds.add(p.id);
+        return { id: p.id, phone: p.phone, notify_sms: p.notify_sms, eventOptIn: p.notify_leads };
+      });
+      if (referrerTechId && !recipientIds.has(referrerTechId)) {
+        const { data: ref } = await supabase
+          .from("profiles")
+          .select("id, phone, notify_sms, notify_leads")
+          .eq("org_id", orgId)
+          .eq("id", referrerTechId)
+          .limit(1);
+        if (ref?.length) {
+          const p = ref[0];
+          recipients.push({ id: p.id, phone: p.phone, notify_sms: p.notify_sms, eventOptIn: p.notify_leads });
+        }
+      }
+      if (recipients.length) {
+        const origin = req.headers.get("origin") || `https://${req.headers.get("host") || ""}`;
+        const summary = description.length > 90 ? `${description.slice(0, 90)}…` : description;
+        await dispatchNotifications(supabase, {
+          orgId,
+          type: "new_lead",
+          title: "New lead",
+          body: addressLine ? `${name} · ${addressLine}` : name,
+          jobId: jobRow.id,
+          smsBody: `New lead: ${name}${phone ? ` (${phone})` : ""} — ${summary}.${origin ? ` ${origin}` : ""}`,
+          recipients,
+        });
+      }
+    } catch (notifyErr) {
+      // eslint-disable-next-line no-console
+      console.error("leads notify failed (lead still saved):", notifyErr);
+    }
 
     return NextResponse.json({ ok: true, business: org.name });
   } catch (error: unknown) {

@@ -82,11 +82,41 @@ export interface Profile {
   start_date: string;
   emp_num: string;
   org_id: string;
+  /** Mobile number for SMS notifications (E.164 or loose US — the send
+   *  path normalizes). Optional; SMS notifications skip users without one. */
+  phone?: string;
+  /** Notification prefs. Default TRUE (opt-out model) — the columns are
+   *  created with DEFAULT TRUE so existing rows read as opted-in. The
+   *  in-app feed respects the per-event toggles; `notify_sms` is the
+   *  master "also text me" switch, gating the SMS channel only. */
+  notify_sms?: boolean;
+  notify_assigned?: boolean;
+  notify_leads?: boolean;
   /** PTO balance — unused by the app today but kept on the type because
    *  the underlying DB column still exists for a possible future return. */
   pto_balance_hrs?: number;
   /** Sick balance — unused by the app today, kept for the same reason. */
   sick_balance_hrs?: number;
+  created_at?: string;
+}
+
+/** In-app notification feed row. Source of truth for the dashboard bell.
+ *  Created server-side (service-role) by /api/leads (new lead) and
+ *  /api/notify (job assigned); read + marked-read client-side, scoped by
+ *  `user_id`. SMS is a delivery side-effect at creation time, gated by the
+ *  recipient's prefs — the row is always written so the feed is complete.
+ *  Named AppNotification to avoid colliding with the DOM `Notification`. */
+export type NotificationType = "job_assigned" | "new_lead";
+
+export interface AppNotification {
+  id: string;
+  org_id: string;
+  user_id: string;        // recipient profile id
+  type: NotificationType;
+  title: string;
+  body: string;
+  job_id?: string;        // deep-link target (nullable)
+  read_at?: string | null; // null = unread
   created_at?: string;
 }
 
