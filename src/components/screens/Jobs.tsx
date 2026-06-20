@@ -666,7 +666,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                 <option value="invoiced"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.invoiced")}</option>
                 <option value="paid"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.paid")}</option>
               </select>
-              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22 }}>${(dj.total || 0).toFixed(0)}</div>
+              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, color: "var(--color-money)" }}>${(dj.total || 0).toFixed(0)}</div>
             </div>
             {dj.property && (
               <a
@@ -759,7 +759,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
             <div className="seclabel"><Icon name="money" size={13} /> Money</div>
             <div className="drow">
               <span className="l">Quote total</span>
-              <span className="v" style={{ fontFamily: "Oswald", fontSize: 14 }}>
+              <span className="v" style={{ fontFamily: "Oswald", fontSize: 14, color: "var(--color-money)" }}>
                 ${(dj.total || 0).toFixed(0)}
                 {onEditJob && (
                   <button onClick={() => onEditJob(dj.id)} title="Edit quote" style={{ background: "transparent", border: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0, marginLeft: 6, display: "inline-flex", alignItems: "center" }}>
@@ -1380,7 +1380,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                       </div>
                     )}
                   </div>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, whiteSpace: "nowrap", color: "var(--color-success)" }}>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, whiteSpace: "nowrap", color: "var(--color-money)" }}>
                     ${(j.total || 0).toFixed(0)}
                   </div>
                 </div>
