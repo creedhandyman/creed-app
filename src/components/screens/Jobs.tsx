@@ -769,78 +769,69 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
             } catch { return null; }
           })();
 
+          // Status-aware triage hint for the collapsed card's second row —
+          // surfaces the job's next-action context the way the mockup does
+          // (On site · <tech>, Ready to invoice, …). Icons are curated names
+          // from Icon.tsx; an unknown name renders nothing rather than crash.
+          const hint: { icon: string; text: string } = (() => {
+            switch (j.status) {
+              case "lead":      return { icon: "quote", text: "New lead" };
+              case "quoted":    return { icon: "send", text: j.job_date ? `Quoted · ${j.job_date}` : "Quoted" };
+              case "accepted":  return { icon: "schedule", text: "Schedule it" };
+              case "scheduled": return { icon: "schedule", text: j.job_date || "Scheduled" };
+              case "active":    return { icon: "worker", text: w.length ? `On site · ${w[0].name}` : "In progress" };
+              case "complete":  return { icon: "receipt", text: "Ready to invoice" };
+              case "invoiced":  return { icon: "receipt", text: "Invoice sent" };
+              case "paid":      return { icon: "checkCircle", text: "Paid" };
+              default:          return { icon: "dot", text: j.status || "" };
+            }
+          })();
+
           return (
             <div key={j.id} id={`job-row-${j.id}`} className="cd mb" style={{ borderLeft: `4px solid ${statusColor(j.status)}` }}>
               {/* Collapsed header */}
               <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  cursor: "pointer",
-                  flexWrap: "wrap",
-                  gap: 6,
-                }}
+                style={{ cursor: "pointer" }}
                 onClick={() => setOpen(isOpen ? null : j.id)}
               >
-                <div>
-                  <h4 style={{ fontSize: 14, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    {j.status === "lead" && (
-                      <span style={{
-                        fontSize: 9,
-                        fontFamily: "Oswald",
-                        letterSpacing: ".08em",
-                        padding: "2px 6px",
-                        borderRadius: 4,
-                        background: "#ff3d6e",
-                        color: "#fff",
-                      }}>
-                        NEW LEAD
-                      </span>
-                    )}
-                    {j.property}
-                  </h4>
-                  <div style={{ fontSize: 11 }} className="dim">
-                    {j.client} · {j.job_date}
-                    {w.length > 0 && (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4 }}>
-                        · <Icon name="worker" size={11} />{w.map((x) => x.name).join(", ")}
-                      </span>
-                    )}
-                    {j.referrer_tech_id && (() => {
-                      const ref = profiles.find((p) => p.id === j.referrer_tech_id);
-                      if (!ref) return null;
-                      return (
-                        <span style={{ marginLeft: 6, color: "var(--color-warning)", fontFamily: "Oswald", letterSpacing: ".04em" }}>
-                          · via {ref.name}
+                {/* Row 1 — client headline + address (map pin) · amount */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      {j.status === "lead" && (
+                        <span style={{ fontSize: 9, fontFamily: "Oswald", letterSpacing: ".08em", padding: "2px 6px", borderRadius: 4, background: "#ff3d6e", color: "#fff" }}>
+                          NEW LEAD
                         </span>
-                      );
-                    })()}
-                  </div>
-                  {j.property && (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.property)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ fontSize: 12, color: "var(--color-primary)", textDecoration: "none" }}
-                    >
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <Icon name="mapPin" size={12} color="var(--color-primary)" />View on Map
+                      )}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                        {j.property || "(no address)"}
                       </span>
-                    </a>
-                  )}
-                </div>
-                <div className="row">
-                  <div
-                    style={{
-                      fontSize: 18,
-                      fontFamily: "Oswald",
-                      color: "var(--color-success)",
-                    }}
-                  >
+                      {j.property && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.property)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Map"
+                          style={{ color: "var(--color-primary)", display: "inline-flex", flexShrink: 0 }}
+                        >
+                          <Icon name="mapPin" size={13} color="var(--color-primary)" />
+                        </a>
+                      )}
+                    </div>
+                    {j.client && (
+                      <div className="dim" style={{ fontSize: 11.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {j.client}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, whiteSpace: "nowrap", color: "var(--color-success)" }}>
                     ${(j.total || 0).toFixed(0)}
                   </div>
+                </div>
+
+                {/* Row 2 — status chip · next-action hint + chevron */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 9, gap: 8 }}>
                   <select
                     value={j.status || "quoted"}
                     onClick={(e) => e.stopPropagation()}
@@ -879,25 +870,21 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                     <option value="invoiced"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.invoiced")}</option>
                     <option value="paid"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.paid")}</option>
                   </select>
-                  {isOpen && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }}
-                      title={t("jobs.delete")}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        padding: 4,
-                        marginLeft: 2,
-                        color: "var(--color-accent-red)",
-                        cursor: "pointer",
-                        opacity: 0.6,
-                        display: "inline-flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Icon name="delete" size={14} />
-                    </button>
-                  )}
+                  <span className="dim" style={{ fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0 }}>
+                    <Icon name={hint.icon} size={12} />
+                    {hint.text}
+                    {isOpen ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }}
+                        title={t("jobs.delete")}
+                        style={{ background: "transparent", border: "none", padding: 2, marginLeft: 4, color: "var(--color-accent-red)", cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+                      >
+                        <Icon name="delete" size={14} />
+                      </button>
+                    ) : (
+                      <Icon name="next" size={14} />
+                    )}
+                  </span>
                 </div>
               </div>
 
