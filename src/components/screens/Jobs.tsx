@@ -185,6 +185,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
   const [jobTab, setJobTab] = useState<"active" | "billing" | "paid" | "archive">("active");
   const [open, setOpen] = useState<string | null>(null);
+  // Phase 2 redesign: id of the job shown in the separate detail screen
+  // (null = the Jobs list). Set by the card tap once the switchover lands.
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
   // Property typeahead query — drives both the dropdown suggestions
   // (in <PropertySearch>) and the inline filter on the visible list,
   // so the list and the typeahead stay in sync.
@@ -557,8 +560,328 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
     }
   };
 
+  // Status-aware primary action for the detail header — the single
+  // "what's next" button that advances a job through its lifecycle,
+  // wired to the handlers that already exist on this screen.
+  const primaryCTA = (dj: typeof jobs[0]): { label: string; icon: string; onClick: () => void } | null => {
+    switch (dj.status) {
+      case "lead":      return { label: "Build Quote", icon: "quote", onClick: () => onEditJob?.(dj.id) };
+      case "quoted":    return { label: "Edit / Send Quote", icon: "edit", onClick: () => onEditJob?.(dj.id) };
+      case "accepted":  return { label: "Schedule", icon: "schedule", onClick: () => (onScheduleJob ? onScheduleJob(dj.property) : setPage("sched")) };
+      case "scheduled": return { label: "Mark Active", icon: "play", onClick: () => setStatus(dj.id, "active") };
+      case "active":    return { label: "Mark Complete", icon: "check", onClick: () => setStatus(dj.id, "complete") };
+      case "complete":  return { label: "Generate Invoice", icon: "receipt", onClick: () => { generateInvoice(dj); setStatus(dj.id, "invoiced"); } };
+      case "invoiced":  return { label: "Mark Paid", icon: "checkCircle", onClick: () => setStatus(dj.id, "paid") };
+      case "paid":      return { label: "Request Review", icon: "star", onClick: () => setReviewJob(dj) };
+      default:          return null;
+    }
+  };
+
+  // ── PHASE 2: Job detail screen ──────────────────────────────
+  // Separate-screen detail (per the redesign mockup): replaces the Jobs
+  // list when a card is opened (detailJobId). Computed as a VALUE, not an
+  // early return, so the modals at the end of the main return — recurring,
+  // review, QR-collect — still render while the detail screen is open.
+  const detailScreen = (() => {
+    if (!detailJobId) return null;
+    const dj = jobs.find((x) => x.id === detailJobId);
+    if (!dj) return null;
+      const cta = primaryCTA(dj);
+      const djLead = dj.status === "lead" ? (() => {
+        try {
+          const data = typeof dj.rooms === "string" ? JSON.parse(dj.rooms) : dj.rooms;
+          return {
+            description: data?.leadDescription as string | undefined,
+            photos: (Array.isArray(data?.leadPhotos) ? data.leadPhotos : []) as string[],
+          };
+        } catch { return null; }
+      })() : null;
+      return (
+        <>
+          {/* Topbar — back · JOB · print */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
+            <button className="bo" onClick={() => setDetailJobId(null)} style={{ fontSize: 12, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <Icon name="back" size={15} /> Jobs
+            </button>
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px" }}>JOB</div>
+            <button className="bo" onClick={() => generateInvoice(dj)} title="Print / invoice" style={{ padding: "6px 9px", display: "inline-flex", alignItems: "center" }}>
+              <Icon name="print" size={15} />
+            </button>
+          </div>
+
+          {/* Detail header */}
+          <div className="dhead">
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".4px" }}>
+              {dj.property || "(no address)"}
+            </div>
+            {dj.client && <div style={{ fontSize: 11.5, color: "#9db4d6", marginTop: 2 }}>{dj.client}</div>}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 8 }}>
+              <select
+                value={dj.status || "quoted"}
+                onChange={(e) => setStatus(dj.id, e.target.value)}
+                aria-label="Job status"
+                style={{
+                  WebkitAppearance: "none", MozAppearance: "none", appearance: "none",
+                  fontFamily: "Oswald", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em",
+                  color: statusColor(dj.status), backgroundColor: statusColor(dj.status) + "1f",
+                  border: `1px solid ${statusColor(dj.status)}66`, borderRadius: 999,
+                  padding: "3px 20px 3px 10px", cursor: "pointer",
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath fill='${encodeURIComponent(statusColor(dj.status))}' d='M0 0 L8 0 L4 5 Z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
+                }}
+              >
+                <option value="lead"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>Lead</option>
+                <option value="quoted"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.quoted")}</option>
+                <option value="accepted"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.accepted")}</option>
+                <option value="scheduled" style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.scheduled")}</option>
+                <option value="active"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.active")}</option>
+                <option value="complete"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.complete")}</option>
+                <option value="invoiced"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.invoiced")}</option>
+                <option value="paid"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.paid")}</option>
+              </select>
+              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22 }}>${(dj.total || 0).toFixed(0)}</div>
+            </div>
+            {dj.property && (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dj.property)}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 11, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 9, textDecoration: "none" }}
+              >
+                <Icon name="mapPin" size={13} /> Show on map
+              </a>
+            )}
+          </div>
+
+          {/* Status-aware primary action */}
+          {cta && (
+            <button className="bb mb" onClick={cta.onClick} style={{ width: "100%", padding: "11px", fontFamily: "Oswald", fontSize: 14, letterSpacing: ".4px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <Icon name={cta.icon} size={16} /> {cta.label}
+            </button>
+          )}
+
+          {/* Lead context — the prospect's request + photos (lead jobs only) */}
+          {djLead && (djLead.description || djLead.photos.length > 0) && (
+            <div className="section" style={{ borderLeft: "3px solid #ff3d6e" }}>
+              <div className="seclabel" style={{ color: "#ff3d6e", borderBottom: "none", marginBottom: 0 }}>
+                <Icon name="star" size={13} /> Request from prospect
+              </div>
+              {djLead.description && (
+                <div style={{ fontSize: 13, whiteSpace: "pre-wrap", padding: djLead.photos.length ? "0 0 8px" : "0 0 4px" }}>
+                  {djLead.description}
+                </div>
+              )}
+              {djLead.photos.length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(70px, 1fr))", gap: 6, paddingBottom: 4 }}>
+                  {djLead.photos.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                      <img src={url} alt="" style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 6, border: "1px solid var(--color-border-dark)" }} />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Properties */}
+          <div className="section">
+            <div className="seclabel"><Icon name="settings" size={13} /> Properties</div>
+            <div className="drow">
+              <span className="l">Trade</span>
+              <select
+                value={dj.trade || ""}
+                onChange={async (e) => { await db.patch("jobs", dj.id, { trade: e.target.value }); loadAll(); }}
+                style={{ background: "transparent", color: "inherit", border: "none", fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", textAlign: "right" }}
+              >
+                <option value="">None</option>
+                <option value="Plumbing">Plumbing</option>
+                <option value="Electrical">Electrical</option>
+                <option value="Carpentry">Carpentry</option>
+                <option value="HVAC">HVAC</option>
+                <option value="Painting">Painting</option>
+                <option value="Flooring">Flooring</option>
+                <option value="General">General</option>
+              </select>
+            </div>
+            <div className="drow">
+              <span className="l">Requested tech</span>
+              <select
+                value={dj.requested_tech || ""}
+                onChange={async (e) => { await db.patch("jobs", dj.id, { requested_tech: e.target.value }); loadAll(); }}
+                style={{ background: "transparent", color: "inherit", border: "none", fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", textAlign: "right" }}
+              >
+                <option value="">Anyone</option>
+                {profiles.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="drow">
+              <span className="l">Created</span>
+              <span className="v">{dj.job_date || (dj.created_at ? dj.created_at.slice(0, 10) : "—")}</span>
+            </div>
+          </div>
+
+          {/* Money */}
+          <div className="section">
+            <div className="seclabel"><Icon name="money" size={13} /> Money</div>
+            <div className="drow">
+              <span className="l">Quote total</span>
+              <span className="v" style={{ fontFamily: "Oswald", fontSize: 14 }}>
+                ${(dj.total || 0).toFixed(0)}
+                {onEditJob && (
+                  <button onClick={() => onEditJob(dj.id)} title="Edit quote" style={{ background: "transparent", border: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0, marginLeft: 6, display: "inline-flex", alignItems: "center" }}>
+                    <Icon name="edit" size={13} />
+                  </button>
+                )}
+              </span>
+            </div>
+            <div className="drow">
+              <span className="l">Labor · Materials · Hours</span>
+              <span className="v">${(dj.total_labor || 0).toFixed(0)} · ${(dj.total_mat || 0).toFixed(0)} · {(dj.total_hrs || 0).toFixed(1)}h</span>
+            </div>
+            {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
+                <button
+                  className="bo"
+                  onClick={() => { generateInvoice(dj); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }}
+                  style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Icon name="receipt" size={14} /> {dj.status === "complete" ? "Invoice" : "View invoice"}
+                </button>
+                {(dj.status === "invoiced" || dj.status === "complete") && dj.total > 0 && org?.stripe_connected && (
+                  <>
+                    <button
+                      className="bo"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: dj.total, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
+                          const data = await res.json();
+                          if (data.url) { navigator.clipboard.writeText(data.url); useStore.getState().showToast("Payment link copied! Send it to the client.", "success"); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
+                          else useStore.getState().showToast("Error: " + (data.error || "Could not create payment link"), "error");
+                        } catch { useStore.getState().showToast("Failed to create payment link", "error"); }
+                      }}
+                      style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                    >
+                      <Icon name="link" size={14} /> Send link
+                    </button>
+                    <button
+                      className="bo"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: dj.total, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
+                          const data = await res.json();
+                          if (data.url) { setPayQR({ url: data.url, jobId: dj.id, amount: dj.total }); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
+                          else useStore.getState().showToast("Error: " + (data.error || "Could not create payment"), "error");
+                        } catch { useStore.getState().showToast("Failed to create payment", "error"); }
+                      }}
+                      style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                    >
+                      <Icon name="qr" size={14} /> Collect now
+                    </button>
+                  </>
+                )}
+                {dj.status === "invoiced" && (
+                  <button
+                    className="bg"
+                    onClick={() => setStatus(dj.id, "paid")}
+                    style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  >
+                    <Icon name="check" size={14} /> Mark paid
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Work */}
+          <div className="section">
+            <div className="seclabel"><Icon name="list" size={13} /> Work</div>
+            {onEditJob && (
+              <div className="linkrow" onClick={() => onEditJob(dj.id)}>
+                <span className="lf"><span className="ic"><Icon name="edit" size={15} /></span> Edit quote</span>
+                <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
+              </div>
+            )}
+            <div className="linkrow" onClick={() => useStore.getState().showToast("Work order screen lands in Phase 3", "info")}>
+              <span className="lf"><span className="ic"><Icon name="list" size={15} /></span> Work order</span>
+              <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
+            </div>
+            <div className="linkrow" onClick={() => useStore.getState().showToast("Receipts & photos screen lands in Phase 3", "info")}>
+              <span className="lf"><span className="ic" style={{ color: "var(--color-warning)" }}><Icon name="receipt" size={15} /></span> Receipts &amp; photos</span>
+              <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
+            </div>
+          </div>
+
+          {/* Manage */}
+          <div className="section">
+            <div className="seclabel"><Icon name="settings" size={13} /> Manage</div>
+            <div className="linkrow" onClick={() => setRecurringFrom(dj)}>
+              <span className="lf"><span className="ic"><Icon name="refresh" size={15} /></span> Make recurring</span>
+              <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
+              <button
+                className="bo"
+                onClick={() => {
+                  const url = `${window.location.origin}/status?job=${dj.id}`;
+                  const msg = dj.status === "quoted" || dj.status === "accepted"
+                    ? `Hi! Here's your quote from ${org?.name || "us"} for ${dj.property}:\n\nTotal: $${(dj.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
+                    : `Hi! Here's the status update for your job at ${dj.property}:\n\nView progress: ${url}`;
+                  navigator.clipboard.writeText(msg);
+                  useStore.getState().showToast("Message copied! Paste & send to client.", "success");
+                }}
+                style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+              >
+                <Icon name="send" size={13} /> Send to client
+              </button>
+              {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
+                <button
+                  className="bo"
+                  onClick={() => setReviewJob(dj)}
+                  style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: dj.review_requested_at ? "#888" : "var(--color-highlight)" }}
+                >
+                  <Icon name={dj.review_requested_at ? "mail" : "star"} size={13} /> {dj.review_requested_at ? "Review sent" : "Request review"}
+                </button>
+              )}
+            </div>
+            {(dj.status === "scheduled" || dj.status === "active" || dj.status === "complete") && (
+              <div style={{ paddingTop: 8 }}>
+                <SmsNotifyButtons jobId={dj.id} variant="grid" />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 7, paddingTop: 8 }}>
+              {!dj.archived ? (
+                <button
+                  className="bo"
+                  onClick={async () => { await db.patch("jobs", dj.id, { archived: true, archived_at: new Date().toISOString() }); loadAll(); }}
+                  style={{ flex: 1, fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Icon name="package" size={14} /> Archive
+                </button>
+              ) : (
+                <button
+                  className="bo"
+                  onClick={async () => { await db.patch("jobs", dj.id, { archived: false, archived_at: null }); loadAll(); }}
+                  style={{ flex: 1, fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Icon name="refresh" size={14} /> Restore
+                </button>
+              )}
+              <button
+                className="br"
+                onClick={() => deleteJob(dj.id)}
+                style={{ flex: 1, fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+              >
+                <Icon name="delete" size={14} /> Delete
+              </button>
+            </div>
+          </div>
+        </>
+      );
+  })();
+
   return (
     <div className="fi">
+      {detailScreen || (
+        <>
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
         <Icon name="jobs" size={22} color="var(--color-primary)" />
         Jobs
@@ -632,14 +955,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
               </span>
             </div>
           )}
-          onSelect={(j) => {
-            setOpen(j.id);
-            // Defer scroll until React commits the expanded row.
-            setTimeout(() => {
-              const el = document.getElementById(`job-row-${j.id}`);
-              el?.scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 50);
-          }}
+          onSelect={(j) => setDetailJobId(j.id)}
           onQueryChange={setSearchQuery}
           placeholder="Search jobs by property, client, or trade…"
         />
@@ -792,7 +1108,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
               {/* Collapsed header */}
               <div
                 style={{ cursor: "pointer" }}
-                onClick={() => setOpen(isOpen ? null : j.id)}
+                onClick={() => setDetailJobId(j.id)}
               >
                 {/* Row 1 — client headline + address (map pin) · amount */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
@@ -832,44 +1148,19 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
                 {/* Row 2 — status chip · next-action hint + chevron */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 9, gap: 8 }}>
-                  <select
-                    value={j.status || "quoted"}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setStatus(j.id, e.target.value);
-                    }}
-                    aria-label="Job status"
+                  <span
+                    className="chip"
                     style={{
-                      WebkitAppearance: "none",
-                      MozAppearance: "none",
-                      appearance: "none",
                       fontFamily: "Oswald",
-                      fontSize: 11,
-                      fontWeight: 600,
                       textTransform: "uppercase",
                       letterSpacing: ".06em",
                       color: statusColor(j.status),
-                      backgroundColor: statusColor(j.status) + "1f",
+                      background: statusColor(j.status) + "1f",
                       border: `1px solid ${statusColor(j.status)}66`,
-                      borderRadius: 999,
-                      padding: "3px 20px 3px 10px",
-                      width: "auto",
-                      cursor: "pointer",
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath fill='${encodeURIComponent(statusColor(j.status))}' d='M0 0 L8 0 L4 5 Z'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: "no-repeat",
-                      backgroundPosition: "right 8px center",
                     }}
                   >
-                    <option value="lead"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>Lead</option>
-                    <option value="quoted"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.quoted")}</option>
-                    <option value="accepted"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.accepted")}</option>
-                    <option value="scheduled" style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.scheduled")}</option>
-                    <option value="active"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.active")}</option>
-                    <option value="complete"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.complete")}</option>
-                    <option value="invoiced"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.invoiced")}</option>
-                    <option value="paid"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.paid")}</option>
-                  </select>
+                    {j.status === "lead" ? "Lead" : (t(`status.${j.status}`) || j.status)}
+                  </span>
                   <span className="dim" style={{ fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0 }}>
                     <Icon name={hint.icon} size={12} />
                     {hint.text}
@@ -1870,6 +2161,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
           </span>
         </p>
       </div>
+        </>
+      )}
 
       {/* Payment QR overlay */}
       {payQR && (
