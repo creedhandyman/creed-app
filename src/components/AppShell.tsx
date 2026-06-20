@@ -15,12 +15,16 @@ import Troubleshoot from "./screens/Troubleshoot";
 import Financials from "./screens/Financials";
 import Operations from "./screens/Operations";
 import WorkVision from "./screens/WorkVision";
+import MoreHub from "./screens/MoreHub";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
   const [showSettings, setShowSettings] = useState(false);
   const [editJobId, setEditJobId] = useState<string | null>(null);
   const [scheduleJobName, setScheduleJobName] = useState<string | null>(null);
+  // Deep-link target sub-tab for Operations (the More hub's Customers tile
+  // opens Operations on its customers sub-tab).
+  const [opsInitialTab, setOpsInitialTab] = useState<string | null>(null);
   const user = useStore((s) => s.user)!;
   const darkMode = useStore((s) => s.darkMode);
 
@@ -44,6 +48,12 @@ export default function AppShell() {
     window.scrollTo(0, 0);
     if (p !== "sched") setScheduleJobName(null);
     setPage(p);
+  };
+
+  // Open Operations, optionally deep-linked to a sub-tab (More hub -> Customers).
+  const goToOps = (tab?: string) => {
+    setOpsInitialTab(tab ?? null);
+    goToPage("ops");
   };
 
   if (showSettings) {
@@ -71,7 +81,7 @@ export default function AppShell() {
       case "ops":
         // Open to everyone — Operations.tsx filters its sub-tabs by role
         // so non-admins only see HR (the consolidated time-off home).
-        return <Operations setPage={goToPage} />;
+        return <Operations setPage={goToPage} initialTab={opsInitialTab ?? undefined} />;
       case "workvision":
         return <WorkVision setPage={goToPage} />;
       case "quests":
@@ -82,6 +92,8 @@ export default function AppShell() {
         return <Troubleshoot setPage={goToPage} />;
       case "financials":
         return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
+      case "more":
+        return <MoreHub setPage={goToPage} openSettings={() => setShowSettings(true)} openOps={goToOps} />;
       default:
         return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} />;
     }

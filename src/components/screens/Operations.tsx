@@ -352,7 +352,7 @@ function ReviewAutomationCard({
 
 type OpsTab = "payroll" | "financials" | "customers" | "recurring" | "hr" | "team" | "billing" | "settings";
 
-export default function Operations({ setPage }: { setPage: (p: string) => void }) {
+export default function Operations({ setPage, initialTab }: { setPage: (p: string) => void; initialTab?: string }) {
   const user = useStore((s) => s.user);
   const isAdmin = user?.role === "owner" || user?.role === "manager";
   const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
@@ -365,7 +365,12 @@ export default function Operations({ setPage }: { setPage: (p: string) => void }
   // Non-admins land here only via the HR entry — default the sub-tab to
   // "hr" so they don't briefly see an empty "payroll" surface before any
   // filtering renders.
-  const [tab, setTab] = useState<OpsTab>(isAdmin ? "payroll" : "hr");
+  const [tab, setTab] = useState<OpsTab>(() => {
+    // Deep-link (e.g. More hub -> Customers) opens a specific sub-tab when
+    // it's a valid one; otherwise fall back to the role-appropriate default.
+    const valid = ["payroll", "financials", "customers", "recurring", "hr", "team", "billing", "settings"];
+    return initialTab && valid.includes(initialTab) ? (initialTab as OpsTab) : (isAdmin ? "payroll" : "hr");
+  });
   // CustomerDetail is rendered inline within the customers sub-tab. Its
   // state lives here so switching to a different sub-tab and back resets
   // to the list view (rather than the user landing on a stale detail).

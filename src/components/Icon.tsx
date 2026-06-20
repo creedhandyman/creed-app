@@ -68,6 +68,7 @@ import {
   Briefcase,
   HardHat,
   Filter,
+  Menu,
   Sparkles,
   CircleDot,
   Printer,
@@ -135,6 +136,7 @@ const ICONS: Record<string, LucideIcon> = {
   send: Send,
   qr: QrCode,
   filter: Filter,
+  menu: Menu,
 
   // Trades / context
   hammer: Hammer,

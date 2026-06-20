@@ -10,15 +10,15 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
+// Mockup 5-tab bar: Quote · Jobs · Home · Time · More. The overflow tabs
+// (Schedule, Quests, Operations, Customers, Mileage, Settings) relocate
+// into the More hub — nothing is lost. This array is in side-nav order;
+// bottom-nav reverses it (see `items` below), yielding Quote · Jobs ·
+// Home · Time · More left-to-right.
 const NAV_ITEMS: (NavItem | "logo")[] = [
-  { id: "quests", icon: "quest", labelKey: "nav.quest" },
-  // Ops is open to everyone — non-admins land on the HR sub-tab (the
-  // consolidated time-off home). Admin-only sub-tabs are filtered out
-  // inside Operations.tsx.
-  { id: "ops", icon: "ops", labelKey: "nav.ops" },
+  { id: "more", icon: "menu", labelKey: "nav.more" },
   { id: "time", icon: "time", labelKey: "nav.time" },
   "logo",
-  { id: "sched", icon: "schedule", labelKey: "nav.sched" },
   { id: "jobs", icon: "jobs", labelKey: "nav.jobs" },
   { id: "qf", icon: "quote", labelKey: "nav.quote" },
 ];
