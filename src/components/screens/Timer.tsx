@@ -106,6 +106,12 @@ export default function Timer({ setPage }: Props) {
 
   const rate = user.rate || 55;
 
+  // Next check (this user) — unpaid hours × rate, matching the dashboard's
+  // "next check" so the two screens agree. Bonuses are added at payout.
+  const myUnpaid = timeEntries.filter((e) => (e.user_id === user.id || (!e.user_id && e.user_name === user.name)) && !e.paid_at);
+  const checkHrs = myUnpaid.reduce((s, e) => s + (e.hours || 0), 0);
+  const checkPay = checkHrs * rate;
+
   // Persist timer state
   useEffect(() => sv("t_on", on), [on]);
   useEffect(() => sv("t_st", st), [st]);
@@ -354,104 +360,96 @@ export default function Timer({ setPage }: Props) {
         {t("timer.title")}
       </h2>
 
-      {/* Tab switcher (Crew tab is admin-only) */}
+      {/* Tab switcher (Crew tab is admin-only) — segmented icon control */}
       {isOwner && (
-        <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-          <button
-            onClick={() => setTab("time")}
-            className={tab === "time" ? "bb" : "bo"}
-            style={{ fontSize: 12, padding: "6px 14px", flex: 1 }}
-          >
-            ⏱ {t("timer.myTimeTab")}
-          </button>
-          <button
-            onClick={() => setTab("crew")}
-            className={tab === "crew" ? "bb" : "bo"}
-            style={{ fontSize: 12, padding: "6px 14px", flex: 1, position: "relative" }}
-          >
-            👷 {t("timer.crewTab")}
-            {activeSessions.length > 0 && (
-              <span style={{
-                marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 8,
-                background: "var(--color-success)", color: "#fff", fontFamily: "Oswald",
-              }}>
-                {activeSessions.length} ON
-              </span>
-            )}
-          </button>
+        <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
+          {([
+            { id: "time" as const, icon: "time" as const, label: t("timer.myTimeTab") },
+            { id: "crew" as const, icon: "worker" as const, label: t("timer.crewTab") },
+          ]).map((tb) => {
+            const tabOn = tab === tb.id;
+            return (
+              <button
+                key={tb.id}
+                onClick={() => setTab(tb.id)}
+                style={{
+                  flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  fontSize: 12, fontFamily: "Oswald", letterSpacing: ".04em", padding: "9px", borderRadius: 11,
+                  background: tabOn ? "var(--color-primary)" : "var(--color-card-dark-2)",
+                  color: tabOn ? "#fff" : "var(--color-dim)",
+                  border: `1px solid ${tabOn ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                }}
+              >
+                <Icon name={tb.icon} size={14} color={tabOn ? "#fff" : "var(--color-dim)"} />
+                {tb.label}
+                {tb.id === "crew" && activeSessions.length > 0 && (
+                  <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 8, background: "var(--color-success)", color: "#fff", fontFamily: "Oswald" }}>
+                    {activeSessions.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
       {tab === "time" && (<>
-      {/* Today's Jobs */}
-      {todayJobs.length > 0 && (
-        <div className="cd mb">
-          <h4 style={{ fontSize: 12, marginBottom: 6, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Icon name="schedule" size={14} color="var(--color-primary)" />
-            Today&apos;s Jobs
-          </h4>
-          <div className="row">
-            {todayJobs.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setSj(s.job)}
-                className={sj === s.job ? "bb" : "bo"}
-                style={{ fontSize: 13, padding: "5px 12px" }}
-              >
-                {s.job}
-              </button>
-            ))}
-          </div>
+      {/* Next check (unpaid × rate) — same number the dashboard shows */}
+      <div className="cd mb" style={{ background: "rgba(0,204,102,.09)", border: "1px solid rgba(0,204,102,.4)", borderRadius: 16, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 26, color: "#3ee08f", lineHeight: 1.15 }}>${checkPay.toFixed(0)}</div>
         </div>
-      )}
+        <div className="dim" style={{ fontSize: 11, textAlign: "right", lineHeight: 1.4 }}>{checkHrs.toFixed(1)} hrs unpaid<br />${rate}/hr</div>
+      </div>
 
-      {/* Timer Display */}
-      <div className="cd mb" style={{ textAlign: "center", padding: 20 }}>
-        <div
-          style={{
-            fontSize: 48,
-            fontFamily: "Oswald",
-            fontWeight: 700,
-            color: on ? "var(--color-success)" : darkMode ? "#555" : "#ccc",
-          }}
-        >
-          {fmt(el)}
+      {!on ? (<>
+        {/* Clock into — today's jobs as chips, plus any other property */}
+        <div className="sl" style={{ margin: "0 2px 7px" }}>Today&apos;s jobs · clock into</div>
+        <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {todayJobs.map((s) => (
+            <button key={s.id} onClick={() => setSj(s.job)} className={sj === s.job ? "bb" : "bo"} style={{ fontSize: 12, padding: "6px 11px", borderRadius: 99 }}>{s.job}</button>
+          ))}
+          <button onClick={() => setSj("")} className={sj === "" ? "bb" : "bo"} style={{ fontSize: 12, padding: "6px 11px", borderRadius: 99 }}>{t("timer.general")}</button>
         </div>
-        <select
-          value={sj}
-          onChange={(e) => setSj(e.target.value)}
-          style={{ maxWidth: 300, margin: "10px auto", display: "block" }}
-        >
+        <select value={sj} onChange={(e) => setSj(e.target.value)} style={{ width: "100%", marginBottom: 11 }}>
           <option value="">{t("timer.general")}</option>
           {jobs.map((j) => (
-            <option key={j.id} value={j.property}>
-              {j.property} ({j.status})
-            </option>
+            <option key={j.id} value={j.property}>{j.property} ({j.status})</option>
           ))}
         </select>
-        {!on ? (
-          <button
-            className="bb"
-            onClick={start}
-            style={{ fontSize: 16, padding: "10px 36px" }}
-          >
-            ▶ {t("timer.start")}
-          </button>
-        ) : (
-          <button
-            className="br"
-            onClick={stop}
-            style={{ fontSize: 16, padding: "10px 36px" }}
-          >
-            ⏹ {t("timer.stop")}
-          </button>
-        )}
-        {on && (
-          <div style={{ marginTop: 6, fontSize: 13, color: "var(--color-success)" }}>
-            Running — persists across pages
+        {/* CLOCK IN glow CTA — starts the timer and jumps to WorkVision */}
+        <div onClick={start} style={{ display: "flex", alignItems: "center", gap: 13, padding: 15, borderRadius: 16, cursor: "pointer", marginBottom: 12, color: "#fff", background: "rgba(255,91,91,.14)", border: "1.5px solid rgba(255,91,91,.8)", boxShadow: "0 0 24px -2px rgba(255,91,91,.5), inset 0 0 22px -8px rgba(255,91,91,.45)" }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,.13)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="start" size={22} color="#fff" />
           </div>
-        )}
-      </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17, letterSpacing: ".4px" }}>{t("timer.start")}</div>
+            <div style={{ fontSize: 11.5, color: "#ffffffcc", display: "flex", alignItems: "center", gap: 5 }}><Icon name="mapPin" size={12} color="#ffffffcc" /> Into: {sj || t("timer.general")}</div>
+          </div>
+          <Icon name="next" size={18} color="#fff" />
+        </div>
+      </>) : (<>
+        {/* On the clock — live timer + open work order / clock out */}
+        <div className="cd mb" style={{ background: "rgba(0,204,102,.1)", border: "1px solid rgba(0,204,102,.5)", borderRadius: 16, padding: 16, textAlign: "center", boxShadow: "0 0 40px -16px rgba(0,204,102,.6)" }}>
+          <div style={{ fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 9px var(--color-success)" }} /> On the clock
+          </div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, letterSpacing: "1px", margin: "6px 0 2px", color: "var(--color-success)" }}>{fmt(el)}</div>
+          <div className="dim" style={{ fontSize: 11.5 }}>{sj || t("timer.general")}</div>
+          {sj && (
+            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(sj)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 7 }}>
+              <Icon name="mapPin" size={12} color="#7fb6ff" /> Show on map
+            </a>
+          )}
+        </div>
+        <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+          <button onClick={() => setPage?.("workvision")} className="bb" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, padding: "11px" }}>
+            <Icon name="list" size={15} color="#fff" /> Open work order
+          </button>
+          <button onClick={stop} className="br" style={{ flex: 1, fontSize: 13, padding: "11px" }}>⏹ {t("timer.stop")}</button>
+        </div>
+      </>)}
 
       {/* Manual Entry — admin only */}
       {isOwner && (

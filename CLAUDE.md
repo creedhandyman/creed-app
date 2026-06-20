@@ -255,6 +255,19 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Time + WorkVision visual redesign (from mockups)**: both screens already
+  had the logic — this was a restyle toward the `Creed_Time_WorkVision_v2` /
+  `Creed_WorkVision_Full` mockups, no plumbing changes. **Time** (`Timer.tsx`):
+  segmented icon tabs (My time / Crew), a green **"next check"** card (unpaid ×
+  rate — same metric as the dashboard), today's-jobs **chips** + a glowing
+  **CLOCK IN** CTA when off the clock, and a live timer card + **Open work
+  order** / Clock out when on. **WorkVision** (`WorkVision.tsx`): Tasks tab now
+  **grouped by trade** (the work-order `room` field, with colored trade dots),
+  a **per-item camera** on each task (uploads a "work" photo), and an icon
+  segmented control for Tasks/Guide/Notes/Photos. Deliberately NOT yet
+  restyled (they work — follow-ups): the Crew-activity cards (still the old
+  list — no avatars; GPS was explicitly deferred), WorkVision's clocked-in
+  header / job-info bar, and the Guide/Notes/Photos section internals.
 - **Nav per-tab colors + morphing More slot; dashboard "next check"**:
   `VerticalNav.tsx` colors the active tab in its signature hue (Home blue,
   Quote yellow/gold, Jobs red, Time green, Quests purple, … — `TAB_COLOR`
