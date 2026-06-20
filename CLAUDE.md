@@ -243,6 +243,25 @@ src/
   `jobNotes`, and the `workOrder` checklist — edited via the serialized
   `enqueueRoomsWrite` (avoids clobbering on quick taps). Full spec +
   build phases: `.claude/plans/jobs-redesign.md`.
+- **Nav + Dashboard redesign**: nav bar trimmed to 5 tabs
+  (Quote · Jobs · Home · Time · More) in `VerticalNav.tsx` — Home is a
+  house icon (the logo image is gone), bottom-nav buttons are `flex:1`
+  edge-to-edge. Overflow tabs live in a new **More hub**
+  (`screens/MoreHub.tsx`): Schedule, Quests, Operations, Customers
+  (deep-links Operations → customers via a new `initialTab` prop on
+  Operations), Mileage, Settings, Help. Routed in `AppShell.tsx` as page
+  `more`. The **Dashboard** (`screens/Dashboard.tsx`) is role-aware:
+  owner/manager → Quote/Clock CTAs, Up next, Needs attention
+  (To send / To invoice / Unpaid), Money (week / month / pipeline),
+  business card; tech/apprentice → a "this week's pay" hero (vs last
+  week + progress bar), CTAs, Up next, closest quest. Full-height flex
+  column (`min-height: calc(100dvh - 150px)` + body `flex:1`
+  space-between) so the cards fill the screen — the 150px is an estimate.
+  Mileage moved off the dashboard into More.
+- **Theme polish**: near-black bg (`--color-dark-bg #040406`), darker
+  card tokens, bright-green money (`--color-money #00e676`), bright-blue
+  translucent glass `.dhead`. Reusable globals.css classes added:
+  `.dhead / .section / .seclabel / .drow / .linkrow / .chip / .iconbtn`.
 - **Self-learning AI quoting**: edits + receipt scans + completed-job
   outcomes write to `price_corrections`. ZIP-tagged so AI weights
   same-ZIP data over regional. See parser.ts `aiParsePdf` for the
@@ -266,6 +285,17 @@ src/
 
 ## Things that still bug me / open follow-ups
 
+- **Notifications (planned next)**: wire the dashboard topbar bell. Want
+  staff alerts when a job is assigned to a tech and when a new lead comes
+  in. App already has Twilio SMS (`/api/reviews/dispatch`, SMS-notify
+  buttons) so SMS-first is likely simplest; web push (PWA + VAPID) is the
+  fancier option. Needs per-user prefs + a phone field (check `profiles`).
+- Dashboard fill-height `min-height: calc(100dvh - 150px)` is an estimate
+  — nudge the `150px` if it scrolls or leaves a sliver.
+- More hub shows every tile to everyone; Customers / admin Operations
+  tabs probably shouldn't render for techs (role-gate them).
+- Jobs Phase-3 polish: before/after photo grid on the Receipts screen +
+  work-order per-item camera / Add item.
 - Inspector trade chips and Marketing screen still have lots of
   English-only strings. Keys exist for some; just need `t()` swaps.
 - `customWorkOrder` in QuoteForge — if rooms change after the user
