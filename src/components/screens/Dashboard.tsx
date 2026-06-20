@@ -113,7 +113,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
     ? <Cta glow="green" icon="worker" title="Work Mode" sub={clockedJob || "On the clock"} onClick={() => setPage("workvision")} />
     : <Cta glow="red" icon="start" title="Clock In" sub="Start your day" onClick={() => setPage("workvision")} />;
 
-  const upNext = nextJob ? (
+  const upNext = (
     <div>
       <div className="sl" style={{ margin: "0 2px 6px" }}>Up next</div>
       <div className="cd" onClick={() => setPage("sched")} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "12px 13px" }}>
@@ -121,21 +121,30 @@ export default function Dashboard({ setPage, openSettings }: Props) {
           <Icon name="schedule" size={19} color="#ffd84d" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, letterSpacing: ".3px" }}>{nextJob.job}</div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
-            {(() => {
-              const d = new Date(nextJob.sched_date + "T12:00:00");
-              const dayStr = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-              const tm = nextJob.note?.match(/🕐\s*(\d{1,2}:\d{2})/);
-              const timeStr = tm ? (() => { const [h, m] = tm[1].split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; return `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, "0")} ${ap}`; })() : "";
-              return `${dayStr}${timeStr ? ` · ${timeStr}` : ""}`;
-            })()}
-          </div>
+          {nextJob ? (
+            <>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, letterSpacing: ".3px" }}>{nextJob.job}</div>
+              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+                {(() => {
+                  const d = new Date(nextJob.sched_date + "T12:00:00");
+                  const dayStr = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                  const tm = nextJob.note?.match(/🕐\s*(\d{1,2}:\d{2})/);
+                  const timeStr = tm ? (() => { const [h, m] = tm[1].split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; return `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, "0")} ${ap}`; })() : "";
+                  return `${dayStr}${timeStr ? ` · ${timeStr}` : ""}`;
+                })()}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".3px" }}>{t("dash.noNextJob")}</div>
+              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>Tap to schedule a job</div>
+            </>
+          )}
         </div>
         <Icon name="next" size={16} color="var(--color-dim)" />
       </div>
     </div>
-  ) : null;
+  );
 
   return (
     <div className="fi" style={{ minHeight: "calc(100dvh - 150px)", display: "flex", flexDirection: "column" }}>
