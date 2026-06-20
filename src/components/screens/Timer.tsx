@@ -432,14 +432,12 @@ export default function Timer({ setPage }: Props) {
             <option key={j.id} value={j.property}>{j.property} ({j.status})</option>
           ))}
         </select>
-        {/* CLOCK IN glow CTA — starts the timer and jumps to WorkVision */}
-        <div onClick={start} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, cursor: "pointer", marginBottom: 12, color: "#fff", background: "rgba(255,91,91,.14)", border: "1.5px solid rgba(255,91,91,.8)", boxShadow: "0 0 24px -2px rgba(255,91,91,.5), inset 0 0 22px -8px rgba(255,91,91,.4)" }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, background: "rgba(255,255,255,.13)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="start" size={23} color="#fff" />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".4px" }}>{t("timer.start")}</div>
-            <div style={{ fontSize: 11, color: "#ffffffcc", display: "flex", alignItems: "center", gap: 5 }}><Icon name="mapPin" size={12} color="#ffffffcc" /> Into: {sj || t("timer.general")}</div>
+        {/* CLOCK IN — banked .cta glow (globals.css). Starts the timer + jumps to WorkVision. */}
+        <div onClick={start} className="cta glow-red" style={{ marginBottom: 12 }}>
+          <div className="ic"><Icon name="start" size={24} color="#fff" /></div>
+          <div className="tx">
+            <b>{t("timer.start")}</b>
+            <small><Icon name="mapPin" size={12} color="#ffffffcc" /> Into: {sj || t("timer.general")}</small>
           </div>
           <Icon name="next" size={18} color="#fff" />
         </div>

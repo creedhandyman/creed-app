@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
+import { parseEntryDate } from "@/lib/dates";
 import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
 import UserGuideModal from "../UserGuideModal";
@@ -50,6 +51,17 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
   // period — the unpaid entries are exactly everything since that date.
   const myPays = payHistory.filter((p) => p.user_id === user.id);
   const lastPayDate = myPays.length ? myPays[0].pay_date : null;
+  // This-week vs last-week pay — the "watch it grow / beat last week" hook.
+  // parseEntryDate keeps manual (ISO-dated) entries in the right week.
+  const ws = new Date(now); ws.setDate(now.getDate() - now.getDay()); ws.setHours(0, 0, 0, 0);
+  const lastWs = new Date(ws); lastWs.setDate(ws.getDate() - 7);
+  const hrsBetween = (from: Date, to: Date | null) =>
+    mine.filter((e) => { const d = parseEntryDate(e.entry_date); return d ? d >= from && (!to || d < to) : false; })
+      .reduce((s, e) => s + (e.hours || 0), 0);
+  const weekPay = hrsBetween(ws, null) * rate;
+  const lastWeekPay = hrsBetween(lastWs, ws) * rate;
+  const toBeat = Math.max(0, lastWeekPay - weekPay);
+  const weekProgress = lastWeekPay > 0 ? Math.min(100, (weekPay / lastWeekPay) * 100) : (weekPay > 0 ? 100 : 0);
 
   // ── Closest Quest ──
   const completedJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
@@ -86,29 +98,18 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
   const [showNotifs, setShowNotifs] = useState(false);
 
   // ── Shared building blocks ──
-  const Cta = ({ glow, icon, title, sub, onClick }: { glow: "blue" | "red" | "green"; icon: IconName; title: string; sub: string; onClick: () => void }) => {
-    const c = glow === "blue" ? "46,139,255" : glow === "green" ? "0,204,102" : "255,91,91";
-    return (
-      <div
-        onClick={onClick}
-        style={{
-          display: "flex", alignItems: "center", gap: 13, padding: 16, borderRadius: 18, cursor: "pointer", color: "#fff",
-          background: `rgba(${c},0.14)`,
-          border: `1.5px solid rgba(${c},0.85)`,
-          boxShadow: `0 0 24px -2px rgba(${c},0.5), inset 0 0 22px -8px rgba(${c},0.45)`,
-        }}
-      >
-        <div style={{ width: 46, height: 46, borderRadius: 13, background: "rgba(255,255,255,.13)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icon name={icon} size={24} color="#fff" strokeWidth={2} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17, letterSpacing: ".4px", textTransform: "uppercase" }}>{title}</div>
-          <div style={{ fontSize: 11.5, color: "#ffffffcc" }}>{sub}</div>
-        </div>
-        <Icon name="next" size={19} color="#fff" />
+  // Glow CTA — layout + hue live in globals.css (.cta / .glow-*) so every
+  // screen draws the same button. See app/globals.css "GLOW CTA".
+  const Cta = ({ glow, icon, title, sub, onClick }: { glow: "blue" | "red" | "green"; icon: IconName; title: string; sub: string; onClick: () => void }) => (
+    <div onClick={onClick} className={`cta glow-${glow}`}>
+      <div className="ic"><Icon name={icon} size={24} color="#fff" strokeWidth={2} /></div>
+      <div className="tx">
+        <b>{title}</b>
+        <small>{sub}</small>
       </div>
-    );
-  };
+      <Icon name="next" size={19} color="#fff" />
+    </div>
+  );
   const quoteCta = <Cta glow="blue" icon="quote" title={t("dash.startQuote")} sub="Quote · inspect · upload" onClick={() => setPage("qf")} />;
   const clockCta = isClocked
     ? <Cta glow="green" icon="worker" title="Work Mode" sub={clockedJob || "On the clock"} onClick={() => setPage("workvision")} />
@@ -225,7 +226,7 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
           </>
         ) : (
           <>
-            {/* Tech hero — your next check: all unpaid hours × rate */}
+            {/* Tech hero — next check (grows as you log) + beat-last-week hook */}
             <div className="cd" style={{ background: "rgba(0,204,102,.09)", border: "1px solid rgba(0,204,102,.4)", borderRadius: 18, padding: 16, boxShadow: "0 0 30px -14px rgba(0,204,102,.5)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
@@ -233,11 +234,18 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
                   <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}>${checkPay.toFixed(0)}</div>
                 </div>
                 <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
-                  <Icon name="time" size={12} color="#3ee08f" /> {checkHrs.toFixed(1)} hrs
+                  <Icon name="trending" size={12} color="#3ee08f" /> {lastWeekPay > 0 ? (toBeat > 0 ? "keep going" : "ahead of last week") : `${checkHrs.toFixed(1)} hrs`}
                 </span>
               </div>
-              <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>${rate}/hr · {unpaidMine.length} {unpaidMine.length === 1 ? "entry" : "entries"} unpaid</div>
-              <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 6 }}>{lastPayDate ? `Since last payout · ${lastPayDate}` : "Awaiting first payout"}</div>
+              <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>{checkHrs.toFixed(1)} hrs unpaid · ${rate}/hr{lastPayDate ? ` · since ${lastPayDate}` : ""}</div>
+              {/* This week vs last week — the come-back-tomorrow incentive */}
+              <div style={{ height: 8, background: "rgba(255,255,255,.07)", borderRadius: 5, overflow: "hidden", marginTop: 12 }}>
+                <div style={{ height: "100%", width: `${weekProgress}%`, background: "var(--color-success)", borderRadius: 5, boxShadow: "0 0 12px -1px var(--color-success)" }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginTop: 5 }}>
+                <span>This week ${weekPay.toFixed(0)}</span>
+                <span>{lastWeekPay > 0 ? (toBeat > 0 ? `$${toBeat.toFixed(0)} to beat last week ($${lastWeekPay.toFixed(0)})` : "Beat last week!") : "Build your streak"}</span>
+              </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{clockCta}{quoteCta}</div>

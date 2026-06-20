@@ -67,7 +67,11 @@ src/
 
 - **Styling**: globals.css holds tokens. Buttons are `.bb` (primary),
   `.br` (red/destructive), `.bg` (success), `.bo` (outline). Cards are
-  `.cd`. Layout helpers `.row`, `.g2`, `.g4`, `.mt`, `.mb`, `.fi`.
+  `.cd`. Big glow action cards are `.cta` + a hue (`.glow-blue` /
+  `.glow-red` / `.glow-green`) with `.ic` (icon tile) / `.tx b` (title) /
+  `.tx small` (sub) inside — used by the dashboard Quote/Clock CTAs and the
+  Time clock-in; don't re-inline the glow. Layout helpers `.row`, `.g2`,
+  `.g4`, `.mt`, `.mb`, `.fi`.
 - **Icons**: import from `<Icon name="..." />`. Curated set in
   `Icon.tsx`. Inline emoji in flowing copy (✅ status, ⭐ ratings) is
   fine; UI affordances should be Lucide.
@@ -283,9 +287,10 @@ src/
   **"My check"** tile — now shows **all unpaid hours × rate**, i.e. exactly
   what Run Payroll will pay (no calendar-week window), so it always
   reconciles with the actual check. Approved quest bonuses are added at
-  payout, not previewed. The old "vs last week" comparison + progress bar
-  were retired with the week window; the `lib/dates.ts` `parseEntryDate`
-  helper (from the TZ-bucketing fix) is now only used by Financials.
+  payout, not previewed. The tech hero keeps the next-check headline AND a
+  this-week-vs-last-week progress bar + "beat last week" line as the
+  come-back motivator (weekly halves computed via `lib/dates.ts`
+  `parseEntryDate` so manual ISO-dated entries bucket correctly).
 - **Notifications (in-app feed v1)**: dashboard topbar **bell** with an
   unread badge → `NotificationsPanel.tsx` (overlay list, tap a row to mark
   read + deep-link to the job). Source of truth is the `notifications`

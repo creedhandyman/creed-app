@@ -271,6 +271,52 @@ button:focus-visible {
   filter: brightness(0.95);
 }
 
+/* ─── GLOW CTA ─────────────────────────────────────────
+   The big action cards (dashboard Quote / Clock In, Time clock-in):
+   translucent fill + bright ring + outer/inset glow, white content.
+   `.cta` is the layout; `.glow-{blue,red,green}` sets the hue — banked
+   here so every screen uses one source instead of inline duplicates. */
+.cta {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 16px;
+  border-radius: 18px;
+  cursor: pointer;
+  color: #fff;
+}
+.cta .ic {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.13);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.cta .tx { flex: 1; min-width: 0; }
+.cta .tx b {
+  display: block;
+  font-family: Oswald, sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #fff;
+}
+.cta .tx small {
+  font-size: 11.5px;
+  color: #ffffffcc;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.cta:active { transform: scale(0.985); }
+.glow-blue  { background: rgba(46, 139, 255, 0.14); border: 1.5px solid rgba(46, 139, 255, 0.85); box-shadow: 0 0 24px -2px rgba(46, 139, 255, 0.5), inset 0 0 22px -8px rgba(46, 139, 255, 0.45); }
+.glow-green { background: rgba(0, 204, 102, 0.14);  border: 1.5px solid rgba(0, 204, 102, 0.85);  box-shadow: 0 0 24px -2px rgba(0, 204, 102, 0.5),  inset 0 0 22px -8px rgba(0, 204, 102, 0.45); }
+.glow-red   { background: rgba(255, 91, 91, 0.14);  border: 1.5px solid rgba(255, 91, 91, 0.85);  box-shadow: 0 0 24px -2px rgba(255, 91, 91, 0.5),  inset 0 0 22px -8px rgba(255, 91, 91, 0.45); }
+
 /* Outline / quiet button */
 .dark .bo {
   background: transparent;

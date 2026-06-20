@@ -725,50 +725,60 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             <div className="seclabel"><Icon name="settings" size={13} /> Properties</div>
             <div className="drow">
               <span className="l">Trade</span>
-              <select
-                value={dj.trade || ""}
-                onChange={async (e) => { await db.patch("jobs", dj.id, { trade: e.target.value }); loadAll(); }}
-                style={{ background: "transparent", color: "inherit", border: "none", fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", textAlign: "right" }}
-              >
-                <option value="">None</option>
-                <option value="Plumbing">Plumbing</option>
-                <option value="Electrical">Electrical</option>
-                <option value="Carpentry">Carpentry</option>
-                <option value="HVAC">HVAC</option>
-                <option value="Painting">Painting</option>
-                <option value="Flooring">Flooring</option>
-                <option value="General">General</option>
-              </select>
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)" }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{dj.trade || "None"}</span>
+                <Icon name="expand" size={12} color="var(--color-dim)" />
+                <select
+                  value={dj.trade || ""}
+                  onChange={async (e) => { await db.patch("jobs", dj.id, { trade: e.target.value }); loadAll(); }}
+                  aria-label="Trade"
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", WebkitAppearance: "none", appearance: "none" }}
+                >
+                  <option value="">None</option>
+                  <option value="Plumbing">Plumbing</option>
+                  <option value="Electrical">Electrical</option>
+                  <option value="Carpentry">Carpentry</option>
+                  <option value="HVAC">HVAC</option>
+                  <option value="Painting">Painting</option>
+                  <option value="Flooring">Flooring</option>
+                  <option value="General">General</option>
+                </select>
+              </div>
             </div>
             <div className="drow">
               <span className="l">Requested tech</span>
-              <select
-                value={dj.requested_tech || ""}
-                onChange={async (e) => {
-                  const techName = e.target.value;
-                  const prev = dj.requested_tech || "";
-                  await db.patch("jobs", dj.id, { requested_tech: techName });
-                  loadAll();
-                  // Notify the newly-assigned tech. Skip clears ("Anyone"),
-                  // re-selecting the same tech, and self-assignment. Fire-and-
-                  // forget — the assignment itself already succeeded above.
-                  if (techName && techName !== prev) {
-                    const tech = profiles.find((p) => p.name === techName);
-                    const orgId = user.org_id || org?.id;
-                    if (tech && orgId && tech.id !== user.id) {
-                      fetch("/api/notify", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ type: "job_assigned", orgId, jobId: dj.id, recipientId: tech.id, techName, actorId: user.id }),
-                      }).catch(() => { /* non-blocking */ });
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)" }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{dj.requested_tech || "Anyone"}</span>
+                <Icon name="expand" size={12} color="var(--color-dim)" />
+                <select
+                  value={dj.requested_tech || ""}
+                  aria-label="Requested tech"
+                  onChange={async (e) => {
+                    const techName = e.target.value;
+                    const prev = dj.requested_tech || "";
+                    await db.patch("jobs", dj.id, { requested_tech: techName });
+                    loadAll();
+                    // Notify the newly-assigned tech. Skip clears ("Anyone"),
+                    // re-selecting the same tech, and self-assignment. Fire-and-
+                    // forget — the assignment itself already succeeded above.
+                    if (techName && techName !== prev) {
+                      const tech = profiles.find((p) => p.name === techName);
+                      const orgId = user.org_id || org?.id;
+                      if (tech && orgId && tech.id !== user.id) {
+                        fetch("/api/notify", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ type: "job_assigned", orgId, jobId: dj.id, recipientId: tech.id, techName, actorId: user.id }),
+                        }).catch(() => { /* non-blocking */ });
+                      }
                     }
-                  }
-                }}
-                style={{ background: "transparent", color: "inherit", border: "none", fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", textAlign: "right" }}
-              >
-                <option value="">Anyone</option>
-                {profiles.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-              </select>
+                  }}
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", WebkitAppearance: "none", appearance: "none" }}
+                >
+                  <option value="">Anyone</option>
+                  {profiles.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              </div>
             </div>
             <div className="drow">
               <span className="l">Created</span>
