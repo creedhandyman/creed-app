@@ -75,7 +75,6 @@ export default function Dashboard({ setPage, openSettings }: Props) {
     .filter((j) => ["lead", "quoted", "accepted", "scheduled", "active"].includes(j.status))
     .reduce((s, j) => s + (j.total || 0), 0);
 
-  // Clock state (for the CLOCK IN / Work Mode CTA)
   const isClocked = (() => { try { return JSON.parse(localStorage.getItem("c_t_on") || "false"); } catch { return false; } })();
   const clockedJob = (() => { try { return localStorage.getItem("c_t_sj") ? JSON.parse(localStorage.getItem("c_t_sj")!) : ""; } catch { return ""; } })();
 
@@ -92,13 +91,13 @@ export default function Dashboard({ setPage, openSettings }: Props) {
       <div
         onClick={onClick}
         style={{
-          display: "flex", alignItems: "center", gap: 13, padding: 15, borderRadius: 18, cursor: "pointer", marginBottom: 11, color: "#fff",
+          display: "flex", alignItems: "center", gap: 13, padding: 16, borderRadius: 18, cursor: "pointer", color: "#fff",
           background: `rgba(${c},0.14)`,
           border: `1.5px solid rgba(${c},0.85)`,
           boxShadow: `0 0 24px -2px rgba(${c},0.5), inset 0 0 22px -8px rgba(${c},0.45)`,
         }}
       >
-        <div style={{ width: 44, height: 44, borderRadius: 13, background: "rgba(255,255,255,.13)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <div style={{ width: 46, height: 46, borderRadius: 13, background: "rgba(255,255,255,.13)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <Icon name={icon} size={24} color="#fff" strokeWidth={2} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -109,21 +108,16 @@ export default function Dashboard({ setPage, openSettings }: Props) {
       </div>
     );
   };
+  const quoteCta = <Cta glow="blue" icon="quote" title={t("dash.startQuote")} sub="Quote · inspect · upload" onClick={() => setPage("qf")} />;
+  const clockCta = isClocked
+    ? <Cta glow="green" icon="worker" title="Work Mode" sub={clockedJob || "On the clock"} onClick={() => setPage("workvision")} />
+    : <Cta glow="red" icon="start" title="Clock In" sub="Start your day" onClick={() => setPage("workvision")} />;
 
-  const quoteCta = (
-    <Cta glow="blue" icon="quote" title={t("dash.startQuote")} sub="Quote · inspect · upload" onClick={() => setPage("qf")} />
-  );
-  const clockCta = isClocked ? (
-    <Cta glow="green" icon="worker" title="Work Mode" sub={clockedJob || "On the clock"} onClick={() => setPage("workvision")} />
-  ) : (
-    <Cta glow="red" icon="start" title="Clock In" sub="Start your day" onClick={() => setPage("workvision")} />
-  );
-
-  const upNext = nextJob && (
-    <>
-      <div className="sl" style={{ margin: "4px 2px 6px" }}>Up next</div>
-      <div className="cd mb" onClick={() => setPage("sched")} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "12px 13px" }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(255,204,0,.14)", color: "#ffd84d", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+  const upNext = nextJob ? (
+    <div>
+      <div className="sl" style={{ margin: "0 2px 6px" }}>Up next</div>
+      <div className="cd" onClick={() => setPage("sched")} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "12px 13px" }}>
+        <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(255,204,0,.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <Icon name="schedule" size={19} color="#ffd84d" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -140,24 +134,20 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
         <Icon name="next" size={16} color="var(--color-dim)" />
       </div>
-    </>
-  );
+    </div>
+  ) : null;
 
   return (
-    <div className="fi">
+    <div className="fi" style={{ minHeight: "calc(100dvh - 150px)", display: "flex", flexDirection: "column" }}>
       {/* Topbar — greeting + name + help / settings */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 15 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <div>
           <div className="dim" style={{ fontSize: 12 }}>{isAdmin ? "Welcome back" : "Let's get it"}</div>
           <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".8px", textTransform: "uppercase" }}>{user.name}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setShowUserGuide(true)} aria-label="User guide" title="User guide" className="iconbtn">
-            <Icon name="help" size={18} />
-          </button>
-          <button onClick={openSettings} aria-label="Settings" title="Settings" className="iconbtn">
-            <Icon name="settings" size={18} />
-          </button>
+          <button onClick={() => setShowUserGuide(true)} aria-label="User guide" title="User guide" className="iconbtn"><Icon name="help" size={18} /></button>
+          <button onClick={openSettings} aria-label="Settings" title="Settings" className="iconbtn"><Icon name="settings" size={18} /></button>
         </div>
       </div>
 
@@ -178,90 +168,87 @@ export default function Dashboard({ setPage, openSettings }: Props) {
         </div>
       )}
 
-      {isAdmin ? (
-        <>
-          {quoteCta}
-          {clockCta}
-          {upNext}
-
-          {/* Needs attention */}
-          <div className="sl" style={{ margin: "2px 2px 7px" }}>Needs attention</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9, marginBottom: 12 }}>
-            {[
-              { n: toSend, l: "To send", c: "#ff5b5b", page: "jobs" },
-              { n: toInvoice, l: "To invoice", c: "#2e8bff", page: "jobs" },
-              { n: unpaid, l: "Unpaid", c: "#7b54f0", page: "jobs" },
-            ].map((a) => (
-              <div key={a.l} className="cd" onClick={() => setPage(a.page)} style={{ position: "relative", overflow: "hidden", textAlign: "center", padding: "11px 8px", cursor: "pointer" }}>
-                <span style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: a.c }} />
-                <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, lineHeight: 1, color: a.c }}>{a.n}</div>
-                <div className="dim" style={{ fontSize: 10, marginTop: 4 }}>{a.l}</div>
+      {/* Variant body — flex-grows to fill the screen; blocks distribute evenly */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 14 }}>
+        {isAdmin ? (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{quoteCta}{clockCta}</div>
+            {upNext}
+            <div>
+              <div className="sl" style={{ margin: "0 2px 7px" }}>Needs attention</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}>
+                {[
+                  { n: toSend, l: "To send", c: "#ff5b5b" },
+                  { n: toInvoice, l: "To invoice", c: "#2e8bff" },
+                  { n: unpaid, l: "Unpaid", c: "#7b54f0" },
+                ].map((a) => (
+                  <div key={a.l} className="cd" onClick={() => setPage("jobs")} style={{ position: "relative", overflow: "hidden", textAlign: "center", padding: "13px 8px", cursor: "pointer" }}>
+                    <span style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: a.c }} />
+                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, lineHeight: 1, color: a.c }}>{a.n}</div>
+                    <div className="dim" style={{ fontSize: 10, marginTop: 4 }}>{a.l}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-
-          {/* Money */}
-          <div className="cd mb" style={{ display: "flex", padding: "11px 0" }}>
-            {[
-              { l: "This week", v: `$${weekPay.toFixed(0)}`, green: true },
-              { l: "This month", v: `$${earnedMonth.toLocaleString()}`, green: false },
-              { l: "Pipeline", v: pipeline >= 1000 ? `$${(pipeline / 1000).toFixed(1)}k` : `$${pipeline.toFixed(0)}`, green: false },
-            ].map((m, i) => (
-              <div key={m.l} style={{ flex: 1, textAlign: "center", borderLeft: i ? "1px solid var(--color-border-dark)" : "none" }}>
-                <div className="sl" style={{ fontSize: 9.5 }}>{m.l}</div>
-                <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: m.green ? "var(--color-money)" : "inherit" }}>{m.v}</div>
-              </div>
-            ))}
-          </div>
-
-          <DashboardCardPreview />
-        </>
-      ) : (
-        <>
-          {/* Tech hero — this week's pay growing */}
-          <div className="cd mb" style={{ background: "rgba(0,204,102,.09)", border: "1px solid rgba(0,204,102,.4)", borderRadius: 18, padding: 15, boxShadow: "0 0 30px -14px rgba(0,204,102,.5)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <div style={{ fontSize: 10, letterSpacing: ".15em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>This week&apos;s pay</div>
-                <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 36, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}>${weekPay.toFixed(0)}</div>
-              </div>
-              {lastWeekPay > 0 && (
-                <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
-                  <Icon name="trending" size={12} color="#3ee08f" /> {toBeat > 0 ? "keep going" : "ahead of last week"}
-                </span>
-              )}
             </div>
-            <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>{weekHrs.toFixed(1)} hrs · ${rate}/hr{daysIn > 0 ? ` · ${daysIn} ${daysIn === 1 ? "day" : "days"} in` : ""}</div>
-            <div style={{ height: 8, background: "rgba(255,255,255,.07)", borderRadius: 5, overflow: "hidden", marginTop: 12 }}>
-              <div style={{ height: "100%", width: `${weekProgress}%`, background: "var(--color-success)", borderRadius: 5, boxShadow: "0 0 12px -1px var(--color-success)" }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginTop: 5 }}>
-              <span>Mon–Sun</span>
-              <span>{lastWeekPay > 0 ? (toBeat > 0 ? `$${toBeat.toFixed(0)} to beat last week ($${lastWeekPay.toFixed(0)})` : "Beat last week!") : "Build your streak"}</span>
-            </div>
-          </div>
-
-          {clockCta}
-          {quoteCta}
-          {upNext}
-
-          {/* Closest quest */}
-          {closest && (
-            <div className="cd" onClick={() => setPage("quests")} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: "11px 12px" }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(157,78,221,.16)", color: "var(--color-violet)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Icon name="trophy" size={17} color="var(--color-violet)" />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{closest.name} · {closest.bonus} bonus</div>
-                <div style={{ height: 6, background: "var(--color-card-dark-3)", borderRadius: 4, overflow: "hidden", marginTop: 5 }}>
-                  <div style={{ height: "100%", width: `${Math.min(100, (closest.p / closest.g) * 100)}%`, background: "var(--color-violet)", borderRadius: 4 }} />
+            <div className="cd" style={{ display: "flex", padding: "13px 0" }}>
+              {[
+                { l: "This week", v: `$${weekPay.toFixed(0)}`, green: true },
+                { l: "This month", v: `$${earnedMonth.toLocaleString()}`, green: false },
+                { l: "Pipeline", v: pipeline >= 1000 ? `$${(pipeline / 1000).toFixed(1)}k` : `$${pipeline.toFixed(0)}`, green: false },
+              ].map((m, i) => (
+                <div key={m.l} style={{ flex: 1, textAlign: "center", borderLeft: i ? "1px solid var(--color-border-dark)" : "none" }}>
+                  <div className="sl" style={{ fontSize: 9.5 }}>{m.l}</div>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, marginTop: 3, color: m.green ? "var(--color-money)" : "inherit" }}>{m.v}</div>
                 </div>
-              </div>
-              <div style={{ fontFamily: "Oswald", fontWeight: 700, color: "var(--color-violet)", fontSize: 13, whiteSpace: "nowrap" }}>{closest.p}/{closest.g}</div>
+              ))}
             </div>
-          )}
-        </>
-      )}
+            <DashboardCardPreview />
+          </>
+        ) : (
+          <>
+            {/* Tech hero — this week's pay growing */}
+            <div className="cd" style={{ background: "rgba(0,204,102,.09)", border: "1px solid rgba(0,204,102,.4)", borderRadius: 18, padding: 16, boxShadow: "0 0 30px -14px rgba(0,204,102,.5)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontSize: 10, letterSpacing: ".15em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>This week&apos;s pay</div>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}>${weekPay.toFixed(0)}</div>
+                </div>
+                {lastWeekPay > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+                    <Icon name="trending" size={12} color="#3ee08f" /> {toBeat > 0 ? "keep going" : "ahead of last week"}
+                  </span>
+                )}
+              </div>
+              <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>{weekHrs.toFixed(1)} hrs · ${rate}/hr{daysIn > 0 ? ` · ${daysIn} ${daysIn === 1 ? "day" : "days"} in` : ""}</div>
+              <div style={{ height: 8, background: "rgba(255,255,255,.07)", borderRadius: 5, overflow: "hidden", marginTop: 12 }}>
+                <div style={{ height: "100%", width: `${weekProgress}%`, background: "var(--color-success)", borderRadius: 5, boxShadow: "0 0 12px -1px var(--color-success)" }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginTop: 5 }}>
+                <span>Mon–Sun</span>
+                <span>{lastWeekPay > 0 ? (toBeat > 0 ? `$${toBeat.toFixed(0)} to beat last week ($${lastWeekPay.toFixed(0)})` : "Beat last week!") : "Build your streak"}</span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{clockCta}{quoteCta}</div>
+            {upNext}
+
+            {closest && (
+              <div className="cd" onClick={() => setPage("quests")} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: "12px" }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(157,78,221,.16)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon name="trophy" size={17} color="var(--color-violet)" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{closest.name} · {closest.bonus} bonus</div>
+                  <div style={{ height: 6, background: "var(--color-card-dark-3)", borderRadius: 4, overflow: "hidden", marginTop: 5 }}>
+                    <div style={{ height: "100%", width: `${Math.min(100, (closest.p / closest.g) * 100)}%`, background: "var(--color-violet)", borderRadius: 4 }} />
+                  </div>
+                </div>
+                <div style={{ fontFamily: "Oswald", fontWeight: 700, color: "var(--color-violet)", fontSize: 13, whiteSpace: "nowrap" }}>{closest.p}/{closest.g}</div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
