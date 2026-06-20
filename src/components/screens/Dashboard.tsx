@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
+import { parseEntryDate } from "@/lib/dates";
 import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
 import UserGuideModal from "../UserGuideModal";
@@ -38,13 +39,10 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
   ws.setHours(0, 0, 0, 0);
   const lastWs = new Date(ws);
   lastWs.setDate(ws.getDate() - 7);
-  const entryDate = (e: { entry_date?: string }): Date | null => {
-    try {
-      const parts = e.entry_date?.split("/");
-      if (parts?.length === 3) return new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
-      return e.entry_date ? new Date(e.entry_date) : null;
-    } catch { return null; }
-  };
+  // Parse via the shared local-date helper. Manual entries store "YYYY-MM-DD",
+  // which the old inline parser read as UTC midnight and bucketed into the
+  // previous day's week — the "couple hours off" pay drift. See lib/dates.ts.
+  const entryDate = (e: { entry_date?: string }): Date | null => parseEntryDate(e.entry_date);
   const mine = timeEntries.filter((e) => e.user_id === user.id || e.user_name === user.name);
   const weekEntries = mine.filter((e) => { const d = entryDate(e); return d ? d >= ws : false; });
   const lastWeekEntries = mine.filter((e) => { const d = entryDate(e); return d ? d >= lastWs && d < ws : false; });

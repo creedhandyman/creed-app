@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { wrapPrint, openPrint } from "@/lib/print-template";
+import { parseEntryDate } from "@/lib/dates";
 import { Icon } from "../Icon";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
@@ -91,14 +92,8 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   // Revenue per tech
   const byTech: Record<string, { hours: number; pay: number }> = {};
   const rangeEntries = timeEntries.filter((e) => {
-    try {
-      const parts = e.entry_date?.split("/");
-      if (parts?.length === 3) {
-        const d = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
-        return d >= rangeStart;
-      }
-      return new Date(e.entry_date) >= rangeStart;
-    } catch { return false; }
+    const d = parseEntryDate(e.entry_date);
+    return d ? d >= rangeStart : false;
   });
   rangeEntries.forEach((e) => {
     const name = e.user_name || "Unknown";
