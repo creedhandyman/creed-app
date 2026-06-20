@@ -184,9 +184,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   };
 
   const [jobTab, setJobTab] = useState<"active" | "billing" | "paid" | "archive">("active");
-  const [open, setOpen] = useState<string | null>(null);
   // Phase 2 redesign: id of the job shown in the separate detail screen
-  // (null = the Jobs list). Set by the card tap once the switchover lands.
+  // (null = the Jobs list). Set by tapping a card; cleared by the Back button.
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
   // Property typeahead query — drives both the dropdown suggestions
   // (in <PropertySearch>) and the inline filter on the visible list,
@@ -207,7 +206,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   const [scannedVendor, setScannedVendor] = useState("");
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
   const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number } | null>(null);
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [connectingStripe, setConnectingStripe] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
 
@@ -733,10 +731,37 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                 )}
               </span>
             </div>
-            <div className="drow">
-              <span className="l">Labor · Materials · Hours</span>
-              <span className="v">${(dj.total_labor || 0).toFixed(0)} · ${(dj.total_mat || 0).toFixed(0)} · {(dj.total_hrs || 0).toFixed(1)}h</span>
-            </div>
+            {(() => {
+              const labor = getJobLabor(dj);
+              const quoted = dj.total_hrs || 0;
+              const variancePct = quoted > 0 ? ((labor.totalHrs - quoted) / quoted) * 100 : 0;
+              const overBudget = labor.totalHrs > quoted && quoted > 0;
+              const underBudget = quoted > 0 && labor.totalHrs > 0 && labor.totalHrs <= quoted;
+              return (
+                <div style={{ display: "flex", gap: 6, paddingTop: 8 }}>
+                  <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                    <div className="sl">Labor</div>
+                    <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 14 }}>${(dj.total_labor || 0).toFixed(0)}</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                    <div className="sl">Materials</div>
+                    <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 14 }}>${(dj.total_mat || 0).toFixed(0)}</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
+                    <div className="sl">Hours</div>
+                    <div style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 14 }}>{quoted.toFixed(1)}</div>
+                    {labor.totalHrs > 0 && (
+                      <div
+                        style={{ fontSize: 9, marginTop: 2, color: overBudget ? "var(--color-accent-red)" : underBudget ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}
+                        title="Actual hours logged via Timer"
+                      >
+                        {labor.totalHrs.toFixed(1)}h actual{quoted > 0 && ` (${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%)`}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
                 <button
@@ -847,6 +872,40 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                 <SmsNotifyButtons jobId={dj.id} variant="grid" />
               </div>
             )}
+            {dj.status === "paid" && (() => {
+              const rrows = reviewRequests
+                .filter((r) => r.job_id === dj.id)
+                .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+              const rr = rrows[0];
+              const automationOn = org?.review_request_enabled !== false;
+              let label: string;
+              let color: string;
+              let icon: "star" | "mail" | "info" = "star";
+              if (rr?.status === "scheduled") {
+                const hoursOut = Math.max(0, Math.round((new Date(rr.scheduled_for).getTime() - Date.now()) / 3600 / 1000));
+                label = hoursOut <= 0 ? "Review request queued — sending shortly" : `Review request scheduled in ${hoursOut}h`;
+                color = "var(--color-highlight)"; icon = "star";
+              } else if (rr?.status === "sent") {
+                label = `Review request sent on ${rr.sent_at ? new Date(rr.sent_at).toLocaleDateString() : "—"}`;
+                color = "var(--color-success)"; icon = "mail";
+              } else if (rr?.status === "failed") {
+                label = `Review request failed${rr.error ? `: ${rr.error}` : ""}`;
+                color = "var(--color-accent-red)"; icon = "info";
+              } else if (rr?.status === "cancelled") {
+                label = "Review request cancelled (manual send)"; color = "#888"; icon = "mail";
+              } else if (!automationOn) {
+                label = "Review request off (disabled in Settings)"; color = "#888"; icon = "info";
+              } else { return null; }
+              return (
+                <div
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, padding: "4px 8px", borderRadius: 6, background: darkMode ? "#0f0f18" : "#f5f5f8", color, marginTop: 8, fontFamily: "Oswald", letterSpacing: ".02em" }}
+                  title={rr?.error || label}
+                >
+                  <Icon name={icon} size={12} color={color} />
+                  {label}
+                </div>
+              );
+            })()}
             <div style={{ display: "flex", gap: 7, paddingTop: 8 }}>
               {!dj.archived ? (
                 <button
@@ -1070,21 +1129,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
 
         return filtered.map((j) => {
           const w = getWorkers(j);
-          const isOpen = open === j.id;
-          // For status="lead" jobs, the rooms JSON carries the
-          // prospect's description + uploaded photos so Bernard can
-          // triage without leaving Jobs.
-          const leadInfo: { description?: string; photos?: string[] } | null = (() => {
-            if (j.status !== "lead") return null;
-            try {
-              const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-              return {
-                description: data?.leadDescription,
-                photos: Array.isArray(data?.leadPhotos) ? data.leadPhotos : [],
-              };
-            } catch { return null; }
-          })();
-
           // Status-aware triage hint for the collapsed card's second row —
           // surfaces the job's next-action context the way the mockup does
           // (On site · <tech>, Ready to invoice, …). Icons are curated names
@@ -1164,990 +1208,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                   <span className="dim" style={{ fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0 }}>
                     <Icon name={hint.icon} size={12} />
                     {hint.text}
-                    {isOpen ? (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteJob(j.id); }}
-                        title={t("jobs.delete")}
-                        style={{ background: "transparent", border: "none", padding: 2, marginLeft: 4, color: "var(--color-accent-red)", cursor: "pointer", display: "inline-flex", alignItems: "center" }}
-                      >
-                        <Icon name="delete" size={14} />
-                      </button>
-                    ) : (
-                      <Icon name="next" size={14} />
-                    )}
+                    <Icon name="next" size={14} />
                   </span>
                 </div>
               </div>
-
-              {/* Expanded content */}
-              {isOpen && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    paddingTop: 10,
-                    borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
-                  }}
-                >
-                  {/* Lead context — only on status="lead" rows. Shows the
-                      prospect's free-text description + any photos they
-                      uploaded so Bernard can triage and build the quote. */}
-                  {leadInfo && (leadInfo.description || (leadInfo.photos?.length ?? 0) > 0) && (
-                    <div className="cd mb" style={{ borderLeft: "3px solid #ff3d6e", padding: 10 }}>
-                      <div style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".08em", color: "#ff3d6e", marginBottom: 6 }}>
-                        REQUEST FROM PROSPECT
-                      </div>
-                      {leadInfo.description && (
-                        <div style={{ fontSize: 13, color: "#e2e2e8", whiteSpace: "pre-wrap", marginBottom: leadInfo.photos?.length ? 8 : 0 }}>
-                          {leadInfo.description}
-                        </div>
-                      )}
-                      {leadInfo.photos && leadInfo.photos.length > 0 && (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(70px, 1fr))", gap: 6 }}>
-                          {leadInfo.photos.map((url, i) => (
-                            <a
-                              key={i}
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <img
-                                src={url}
-                                alt=""
-                                style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 6, border: "1px solid #1e1e2e" }}
-                              />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Primary actions — Edit + Schedule. Equal-weight, full-width
-                      split. These are the two most-tapped actions on any job. */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 6 }}>
-                    {onEditJob && (
-                      <button
-                        className="bb"
-                        onClick={(e) => { e.stopPropagation(); onEditJob(j.id); }}
-                        style={{ fontSize: 12, padding: "8px 12px", width: "100%" }}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                          <Icon name={j.status === "lead" ? "quote" : "edit"} size={14} />
-                          {j.status === "lead" ? "Build Quote" : t("jobs.editQuote")}
-                        </span>
-                      </button>
-                    )}
-                    <button
-                      className="bb"
-                      onClick={(e) => { e.stopPropagation(); if (onScheduleJob) onScheduleJob(j.property); else setPage("sched"); }}
-                      style={{ fontSize: 12, padding: "8px 12px", width: "100%" }}
-                    >
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                        <Icon name="schedule" size={14} />
-                        {t("jobs.scheduleThis")}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Job lifecycle row — secondary actions for moving a job
-                      forward (send to client, ask for review, notify SMS, job
-                      complete SMS, archive). All ghost-style and uniform size
-                      so none of them visually compete with the primary pair. */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 8 }}>
-                    <button
-                      className="bo"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const url = `${window.location.origin}/status?job=${j.id}`;
-                        const msg = j.status === "quoted" || j.status === "accepted"
-                          ? `Hi! Here's your quote from ${org?.name || "us"} for ${j.property}:\n\nTotal: $${(j.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
-                          : `Hi! Here's the status update for your job at ${j.property}:\n\nView progress: ${url}`;
-                        navigator.clipboard.writeText(msg);
-                        useStore.getState().showToast("Message copied! Paste & send to client.", "success");
-                      }}
-                      style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
-                    >
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                        <Icon name="send" size={13} />Send Job to Client
-                      </span>
-                    </button>
-                    {/* Manual review-request — appears on completed/paid jobs. */}
-                    {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (
-                      <button
-                        className="bo"
-                        onClick={(e) => { e.stopPropagation(); setReviewJob(j); }}
-                        style={{
-                          fontSize: 12,
-                          padding: "7px 10px",
-                          width: "100%",
-                          color: j.review_requested_at ? "#888" : "var(--color-highlight)",
-                        }}
-                        title={j.review_requested_at ? "Already requested — tap to send another" : "Send a review request to this client"}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                          <Icon name={j.review_requested_at ? "mail" : "star"} size={13} />
-                          {j.review_requested_at ? "Review Sent" : "Request Review"}
-                        </span>
-                      </button>
-                    )}
-                    {/* Twilio SMS templates — collapsed into a "Notify ▾"
-                        dropdown + standalone "Job complete" button. Only the
-                        statuses where each makes sense in the lifecycle. */}
-                    {(j.status === "scheduled" || j.status === "active" || j.status === "complete") && (
-                      <SmsNotifyButtons jobId={j.id} variant="grid" />
-                    )}
-                    {/* Archive / Restore — preserves status field so Restore
-                        returns the job to its prior state with no data loss. */}
-                    {!j.archived && (j.status === "quoted" || j.status === "accepted") && (
-                      <button
-                        className="bo"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await db.patch("jobs", j.id, {
-                            archived: true,
-                            archived_at: new Date().toISOString(),
-                          });
-                          loadAll();
-                        }}
-                        style={{ fontSize: 12, padding: "7px 10px", width: "100%", color: "#888" }}
-                        title="Hide this quote from active jobs without deleting it"
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                          <Icon name="package" size={13} />Archive
-                        </span>
-                      </button>
-                    )}
-                    {j.archived && (
-                      <button
-                        className="bo"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await db.patch("jobs", j.id, {
-                            archived: false,
-                            archived_at: null,
-                          });
-                          loadAll();
-                        }}
-                        style={{ fontSize: 12, padding: "7px 10px", width: "100%", color: "var(--color-success)" }}
-                        title="Restore this job to its original status"
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                          <Icon name="refresh" size={13} />Restore
-                        </span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Payment actions — appears once a job is in the
-                      billable lifecycle (complete / invoiced / paid). Same
-                      grid weight as the lifecycle row so the eye treats this
-                      as a sibling group, not a louder layer. */}
-                  {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 8 }}>
-                      <button
-                        className="bb"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          generateInvoice(j);
-                          if (j.status === "complete") {
-                            setStatus(j.id, "invoiced");
-                          }
-                        }}
-                        style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                          <Icon name="receipt" size={14} />
-                          {j.status === "complete" ? t("jobs.generateInvoice") : t("jobs.viewInvoice")}
-                        </span>
-                      </button>
-                      {(j.status === "invoiced" || j.status === "complete") && j.total > 0 && org?.stripe_connected && (<>
-                        <button
-                          className="bb"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const res = await fetch("/api/checkout", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  jobId: j.id,
-                                  property: j.property,
-                                  client: j.client,
-                                  amount: j.total,
-                                  orgName: org?.name || "Service Provider",
-                                  stripeAccountId: org?.stripe_account_id || "",
-                                }),
-                              });
-                              const data = await res.json();
-                              if (data.url) {
-                                navigator.clipboard.writeText(data.url);
-                                useStore.getState().showToast("Payment link copied! Send it to the client.", "success");
-                                if (j.status === "complete") setStatus(j.id, "invoiced");
-                              } else {
-                                useStore.getState().showToast("Error: " + (data.error || "Could not create payment link"), "error");
-                              }
-                            } catch { useStore.getState().showToast("Failed to create payment link", "error"); }
-                          }}
-                          style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                            <Icon name="link" size={14} />Send Link
-                          </span>
-                        </button>
-                        <button
-                          className="bb"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const res = await fetch("/api/checkout", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  jobId: j.id,
-                                  property: j.property,
-                                  client: j.client,
-                                  amount: j.total,
-                                  orgName: org?.name || "Service Provider",
-                                  stripeAccountId: org?.stripe_account_id || "",
-                                }),
-                              });
-                              const data = await res.json();
-                              if (data.url) {
-                                setPayQR({ url: data.url, jobId: j.id, amount: j.total });
-                                if (j.status === "complete") setStatus(j.id, "invoiced");
-                              } else {
-                                useStore.getState().showToast("Error: " + (data.error || "Could not create payment"), "error");
-                              }
-                            } catch { useStore.getState().showToast("Failed to create payment", "error"); }
-                          }}
-                          style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                            <Icon name="qr" size={14} />Collect Now
-                          </span>
-                        </button>
-                      </>)}
-                      {j.status === "invoiced" && (
-                        <button
-                          className="bg"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setStatus(j.id, "paid");
-                          }}
-                          style={{ fontSize: 12, padding: "7px 10px", width: "100%" }}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                            <Icon name="check" size={14} />Mark Paid
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Review-Request automation status — paid jobs only.
-                      Reads the latest review_requests row for this job and
-                      renders a one-line badge. Three states:
-                        scheduled → "Review request in Xh"
-                        sent / failed → "Review request sent on <date>"
-                        none + disabled → "Review request off (disabled in Settings)" */}
-                  {j.status === "paid" && (() => {
-                    const rrows = reviewRequests
-                      .filter((r) => r.job_id === j.id)
-                      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-                    const rr = rrows[0];
-                    const automationOn = org?.review_request_enabled !== false; // default TRUE
-                    let label: string;
-                    let color: string;
-                    let icon: "star" | "mail" | "info" = "star";
-                    if (rr?.status === "scheduled") {
-                      const diffMs = new Date(rr.scheduled_for).getTime() - Date.now();
-                      const hoursOut = Math.max(0, Math.round(diffMs / 3600 / 1000));
-                      label = hoursOut <= 0
-                        ? "Review request queued — sending shortly"
-                        : `Review request scheduled in ${hoursOut}h`;
-                      color = "var(--color-highlight)";
-                      icon = "star";
-                    } else if (rr?.status === "sent") {
-                      const sentDate = rr.sent_at ? new Date(rr.sent_at).toLocaleDateString() : "—";
-                      label = `Review request sent on ${sentDate}`;
-                      color = "var(--color-success)";
-                      icon = "mail";
-                    } else if (rr?.status === "failed") {
-                      label = `Review request failed${rr.error ? `: ${rr.error}` : ""}`;
-                      color = "var(--color-accent-red)";
-                      icon = "info";
-                    } else if (rr?.status === "cancelled") {
-                      label = "Review request cancelled (manual send)";
-                      color = "#888";
-                      icon = "mail";
-                    } else if (!automationOn) {
-                      label = "Review request off (disabled in Settings)";
-                      color = "#888";
-                      icon = "info";
-                    } else {
-                      // No row, automation enabled — legacy paid job from
-                      // before automation shipped, or the schedule insert
-                      // hasn't run yet. Stay silent rather than imply state.
-                      return null;
-                    }
-                    return (
-                      <div
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          fontSize: 11,
-                          padding: "4px 8px",
-                          borderRadius: 6,
-                          background: darkMode ? "#0f0f18" : "#f5f5f8",
-                          color,
-                          marginBottom: 8,
-                          fontFamily: "Oswald",
-                          letterSpacing: ".02em",
-                        }}
-                        title={rr?.error || label}
-                      >
-                        <Icon name={icon} size={12} color={color} />
-                        {label}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Job info cards */}
-                  {(() => {
-                    const labor = getJobLabor(j);
-                    const quoted = j.total_hrs || 0;
-                    const variancePct = quoted > 0 ? ((labor.totalHrs - quoted) / quoted) * 100 : 0;
-                    const overBudget = labor.totalHrs > quoted && quoted > 0;
-                    const underBudget = quoted > 0 && labor.totalHrs > 0 && labor.totalHrs <= quoted;
-                    return (
-                      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                        <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                          <div className="sl">Labor</div>
-                          <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 14 }}>${(j.total_labor || 0).toFixed(0)}</div>
-                        </div>
-                        <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                          <div className="sl">Materials</div>
-                          <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 14 }}>${(j.total_mat || 0).toFixed(0)}</div>
-                        </div>
-                        <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                          <div className="sl">Hours</div>
-                          <div style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 14 }}>{quoted.toFixed(1)}</div>
-                          {labor.totalHrs > 0 && (
-                            <div
-                              style={{
-                                fontSize: 9,
-                                marginTop: 2,
-                                color: overBudget ? "var(--color-accent-red)" : underBudget ? "var(--color-success)" : "#888",
-                                fontFamily: "Oswald",
-                              }}
-                              title="Actual hours logged via Timer"
-                            >
-                              {labor.totalHrs.toFixed(1)}h actual
-                              {quoted > 0 && ` (${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%)`}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Time Logged detail — only when entries exist */}
-                  {(() => {
-                    const labor = getJobLabor(j);
-                    if (labor.totalHrs === 0) return null;
-                    const isOpenSection = expandedSection === `time-${j.id}`;
-                    return (
-                      <div style={{ marginBottom: 8 }}>
-                        <button
-                          className="bo"
-                          onClick={(e) => { e.stopPropagation(); setExpandedSection(isOpenSection ? null : `time-${j.id}`); }}
-                          style={{ fontSize: 12, padding: "4px 10px", width: "100%", textAlign: "left" }}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                            <Icon name="time" size={13} />
-                            Time Logged: {labor.totalHrs.toFixed(1)}h · ${labor.totalCost.toFixed(0)} ({labor.byPerson.length} crew)
-                            <Icon name={isOpenSection ? "expand" : "next"} size={12} />
-                          </span>
-                        </button>
-                        {isOpenSection && (
-                          <div style={{ marginTop: 6, padding: 8, background: darkMode ? "#0f0f18" : "#f7f7fa", borderRadius: 6 }}>
-                            {labor.byPerson
-                              .sort((a, b) => b.hrs - a.hrs)
-                              .map((p) => (
-                                <div key={p.name} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <Icon name="worker" size={12} />{p.name}
-                                  </span>
-                                  <span style={{ color: "var(--color-highlight)", fontFamily: "Oswald" }}>{p.hrs.toFixed(1)}h</span>
-                                  <span style={{ color: "var(--color-success)", fontFamily: "Oswald", minWidth: 60, textAlign: "right" }}>${p.cost.toFixed(0)}</span>
-                                </div>
-                              ))}
-                            {labor.recoveredHrs > 0 && (
-                              <div className="dim" style={{ fontSize: 10, marginTop: 6 }}>
-                                {labor.loggedHrs.toFixed(1)}h logged · {labor.recoveredHrs.toFixed(1)}h recovered from past payroll
-                              </div>
-                            )}
-                            <div className="dim" style={{ fontSize: 10, marginTop: 6, fontStyle: "italic" }}>
-                              Quoted {(j.total_hrs || 0).toFixed(1)}h · Actual {labor.totalHrs.toFixed(1)}h · This data trains the AI quoter for similar future jobs.
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Inspection + Work Order — collapsible side by side */}
-                  {(() => {
-                    try {
-                      const jd = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-                      const hasInspection = jd?.inspection?.rooms?.length > 0;
-                      const hasWorkOrder = jd?.workOrder?.length > 0;
-                      if (!hasInspection && !hasWorkOrder) return null;
-
-                      const findingsCount = jd?.inspection?.rooms?.reduce((s: number, r: { items: { condition: string }[] }) => s + r.items.filter((it) => it.condition !== "S").length, 0) || 0;
-                      const woTotal = jd?.workOrder?.length || 0;
-                      const woDone = jd?.workOrder?.filter((w: { done: boolean }) => w.done).length || 0;
-
-                      return (
-                        <div className="row" style={{ gap: 6, marginBottom: 8 }}>
-                          {hasInspection && (
-                            <button
-                              className="bo"
-                              onClick={(e) => { e.stopPropagation(); setExpandedSection(expandedSection === `insp-${j.id}` ? null : `insp-${j.id}`); }}
-                              style={{ flex: 1, fontSize: 12, padding: "6px 10px", textAlign: "left" }}
-                            >
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                <Icon name="list" size={13} />
-                                Inspection ({findingsCount} findings)
-                                <Icon name={expandedSection === `insp-${j.id}` ? "collapse" : "expand"} size={12} />
-                              </span>
-                            </button>
-                          )}
-                          {hasWorkOrder && (
-                            <button
-                              className="bo"
-                              onClick={(e) => { e.stopPropagation(); setExpandedSection(expandedSection === `wo-${j.id}` ? null : `wo-${j.id}`); }}
-                              style={{ flex: 1, fontSize: 12, padding: "6px 10px", textAlign: "left" }}
-                            >
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                <Icon name="checkCircle" size={13} />
-                                Work Order ({woDone}/{woTotal})
-                                <Icon name={expandedSection === `wo-${j.id}` ? "collapse" : "expand"} size={12} />
-                              </span>
-                            </button>
-                          )}
-                        </div>
-                      );
-                    } catch { return null; }
-                  })()}
-
-                  {/* Expanded Inspection */}
-                  {expandedSection === `insp-${j.id}` && (() => {
-                    try {
-                      const jd = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-                      if (!jd?.inspection?.rooms?.length) return null;
-                      return (
-                        <div style={{ marginBottom: 10 }}>
-                          {jd.inspection.rooms.map((r: { name: string; items: { name: string; condition: string; comment: string; photos?: string[] }[] }, ri: number) => (
-                            <div key={ri} style={{ marginBottom: 6 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>{r.name}</div>
-                              {r.items.map((it: { name: string; condition: string; comment: string; photos?: string[] }, ii: number) => (
-                                <div key={ii} style={{ fontSize: 12, padding: "3px 0 3px 12px", borderBottom: `1px solid ${darkMode ? "#1e1e2e11" : "#eee"}` }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                    <span>{it.name}</span>
-                                    <span style={{ fontSize: 11, padding: "0 4px", borderRadius: 3, background: it.condition === "D" ? "#C0000022" : it.condition === "P" ? "#ff880022" : it.condition === "F" ? "#ffcc0022" : "#00cc6622", color: it.condition === "D" ? "#C00000" : it.condition === "P" ? "#ff8800" : it.condition === "F" ? "#ffcc00" : "#00cc66" }}>
-                                      {it.condition || "S"}
-                                    </span>
-                                  </div>
-                                  {it.comment && <div className="dim" style={{ fontSize: 12 }}>{it.comment}</div>}
-                                  {it.photos && it.photos.length > 0 && (
-                                    <div style={{ display: "flex", gap: 3, marginTop: 3 }}>
-                                      {it.photos.slice(0, 4).map((url: string, pi: number) => (
-                                        <img key={pi} src={url} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 4 }} />
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    } catch { return null; }
-                  })()}
-
-                  {/* Work Order Checklist — expanded via button above */}
-                  {expandedSection === `wo-${j.id}` && (() => {
-                    try {
-                      const jobData = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-                      const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[] = jobData?.workOrder || [];
-                      if (!workOrder.length) return null;
-
-                      const completedCount = workOrder.filter((w) => w.done).length;
-                      const totalCount = workOrder.length;
-
-                      return (
-                        <div className="mt">
-                          {/* Progress bar */}
-                          <div style={{ height: 4, background: darkMode ? "#1e1e2e" : "#eee", borderRadius: 2, marginBottom: 6 }}>
-                            <div style={{ height: 4, background: completedCount === totalCount ? "var(--color-success)" : "var(--color-primary)", borderRadius: 2, width: `${(completedCount / totalCount) * 100}%`, transition: "width 0.3s" }} />
-                          </div>
-                          {workOrder.map((w, wi) => (
-                            <div
-                              key={wi}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Read fresh blob from the store at save-time
-                                // (the render closure can be stale if a prior
-                                // toggle's loadAll hasn't completed). Match
-                                // the clicked task by (room, detail) so a
-                                // mid-flight reorder can't redirect the toggle
-                                // to the wrong row.
-                                const targetKey = woStableKey(w);
-                                const nextDone = !w.done;
-                                enqueueRoomsWrite(async () => {
-                                  const fresh = useStore.getState().jobs.find((x) => x.id === j.id);
-                                  if (!fresh) return;
-                                  let freshData: Record<string, unknown> = {};
-                                  try {
-                                    freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
-                                  } catch { return; }
-                                  const freshWO = Array.isArray(freshData.workOrder)
-                                    ? (freshData.workOrder as { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[])
-                                    : [];
-                                  const matchIdx = freshWO.findIndex((x) => woStableKey(x) === targetKey);
-                                  if (matchIdx < 0) return;
-                                  const updatedWO = [...freshWO];
-                                  updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
-                                  await db.patch("jobs", j.id, {
-                                    rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }),
-                                  });
-                                  await loadAll();
-                                });
-                              }}
-                              style={{
-                                display: "flex", alignItems: "center", gap: 6, padding: "3px 0",
-                                borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
-                                cursor: "pointer", opacity: w.done ? 0.5 : 1,
-                                textDecoration: w.done ? "line-through" : "none",
-                              }}
-                            >
-                              <span style={{
-                                width: 16, height: 16, borderRadius: 3, flexShrink: 0,
-                                border: `2px solid ${w.done ? "var(--color-success)" : "#555"}`,
-                                background: w.done ? "var(--color-success)" : "transparent",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 12, color: "#fff",
-                              }}>
-                                {w.done && "✓"}
-                              </span>
-                              <div style={{ flex: 1, fontSize: 11 }}>
-                                <span style={{
-                                  fontSize: 13, padding: "1px 4px", borderRadius: 3, marginRight: 4,
-                                  background: w.pri === "HIGH" ? "#C0000033" : w.pri === "MED" ? "#ff880033" : "#00cc6633",
-                                  color: w.pri === "HIGH" ? "var(--color-accent-red)" : w.pri === "MED" ? "var(--color-warning)" : "var(--color-success)",
-                                }}>
-                                  {w.pri}
-                                </span>
-                                <b style={{ color: "var(--color-primary)" }}>{w.room}</b> — {w.detail}
-                                <div className="dim" style={{ fontSize: 10 }}>{w.action}</div>
-                              </div>
-                              <span className="dim" style={{ fontSize: 9 }}>{w.hrs}h</span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    } catch { return null; }
-                  })()}
-
-                  {/* Job Notes */}
-                  <div style={{ marginTop: 8 }}>
-                    <JobNotesInput job={j} />
-                  </div>
-
-                  {/* Job Properties — form-style settings (not actions).
-                      2-col grid: label on the left, control on the right.
-                      Section divider above pulls these visually away from
-                      the Job Notes textarea so they read as metadata. */}
-                  <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
-                    <div style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".08em", textTransform: "uppercase", color: "#888", marginBottom: 8 }}>
-                      Job Properties
-                    </div>
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "auto 1fr",
-                        gap: "6px 10px",
-                        alignItems: "center",
-                        fontSize: 12,
-                      }}
-                    >
-                      <span className="dim">Trade</span>
-                      <select
-                        value={j.trade || ""}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={async (e) => {
-                          e.stopPropagation();
-                          await db.patch("jobs", j.id, { trade: e.target.value });
-                          loadAll();
-                        }}
-                        style={{ width: "100%", fontSize: 12, padding: "3px 6px" }}
-                      >
-                        <option value="">None</option>
-                        <option value="Plumbing">Plumbing</option>
-                        <option value="Electrical">Electrical</option>
-                        <option value="Carpentry">Carpentry</option>
-                        <option value="HVAC">HVAC</option>
-                        <option value="Painting">Painting</option>
-                        <option value="Flooring">Flooring</option>
-                        <option value="General">General</option>
-                      </select>
-
-                      <span className="dim">Client requested</span>
-                      <select
-                        value={j.requested_tech || ""}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={async (e) => {
-                          e.stopPropagation();
-                          await db.patch("jobs", j.id, { requested_tech: e.target.value });
-                          loadAll();
-                        }}
-                        style={{ width: "100%", fontSize: 12, padding: "3px 6px" }}
-                      >
-                        <option value="">No one specific</option>
-                        {profiles.map((p) => (
-                          <option key={p.id} value={p.name}>{p.name}</option>
-                        ))}
-                      </select>
-
-                      <span className="dim">Recurring</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <button
-                          className="bo"
-                          onClick={(e) => { e.stopPropagation(); setRecurringFrom(j); }}
-                          style={{ fontSize: 12, padding: "3px 10px" }}
-                        >
-                          <Icon name="refresh" size={12} /> Make recurring…
-                        </button>
-                        <span className="dim" style={{ fontSize: 11 }}>Manage in Ops → Recurring</span>
-                      </div>
-
-                      <span className="dim">Callback</span>
-                      <label
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          fontSize: 12,
-                          cursor: "pointer",
-                          color: j.callback ? "var(--color-accent-red)" : "#888",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={j.callback || false}
-                          onChange={async (e) => {
-                            e.stopPropagation();
-                            await db.patch("jobs", j.id, { callback: e.target.checked });
-                            loadAll();
-                          }}
-                          style={{ width: "auto", accentColor: "var(--color-accent-red)" }}
-                        />
-                        Mark as callback
-                      </label>
-
-                      <span className="dim">Upsell</span>
-                      <label
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          fontSize: 12,
-                          cursor: "pointer",
-                          color: j.is_upsell ? "var(--color-success)" : "#888",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={j.is_upsell || false}
-                          onChange={async (e) => {
-                            e.stopPropagation();
-                            await db.patch("jobs", j.id, { is_upsell: e.target.checked });
-                            loadAll();
-                          }}
-                          style={{ width: "auto", accentColor: "var(--color-success)" }}
-                        />
-                        Mark as upsell
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Before/After Photos */}
-                  {(j.status === "complete" || j.status === "invoiced" || j.status === "paid") && (() => {
-                    const jobData = (() => { try { return typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms; } catch { return {}; } })();
-                    const photos: { url: string; label: string; type: string }[] = jobData?.photos || [];
-                    const beforePhotos = photos.filter((p) => p.type === "before");
-                    const afterPhotos = photos.filter((p) => p.type === "after");
-
-                    return (
-                      <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                          <span style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".08em", textTransform: "uppercase", color: "#888" }}>Completion Photos</span>
-                          <div className="row" style={{ gap: 4 }}>
-                            <button
-                              className="bo"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const input = document.createElement("input");
-                                input.type = "file";
-                                input.accept = "image/*";
-                                input.multiple = true;
-                                input.onchange = async () => {
-                                  if (!input.files?.length) return;
-                                  // Upload to storage first (no blob mutation
-                                  // yet) so the rooms-write step is short-
-                                  // lived and serializable.
-                                  const newPhotos: { url: string; label: string; type: "after" }[] = [];
-                                  for (let i = 0; i < input.files.length; i++) {
-                                    const file = input.files[i];
-                                    const ext = file.name.split(".").pop() || "jpg";
-                                    const path = `gallery/${j.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-                                    const { error } = await supabase.storage.from("receipts").upload(path, file);
-                                    if (!error) {
-                                      const { data } = supabase.storage.from("receipts").getPublicUrl(path);
-                                      if (data?.publicUrl) newPhotos.push({ url: data.publicUrl, label: "", type: "after" });
-                                    }
-                                  }
-                                  if (!newPhotos.length) return;
-                                  await enqueueRoomsWrite(async () => {
-                                    const fresh = useStore.getState().jobs.find((x) => x.id === j.id);
-                                    if (!fresh) return;
-                                    let freshData: Record<string, unknown> = {};
-                                    try {
-                                      freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
-                                    } catch { return; }
-                                    const existingPhotos = Array.isArray(freshData.photos)
-                                      ? (freshData.photos as Array<{ url: string; label: string; type: string }>)
-                                      : [];
-                                    const seen = new Set(existingPhotos.map((p) => p.url));
-                                    const merged = [
-                                      ...existingPhotos,
-                                      ...newPhotos.filter((p) => !seen.has(p.url)),
-                                    ];
-                                    await db.patch("jobs", j.id, {
-                                      rooms: JSON.stringify({ ...freshData, photos: merged }),
-                                    });
-                                    await loadAll();
-                                  });
-                                  useStore.getState().showToast("After photos uploaded", "success");
-                                };
-                                input.click();
-                              }}
-                              style={{ fontSize: 12, padding: "3px 8px" }}
-                            >
-                              + After Photos
-                            </button>
-                            {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
-                              <button
-                                className="bo"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Generate before/after report PDF
-                                  const orgName = org?.name || "Service Provider";
-                                  const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-                                  const photoRows = [...new Set([...beforePhotos.map(p => p.label), ...afterPhotos.map(p => p.label)])].filter(Boolean).map((label) => {
-                                    const before = beforePhotos.find(p => p.label === label);
-                                    const after = afterPhotos.find(p => p.label === label);
-                                    return `<tr><td style="font-weight:600;font-size:12px">${label}</td><td style="text-align:center">${before ? `<img src="${before.url}" style="width:200px;height:130px;object-fit:cover;border-radius:6px" />` : '<span style="color:#888">—</span>'}</td><td style="text-align:center">${after ? `<img src="${after.url}" style="width:200px;height:130px;object-fit:cover;border-radius:6px" />` : '<span style="color:#888">—</span>'}</td></tr>`;
-                                  }).join("");
-                                  // Also show unlabeled photos
-                                  const unlabeledBefore = beforePhotos.filter(p => !p.label);
-                                  const unlabeledAfter = afterPhotos.filter(p => !p.label);
-                                  let extraHtml = "";
-                                  if (unlabeledBefore.length || unlabeledAfter.length) {
-                                    extraHtml = `<h3 style="font-family:Oswald;font-size:14px;color:#2E75B6;margin:16px 0 8px">Additional Photos</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">${[...unlabeledBefore, ...unlabeledAfter].map(p => `<div style="text-align:center"><img src="${p.url}" style="width:100%;height:100px;object-fit:cover;border-radius:6px" /><div style="font-size:10px;color:#666;margin-top:2px">${p.type}</div></div>`).join("")}</div>`;
-                                  }
-                                  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Photo Report — ${j.property}</title><style>@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Source Sans 3',sans-serif;color:#1a1a2a;font-size:13px}.page{max-width:800px;margin:0 auto;padding:32px 40px}h1{font-family:Oswald;font-size:22px;color:#2E75B6;text-transform:uppercase}h2{font-family:Oswald;font-size:15px;color:#2E75B6;text-transform:uppercase;margin:20px 0 8px;border-bottom:2px solid #2E75B6;padding-bottom:4px}table{width:100%;border-collapse:collapse}th{font-family:Oswald;font-size:12px;color:#fff;background:#2E75B6;padding:8px;text-align:center}td{padding:8px;border-bottom:1px solid #e8e8e8;vertical-align:middle}.header{display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2E75B6}.footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:24px}@media print{.page{padding:16px 24px}}</style></head><body><div class="page"><div class="header"><div><h1>${orgName}</h1><div style="font-size:12px;color:#666;margin-top:4px">Before & After Photo Report</div></div><div style="text-align:right"><div style="font-size:14px;font-family:Oswald;color:#2E75B6">PHOTO REPORT</div><div style="font-size:12px;color:#666">${today}</div><div style="font-size:12px;color:#666">${j.property}</div></div></div><h2>Before & After Comparison</h2><table><thead><tr><th style="text-align:left;width:30%">Location</th><th>Before</th><th>After</th></tr></thead><tbody>${photoRows || '<tr><td colspan="3" style="text-align:center;color:#888;padding:20px">Upload before and after photos to generate comparison</td></tr>'}</tbody></table>${extraHtml}<div style="margin-top:20px;font-size:12px;color:#666"><b>Before photos:</b> ${beforePhotos.length} · <b>After photos:</b> ${afterPhotos.length}</div><div class="footer">${orgName}</div></div></body></html>`;
-                                  const win = window.open("", "_blank");
-                                  if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
-                                }}
-                                style={{ fontSize: 12, padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: 6 }}
-                              >
-                                <Icon name="photo" size={13} />Photo Report
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
-                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                            {photos.filter(p => p.type === "before" || p.type === "after").slice(0, 8).map((p, i) => (
-                              <div key={i} style={{ position: "relative" }}>
-                                <img src={p.url} alt="" style={{ width: 50, height: 50, objectFit: "cover", borderRadius: 4, border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}` }} />
-                                <span style={{ position: "absolute", bottom: 1, left: 1, fontSize: 8, background: p.type === "before" ? "#ff8800" : "#00cc66", color: "#fff", padding: "0 3px", borderRadius: 2 }}>
-                                  {p.type === "before" ? "B" : "A"}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Receipts — existing list + Add Receipt form, grouped
-                      under a single section divider/label. */}
-                  <div style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
-                    <div style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".08em", textTransform: "uppercase", color: "#888", marginBottom: 8 }}>
-                      Receipts
-                    </div>
-                    {receipts.filter((r) => r.job_id === j.id).length > 0 && (
-                      <div style={{ marginBottom: 8 }}>
-                        {receipts
-                          .filter((r) => r.job_id === j.id)
-                          .map((r) => (
-                            <div
-                              key={r.id}
-                              className="sep"
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                fontSize: 12,
-                                gap: 8,
-                              }}
-                            >
-                              <div style={{ flex: 1 }}>
-                                <span>{r.note || "Receipt"}</span>
-                                <span className="dim" style={{ marginLeft: 6 }}>{r.receipt_date}</span>
-                              </div>
-                              <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
-                                ${(r.amount || 0).toFixed(2)}
-                              </span>
-                              {r.photo_url && (
-                                <img
-                                  src={r.photo_url}
-                                  alt="receipt"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setViewPhoto(r.photo_url);
-                                  }}
-                                  style={{
-                                    width: 36,
-                                    height: 36,
-                                    borderRadius: 4,
-                                    objectFit: "cover",
-                                    cursor: "pointer",
-                                    border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-                                  }}
-                                />
-                              )}
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  if (await useStore.getState().showConfirm("Delete Receipt", "Delete receipt?")) {
-                                    await db.del("receipts", r.id);
-                                    loadAll();
-                                  }
-                                }}
-                                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, padding: 0 }}
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-
-                    {/* Add Receipt — form (recent AI-scan flow lives here). */}
-                    <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>Add receipt</div>
-                    <div className="row">
-                      <input
-                        value={rn}
-                        onChange={(e) => setRn(e.target.value)}
-                        placeholder={scanning ? "Scanning…" : "Note"}
-                        style={{ flex: 1 }}
-                        disabled={scanning}
-                      />
-                      <input
-                        type="number"
-                        value={ra}
-                        onChange={(e) => setRa(e.target.value)}
-                        placeholder={scanning ? "…" : "$"}
-                        style={{ width: 60 }}
-                        disabled={scanning}
-                      />
-                      <button
-                        className="bg"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          addReceipt(j.id);
-                        }}
-                        style={{ fontSize: 12, padding: "5px 10px" }}
-                        disabled={uploading || scanning}
-                      >
-                        {uploading ? "..." : "Add"}
-                      </button>
-                    </div>
-                    <div className="row" style={{ marginTop: 6 }}>
-                      <label
-                        onClick={(e) => { e.stopPropagation(); if (!scanning) photoRef.current?.click(); }}
-                        style={{
-                          fontSize: 13,
-                          color: scanning ? "var(--color-warning)" : "var(--color-primary)",
-                          cursor: scanning ? "wait" : "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-                          <Icon name="camera" size={13} />
-                          {scanning
-                            ? "Scanning receipt…"
-                            : rPhoto
-                              ? rPhoto.name
-                              : "Attach photo (auto-scan)"}
-                        </span>
-                      </label>
-                      <input
-                        ref={photoRef}
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        style={{ display: "none" }}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          const f = e.target.files?.[0];
-                          if (f) handlePhotoAttach(f, j.id);
-                        }}
-                      />
-                      {rPhoto && !scanning && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRPhoto(null);
-                            setScannedPhotoUrl("");
-                            setScannedItems([]);
-                            setScannedVendor("");
-                            if (photoRef.current) photoRef.current.value = "";
-                          }}
-                          style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: 0 }}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
-                            <Icon name="close" size={12} />Remove
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           );
         });
