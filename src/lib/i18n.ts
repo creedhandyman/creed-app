@@ -18,6 +18,7 @@ const translations: Record<Lang, Record<string, string>> = {
     // Dashboard
     "dash.welcome": "Welcome",
     "dash.nextJob": "Next Job",
+    "dash.noNextJob": "Nothing scheduled",
     "dash.closestQuest": "Closest Quest",
     "dash.earnedMonth": "Earned This Month",
     "dash.netPay": "Net Pay This Week",
@@ -333,6 +334,7 @@ const translations: Record<Lang, Record<string, string>> = {
     // Dashboard
     "dash.welcome": "Bienvenido",
     "dash.nextJob": "Pr\u00f3ximo Trabajo",
+    "dash.noNextJob": "Nada agendado",
     "dash.closestQuest": "Meta M\u00e1s Cercana",
     "dash.earnedMonth": "Ganado Este Mes",
     "dash.netPay": "Pago Neto Esta Semana",

@@ -170,7 +170,7 @@ export default function Dashboard({ setPage, openSettings }: Props) {
               </div>
             </>
           ) : (
-            <div className="sv" style={{ color: "var(--color-primary)" }}>—</div>
+            <div className="dim" style={{ fontSize: 13, marginTop: 4 }}>{t("dash.noNextJob")}</div>
           )}
         </div>
 
