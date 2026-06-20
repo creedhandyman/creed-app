@@ -101,6 +101,7 @@ export default function Timer({ setPage }: Props) {
   const [mUser, setMUser] = useState(user.id);
   const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
   const [expandedCrew, setExpandedCrew] = useState<string | null>(null);
+  const [showManual, setShowManual] = useState(false);
   // Re-render every minute on the Crew tab so live durations tick
   const [tick, setTick] = useState(0);
 
@@ -356,10 +357,22 @@ export default function Timer({ setPage }: Props) {
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <Icon name="time" size={22} color="var(--color-primary)" />
-        {t("timer.title")}
-      </h2>
+      {/* Topbar — clock + TIME; right shows the date (off) or a live chip (on) */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="time" size={19} color="#8cc0ff" />
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("timer.title")}</span>
+        </div>
+        {on ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
+          </span>
+        ) : (
+          <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>
+            {`${new Date().toLocaleDateString("en-US", { weekday: "short" })} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+          </span>
+        )}
+      </div>
 
       {/* Tab switcher (Crew tab is admin-only) — segmented icon control */}
       {isOwner && (
@@ -396,22 +409,22 @@ export default function Timer({ setPage }: Props) {
 
       {tab === "time" && (<>
       {/* Next check (unpaid × rate) — same number the dashboard shows */}
-      <div className="cd mb" style={{ background: "rgba(0,204,102,.09)", border: "1px solid rgba(0,204,102,.4)", borderRadius: 16, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <div style={{ fontSize: 9.5, letterSpacing: ".14em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 26, color: "#3ee08f", lineHeight: 1.15 }}>${checkPay.toFixed(0)}</div>
-        </div>
-        <div className="dim" style={{ fontSize: 11, textAlign: "right", lineHeight: 1.4 }}>{checkHrs.toFixed(1)} hrs unpaid<br />${rate}/hr</div>
+      <div className="cd mb" style={{ background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.32)", borderRadius: 13, padding: "10px 12px" }}>
+        <div style={{ fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
+        <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, color: "#3ee08f", lineHeight: 1.2 }}>${checkPay.toFixed(0)}</div>
+        <div style={{ fontSize: 10, color: "var(--color-dim)" }}>{checkHrs.toFixed(1)} hrs unpaid · ${rate}/hr</div>
       </div>
 
       {!on ? (<>
         {/* Clock into — today's jobs as chips, plus any other property */}
-        <div className="sl" style={{ margin: "0 2px 7px" }}>Today&apos;s jobs · clock into</div>
-        <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-          {todayJobs.map((s) => (
-            <button key={s.id} onClick={() => setSj(s.job)} className={sj === s.job ? "bb" : "bo"} style={{ fontSize: 12, padding: "6px 11px", borderRadius: 99 }}>{s.job}</button>
-          ))}
-          <button onClick={() => setSj("")} className={sj === "" ? "bb" : "bo"} style={{ fontSize: 12, padding: "6px 11px", borderRadius: 99 }}>{t("timer.general")}</button>
+        <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "2px 2px 6px" }}>Today&apos;s jobs · clock into</div>
+        <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 9 }}>
+          {[...todayJobs.map((s) => ({ key: s.id, label: s.job, val: s.job })), { key: "general", label: t("timer.general"), val: "" }].map((c) => {
+            const cOn = sj === c.val;
+            return (
+              <button key={c.key} onClick={() => setSj(c.val)} style={{ fontSize: 10.5, padding: "6px 10px", borderRadius: 99, fontWeight: cOn ? 600 : 400, background: cOn ? "rgba(46,139,255,.16)" : "var(--color-card-dark-2)", border: `1px solid ${cOn ? "var(--color-primary)" : "var(--color-border-dark-2)"}`, color: cOn ? "#8cc0ff" : "var(--color-dim)" }}>{c.label}</button>
+            );
+          })}
         </div>
         <select value={sj} onChange={(e) => setSj(e.target.value)} style={{ width: "100%", marginBottom: 11 }}>
           <option value="">{t("timer.general")}</option>
@@ -420,23 +433,23 @@ export default function Timer({ setPage }: Props) {
           ))}
         </select>
         {/* CLOCK IN glow CTA — starts the timer and jumps to WorkVision */}
-        <div onClick={start} style={{ display: "flex", alignItems: "center", gap: 13, padding: 15, borderRadius: 16, cursor: "pointer", marginBottom: 12, color: "#fff", background: "rgba(255,91,91,.14)", border: "1.5px solid rgba(255,91,91,.8)", boxShadow: "0 0 24px -2px rgba(255,91,91,.5), inset 0 0 22px -8px rgba(255,91,91,.45)" }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,.13)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="start" size={22} color="#fff" />
+        <div onClick={start} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, cursor: "pointer", marginBottom: 12, color: "#fff", background: "rgba(255,91,91,.14)", border: "1.5px solid rgba(255,91,91,.8)", boxShadow: "0 0 24px -2px rgba(255,91,91,.5), inset 0 0 22px -8px rgba(255,91,91,.4)" }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: "rgba(255,255,255,.13)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="start" size={23} color="#fff" />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17, letterSpacing: ".4px" }}>{t("timer.start")}</div>
-            <div style={{ fontSize: 11.5, color: "#ffffffcc", display: "flex", alignItems: "center", gap: 5 }}><Icon name="mapPin" size={12} color="#ffffffcc" /> Into: {sj || t("timer.general")}</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".4px" }}>{t("timer.start")}</div>
+            <div style={{ fontSize: 11, color: "#ffffffcc", display: "flex", alignItems: "center", gap: 5 }}><Icon name="mapPin" size={12} color="#ffffffcc" /> Into: {sj || t("timer.general")}</div>
           </div>
           <Icon name="next" size={18} color="#fff" />
         </div>
       </>) : (<>
         {/* On the clock — live timer + open work order / clock out */}
-        <div className="cd mb" style={{ background: "rgba(0,204,102,.1)", border: "1px solid rgba(0,204,102,.5)", borderRadius: 16, padding: 16, textAlign: "center", boxShadow: "0 0 40px -16px rgba(0,204,102,.6)" }}>
+        <div className="cd mb" style={{ background: "rgba(0,204,102,.1)", border: "1px solid rgba(0,204,102,.5)", borderRadius: 18, padding: 15, textAlign: "center", boxShadow: "0 0 40px -16px rgba(0,204,102,.6)" }}>
           <div style={{ fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 9px var(--color-success)" }} /> On the clock
           </div>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, letterSpacing: "1px", margin: "6px 0 2px", color: "var(--color-success)" }}>{fmt(el)}</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, letterSpacing: "1px", margin: "7px 0 2px", color: "var(--color-success)" }}>{fmt(el)}</div>
           <div className="dim" style={{ fontSize: 11.5 }}>{sj || t("timer.general")}</div>
           {sj && (
             <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(sj)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 7 }}>
@@ -445,17 +458,27 @@ export default function Timer({ setPage }: Props) {
           )}
         </div>
         <div className="row" style={{ gap: 8, marginBottom: 12 }}>
-          <button onClick={() => setPage?.("workvision")} className="bb" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, padding: "11px" }}>
+          <button onClick={() => setPage?.("workvision")} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#fff", background: "rgba(46,139,255,.14)", border: "1px solid rgba(46,139,255,.85)", boxShadow: "0 0 22px -4px rgba(46,139,255,.55)" }}>
             <Icon name="list" size={15} color="#fff" /> Open work order
           </button>
-          <button onClick={stop} className="br" style={{ flex: 1, fontSize: 13, padding: "11px" }}>⏹ {t("timer.stop")}</button>
+          <button onClick={stop} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.45)" }}>
+            <Icon name="stop" size={14} color="#ff9d9d" /> {t("timer.stop")}
+          </button>
         </div>
       </>)}
 
-      {/* Manual Entry — admin only */}
-      {isOwner && (
+      {/* Manual entry — collapsed dashed row that expands the form (admin) */}
+      {isOwner && !showManual && (
+        <div onClick={() => setShowManual(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 11.5, color: "#8cc0ff", fontWeight: 600, background: "var(--color-card-dark-2)", border: "1px dashed var(--color-border-dark-2)", borderRadius: 11, padding: 10, marginBottom: 11, cursor: "pointer" }}>
+          <Icon name="add" size={15} color="#8cc0ff" /> Add time entry · manual
+        </div>
+      )}
+      {isOwner && showManual && (
         <div className="cd mb">
-          <h4 style={{ fontSize: 13, marginBottom: 6 }}>{t("timer.log")}</h4>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h4 style={{ fontSize: 13 }}>{t("timer.log")}</h4>
+            <button onClick={() => setShowManual(false)} aria-label="Close" style={{ background: "none", border: "none", color: "var(--color-dim)", cursor: "pointer", display: "inline-flex", padding: 2 }}><Icon name="close" size={15} /></button>
+          </div>
           <div className="row" style={{ marginBottom: 6 }}>
             <span className="dim" style={{ fontSize: 11 }}>For:</span>
             <select
@@ -483,7 +506,7 @@ export default function Timer({ setPage }: Props) {
               style={{ flex: 1 }}
             >
               <option value="">{t("timer.general")}</option>
-              {jobs.map((j) => (
+              {jobs.filter((j) => !j.archived).map((j) => (
                 <option key={j.id} value={j.property}>
                   {j.property}
                 </option>
@@ -501,7 +524,7 @@ export default function Timer({ setPage }: Props) {
             />
             <button
               className="bg"
-              onClick={addManual}
+              onClick={async () => { await addManual(); setShowManual(false); }}
               style={{ fontSize: 13, padding: "7px 12px" }}
             >
               {t("timer.log")}
@@ -510,73 +533,61 @@ export default function Timer({ setPage }: Props) {
         </div>
       )}
 
-      {/* My Log */}
-      <div className="cd">
-        <h4 style={{ fontSize: 13, marginBottom: 6 }}>{t("timer.myLog")} ({myTime.length})</h4>
-        {!myTime.length ? (
-          <p className="dim" style={{ fontSize: 12 }}>No entries</p>
-        ) : (
-          myTime.map((e) => (
-            <div
-              key={e.id}
-              className="sep"
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: 12,
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              <span style={{ minWidth: 65 }}>{e.entry_date}</span>
-              <span style={{ color: "var(--color-primary)", flex: 1 }}>
-                {e.job}
-                {(e.start_time || e.end_time) && (
-                  <span className="dim" style={{ fontSize: 12, marginLeft: 4 }}>
-                    {e.start_time || "?"} – {e.end_time || "?"}
-                  </span>
-                )}
-              </span>
-              <input
-                type="number"
-                defaultValue={e.hours}
-                step=".25"
-                min="0"
-                style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 11 }}
-                onBlur={async (ev) => {
-                  // Only allow editing entries owned by current user (defense-in-depth
-                  // against legacy rows without user_id but matching user_name).
-                  if (e.user_id && e.user_id !== user.id && !isOwner) return;
-                  const newHrs = parseFloat(ev.target.value) || 0;
-                  if (newHrs === e.hours) return;
-                  // Use the entry-owner's rate, not the logged-in user's rate.
-                  const owner = profiles.find((p) => p.id === e.user_id);
-                  const ownerRate = owner?.rate || user.rate || 55;
-                  await db.patch("time_entries", e.id, {
-                    hours: newHrs,
-                    amount: Math.round(newHrs * ownerRate * 100) / 100,
-                  });
-                  await loadAll();
-                }}
-              />
-              <span style={{ color: "var(--color-success)", minWidth: 45 }}>
-                ${(e.amount || 0).toFixed(2)}
-              </span>
-              <button
-                onClick={async () => {
-                  if (e.user_id && e.user_id !== user.id && !isOwner) return;
-                  if (!await useStore.getState().showConfirm("Delete Entry", "Delete this time entry?")) return;
-                  await db.del("time_entries", e.id);
-                  await loadAll();
-                }}
-                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12 }}
-              >
-                ✕
-              </button>
+      {/* My Log — today summary + entry cards */}
+      {(() => {
+        const todayUS = new Date().toLocaleDateString("en-US");
+        const todayISO = new Date().toISOString().split("T")[0];
+        const myTodayHrs = myTime.filter((e) => e.entry_date === todayUS || e.entry_date === todayISO).reduce((s, e) => s + (e.hours || 0), 0);
+        return (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 2px 7px" }}>
+              <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>{t("timer.myLog")}</span>
+              {myTodayHrs > 0 && <span style={{ fontSize: 10.5, fontFamily: "Oswald", color: "var(--color-success)" }}>Today · {myTodayHrs.toFixed(1)} hrs</span>}
             </div>
-          ))
-        )}
-      </div>
+            {!myTime.length ? (
+              <div className="cd" style={{ textAlign: "center", padding: 16 }}><p className="dim" style={{ fontSize: 12 }}>No entries</p></div>
+            ) : (
+              myTime.map((e) => (
+                <div key={e.id} className="cd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 11px", marginBottom: 6, gap: 8 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.job || t("timer.general")}</div>
+                    <div className="dim" style={{ fontSize: 9.5 }}>{e.entry_date}{(e.start_time || e.end_time) ? ` · ${e.start_time || "?"}–${e.end_time || "now"}` : ""}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
+                    <input
+                      type="number"
+                      defaultValue={e.hours}
+                      step=".25"
+                      min="0"
+                      style={{ width: 48, textAlign: "center", padding: "2px 4px", fontSize: 12.5, fontFamily: "Oswald", fontWeight: 600 }}
+                      onBlur={async (ev) => {
+                        // Only the owner (or an admin) can edit a row.
+                        if (e.user_id && e.user_id !== user.id && !isOwner) return;
+                        const newHrs = parseFloat(ev.target.value) || 0;
+                        if (newHrs === e.hours) return;
+                        const owner = profiles.find((p) => p.id === e.user_id);
+                        const ownerRate = owner?.rate || user.rate || 55;
+                        await db.patch("time_entries", e.id, { hours: newHrs, amount: Math.round(newHrs * ownerRate * 100) / 100 });
+                        await loadAll();
+                      }}
+                    />
+                    <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, color: "var(--color-success)", minWidth: 42, textAlign: "right" }}>${(e.amount || 0).toFixed(0)}</span>
+                    <button
+                      onClick={async () => {
+                        if (e.user_id && e.user_id !== user.id && !isOwner) return;
+                        if (!await useStore.getState().showConfirm("Delete Entry", "Delete this time entry?")) return;
+                        await db.del("time_entries", e.id);
+                        await loadAll();
+                      }}
+                      style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 12, cursor: "pointer", padding: 0 }}
+                    >✕</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </>
+        );
+      })()}
       </>)}
 
       {/* ── Crew Activity tab (admin only) ── */}

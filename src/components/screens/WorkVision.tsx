@@ -814,13 +814,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         </div>
       )}
 
-      {/* Section tabs — segmented control (icon + label) */}
-      <div style={{ display: "flex", gap: 5, marginBottom: 12 }}>
+      {/* Section tabs — text segmented control (matches the mockup) */}
+      <div style={{ display: "flex", gap: 5, marginBottom: 11 }}>
         {([
-          { id: "tasks" as const, icon: "list" as const, label: t("wv.tasks") },
-          { id: "guide" as const, icon: "cart" as const, label: t("wv.guide") },
-          { id: "notes" as const, icon: "edit" as const, label: t("common.notes") },
-          { id: "photos" as const, icon: "photo" as const, label: t("common.photos") },
+          { id: "tasks" as const, label: t("wv.tasks") },
+          { id: "guide" as const, label: t("wv.guide") },
+          { id: "notes" as const, label: t("common.notes") },
+          { id: "photos" as const, label: t("common.photos") },
         ]).map((s) => {
           const on = section === s.id;
           return (
@@ -828,14 +828,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               key={s.id}
               onClick={() => setSection(s.id)}
               style={{
-                flex: 1, padding: "8px 2px", borderRadius: 10, fontSize: 10.5, fontFamily: "Oswald",
-                letterSpacing: ".04em", display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                flex: 1, textAlign: "center", padding: "8px 2px", borderRadius: 10, fontSize: 10.5,
+                fontFamily: "Oswald", fontWeight: 600, letterSpacing: ".04em",
                 background: on ? "var(--color-primary)" : "var(--color-card-dark-2)",
                 color: on ? "#fff" : "var(--color-dim)",
                 border: `1px solid ${on ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
               }}
             >
-              <Icon name={s.icon} size={15} color={on ? "#fff" : "var(--color-dim)"} />
               {s.label}
             </button>
           );
@@ -875,12 +874,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         <div>
           {workOrder.length > 0 && (
             <>
-              {/* Progress */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <div style={{ flex: 1, height: 8, borderRadius: 4, background: border }}>
-                  <div style={{ height: "100%", borderRadius: 4, background: "var(--color-success)", width: `${(workOrder.filter((w) => w.done).length / workOrder.length) * 100}%`, transition: "width .3s" }} />
-                </div>
-                <span style={{ fontSize: 13, fontFamily: "Oswald", color: "var(--color-success)" }}>{workOrder.filter((w) => w.done).length}/{workOrder.length}</span>
+              {/* Progress — bar + "Work order · X / Y done" row */}
+              <div style={{ height: 7, borderRadius: 5, background: "var(--color-card-dark-2)", overflow: "hidden", margin: "2px 0" }}>
+                <div style={{ height: "100%", borderRadius: 5, background: "var(--color-success)", width: `${(workOrder.filter((w) => w.done).length / workOrder.length) * 100}%`, boxShadow: "0 0 12px -2px var(--color-success)", transition: "width .3s" }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", margin: "5px 1px 10px" }}>
+                <span>Work order</span>
+                <span>{workOrder.filter((w) => w.done).length} / {workOrder.length} done</span>
               </div>
 
               {/* Priority sorted work order — tap body to expand for materials,
@@ -905,10 +905,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   <div
                     style={{
                       marginBottom: 6,
-                      borderRadius: 10,
+                      borderRadius: 11,
                       background: w.done ? "transparent" : darkMode ? "#12121a" : "#fff",
-                      border: w.done ? `1px solid ${border}` : `1px solid ${priColor(w.pri)}33`,
-                      borderLeft: w.done ? `1px solid ${border}` : `3px solid ${priColor(w.pri)}`,
+                      border: `1px solid ${border}`,
                       opacity: w.done ? 0.55 : 1,
                       overflow: "hidden",
                       transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
@@ -921,14 +920,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         onClick={(e) => { e.stopPropagation(); toggleWO(w._idx); }}
                         aria-label={w.done ? "Mark not done" : "Mark done"}
                         style={{
-                          width: 24, height: 24, borderRadius: 6, flexShrink: 0, marginTop: 1,
-                          border: `2px solid ${w.done ? "var(--color-success)" : priColor(w.pri)}`,
+                          width: 22, height: 22, borderRadius: "50%", flexShrink: 0, marginTop: 1,
+                          border: `2px solid ${w.done ? "var(--color-success)" : "var(--color-dim)"}`,
                           background: w.done ? "var(--color-success)" : "transparent",
                           display: "flex", alignItems: "center", justifyContent: "center",
                           color: "#fff", padding: 0, cursor: "pointer",
                         }}
                       >
-                        {w.done && <Icon name="check" size={14} color="#fff" strokeWidth={3} />}
+                        {w.done && <Icon name="check" size={13} color="#fff" strokeWidth={3} />}
                       </button>
                       {/* Task body — tap to expand */}
                       <div
