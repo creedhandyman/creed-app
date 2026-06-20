@@ -187,6 +187,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
   // Phase 2 redesign: id of the job shown in the separate detail screen
   // (null = the Jobs list). Set by tapping a card; cleared by the Back button.
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
+  // Phase 3: sub-screen opened from the detail's Work section (work order /
+  // receipts). null = show the detail (or the list). Back clears it.
+  const [subScreen, setSubScreen] = useState<{ id: string; kind: "workorder" | "receipts" } | null>(null);
   // Property typeahead query — drives both the dropdown suggestions
   // (in <PropertySearch>) and the inline filter on the visible list,
   // so the list and the typeahead stay in sync.
@@ -825,7 +828,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
                 <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
               </div>
             )}
-            <div className="linkrow" onClick={() => useStore.getState().showToast("Work order screen lands in Phase 3", "info")}>
+            <div className="linkrow" onClick={() => setSubScreen({ id: dj.id, kind: "workorder" })}>
               <span className="lf"><span className="ic"><Icon name="list" size={15} /></span> Work order</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
             </div>
@@ -937,9 +940,104 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob }: Props) {
       );
   })();
 
+  // ── PHASE 3: Work-order / Receipts sub-screens ──────────────
+  // Opened from the detail's Work section. Rendered ahead of the detail
+  // so Back (setSubScreen(null)) returns to the detail, which is still
+  // mounted via detailJobId.
+  type WOItem = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean };
+  const subScreenJsx = (() => {
+    if (!subScreen) return null;
+    const sj = jobs.find((x) => x.id === subScreen.id);
+    if (!sj) return null;
+    return (
+      <>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <button className="bo" onClick={() => setSubScreen(null)} style={{ fontSize: 12, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name="back" size={15} /> Job
+          </button>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, letterSpacing: ".5px" }}>
+            {subScreen.kind === "workorder" ? "WORK ORDER" : "RECEIPTS"}
+          </div>
+          <span style={{ width: 56 }} />
+        </div>
+        <div className="dim" style={{ fontSize: 11.5, marginBottom: 11 }}>{sj.property}</div>
+
+        {subScreen.kind === "workorder" && (() => {
+          let jobData: Record<string, unknown> = {};
+          try { jobData = typeof sj.rooms === "string" ? JSON.parse(sj.rooms) : (sj.rooms || {}); } catch { jobData = {}; }
+          const workOrder: WOItem[] = Array.isArray(jobData.workOrder) ? (jobData.workOrder as WOItem[]) : [];
+          if (!workOrder.length) {
+            return (
+              <div className="section">
+                <div style={{ fontSize: 12, color: "var(--color-dim)", padding: "12px 0", textAlign: "center" }}>
+                  No work-order items on this job yet.
+                </div>
+              </div>
+            );
+          }
+          const done = workOrder.filter((w) => w.done).length;
+          const total = workOrder.length;
+          return (
+            <div>
+              <div style={{ height: 7, background: "var(--color-card-dark-3)", borderRadius: 5, marginBottom: 4 }}>
+                <div style={{ height: 7, background: "var(--color-success)", borderRadius: 5, width: `${(done / total) * 100}%`, transition: "width 0.3s" }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--color-dim)", marginBottom: 11 }}>
+                <span>Progress</span><span>{done} / {total} done</span>
+              </div>
+              {workOrder.map((w, wi) => (
+                <div
+                  key={wi}
+                  onClick={() => {
+                    const targetKey = woStableKey(w);
+                    const nextDone = !w.done;
+                    enqueueRoomsWrite(async () => {
+                      const fresh = useStore.getState().jobs.find((x) => x.id === sj.id);
+                      if (!fresh) return;
+                      let freshData: Record<string, unknown> = {};
+                      try { freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {}); } catch { return; }
+                      const freshWO: WOItem[] = Array.isArray(freshData.workOrder) ? (freshData.workOrder as WOItem[]) : [];
+                      const matchIdx = freshWO.findIndex((x) => woStableKey(x) === targetKey);
+                      if (matchIdx < 0) return;
+                      const updatedWO = [...freshWO];
+                      updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
+                      await db.patch("jobs", sj.id, { rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }) });
+                      await loadAll();
+                    });
+                  }}
+                  style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark)", borderRadius: 12, padding: "9px 10px", marginBottom: 7, cursor: "pointer", opacity: w.done ? 0.6 : 1 }}
+                >
+                  <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, border: `2px solid ${w.done ? "var(--color-success)" : "#555"}`, background: w.done ? "var(--color-success)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff" }}>
+                    {w.done && "✓"}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 500, textDecoration: w.done ? "line-through" : "none" }}>
+                      <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, marginRight: 5, background: w.pri === "HIGH" ? "#C0000033" : w.pri === "MED" ? "#ff880033" : "#00cc6633", color: w.pri === "HIGH" ? "var(--color-accent-red)" : w.pri === "MED" ? "var(--color-warning)" : "var(--color-success)" }}>{w.pri}</span>
+                      <b style={{ color: "var(--color-primary)" }}>{w.room}</b> — {w.detail}
+                    </div>
+                    {w.action && <div className="dim" style={{ fontSize: 10, marginTop: 1 }}>{w.action}</div>}
+                  </div>
+                  <span className="dim" style={{ fontSize: 10, flexShrink: 0 }}>{w.hrs}h</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {subScreen.kind === "receipts" && (
+          <div className="section">
+            <div style={{ fontSize: 12, color: "var(--color-dim)", padding: "12px 0", textAlign: "center" }}>
+              Receipts &amp; photos — building next.
+            </div>
+          </div>
+        )}
+      </>
+    );
+  })();
+
   return (
     <div className="fi">
-      {detailScreen || (
+      {subScreenJsx || detailScreen || (
         <>
       <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
         <Icon name="jobs" size={22} color="var(--color-primary)" />
