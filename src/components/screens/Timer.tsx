@@ -415,7 +415,7 @@ export default function Timer({ setPage }: Props) {
         </div>
         <select value={sj} onChange={(e) => setSj(e.target.value)} style={{ width: "100%", marginBottom: 11 }}>
           <option value="">{t("timer.general")}</option>
-          {jobs.map((j) => (
+          {jobs.filter((j) => !j.archived).map((j) => (
             <option key={j.id} value={j.property}>{j.property} ({j.status})</option>
           ))}
         </select>
