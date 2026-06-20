@@ -79,7 +79,10 @@ src/
   did this once after a hard-to-debug filter mismatch).
 - **Status colors (ROYGBIV)**: quoted=red, accepted=orange,
   scheduled=yellow, active=green, complete=blue, invoiced=indigo,
-  paid=violet. Logic in Jobs.tsx `statusColor()`.
+  paid=violet. Shared `statusColor()` lives in `src/lib/status.ts`
+  (lead = hot-pink, ranks before quoted); imported by Jobs, Schedule,
+  WorkVision, CustomerDetail, and the portal. Promote to a real `.chip`
+  in globals.css for read-only status pills.
 - **Prints**: every PDF goes through `wrapPrint(brand, body)` in
   `print-template.ts`. Never write your own `<html>` boilerplate.
 - **Translation**: prefer `t("key.path")` for new strings. Keys live
@@ -222,6 +225,24 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Jobs tab redesign (list → detail → sub-screens)**: `Jobs.tsx` is no
+  longer one screen with inline-expanding cards. It renders three levels
+  gated by state — the **list** (two-row triage cards; status is a
+  read-only `.chip`, whole card taps through), a **detail screen**
+  (`detailJobId`: `.dhead` header with editable status + a status-aware
+  primary CTA, then Properties / Notes / Money / Work / Manage sections),
+  and **sub-screens** (`subScreen` = `{id, kind:'workorder'|'receipts'}`:
+  the work-order checklist and the receipt scan/list). Render order in
+  the main return is `subScreenJsx || detailScreen || (list)`, and the
+  modals (recurring / review / QR-collect / photo) are mounted **after**
+  that conditional so they render over any level — don't move them back
+  inside it. The old inline-expand was deleted. Reusable building blocks
+  live in `globals.css`: `.dhead` / `.section` / `.seclabel` / `.drow`
+  (label-value row — NOT `.row`, the flex helper) / `.linkrow` / `.chip`.
+  Per-job extras are stored in the job's `rooms` JSON blob — `jobNumber`,
+  `jobNotes`, and the `workOrder` checklist — edited via the serialized
+  `enqueueRoomsWrite` (avoids clobbering on quick taps). Full spec +
+  build phases: `.claude/plans/jobs-redesign.md`.
 - **Self-learning AI quoting**: edits + receipt scans + completed-job
   outcomes write to `price_corrections`. ZIP-tagged so AI weights
   same-ZIP data over regional. See parser.ts `aiParsePdf` for the
