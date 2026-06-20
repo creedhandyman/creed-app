@@ -710,66 +710,56 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Dashboard</button>
         </div>
 
-        <div className="cd mb" style={{ textAlign: "center", padding: 24 }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>👷</div>
-          <h3 style={{ fontSize: 16, color: "var(--color-primary)", marginBottom: 8 }}>{t("wv.readyToWork")}</h3>
-          <p className="dim" style={{ fontSize: 13, marginBottom: 16 }}>{t("wv.selectJob")}</p>
-        </div>
+        <div className="dim" style={{ fontSize: 13, margin: "0 2px 14px" }}>{t("wv.selectJob")}</div>
 
-        {/* Today's Schedule */}
+        {/* Today's schedule — tap a card to clock in */}
         {todaySchedule.length > 0 && (
-          <div className="cd mb">
-            <h4 style={{ fontSize: 13, marginBottom: 8 }}>{t("wv.todaySchedule")}</h4>
+          <>
+            <div className="sl" style={{ margin: "0 2px 7px" }}>{t("wv.todaySchedule")}</div>
             {todaySchedule.map((s) => (
-              <div key={s.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
-                <div>
-                  <b style={{ color: "var(--color-primary)" }}>{s.job}</b>
-                  {s.note && <div className="dim" style={{ fontSize: 12 }}>{s.note}</div>}
+              <div key={s.id} onClick={() => clockIn(s.job)} className="cd" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", marginBottom: 8, cursor: "pointer" }}>
+                <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon name="start" size={17} color="var(--color-success)" />
                 </div>
-                <button className="bb" onClick={() => clockIn(s.job)} style={{ fontSize: 12, padding: "5px 12px" }}>
-                  ▶ Clock In
-                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{s.job}</div>
+                  <div className="dim" style={{ fontSize: 11.5, marginTop: 2 }}>{s.note || "Scheduled today"}</div>
+                </div>
+                <Icon name="next" size={16} color="var(--color-success)" />
               </div>
             ))}
-          </div>
+          </>
         )}
 
-        {/* All Jobs */}
-        <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>{t("wv.allActive")}</h4>
-          {(() => {
-            const active = jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status));
-            if (active.length === 0) return <p className="dim" style={{ fontSize: 12 }}>{t("wv.noActive")}</p>;
-            // Count properties so we can show a "duplicate address" hint when
-            // two jobs share one — the status pill + short ref are always on,
-            // but the pink dot draws Bernard's eye to the rows that need care.
-            const propCount: Record<string, number> = {};
-            active.forEach((j) => { propCount[j.property] = (propCount[j.property] || 0) + 1; });
-            return active.map((j) => {
-              const dupe = propCount[j.property] > 1;
-              return (
-                <div key={j.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <b>{j.property}</b>
-                      {dupe && <span title="Multiple jobs at this address" style={{ width: 6, height: 6, borderRadius: 3, background: "#ff4d8d", flexShrink: 0 }} />}
-                    </div>
-                    <div className="dim" style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      <span>{j.client} · ${(j.total || 0).toFixed(0)}</span>
-                      <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 3, background: statusColor(j.status) + "22", color: statusColor(j.status), fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>
-                        {j.status}
-                      </span>
-                      <span style={{ fontFamily: "Oswald", fontSize: 11 }}>#{j.id.slice(-6).toUpperCase()}</span>
-                    </div>
-                  </div>
-                  <button className="bb" onClick={() => clockIn(j.property, j.id)} style={{ fontSize: 12, padding: "5px 12px", flexShrink: 0, marginLeft: 8 }}>
-                    ▶ Clock In
-                  </button>
+        {/* All active jobs — tap a card to clock in */}
+        <div className="sl" style={{ margin: todaySchedule.length > 0 ? "12px 2px 7px" : "0 2px 7px" }}>{t("wv.allActive")}</div>
+        {(() => {
+          const active = jobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status));
+          if (active.length === 0) return <div className="cd" style={{ textAlign: "center", padding: 20 }}><p className="dim" style={{ fontSize: 12 }}>{t("wv.noActive")}</p></div>;
+          // Pink dot flags addresses with more than one open job so Bernard
+          // notices the ones that need care before clocking in.
+          const propCount: Record<string, number> = {};
+          active.forEach((j) => { propCount[j.property] = (propCount[j.property] || 0) + 1; });
+          return active.map((j) => (
+            <div key={j.id} onClick={() => clockIn(j.property, j.id)} className="cd" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", marginBottom: 8, cursor: "pointer" }}>
+              <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(46,139,255,.12)", border: "1px solid rgba(46,139,255,.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Icon name="start" size={17} color="var(--color-primary)" />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.property}</span>
+                  {propCount[j.property] > 1 && <span title="Multiple jobs at this address" style={{ width: 6, height: 6, borderRadius: 3, background: "#ff4d8d", flexShrink: 0 }} />}
                 </div>
-              );
-            });
-          })()}
-        </div>
+                <div className="dim" style={{ fontSize: 11.5, marginTop: 2, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <span>{j.client} · ${(j.total || 0).toFixed(0)}</span>
+                  <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 99, background: statusColor(j.status) + "22", color: statusColor(j.status), fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>{j.status}</span>
+                  <span style={{ fontFamily: "Oswald", fontSize: 11 }}>#{j.id.slice(-6).toUpperCase()}</span>
+                </div>
+              </div>
+              <Icon name="next" size={16} color="var(--color-primary)" />
+            </div>
+          ));
+        })()}
       </div>
     );
   }
@@ -777,23 +767,27 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // ── CLOCKED IN — WORK MODE ──
   return (
     <div className="fi">
-      {/* Timer header — compact, always visible */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, padding: "10px 14px", borderRadius: 12, background: darkMode ? "#0a1a0a" : "#f0fff0", border: "1px solid var(--color-success)" }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, color: "var(--color-success)", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
-            🟢 {t("wv.clockedIn")}
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{sj || "General"}</div>
-          {activeJob && (
-            <div className="dim" style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              <span>{activeJob.client}</span>
-              <span style={{ fontFamily: "Oswald", fontSize: 11 }}>#{activeJob.id.slice(-6).toUpperCase()}</span>
-            </div>
-          )}
+      {/* Topbar — back + title + live timer chip */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button className="iconbtn" onClick={() => setPage("dash")} aria-label="Back"><Icon name="back" size={18} /></button>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("wv.title")}</span>
         </div>
-        <div style={{ fontSize: 28, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-success)" }}>
-          {fmt(el)}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
+        </span>
+      </div>
+      {/* Job row + Map */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+        <div className="dim" style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span style={{ fontWeight: 600 }}>{sj || "General"}</span>
+          {activeJob?.client ? ` · ${activeJob.client}` : ""}{activeJob ? ` · #${activeJob.id.slice(-6).toUpperCase()}` : ""}
         </div>
+        {activeJob && (
+          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeJob.property)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, fontWeight: 600, color: "#7fb6ff", background: "rgba(46,139,255,.12)", border: "1px solid rgba(46,139,255,.38)", padding: "5px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none" }}>
+            <Icon name="mapPin" size={12} color="#7fb6ff" /> Map
+          </a>
+        )}
       </div>
 
       {/* Action buttons */}
@@ -813,15 +807,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             <div className="sl">Hours</div>
             <div style={{ fontSize: 18, fontFamily: "Oswald", color: "var(--color-primary)" }}>{(activeJob.total_hrs || 0).toFixed(1)}</div>
           </div>
-          <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeJob.property)}`}
-            target="_blank" rel="noopener noreferrer"
-            className="cd"
-            style={{ flex: 1, padding: 10, textAlign: "center", textDecoration: "none", color: "var(--color-primary)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}
-          >
-            <Icon name="mapPin" size={20} color="var(--color-primary)" />
-            <div style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".04em", lineHeight: 1.1, textAlign: "center" }}>View on Map</div>
-          </a>
           <div className="cd" onClick={() => setPage("troubleshoot")} style={{ flex: 1, padding: 10, textAlign: "center", cursor: "pointer" }}>
             <div style={{ fontSize: 20 }}>🔧</div>
             <div style={{ fontSize: 12 }}>Help</div>
