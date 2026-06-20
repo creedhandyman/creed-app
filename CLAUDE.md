@@ -264,10 +264,14 @@ src/
   order** / Clock out when on. **WorkVision** (`WorkVision.tsx`): Tasks tab now
   **grouped by trade** (the work-order `room` field, with colored trade dots),
   a **per-item camera** on each task (uploads a "work" photo), and an icon
-  segmented control for Tasks/Guide/Notes/Photos. Deliberately NOT yet
-  restyled (they work — follow-ups): the Crew-activity cards (still the old
-  list — no avatars; GPS was explicitly deferred), WorkVision's clocked-in
-  header / job-info bar, and the Guide/Notes/Photos section internals.
+  segmented control for Tasks/Guide/Notes/Photos. Second pass also restyled:
+  the WorkVision **clock-in picker** (tappable dark job cards), the
+  **clocked-in header** (compact topbar + live timer chip + job row w/ Map),
+  and the **Crew-activity** per-member list (avatar initials + live status
+  dot + On-the-clock/Off chip). Still original (functional — follow-ups):
+  the "Currently clocked in" force-stop card above the crew list, GPS on crew
+  (deferred), and the Guide/Notes/Photos section internals (Photos already
+  has the toggle + grid + receipt-scan + AI render).
 - **Nav per-tab colors + morphing More slot; dashboard "next check"**:
   `VerticalNav.tsx` colors the active tab in its signature hue (Home blue,
   Quote yellow/gold, Jobs red, Time green, Quests purple, … — `TAB_COLOR`
