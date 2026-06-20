@@ -380,17 +380,25 @@ button:focus-visible {
    NB: the label/value row is `.drow` — `.row` is already the flex layout
    helper above, so the two must not share a name. */
 
-/* Gradient hero atop a detail / hub screen. */
+/* Glass hero atop a detail / hub screen — translucent dark panel with a
+   bright-blue, slightly-translucent outline + soft blue glow (the mockup
+   look). The blur lets the dark page show through for the "glass" feel. */
 .dhead {
-  background: linear-gradient(135deg, #16223a, #101a2e);
-  border: 1px solid #243a5e;
+  background: linear-gradient(135deg, rgba(18, 30, 54, 0.5), rgba(10, 18, 36, 0.5));
+  border: 1px solid rgba(58, 160, 255, 0.55);
   border-radius: var(--r-xl);
   padding: var(--pad-3);
   margin-bottom: 11px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 0 22px -8px rgba(58, 160, 255, 0.4);
 }
 .light .dhead {
-  background: linear-gradient(135deg, #e9eef8, #dce6f5);
-  border-color: var(--color-border-light-2);
+  background: linear-gradient(135deg, rgba(235, 242, 252, 0.72), rgba(222, 233, 248, 0.72));
+  border-color: rgba(46, 139, 255, 0.5);
+  box-shadow: 0 0 18px -8px rgba(46, 139, 255, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 /* A labeled group of rows / actions. */
