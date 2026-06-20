@@ -15,10 +15,10 @@ interface NavItem {
 // into the More hub — nothing is lost. This array is in side-nav order;
 // bottom-nav reverses it (see `items` below), yielding Quote · Jobs ·
 // Home · Time · More left-to-right.
-const NAV_ITEMS: (NavItem | "logo")[] = [
+const NAV_ITEMS: NavItem[] = [
   { id: "more", icon: "menu", labelKey: "nav.more" },
   { id: "time", icon: "time", labelKey: "nav.time" },
-  "logo",
+  { id: "dash", icon: "home", labelKey: "nav.home" },
   { id: "jobs", icon: "jobs", labelKey: "nav.jobs" },
   { id: "qf", icon: "quote", labelKey: "nav.quote" },
 ];
@@ -30,73 +30,16 @@ interface Props {
 }
 
 export default function VerticalNav({ page, setPage, isAdmin }: Props) {
-  const org = useStore((s) => s.org);
   const navBottom = useStore((s) => s.navBottom);
   // Pending leads light up a dot on the Jobs nav button so Bernard
   // notices them without having to open Jobs first.
   const leadCount = useStore((s) =>
     s.jobs.filter((j) => j.status === "lead" && !j.archived).length
   );
-  const LOGO = org?.logo_url || "/CREED_LOGO.png";
   const items = navBottom ? [...NAV_ITEMS].reverse() : NAV_ITEMS;
   return (
     <div className="vnav">
       {items.map((item, i) => {
-        if (item === "logo") {
-          const onDash = page === "dash";
-          // Logo button = Dashboard. Sized larger than its sibling nav
-          // buttons so it reads as the visual anchor. Active state matches
-          // the other nav buttons (gradient bg + glow), with a small label
-          // below for clarity and a pulsing indicator dot on the dashboard.
-          return (
-            <button
-              key="logo"
-              onClick={() => setPage("dash")}
-              className={onDash ? "act" : ""}
-              aria-label="Dashboard"
-              title="Dashboard"
-              style={{ position: "relative", overflow: "visible", width: 52, height: 52 }}
-            >
-              <img
-                src={LOGO}
-                alt=""
-                onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
-                style={{
-                  // 20px in bottom-nav so the logo matches the visual
-                  // height of the Lucide icons (size={20}) used by
-                  // every other nav button — that keeps the centered
-                  // flex content the same height across all 7 buttons,
-                  // which is what aligns the label baseline. 38px in
-                  // side-nav where the logo is the visual anchor.
-                  width: navBottom ? 20 : 38,
-                  height: navBottom ? 20 : 38,
-                  filter: onDash ? "drop-shadow(0 0 6px rgba(255,255,255,0.45))" : "none",
-                }}
-              />
-              {/* Match the marginTop of the other nav labels (2px) so
-                  the gap between icon and label is identical. fontSize
-                  10 + bold keeps the Home label slightly heavier
-                  visually without changing the baseline. */}
-              <span style={{ fontSize: 10, marginTop: 2, fontWeight: 700 }}>{t("nav.home") || "Home"}</span>
-              {onDash && (
-                <span
-                  aria-hidden
-                  style={{
-                    position: "absolute",
-                    top: -2,
-                    right: -2,
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: "var(--color-success)",
-                    boxShadow: "0 0 0 2px var(--color-dark-bg), 0 0 10px rgba(0, 204, 102, 0.8)",
-                    animation: "pulse 1.8s ease-in-out infinite",
-                  }}
-                />
-              )}
-            </button>
-          );
-        }
         if (item.adminOnly && !isAdmin) return null;
         const active = page === item.id;
         const showLeadDot = item.id === "jobs" && leadCount > 0;
