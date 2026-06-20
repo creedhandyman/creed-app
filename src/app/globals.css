@@ -12,7 +12,7 @@
   --color-indigo: #6a3de8;
   --color-violet: #9d4edd;
 
-  --color-dark-bg: #0a0a0f;
+  --color-dark-bg: #040406;
   --color-card-dark: #12121a;
   --color-card-dark-2: #181824;
   --color-card-dark-3: #1f1f2c;
@@ -85,8 +85,8 @@ body {
 /* Premium subtle gradient backgrounds — gives depth without being noisy */
 .dark body {
   background:
-    radial-gradient(ellipse 1200px 600px at top right, rgba(46, 117, 182, 0.06), transparent 60%),
-    radial-gradient(ellipse 800px 500px at bottom left, rgba(157, 78, 221, 0.04), transparent 55%),
+    radial-gradient(ellipse 1200px 600px at top right, rgba(46, 117, 182, 0.03), transparent 60%),
+    radial-gradient(ellipse 800px 500px at bottom left, rgba(157, 78, 221, 0.02), transparent 55%),
     var(--color-dark-bg);
   color: #e8e8ee;
 }
