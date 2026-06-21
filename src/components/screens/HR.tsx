@@ -45,10 +45,12 @@ export default function HR() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <Icon name="worker" size={22} color="var(--color-primary)" />
-        HR
-      </h2>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16 }}>
+        <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(46,139,255,.14)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon name="worker" size={19} color="var(--color-primary)" />
+        </span>
+        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>HR &amp; Time Off</span>
+      </div>
 
       <NewRequestForm userId={user.id} userName={user.name} onSubmitted={loadAll} />
 
@@ -295,24 +297,24 @@ function RequestRow({
         </div>
       </div>
       {req.reason && (
-        <div style={{ fontSize: 14, marginTop: 4, color: "#666" }}>&ldquo;{req.reason}&rdquo;</div>
+        <div style={{ fontSize: 14, marginTop: 4, color: "var(--color-dim)" }}>&ldquo;{req.reason}&rdquo;</div>
       )}
       <div className="row" style={{ marginTop: 6, gap: 6 }}>
         <button
           className="bg"
           onClick={() => decide("approved")}
           disabled={busy}
-          style={{ fontSize: 13, padding: "4px 12px" }}
+          style={{ fontSize: 13, padding: "4px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}
         >
-          {busy ? "..." : "✓ Approve"}
+          {busy ? "..." : <><Icon name="check" size={13} /> Approve</>}
         </button>
         <button
           className="br"
           onClick={() => decide("denied")}
           disabled={busy}
-          style={{ fontSize: 13, padding: "4px 12px" }}
+          style={{ fontSize: 13, padding: "4px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}
         >
-          {busy ? "..." : "✕ Deny"}
+          {busy ? "..." : <><Icon name="close" size={13} /> Deny</>}
         </button>
       </div>
     </div>

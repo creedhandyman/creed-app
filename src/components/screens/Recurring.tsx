@@ -111,13 +111,14 @@ export default function Recurring() {
         </button>
       </div>
 
-      <div className="cd mb" style={{ background: darkMode ? "#1a1a26" : "#f8f9fb", fontSize: 14 }}>
-        Templates fire daily via cron. Each fire creates a new <strong>scheduled</strong> job copied from the template. Pause to skip without losing the schedule.
+      <div className="cd mb" style={{ fontSize: 14, color: "var(--color-dim)", display: "flex", gap: 8, alignItems: "flex-start" }}>
+        <span style={{ flexShrink: 0, marginTop: 1 }}><Icon name="info" size={16} color="var(--color-primary)" /></span>
+        <div>Templates fire daily via cron. Each fire creates a new <strong style={{ color: "inherit" }}>scheduled</strong> job copied from the template. Pause to skip without losing the schedule.</div>
       </div>
 
       {recurringJobs.length === 0 && (
-        <div className="cd" style={{ textAlign: "center", padding: 28, color: "#888" }}>
-          <Icon name="refresh" size={28} color="#bbb" />
+        <div className="cd" style={{ textAlign: "center", padding: 28, color: "var(--color-dim)" }}>
+          <Icon name="refresh" size={28} color="var(--color-dim)" />
           <div style={{ marginTop: 10, fontSize: 16 }}>No recurring templates yet.</div>
           <div style={{ fontSize: 14, marginTop: 6 }}>
             Make any existing job recurring from its expanded row in Jobs.

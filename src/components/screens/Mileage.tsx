@@ -196,17 +196,21 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
   return (
     <div className="fi">
       <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <Icon name="mileage" size={22} color="var(--color-primary)" />
-          Mileage
-        </h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(46,139,255,.14)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="mileage" size={19} color="var(--color-primary)" />
+          </span>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>Mileage</span>
+        </div>
         <div className="row">
           {entries.length > 0 && (
-            <button className="bo" onClick={exportMileagePdf} style={{ fontSize: 14, padding: "4px 10px" }}>
-              🖨 Print Log
+            <button className="bo" onClick={exportMileagePdf} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <Icon name="print" size={14} /> Print
             </button>
           )}
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px" }}>← Dashboard</button>
+          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name="back" size={14} /> Dashboard
+          </button>
         </div>
       </div>
 
@@ -227,7 +231,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
       {/* Trip Tracker */}
       <div className="cd mb">
         <h4 style={{ fontSize: 15, marginBottom: 8 }}>
-          {tripActive ? "🟢 Trip In Progress" : "Start a Trip"}
+          {tripActive ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> Trip In Progress</span> : "Start a Trip"}
         </h4>
 
         {!tripActive ? (
@@ -248,8 +252,8 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                 placeholder="Starting odometer"
                 style={{ flex: 1 }}
               />
-              <button className="bb" onClick={startTrip} style={{ fontSize: 14, padding: "8px 16px" }}>
-                ▶ Start Trip
+              <button className="bb" onClick={startTrip} style={{ fontSize: 14, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <Icon name="start" size={14} /> Start Trip
               </button>
             </div>
           </>
@@ -268,8 +272,8 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                 placeholder="Ending odometer"
                 style={{ flex: 1 }}
               />
-              <button className="br" onClick={endTrip} style={{ fontSize: 14, padding: "8px 16px" }}>
-                ⏹ End Trip
+              <button className="br" onClick={endTrip} style={{ fontSize: 14, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <Icon name="stop" size={14} /> End Trip
               </button>
             </div>
             {endMiles && parseFloat(endMiles) > parseFloat(startMiles) && (
@@ -342,9 +346,10 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                   await db.del("mileage", e.id);
                   setLoaded(false);
                 }}
-                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, marginLeft: 6 }}
+                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, marginLeft: 6, display: "inline-flex", alignItems: "center" }}
+                aria-label="Delete trip"
               >
-                ✕
+                <Icon name="close" size={14} />
               </button>
             </div>
           ))

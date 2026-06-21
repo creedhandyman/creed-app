@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
+import { Icon } from "./Icon";
 
 interface Props {
   onClose: () => void;
@@ -36,25 +37,36 @@ export default function Settings({ onClose }: Props) {
 
   return (
     <div className="fi" style={{ maxWidth: 500, margin: "0 auto", padding: "16px 12px" }}>
-      <div className="row mb">
-        <button className="bo" onClick={onClose}>← Back</button>
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>⚙️ {t("settings.title")}</h2>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <button
+          onClick={onClose}
+          aria-label="Back"
+          style={{ width: 30, height: 30, borderRadius: 9, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit", flexShrink: 0 }}
+        >
+          <Icon name="back" size={17} />
+        </button>
+        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("settings.title")}</span>
       </div>
 
-      {/* Tab bar */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 14, overflowX: "auto" }}>
+      {/* Tab bar — segmented control */}
+      <div style={{ display: "inline-flex", background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 10, padding: 3, marginBottom: 16 }}>
         {["account", "general"].map((tb) => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
             style={{
-              padding: "5px 12px",
-              borderRadius: 6,
-              fontSize: 15,
-              whiteSpace: "nowrap",
-              background: tab === tb ? "var(--color-primary)" : "transparent",
-              color: tab === tb ? "#fff" : "#888",
+              padding: "6px 16px",
+              borderRadius: 8,
+              fontSize: 14,
               fontFamily: "Oswald",
+              fontWeight: 600,
+              letterSpacing: ".3px",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+              border: "none",
+              cursor: "pointer",
+              background: tab === tb ? "var(--color-primary)" : "transparent",
+              color: tab === tb ? "#fff" : "var(--color-dim)",
             }}
           >
             {t(`settings.${tb}`)}
@@ -74,7 +86,7 @@ export default function Settings({ onClose }: Props) {
 
           {/* User info */}
           <div className="cd mb">
-            <h4 style={{ fontSize: 16, marginBottom: 8 }}>{t("settings.yourProfile")}</h4>
+            <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="worker" size={16} color="var(--color-primary)" /> {t("settings.yourProfile")}</h4>
             {[
               { label: "Name", value: user.name, field: "name" },
               { label: "Email", value: user.email, field: "" },
@@ -93,7 +105,7 @@ export default function Settings({ onClose }: Props) {
               dashboard bell) are always on; these gate the SMS channel and
               which events reach you. */}
           <div className="cd mb">
-            <h4 style={{ fontSize: 16, marginBottom: 4 }}>🔔 {t("settings.notifications")}</h4>
+            <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="bell" size={16} color="var(--color-primary)" /> {t("settings.notifications")}</h4>
             <div className="dim" style={{ fontSize: 13.5, marginBottom: 10 }}>{t("settings.notifDesc")}</div>
             <div className="row" style={{ marginBottom: 2 }}>
               <input
@@ -130,7 +142,7 @@ export default function Settings({ onClose }: Props) {
           </div>
 
           <div className="cd mb">
-            <h4 style={{ fontSize: 16, marginBottom: 8 }}>{t("settings.changePassword")}</h4>
+            <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="safety" size={16} color="var(--color-primary)" /> {t("settings.changePassword")}</h4>
             <div className="row">
               <input
                 type="password"
@@ -186,7 +198,7 @@ export default function Settings({ onClose }: Props) {
       {/* Appearance — renders first in General tab */}
       {tab === "general" && (
         <div className="cd mb">
-          <h4 style={{ fontSize: 16, marginBottom: 8 }}>{t("settings.appearance")}</h4>
+          <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="paint" size={16} color="var(--color-primary)" /> {t("settings.appearance")}</h4>
           <div className="sep row" style={{ justifyContent: "space-between" }}>
             <span>{t("settings.darkMode")}</span>
             <div onClick={toggleDark} style={{ width: 44, height: 24, borderRadius: 12, background: darkMode ? "var(--color-primary)" : "#ccc", position: "relative", cursor: "pointer" }}>
@@ -217,7 +229,7 @@ export default function Settings({ onClose }: Props) {
       {/* Quest Config — after appearance */}
       {tab === "general" && isOwner && (
         <div className="cd" style={{ marginTop: 14 }}>
-          <h4 style={{ fontSize: 16, marginBottom: 10 }}>🎯 Quest Bonuses</h4>
+          <h4 style={{ fontSize: 16, marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="quest" size={16} color="var(--color-primary)" /> Quest Bonuses</h4>
           <div className="dim" style={{ fontSize: 14, marginBottom: 10 }}>Toggle quests on/off and set custom bonus amounts for your team.</div>
           {(() => {
             const defaultQuests = [

@@ -391,7 +391,7 @@ function PromoCodeForm({ orgId }: { orgId: string }) {
         onClick={() => { setOpen(false); setCode(""); }}
         style={{
           background: "none",
-          color: "#888",
+          color: "var(--color-dim)",
           fontSize: 14,
           padding: "4px 6px",
           cursor: "pointer",
