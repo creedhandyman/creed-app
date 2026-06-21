@@ -394,8 +394,15 @@ src/
   show "since …"), **Force clock out** (folded in — the old standalone
   force-stop card is gone), and **Add entry for {first name}** (jumps to My
   time with the manual form pre-set to that person). GPS still deferred.
-  Notes/Photos internals still original (Photos has toggle + grid +
-  receipt-scan + AI render). **Guide shopping list is editable**: the
+  Notes internals still original. **Photos** was rebuilt to the
+  `Creed_WorkVision_Full` mock (no logic change): Before/Work/After tag
+  chips (sets `photoType` for the next shot) → a 3-col thumb grid with
+  translucent type tags + a dashed **Add** tile + a per-photo sparkle
+  render button → a **Camera / Upload / Scan receipt** action row → an **AI
+  after-render** card (Generate seeds the render modal with the latest photo,
+  toasts a hint if none). The renderings list (source/result pairs) still
+  renders below. All handlers reused (`setWvCam`, `uploadWorkPhoto`,
+  `uploadReceipt`, `openRenderModal`). **Guide shopping list is editable**: the
   checkbox alone toggles bought-state; tapping an item's name/price opens an
   inline editor (rename / change cost / delete). Custom items edit their
   `customShop` entry in place; quote-derived items are "adopted" into

@@ -1361,97 +1361,34 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
       {/* ── PHOTOS TAB ── */}
       {section === "photos" && (
-        <div className="cd">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
-            <h4 style={{ fontSize: 15 }}>📸 {t("wv.jobPhotos")}</h4>
-            <div className="row" style={{ gap: 4 }}>
-              <button
-                className="bb"
-                onClick={() => setWvCam({
-                  title: photoType === "after" ? "Completion photo" : photoType === "before" ? "Before photo" : "Work photo",
-                  multiple: true,
-                  onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f)),
-                })}
-                style={{ fontSize: 14, padding: "5px 10px" }}
-                title={`Photo will be saved as a ${photoType === "after" ? "completion" : photoType} photo`}
-              >
-                📷 {photoType === "after" ? "Completion Photo" : photoType === "before" ? "Before Photo" : "Work Photo"}
-              </button>
-              <button
-                className="bo"
-                onClick={() => {
-                  const input = document.createElement("input");
-                  input.type = "file"; input.accept = "image/*"; input.multiple = true;
-                  input.onchange = async () => {
-                    if (!input.files?.length) return;
-                    for (const file of Array.from(input.files)) {
-                      await uploadWorkPhoto(file);
-                    }
-                  };
-                  input.click();
-                }}
-                style={{ fontSize: 14, padding: "5px 10px" }}
-              >
-                📁 {t("common.upload")}
-              </button>
-              {/* Receipt upload — snap a receipt at the supply store and the
-                  AI scans vendor + line items, enriches the note, sets the
-                  amount, and feeds price_corrections for the quoter. */}
-              <button
-                className="bo"
-                onClick={() => setWvCam({ title: "Receipt", multiple: false, onFiles: (fs) => { const f = fs[0]; if (f) uploadReceipt(f); } })}
-                disabled={uploadingReceipt}
-                style={{ fontSize: 14, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 4, opacity: uploadingReceipt ? 0.5 : 1 }}
-                title="Snap a receipt photo — AI extracts vendor, items, and total"
-              >
-                <Icon name="receipt" size={13} />
-                {uploadingReceipt ? "…" : "Receipt"}
-              </button>
-            </div>
-          </div>
-
-          {/* Photo-type segmented control. Default is "After"
-              (completion) because that's what most photos taken in
-              Work Vision are — and it's what the completeJob() gate
-              counts. Tech can flip to "Before" or "Work" before
-              snapping if they're documenting earlier phases. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-            <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>
-              Tag as:
-            </span>
-            <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: `1px solid ${border}` }}>
-              {(
-                [
-                  { key: "before" as const, label: "Before", color: "#ff8800" },
-                  { key: "work" as const, label: "Working", color: "#2E75B6" },
-                  { key: "after" as const, label: "After", color: "#00cc66" },
-                ]
-              ).map((opt) => {
-                const active = photoType === opt.key;
-                return (
-                  <button
-                    key={opt.key}
-                    onClick={() => setPhotoType(opt.key)}
-                    style={{
-                      padding: "4px 10px", fontSize: 13,
-                      fontFamily: "Oswald, sans-serif", letterSpacing: ".05em",
-                      background: active ? opt.color : "transparent",
-                      color: active ? "#fff" : "#888",
-                      border: "none",
-                      cursor: "pointer",
-                    }}
-                    aria-pressed={active}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* After photos prompt */}
-          <div style={{ marginBottom: 10, padding: 8, borderRadius: 6, background: darkMode ? "#1a1a0a" : "#fffbe6", border: "1px solid var(--color-warning)", fontSize: 14 }}>
-            💡 {t("wv.photosTip")}
+        <div>
+          {/* Before / Work / After tag toggle — sets the type the next
+              photo is saved as (matches the mock's .ptoggle). */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            {([
+              { key: "before" as const, label: "Before", bg: "rgba(255,136,0,.16)", bd: "rgba(255,136,0,.5)", fg: "#ffb15e" },
+              { key: "work" as const, label: "Work", bg: "rgba(46,139,255,.16)", bd: "rgba(46,139,255,.5)", fg: "#9fc4ff" },
+              { key: "after" as const, label: "After", bg: "rgba(0,204,102,.16)", bd: "rgba(0,204,102,.5)", fg: "#3ee08f" },
+            ]).map((opt) => {
+              const active = photoType === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => setPhotoType(opt.key)}
+                  aria-pressed={active}
+                  style={{
+                    flex: 1, textAlign: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 10.5, letterSpacing: ".04em",
+                    padding: 7, borderRadius: 9,
+                    background: active ? opt.bg : "var(--color-card-dark-3)",
+                    border: `1px solid ${active ? opt.bd : "var(--color-border-dark-2)"}`,
+                    color: active ? opt.fg : "var(--color-dim)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
 
           {(() => {
@@ -1460,56 +1397,118 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             // grid focused on real before/after/work shots.
             const regular = allPhotos.filter((p) => p.type !== "rendered");
             const rendered = allPhotos.filter((p) => p.type === "rendered");
+            const latest = regular[regular.length - 1];
+            const tagTint = (type?: string) =>
+              type === "before" ? { bg: "rgba(255,136,0,.3)", fg: "#ffb15e" }
+              : type === "after" ? { bg: "rgba(0,204,102,.3)", fg: "#3ee08f" }
+              : { bg: "rgba(46,139,255,.3)", fg: "#9fc4ff" };
+            const pactTile: React.CSSProperties = {
+              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+              fontSize: 10.5, fontWeight: 600, padding: "9px 4px", borderRadius: 10,
+              border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)",
+              color: "inherit", cursor: "pointer",
+            };
+            const camTitle = photoType === "after" ? "Completion photo" : photoType === "before" ? "Before photo" : "Work photo";
             return (
               <>
-                {regular.length > 0 ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                    {regular.map((p, i) => (
+                {/* Photo grid + Add tile */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 10 }}>
+                  {regular.map((p, i) => {
+                    const tint = tagTint(p.type);
+                    return (
                       <div key={i} style={{ position: "relative" }}>
-                        <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: `1px solid ${border}` }} />
+                        <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10, border: `1px solid ${border}` }} />
                         {p.type && (
-                          <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: 11, padding: "1px 4px", borderRadius: 3, background: p.type === "before" ? "#ff8800" : p.type === "after" ? "#00cc66" : "#2E75B6", color: "#fff" }}>
+                          <span style={{ position: "absolute", bottom: 3, left: 3, fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: tint.bg, color: tint.fg, textTransform: "capitalize" }}>
                             {p.type}
                           </span>
                         )}
-                        {/* Render-finished button — overlays each photo. Tap to
-                            open the AI render modal seeded with this photo. */}
+                        {/* Per-photo AI render — tap to render the finished look. */}
                         <button
                           onClick={() => openRenderModal(p.url)}
                           title={t("wv.renderFinished")}
                           aria-label={t("wv.renderFinished")}
-                          style={{
-                            position: "absolute",
-                            top: 4,
-                            right: 4,
-                            width: 26,
-                            height: 26,
-                            borderRadius: "50%",
-                            background: "rgba(0, 0, 0, 0.6)",
-                            color: "#fff",
-                            border: "1px solid rgba(255,255,255,0.25)",
-                            cursor: "pointer",
-                            fontSize: 15,
-                            lineHeight: "24px",
-                            padding: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
+                          style={{ position: "absolute", top: 4, right: 4, width: 24, height: 24, borderRadius: "50%", background: "rgba(0,0,0,.6)", border: "1px solid rgba(255,255,255,.25)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
                         >
-                          ✨
+                          <Icon name="sparkle" size={12} color="#fff" />
                         </button>
                       </div>
-                    ))}
+                    );
+                  })}
+                  {/* Add tile → camera with the current tag */}
+                  <button
+                    onClick={() => setWvCam({ title: camTitle, multiple: true, onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f)) })}
+                    style={{ aspectRatio: "1", borderRadius: 10, border: `1.5px dashed ${border}`, background: "none", color: "var(--color-dim)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, fontSize: 9, fontWeight: 600 }}
+                  >
+                    <Icon name="add" size={18} color="var(--color-dim)" /> Add
+                  </button>
+                </div>
+
+                {/* Action row — Camera / Upload / Scan receipt */}
+                <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
+                  <button
+                    onClick={() => setWvCam({ title: camTitle, multiple: true, onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f)) })}
+                    style={pactTile}
+                    title={`Saved as a ${photoType === "after" ? "completion" : photoType} photo`}
+                  >
+                    <Icon name="camera" size={15} color="#7fb6ff" /> Camera
+                  </button>
+                  <button
+                    onClick={() => {
+                      const input = document.createElement("input");
+                      input.type = "file"; input.accept = "image/*"; input.multiple = true;
+                      input.onchange = async () => {
+                        if (!input.files?.length) return;
+                        for (const file of Array.from(input.files)) {
+                          await uploadWorkPhoto(file);
+                        }
+                      };
+                      input.click();
+                    }}
+                    style={pactTile}
+                  >
+                    <Icon name="upload" size={15} color="#7fb6ff" /> {t("common.upload")}
+                  </button>
+                  {/* Receipt scan — AI extracts vendor, items, total; enriches
+                      the note + feeds price_corrections for the quoter. */}
+                  <button
+                    onClick={() => setWvCam({ title: "Receipt", multiple: false, onFiles: (fs) => { const f = fs[0]; if (f) uploadReceipt(f); } })}
+                    disabled={uploadingReceipt}
+                    style={{ ...pactTile, opacity: uploadingReceipt ? 0.5 : 1 }}
+                    title="Snap a receipt photo — AI extracts vendor, items, and total"
+                  >
+                    <Icon name="receipt" size={15} color="#7fb6ff" /> {uploadingReceipt ? "…" : "Scan receipt"}
+                  </button>
+                </div>
+
+                {/* AI after-render card */}
+                <div style={{ background: "linear-gradient(135deg,#231a3a,#15101f)", border: "1px solid #3a2c5a", borderRadius: 13, padding: 11, display: "flex", alignItems: "center", gap: 11 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(157,78,221,.18)", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
+                    <Icon name="sparkle" size={18} color="#9d4edd" />
                   </div>
-                ) : (
-                  <p className="dim" style={{ textAlign: "center", padding: 16 }}>{t("wv.noPhotos")}</p>
+                  <div style={{ minWidth: 0 }}>
+                    <b style={{ fontSize: 12 }}>AI after-render</b>
+                    <span style={{ fontSize: 10, color: "var(--color-dim)", display: "block" }}>See the finished room</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (latest) openRenderModal(latest.url);
+                      else useStore.getState().showToast("Add a photo first to generate a render", "info");
+                    }}
+                    style={{ marginLeft: "auto", fontFamily: "Oswald", fontWeight: 600, fontSize: 10.5, color: "#c9a6ff", background: "rgba(157,78,221,.18)", border: "1px solid rgba(157,78,221,.45)", padding: "6px 10px", borderRadius: 9, whiteSpace: "nowrap", cursor: "pointer" }}
+                  >
+                    Generate
+                  </button>
+                </div>
+
+                {regular.length === 0 && (
+                  <p className="dim" style={{ textAlign: "center", padding: 12, fontSize: 12 }}>{t("wv.noPhotos")}</p>
                 )}
 
                 {/* ── Renderings section ── */}
                 <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${border}` }}>
-                  <h4 style={{ fontSize: 15, marginBottom: 8 }}>
-                    ✨ {t("wv.renderingsHeader")} ({rendered.length})
+                  <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Icon name="sparkle" size={14} color="#9d4edd" /> {t("wv.renderingsHeader")} ({rendered.length})
                   </h4>
                   {rendered.length === 0 ? (
                     <p className="dim" style={{ fontSize: 14, textAlign: "center", padding: 12 }}>
