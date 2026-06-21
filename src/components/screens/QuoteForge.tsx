@@ -234,6 +234,24 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const jobs = useStore((s) => s.jobs);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+  // Light-mode CTA fix: dark keeps the neon glow on a translucent fill; light
+  // switches to a SOLID fill so white text never washes out on white (the CSS
+  // .light .glow-* fix can't reach these inline-styled buttons). Gold uses dark
+  // text on its light fill; blue/green keep white.
+  const ctaHue = (rgba: string, solid: string, darkIcon: string, gold = false) => ({
+    card: darkMode
+      ? { background: `rgba(${rgba},.13)`, border: `1.5px solid rgba(${rgba},.75)`, boxShadow: `0 0 24px -3px rgba(${rgba},.5), inset 0 0 22px -8px rgba(${rgba},.4)` }
+      : { background: solid, border: `1.5px solid ${solid}`, boxShadow: `0 8px 18px -6px rgba(${rgba},.55)` },
+    text: darkMode ? "#fff" : gold ? "#3a2a00" : "#fff",
+    sub: darkMode ? "#ffffffb0" : gold ? "rgba(58,42,0,.72)" : "rgba(255,255,255,.9)",
+    icon: darkMode ? darkIcon : gold ? "#3a2a00" : "#fff",
+    tag: darkMode
+      ? { background: `rgba(${rgba},.2)`, color: darkIcon }
+      : gold ? { background: "rgba(0,0,0,.14)", color: "#3a2a00" } : { background: "rgba(255,255,255,.22)", color: "#fff" },
+  });
+  const cGold = ctaHue("245,180,0", "#f5b400", "#f5b400", true);
+  const cGreen = ctaHue("0,204,102", "#00b85c", "#3ee08f");
+  const cBlue = ctaHue("46,139,255", "var(--color-primary)", "#8cc0ff");
 
   const [mode, setMode] = useState<null | "paste" | "manual" | "edit" | "inspect" | "inspect-edit" | "quick">(null);
   // Set when the user taps ✏️ Edit on a saved inspection in
@@ -1386,16 +1404,16 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         {/* Quick Quote — gold glow */}
         <div
           onClick={() => setMode("quick")}
-          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", background: "rgba(245,180,0,.13)", border: "1.5px solid rgba(245,180,0,.75)", boxShadow: "0 0 24px -3px rgba(245,180,0,.5), inset 0 0 22px -8px rgba(245,180,0,.4)" }}
+          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", ...cGold.card }}
         >
           <div style={{ width: 50, height: 50, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="quote" size={26} color="#f5b400" strokeWidth={2} />
+            <Icon name="quote" size={26} color={cGold.icon} strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: "#fff" }}>QUICK QUOTE</div>
-            <div style={{ fontSize: 13, color: "#ffffffb0" }}>Describe it, add photos → AI prices it</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: cGold.text }}>QUICK QUOTE</div>
+            <div style={{ fontSize: 13, color: cGold.sub }}>Describe it, add photos → AI prices it</div>
           </div>
-          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(245,180,0,.2)", color: "#f5b400" }}>SMALL JOBS</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", ...cGold.tag }}>SMALL JOBS</span>
         </div>
 
         {/* Full Inspection — green glow. Every plan can run inspections; the
@@ -1418,31 +1436,31 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             }
             setMode("inspect");
           }}
-          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", background: "rgba(0,204,102,.13)", border: "1.5px solid rgba(0,204,102,.7)", boxShadow: "0 0 24px -3px rgba(0,204,102,.45), inset 0 0 22px -8px rgba(0,204,102,.4)" }}
+          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", ...cGreen.card }}
         >
           <div style={{ width: 50, height: 50, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="search" size={26} color="#3ee08f" strokeWidth={2} />
+            <Icon name="search" size={26} color={cGreen.icon} strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: "#fff" }}>FULL INSPECTION</div>
-            <div style={{ fontSize: 13, color: "#ffffffb0" }}>Area-by-area walkthrough · voice</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: cGreen.text }}>FULL INSPECTION</div>
+            <div style={{ fontSize: 13, color: cGreen.sub }}>Area-by-area walkthrough · voice</div>
           </div>
-          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(0,204,102,.2)", color: "#3ee08f" }}>MOST ACCURATE</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", ...cGreen.tag }}>MOST ACCURATE</span>
         </div>
 
         {/* Upload Report — blue glow */}
         <div
           onClick={() => fileRef.current?.click()}
-          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", background: "rgba(46,139,255,.13)", border: "1.5px solid rgba(46,139,255,.75)", boxShadow: "0 0 24px -3px rgba(46,139,255,.5), inset 0 0 22px -8px rgba(46,139,255,.4)" }}
+          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", ...cBlue.card }}
         >
           <div style={{ width: 50, height: 50, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="doc" size={26} color="#8cc0ff" strokeWidth={2} />
+            <Icon name="doc" size={26} color={cBlue.icon} strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: "#fff" }}>UPLOAD REPORT</div>
-            <div style={{ fontSize: 13, color: "#ffffffb0" }}>PDF inspection → AI analysis</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: cBlue.text }}>UPLOAD REPORT</div>
+            <div style={{ fontSize: 13, color: cBlue.sub }}>PDF inspection → AI analysis</div>
           </div>
-          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(46,139,255,.2)", color: "#8cc0ff" }}>PDF</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", ...cBlue.tag }}>PDF</span>
           <input
             ref={fileRef}
             type="file"
@@ -2456,7 +2474,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               });
             })()
           }
-          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}
         >
           <Icon name="doc" size={14} /> PDF
         </button>
@@ -2467,9 +2485,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             setShowRender(true);
           }}
           title="AI-render the finished look from this quote's photos"
-          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)", cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55 }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55, ...(darkMode ? { border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)" } : { border: "1.5px solid #9d4edd", background: "#9d4edd", color: "#fff", boxShadow: "0 8px 18px -6px rgba(157,78,221,.55)" }) }}
         >
-          <Icon name="sparkle" size={14} color="#d8b6ff" /> Render
+          <Icon name="sparkle" size={14} color={darkMode ? "#d8b6ff" : "#fff"} /> Render
         </button>
         <button
           onClick={() => {
@@ -2490,7 +2508,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             );
             window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_self");
           }}
-          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}
         >
           <Icon name="send" size={14} /> Send
         </button>
