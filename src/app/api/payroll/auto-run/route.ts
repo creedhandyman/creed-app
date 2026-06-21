@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { runPayrollForUser, type RunPayrollResult } from "@/lib/payroll-runner";
 
 export const dynamic = "force-dynamic";
@@ -92,15 +92,42 @@ function isAuthorized(req: NextRequest): boolean {
   return false;
 }
 
-export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+/**
+ * Owner/manager session auth — lets the in-app "Run now" test button in
+ * the Auto Payroll panel trigger this endpoint with the logged-in user's
+ * Supabase JWT (`Authorization: Bearer <access_token>`) instead of the
+ * cron secret / admin token. We validate the JWT and confirm the caller
+ * is an owner or manager before allowing the run.
+ */
+async function isOwnerSession(
+  req: NextRequest,
+  supabase: SupabaseClient,
+): Promise<boolean> {
+  const auth = req.headers.get("authorization") || "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (!m) return false;
+  const token = m[1].trim();
+  if (!token || token === process.env.CRON_SECRET) return false;
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return false;
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  const role = (prof as { role?: string } | null)?.role;
+  return role === "owner" || role === "manager";
+}
 
+export async function GET(req: NextRequest) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
+
+  if (!isAuthorized(req) && !(await isOwnerSession(req, supabase))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { data, error } = await supabase
     .from("organizations")
@@ -108,7 +135,19 @@ export async function GET(req: NextRequest) {
     .eq("auto_payroll_enabled", true);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Most common real-world cause: the auto_payroll_* columns were never
+    // added in Supabase, so this SELECT errors. Surface a concrete hint
+    // instead of a raw Postgres message.
+    const missingCols = /does not exist|auto_payroll/i.test(error.message);
+    return NextResponse.json(
+      {
+        error: error.message,
+        hint: missingCols
+          ? "The auto_payroll_* columns may be missing on the organizations table — run the Auto Payroll migration from CLAUDE.md in Supabase."
+          : undefined,
+      },
+      { status: 500 },
+    );
   }
 
   const orgs: OrgRow[] = data || [];
@@ -167,23 +206,33 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Fetch this org's payable profiles. rate=0 are skipped (apprentices
-    // not on payroll yet, contractors paid outside the app, etc.).
+    // Fetch this org's whole team. We pull EVERYONE (not just rate>0) so a
+    // crew member without a pay rate is reported as an explicit skip
+    // ("no pay rate set") rather than silently vanishing — the #1 reason
+    // an owner sees "auto payroll never paid my crew". Only rate>0
+    // profiles actually get paid; we never auto-pay a fabricated rate.
     const { data: profileRows, error: profErr } = await supabase
       .from("profiles")
       .select("id, name, rate, emp_num")
-      .eq("org_id", org.id)
-      .gt("rate", 0);
+      .eq("org_id", org.id);
 
     if (profErr) {
       skipped.push({ id: org.id, name: org.name, reason: `profile query failed: ${profErr.message}`, config: cfg });
       continue;
     }
 
-    const profiles: ProfileRow[] = profileRows || [];
+    const allProfiles: ProfileRow[] = profileRows || [];
+    const profiles: ProfileRow[] = allProfiles.filter((p) => Number(p.rate) > 0);
     const paid: UserResult[] = [];
     const userSkipped: UserSkip[] = [];
     const userErrors: FiredOrg["errors"] = [];
+
+    // Surface rate-less crew so the owner knows exactly who to fix in Team.
+    for (const p of allProfiles) {
+      if (!(Number(p.rate) > 0)) {
+        userSkipped.push({ userId: p.id, userName: p.name, reason: "no pay rate set (set it in Team)" });
+      }
+    }
 
     // Use ONE paidAt for the whole batch so every entry in this run
     // shares a timestamp — easier to audit / rollback as a group.
@@ -276,6 +325,10 @@ export async function GET(req: NextRequest) {
     timestamp: now.toISOString(),
     force,
     today,
+    // Diagnostic: false means the cron is on the anon key (service-role
+    // env var missing). Fine if RLS is off, but a red flag if the run
+    // claims 0 rows for everyone.
+    usingServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
     enabledOrgs: orgs.length,
     fired,
     skipped,

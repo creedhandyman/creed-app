@@ -126,6 +126,21 @@ src/
   ```
   Test-fire on demand (bypasses day-of-week + cadence debounce):
   `curl -H "x-admin-token: $ADMIN_PASSWORD" 'https://<host>/api/payroll/auto-run?force=1'`
+  In-app: Operations → Payroll → Auto Payroll has a **"Run now (test)"**
+  button that hits the same endpoint with the owner's Supabase JWT
+  (`Authorization: Bearer`, validated server-side via `isOwnerSession`,
+  owner/manager only) and toasts a plain-language summary (paid N · M
+  skipped (reasons) · K errored). Diagnostics added after "auto payroll
+  never paid my crew" reports: the endpoint now (a) reports crew with
+  **rate ≤ 0** as an explicit `"no pay rate set"` skip instead of silently
+  dropping them (the old `.gt("rate",0)` filter hid them — and manual
+  payroll masks the problem via a `rate || 55` fallback the cron
+  deliberately does NOT use); (b) returns a `hint` when the
+  `auto_payroll_*` columns are missing; (c) returns `usingServiceRole`
+  (false = anon fallback). The cron's day check is UTC `getDay()` at 17:00
+  UTC — same calendar day as US daytime, so day-matching is fine for US;
+  `auto_payroll_hour` is advisory on the single daily cron (runs ~midday
+  Central regardless of the hour picked).
 - `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
 - `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
 - `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;`

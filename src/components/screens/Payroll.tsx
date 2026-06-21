@@ -655,6 +655,53 @@ function AutoPayrollPanel() {
     }
   };
 
+  // Fire the EXACT scheduled job right now (force=1 bypasses the day +
+  // cadence gates) and report what happened in plain language. This is
+  // the diagnostic: if this pays the crew but the schedule doesn't, the
+  // day/cadence is the issue; if it skips people for "no pay rate", that's
+  // the fix. Safe to tap repeatedly — already-paid hours are never re-paid.
+  const runNow = async () => {
+    const ok = await useStore.getState().showConfirm(
+      "Run Auto Payroll now?",
+      "Pays every crew member who has a pay rate set, for all their unpaid hours (no quest bonuses). Safe to run anytime — already-paid hours are never paid twice.",
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      const res = await fetch("/api/payroll/auto-run?force=1", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const j = await res.json();
+      const toast = useStore.getState().showToast;
+      if (!res.ok || j.error) {
+        toast(j.hint || j.error || `Run failed (${res.status})`, "error");
+        return;
+      }
+      const mine = (j.fired || []).find((f: { id: string }) => f.id === org.id);
+      if (!mine) {
+        toast("Ran, but your org wasn't processed — make sure Auto Payroll is enabled and saved.", "warning");
+      } else {
+        const paidTotal = mine.paid.reduce((s: number, p: { totalPay: number }) => s + p.totalPay, 0);
+        const parts = [`Paid ${mine.paid.length} ($${paidTotal.toFixed(2)})`];
+        if (mine.skipped.length) {
+          const reasons = Array.from(
+            new Set(mine.skipped.map((s: { reason: string }) => s.reason)),
+          ).join(", ");
+          parts.push(`${mine.skipped.length} skipped (${reasons})`);
+        }
+        if (mine.errors.length) parts.push(`${mine.errors.length} errored`);
+        toast(parts.join(" · "), mine.paid.length ? "success" : "warning");
+      }
+      await loadAll();
+    } catch (e) {
+      useStore.getState().showToast(e instanceof Error ? e.message : "Run failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const nextRun = computeNextRun(day, hour, cadence, lastRun);
   const nextRunStr = nextRun.toLocaleDateString("en-US", {
     weekday: "short", month: "short", day: "numeric",
@@ -798,6 +845,19 @@ function AutoPayrollPanel() {
                     Last run: {lastRunStr}
                   </div>
                 )}
+              </div>
+
+              <button
+                onClick={runNow}
+                disabled={busy}
+                className="bo"
+                style={{ width: "100%", marginTop: 12, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+              >
+                <Icon name="pay" size={14} />
+                {busy ? "Running…" : "Run now (test)"}
+              </button>
+              <div className="dim" style={{ fontSize: 10.5, marginTop: 5, lineHeight: 1.5 }}>
+                Runs the scheduled job immediately and reports who got paid or skipped. If this pays the crew but the schedule doesn&apos;t, the day/cadence is the issue. If crew are skipped for &quot;no pay rate&quot;, set their hourly rate in Team.
               </div>
             </>
           )}
