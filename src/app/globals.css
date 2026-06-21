@@ -559,7 +559,15 @@ button:focus-visible {
   to   { opacity: 1; transform: translateY(0); }
 }
 .fi {
-  animation: fi var(--t-slow) var(--ease-out) forwards;
+  /* NB: no `forwards`. Holding the final keyframe would leave
+     transform: translateY(0) on the element permanently, and ANY transform
+     creates a containing block that breaks position:fixed for descendant
+     modals/popups — they'd center on this (tall) screen wrapper instead of
+     the viewport, so they landed below the fold and you had to scroll to
+     them (achievement/confetti, material editor, etc.). translateY(0) is
+     visually identical to no transform, so dropping `forwards` keeps the
+     fade-in looking the same while letting fixed popups center on screen. */
+  animation: fi var(--t-slow) var(--ease-out);
   /* Breathing room at the bottom of every screen so the last element
      (Save, Add Task, etc.) doesn't sit flush against the bottom nav
      or screen edge. */
