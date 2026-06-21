@@ -38,6 +38,19 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
+// iOS Safari/WebKit has no web API to control the camera torch, so the flash
+// button is hidden there. Every other platform (Android, desktop) gets it. We
+// do NOT gate on getCapabilities().torch — that flag is unreliable on Android
+// (often false right after the stream opens even though the torch works), which
+// is what hid the button on Galaxy phones.
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 /* ── Keyword expansion for the per-room checklist auto-tick ─────────── */
 const ITEM_KEYWORD_OVERRIDES: Record<string, string[]> = {
   Caulking: ["caulk", "caulking", "sealant", "seal"],
@@ -469,13 +482,10 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
         await videoRef.current.play().catch(() => {});
       }
       setCameraOn(true);
-      // Show the flash toggle only when the device exposes a torch. iOS Safari
-      // has no web torch API (caps come back without it) so it stays hidden
-      // there rather than offering a button that can't work; unknown caps
-      // (some Android WebViews) still get the option.
-      const torchTrack = stream.getVideoTracks()[0];
-      const torchCaps = torchTrack?.getCapabilities?.() as (MediaTrackCapabilities & { torch?: boolean }) | undefined;
-      setTorchAvailable(torchCaps ? !!torchCaps.torch : true);
+      // Show the flash toggle on every non-iOS device (see isIOS note above).
+      // The toggle proves it out: if applyConstraints can't drive the LED it
+      // throws and we hide the button then.
+      setTorchAvailable(!isIOS());
       setTorchOn(false);
 
       // Start MediaRecorder on JUST the audio track from the same stream.
@@ -578,13 +588,6 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       await (track.applyConstraints as (c: MediaTrackConstraints & { advanced?: Array<{ torch?: boolean }> }) => Promise<void>)({
         advanced: [{ torch: next }],
       });
-      const settings = track.getSettings?.() as undefined | MediaTrackSettings & { torch?: boolean };
-      if (settings && "torch" in settings && settings.torch !== next) {
-        setTorchAvailable(false);
-        setTorchOn(false);
-        useStore.getState().showToast("Flash not supported on this device", "info");
-        return;
-      }
       setTorchOn(next);
     } catch (err) {
       console.warn("Torch toggle failed:", err);

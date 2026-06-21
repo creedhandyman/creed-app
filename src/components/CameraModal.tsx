@@ -44,6 +44,20 @@ export interface CameraModalProps {
 
 type Facing = "environment" | "user";
 
+// iOS Safari/WebKit exposes no web API to control the camera torch, so the
+// flash button is hidden there. Every other platform (Android, desktop) gets
+// it. We deliberately do NOT gate on getCapabilities().torch: that flag is
+// unreliable on Android (often false/absent right after the stream opens even
+// though the torch works fine), which is exactly what hid the button on Galaxy
+// phones.
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 export function CameraModal({
   open,
   onClose,
@@ -91,18 +105,10 @@ export function CameraModal({
         videoRef.current.muted = true;
         await videoRef.current.play().catch(() => {});
       }
-      // Torch only exists on some rear cameras (mostly Android). Probe caps
-      // so we hide the button when it would do nothing.
-      const track = stream.getVideoTracks()[0];
-      const caps = track?.getCapabilities?.() as
-        | (MediaTrackCapabilities & { torch?: boolean })
-        | undefined;
-      // Offer the flash toggle when the device reports a torch (Android rear
-      // cameras), or when capabilities are unknown (some Android WebViews omit
-      // getCapabilities yet still honor the constraint). iOS Safari reports
-      // caps WITHOUT torch — there is no web torch API there — so it stays
-      // hidden rather than showing a button that can't work.
-      setTorchAvailable(caps ? !!caps.torch : true);
+      // Show the flash toggle on every non-iOS device (see isIOS note above).
+      // The toggle proves it out: if applyConstraints can't drive the LED it
+      // throws and we hide the button then.
+      setTorchAvailable(!isIOS());
       setReady(true);
     } catch (err) {
       console.warn("Camera unavailable:", err);
@@ -145,15 +151,6 @@ export function CameraModal({
           c: MediaTrackConstraints & { advanced?: Array<{ torch?: boolean }> }
         ) => Promise<void>
       )({ advanced: [{ torch: next }] });
-      // Some devices accept the constraint but don't actually drive the LED —
-      // verify it took, and back out (hiding the button) if it didn't.
-      const settings = track.getSettings?.() as (MediaTrackSettings & { torch?: boolean }) | undefined;
-      if (settings && "torch" in settings && settings.torch !== next) {
-        setTorchAvailable(false);
-        setTorchOn(false);
-        useStore.getState().showToast("Flash not supported on this device", "info");
-        return;
-      }
       setTorchOn(next);
     } catch {
       setTorchAvailable(false);
