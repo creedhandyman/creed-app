@@ -241,7 +241,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const ctaHue = (rgba: string, solid: string, darkIcon: string, gold = false) => ({
     card: darkMode
       ? { background: `rgba(${rgba},.13)`, border: `1.5px solid rgba(${rgba},.75)`, boxShadow: `0 0 24px -3px rgba(${rgba},.5), inset 0 0 22px -8px rgba(${rgba},.4)` }
-      : { background: solid, border: `1.5px solid ${solid}`, boxShadow: `0 8px 18px -6px rgba(${rgba},.55)` },
+      : { background: solid, border: `1.5px solid ${solid}`, boxShadow: `0 0 17px -2px rgba(${rgba},.6), 0 4px 12px -7px rgba(0,0,0,.22)` },
     text: darkMode ? "#fff" : gold ? "#3a2a00" : "#fff",
     sub: darkMode ? "#ffffffb0" : gold ? "rgba(58,42,0,.72)" : "rgba(255,255,255,.9)",
     icon: darkMode ? darkIcon : gold ? "#3a2a00" : "#fff",
@@ -2485,7 +2485,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             setShowRender(true);
           }}
           title="AI-render the finished look from this quote's photos"
-          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55, ...(darkMode ? { border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)" } : { border: "1.5px solid #9d4edd", background: "#9d4edd", color: "#fff", boxShadow: "0 8px 18px -6px rgba(157,78,221,.55)" }) }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55, ...(darkMode ? { border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)" } : { border: "1.5px solid #9d4edd", background: "#9d4edd", color: "#fff", boxShadow: "0 0 17px -2px rgba(157,78,221,.6), 0 4px 12px -7px rgba(0,0,0,.22)" }) }}
         >
           <Icon name="sparkle" size={14} color={darkMode ? "#d8b6ff" : "#fff"} /> Render
         </button>
