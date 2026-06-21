@@ -1749,38 +1749,47 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         </span>
       </div>
 
-      {/* Property + Total — gold total card (mock) */}
+      {/* Customer / property — pulled above the total so the glow card holds
+          just the totals (render look). */}
+      <div className="cd mb">
+        <CustomerPicker
+          prop={prop}
+          setProp={setProp}
+          client={client}
+          setClient={setClient}
+          customerId={customerId}
+          setCustomerId={setCustomerId}
+          addressId={addressId}
+          setAddressId={setAddressId}
+          compact
+        />
+      </div>
+
+      {/* Totals — gold glow; figures sit next to each other, not stacked. */}
       <div
         className="cd mb"
         style={{
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
-          flexWrap: "wrap",
           gap: 8,
           background: "rgba(245,180,0,.13)",
           border: "1.5px solid rgba(245,180,0,.6)",
           boxShadow: "0 0 26px -4px rgba(245,180,0,.5), inset 0 0 26px -10px rgba(245,180,0,.4)",
         }}
       >
-        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-          <CustomerPicker
-            prop={prop}
-            setProp={setProp}
-            client={client}
-            setClient={setClient}
-            customerId={customerId}
-            setCustomerId={setCustomerId}
-            addressId={addressId}
-            setAddressId={setAddressId}
-            compact
-          />
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 600 }}>Total</div>
-          <div style={{ fontSize: 30, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.1 }}>
-            ${gt.toFixed(2)}
+        {[
+          { l: "Labor", v: "$" + tl.toFixed(0) },
+          { l: markupPct > 0 ? `Mat'l +${markupPct}%` : "Mat'l", v: "$" + tm.toFixed(0) },
+          { l: "Hours", v: th.toFixed(1) },
+        ].map((x) => (
+          <div key={x.l} style={{ flex: 1, textAlign: "center" }}>
+            <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#e9c879", fontWeight: 600 }}>{x.l}</div>
+            <div style={{ fontSize: 15, fontFamily: "Oswald", fontWeight: 600, color: "#fff", marginTop: 2 }}>{x.v}</div>
           </div>
+        ))}
+        <div style={{ flex: 1.1, textAlign: "center", borderLeft: "1px solid rgba(245,180,0,.35)" }}>
+          <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 700 }}>Total</div>
+          <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.05, marginTop: 1 }}>${gt.toFixed(2)}</div>
         </div>
       </div>
 
@@ -1968,12 +1977,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Adjustments — trip fee / T&M / discount / tax. The headline totals
+          (Labor / Mat'l / Hours / Total) now live in the glow card above. */}
+      {(tripFee > 0 || tnmItems.length > 0 || discountAmount > 0 || (taxPct > 0 && effectiveTaxMode !== "none")) && (
       <div className="g4 mb">
         {[
-          { l: "Labor", v: "$" + tl.toFixed(0), c: "var(--color-primary)" },
-          { l: markupPct > 0 ? `Mat +${markupPct}%` : "Materials", v: "$" + tm.toFixed(0), c: "var(--color-warning)" },
-          { l: "Hours", v: th.toFixed(1), c: "var(--color-highlight)" },
           ...(tripFee > 0 ? [{ l: "Trip Fee", v: "$" + tripFee.toFixed(0), c: "var(--color-success)" }] : []),
           // F5 — T&M / Assessment-first stat tile. The fee IS in the
           // base subtotal (assessment visit is billable), but we flag
@@ -2003,6 +2011,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           </div>
         ))}
       </div>
+      )}
 
       {/* Minimum service-charge note. Only renders when the floor
           actually kicked in — i.e. the quote had < min hours of labor
