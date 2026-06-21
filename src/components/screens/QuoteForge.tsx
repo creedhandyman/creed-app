@@ -1772,8 +1772,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           alignItems: "center",
           flexWrap: "wrap",
           gap: 8,
-          background: "linear-gradient(135deg,#2a2410,#181308)",
-          border: "1px solid #4a3d12",
+          background: "rgba(245,180,0,.13)",
+          border: "1.5px solid rgba(245,180,0,.6)",
+          boxShadow: "0 0 26px -4px rgba(245,180,0,.5), inset 0 0 26px -10px rgba(245,180,0,.4)",
         }}
       >
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>
@@ -1790,8 +1791,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           />
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "#f5b400", fontWeight: 600 }}>Total</div>
-          <div style={{ fontSize: 30, fontFamily: "Oswald", fontWeight: 700, color: "#fff", lineHeight: 1.1 }}>
+          <div style={{ fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 600 }}>Total</div>
+          <div style={{ fontSize: 30, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.1 }}>
             ${gt.toFixed(2)}
           </div>
         </div>
