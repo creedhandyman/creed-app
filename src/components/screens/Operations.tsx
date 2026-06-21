@@ -88,7 +88,7 @@ function OpsSettings() {
 
       {/* Licensed Trades */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 16, marginBottom: 8 }}>🔑 {t("ops.licensedTrades")}</h4>
+        <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="safety" size={15} color="var(--color-primary)" /> {t("ops.licensedTrades")}</h4>
         <div className="dim" style={{ fontSize: 14, marginBottom: 8 }}>{t("ops.licensedHelp")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
           {["Electrical", "Plumbing", "HVAC", "Roofing", "Gas Fitting", "Fire Protection", "Structural", "Asbestos/Mold"].map((trade) => {
@@ -108,7 +108,7 @@ function OpsSettings() {
                   border: `1px solid ${isLicensed ? "var(--color-success)" : darkMode ? "#1e1e2e" : "#ddd"}`,
                 }}
               >
-                <span style={{ fontSize: 16, color: isLicensed ? "var(--color-success)" : "#555" }}>{isLicensed ? "☑" : "☐"}</span>
+                <span style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: isLicensed ? "var(--color-success)" : "transparent", border: `1.5px solid ${isLicensed ? "var(--color-success)" : "var(--color-border-dark-2)"}` }}>{isLicensed && <Icon name="check" size={11} color="#fff" strokeWidth={3} />}</span>
                 {trade}
               </label>
             );
@@ -205,7 +205,7 @@ function OpsSettings() {
                 await db.patch("organizations", org.id, { trade_rates: JSON.stringify(updated) }); refreshOrg();
               }} />
             <span style={{ fontSize: 13 }}>/hr</span>
-            {tradeRates[trade] && <span style={{ fontSize: 14, color: "var(--color-success)" }}>✓</span>}
+            {tradeRates[trade] ? <Icon name="check" size={14} color="var(--color-success)" /> : null}
           </div>
         ))}
       </div>
