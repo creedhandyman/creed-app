@@ -449,12 +449,18 @@ export default function Quests() {
 
                 {tier.quests.map((q) => {
                   const isDone = q.progress >= q.goal;
+                  const isPaid = isDone && paidKeys.has(QUEST_KEY_BY_NAME[q.name] || q.name);
                   const pct = Math.min(100, (q.progress / q.goal) * 100);
                   return (
                     <div key={q.name} style={{ position: "relative", overflow: "hidden", background: "var(--color-card-dark-3)", border: `1px solid ${isDone ? "rgba(245,180,0,.5)" : "var(--color-border-dark-2)"}`, borderRadius: 15, padding: "12px 13px", marginBottom: 9, boxShadow: isDone ? "0 0 24px -11px rgba(245,180,0,.7)" : "none" }}>
                       <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: isDone ? "#f5b400" : q.tierColor }} />
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                        <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{q.name}</div>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 7, flexWrap: "wrap", minWidth: 0 }}>
+                          <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{q.name}</span>
+                          {isPaid && (
+                            <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 10, letterSpacing: ".08em", color: "#1a1030", background: "linear-gradient(135deg,#d8b6ff,#9d4edd)", borderRadius: 99, padding: "2px 8px", boxShadow: "0 0 12px -3px rgba(157,78,221,.7)" }}>PAID</span>
+                          )}
+                        </div>
                         <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 14, color: "#5a3d00", background: "linear-gradient(135deg,#ffe08a,#f5b400)", borderRadius: 99, padding: "4px 10px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3, boxShadow: "0 0 14px -3px rgba(245,180,0,.6)" }}>
                           <Icon name="money" size={11} color="#5a3d00" /> {q.bonus}
                         </span>
@@ -464,7 +470,11 @@ export default function Quests() {
                         <div style={{ height: "100%", borderRadius: 5, width: `${pct}%`, background: isDone ? "#f5b400" : q.tierColor, transition: "width .3s" }} />
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--color-dim)", marginTop: 5 }}>
-                        {isDone ? (
+                        {isPaid ? (
+                          <span style={{ color: "#c9a6ff", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <Icon name="checkCircle" size={12} color="#c9a6ff" /> Paid ✓
+                          </span>
+                        ) : isDone ? (
                           <span style={{ color: "#3ee08f", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <Icon name="checkCircle" size={12} color="#3ee08f" /> Done · pending
                           </span>
