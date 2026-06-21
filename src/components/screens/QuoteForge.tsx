@@ -2385,6 +2385,18 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               const customerData = customerId
                 ? useStore.getState().customers.find((c) => c.id === customerId)
                 : undefined;
+              // Pull saved AI renders flagged for the quote (Now → Done pairs).
+              const savedJob = editingId ? useStore.getState().jobs.find((j) => j.id === editingId) : null;
+              let renders: { sourceUrl?: string; url: string }[] = [];
+              if (savedJob) {
+                try {
+                  const d = typeof savedJob.rooms === "string" ? JSON.parse(savedJob.rooms) : savedJob.rooms;
+                  const ph: Record<string, unknown>[] = Array.isArray(d?.photos) ? d.photos : [];
+                  renders = ph
+                    .filter((p) => p.type === "rendered" && p.includeInQuote)
+                    .map((p) => ({ sourceUrl: p.sourceUrl as string | undefined, url: p.url as string }));
+                } catch { /* */ }
+              }
               exportQuotePdf({
                 property: prop,
                 client,
@@ -2407,6 +2419,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 orgAddress: o?.address,
                 orgLogo: o?.logo_url,
                 photos: jobPhotos,
+                renders,
                 markupPct,
                 taxPct,
                 taxAmount,

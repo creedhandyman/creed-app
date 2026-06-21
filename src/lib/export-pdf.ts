@@ -28,6 +28,9 @@ interface ExportOptions {
   orgLogo?: string;
   statusUrl?: string;
   photos?: { url: string; label: string; type: string }[];
+  /** AI "proposed finish" before/after pairs (rendered photos flagged
+   *  includeInQuote). Rendered as a Now → Done section in the estimate. */
+  renders?: { sourceUrl?: string; url: string }[];
   markupPct?: number;
   taxPct?: number;
   taxAmount?: number;
@@ -68,6 +71,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   const clientEmail = opts.clientEmail || "";
   const statusUrl = opts.statusUrl || "";
   const photos = opts.photos || [];
+  const renders = opts.renders || [];
   const markupPct = opts.markupPct || 0;
   const taxPct = opts.taxPct || 0;
   const tripFee = opts.tripFee || 0;
@@ -362,6 +366,20 @@ ${photos.length > 0 ? `
     )
     .join("")}
 </div>
+` : ""}
+
+${renders.length > 0 ? `
+<h2>Proposed Finish</h2>
+<div style="font-size:12px;color:#666;margin-bottom:8px">AI preview of the completed work, generated from this estimate's scope.</div>
+${renders
+  .map(
+    (r) => `
+<div style="display:grid;grid-template-columns:${r.sourceUrl ? "1fr 1fr" : "1fr"};gap:8px;margin-bottom:12px;page-break-inside:avoid">
+  ${r.sourceUrl ? `<div style="text-align:center"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:3px">Now</div><img src="${esc(r.sourceUrl)}" alt="" style="width:100%;height:170px;object-fit:cover;border-radius:6px;border:1px solid #ddd" /></div>` : ""}
+  <div style="text-align:center"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#2E75B6;margin-bottom:3px">Done</div><img src="${esc(r.url)}" alt="" style="width:100%;height:170px;object-fit:cover;border-radius:6px;border:1px solid #2E75B6" /></div>
+</div>`,
+  )
+  .join("")}
 ` : ""}
 
 <h2>Notes &amp; Exclusions</h2>
