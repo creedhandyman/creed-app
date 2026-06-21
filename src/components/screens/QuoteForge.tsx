@@ -52,11 +52,11 @@ async function compressImage(file: File, maxSize = 800): Promise<string> {
 
 function AiLoadingDisplay({ status }: { status: string }) {
   const steps = [
-    { label: "Reading document", icon: "📄", match: /reading|rendering|render(ed|ing)/i },
-    { label: "Analyzing content", icon: "🔍", match: /analyz|sending|text|batch|upload/i },
-    { label: "Identifying repairs", icon: "🔧", match: /identify|photo|vision/i },
-    { label: "Estimating costs", icon: "💰", match: /estimat|pric|cost/i },
-    { label: "Building quote", icon: "📋", match: /build|generat|compil|merg/i },
+    { label: "Reading document", icon: "doc", match: /reading|rendering|render(ed|ing)/i },
+    { label: "Analyzing content", icon: "search", match: /analyz|sending|text|batch|upload/i },
+    { label: "Identifying repairs", icon: "troubleshoot", match: /identify|photo|vision/i },
+    { label: "Estimating costs", icon: "calc", match: /estimat|pric|cost/i },
+    { label: "Building quote", icon: "list", match: /build|generat|compil|merg/i },
   ];
 
   // Pull "X of Y" out of the status when present. Status messages look like
@@ -153,9 +153,11 @@ function AiLoadingDisplay({ status }: { status: string }) {
 
   return (
     <div style={{ padding: 20, textAlign: "center" }}>
-      <div style={{ fontSize: 40, marginBottom: 12, animation: "pulse 1.5s ease-in-out infinite" }}>🤖</div>
-      <style>{`@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } } @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
-      <div style={{ fontSize: 14, fontFamily: "Oswald", color: "var(--color-primary)", marginBottom: 16 }}>
+      <div style={{ width: 60, height: 60, borderRadius: 18, background: "rgba(245,180,0,.14)", border: "1px solid rgba(245,180,0,.4)", display: "flex", alignItems: "center", justifyContent: "center", margin: "6px auto 12px", boxShadow: "0 0 36px -10px rgba(245,180,0,.6)", animation: "pulse 1.6s ease-in-out infinite" }}>
+        <Icon name="sparkle" size={30} color="#f5b400" />
+      </div>
+      <style>{`@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: 0.85; } } @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
+      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px", marginBottom: 16 }}>
         AI is building your quote
       </div>
 
@@ -167,19 +169,17 @@ function AiLoadingDisplay({ status }: { status: string }) {
           return (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, opacity: i > currentStep + 1 ? 0.3 : 1, transition: "opacity 0.3s" }}>
               <div style={{
-                width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
-                background: isDone ? "var(--color-success)" : isActive ? "var(--color-primary)" : "transparent",
-                border: `2px solid ${isDone ? "var(--color-success)" : isActive ? "var(--color-primary)" : "#333"}`,
-                color: isDone || isActive ? "#fff" : "#555",
+                width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                background: isDone ? "rgba(0,204,102,.18)" : isActive ? "rgba(245,180,0,.18)" : "var(--color-card-dark-2)",
               }}>
-                {isDone ? "✓" : step.icon}
+                <Icon name={isDone ? "check" : step.icon} size={13} color={isDone ? "#3ee08f" : isActive ? "#f5b400" : "var(--color-dim)"} strokeWidth={isDone ? 3 : 2} />
               </div>
-              <span style={{ fontSize: 12, color: isDone ? "var(--color-success)" : isActive ? "#fff" : "#555", fontWeight: isActive ? 600 : 400 }}>
-                {step.label}{isActive ? "..." : ""}
+              <span style={{ fontSize: 12.5, color: isDone || isActive ? "inherit" : "var(--color-dim)", fontWeight: isActive ? 600 : 400 }}>
+                {step.label}{isActive ? "…" : ""}
               </span>
               {/* Inline counter on the active row when we know X/Y */}
               {isActive && stepTotal > 0 && (
-                <span style={{ fontSize: 11, marginLeft: "auto", color: "var(--color-primary)", fontFamily: "Oswald" }}>
+                <span style={{ fontSize: 11, marginLeft: "auto", color: "#f5b400", fontFamily: "Oswald" }}>
                   {stepCur}/{stepTotal}
                 </span>
               )}
@@ -189,19 +189,18 @@ function AiLoadingDisplay({ status }: { status: string }) {
       </div>
 
       {/* Progress bar */}
-      <div style={{ marginTop: 16, height: 6, background: "#1e1e2e", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ marginTop: 16, height: 8, background: "var(--color-card-dark-2)", borderRadius: 5, overflow: "hidden" }}>
         <div style={{
-          height: 6, borderRadius: 3,
-          background: "linear-gradient(90deg, var(--color-primary), var(--color-success), var(--color-primary))",
-          backgroundSize: "200% 100%",
-          animation: "shimmer 2s linear infinite",
+          height: 8, borderRadius: 5,
+          background: "#f5b400",
+          boxShadow: "0 0 12px -1px #f5b400",
           width: `${displayPct}%`,
           transition: "width 0.5s",
         }} />
       </div>
 
       {/* Numeric percent + batch counter beneath the bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 4, color: "var(--color-primary)", fontFamily: "Oswald" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, marginTop: 5, color: "var(--color-dim)", fontFamily: "Oswald" }}>
         <span>{Math.round(displayPct)}%</span>
         {stepTotal > 0 ? (
           <span>{isBatch ? "Batch" : isRender ? "Page" : "Step"} {stepCur} of {stepTotal}</span>

@@ -271,9 +271,11 @@ src/
   removed (incl. the worker chips). Kept as-is (functional, richer than the
   mock): the expanded pricing controls (labor/discount/tax), the stats `.g4`
   grid, AI Assist, and the editable hrs/mat/sqft line-item inputs + material
-  modal. NOT yet matched: compact pricing tiles, action bar pinned to the
-  very bottom, and the AI-build loading screen (still the shared
-  `AiLoadingDisplay`; only its header was de-emoji'd).
+  modal. The **AI-build loading screen** (shared `AiLoadingDisplay`, used by
+  both the hub overlay and the build view) is gold-themed to the mock — a
+  sparkles-in-gold-tile "robot", Lucide step icons (done=green check,
+  now=gold, todo=muted), and a solid gold progress bar. NOT yet matched:
+  the compact pricing tiles + the action bar pinned to the very bottom.
 - **Schedule redesign (from mockup)**: `Schedule.tsx` rebuilt to **Day /
   Week / Month** views + a **worker-filter** avatar row (`Creed_Schedule`
   mockup). Topbar = title + date-nav (label adapts per view, tap = today;
