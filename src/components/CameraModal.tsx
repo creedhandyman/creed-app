@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { useStore } from "@/lib/store";
+import { trackHasTorch, findTorchDeviceId } from "@/lib/torch";
 
 export interface CameraModalProps {
   open: boolean;
@@ -43,20 +44,6 @@ export interface CameraModalProps {
 }
 
 type Facing = "environment" | "user";
-
-// iOS Safari/WebKit exposes no web API to control the camera torch, so the
-// flash button is hidden there. Every other platform (Android, desktop) gets
-// it. We deliberately do NOT gate on getCapabilities().torch: that flag is
-// unreliable on Android (often false/absent right after the stream opens even
-// though the torch works fine), which is exactly what hid the button on Galaxy
-// phones.
-function isIOS(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return (
-    /iP(hone|ad|od)/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  );
-}
 
 export function CameraModal({
   open,
@@ -105,11 +92,40 @@ export function CameraModal({
         videoRef.current.muted = true;
         await videoRef.current.play().catch(() => {});
       }
-      // Show the flash toggle on every non-iOS device (see isIOS note above).
-      // The toggle proves it out: if applyConstraints can't drive the LED it
-      // throws and we hide the button then.
-      setTorchAvailable(!isIOS());
+      const hasTorch = trackHasTorch(stream.getVideoTracks()[0]);
+      setTorchAvailable(hasTorch);
       setReady(true);
+
+      // If this rear lens can't drive the flash, hunt for a sibling rear lens
+      // that can and swap to it in place (the preview is already live). Galaxy
+      // phones expose the torch on only one of their rear lenses, which is
+      // usually NOT the one facingMode auto-selects. Guarded by stream identity
+      // so a flip/close mid-probe doesn't clobber the active camera.
+      if (mode === "environment" && !hasTorch) {
+        const torchId = await findTorchDeviceId();
+        if (torchId && streamRef.current === stream) {
+          try {
+            const better = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: torchId } },
+              audio: false,
+            });
+            if (streamRef.current === stream) {
+              streamRef.current = better;
+              if (videoRef.current) {
+                videoRef.current.srcObject = better;
+                videoRef.current.muted = true;
+                await videoRef.current.play().catch(() => {});
+              }
+              stream.getTracks().forEach((t) => t.stop());
+              setTorchAvailable(true);
+            } else {
+              better.getTracks().forEach((t) => t.stop());
+            }
+          } catch {
+            /* keep the current lens */
+          }
+        }
+      }
     } catch (err) {
       console.warn("Camera unavailable:", err);
       setError(
@@ -152,10 +168,12 @@ export function CameraModal({
         ) => Promise<void>
       )({ advanced: [{ torch: next }] });
       setTorchOn(next);
-    } catch {
+    } catch (e) {
       setTorchAvailable(false);
       setTorchOn(false);
-      useStore.getState().showToast("Flash not supported on this device", "info");
+      console.warn("Torch toggle failed:", e);
+      const name = e instanceof Error && e.name ? ` (${e.name})` : "";
+      useStore.getState().showToast(`Flash not available on this camera${name}`, "info");
     }
   }, [torchOn]);
 

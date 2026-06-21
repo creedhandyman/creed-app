@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import { ROOM_PRESETS } from "./screens/Inspector";
 import { Icon } from "./Icon";
+import { trackHasTorch, findTorchDeviceId } from "@/lib/torch";
 
 /* ── Web Speech API typing — narrow declarations so we don't pull in the
    full DOM lib type for every browser variant. ──────────────────────── */
@@ -36,19 +37,6 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
     webkitSpeechRecognition?: SpeechRecognitionCtor;
   };
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
-}
-
-// iOS Safari/WebKit has no web API to control the camera torch, so the flash
-// button is hidden there. Every other platform (Android, desktop) gets it. We
-// do NOT gate on getCapabilities().torch — that flag is unreliable on Android
-// (often false right after the stream opens even though the torch works), which
-// is what hid the button on Galaxy phones.
-function isIOS(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return (
-    /iP(hone|ad|od)/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  );
 }
 
 /* ── Keyword expansion for the per-room checklist auto-tick ─────────── */
@@ -470,7 +458,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   const startCameraAndRecorder = useCallback(async () => {
     setCameraError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      let stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
         audio: true,
       });
@@ -482,10 +470,39 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
         await videoRef.current.play().catch(() => {});
       }
       setCameraOn(true);
-      // Show the flash toggle on every non-iOS device (see isIOS note above).
-      // The toggle proves it out: if applyConstraints can't drive the LED it
-      // throws and we hide the button then.
-      setTorchAvailable(!isIOS());
+      // Torch lives on only one rear lens on multi-lens phones, usually not the
+      // one facingMode picks. If ours can't drive the flash, hunt for a lens
+      // that can and re-open it WITH audio (so the recorder below binds to the
+      // final stream). Done before the MediaRecorder block on purpose; guarded
+      // by stream identity so a Stop mid-probe doesn't clobber anything.
+      let hasTorch = trackHasTorch(stream.getVideoTracks()[0]);
+      if (!hasTorch) {
+        const torchId = await findTorchDeviceId();
+        if (torchId && streamRef.current === stream) {
+          try {
+            const better = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: torchId } },
+              audio: true,
+            });
+            if (streamRef.current === stream) {
+              stream.getTracks().forEach((t) => t.stop());
+              stream = better;
+              streamRef.current = stream;
+              if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.muted = true;
+                await videoRef.current.play().catch(() => {});
+              }
+              hasTorch = true;
+            } else {
+              better.getTracks().forEach((t) => t.stop());
+            }
+          } catch {
+            /* keep the original stream */
+          }
+        }
+      }
+      setTorchAvailable(hasTorch);
       setTorchOn(false);
 
       // Start MediaRecorder on JUST the audio track from the same stream.
@@ -593,7 +610,8 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       console.warn("Torch toggle failed:", err);
       setTorchAvailable(false);
       setTorchOn(false);
-      useStore.getState().showToast("Flash not supported on this device", "info");
+      const name = err instanceof Error && err.name ? ` (${err.name})` : "";
+      useStore.getState().showToast(`Flash not available on this camera${name}`, "info");
     }
   }, [torchOn]);
 
