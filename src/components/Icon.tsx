@@ -97,7 +97,7 @@ const ICONS: Record<string, LucideIcon> = {
   jobs: ClipboardList,
   schedule: Calendar,
   time: Clock,
-  quest: Target,
+  quest: Trophy,
   ops: Building2,
   clients: Users,
   mileage: Car,

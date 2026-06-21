@@ -274,6 +274,30 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Quests redesign (from mockup)**: `Creed_Quests_Tabs_Confetti` mockup —
+  `Quests.tsx` rebuilt to a battle-pass "QUEST HUB" while ALL the quest
+  computation logic (per-user cycle stats, tiers, qBonus/qEnabled config,
+  HandyKing aggregate) + `addReview`/`addReferral` were preserved verbatim.
+  Topbar = title + violet trophy tile; violet-active segmented sub-tabs
+  (Quests/Team/Reviews/Referrals). **Quests**: violet battle-pass hero
+  (cycle + reset countdown, $earned of $max, a pip bar of completedCount /
+  total, "N / M QUESTS COMPLETE") → tier headers (T-badge + name + done/total)
+  → mission cards (left color bar, gold coin payout pill, progress, "Done ·
+  pending" flag + gold glow when complete). **Team** = leaderboard (podium
+  top-3 + ranked rows + "Team cycle payout so far"), ranked by real
+  `quest_payouts` $ this cycle (5★ tiebreaker) — replaced the old per-tech
+  baseball-card stats (those live in TeamStats / Ops → Team). **Reviews** =
+  gold star hero (avg + N reviews · M five-star this cycle) + 2 quest chips +
+  review cards; the QR collect + manual add-review form are kept below.
+  **Referrals** = 2 quest chips + green "Refer a client" CTA that toggles the
+  add form + referral rows (status still an editable select, styled as a
+  colored chip) + payout line. **Confetti celebration**: a fixed overlay
+  (confetti + trophy burst + quest name + coin) fires the first time the user
+  sees a quest cross into done, acked per-quest in localStorage
+  (`creed_quest_seen_<uid>_<yr>_<mo>`). Micro-labels ("QUESTS COMPLETE",
+  "Done · pending", chip labels) are literals, not i18n keys yet. **Icon**:
+  `quest` now maps to `Trophy` in `Icon.tsx` (was `Target`), so the nav tab,
+  screen, More hub, and dashboard all show a trophy.
 - **Shared in-app camera (`CameraModal.tsx`)**: one full-screen live-camera
   component — rear-facing preview, shutter, flash/torch, front/back flip, and a
   "choose from library" fallback for desktop / denied permission. It hands back
