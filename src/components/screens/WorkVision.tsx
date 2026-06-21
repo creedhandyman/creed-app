@@ -773,9 +773,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           <button className="iconbtn" onClick={() => setPage("dash")} aria-label="Back"><Icon name="back" size={18} /></button>
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("wv.title")}</span>
         </div>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={clockOut} aria-label="Clock out" style={{ fontSize: 10, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 99, padding: "5px 9px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <Icon name="stop" size={11} color="#ff9d9d" /> {t("wv.clockOut")}
+          </button>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
+          </span>
+        </div>
       </div>
       {/* Job row + Map */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
@@ -789,30 +794,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           </a>
         )}
       </div>
-
-      {/* Action buttons */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        <button className="br" onClick={clockOut} style={{ flex: 1, fontSize: 14, padding: "10px" }}>⏹ {t("wv.clockOut")}</button>
-        <button className="bg" onClick={completeJob} style={{ flex: 1, fontSize: 14, padding: "10px" }}>✅ {t("wv.completeJob")}</button>
-      </div>
-
-      {/* Job info bar */}
-      {activeJob && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <div className="cd" style={{ flex: 1, padding: 10, textAlign: "center" }}>
-            <div className="sl">Total</div>
-            <div style={{ fontSize: 18, fontFamily: "Oswald", color: "var(--color-success)" }}>${(activeJob.total || 0).toFixed(0)}</div>
-          </div>
-          <div className="cd" style={{ flex: 1, padding: 10, textAlign: "center" }}>
-            <div className="sl">Hours</div>
-            <div style={{ fontSize: 18, fontFamily: "Oswald", color: "var(--color-primary)" }}>{(activeJob.total_hrs || 0).toFixed(1)}</div>
-          </div>
-          <div className="cd" onClick={() => setPage("troubleshoot")} style={{ flex: 1, padding: 10, textAlign: "center", cursor: "pointer" }}>
-            <div style={{ fontSize: 20 }}>🔧</div>
-            <div style={{ fontSize: 12 }}>Help</div>
-          </div>
-        </div>
-      )}
 
       {/* Section tabs — text segmented control (matches the mockup) */}
       <div style={{ display: "flex", gap: 5, marginBottom: 11 }}>
@@ -1050,6 +1031,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               <p className="dim">{t("wv.noWorkOrder")}</p>
             </div>
           )}
+          {/* Complete job — full-width green CTA at the bottom of Tasks (mock) */}
+          <button onClick={completeJob} className="bg" style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".4px", textTransform: "uppercase", padding: 12, borderRadius: 13, marginTop: 10, boxShadow: "0 0 26px -6px rgba(0,204,102,.6)" }}>
+            <Icon name="check" size={15} color="#fff" strokeWidth={2.5} /> {t("wv.completeJob")}
+          </button>
         </div>
       )}
 

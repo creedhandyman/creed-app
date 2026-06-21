@@ -285,7 +285,11 @@ src/
   a **per-item camera** on each task (uploads a "work" photo), and an icon
   segmented control for Tasks/Guide/Notes/Photos. Second pass restyled the
   WorkVision **clock-in picker** (tappable dark job cards) + **clocked-in
-  header** (compact topbar + live timer chip + job row w/ Map). Third pass
+  header** (compact topbar + live timer chip + job row w/ Map). Work mode was
+  then **leaned to the mock**: clock-out is a small header link, the top
+  Clock-out/Complete row + the Total/Hours/Help tile bar are gone, and
+  **COMPLETE JOB** is a full-width green button at the bottom of the Tasks
+  tab. Third pass
   **rebuilt Crew-activity to the mockup**: the topbar shows "N on the clock";
   the body is one **crew card per teammate** (avatar + status dot, name,
   location/job when on-the-clock or "Last out … · Xh today" when off,
