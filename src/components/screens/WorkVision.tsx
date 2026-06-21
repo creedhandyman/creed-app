@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip } from "@/lib/parser";
+import { recordJobOutcome, jobActualHours } from "@/lib/learning";
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
@@ -555,6 +556,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     await db.patch("jobs", activeJob.id, { status: "complete" });
     // Clock out
     await clockOut();
+    // Teach the AI quoter from this job's real hours. clockOut() refreshed the
+    // store, so the final session is now counted. Best-effort — never block
+    // completion on a learning write.
+    try {
+      const fresh = useStore.getState().jobs.find((j) => j.id === activeJob.id) || activeJob;
+      await recordJobOutcome(fresh, jobActualHours(fresh, useStore.getState().timeEntries));
+    } catch { /* */ }
     useStore.getState().showToast("Job completed! Great work.", "success");
     // Pop the review-request modal before navigating away — last chance to
     // capture the client's goodwill while the work is fresh in their mind.

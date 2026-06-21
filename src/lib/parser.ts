@@ -1122,16 +1122,33 @@ async function aiParsePdfSingle(
       const corrections = await db.get<{
         item_name: string; original_hours: number; corrected_hours: number;
         original_mat_cost: number; corrected_mat_cost: number; trade: string;
-        zip?: string;
+        zip?: string; job_id?: string; source?: string; created_at?: string;
       }>("price_corrections");
       if (corrections.length > 0) {
+        // Smarter weighting: process newest-first so recent corrections survive
+        // the per-item cap and keep the model current, and de-dupe
+        // job_completion rows by (job_id, item_name) so a re-completed job (or
+        // two completion paths firing) can't double-count. Rows from before the
+        // source/job_id/created_at migration simply have undefined fields and
+        // fall through unchanged.
+        const ordered = corrections
+          .slice()
+          .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+        const seenJobItem = new Set<string>();
+        const deduped = ordered.filter((c) => {
+          if (c.source !== "job_completion" || !c.job_id) return true;
+          const k = `${c.job_id}|${c.item_name}`;
+          if (seenJobItem.has(k)) return false;
+          seenJobItem.add(k);
+          return true;
+        });
         // Job-level calibrations (item_name starts with "__job__:") are kept
         // separate from per-item corrections and surfaced as their own prompt
         // section so the AI uses them as overall sizing context.
         type JobCal = { quoted: number[]; actual: number[]; localQuoted: number[]; localActual: number[] };
         const jobCalsByTrade: Record<string, JobCal> = {};
         const itemCorrections: typeof corrections = [];
-        corrections.forEach((c) => {
+        deduped.forEach((c) => {
           if (typeof c.item_name === "string" && c.item_name.startsWith("__job__:")) {
             const trade = c.item_name.slice("__job__:".length) || c.trade || "General";
             if (!jobCalsByTrade[trade]) {

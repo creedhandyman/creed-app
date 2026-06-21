@@ -113,6 +113,16 @@ src/
 ## Schema migrations the user should run in Supabase
 
 - `ALTER TABLE price_corrections ADD COLUMN zip TEXT;`
+- Self-learning v2 — richer outcome capture + recency/dedup weighting:
+  ```sql
+  ALTER TABLE price_corrections ADD COLUMN IF NOT EXISTS source TEXT;         -- 'receipt_scan'|'manual_add'|'quote_edit'|'job_completion'
+  ALTER TABLE price_corrections ADD COLUMN IF NOT EXISTS job_id UUID;         -- which job produced the row (dedup + traceability)
+  ALTER TABLE price_corrections ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();  -- recency weighting
+  ```
+  Until this runs, job-completion learning writes toast a "column does not
+  exist" error — but the write is best-effort/try-caught so completing a job
+  still works, and the read side (parser.ts) is migration-safe (undefined
+  fields fall through). `lib/learning.ts` `recordJobOutcome` writes the rows.
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
 - Auto Payroll columns (cron at `/api/payroll/auto-run` reads these,
@@ -531,7 +541,19 @@ src/
 - **Self-learning AI quoting**: edits + receipt scans + completed-job
   outcomes write to `price_corrections`. ZIP-tagged so AI weights
   same-ZIP data over regional. See parser.ts `aiParsePdf` for the
-  prompt-building.
+  prompt-building. **v2 (`lib/learning.ts`)**: `recordJobOutcome(job,
+  actualHrs)` now fires from BOTH completion paths — WorkVision's **Complete
+  Job** button AND the Jobs status flip. Before, only the admin Jobs path
+  logged, so jobs finished by techs in WorkVision (most of them) taught the
+  AI nothing — the single biggest leak. It writes per-trade `__job__:` sizing
+  rows AND per-item rows (actual hours split pro-rata by each item's estimate,
+  keyed by item description for granular learning), tagged `source`/`job_id`.
+  Materials are left untouched there (already learned per-item from receipts;
+  `original_mat==corrected_mat` keeps them out of the material averages).
+  parser.ts processes corrections **newest-first** (recent data survives the
+  200-row per-item cap → learns faster) and **de-dupes `job_completion` rows
+  by (job_id, item_name)** so a re-completed job (or both paths firing) can't
+  double-count. Needs the `source`/`job_id`/`created_at` migration above.
 - **Stripe Connect**: per-org accounts. `/api/stripe/connect`,
   `/callback`, `/refresh`, `/webhook` (signature required, no
   dev-mode bypass). `/api/verify-payment` server-verifies the

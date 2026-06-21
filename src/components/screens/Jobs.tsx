@@ -8,6 +8,7 @@ import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
+import { recordJobOutcome } from "@/lib/learning";
 import { Icon } from "../Icon";
 import CameraModal from "../CameraModal";
 import PropertySearch from "../PropertySearch";
@@ -411,28 +412,16 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     }
     await db.patch("jobs", id, { status });
 
-    // When a job goes Complete, log the quoted-vs-actual hours variance into
-    // price_corrections so the AI quoter learns from real outcomes. Tagged
-    // with __job__:{trade} so parser.ts can surface it as a separate
-    // "PAST JOB DURATIONS" prompt section.
+    // When a job goes Complete, teach the AI quoter from its real hours
+    // (job-level per trade + per item). Shared via recordJobOutcome with
+    // WorkVision's Complete Job button so EVERY completion path feeds learning,
+    // not just this admin one.
     if (status === "complete") {
       const completedJob = jobs.find((j) => j.id === id);
       if (completedJob) {
-        const labor = getJobLabor(completedJob);
-        const quotedHrs = completedJob.total_hrs || 0;
-        if (labor.totalHrs > 0 && quotedHrs > 0 && Math.abs(labor.totalHrs - quotedHrs) > 0.5) {
-          const trade = completedJob.trade || "General";
-          await db.post("price_corrections", {
-            item_name: `__job__:${trade}`,
-            original_hours: quotedHrs,
-            corrected_hours: Math.round(labor.totalHrs * 100) / 100,
-            original_mat_cost: completedJob.total_mat || 0,
-            corrected_mat_cost: completedJob.total_mat || 0,
-            material_name: "Full job calibration",
-            trade,
-            zip: extractZip(completedJob.property),
-          });
-        }
+        try {
+          await recordJobOutcome(completedJob, getJobLabor(completedJob).totalHrs);
+        } catch { /* learning is best-effort */ }
       }
     }
 
