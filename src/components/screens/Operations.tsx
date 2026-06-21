@@ -375,6 +375,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   const isAdmin = user?.role === "owner" || user?.role === "manager";
   const profiles = useStore((s) => s.profiles);
   const timeEntries = useStore((s) => s.timeEntries);
+  const darkMode = useStore((s) => s.darkMode);
   const jobs = useStore((s) => s.jobs);
   const customers = useStore((s) => s.customers) ?? [];
   const recurringJobs = useStore((s) => s.recurringJobs) ?? [];
@@ -457,7 +458,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
             { l: `Revenue · ${monthLabel}`, v: fmtMoney(revenueMonth), c: "inherit" },
             { l: "Net profit", v: fmtMoney(netProfit), c: netProfit >= 0 ? "var(--color-money)" : "var(--color-accent-red)" },
           ].map((k) => (
-            <div key={k.l} style={{ background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "11px 6px", textAlign: "center" }}>
+            <div key={k.l} style={{ background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, borderRadius: 13, padding: "11px 6px", textAlign: "center" }}>
               <div style={{ fontSize: 8.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--color-dim)" }}>{k.l}</div>
               <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: k.c }}>{k.v}</div>
             </div>
@@ -473,7 +474,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                style={{ position: "relative", textAlign: "left", background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 15, padding: 13, cursor: "pointer", color: "inherit" }}
+                style={{ position: "relative", textAlign: "left", background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, borderRadius: 15, padding: 13, cursor: "pointer", color: "inherit" }}
               >
                 {badge ? (
                   <span style={{ position: "absolute", top: 11, right: 11, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 9.5, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center" }}>{badge}</span>
@@ -499,7 +500,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
           <button
             onClick={() => setTab(null)}
             aria-label="Back to Operations"
-            style={{ width: 30, height: 30, borderRadius: 9, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit" }}
+            style={{ width: 30, height: 30, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit" }}
           >
             <Icon name="back" size={16} />
           </button>
