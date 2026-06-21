@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import type { Job } from "@/lib/types";
 import { Icon } from "../Icon";
+import { parseEntryDate } from "@/lib/dates";
 
 // Resolve a job_id from a property/address string when stamping a new
 // time_entries row. Disambiguates the case where two jobs share an
@@ -101,6 +102,7 @@ export default function Timer({ setPage }: Props) {
   const [mUser, setMUser] = useState(user.id);
   const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
   const [expandedCrew, setExpandedCrew] = useState<string | null>(null);
+  const [logOpen, setLogOpen] = useState(false); // My Log collapsed by default — it grows forever
   const [showManual, setShowManual] = useState(false);
   // Re-render every minute on the Crew tab so live durations tick
   const [tick, setTick] = useState(0);
@@ -538,52 +540,104 @@ export default function Timer({ setPage }: Props) {
         const todayUS = new Date().toLocaleDateString("en-US");
         const todayISO = new Date().toISOString().split("T")[0];
         const myTodayHrs = myTime.filter((e) => e.entry_date === todayUS || e.entry_date === todayISO).reduce((s, e) => s + (e.hours || 0), 0);
+        const totalHrs = myTime.reduce((s, e) => s + (e.hours || 0), 0);
+
+        // Group entries by calendar day (newest-first — myTime is already sorted).
+        // Normalizing via parseEntryDate folds the two on-disk date formats
+        // ("M/D/YYYY" + "YYYY-MM-DD") into one key so a day doesn't split in two.
+        const now = new Date();
+        const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const dayLabel = (d: Date | null, raw: string): string => {
+          if (!d) return raw || "—";
+          const diff = Math.round((todayMid - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
+          if (diff === 0) return "Today";
+          if (diff === 1) return "Yesterday";
+          const opts: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" };
+          if (d.getFullYear() !== now.getFullYear()) opts.year = "numeric";
+          return d.toLocaleDateString("en-US", opts);
+        };
+        const groups: { key: string; label: string; hrs: number; entries: typeof myTime }[] = [];
+        const gIdx = new Map<string, number>();
+        for (const e of myTime) {
+          const d = parseEntryDate(e.entry_date);
+          const key = d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : (e.entry_date || "unknown");
+          let gi = gIdx.get(key);
+          if (gi === undefined) { gi = groups.length; gIdx.set(key, gi); groups.push({ key, label: dayLabel(d, e.entry_date || ""), hrs: 0, entries: [] }); }
+          groups[gi].entries.push(e);
+          groups[gi].hrs += e.hours || 0;
+        }
+
+        const renderEntry = (e: (typeof myTime)[number]) => (
+          <div key={e.id} className="cd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 11px", marginBottom: 6, gap: 8 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.job || t("timer.general")}</div>
+              <div className="dim" style={{ fontSize: 11.5 }}>{e.entry_date}{(e.start_time || e.end_time) ? ` · ${e.start_time || "?"}–${e.end_time || "now"}` : ""}</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
+              <input
+                type="number"
+                defaultValue={e.hours}
+                step=".25"
+                min="0"
+                style={{ width: 48, textAlign: "center", padding: "2px 4px", fontSize: 14.5, fontFamily: "Oswald", fontWeight: 600 }}
+                onBlur={async (ev) => {
+                  // Only the owner (or an admin) can edit a row.
+                  if (e.user_id && e.user_id !== user.id && !isOwner) return;
+                  const newHrs = parseFloat(ev.target.value) || 0;
+                  if (newHrs === e.hours) return;
+                  const owner = profiles.find((p) => p.id === e.user_id);
+                  const ownerRate = owner?.rate || user.rate || 55;
+                  await db.patch("time_entries", e.id, { hours: newHrs, amount: Math.round(newHrs * ownerRate * 100) / 100 });
+                  await loadAll();
+                }}
+              />
+              <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "var(--color-success)", minWidth: 42, textAlign: "right" }}>${(e.amount || 0).toFixed(0)}</span>
+              <button
+                onClick={async () => {
+                  if (e.user_id && e.user_id !== user.id && !isOwner) return;
+                  if (!await useStore.getState().showConfirm("Delete Entry", "Delete this time entry?")) return;
+                  await db.del("time_entries", e.id);
+                  await loadAll();
+                }}
+                style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}
+              >✕</button>
+            </div>
+          </div>
+        );
+
         return (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 2px 7px" }}>
-              <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>{t("timer.myLog")}</span>
-              {myTodayHrs > 0 && <span style={{ fontSize: 12.5, fontFamily: "Oswald", color: "var(--color-success)" }}>Today · {myTodayHrs.toFixed(1)} hrs</span>}
+            {/* Header doubles as the collapse toggle — the log grows forever,
+                so it's collapsed by default and split by day when opened. */}
+            <div
+              onClick={() => myTime.length && setLogOpen((o) => !o)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 2px 7px", cursor: myTime.length ? "pointer" : "default", userSelect: "none" }}
+            >
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>
+                {myTime.length > 0 && <Icon name={logOpen ? "collapse" : "expand"} size={14} color="var(--color-dim)" />}
+                {t("timer.myLog")}
+              </span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                {myTodayHrs > 0 && <span style={{ fontSize: 12.5, fontFamily: "Oswald", color: "var(--color-success)" }}>Today · {myTodayHrs.toFixed(1)} hrs</span>}
+                {myTime.length > 0 && <span className="dim" style={{ fontSize: 11.5, fontFamily: "Oswald" }}>{myTime.length} {myTime.length === 1 ? "entry" : "entries"}</span>}
+              </span>
             </div>
             {!myTime.length ? (
               <div className="cd" style={{ textAlign: "center", padding: 16 }}><p className="dim" style={{ fontSize: 14 }}>No entries</p></div>
-            ) : (
-              myTime.map((e) => (
-                <div key={e.id} className="cd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 11px", marginBottom: 6, gap: 8 }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.job || t("timer.general")}</div>
-                    <div className="dim" style={{ fontSize: 11.5 }}>{e.entry_date}{(e.start_time || e.end_time) ? ` · ${e.start_time || "?"}–${e.end_time || "now"}` : ""}</div>
+            ) : logOpen ? (
+              groups.map((g) => (
+                <div key={g.key}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "10px 2px 5px" }}>
+                    <span style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--color-dim)" }}>{g.label}</span>
+                    <span style={{ fontSize: 12, fontFamily: "Oswald", color: "var(--color-success)" }}>{g.hrs.toFixed(1)} hrs</span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
-                    <input
-                      type="number"
-                      defaultValue={e.hours}
-                      step=".25"
-                      min="0"
-                      style={{ width: 48, textAlign: "center", padding: "2px 4px", fontSize: 14.5, fontFamily: "Oswald", fontWeight: 600 }}
-                      onBlur={async (ev) => {
-                        // Only the owner (or an admin) can edit a row.
-                        if (e.user_id && e.user_id !== user.id && !isOwner) return;
-                        const newHrs = parseFloat(ev.target.value) || 0;
-                        if (newHrs === e.hours) return;
-                        const owner = profiles.find((p) => p.id === e.user_id);
-                        const ownerRate = owner?.rate || user.rate || 55;
-                        await db.patch("time_entries", e.id, { hours: newHrs, amount: Math.round(newHrs * ownerRate * 100) / 100 });
-                        await loadAll();
-                      }}
-                    />
-                    <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "var(--color-success)", minWidth: 42, textAlign: "right" }}>${(e.amount || 0).toFixed(0)}</span>
-                    <button
-                      onClick={async () => {
-                        if (e.user_id && e.user_id !== user.id && !isOwner) return;
-                        if (!await useStore.getState().showConfirm("Delete Entry", "Delete this time entry?")) return;
-                        await db.del("time_entries", e.id);
-                        await loadAll();
-                      }}
-                      style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}
-                    >✕</button>
-                  </div>
+                  {g.entries.map(renderEntry)}
                 </div>
               ))
+            ) : (
+              <div onClick={() => setLogOpen(true)} className="cd" style={{ textAlign: "center", padding: "11px", cursor: "pointer" }}>
+                <span className="dim" style={{ fontSize: 13 }}>Tap to view {myTime.length} {myTime.length === 1 ? "entry" : "entries"} · {totalHrs.toFixed(1)} hrs</span>
+              </div>
             )}
           </>
         );
