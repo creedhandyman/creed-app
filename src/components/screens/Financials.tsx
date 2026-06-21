@@ -346,36 +346,77 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
         </button>
       </div>
 
-      {/* Range selector */}
-      <div style={{ display: "flex", gap: 3, marginBottom: 14 }}>
+      {/* Range selector — mock period pills */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 13 }}>
         {([
           { key: "week" as Range, label: "Week" },
           { key: "month" as Range, label: "Month" },
           { key: "quarter" as Range, label: "Quarter" },
           { key: "year" as Range, label: "Year" },
           { key: "all" as Range, label: "All" },
-        ]).map((r) => (
-          <button
-            key={r.key}
-            onClick={() => setRange(r.key)}
-            style={{
-              padding: "5px 12px", borderRadius: 6, fontSize: 14,
-              background: range === r.key ? "var(--color-primary)" : "transparent",
-              color: range === r.key ? "#fff" : "#888", fontFamily: "Oswald",
-            }}
-          >
-            {r.label}
-          </button>
-        ))}
+        ]).map((r) => {
+          const on = range === r.key;
+          return (
+            <button
+              key={r.key}
+              onClick={() => setRange(r.key)}
+              style={{
+                flex: 1, textAlign: "center", fontSize: 11, fontWeight: 600, padding: 7, borderRadius: 9, fontFamily: "Oswald",
+                background: on ? "var(--color-primary)" : "var(--color-card-dark-3)",
+                border: `1px solid ${on ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                color: on ? "#fff" : "var(--color-dim)",
+              }}
+            >
+              {r.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Revenue stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 14 }}>
+      {/* P&L stat cards (mock: Revenue / Crew cost / Net profit / Margin) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 13 }}>
         {statCard("Revenue", `$${completedRevenue.toLocaleString()}`, "var(--color-success)", `${completed.length} jobs`)}
-        {statCard("Paid", `$${paidRevenue.toLocaleString()}`, "#00cc66", `${paid.length} collected`)}
-        {statCard("Outstanding", `$${outstandingInvoices.toLocaleString()}`, "var(--color-warning)", `${invoiced.length} invoices`)}
-        {statCard("Avg Job", `$${avgJobSize.toLocaleString()}`, "var(--color-primary)")}
+        {statCard("Crew cost", `$${Math.round(crewCost).toLocaleString()}`, "var(--color-accent-red)", `${rangeEntries.length} entries`)}
+        {statCard("Net profit", `$${profit.toLocaleString()}`, profit >= 0 ? "var(--color-success)" : "var(--color-accent-red)", "after materials")}
+        {statCard("Margin", `${completedRevenue > 0 ? Math.round((profit / completedRevenue) * 100) : 0}%`, "var(--color-primary)", "of revenue")}
       </div>
+
+      {/* Pipeline by status — stacked bar + legend (mock centerpiece) */}
+      {(() => {
+        const PIPE = [
+          { key: "quoted", label: "Quoted", color: "#ff5b5b" },
+          { key: "accepted", label: "Accepted", color: "#ff8800" },
+          { key: "scheduled", label: "Scheduled", color: "#ffcc00" },
+          { key: "active", label: "Active", color: "#00cc66" },
+          { key: "complete", label: "Complete", color: "#2e8bff" },
+          { key: "invoiced", label: "Invoiced", color: "#7b54f0" },
+          { key: "paid", label: "Paid", color: "#9d4edd" },
+        ];
+        const data = PIPE.map((p) => ({ ...p, total: rangeJobs.filter((j) => j.status === p.key).reduce((s, j) => s + (j.total || 0), 0) })).filter((p) => p.total > 0);
+        const total = data.reduce((s, p) => s + p.total, 0);
+        if (total === 0) return null;
+        return (
+          <div className="cd mb" style={{ padding: 14 }}>
+            <h4 style={{ fontSize: 15, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icon name="layers" size={15} color="var(--color-primary)" /> Pipeline by status
+            </h4>
+            <div style={{ display: "flex", height: 16, borderRadius: 8, overflow: "hidden", marginBottom: 10 }}>
+              {data.map((p) => (
+                <div key={p.key} title={`${p.label}: $${p.total.toLocaleString()}`} style={{ width: `${(p.total / total) * 100}%`, background: p.color }} />
+              ))}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 14px" }}>
+              {data.map((p) => (
+                <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, minWidth: 108 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.color }} />
+                  {p.label}
+                  <span style={{ marginLeft: "auto", fontFamily: "Oswald", fontWeight: 600, color: "var(--color-dim)" }}>${p.total.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Funnel + Profit */}
       <div className="g2 mb">
