@@ -503,7 +503,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
       )}
 
       {tab === "payroll" && (
-        <SubTabErrorBoundary label="Payroll"><Payroll /></SubTabErrorBoundary>
+        <SubTabErrorBoundary label="Payroll"><Payroll embedded /></SubTabErrorBoundary>
       )}
       {tab === "financials" && (
         <SubTabErrorBoundary label="Financials"><Financials setPage={setPage} /></SubTabErrorBoundary>

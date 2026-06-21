@@ -22,7 +22,7 @@ function downloadHtmlFile(html: string, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export default function Payroll() {
+export default function Payroll({ embedded }: { embedded?: boolean }) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
@@ -111,6 +111,7 @@ export default function Payroll() {
   const totalPay = laborPay + totalBonus;
 
   const [processing, setProcessing] = useState(false);
+  const [processingAll, setProcessingAll] = useState(false);
   const [openPay, setOpenPay] = useState<string | number | null>(null);
   const processGuard = useRef(false);
 
@@ -240,73 +241,173 @@ export default function Payroll() {
 
   const userPayHistory = payHistory.filter((p) => p.user_id === sel);
 
-  // Team-wide summary (the gradient bar in the mock) — all unpaid hours
-  // and what they total at each person's rate. Glanceable; the per-person
-  // breakdown below is the actual pay-run surface.
-  const rateForUser = (uid?: string | null) => (uid ? profiles.find((p) => p.id === uid)?.rate || 0 : 0);
-  const teamUnpaidEntries = timeEntries.filter((e) => !e.paid_at);
-  const teamUnpaidHours = teamUnpaidEntries.reduce((s, e) => s + (e.hours || 0), 0);
-  const teamCycleTotal = teamUnpaidEntries.reduce((s, e) => s + (e.hours || 0) * rateForUser(e.user_id), 0);
+  // Per-employee unpaid pay — drives the team summary bar, the employee
+  // rows, and the Process-All total. `amount` uses each person's real rate
+  // (no fallback) so it matches what Process All actually pays via the
+  // auto-run endpoint; people without a rate show "No rate" and are left out
+  // of the total. Includes legacy name-matched entries (null user_id).
+  const empRows = profiles
+    .map((p) => {
+      const unpaid = timeEntries.filter((e) => !e.paid_at && (e.user_id === p.id || (!e.user_id && e.user_name === p.name)));
+      const hrs = unpaid.reduce((s, e) => s + (e.hours || 0), 0);
+      const rate = p.rate || 0;
+      return {
+        id: p.id,
+        name: p.name,
+        rate,
+        hrs,
+        amount: hrs * rate,
+        hasRate: rate > 0,
+        initials: (p.name || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(),
+      };
+    })
+    .filter((r) => r.hrs > 0)
+    .sort((a, b) => b.amount - a.amount);
+  const teamUnpaidHours = empRows.reduce((s, r) => s + r.hrs, 0);
+  const processAllTotal = empRows.filter((r) => r.hasRate).reduce((s, r) => s + r.amount, 0);
+  const teamCycleTotal = processAllTotal;
+
+  // Process All — pays everyone with a rate for their unpaid base hours via
+  // the safe, tested auto-run endpoint (same path Auto Payroll uses). Quest
+  // bonuses are NOT included; approve those per person below. Idempotent —
+  // already-paid hours can't be re-claimed.
+  const processAll = async () => {
+    if (processAllTotal <= 0) return;
+    const n = empRows.filter((r) => r.hasRate).length;
+    const ok = await useStore.getState().showConfirm(
+      "Process all payroll",
+      `Pay ${n} crew with a rate for all unpaid hours — $${processAllTotal.toFixed(2)} total. Quest bonuses aren't included (approve those per person). Safe to run; already-paid hours are never paid twice.`,
+    );
+    if (!ok) return;
+    setProcessingAll(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      const res = await fetch("/api/payroll/auto-run?force=1", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const j = await res.json();
+      const toast = useStore.getState().showToast;
+      if (!res.ok || j.error) { toast(j.hint || j.error || `Process failed (${res.status})`, "error"); return; }
+      const mine = (j.fired || []).find((f: { id: string }) => f.id === org?.id);
+      if (mine) {
+        const paidTotal = mine.paid.reduce((s: number, p: { totalPay: number }) => s + p.totalPay, 0);
+        const parts = [`Paid ${mine.paid.length} ($${paidTotal.toFixed(2)})`];
+        if (mine.skipped.length) {
+          const reasons = Array.from(new Set(mine.skipped.map((s: { reason: string }) => s.reason))).join(", ");
+          parts.push(`${mine.skipped.length} skipped (${reasons})`);
+        }
+        toast(parts.join(" · "), mine.paid.length ? "success" : "warning");
+      } else {
+        toast("Ran, but your org wasn't processed.", "warning");
+      }
+      await loadAll();
+    } catch (e) {
+      useStore.getState().showToast(e instanceof Error ? e.message : "Process failed", "error");
+    } finally {
+      setProcessingAll(false);
+    }
+  };
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <Icon name="money" size={22} color="var(--color-primary)" />
-        {t("pay.title")}
-      </h2>
+      {!embedded && (
+        <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Icon name="money" size={22} color="var(--color-primary)" />
+          {t("pay.title")}
+        </h2>
+      )}
 
       {/* Auto Payroll — server-side scheduled run (cron hits
           /api/payroll/auto-run). Toggle, day/hour pickers, cadence. */}
       {isOwner && <AutoPayrollPanel />}
 
-      {/* Pay-run block — employee selector, stats, quest bonuses, by-job
-          breakdown, and the Run Payroll button. Collapsible (default
-          expanded since this is the primary action surface). Collapsed
-          header shows the selected employee + total so the at-a-glance
-          number is still visible without expanding. */}
+      {/* ── Team overview (the mock's payroll surface) — avatar strip,
+          summary bar, per-employee rows, and Process All. The per-person
+          breakdown + bonus approval lives in "Current Pay" below. ── */}
+      {isOwner && (
+        <>
+          {/* Avatar strip — tap to switch whose pay you're drilling into. */}
+          <div style={{ display: "flex", gap: 9, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+            {profiles.map((u) => {
+              const on = sel === u.id;
+              const initials = (u.name || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => setSel(u.id)}
+                  style={{ flex: "none", width: 48, textAlign: "center", background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit" }}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: "50%", margin: "0 auto 4px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, background: "var(--color-card-dark-2)", color: on ? "#fff" : "#cdd6e6", border: `2px solid ${on ? "var(--color-primary)" : "transparent"}`, boxShadow: on ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>
+                    {u.photo_url ? <img src={u.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
+                  </div>
+                  <div style={{ fontSize: 8.5, color: on ? "inherit" : "var(--color-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(u.name || "").split(/\s+/)[0]}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Team summary bar */}
+          <div style={{ display: "flex", background: "linear-gradient(135deg,#14233d,#101a2e)", border: "1px solid #243a5e", borderRadius: 15, padding: "13px 8px", marginBottom: 13 }}>
+            {[
+              { l: "Staff", v: String(profiles.length) },
+              { l: "Unpaid hrs", v: teamUnpaidHours.toFixed(1) },
+              { l: "Cycle total", v: "$" + Math.round(teamCycleTotal).toLocaleString(), c: "var(--color-money)" },
+            ].map((s) => (
+              <div key={s.l} style={{ flex: 1, textAlign: "center" }}>
+                <div style={{ fontSize: 8.5, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--color-dim)" }}>{s.l}</div>
+                <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: s.c || "inherit" }}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Employees — unpaid pay per person + status, tap to drill in. */}
+          <div className="sl" style={{ display: "inline-flex", alignItems: "center", gap: 6, margin: "2px 1px 8px" }}>
+            <Icon name="clients" size={13} /> Employees
+          </div>
+          {empRows.length === 0 ? (
+            <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>No unpaid hours this cycle.</p>
+          ) : (
+            empRows.map((r) => {
+              const on = sel === r.id;
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => setSel(r.id)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, background: "var(--color-card-dark-3)", border: `1px solid ${on ? "var(--color-primary)" : "var(--color-border-dark-2)"}`, borderRadius: 13, padding: "10px 12px", marginBottom: 8, cursor: "pointer", color: "inherit", textAlign: "left" }}
+                >
+                  <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 11, color: "#cdd6e6", flex: "none" }}>{r.initials}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>{r.name}</div>
+                    <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{r.hrs.toFixed(1)}h · ${r.rate}/hr</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 14 }}>${Math.round(r.amount).toLocaleString()}</div>
+                    <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 6px", borderRadius: 99, marginTop: 3, display: "inline-block", background: r.hasRate ? "rgba(0,204,102,.16)" : "rgba(255,136,0,.16)", color: r.hasRate ? "#3ee08f" : "#ffb15e" }}>{r.hasRate ? "Ready" : "No rate"}</span>
+                  </div>
+                </button>
+              );
+            })
+          )}
+
+          {/* Process All — base pay for everyone with a rate (no bonuses). */}
+          <button
+            onClick={processAll}
+            disabled={processingAll || processAllTotal <= 0}
+            className="bg"
+            style={{ width: "100%", marginTop: 4, marginBottom: 14, fontSize: 14, fontFamily: "Oswald", fontWeight: 600, letterSpacing: ".4px", padding: 13, borderRadius: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: processingAll || processAllTotal <= 0 ? 0.5 : 1 }}
+          >
+            <Icon name="money" size={16} /> {processingAll ? "Processing…" : `Process all · $${Math.round(processAllTotal).toLocaleString()}`}
+          </button>
+        </>
+      )}
+
+      {/* Pay-run block — the selected employee's detail: stats, quest-bonus
+          approval, by-job breakdown, and per-person Process Pay. */}
       <PayrollSection
         title="Current Pay"
         subtitle={`${selUser.name} · ${totalHrs.toFixed(1)}h · $${totalPay.toFixed(2)}`}
         storageKey="payroll.main.collapsed"
         defaultCollapsed={false}
       >
-      {/* Employee avatar strip — tap to switch whose pay you're running. */}
-      {isOwner && (
-        <div style={{ display: "flex", gap: 9, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
-          {profiles.map((u) => {
-            const on = sel === u.id;
-            const initials = (u.name || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-            return (
-              <button
-                key={u.id}
-                onClick={() => setSel(u.id)}
-                style={{ flex: "none", width: 48, textAlign: "center", background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit" }}
-              >
-                <div style={{ width: 40, height: 40, borderRadius: "50%", margin: "0 auto 4px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, background: "var(--color-card-dark-2)", color: on ? "#fff" : "#cdd6e6", border: `2px solid ${on ? "var(--color-primary)" : "transparent"}`, boxShadow: on ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>
-                  {u.photo_url ? <img src={u.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
-                </div>
-                <div style={{ fontSize: 8.5, color: on ? "inherit" : "var(--color-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(u.name || "").split(/\s+/)[0]}</div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Team summary bar */}
-      {isOwner && (
-        <div style={{ display: "flex", background: "linear-gradient(135deg,#14233d,#101a2e)", border: "1px solid #243a5e", borderRadius: 15, padding: "13px 8px", marginBottom: 14 }}>
-          {[
-            { l: "Staff", v: String(profiles.length) },
-            { l: "Unpaid hrs", v: teamUnpaidHours.toFixed(1) },
-            { l: "Cycle total", v: "$" + Math.round(teamCycleTotal).toLocaleString(), c: "var(--color-money)" },
-          ].map((s) => (
-            <div key={s.l} style={{ flex: 1, textAlign: "center" }}>
-              <div style={{ fontSize: 8.5, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--color-dim)" }}>{s.l}</div>
-              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: s.c || "inherit" }}>{s.v}</div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: totalBonus > 0 ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
