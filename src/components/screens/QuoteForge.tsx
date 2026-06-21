@@ -1,5 +1,7 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import RenderModal from "../RenderModal";
+import { buildRenderPrompt } from "@/lib/render-prompt";
 import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
@@ -287,6 +289,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setQuickUploading(false);
   };
   const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
+  const [showRender, setShowRender] = useState(false);
+  // Auto-built "after" render prompt from this quote's line items (visible
+  // scope only — paint/floors/fixtures; hidden/plumbing work is skipped).
+  const renderSeed = useMemo(() => buildRenderPrompt(rooms), [rooms]);
   const [inspectionData, setInspectionData] = useState<InspectionData | null>(null);
   // Editable work order — null means "use auto-generated from guide.steps"
   const [customWorkOrder, setCustomWorkOrder] = useState<GuideStep[] | null>(null);
@@ -2439,12 +2445,47 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <Icon name="send" size={14} /> Send
         </button>
         <button
+          onClick={() => {
+            if (!editingId) { useStore.getState().showToast("Save the quote once, then render its photos.", "info"); return; }
+            if (jobPhotos.length === 0) { useStore.getState().showToast("Add an inspection photo to preview the finish.", "info"); return; }
+            setShowRender(true);
+          }}
+          title="AI-render the finished look from this quote's photos"
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)", cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55 }}
+        >
+          <Icon name="sparkle" size={14} color="#d8b6ff" /> Render
+        </button>
+        <button
           onClick={saveJob}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-success)", background: "var(--color-success)", color: "#06371f", boxShadow: "0 0 22px -6px rgba(0,204,102,.6)", cursor: "pointer" }}
         >
           <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? "Update" : "Save job"}
         </button>
       </div>
+
+      <RenderModal
+        open={showRender}
+        onClose={() => setShowRender(false)}
+        sourcePhotos={jobPhotos}
+        initialPrompt={renderSeed.prompt}
+        promptMeta={renderSeed}
+        jobId={editingId ?? undefined}
+        showQuoteToggle
+        onSaved={async (url, sourceUrl, includeInQuote) => {
+          if (!editingId) return;
+          const freshJob = useStore.getState().jobs.find((j) => j.id === editingId);
+          let data: Record<string, unknown> = {};
+          try { data = freshJob ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {} : {}; } catch { /* */ }
+          if (!Array.isArray(data.photos)) data.photos = [];
+          (data.photos as Record<string, unknown>[]).push({
+            url, label: "Proposed finish", type: "rendered", sourceUrl,
+            includeInQuote, createdAt: new Date().toISOString(),
+          });
+          await db.patch("jobs", editingId, { rooms: JSON.stringify(data) });
+          await loadAll();
+          useStore.getState().showToast("Render saved to the quote", "success");
+        }}
+      />
 
       {/* QUOTE TAB */}
       {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} />}
