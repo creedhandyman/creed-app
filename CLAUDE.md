@@ -274,6 +274,28 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **AI Render from the quote (`Creed_AI_Render_Enhancement`)**: the "after"
+  render now reads the quote's own line items instead of a fixed prompt.
+  `src/lib/render-prompt.ts` `buildRenderPrompt(rooms, onlyRoom?)` keyword-maps
+  VISIBLE scope (paint/floors/fixtures/blinds/doors…) to short render phrases
+  and skips hidden work (plumbing internals, fill valves, smoke detectors);
+  returns `{prompt, usedCount, skipped}`. `src/components/RenderModal.tsx` is a
+  shared modal (source picker → editable auto-prompt with a "Built from N
+  visual items" chip → Generate via `/api/render` → before/after → Save);
+  `onSaved(url, sourceUrl, includeInQuote)` lets the parent attach the photo.
+  **QuoteForge**: violet **Render** button in the action bar (PDF · Render ·
+  Send · Save), seeded from the line items, **disabled until the quote is
+  saved once** (needs a jobId — spec Option A) and there's ≥1 photo; the saved
+  render attaches to the job's `rooms.photos` as `type:"rendered"` +
+  `includeInQuote`, surviving later Updates (saveJob preserves photos).
+  **WorkVision** now uses the same RenderModal (its inline modal +
+  `DEFAULT_RENDER_PROMPT` removed, −279 lines), seeded from `buildRenderPrompt`.
+  **PDF**: `export-pdf.ts` takes an optional `renders` param → a "Proposed
+  Finish" Now→Done before/after section; QuoteForge passes the includeInQuote
+  renders. `/api/render` (gpt-image-1 edits) unchanged. NOT done: the public
+  `s/` + `status/` pages don't show renders yet; no org "house finish profile"
+  in Ops → Settings; no per-room render loop.
+
 - **Operations remodel (from mockups)**: `Creed_Ops_Streamlined` +
   `Creed_Ops_Customers_Team_Settings` + `Creed_Settings_Full`. **Ops tab DONE.**
   `Operations.tsx` is no longer an 8-tab strip; it's a **launcher hub**: topbar
