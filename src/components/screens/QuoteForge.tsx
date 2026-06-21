@@ -2436,6 +2436,17 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         </button>
         <button
           onClick={() => {
+            if (!editingId) { useStore.getState().showToast("Save the quote once, then render its photos.", "info"); return; }
+            if (jobPhotos.length === 0) { useStore.getState().showToast("Add an inspection photo to preview the finish.", "info"); return; }
+            setShowRender(true);
+          }}
+          title="AI-render the finished look from this quote's photos"
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)", cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55 }}
+        >
+          <Icon name="sparkle" size={14} color="#d8b6ff" /> Render
+        </button>
+        <button
+          onClick={() => {
             const customerData = customerId
               ? useStore.getState().customers.find((c) => c.id === customerId)
               : undefined;
@@ -2456,17 +2467,6 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
         >
           <Icon name="send" size={14} /> Send
-        </button>
-        <button
-          onClick={() => {
-            if (!editingId) { useStore.getState().showToast("Save the quote once, then render its photos.", "info"); return; }
-            if (jobPhotos.length === 0) { useStore.getState().showToast("Add an inspection photo to preview the finish.", "info"); return; }
-            setShowRender(true);
-          }}
-          title="AI-render the finished look from this quote's photos"
-          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)", cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55 }}
-        >
-          <Icon name="sparkle" size={14} color="#d8b6ff" /> Render
         </button>
         <button
           onClick={saveJob}
