@@ -98,6 +98,25 @@ body {
   color: #1a1a2a;
 }
 
+/* ── Light-mode surface flip ──────────────────────────
+   The app is dark-first: ~90 inline styles across 24 components hardcode
+   `var(--color-card-dark*)` / `var(--color-border-dark*)` for surfaces and
+   borders with no light fallback, so in light mode they'd render dark-on-dark
+   (the surface stays dark while inherited text flips to #1a1a2a). Re-point the
+   dark-surface tokens to light values ONLY under `.light`. Dark mode (the
+   :root values from @theme) is untouched, and no `.light` rule SETS these
+   tokens, so this reaches only the inline offenders. `--color-dim` stays
+   mid-gray (reads on both themes). Hardcoded-hex surfaces can't flip via a
+   token and are swept separately. */
+.light {
+  --color-card-dark:     #ffffff;
+  --color-card-dark-2:   #f1f4f8;
+  --color-card-dark-3:   #e8ecf2;
+  --color-border-dark:   #e2e5ec;
+  --color-border-dark-2: #d0d4dd;
+  --color-dark-bg:       #eef1f5;
+}
+
 /* Headings — sharp, condensed, hierarchical */
 h1, h2, h3, h4, h5 {
   font-family: var(--font-heading);
