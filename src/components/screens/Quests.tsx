@@ -270,32 +270,57 @@ export default function Quests() {
     .filter((qp) => qp.quest_key === "network_scout" || qp.quest_key === "critical_referral")
     .reduce((s, qp) => s + (qp.bonus_amount || 0), 0);
 
-  // ── Quest-complete celebration. Fire a confetti overlay the first time
-  // the user sees a quest cross into "done" this cycle (acknowledged in
-  // localStorage so it shows once per quest).
+  // Quest display-name → quest_key (mirrors the tier definitions above), so a
+  // completed quest can be matched against paid quest_payouts (which key by
+  // quest_key) and never re-celebrated once its bonus has been paid.
+  const QUEST_KEY_BY_NAME: Record<string, string> = {
+    "Review Favor": "review_favor",
+    "Five Star Tech": "five_star",
+    "Super Handy": "super_handy",
+    "Network Scout": "network_scout",
+    "Critical Referral": "critical_referral",
+    "Deal Closer": "deal_closer",
+    "Repeat Machine": "repeat_machine",
+    "Skill Mastery": "skill_mastery",
+    "Make Ready Pro": "make_ready",
+    "Zero Callback": "zero_callback",
+    "Mr.Speed": "mr_speed",
+    "HandyKing": "handy_king",
+  };
+
+  // ── Quest-complete celebration. Fires ONE confetti overlay the first time a
+  // quest crosses into "done" this cycle, then never again. Two guards:
+  //  1. It's acked the moment it's SHOWN (not on dismiss) and the whole
+  //     current completed batch is acked at once — so it can't loop if the
+  //     user never taps, and a backlog of several finished quests shows a
+  //     single celebration, not a string of them.
+  //  2. Bonuses already PAID this cycle are filtered out entirely — paid is
+  //     the server-side source of truth (survives a localStorage clear), so a
+  //     paid quest won't pop again until the cycle resets.
   const completedQuests = allQuests.filter((q) => q.progress >= q.goal);
-  const completedKey = completedQuests.map((q) => q.name).join("|");
+  const paidKeys = new Set(
+    questPayouts
+      .filter((qp) => qp.user_id === user.id && inCycle(qp.paid_date || qp.created_at))
+      .map((qp) => qp.quest_key)
+  );
+  const celebratable = completedQuests.filter((q) => !paidKeys.has(QUEST_KEY_BY_NAME[q.name] || q.name));
+  const completedKey = celebratable.map((q) => q.name).join("|");
   const ackKey = `creed_quest_seen_${user.id}_${cycleStart.getFullYear()}_${cycleStart.getMonth()}`;
   const [celebrate, setCelebrate] = useState<Quest | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
     let seen: string[] = [];
     try { seen = JSON.parse(localStorage.getItem(ackKey) || "[]"); } catch { /* */ }
-    const fresh = completedQuests.find((q) => !seen.includes(q.name));
-    if (fresh) setCelebrate(fresh);
+    const fresh = celebratable.find((q) => !seen.includes(q.name));
+    if (!fresh) return;
+    // Ack the whole current completed batch up front so it shows once and
+    // never re-fires this cycle.
+    const merged = Array.from(new Set([...seen, ...completedQuests.map((q) => q.name)]));
+    try { localStorage.setItem(ackKey, JSON.stringify(merged)); } catch { /* */ }
+    setCelebrate(fresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedKey, ackKey]);
-  const dismissCelebrate = () => {
-    if (celebrate && typeof window !== "undefined") {
-      let seen: string[] = [];
-      try { seen = JSON.parse(localStorage.getItem(ackKey) || "[]"); } catch { /* */ }
-      if (!seen.includes(celebrate.name)) {
-        seen.push(celebrate.name);
-        try { localStorage.setItem(ackKey, JSON.stringify(seen)); } catch { /* */ }
-      }
-    }
-    setCelebrate(null);
-  };
+  const dismissCelebrate = () => setCelebrate(null);
   // Generated once so positions don't jitter on re-render.
   const confetti = useMemo(
     () =>
