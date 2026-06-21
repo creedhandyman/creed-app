@@ -317,6 +317,15 @@ button:focus-visible {
 .glow-green { background: rgba(0, 204, 102, 0.14);  border: 1.5px solid rgba(0, 204, 102, 0.85);  box-shadow: 0 0 24px -2px rgba(0, 204, 102, 0.5),  inset 0 0 22px -8px rgba(0, 204, 102, 0.45); }
 .glow-red   { background: rgba(255, 91, 91, 0.14);  border: 1.5px solid rgba(255, 91, 91, 0.85);  box-shadow: 0 0 24px -2px rgba(255, 91, 91, 0.5),  inset 0 0 22px -8px rgba(255, 91, 91, 0.45); }
 
+/* Light mode: the translucent neon glow washes out on white — white text
+   (set on .cta) on a near-white 14% fill reads as an empty ghost button. Swap
+   to a SOLID saturated fill so the white text + button stay crisp. Dark keeps
+   the neon glow above. (Creed_LightMode_CTA mock, option C — no JSX change.) */
+.light .glow-blue  { background: var(--color-primary); border-color: var(--color-primary); color: #fff; box-shadow: 0 8px 18px -6px rgba(46, 117, 182, 0.55); }
+.light .glow-green { background: #00b85c; border-color: #00b85c; color: #fff; box-shadow: 0 8px 18px -6px rgba(0, 204, 102, 0.55); }
+.light .glow-red   { background: #d23b3b; border-color: #d23b3b; color: #fff; box-shadow: 0 8px 18px -6px rgba(210, 59, 59, 0.55); }
+.light .cta .ic    { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
 /* Outline / quiet button */
 .dark .bo {
   background: transparent;
