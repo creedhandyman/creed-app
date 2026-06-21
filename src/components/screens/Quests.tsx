@@ -17,6 +17,7 @@ export default function Quests() {
   const questPayouts = useStore((s) => s.questPayouts);
   const timeEntries = useStore((s) => s.timeEntries);
   const loadAll = useStore((s) => s.loadAll);
+  const darkMode = useStore((s) => s.darkMode);
 
   const [tab, setTab] = useState("quests");
 
@@ -338,7 +339,7 @@ export default function Quests() {
       {tab === "quests" && (
         <div>
           {/* Battle-pass hero */}
-          <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(135deg, rgba(124,58,237,.32), rgba(45,24,90,.55))", border: "1px solid rgba(157,78,221,.55)", borderRadius: 20, padding: 15, marginBottom: 12, boxShadow: "0 0 52px -12px rgba(157,78,221,.85), inset 0 0 46px -18px rgba(157,78,221,.5)" }}>
+          <div style={{ position: "relative", overflow: "hidden", borderRadius: 20, padding: 15, marginBottom: 12, ...(darkMode ? { background: "linear-gradient(135deg, rgba(124,58,237,.32), rgba(45,24,90,.55))", border: "1px solid rgba(157,78,221,.55)", boxShadow: "0 0 52px -12px rgba(157,78,221,.85), inset 0 0 46px -18px rgba(157,78,221,.5)" } : { background: "linear-gradient(135deg,#7c3aed,#4c1d95)", border: "1px solid #7c3aed", boxShadow: "0 0 17px -2px rgba(124,58,237,.6), 0 4px 12px -7px rgba(0,0,0,.22)" }) }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#c9a6ff" }}>
               <span>{cycleLabel}</span>
               <span style={{ color: "#ffd76b", display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,180,0,.12)", border: "1px solid rgba(245,180,0,.3)", borderRadius: 99, padding: "2px 8px", boxShadow: "0 0 14px -3px rgba(245,180,0,.6)" }}>
