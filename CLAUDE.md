@@ -298,8 +298,14 @@ src/
   show "since …"), **Force clock out** (folded in — the old standalone
   force-stop card is gone), and **Add entry for {first name}** (jumps to My
   time with the manual form pre-set to that person). GPS still deferred.
-  Guide/Notes/Photos internals still original (Photos has toggle + grid +
-  receipt-scan + AI render).
+  Notes/Photos internals still original (Photos has toggle + grid +
+  receipt-scan + AI render). **Guide shopping list is editable**: the
+  checkbox alone toggles bought-state; tapping an item's name/price opens an
+  inline editor (rename / change cost / delete). Custom items edit their
+  `customShop` entry in place; quote-derived items are "adopted" into
+  `customShop` with their original key recorded in a new `removedGuideShop`
+  array on the rooms blob (so the auto list hides the original). Checked
+  state migrates when a rename changes the `shopKey`.
 - **Nav per-tab colors + morphing More slot; dashboard "next check"**:
   `VerticalNav.tsx` colors the active tab in its signature hue (Home blue,
   Quote yellow/gold, Jobs red, Time green, Quests purple, … — `TAB_COLOR`

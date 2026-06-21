@@ -126,6 +126,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [newTool, setNewTool] = useState("");
   const [newShopName, setNewShopName] = useState("");
   const [newShopCost, setNewShopCost] = useState("");
+  // Quote-derived shop items the user has edited/removed (hidden from the
+  // auto list; an edited copy lives in customShop). Keyed by shopKey.
+  const [removedGuideShop, setRemovedGuideShop] = useState<string[]>([]);
+  // Inline shopping-item editor: the shopKey being edited + draft name/cost.
+  const [editShopKey, setEditShopKey] = useState<string | null>(null);
+  const [editShopName, setEditShopName] = useState("");
+  const [editShopCost, setEditShopCost] = useState("");
   const rate = user.rate || 55;
 
   // Persist timer
@@ -168,13 +175,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // page refresh doesn't wipe the shopping list.
   useEffect(() => {
     if (!activeJob || !jobData) {
-      setCheckedTools([]); setCheckedShop([]); setExtraTools([]); setExtraShop([]);
+      setCheckedTools([]); setCheckedShop([]); setExtraTools([]); setExtraShop([]); setRemovedGuideShop([]);
       return;
     }
     setCheckedTools(Array.isArray(jobData.checkedTools) ? jobData.checkedTools : []);
     setCheckedShop(Array.isArray(jobData.checkedShop) ? jobData.checkedShop : []);
     setExtraTools(Array.isArray(jobData.customTools) ? jobData.customTools : []);
     setExtraShop(Array.isArray(jobData.customShop) ? jobData.customShop : []);
+    setRemovedGuideShop(Array.isArray(jobData.removedGuideShop) ? jobData.removedGuideShop : []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.id]);
 
@@ -186,6 +194,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     checkedShop?: string[];
     customTools?: string[];
     customShop?: { n: string; c: number; room?: string; trade?: string }[];
+    removedGuideShop?: string[];
   }) => {
     if (!activeJob) return;
     const targetId = activeJob.id;
@@ -1047,7 +1056,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           const guide = makeGuide(roomsData);
           const allTools = [...guide.tools, ...extraTools];
           const allShop: { n: string; c: number; room?: string; trade?: string }[] = [
-            ...guide.shop,
+            ...guide.shop.filter((gs) => !removedGuideShop.includes(shopKey(gs))),
             ...extraShop,
           ];
           const shopTotal = allShop.reduce((s, i) => s + (i.c || 0), 0);
@@ -1083,6 +1092,51 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             const next = [...extraShop, item];
             setExtraShop(next);
             persistGuide({ customShop: next });
+          };
+          // Edit-in-place. Custom items update their extraShop entry; quote-
+          // derived items are "adopted" into customShop and their original key
+          // hidden via removedGuideShop. Checked state migrates if the name
+          // (and thus shopKey) changed.
+          type ShopItem = { n: string; c: number; room?: string; trade?: string };
+          const isCustomShop = (item: ShopItem) => extraShop.some((x) => shopKey(x) === shopKey(item));
+          const startEditShop = (item: ShopItem) => {
+            setEditShopKey(shopKey(item));
+            setEditShopName(item.n);
+            setEditShopCost(item.c != null ? String(item.c) : "");
+          };
+          const cancelEditShop = () => { setEditShopKey(null); setEditShopName(""); setEditShopCost(""); };
+          const saveEditShop = (item: ShopItem) => {
+            const key = shopKey(item);
+            const updated: ShopItem = { n: editShopName.trim() || item.n, c: parseFloat(editShopCost) || 0, room: item.room, trade: item.trade };
+            const newKey = shopKey(updated);
+            const nextChecked = checkedShop.includes(key) && newKey !== key
+              ? [...checkedShop.filter((k) => k !== key), newKey]
+              : checkedShop;
+            if (isCustomShop(item)) {
+              const nextExtra = extraShop.map((x) => (shopKey(x) === key ? updated : x));
+              setExtraShop(nextExtra); setCheckedShop(nextChecked);
+              persistGuide({ customShop: nextExtra, checkedShop: nextChecked });
+            } else {
+              const nextRemoved = [...removedGuideShop, key];
+              const nextExtra = [...extraShop, updated];
+              setRemovedGuideShop(nextRemoved); setExtraShop(nextExtra); setCheckedShop(nextChecked);
+              persistGuide({ removedGuideShop: nextRemoved, customShop: nextExtra, checkedShop: nextChecked });
+            }
+            cancelEditShop();
+          };
+          const deleteShop = (item: ShopItem) => {
+            const key = shopKey(item);
+            const nextChecked = checkedShop.filter((k) => k !== key);
+            if (isCustomShop(item)) {
+              const nextExtra = extraShop.filter((x) => shopKey(x) !== key);
+              setExtraShop(nextExtra); setCheckedShop(nextChecked);
+              persistGuide({ customShop: nextExtra, checkedShop: nextChecked });
+            } else {
+              const nextRemoved = [...removedGuideShop, key];
+              setRemovedGuideShop(nextRemoved); setCheckedShop(nextChecked);
+              persistGuide({ removedGuideShop: nextRemoved, checkedShop: nextChecked });
+            }
+            cancelEditShop();
           };
 
           return (
@@ -1196,34 +1250,46 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                           {curTrade}
                         </div>
                       )}
-                      <div
-                        onClick={() => toggleShop(s)}
-                        style={{
-                          display: "flex", justifyContent: "space-between", alignItems: "center",
-                          fontSize: 13, padding: "6px 0 6px 4px",
-                          borderBottom: `1px solid ${border}`,
-                          cursor: "pointer",
-                          textDecoration: done ? "line-through" : "none",
-                          opacity: done ? 0.5 : 1,
-                          transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
-                        }}
-                      >
-                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{
-                            width: 18, height: 18, borderRadius: 4,
-                            border: `2px solid ${done ? "var(--color-success)" : "#666"}`,
-                            background: done ? "var(--color-success)" : "transparent",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            flexShrink: 0,
-                          }}>
-                            {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
+                      {editShopKey === shopKey(s) ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 6px 4px", borderBottom: `1px solid ${border}` }}>
+                          <input value={editShopName} onChange={(e) => setEditShopName(e.target.value)} autoFocus style={{ flex: 1, fontSize: 13, padding: "5px 8px", minWidth: 0 }} />
+                          <input type="number" value={editShopCost} onChange={(e) => setEditShopCost(e.target.value)} placeholder="$" style={{ width: 58, fontSize: 13, padding: "5px 6px" }} />
+                          <button onClick={() => saveEditShop(s)} aria-label="Save" style={{ background: "none", border: "none", color: "var(--color-success)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="check" size={18} /></button>
+                          <button onClick={() => deleteShop(s)} aria-label="Delete" style={{ background: "none", border: "none", color: "var(--color-accent-red)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="delete" size={16} /></button>
+                          <button onClick={cancelEditShop} aria-label="Cancel" style={{ background: "none", border: "none", color: "var(--color-dim)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="close" size={16} /></button>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            fontSize: 13, padding: "6px 0 6px 4px",
+                            borderBottom: `1px solid ${border}`,
+                            textDecoration: done ? "line-through" : "none",
+                            opacity: done ? 0.5 : 1,
+                            transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
+                          }}
+                        >
+                          <span style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                            <button
+                              onClick={() => toggleShop(s)}
+                              aria-label={done ? "Uncheck item" : "Check off item"}
+                              style={{
+                                width: 18, height: 18, borderRadius: 4, padding: 0,
+                                border: `2px solid ${done ? "var(--color-success)" : "#666"}`,
+                                background: done ? "var(--color-success)" : "transparent",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                flexShrink: 0, cursor: "pointer",
+                              }}
+                            >
+                              {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
+                            </button>
+                            <span onClick={() => startEditShop(s)} style={{ flex: 1, minWidth: 0, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.n}</span>
                           </span>
-                          {s.n}
-                        </span>
-                        <span style={{ color: done ? "#888" : "var(--color-success)", fontFamily: "Oswald" }}>
-                          ${(s.c || 0).toFixed(0)}
-                        </span>
-                      </div>
+                          <span onClick={() => startEditShop(s)} style={{ color: done ? "#888" : "var(--color-success)", fontFamily: "Oswald", cursor: "pointer", flexShrink: 0, marginLeft: 8 }}>
+                            ${(s.c || 0).toFixed(0)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
