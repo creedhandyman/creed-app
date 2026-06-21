@@ -865,12 +865,12 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
           disabled={uploading > 0}
           onClick={() => { stopPreviewRecognition(); stopCameraAndRecorder(); onCancel(); }}
           title={uploading > 0 ? "Wait for photo upload to finish…" : "Cancel"}
-          style={{ fontSize: 12, padding: "4px 8px", opacity: uploading > 0 ? 0.5 : 1 }}
+          style={{ fontSize: 14, padding: "4px 8px", opacity: uploading > 0 ? 0.5 : 1 }}
         >← Cancel</button>
-        <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="mic" size={18} color="var(--color-primary)" strokeWidth={2} /> Voice Walk
         </h2>
-        <span className="dim" style={{ fontSize: 11 }}>
+        <span className="dim" style={{ fontSize: 13 }}>
           Room {currentIdx + 1}/{rooms.length}
         </span>
       </div>
@@ -898,7 +898,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                 style={{
                   padding: "5px 10px",
                   borderRadius: 14,
-                  fontSize: 11,
+                  fontSize: 13,
                   whiteSpace: "nowrap",
                   background: active ? c : "transparent",
                   color: active ? "#fff" : c,
@@ -914,7 +914,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                 <span>{r}</span>
                 <span
                   style={{
-                    fontSize: 10,
+                    fontSize: 12,
                     fontFamily: "Oswald",
                     background: active ? "rgba(255,255,255,0.18)" : `${c}1a`,
                     padding: "1px 5px",
@@ -933,10 +933,10 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       {!supported && (
         <div
           className="cd mb"
-          style={{ borderLeft: "3px solid var(--color-warning)", fontSize: 12 }}
+          style={{ borderLeft: "3px solid var(--color-warning)", fontSize: 14 }}
         >
           <b style={{ color: "var(--color-warning)" }}>Voice not available</b>
-          <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+          <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>
             This browser doesn&apos;t support speech recognition. Type your narration in the box below; AI will use it the same way.
           </div>
         </div>
@@ -947,17 +947,17 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       {currentRoom && (
         <div className="cd mb" style={{ padding: "10px 12px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ fontSize: 17, color: "var(--color-primary)", margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <h3 style={{ fontSize: 19, color: "var(--color-primary)", margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
               {currentRoom}
               {currentRoom && roomStatuses?.[currentRoom] === "analyzing" && (
-                <span style={{ fontSize: 11, color: "var(--color-highlight)", fontFamily: "Oswald" }}>· analyzing…</span>
+                <span style={{ fontSize: 13, color: "var(--color-highlight)", fontFamily: "Oswald" }}>· analyzing…</span>
               )}
               {currentRoom && roomStatuses?.[currentRoom] === "done" && (
-                <span style={{ fontSize: 11, color: "var(--color-success)", fontFamily: "Oswald" }}>· done ✓</span>
+                <span style={{ fontSize: 13, color: "var(--color-success)", fontFamily: "Oswald" }}>· done ✓</span>
               )}
             </h3>
             {items.length > 0 && (
-              <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald" }}>
+              <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald" }}>
                 {checkedSet.size}/{items.length} mentioned · {thisRoomPhotos.length} 📷
               </span>
             )}
@@ -997,7 +997,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
               }}
             />
             {!cameraOn && (
-              <div style={{ color: "#bbb", fontSize: 12, padding: 16, textAlign: "center" }}>
+              <div style={{ color: "#bbb", fontSize: 14, padding: 16, textAlign: "center" }}>
                 {cameraError || "Starting camera..."}
               </div>
             )}
@@ -1017,13 +1017,13 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 11, fontFamily: "Oswald", padding: "3px 8px", borderRadius: 12, letterSpacing: ".06em" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 13, fontFamily: "Oswald", padding: "3px 8px", borderRadius: 12, letterSpacing: ".06em" }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-accent-red)", animation: "vw-pulse 1.5s ease-in-out infinite" }} />
                   REC {elapsedDisplay}
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {items.length > 0 && (
-                    <span style={{ background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 11, fontFamily: "Oswald", padding: "3px 8px", borderRadius: 12 }}>
+                    <span style={{ background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 13, fontFamily: "Oswald", padding: "3px 8px", borderRadius: 12 }}>
                       {checkedSet.size}/{items.length}
                     </span>
                   )}
@@ -1066,7 +1066,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                           gap: 4,
                           padding: "3px 9px",
                           borderRadius: 13,
-                          fontSize: 11,
+                          fontSize: 13,
                           fontWeight: isChecked ? 700 : 500,
                           color: "#fff",
                           background: isChecked ? "rgba(38,166,91,0.6)" : "rgba(0,0,0,0.45)",
@@ -1078,14 +1078,14 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                           cursor: "pointer",
                         }}
                       >
-                        {isChecked && <span style={{ fontSize: 11, lineHeight: 1 }}>✓</span>}
+                        {isChecked && <span style={{ fontSize: 13, lineHeight: 1 }}>✓</span>}
                         {item}
                       </button>
                     );
                   })}
                 </div>
               ) : (
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", fontStyle: "italic", background: "rgba(0,0,0,0.4)", padding: "3px 8px", borderRadius: 10, display: "inline-block" }}>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontStyle: "italic", background: "rgba(0,0,0,0.4)", padding: "3px 8px", borderRadius: 10, display: "inline-block" }}>
                   No checklist — describe what you see.
                 </div>
               )}
@@ -1127,7 +1127,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                   cursor: cameraOn && uploading === 0 ? "pointer" : "default",
                 }}
               />
-              <div style={{ width: 44, textAlign: "right", color: "#fff", fontSize: 11, fontFamily: "Oswald" }}>
+              <div style={{ width: 44, textAlign: "right", color: "#fff", fontSize: 13, fontFamily: "Oswald" }}>
                 {uploading > 0 ? `↑ ${uploading}` : thisRoomPhotos.length > 0 ? `📷 ${thisRoomPhotos.length}` : ""}
               </div>
             </div>
@@ -1193,7 +1193,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span
                       style={{
-                        fontSize: 12,
+                        fontSize: 14,
                         fontWeight: isChecked ? 600 : 400,
                         color: isChecked ? "var(--color-success)" : undefined,
                       }}
@@ -1209,7 +1209,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       )}
       {!inspecting && currentRoom && items.length === 0 && (
         <div className="cd mb" style={{ padding: 10 }}>
-          <div className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
+          <div className="dim" style={{ fontSize: 14, fontStyle: "italic" }}>
             No standard checklist for this room — describe what you see.
           </div>
         </div>
@@ -1218,7 +1218,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       {/* This room's captured photos — small thumb strip */}
       {thisRoomPhotos.length > 0 && (
         <div className="cd mb" style={{ padding: 10 }}>
-          <div className="dim" style={{ fontSize: 11, marginBottom: 6, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+          <div className="dim" style={{ fontSize: 13, marginBottom: 6, fontFamily: "Oswald", letterSpacing: ".06em" }}>
             PHOTOS IN {currentRoom?.toUpperCase()} ({thisRoomPhotos.length})
           </div>
           <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
@@ -1236,7 +1236,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                     position: "absolute",
                     bottom: 2,
                     left: 2,
-                    fontSize: 9,
+                    fontSize: 11,
                     fontFamily: "Oswald",
                     background: "rgba(0,0,0,0.6)",
                     color: "#fff",
@@ -1268,7 +1268,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                     borderRadius: "50%",
                     width: 18,
                     height: 18,
-                    fontSize: 11,
+                    fontSize: 13,
                     lineHeight: "16px",
                     padding: 0,
                   }}
@@ -1291,7 +1291,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
             padding: "6px 10px",
             background: darkMode ? "#0d0d14" : "#f7f7fa",
             border: `1px dashed ${border}`,
-            fontSize: 11,
+            fontSize: 13,
             color: "#888",
             display: "flex",
             alignItems: "center",
@@ -1314,7 +1314,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       )}
       {!supported && (
         <div className="cd mb" style={{ padding: 10 }}>
-          <div className="dim" style={{ fontSize: 11, marginBottom: 4, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+          <div className="dim" style={{ fontSize: 13, marginBottom: 4, fontFamily: "Oswald", letterSpacing: ".06em" }}>
             TYPE YOUR NARRATION
           </div>
           <textarea
@@ -1341,7 +1341,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
               borderRadius: 8,
               padding: 8,
               minHeight: 70,
-              fontSize: 12,
+              fontSize: 14,
               color: "inherit",
               resize: "vertical",
             }}
@@ -1358,17 +1358,17 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       <div className="cd mb" style={{ padding: 10, textAlign: "center" }}>
         {!inspecting && currentRec && currentRec.totalRecordedMs > 0 ? (
           <>
-            <div style={{ fontSize: 14, fontFamily: "Oswald", color: "var(--color-success)", letterSpacing: ".04em" }}>
+            <div style={{ fontSize: 16, fontFamily: "Oswald", color: "var(--color-success)", letterSpacing: ".04em" }}>
               ✓ Recorded {elapsedDisplay}
             </div>
             <button
               onClick={reRecord}
               className="bo"
-              style={{ marginTop: 8, fontSize: 12, padding: "6px 14px" }}
+              style={{ marginTop: 8, fontSize: 14, padding: "6px 14px" }}
             >
               ↻ Re-record (clears prior)
             </button>
-            <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            <div className="dim" style={{ fontSize: 13, marginTop: 6 }}>
               Tap Done below to apply, or re-record to start over.
             </div>
           </>
@@ -1378,7 +1378,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
               onClick={() => setInspecting((v) => !v)}
               style={{
                 padding: "12px 28px",
-                fontSize: 15,
+                fontSize: 17,
                 fontFamily: "Oswald",
                 background: inspecting ? "var(--color-accent-red)" : "var(--color-success)",
                 color: "#fff",
@@ -1392,7 +1392,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
               {inspecting ? "■ Stop Recording" : "▶ Start Recording"}
             </button>
             <style>{`@keyframes vw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }`}</style>
-            <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            <div className="dim" style={{ fontSize: 13, marginTop: 6 }}>
               {inspecting
                 ? "Mic + camera live. Talk through what you see, snap photos as you go."
                 : "One continuous take per room — tap Stop when finished."}
@@ -1414,19 +1414,19 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
           style={{
             width: "100%",
             padding: 14,
-            fontSize: 15,
+            fontSize: 17,
             fontFamily: "Oswald",
             opacity: uploading > 0 ? 0.5 : 1,
           }}
         >
           ✓ Done — {isSingleRoom ? "Apply to Room" : "Process & Next Room"}
         </button>
-        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
+        <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 4 }}>
           AI processes this room in the background. The next room opens immediately.
         </p>
       </div>
       {isSingleRoom && (
-        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 4 }}>
+        <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 4 }}>
           Tap Done to transcribe and apply findings to this room.
         </p>
       )}

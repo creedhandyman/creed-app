@@ -117,10 +117,10 @@ export default function Onboarding() {
             style={{ height: 80, display: "block", margin: "0 auto 12px" }}
             onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
           />
-          <h1 style={{ fontFamily: "Oswald", fontSize: 22, color: "#2E75B6", textTransform: "uppercase" }}>
+          <h1 style={{ fontFamily: "Oswald", fontSize: 24, color: "#2E75B6", textTransform: "uppercase" }}>
             Set Up Your Business
           </h1>
-          <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", marginTop: 4 }}>
+          <p style={{ color: "#888", fontSize: 15, fontFamily: "Source Sans 3", marginTop: 4 }}>
             Welcome, {user.name}! Let&apos;s get you started.
           </p>
         </div>
@@ -130,7 +130,7 @@ export default function Onboarding() {
           <button
             onClick={() => { setStep("create"); setErr(""); }}
             style={{
-              flex: 1, padding: "10px", fontSize: 13, fontFamily: "Oswald", textTransform: "uppercase",
+              flex: 1, padding: "10px", fontSize: 15, fontFamily: "Oswald", textTransform: "uppercase",
               background: step === "create" ? "#2E75B6" : "#12121a",
               color: step === "create" ? "#fff" : "#888",
               border: "1px solid #1e1e2e", borderRadius: "8px 0 0 8px",
@@ -141,7 +141,7 @@ export default function Onboarding() {
           <button
             onClick={() => { setStep("join"); setErr(""); }}
             style={{
-              flex: 1, padding: "10px", fontSize: 13, fontFamily: "Oswald", textTransform: "uppercase",
+              flex: 1, padding: "10px", fontSize: 15, fontFamily: "Oswald", textTransform: "uppercase",
               background: step === "join" ? "#2E75B6" : "#12121a",
               color: step === "join" ? "#fff" : "#888",
               border: "1px solid #1e1e2e", borderRadius: "0 8px 8px 0",
@@ -155,49 +155,49 @@ export default function Onboarding() {
           {step === "create" ? (
             <>
               <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Business Name *</label>
+                <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Business Name *</label>
                 <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="e.g. Acme Services LLC" style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
               </div>
               <div className="g2" style={{ marginBottom: 10 }}>
                 <div>
-                  <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Phone</label>
+                  <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Phone</label>
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 123-4567" style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>License #</label>
+                  <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>License #</label>
                   <input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="Optional" style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
                 </div>
               </div>
               <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Business Email</label>
+                <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Business Email</label>
                 <input value={email} onChange={(e) => setEmail(e.target.value)} style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
               </div>
               <div className="g2" style={{ marginBottom: 10 }}>
                 <div>
-                  <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>City / Address</label>
+                  <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>City / Address</label>
                   <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Wichita, KS" style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Default Rate ($/hr)</label>
+                  <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Default Rate ($/hr)</label>
                   <input type="number" value={rate} onChange={(e) => setRate(e.target.value)} style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
                 </div>
               </div>
-              {err && <div style={{ color: "#C00000", fontSize: 12, marginBottom: 8, textAlign: "center" }}>{err}</div>}
-              <button onClick={createBusiness} disabled={saving} style={{ width: "100%", padding: 12, fontSize: 15, fontFamily: "Oswald", textTransform: "uppercase", background: saving ? "#333" : "#2E75B6", color: "#fff", border: "none", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer" }}>
+              {err && <div style={{ color: "#C00000", fontSize: 14, marginBottom: 8, textAlign: "center" }}>{err}</div>}
+              <button onClick={createBusiness} disabled={saving} style={{ width: "100%", padding: 12, fontSize: 17, fontFamily: "Oswald", textTransform: "uppercase", background: saving ? "#333" : "#2E75B6", color: "#fff", border: "none", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer" }}>
                 {saving ? "Creating..." : "Create Business"}
               </button>
             </>
           ) : (
             <>
-              <p style={{ color: "#888", fontSize: 12, marginBottom: 12 }}>
+              <p style={{ color: "#888", fontSize: 14, marginBottom: 12 }}>
                 Ask your business owner for the invite code. It&apos;s in their Settings → Team tab.
               </p>
               <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Invite Code</label>
+                <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>Invite Code</label>
                 <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} placeholder="Paste invite code here" style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8" }} />
               </div>
-              {err && <div style={{ color: "#C00000", fontSize: 12, marginBottom: 8, textAlign: "center" }}>{err}</div>}
-              <button onClick={joinBusiness} disabled={saving} style={{ width: "100%", padding: 12, fontSize: 15, fontFamily: "Oswald", textTransform: "uppercase", background: saving ? "#333" : "#00cc66", color: "#fff", border: "none", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer" }}>
+              {err && <div style={{ color: "#C00000", fontSize: 14, marginBottom: 8, textAlign: "center" }}>{err}</div>}
+              <button onClick={joinBusiness} disabled={saving} style={{ width: "100%", padding: 12, fontSize: 17, fontFamily: "Oswald", textTransform: "uppercase", background: saving ? "#333" : "#00cc66", color: "#fff", border: "none", borderRadius: 8, cursor: saving ? "not-allowed" : "pointer" }}>
                 {saving ? "Joining..." : "Join Team"}
               </button>
             </>

@@ -196,17 +196,17 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
   return (
     <div className="fi">
       <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
           <Icon name="mileage" size={22} color="var(--color-primary)" />
           Mileage
         </h2>
         <div className="row">
           {entries.length > 0 && (
-            <button className="bo" onClick={exportMileagePdf} style={{ fontSize: 12, padding: "4px 10px" }}>
+            <button className="bo" onClick={exportMileagePdf} style={{ fontSize: 14, padding: "4px 10px" }}>
               🖨 Print Log
             </button>
           )}
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Dashboard</button>
+          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px" }}>← Dashboard</button>
         </div>
       </div>
 
@@ -215,18 +215,18 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
         <div className="cd" style={{ textAlign: "center", borderLeft: "3px solid var(--color-primary)" }}>
           <div className="sl">This Week</div>
           <div className="sv" style={{ color: "var(--color-primary)" }}>{thisWeek.toFixed(1)}</div>
-          <div className="dim" style={{ fontSize: 10 }}>miles</div>
+          <div className="dim" style={{ fontSize: 12 }}>miles</div>
         </div>
         <div className="cd" style={{ textAlign: "center", borderLeft: "3px solid var(--color-success)" }}>
           <div className="sl">All Time</div>
           <div className="sv" style={{ color: "var(--color-success)" }}>{totalMiles.toFixed(1)}</div>
-          <div className="dim" style={{ fontSize: 10 }}>miles</div>
+          <div className="dim" style={{ fontSize: 12 }}>miles</div>
         </div>
       </div>
 
       {/* Trip Tracker */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 13, marginBottom: 8 }}>
+        <h4 style={{ fontSize: 15, marginBottom: 8 }}>
           {tripActive ? "🟢 Trip In Progress" : "Start a Trip"}
         </h4>
 
@@ -248,7 +248,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                 placeholder="Starting odometer"
                 style={{ flex: 1 }}
               />
-              <button className="bb" onClick={startTrip} style={{ fontSize: 12, padding: "8px 16px" }}>
+              <button className="bb" onClick={startTrip} style={{ fontSize: 14, padding: "8px 16px" }}>
                 ▶ Start Trip
               </button>
             </div>
@@ -256,7 +256,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
         ) : (
           <>
             <div style={{ textAlign: "center", padding: 12 }}>
-              <div className="dim" style={{ fontSize: 11 }}>
+              <div className="dim" style={{ fontSize: 13 }}>
                 {tripJob || "General"} · Started at {startMiles} mi
               </div>
             </div>
@@ -268,13 +268,13 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                 placeholder="Ending odometer"
                 style={{ flex: 1 }}
               />
-              <button className="br" onClick={endTrip} style={{ fontSize: 12, padding: "8px 16px" }}>
+              <button className="br" onClick={endTrip} style={{ fontSize: 14, padding: "8px 16px" }}>
                 ⏹ End Trip
               </button>
             </div>
             {endMiles && parseFloat(endMiles) > parseFloat(startMiles) && (
               <div style={{ textAlign: "center", marginTop: 8 }}>
-                <span style={{ fontFamily: "Oswald", fontSize: 20, color: "var(--color-success)" }}>
+                <span style={{ fontFamily: "Oswald", fontSize: 22, color: "var(--color-success)" }}>
                   {(parseFloat(endMiles) - parseFloat(startMiles)).toFixed(1)} miles
                 </span>
               </div>
@@ -285,7 +285,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 
       {/* Manual Entry */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 13, marginBottom: 6 }}>Manual Entry</h4>
+        <h4 style={{ fontSize: 15, marginBottom: 6 }}>Manual Entry</h4>
         <div className="row" style={{ marginBottom: 6 }}>
           <input
             type="date"
@@ -308,7 +308,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
             placeholder="Miles"
             style={{ width: 80 }}
           />
-          <button className="bg" onClick={addManual} style={{ fontSize: 13, padding: "7px 12px" }}>
+          <button className="bg" onClick={addManual} style={{ fontSize: 15, padding: "7px 12px" }}>
             Log
           </button>
         </div>
@@ -316,20 +316,20 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 
       {/* Mileage Log */}
       <div className="cd">
-        <h4 style={{ fontSize: 13, marginBottom: 6 }}>Trip Log ({entries.length})</h4>
+        <h4 style={{ fontSize: 15, marginBottom: 6 }}>Trip Log ({entries.length})</h4>
         {!entries.length ? (
-          <p className="dim" style={{ fontSize: 12 }}>No trips logged</p>
+          <p className="dim" style={{ fontSize: 14 }}>No trips logged</p>
         ) : (
           entries.map((e) => (
             <div
               key={e.id}
               className="sep"
-              style={{ display: "flex", justifyContent: "space-between", fontSize: 12, alignItems: "center" }}
+              style={{ display: "flex", justifyContent: "space-between", fontSize: 14, alignItems: "center" }}
             >
               <span style={{ minWidth: 70 }}>{e.trip_date}</span>
               <span style={{ color: "var(--color-primary)", flex: 1 }}>{e.job}</span>
               {e.start_miles > 0 && (
-                <span className="dim" style={{ fontSize: 12, marginRight: 6 }}>
+                <span className="dim" style={{ fontSize: 14, marginRight: 6 }}>
                   {e.start_miles}→{e.end_miles}
                 </span>
               )}
@@ -342,7 +342,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                   await db.del("mileage", e.id);
                   setLoaded(false);
                 }}
-                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, marginLeft: 6 }}
+                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, marginLeft: 6 }}
               >
                 ✕
               </button>

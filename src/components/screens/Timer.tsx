@@ -361,16 +361,16 @@ export default function Timer({ setPage }: Props) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="time" size={19} color="#8cc0ff" />
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("timer.title")}</span>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("timer.title")}</span>
         </div>
         {tab === "crew" ? (
-          <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: activeSessions.length ? "#3ee08f" : "var(--color-dim)", fontWeight: 600 }}>{activeSessions.length} on the clock</span>
+          <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: activeSessions.length ? "#3ee08f" : "var(--color-dim)", fontWeight: 600 }}>{activeSessions.length} on the clock</span>
         ) : on ? (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
           </span>
         ) : (
-          <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>
+          <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>
             {`${new Date().toLocaleDateString("en-US", { weekday: "short" })} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
           </span>
         )}
@@ -390,7 +390,7 @@ export default function Timer({ setPage }: Props) {
                 onClick={() => setTab(tb.id)}
                 style={{
                   flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  fontSize: 12, fontFamily: "Oswald", letterSpacing: ".04em", padding: "9px", borderRadius: 11,
+                  fontSize: 14, fontFamily: "Oswald", letterSpacing: ".04em", padding: "9px", borderRadius: 11,
                   background: tabOn ? "var(--color-primary)" : "var(--color-card-dark-2)",
                   color: tabOn ? "#fff" : "var(--color-dim)",
                   border: `1px solid ${tabOn ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
@@ -399,7 +399,7 @@ export default function Timer({ setPage }: Props) {
                 <Icon name={tb.icon} size={14} color={tabOn ? "#fff" : "var(--color-dim)"} />
                 {tb.label}
                 {tb.id === "crew" && activeSessions.length > 0 && (
-                  <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 8, background: "var(--color-success)", color: "#fff", fontFamily: "Oswald" }}>
+                  <span style={{ fontSize: 12, padding: "1px 6px", borderRadius: 8, background: "var(--color-success)", color: "#fff", fontFamily: "Oswald" }}>
                     {activeSessions.length}
                   </span>
                 )}
@@ -412,19 +412,19 @@ export default function Timer({ setPage }: Props) {
       {tab === "time" && (<>
       {/* Next check (unpaid × rate) — same number the dashboard shows */}
       <div className="cd mb" style={{ background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.32)", borderRadius: 13, padding: "10px 12px" }}>
-        <div style={{ fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
-        <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, color: "#3ee08f", lineHeight: 1.2 }}>${checkPay.toFixed(0)}</div>
-        <div style={{ fontSize: 10, color: "var(--color-dim)" }}>{checkHrs.toFixed(1)} hrs unpaid · ${rate}/hr</div>
+        <div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
+        <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, color: "#3ee08f", lineHeight: 1.2 }}>${checkPay.toFixed(0)}</div>
+        <div style={{ fontSize: 12, color: "var(--color-dim)" }}>{checkHrs.toFixed(1)} hrs unpaid · ${rate}/hr</div>
       </div>
 
       {!on ? (<>
         {/* Clock into — today's jobs as chips, plus any other property */}
-        <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "2px 2px 6px" }}>Today&apos;s jobs · clock into</div>
+        <div style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "2px 2px 6px" }}>Today&apos;s jobs · clock into</div>
         <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 9 }}>
           {[...todayJobs.map((s) => ({ key: s.id, label: s.job, val: s.job })), { key: "general", label: t("timer.general"), val: "" }].map((c) => {
             const cOn = sj === c.val;
             return (
-              <button key={c.key} onClick={() => setSj(c.val)} style={{ fontSize: 10.5, padding: "6px 10px", borderRadius: 99, fontWeight: cOn ? 600 : 400, background: cOn ? "rgba(46,139,255,.16)" : "var(--color-card-dark-2)", border: `1px solid ${cOn ? "var(--color-primary)" : "var(--color-border-dark-2)"}`, color: cOn ? "#8cc0ff" : "var(--color-dim)" }}>{c.label}</button>
+              <button key={c.key} onClick={() => setSj(c.val)} style={{ fontSize: 12.5, padding: "6px 10px", borderRadius: 99, fontWeight: cOn ? 600 : 400, background: cOn ? "rgba(46,139,255,.16)" : "var(--color-card-dark-2)", border: `1px solid ${cOn ? "var(--color-primary)" : "var(--color-border-dark-2)"}`, color: cOn ? "#8cc0ff" : "var(--color-dim)" }}>{c.label}</button>
             );
           })}
         </div>
@@ -446,22 +446,22 @@ export default function Timer({ setPage }: Props) {
       </>) : (<>
         {/* On the clock — live timer + open work order / clock out */}
         <div className="cd mb" style={{ background: "rgba(0,204,102,.1)", border: "1px solid rgba(0,204,102,.5)", borderRadius: 18, padding: 15, textAlign: "center", boxShadow: "0 0 40px -16px rgba(0,204,102,.6)" }}>
-          <div style={{ fontSize: 10, letterSpacing: ".16em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <div style={{ fontSize: 12, letterSpacing: ".16em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 9px var(--color-success)" }} /> On the clock
           </div>
           <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, letterSpacing: "1px", margin: "7px 0 2px", color: "var(--color-success)" }}>{fmt(el)}</div>
-          <div className="dim" style={{ fontSize: 11.5 }}>{sj || t("timer.general")}</div>
+          <div className="dim" style={{ fontSize: 13.5 }}>{sj || t("timer.general")}</div>
           {sj && (
-            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(sj)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 7 }}>
+            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(sj)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 7 }}>
               <Icon name="mapPin" size={12} color="#7fb6ff" /> Show on map
             </a>
           )}
         </div>
         <div className="row" style={{ gap: 8, marginBottom: 12 }}>
-          <button onClick={() => setPage?.("workvision")} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#fff", background: "rgba(46,139,255,.14)", border: "1px solid rgba(46,139,255,.85)", boxShadow: "0 0 22px -4px rgba(46,139,255,.55)" }}>
+          <button onClick={() => setPage?.("workvision")} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#fff", background: "rgba(46,139,255,.14)", border: "1px solid rgba(46,139,255,.85)", boxShadow: "0 0 22px -4px rgba(46,139,255,.55)" }}>
             <Icon name="list" size={15} color="#fff" /> Open work order
           </button>
-          <button onClick={stop} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.45)" }}>
+          <button onClick={stop} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.45)" }}>
             <Icon name="stop" size={14} color="#ff9d9d" /> {t("timer.stop")}
           </button>
         </div>
@@ -469,18 +469,18 @@ export default function Timer({ setPage }: Props) {
 
       {/* Manual entry — collapsed dashed row that expands the form (admin) */}
       {isOwner && !showManual && (
-        <div onClick={() => setShowManual(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 11.5, color: "#8cc0ff", fontWeight: 600, background: "var(--color-card-dark-2)", border: "1px dashed var(--color-border-dark-2)", borderRadius: 11, padding: 10, marginBottom: 11, cursor: "pointer" }}>
+        <div onClick={() => setShowManual(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 13.5, color: "#8cc0ff", fontWeight: 600, background: "var(--color-card-dark-2)", border: "1px dashed var(--color-border-dark-2)", borderRadius: 11, padding: 10, marginBottom: 11, cursor: "pointer" }}>
           <Icon name="add" size={15} color="#8cc0ff" /> Add time entry · manual
         </div>
       )}
       {isOwner && showManual && (
         <div className="cd mb">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <h4 style={{ fontSize: 13 }}>{t("timer.log")}</h4>
+            <h4 style={{ fontSize: 15 }}>{t("timer.log")}</h4>
             <button onClick={() => setShowManual(false)} aria-label="Close" style={{ background: "none", border: "none", color: "var(--color-dim)", cursor: "pointer", display: "inline-flex", padding: 2 }}><Icon name="close" size={15} /></button>
           </div>
           <div className="row" style={{ marginBottom: 6 }}>
-            <span className="dim" style={{ fontSize: 11 }}>For:</span>
+            <span className="dim" style={{ fontSize: 13 }}>For:</span>
             <select
               value={mUser}
               onChange={(e) => setMUser(e.target.value)}
@@ -525,7 +525,7 @@ export default function Timer({ setPage }: Props) {
             <button
               className="bg"
               onClick={async () => { await addManual(); setShowManual(false); }}
-              style={{ fontSize: 13, padding: "7px 12px" }}
+              style={{ fontSize: 15, padding: "7px 12px" }}
             >
               {t("timer.log")}
             </button>
@@ -541,17 +541,17 @@ export default function Timer({ setPage }: Props) {
         return (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 2px 7px" }}>
-              <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>{t("timer.myLog")}</span>
-              {myTodayHrs > 0 && <span style={{ fontSize: 10.5, fontFamily: "Oswald", color: "var(--color-success)" }}>Today · {myTodayHrs.toFixed(1)} hrs</span>}
+              <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>{t("timer.myLog")}</span>
+              {myTodayHrs > 0 && <span style={{ fontSize: 12.5, fontFamily: "Oswald", color: "var(--color-success)" }}>Today · {myTodayHrs.toFixed(1)} hrs</span>}
             </div>
             {!myTime.length ? (
-              <div className="cd" style={{ textAlign: "center", padding: 16 }}><p className="dim" style={{ fontSize: 12 }}>No entries</p></div>
+              <div className="cd" style={{ textAlign: "center", padding: 16 }}><p className="dim" style={{ fontSize: 14 }}>No entries</p></div>
             ) : (
               myTime.map((e) => (
                 <div key={e.id} className="cd" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 11px", marginBottom: 6, gap: 8 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.job || t("timer.general")}</div>
-                    <div className="dim" style={{ fontSize: 9.5 }}>{e.entry_date}{(e.start_time || e.end_time) ? ` · ${e.start_time || "?"}–${e.end_time || "now"}` : ""}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.job || t("timer.general")}</div>
+                    <div className="dim" style={{ fontSize: 11.5 }}>{e.entry_date}{(e.start_time || e.end_time) ? ` · ${e.start_time || "?"}–${e.end_time || "now"}` : ""}</div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
                     <input
@@ -559,7 +559,7 @@ export default function Timer({ setPage }: Props) {
                       defaultValue={e.hours}
                       step=".25"
                       min="0"
-                      style={{ width: 48, textAlign: "center", padding: "2px 4px", fontSize: 12.5, fontFamily: "Oswald", fontWeight: 600 }}
+                      style={{ width: 48, textAlign: "center", padding: "2px 4px", fontSize: 14.5, fontFamily: "Oswald", fontWeight: 600 }}
                       onBlur={async (ev) => {
                         // Only the owner (or an admin) can edit a row.
                         if (e.user_id && e.user_id !== user.id && !isOwner) return;
@@ -571,7 +571,7 @@ export default function Timer({ setPage }: Props) {
                         await loadAll();
                       }}
                     />
-                    <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, color: "var(--color-success)", minWidth: 42, textAlign: "right" }}>${(e.amount || 0).toFixed(0)}</span>
+                    <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "var(--color-success)", minWidth: 42, textAlign: "right" }}>${(e.amount || 0).toFixed(0)}</span>
                     <button
                       onClick={async () => {
                         if (e.user_id && e.user_id !== user.id && !isOwner) return;
@@ -579,7 +579,7 @@ export default function Timer({ setPage }: Props) {
                         await db.del("time_entries", e.id);
                         await loadAll();
                       }}
-                      style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 12, cursor: "pointer", padding: 0 }}
+                      style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}
                     >✕</button>
                   </div>
                 </div>
@@ -613,23 +613,23 @@ export default function Timer({ setPage }: Props) {
               <div key={p.id} className="cd mb" style={{ padding: "10px 11px" }}>
                 {/* Header — avatar + status dot, name, location/job, duration + chip */}
                 <div onClick={() => setExpandedCrew(isExpanded ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                  <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#cdd6e6", flexShrink: 0 }}>
+                  <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: "#cdd6e6", flexShrink: 0 }}>
                     {initials(p.name)}
                     <span style={{ position: "absolute", right: -1, bottom: -1, width: 11, height: 11, borderRadius: "50%", border: `2px solid ${darkMode ? "#16161f" : "#fff"}`, background: isActive ? "var(--color-success)" : "#555" }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".3px" }}>{p.name}</div>
-                    <div className="dim" style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{p.name}</div>
+                    <div className="dim" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {isActive ? (<><Icon name="mapPin" size={11} color="var(--color-dim)" /> {activeEntry!.job || t("timer.general")}</>)
                         : lastOut ? (<><Icon name="time" size={11} color="var(--color-dim)" /> Last out {lastOut} · {todayHrs.toFixed(1)}h today</>)
                         : `${p.role} · $${rRate}/hr`}
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, color: isActive ? "var(--color-success)" : todayHrs > 0 ? "inherit" : "var(--color-dim)" }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, color: isActive ? "var(--color-success)" : todayHrs > 0 ? "inherit" : "var(--color-dim)" }}>
                       {isActive && activeElapsed ? activeElapsed : todayHrs > 0 ? `${todayHrs.toFixed(1)}h` : "—"}
                     </div>
-                    <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 2, background: isActive ? "rgba(0,204,102,.16)" : "var(--color-card-dark-2)", color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 2, background: isActive ? "rgba(0,204,102,.16)" : "var(--color-card-dark-2)", color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
                       {isActive ? "On the clock" : "Off"}
                     </span>
                   </div>
@@ -638,23 +638,23 @@ export default function Timer({ setPage }: Props) {
                 {isExpanded && (
                   <div style={{ borderTop: "1px solid var(--color-border-dark)", marginTop: 9, paddingTop: 9 }}>
                     {isActive && activeEntry!.start_time && (
-                      <div style={{ fontSize: 10.5, color: "#7fb6ff", display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <div style={{ fontSize: 12.5, color: "#7fb6ff", display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                         <Icon name="mapPin" size={13} color="#7fb6ff" /> Clocked in {activeEntry!.start_time}
                       </div>
                     )}
                     {allEntries.length === 0 ? (
-                      <p className="dim" style={{ fontSize: 11.5 }}>No entries yet</p>
+                      <p className="dim" style={{ fontSize: 13.5 }}>No entries yet</p>
                     ) : allEntries.slice(0, 8).map((en) => {
                       const running = !en.end_time && !!en.start_time;
                       return (
                         <div key={en.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "var(--color-card-dark-2)", borderRadius: 10, padding: "7px 9px", marginBottom: 6 }}>
                           <div style={{ minWidth: 0, flex: 1 }}>
-                            <div style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{en.job || t("timer.general")}</div>
-                            <div style={{ fontSize: 9, color: "var(--color-dim)" }}>{running ? `running · since ${en.start_time}` : `${en.entry_date}${en.start_time ? ` · ${en.start_time}–${en.end_time || "now"}` : ""}`}</div>
+                            <div style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{en.job || t("timer.general")}</div>
+                            <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{running ? `running · since ${en.start_time}` : `${en.entry_date}${en.start_time ? ` · ${en.start_time}–${en.end_time || "now"}` : ""}`}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                            <input type="number" defaultValue={en.hours} step=".25" min="0" style={{ width: 46, textAlign: "center", padding: "2px 4px", fontSize: 12, fontFamily: "Oswald", fontWeight: 600 }} onBlur={async (ev) => { const nh = parseFloat(ev.target.value) || 0; if (nh === en.hours) return; await db.patch("time_entries", en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }); loadAll(); }} />
-                            <button onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await db.del("time_entries", en.id); loadAll(); }} style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
+                            <input type="number" defaultValue={en.hours} step=".25" min="0" style={{ width: 46, textAlign: "center", padding: "2px 4px", fontSize: 14, fontFamily: "Oswald", fontWeight: 600 }} onBlur={async (ev) => { const nh = parseFloat(ev.target.value) || 0; if (nh === en.hours) return; await db.patch("time_entries", en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }); loadAll(); }} />
+                            <button onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await db.del("time_entries", en.id); loadAll(); }} style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}>✕</button>
                           </div>
                         </div>
                       );
@@ -666,11 +666,11 @@ export default function Timer({ setPage }: Props) {
                         const hrs = e.start_time ? (() => { const m = e.start_time.match(/(\d+):(\d+)\s*([AP]M)?/i); if (!m) return 0; let h = parseInt(m[1]); const mm = parseInt(m[2]); const ap = m[3]?.toUpperCase(); if (ap === "PM" && h < 12) h += 12; if (ap === "AM" && h === 12) h = 0; const st = new Date(); st.setHours(h, mm, 0, 0); return Math.round((Date.now() - st.getTime()) / 3600000 * 100) / 100; })() : 0;
                         await db.patch("time_entries", e.id, { hours: hrs, amount: Math.round(hrs * rRate * 100) / 100, end_time: fmtTime(Date.now()) });
                         await loadAll();
-                      }} style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 9, padding: "7px", marginBottom: 6, cursor: "pointer" }}>
+                      }} style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 9, padding: "7px", marginBottom: 6, cursor: "pointer" }}>
                         <Icon name="stop" size={12} color="#ff9d9d" /> Force clock out
                       </button>
                     )}
-                    <div onClick={() => { setMUser(p.id); setTab("time"); setShowManual(true); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 11, color: "#8cc0ff", fontWeight: 600, background: "var(--color-card-dark-2)", border: "1px dashed var(--color-border-dark-2)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
+                    <div onClick={() => { setMUser(p.id); setTab("time"); setShowManual(true); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 13, color: "#8cc0ff", fontWeight: 600, background: "var(--color-card-dark-2)", border: "1px dashed var(--color-border-dark-2)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
                       <Icon name="add" size={13} color="#8cc0ff" /> Add entry for {p.name.split(" ")[0]}
                     </div>
                   </div>
@@ -682,7 +682,7 @@ export default function Timer({ setPage }: Props) {
       </>)}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
-        <p className="dim" style={{ fontSize: 12 }}>
+        <p className="dim" style={{ fontSize: 14 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
             <Icon name="tip" size={14} color="var(--color-highlight)" />
             Next: Review hours in Payroll

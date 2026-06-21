@@ -28,7 +28,7 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #1e1e2e",
   background: "#12121a",
   color: "#e2e2e8",
-  fontSize: 15,
+  fontSize: 17,
   fontFamily: "Source Sans 3, sans-serif",
 };
 
@@ -76,17 +76,17 @@ function LoginInner() {
       <div style={{ width: "100%", maxWidth: 420, textAlign: "center" }}>
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 28 }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📱</div>
-          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: "#00cc66", textTransform: "uppercase", marginBottom: 8 }}>
+          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#00cc66", textTransform: "uppercase", marginBottom: 8 }}>
             Check your phone
           </h2>
-          <p style={{ color: "#aaa", fontSize: 14, lineHeight: 1.5 }}>
+          <p style={{ color: "#aaa", fontSize: 16, lineHeight: 1.5 }}>
             If your contractor has your number on file, we just texted a portal link. It expires in 14 days.
           </p>
-          <p style={{ color: "#666", fontSize: 12, marginTop: 12 }}>
+          <p style={{ color: "#666", fontSize: 14, marginTop: 12 }}>
             Didn&apos;t get it? Ask your contractor to send a fresh link from their app.
           </p>
         </div>
-        <div style={{ color: "#555", fontSize: 10, marginTop: 16 }}>Powered by Creed App</div>
+        <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
       </div>
     );
   }
@@ -105,17 +105,17 @@ function LoginInner() {
             style={{
               background: "#3a2a0d", border: "1px solid #ff8800",
               borderRadius: 6, padding: "8px 10px",
-              marginBottom: 14, fontSize: 12, color: "#ffcc88",
+              marginBottom: 14, fontSize: 14, color: "#ffcc88",
             }}
           >
             {banner}
           </div>
         )}
 
-        <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: "#e2e2e8", textTransform: "uppercase", textAlign: "center", margin: "0 0 4px" }}>
+        <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "#e2e2e8", textTransform: "uppercase", textAlign: "center", margin: "0 0 4px" }}>
           Get a portal link
         </h2>
-        <p style={{ color: "#888", fontSize: 12, textAlign: "center", margin: "0 0 14px" }}>
+        <p style={{ color: "#888", fontSize: 14, textAlign: "center", margin: "0 0 14px" }}>
           Enter the phone number your contractor has on file. We&apos;ll text you a single-use link.
         </p>
 
@@ -129,7 +129,7 @@ function LoginInner() {
         />
 
         {error && (
-          <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 12, color: "#ff8888" }}>
+          <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 14, color: "#ff8888" }}>
             {error}
           </div>
         )}
@@ -138,7 +138,7 @@ function LoginInner() {
           onClick={submit}
           disabled={submitting}
           style={{
-            width: "100%", padding: 13, borderRadius: 8, fontSize: 15,
+            width: "100%", padding: 13, borderRadius: 8, fontSize: 17,
             fontFamily: "Oswald, sans-serif", textTransform: "uppercase",
             letterSpacing: ".05em", background: PRIMARY, color: "#fff",
             border: "none", cursor: submitting ? "wait" : "pointer",
@@ -149,7 +149,7 @@ function LoginInner() {
         </button>
       </div>
 
-      <div style={{ textAlign: "center", color: "#555", fontSize: 10, marginTop: 16 }}>Powered by Creed App</div>
+      <div style={{ textAlign: "center", color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
     </div>
   );
 }

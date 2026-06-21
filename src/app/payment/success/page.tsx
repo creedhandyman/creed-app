@@ -64,7 +64,7 @@ function SuccessContent() {
         >
           {verifyError ? "Payment Pending" : "Payment Received"}
         </h1>
-        <p style={{ color: "#888", fontSize: 14, fontFamily: "Source Sans 3, sans-serif", marginBottom: 24 }}>
+        <p style={{ color: "#888", fontSize: 16, fontFamily: "Source Sans 3, sans-serif", marginBottom: 24 }}>
           {verifyError
             ? "We received your payment but couldn't confirm it on our end yet. Your invoice will update once confirmed. Contact us if this persists."
             : "Thank you for your payment. Your invoice has been marked as paid."}
@@ -80,12 +80,12 @@ function SuccessContent() {
             textDecoration: "none",
             fontFamily: "Oswald, sans-serif",
             textTransform: "uppercase",
-            fontSize: 14,
+            fontSize: 16,
           }}
         >
           Back to App
         </a>
-        <div style={{ marginTop: 20, color: "#555", fontSize: 10 }}>
+        <div style={{ marginTop: 20, color: "#555", fontSize: 12 }}>
           Powered by Creed App
         </div>
       </div>

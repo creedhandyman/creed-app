@@ -158,7 +158,7 @@ function AiLoadingDisplay({ status }: { status: string }) {
         <Icon name="sparkle" size={30} color="#f5b400" />
       </div>
       <style>{`@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: 0.85; } } @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
-      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px", marginBottom: 16 }}>
+      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18, letterSpacing: ".3px", marginBottom: 16 }}>
         AI is building your quote
       </div>
 
@@ -175,12 +175,12 @@ function AiLoadingDisplay({ status }: { status: string }) {
               }}>
                 <Icon name={isDone ? "check" : step.icon} size={13} color={isDone ? "#3ee08f" : isActive ? "#f5b400" : "var(--color-dim)"} strokeWidth={isDone ? 3 : 2} />
               </div>
-              <span style={{ fontSize: 12.5, color: isDone || isActive ? "inherit" : "var(--color-dim)", fontWeight: isActive ? 600 : 400 }}>
+              <span style={{ fontSize: 14.5, color: isDone || isActive ? "inherit" : "var(--color-dim)", fontWeight: isActive ? 600 : 400 }}>
                 {step.label}{isActive ? "…" : ""}
               </span>
               {/* Inline counter on the active row when we know X/Y */}
               {isActive && stepTotal > 0 && (
-                <span style={{ fontSize: 11, marginLeft: "auto", color: "#f5b400", fontFamily: "Oswald" }}>
+                <span style={{ fontSize: 13, marginLeft: "auto", color: "#f5b400", fontFamily: "Oswald" }}>
                   {stepCur}/{stepTotal}
                 </span>
               )}
@@ -201,7 +201,7 @@ function AiLoadingDisplay({ status }: { status: string }) {
       </div>
 
       {/* Numeric percent + batch counter beneath the bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, marginTop: 5, color: "var(--color-dim)", fontFamily: "Oswald" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginTop: 5, color: "var(--color-dim)", fontFamily: "Oswald" }}>
         <span>{Math.round(displayPct)}%</span>
         {stepTotal > 0 ? (
           <span>{isBatch ? "Batch" : isRender ? "Page" : "Step"} {stepCur} of {stepTotal}</span>
@@ -212,7 +212,7 @@ function AiLoadingDisplay({ status }: { status: string }) {
         ) : null}
       </div>
 
-      <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
+      <div className="dim" style={{ fontSize: 14, marginTop: 8 }}>
         {status || "This usually takes 15-30 seconds"}
       </div>
     </div>
@@ -1351,8 +1351,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       <div className="fi">
         {/* Topbar — title + eyebrow */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px", textTransform: "uppercase" }}>QuoteForge</span>
-          <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>New quote</span>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>QuoteForge</span>
+          <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>New quote</span>
         </div>
         {parsing && (
           <div className="cd mb">
@@ -1369,10 +1369,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             <Icon name="quote" size={23} color="#f5b400" strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px", color: "#fff" }}>QUICK QUOTE</div>
-            <div style={{ fontSize: 10.5, color: "#ffffffb0" }}>Describe it, add photos → AI prices it</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17.5, letterSpacing: ".3px", color: "#fff" }}>QUICK QUOTE</div>
+            <div style={{ fontSize: 12.5, color: "#ffffffb0" }}>Describe it, add photos → AI prices it</div>
           </div>
-          <span style={{ fontSize: 8.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(245,180,0,.2)", color: "#f5b400" }}>SMALL JOBS</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(245,180,0,.2)", color: "#f5b400" }}>SMALL JOBS</span>
         </div>
 
         {/* Full Inspection — green glow. Every plan can run inspections; the
@@ -1401,10 +1401,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             <Icon name="search" size={23} color="#3ee08f" strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px", color: "#fff" }}>FULL INSPECTION</div>
-            <div style={{ fontSize: 10.5, color: "#ffffffb0" }}>Area-by-area walkthrough · voice</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17.5, letterSpacing: ".3px", color: "#fff" }}>FULL INSPECTION</div>
+            <div style={{ fontSize: 12.5, color: "#ffffffb0" }}>Area-by-area walkthrough · voice</div>
           </div>
-          <span style={{ fontSize: 8.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(0,204,102,.2)", color: "#3ee08f" }}>MOST ACCURATE</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(0,204,102,.2)", color: "#3ee08f" }}>MOST ACCURATE</span>
         </div>
 
         {/* Upload Report — blue glow */}
@@ -1416,10 +1416,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             <Icon name="doc" size={23} color="#8cc0ff" strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px", color: "#fff" }}>UPLOAD REPORT</div>
-            <div style={{ fontSize: 10.5, color: "#ffffffb0" }}>PDF inspection → AI analysis</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17.5, letterSpacing: ".3px", color: "#fff" }}>UPLOAD REPORT</div>
+            <div style={{ fontSize: 12.5, color: "#ffffffb0" }}>PDF inspection → AI analysis</div>
           </div>
-          <span style={{ fontSize: 8.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(46,139,255,.2)", color: "#8cc0ff" }}>PDF</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(46,139,255,.2)", color: "#8cc0ff" }}>PDF</span>
           <input
             ref={fileRef}
             type="file"
@@ -1464,7 +1464,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       <div className="fi">
         <div className="row mb">
           <button className="bo" onClick={() => { setMode(null); setQuickPhotos([]); setQuickDesc(""); }}>←</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-accent-red)" }}>📸 Quick Quote</h2>
+          <h2 style={{ fontSize: 20, color: "var(--color-accent-red)" }}>📸 Quick Quote</h2>
         </div>
 
         {/* Property + Client */}
@@ -1483,7 +1483,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
 
         {/* Description */}
         <div className="cd mb">
-          <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+          <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
             Describe the issue
           </label>
           <textarea
@@ -1497,7 +1497,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         {/* Photos */}
         <div className="cd mb">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-            <label style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
               Photos ({quickPhotos.length})
             </label>
             <div className="row" style={{ gap: 4 }}>
@@ -1505,7 +1505,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 className="bb"
                 onClick={() => setQuickCam(true)}
                 disabled={quickUploading}
-                style={{ fontSize: 12, padding: "4px 10px" }}
+                style={{ fontSize: 14, padding: "4px 10px" }}
               >
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
                   <Icon name="camera" size={16} />Take Photo
@@ -1515,7 +1515,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 className="bo"
                 onClick={() => quickPhotoRef.current?.click()}
                 disabled={quickUploading}
-                style={{ fontSize: 12, padding: "4px 10px" }}
+                style={{ fontSize: 14, padding: "4px 10px" }}
               >
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
                   <Icon name="upload" size={16} />Upload
@@ -1524,7 +1524,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             </div>
           </div>
 
-          {quickUploading && <div className="dim" style={{ fontSize: 13, textAlign: "center", marginBottom: 6 }}>Processing photos...</div>}
+          {quickUploading && <div className="dim" style={{ fontSize: 15, textAlign: "center", marginBottom: 6 }}>Processing photos...</div>}
 
           <CameraModal
             open={quickCam}
@@ -1561,7 +1561,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     style={{
                       position: "absolute", top: 2, right: 2,
                       background: "rgba(0,0,0,0.7)", color: "#fff", border: "none",
-                      borderRadius: "50%", width: 16, height: 16, fontSize: 13,
+                      borderRadius: "50%", width: 16, height: 16, fontSize: 15,
                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                     }}
                   >
@@ -1573,7 +1573,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           ) : (
             <div style={{ textAlign: "center", padding: 20, color: "#555" }}>
               <div style={{ fontSize: 28, marginBottom: 4 }}>📷</div>
-              <div style={{ fontSize: 11 }}>Add photos of the issue for better accuracy</div>
+              <div style={{ fontSize: 13 }}>Add photos of the issue for better accuracy</div>
             </div>
           )}
         </div>
@@ -1595,7 +1595,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             }}
             disabled={!quickDesc.trim() && !quickPhotos.length}
             style={{
-              width: "100%", padding: 14, fontSize: 16,
+              width: "100%", padding: 14, fontSize: 18,
               opacity: !quickDesc.trim() && !quickPhotos.length ? 0.5 : 1,
             }}
           >
@@ -1610,7 +1610,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <button
             className="bo"
             onClick={() => { setMode("manual"); }}
-            style={{ fontSize: 13, padding: "6px 14px" }}
+            style={{ fontSize: 15, padding: "6px 14px" }}
           >
             ✏️ Build manually instead
           </button>
@@ -1626,14 +1626,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       <div className="fi">
         <div className="row mb">
           <button className="bo" onClick={() => setMode(null)}>←</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>Parse Report</h2>
+          <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>Parse Report</h2>
         </div>
         <div className="cd">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Paste report text here..."
-            style={{ height: 200, fontFamily: "monospace", fontSize: 11 }}
+            style={{ height: 200, fontFamily: "monospace", fontSize: 13 }}
           />
           <div className="mt">
             <CustomerPicker
@@ -1679,7 +1679,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       <div className="fi">
         <div className="row mb">
           <button className="bo" onClick={() => setMode(null)}>←</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-warning)" }}>Manual Quote</h2>
+          <h2 style={{ fontSize: 20, color: "var(--color-warning)" }}>Manual Quote</h2>
         </div>
         <div className="cd mb">
           <CustomerPicker
@@ -1710,7 +1710,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       <div className="fi">
         <div className="row mb">
           <button className="bo" onClick={() => { setMode(null); setParsing(false); setParseStatus(""); }}>←</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="sparkle" size={18} color="var(--color-primary)" /> Building Quote</h2>
+          <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="sparkle" size={18} color="var(--color-primary)" /> Building Quote</h2>
         </div>
         <div className="cd">
           <AiLoadingDisplay status={parseStatus || "Processing inspection..."} />
@@ -1737,8 +1737,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setLaborRate(null);
           setMinLaborHours(null);
         }}>←</button>
-        <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>⚡ Quote</h2>
-        <span style={{ fontSize: 10 }} className="dim">
+        <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚡ Quote</h2>
+        <span style={{ fontSize: 12 }} className="dim">
           ${rate}/hr{laborRate && laborRate > 0 ? " (override)" : ""}
         </span>
       </div>
@@ -1771,7 +1771,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           />
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 600 }}>Total</div>
+          <div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 600 }}>Total</div>
           <div style={{ fontSize: 30, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.1 }}>
             ${gt.toFixed(2)}
           </div>
@@ -1785,11 +1785,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       <div className="cd mb" style={{ padding: 10 }}>
         <div
           className="row"
-          style={{ gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}
+          style={{ gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 14 }}
         >
           <span
             style={{
-              fontSize: 10,
+              fontSize: 12,
               color: "#888",
               fontFamily: "Oswald",
               textTransform: "uppercase",
@@ -1808,14 +1808,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               const v = e.target.value;
               setLaborRate(v === "" ? null : parseFloat(v) || null);
             }}
-            style={{ width: 64, padding: "4px 6px", fontSize: 13, textAlign: "center" }}
+            style={{ width: 64, padding: "4px 6px", fontSize: 15, textAlign: "center" }}
             title="Override the labor rate for THIS quote only. Leave empty to use the org default."
           />
           {laborRate && laborRate > 0 ? (
             <button
               onClick={() => setLaborRate(null)}
               className="bo"
-              style={{ fontSize: 10, padding: "2px 8px" }}
+              style={{ fontSize: 12, padding: "2px 8px" }}
               title="Clear labor-rate override"
             >
               ×
@@ -1826,7 +1826,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
 
           <span
             style={{
-              fontSize: 10,
+              fontSize: 12,
               color: "#888",
               fontFamily: "Oswald",
               textTransform: "uppercase",
@@ -1857,7 +1857,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   }}
                   style={{
                     padding: "4px 10px",
-                    fontSize: 11,
+                    fontSize: 13,
                     fontFamily: "Oswald",
                     background: active ? "var(--color-primary)" : "transparent",
                     color: active ? "#fff" : "#888",
@@ -1884,9 +1884,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     value: parseFloat(e.target.value) || 0,
                   })
                 }
-                style={{ width: 70, padding: "4px 6px", fontSize: 13, textAlign: "center" }}
+                style={{ width: 70, padding: "4px 6px", fontSize: 15, textAlign: "center" }}
               />
-              <span style={{ fontSize: 11, color: "#888" }}>
+              <span style={{ fontSize: 13, color: "#888" }}>
                 {discount.type === "percent" ? "%" : "off"}
               </span>
               <input
@@ -1896,12 +1896,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 onChange={(e) =>
                   setDiscount({ ...discount, label: e.target.value || undefined })
                 }
-                style={{ flex: "1 1 140px", minWidth: 100, padding: "4px 8px", fontSize: 12 }}
+                style={{ flex: "1 1 140px", minWidth: 100, padding: "4px 8px", fontSize: 14 }}
               />
               {discountAmount > 0 && (
                 <span
                   style={{
-                    fontSize: 12,
+                    fontSize: 14,
                     fontFamily: "Oswald",
                     color: "var(--color-accent-red)",
                     fontWeight: 600,
@@ -1917,7 +1917,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
 
           <span
             style={{
-              fontSize: 10,
+              fontSize: 12,
               color: "#888",
               fontFamily: "Oswald",
               textTransform: "uppercase",
@@ -1941,7 +1941,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   onClick={() => setTaxMode(opt.key)}
                   style={{
                     padding: "4px 10px",
-                    fontSize: 11,
+                    fontSize: 13,
                     fontFamily: "Oswald",
                     background: active ? "var(--color-primary)" : "transparent",
                     color: active ? "#fff" : "#888",
@@ -1955,7 +1955,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             })}
           </div>
           {taxMode === null && (
-            <span style={{ fontSize: 10, color: "#888", fontFamily: "Oswald" }}>
+            <span style={{ fontSize: 12, color: "#888", fontFamily: "Oswald" }}>
               → {effectiveTaxMode === "materials" ? "mat only" : effectiveTaxMode === "none" ? "no tax" : "L + M"}
             </span>
           )}
@@ -1993,7 +1993,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         ].map((x, i) => (
           <div key={i} className="cd" style={{ textAlign: "center", padding: 8 }}>
             <div className="sl">{x.l}</div>
-            <div style={{ fontSize: 16, fontFamily: "Oswald", color: x.c }}>{x.v}</div>
+            <div style={{ fontSize: 18, fontFamily: "Oswald", color: x.c }}>{x.v}</div>
           </div>
         ))}
       </div>
@@ -2007,7 +2007,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           className="cd mb"
           style={{
             padding: "8px 12px",
-            fontSize: 12,
+            fontSize: 14,
             color: "var(--color-warning)",
             background: "var(--color-warning)15",
             border: "1px solid var(--color-warning)55",
@@ -2027,7 +2027,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       {/* AI Re-quote */}
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <h4 style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <h4 style={{ fontSize: 15, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Icon name="ai" size={14} color="var(--color-primary)" />AI Assist
           </h4>
         </div>
@@ -2036,7 +2036,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             value={quickDesc}
             onChange={(e) => setQuickDesc(e.target.value)}
             placeholder="Add/edit/remove items, set labor rate, apply a discount..."
-            style={{ flex: 1, fontSize: 13 }}
+            style={{ flex: 1, fontSize: 15 }}
           />
           <button
             className="bb"
@@ -2293,17 +2293,17 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               setParseStatus("");
               setQuickDesc("");
             }}
-            style={{ fontSize: 12, padding: "6px 12px" }}
+            style={{ fontSize: 14, padding: "6px 12px" }}
           >
             {parsing ? "..." : "Apply"}
           </button>
         </div>
-        {parseStatus && <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>{parseStatus}</div>}
+        {parseStatus && <div className="dim" style={{ fontSize: 14, marginTop: 4 }}>{parseStatus}</div>}
       </div>
 
       {/* Assign Workers */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 13, marginBottom: 6, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <h4 style={{ fontSize: 15, marginBottom: 6, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="worker" size={14} color="var(--color-primary)" />
           Assign Workers
         </h4>
@@ -2315,7 +2315,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               style={{
                 padding: "5px 12px",
                 borderRadius: 20,
-                fontSize: 12,
+                fontSize: 14,
                 background: workers.includes(u.id)
                   ? "var(--color-primary)" + "33"
                   : "transparent",
@@ -2354,7 +2354,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               key={x.id}
               onClick={() => setTab(x.id)}
               style={{
-                flex: 1, textAlign: "center", padding: "7px 2px", borderRadius: 9, fontSize: 10.5,
+                flex: 1, textAlign: "center", padding: "7px 2px", borderRadius: 9, fontSize: 12.5,
                 fontFamily: "Oswald", fontWeight: 600, letterSpacing: ".04em",
                 background: on ? "#f5b400" : "var(--color-card-dark-2)",
                 color: on ? "#1a1305" : "var(--color-dim)",
@@ -2411,7 +2411,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               });
             })()
           }
-          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
         >
           <Icon name="doc" size={14} /> PDF
         </button>
@@ -2434,13 +2434,13 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             );
             window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_self");
           }}
-          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
         >
           <Icon name="send" size={14} /> Send
         </button>
         <button
           onClick={saveJob}
-          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-success)", background: "var(--color-success)", color: "#06371f", boxShadow: "0 0 22px -6px rgba(0,204,102,.6)", cursor: "pointer" }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-success)", background: "var(--color-success)", color: "#06371f", boxShadow: "0 0 22px -6px rgba(0,204,102,.6)", cursor: "pointer" }}
         >
           <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? "Update" : "Save job"}
         </button>
@@ -2519,14 +2519,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
 
           {/* Upload buttons */}
           <div className="row mb">
-            <button className="bb" onClick={() => galleryRef.current?.click()} disabled={uploadingPhoto} style={{ fontSize: 13, padding: "6px 12px" }}>
+            <button className="bb" onClick={() => galleryRef.current?.click()} disabled={uploadingPhoto} style={{ fontSize: 15, padding: "6px 12px" }}>
               {uploadingPhoto ? "Uploading..." : (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
                   <Icon name="camera" size={14} />Add Photos
                 </span>
               )}
             </button>
-            <span className="dim" style={{ fontSize: 11 }}>{jobPhotos.length} photo{jobPhotos.length !== 1 ? "s" : ""}</span>
+            <span className="dim" style={{ fontSize: 13 }}>{jobPhotos.length} photo{jobPhotos.length !== 1 ? "s" : ""}</span>
           </div>
 
           {/* Type filter */}
@@ -2536,7 +2536,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 {["before", "work", "after"].map((t) => {
                   const count = jobPhotos.filter((p) => p.type === t).length;
                   return (
-                    <span key={t} style={{ fontSize: 12, color: "#888" }}>
+                    <span key={t} style={{ fontSize: 14, color: "#888" }}>
                       {t === "before" ? "📋" : t === "after" ? "✅" : "🔨"} {t}: {count}
                     </span>
                   );
@@ -2568,7 +2568,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                         position: "absolute",
                         bottom: 2,
                         left: 2,
-                        fontSize: 13,
+                        fontSize: 15,
                         padding: "1px 4px",
                         width: "auto",
                         background: "rgba(0,0,0,0.7)",
@@ -2594,7 +2594,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                         borderRadius: "50%",
                         width: 18,
                         height: 18,
-                        fontSize: 12,
+                        fontSize: 14,
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
@@ -2612,7 +2612,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           {!jobPhotos.length && (
             <div className="cd" style={{ textAlign: "center", padding: 24 }}>
               <div style={{ fontSize: 36, marginBottom: 8 }}>📸</div>
-              <p className="dim" style={{ fontSize: 12 }}>Add before, during, and after photos of the work</p>
+              <p className="dim" style={{ fontSize: 14 }}>Add before, during, and after photos of the work</p>
             </div>
           )}
         </div>
@@ -2658,7 +2658,7 @@ function QuoteTab({
     <>
       {rooms.map((rm) => (
         <div key={rm.name} style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "8px 1px 7px", fontFamily: "Oswald", fontWeight: 600, fontSize: 11, letterSpacing: ".1em", color: "var(--color-dim)", textTransform: "uppercase" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "8px 1px 7px", fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".1em", color: "var(--color-dim)", textTransform: "uppercase" }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: dotFor(rm.name), flexShrink: 0 }} />
             {rm.name}
           </div>
@@ -2678,15 +2678,15 @@ function QuoteTab({
                   }}
                 >
                   <div style={{ flex: "1 1 180px" }}>
-                    <b style={{ fontSize: 12 }}>{it.detail}</b>{" "}
+                    <b style={{ fontSize: 14 }}>{it.detail}</b>{" "}
                     <ConditionBadge condition={it.condition} />
-                    <div style={{ fontSize: 11 }} className="dim">
+                    <div style={{ fontSize: 13 }} className="dim">
                       {it.comment}
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 8 }} className="dim">SQFT</div>
+                      <div style={{ fontSize: 10 }} className="dim">SQFT</div>
                       <input
                         type="number"
                         defaultValue={(it as unknown as Record<string, unknown>).sqft as number || ""}
@@ -2697,11 +2697,11 @@ function QuoteTab({
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           upItem(rm.name, it.id, "sqft" as any, sqft as any);
                         }}
-                        style={{ width: 40, textAlign: "center", padding: "2px", fontSize: 11 }}
+                        style={{ width: 40, textAlign: "center", padding: "2px", fontSize: 13 }}
                       />
                     </div>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 8 }} className="dim">HRS</div>
+                      <div style={{ fontSize: 10 }} className="dim">HRS</div>
                       <input
                         type="number"
                         value={it.laborHrs === 0 ? "" : it.laborHrs}
@@ -2714,17 +2714,17 @@ function QuoteTab({
                           const v = raw === "" ? 0 : (parseFloat(raw) || 0);
                           upItem(rm.name, it.id, "laborHrs", v);
                         }}
-                        style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 11 }}
+                        style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 13 }}
                       />
                     </div>
                     <div style={{ textAlign: "center", position: "relative" }}>
-                      <div style={{ fontSize: 8 }} className="dim">MAT</div>
+                      <div style={{ fontSize: 10 }} className="dim">MAT</div>
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
                           setExpandedMat(expandedMat === it.id ? null : it.id);
                         }}
-                        style={{ width: 50, textAlign: "center", padding: "2px", fontSize: 11, cursor: "pointer", color: "var(--color-warning)", fontFamily: "Oswald", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, borderRadius: 4 }}
+                        style={{ width: 50, textAlign: "center", padding: "2px", fontSize: 13, cursor: "pointer", color: "var(--color-warning)", fontFamily: "Oswald", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, borderRadius: 4 }}
                       >
                         ${it.materials.reduce((s, m) => s + (m.c || 0), 0).toFixed(0)}
                       </div>
@@ -2742,7 +2742,7 @@ function QuoteTab({
                           background: darkMode ? "#12121a" : "#fff", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
                           borderRadius: 12, padding: 14, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
                         }}>
-                          <div style={{ display: "flex", gap: 4, marginBottom: 6, fontSize: 11, fontWeight: 600 }}>
+                          <div style={{ display: "flex", gap: 4, marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
                             <span style={{ flex: 1 }}>Material</span>
                             <span style={{ width: 32, textAlign: "center" }}>Qty</span>
                             <span style={{ width: 55, textAlign: "right" }}>Price</span>
@@ -2752,7 +2752,7 @@ function QuoteTab({
                             const qtyVal = mat.qty;
                             const unitVal = mat.unitPrice;
                             return (
-                              <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 12 }}>
+                              <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 14 }}>
                                 <input
                                   value={mat.n}
                                   onChange={(e) => {
@@ -2760,7 +2760,7 @@ function QuoteTab({
                                     mats[mi] = { ...mats[mi], n: e.target.value };
                                     upItem(rm.name, it.id, "materials", mats);
                                   }}
-                                  style={{ flex: 1, fontSize: 11, padding: 2 }}
+                                  style={{ flex: 1, fontSize: 13, padding: 2 }}
                                 />
                                 <input
                                   type="number"
@@ -2796,10 +2796,10 @@ function QuoteTab({
                                       upItem(rm.name, it.id, "materials", mats);
                                     }
                                   }}
-                                  style={{ width: 36, fontSize: 11, padding: 2, textAlign: "center" }}
+                                  style={{ width: 36, fontSize: 13, padding: 2, textAlign: "center" }}
                                   title="Quantity"
                                 />
-                                <span style={{ fontSize: 10, color: "#888" }}>×$</span>
+                                <span style={{ fontSize: 12, color: "#888" }}>×$</span>
                                 <input
                                   type="number"
                                   value={unitVal === undefined || unitVal === null ? "" : unitVal}
@@ -2823,10 +2823,10 @@ function QuoteTab({
                                     mats[mi] = next;
                                     upItem(rm.name, it.id, "materials", mats);
                                   }}
-                                  style={{ width: 52, fontSize: 11, padding: 2, textAlign: "right" }}
+                                  style={{ width: 52, fontSize: 13, padding: 2, textAlign: "right" }}
                                   title="Unit price"
                                 />
-                                <span style={{ fontSize: 11 }}>=$</span>
+                                <span style={{ fontSize: 13 }}>=$</span>
                                 <input
                                   type="number"
                                   value={mat.c === 0 ? "" : mat.c}
@@ -2847,7 +2847,7 @@ function QuoteTab({
                                     mats[mi] = next;
                                     upItem(rm.name, it.id, "materials", mats);
                                   }}
-                                  style={{ width: 56, fontSize: 11, padding: 2, textAlign: "right" }}
+                                  style={{ width: 56, fontSize: 13, padding: 2, textAlign: "right" }}
                                   title="Line total"
                                 />
                                 <button
@@ -2855,7 +2855,7 @@ function QuoteTab({
                                     const mats = it.materials.filter((_, i) => i !== mi);
                                     upItem(rm.name, it.id, "materials", mats.length ? mats : [{ n: "Materials", c: 0 }]);
                                   }}
-                                  style={{ background: "none", color: "var(--color-accent-red)", fontSize: 11, padding: 0 }}
+                                  style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: 0 }}
                                 >✕</button>
                               </div>
                             );
@@ -2864,12 +2864,12 @@ function QuoteTab({
                             onClick={() => {
                               upItem(rm.name, it.id, "materials", [...it.materials, { n: "New material", c: 0 }]);
                             }}
-                            style={{ fontSize: 11, background: "none", color: "var(--color-primary)", padding: "2px 0", width: "100%", textAlign: "center", marginTop: 4 }}
+                            style={{ fontSize: 13, background: "none", color: "var(--color-primary)", padding: "2px 0", width: "100%", textAlign: "center", marginTop: 4 }}
                           >+ Add Material</button>
                           <button
                             onClick={() => setExpandedMat(null)}
                             className="bo"
-                            style={{ fontSize: 12, padding: "4px 0", width: "100%", marginTop: 8 }}
+                            style={{ fontSize: 14, padding: "4px 0", width: "100%", marginTop: 8 }}
                           >Done</button>
                         </div>
                         </>,
@@ -2877,10 +2877,10 @@ function QuoteTab({
                       )}
                     </div>
                     <div style={{ minWidth: 50, textAlign: "right" }}>
-                      <div style={{ fontSize: 8 }} className="dim">TOT</div>
+                      <div style={{ fontSize: 10 }} className="dim">TOT</div>
                       <div
                         style={{
-                          fontSize: 13,
+                          fontSize: 15,
                           fontFamily: "Oswald",
                           color: "var(--color-success)",
                         }}
@@ -2890,7 +2890,7 @@ function QuoteTab({
                     </div>
                     <button
                       onClick={() => rmItem(rm.name, it.id)}
-                      style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: 1 }}
+                      style={{ background: "none", color: "var(--color-accent-red)", fontSize: 15, padding: 1 }}
                     >
                       ✕
                     </button>
@@ -2978,7 +2978,7 @@ function GuideTab({
     <div>
       <div className="g2 mb">
         <div className="cd">
-          <h4 style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 6 }}>
+          <h4 style={{ color: "var(--color-primary)", fontSize: 15, marginBottom: 6 }}>
             🧰 Tools ({allTools.length})
           </h4>
           {allTools.map((t, i) => {
@@ -2988,7 +2988,7 @@ function GuideTab({
                 key={i}
                 onClick={() => toggleTool(t)}
                 style={{
-                  fontSize: 12,
+                  fontSize: 14,
                   padding: "4px 0",
                   borderBottom: `1px solid ${border}`,
                   cursor: "pointer",
@@ -3004,7 +3004,7 @@ function GuideTab({
                   border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
                   background: done ? "var(--color-success)" : "transparent",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 12, color: "#fff", flexShrink: 0,
+                  fontSize: 14, color: "#fff", flexShrink: 0,
                 }}>
                   {done && "✓"}
                 </span>
@@ -3018,7 +3018,7 @@ function GuideTab({
               value={newTool}
               onChange={(e) => setNewTool(e.target.value)}
               placeholder="Add tool..."
-              style={{ flex: 1, fontSize: 13, padding: "4px 8px" }}
+              style={{ flex: 1, fontSize: 15, padding: "4px 8px" }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && newTool.trim()) {
                   setCustomTools((prev) => [...prev, newTool.trim()]);
@@ -3033,14 +3033,14 @@ function GuideTab({
                   setNewTool("");
                 }
               }}
-              style={{ background: "none", color: "var(--color-primary)", fontSize: 14, padding: "0 4px" }}
+              style={{ background: "none", color: "var(--color-primary)", fontSize: 16, padding: "0 4px" }}
             >
               +
             </button>
           </div>
         </div>
         <div className="cd">
-          <h4 style={{ color: "var(--color-warning)", fontSize: 13, marginBottom: 6 }}>
+          <h4 style={{ color: "var(--color-warning)", fontSize: 15, marginBottom: 6 }}>
             🛒 Shopping ($
             {allShop.reduce((s, i) => s + (i.c || 0), 0)})
           </h4>
@@ -3056,7 +3056,7 @@ function GuideTab({
               return (
                 <div key={i}>
                   {showHeader && (
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-primary)", marginTop: i > 0 ? 10 : 0, marginBottom: 4 }}>{curTrade}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-primary)", marginTop: i > 0 ? 10 : 0, marginBottom: 4 }}>{curTrade}</div>
                   )}
                   <div
                     onClick={() => toggleShop(s)}
@@ -3064,7 +3064,7 @@ function GuideTab({
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      fontSize: 13,
+                      fontSize: 15,
                       padding: "3px 0 3px 12px",
                       borderBottom: `1px solid ${border}`,
                       cursor: "pointer",
@@ -3078,7 +3078,7 @@ function GuideTab({
                         border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
                         background: done ? "var(--color-success)" : "transparent",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 13, color: "#fff", flexShrink: 0,
+                        fontSize: 15, color: "#fff", flexShrink: 0,
                       }}>
                         {done && "✓"}
                       </span>
@@ -3096,14 +3096,14 @@ function GuideTab({
               value={newShopName}
               onChange={(e) => setNewShopName(e.target.value)}
               placeholder="Item name..."
-              style={{ flex: 1, fontSize: 13, padding: "4px 8px" }}
+              style={{ flex: 1, fontSize: 15, padding: "4px 8px" }}
             />
             <input
               type="number"
               value={newShopCost}
               onChange={(e) => setNewShopCost(e.target.value)}
               placeholder="$"
-              style={{ width: 50, fontSize: 13, padding: "4px 6px" }}
+              style={{ width: 50, fontSize: 15, padding: "4px 6px" }}
             />
             <button
               onClick={() => {
@@ -3113,7 +3113,7 @@ function GuideTab({
                   setNewShopCost("");
                 }
               }}
-              style={{ background: "none", color: "var(--color-warning)", fontSize: 14, padding: "0 4px" }}
+              style={{ background: "none", color: "var(--color-warning)", fontSize: 16, padding: "0 4px" }}
             >
               +
             </button>
@@ -3122,7 +3122,7 @@ function GuideTab({
       </div>
       <div className="cd">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <h4 style={{ color: "var(--color-success)", fontSize: 13, margin: 0 }}>
+          <h4 style={{ color: "var(--color-success)", fontSize: 15, margin: 0 }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <Icon name="list" size={14} color="var(--color-success)" />
               Work Order ({workOrder.length} tasks · {workOrderHrs.toFixed(1)}h)
@@ -3132,14 +3132,14 @@ function GuideTab({
             <button
               onClick={onReset}
               title="Discard edits and rebuild from quote items"
-              style={{ background: "none", color: "var(--color-primary)", fontSize: 11, padding: "2px 6px" }}
+              style={{ background: "none", color: "var(--color-primary)", fontSize: 13, padding: "2px 6px" }}
             >
               ↺ Regenerate
             </button>
           )}
         </div>
         {workOrder.length === 0 && (
-          <div className="dim" style={{ fontSize: 11, padding: "4px 0" }}>
+          <div className="dim" style={{ fontSize: 13, padding: "4px 0" }}>
             No tasks yet. Add items to the quote or create one below.
           </div>
         )}
@@ -3160,7 +3160,7 @@ function GuideTab({
               style={{
                 marginTop: i === 0 ? 0 : 8,
                 marginBottom: 2,
-                fontSize: 11,
+                fontSize: 13,
                 fontFamily: "Oswald",
                 textTransform: "uppercase",
                 letterSpacing: ".08em",
@@ -3172,7 +3172,7 @@ function GuideTab({
               }}
             >
               <span>{s.room}</span>
-              <span className="dim" style={{ fontSize: 10 }}>
+              <span className="dim" style={{ fontSize: 12 }}>
                 {tradeCount} task{tradeCount === 1 ? "" : "s"} · {tradeHrs.toFixed(1)}h
               </span>
             </div>
@@ -3181,7 +3181,7 @@ function GuideTab({
             style={{
               padding: "4px 0",
               borderBottom: `1px solid ${border}`,
-              fontSize: 12,
+              fontSize: 14,
               display: "flex",
               alignItems: "flex-start",
               gap: 4,
@@ -3192,7 +3192,7 @@ function GuideTab({
                 <select
                   value={s.pri}
                   onChange={(e) => onEditStep(i, { pri: e.target.value as "HIGH" | "MED" | "LOW" })}
-                  style={{ fontSize: 10, padding: "1px 4px", width: "auto", fontFamily: "Oswald" }}
+                  style={{ fontSize: 12, padding: "1px 4px", width: "auto", fontFamily: "Oswald" }}
                 >
                   <option value="HIGH">HIGH</option>
                   <option value="MED">MED</option>
@@ -3201,13 +3201,13 @@ function GuideTab({
                 <input
                   value={s.room}
                   onChange={(e) => onEditStep(i, { room: e.target.value })}
-                  style={{ fontSize: 12, padding: "1px 4px", width: 100, color: "var(--color-primary)", fontWeight: 600 }}
+                  style={{ fontSize: 14, padding: "1px 4px", width: 100, color: "var(--color-primary)", fontWeight: 600 }}
                 />
                 <span>→</span>
                 <input
                   value={s.detail}
                   onChange={(e) => onEditStep(i, { detail: e.target.value })}
-                  style={{ fontSize: 12, padding: "1px 4px", flex: 1, minWidth: 80 }}
+                  style={{ fontSize: 14, padding: "1px 4px", flex: 1, minWidth: 80 }}
                 />
                 <input
                   type="number"
@@ -3221,21 +3221,21 @@ function GuideTab({
                   }}
                   step=".25"
                   min="0"
-                  style={{ fontSize: 11, padding: "1px 4px", width: 50, textAlign: "center" }}
+                  style={{ fontSize: 13, padding: "1px 4px", width: 50, textAlign: "center" }}
                 />
-                <span className="dim" style={{ fontSize: 11 }}>h</span>
+                <span className="dim" style={{ fontSize: 13 }}>h</span>
               </div>
               <input
                 value={s.action}
                 onChange={(e) => onEditStep(i, { action: e.target.value })}
                 placeholder="Action / method"
-                style={{ fontSize: 12, padding: "1px 4px", marginTop: 2, width: "100%", color: "#aaa" }}
+                style={{ fontSize: 14, padding: "1px 4px", marginTop: 2, width: "100%", color: "#aaa" }}
               />
             </div>
             <button
               onClick={() => onRemoveStep(i)}
               title="Remove task"
-              style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12, padding: "0 4px" }}
+              style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, padding: "0 4px" }}
             >
               ✕
             </button>
@@ -3246,14 +3246,14 @@ function GuideTab({
 
         {/* Add new task */}
         <div style={{ marginTop: 8, padding: 6, border: `1px dashed ${border}`, borderRadius: 4 }}>
-          <div className="dim" style={{ fontSize: 10, marginBottom: 4, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+          <div className="dim" style={{ fontSize: 12, marginBottom: 4, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
             + Add task
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 4 }}>
             <select
               value={taskPri}
               onChange={(e) => setTaskPri(e.target.value as "HIGH" | "MED" | "LOW")}
-              style={{ fontSize: 10, padding: "2px 4px", width: "auto" }}
+              style={{ fontSize: 12, padding: "2px 4px", width: "auto" }}
             >
               <option value="HIGH">HIGH</option>
               <option value="MED">MED</option>
@@ -3263,13 +3263,13 @@ function GuideTab({
               value={taskRoom}
               onChange={(e) => setTaskRoom(e.target.value)}
               placeholder="Trade / area"
-              style={{ fontSize: 12, padding: "2px 4px", width: 110 }}
+              style={{ fontSize: 14, padding: "2px 4px", width: 110 }}
             />
             <input
               value={taskDetail}
               onChange={(e) => setTaskDetail(e.target.value)}
               placeholder="Task"
-              style={{ fontSize: 12, padding: "2px 4px", flex: 1, minWidth: 90 }}
+              style={{ fontSize: 14, padding: "2px 4px", flex: 1, minWidth: 90 }}
             />
             <input
               type="number"
@@ -3277,7 +3277,7 @@ function GuideTab({
               onChange={(e) => setTaskHrs(e.target.value)}
               step=".25"
               min="0"
-              style={{ fontSize: 11, padding: "2px 4px", width: 50, textAlign: "center" }}
+              style={{ fontSize: 13, padding: "2px 4px", width: 50, textAlign: "center" }}
             />
           </div>
           <div style={{ display: "flex", gap: 4 }}>
@@ -3285,7 +3285,7 @@ function GuideTab({
               value={taskAction}
               onChange={(e) => setTaskAction(e.target.value)}
               placeholder="Action / method (optional)"
-              style={{ fontSize: 12, padding: "2px 4px", flex: 1 }}
+              style={{ fontSize: 14, padding: "2px 4px", flex: 1 }}
             />
             <button
               onClick={() => {
@@ -3304,7 +3304,7 @@ function GuideTab({
                 setTaskHrs("1");
               }}
               disabled={!taskDetail.trim()}
-              style={{ background: "var(--color-primary)", color: "#fff", padding: "2px 10px", fontSize: 12, borderRadius: 4, opacity: taskDetail.trim() ? 1 : 0.5 }}
+              style={{ background: "var(--color-primary)", color: "#fff", padding: "2px 10px", fontSize: 14, borderRadius: 4, opacity: taskDetail.trim() ? 1 : 0.5 }}
             >
               Add
             </button>
@@ -3332,17 +3332,17 @@ function IssuesTab({
     <>
       {sections.map((s, i) => (
         <div key={i} className="cd mb" style={{ borderLeft: `3px solid ${s.c}` }}>
-          <h4 style={{ color: s.c, fontSize: 13, marginBottom: 4 }}>
+          <h4 style={{ color: s.c, fontSize: 15, marginBottom: 4 }}>
             {s.t} ({s.it.length})
           </h4>
           {!s.it.length ? (
-            <span className="dim" style={{ fontSize: 11 }}>None</span>
+            <span className="dim" style={{ fontSize: 13 }}>None</span>
           ) : (
             s.it.map((x, j) => (
               <div
                 key={j}
                 style={{
-                  fontSize: 12,
+                  fontSize: 14,
                   padding: "3px 0",
                   borderBottom: `1px solid ${border}`,
                 }}
@@ -3386,8 +3386,8 @@ function AddItemForm({
     <div className="cd">
       <div className="g2 mb">
         <div>
-          <label style={{ fontSize: 10 }} className="dim">Trade *</label>
-          <select value={nr} onChange={(e) => setNr(e.target.value)} style={{ fontSize: 13 }}>
+          <label style={{ fontSize: 12 }} className="dim">Trade *</label>
+          <select value={nr} onChange={(e) => setNr(e.target.value)} style={{ fontSize: 15 }}>
             <option value="">— pick a trade —</option>
             {TRADE_CATEGORY_LIST.map((t) => (
               <option key={t} value={t}>{t}</option>
@@ -3395,7 +3395,7 @@ function AddItemForm({
           </select>
         </div>
         <div>
-          <label style={{ fontSize: 10 }} className="dim">Area / Room (optional)</label>
+          <label style={{ fontSize: 12 }} className="dim">Area / Room (optional)</label>
           <input
             value={na}
             onChange={(e) => setNa(e.target.value)}
@@ -3410,7 +3410,7 @@ function AddItemForm({
         </div>
       </div>
       <div style={{ marginBottom: 8 }}>
-        <label style={{ fontSize: 10 }} className="dim">Item *</label>
+        <label style={{ fontSize: 12 }} className="dim">Item *</label>
         <input
           value={nd}
           onChange={(e) => setNd(e.target.value)}
@@ -3418,7 +3418,7 @@ function AddItemForm({
         />
       </div>
       <div style={{ marginBottom: 8 }}>
-        <label style={{ fontSize: 10 }} className="dim">Description (optional)</label>
+        <label style={{ fontSize: 12 }} className="dim">Description (optional)</label>
         <input
           value={nc}
           onChange={(e) => setNc(e.target.value)}
@@ -3427,7 +3427,7 @@ function AddItemForm({
       </div>
       <div className="g2 mb">
         <div>
-          <label style={{ fontSize: 10 }} className="dim">Hours</label>
+          <label style={{ fontSize: 12 }} className="dim">Hours</label>
           <input
             type="number"
             value={nh}
@@ -3437,7 +3437,7 @@ function AddItemForm({
           />
         </div>
         <div>
-          <label style={{ fontSize: 10 }} className="dim">Mat $</label>
+          <label style={{ fontSize: 12 }} className="dim">Mat $</label>
           <input
             type="number"
             value={nm}
@@ -3448,7 +3448,7 @@ function AddItemForm({
       </div>
       <div className="g2 mb">
         <div>
-          <label style={{ fontSize: 10 }} className="dim">SQFT (optional)</label>
+          <label style={{ fontSize: 12 }} className="dim">SQFT (optional)</label>
           <input
             type="number"
             value={nsq}
@@ -3459,11 +3459,11 @@ function AddItemForm({
           />
         </div>
         <div>
-          <label style={{ fontSize: 10 }} className="dim">Condition</label>
+          <label style={{ fontSize: 12 }} className="dim">Condition</label>
           <select
             value={ncn}
             onChange={(e) => setNcn(e.target.value as "D" | "P" | "F" | "-")}
-            style={{ fontSize: 13 }}
+            style={{ fontSize: 15 }}
           >
             <option value="-">— project scope</option>
             <option value="D">D — Damaged / urgent</option>
@@ -3489,7 +3489,7 @@ function ConditionBadge({ condition }: { condition: string }) {
   return (
     <span
       style={{
-        fontSize: 13,
+        fontSize: 15,
         padding: "1px 5px",
         borderRadius: 3,
         background: d.bg,
@@ -3511,7 +3511,7 @@ function PriorityBadge({ pri }: { pri: "HIGH" | "MED" | "LOW" }) {
   return (
     <span
       style={{
-        fontSize: 13,
+        fontSize: 15,
         padding: "1px 5px",
         borderRadius: 3,
         marginRight: 6,
@@ -3540,7 +3540,7 @@ function SavedInspections({ jobs, onQuote, onEdit, onPrint, onDelete }: { jobs: 
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
           background: "none", border: "none", padding: "9px 2px",
-          fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, letterSpacing: ".06em",
+          fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, letterSpacing: ".06em",
           color: "var(--color-dim)", cursor: "pointer",
         }}
       >
@@ -3561,8 +3561,8 @@ function SavedInspections({ jobs, onQuote, onEdit, onPrint, onDelete }: { jobs: 
 
             return (
               <div key={insp.id} className="cd mb" style={{ padding: "11px 12px" }}>
-                <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{insp.property || "Untitled"}</div>
-                <div className="dim" style={{ fontSize: 10, margin: "2px 0 8px" }}>
+                <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>{insp.property || "Untitled"}</div>
+                <div className="dim" style={{ fontSize: 12, margin: "2px 0 8px" }}>
                   {insp.client || "No client"} · {insp.job_date} · {roomCount} areas · {findingsCount} findings
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -3591,7 +3591,7 @@ function SavedInspections({ jobs, onQuote, onEdit, onPrint, onDelete }: { jobs: 
                       address_id: insp.address_id || undefined,
                     };
                     onQuote(normalized, insp.id);
-                  }} style={{ fontSize: 10.5, fontWeight: 600, color: "#1a1305", background: "#f5b400", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", marginRight: "auto" }}>
+                  }} style={{ fontSize: 12.5, fontWeight: 600, color: "#1a1305", background: "#f5b400", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", marginRight: "auto" }}>
                     {t("qf.quoteThis")}
                   </button>
                   <button onClick={() => onEdit(insp)} aria-label="Edit" style={mini}><Icon name="edit" size={14} /></button>

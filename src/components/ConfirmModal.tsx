@@ -44,7 +44,7 @@ export default function ConfirmModal() {
         <h3
           style={{
             fontFamily: "Oswald, sans-serif",
-            fontSize: 18,
+            fontSize: 20,
             textTransform: "uppercase",
             color: accent,
             marginBottom: 12,
@@ -56,7 +56,7 @@ export default function ConfirmModal() {
         </h3>
         <p
           style={{
-            fontSize: 14,
+            fontSize: 16,
             color: "#b5b5c0",
             lineHeight: 1.55,
             marginBottom: 22,
@@ -71,7 +71,7 @@ export default function ConfirmModal() {
             style={{
               padding: "9px 20px",
               borderRadius: 10,
-              fontSize: 13,
+              fontSize: 15,
               fontFamily: "Oswald, sans-serif",
               textTransform: "uppercase",
               letterSpacing: ".06em",
@@ -97,7 +97,7 @@ export default function ConfirmModal() {
             style={{
               padding: "9px 22px",
               borderRadius: 10,
-              fontSize: 13,
+              fontSize: 15,
               fontFamily: "Oswald, sans-serif",
               textTransform: "uppercase",
               letterSpacing: ".06em",

@@ -123,7 +123,7 @@ export default function SignupPage() {
           <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 26, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: "0 0 6px" }}>
             Start your free trial
           </h1>
-          <p style={{ fontSize: 13, color: "#999", margin: 0, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 15, color: "#999", margin: 0, lineHeight: 1.5 }}>
             30 days free · No charge until your trial ends · Cancel anytime
           </p>
         </div>
@@ -132,14 +132,14 @@ export default function SignupPage() {
           {emailSent ? (
             <div style={{ textAlign: "center", padding: "6px 0" }}>
               <div style={{ fontSize: 42, marginBottom: 10 }}>✉</div>
-              <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: ACCENT, textTransform: "uppercase", margin: "0 0 10px" }}>
+              <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: ACCENT, textTransform: "uppercase", margin: "0 0 10px" }}>
                 Check your inbox
               </h2>
-              <p style={{ color: "#aaa", fontSize: 13, lineHeight: 1.5 }}>
+              <p style={{ color: "#aaa", fontSize: 15, lineHeight: 1.5 }}>
                 We sent a verification link to <strong style={{ color: "#ddd" }}>{email}</strong>.
                 Click it and we&apos;ll bring you straight to setup.
               </p>
-              <p style={{ color: "#666", fontSize: 11, marginTop: 14 }}>
+              <p style={{ color: "#666", fontSize: 13, marginTop: 14 }}>
                 Already verified? <a href="/" style={{ color: PRIMARY }}>Sign in</a>
               </p>
             </div>
@@ -178,14 +178,14 @@ export default function SignupPage() {
                 />
                 <span
                   onClick={() => setShowPw(!showPw)}
-                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", cursor: "pointer", fontSize: 16, userSelect: "none" }}
+                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", cursor: "pointer", fontSize: 18, userSelect: "none" }}
                 >
                   {showPw ? "🙈" : "👁"}
                 </span>
               </div>
 
               {err && (
-                <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 12, color: "#ff8888" }}>
+                <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 14, color: "#ff8888" }}>
                   {err}
                 </div>
               )}
@@ -195,7 +195,7 @@ export default function SignupPage() {
                 disabled={busy}
                 style={{
                   width: "100%", padding: 12, borderRadius: 8,
-                  fontFamily: "Oswald, sans-serif", fontSize: 14,
+                  fontFamily: "Oswald, sans-serif", fontSize: 16,
                   textTransform: "uppercase", letterSpacing: ".05em",
                   background: busy ? "#333" : PRIMARY, color: "#fff",
                   border: "none", cursor: busy ? "wait" : "pointer",
@@ -205,14 +205,14 @@ export default function SignupPage() {
                 {busy ? "Creating account…" : "Create my account"}
               </button>
 
-              <p style={{ textAlign: "center", color: "#666", fontSize: 11, marginTop: 14 }}>
+              <p style={{ textAlign: "center", color: "#666", fontSize: 13, marginTop: 14 }}>
                 Already have an account? <a href="/" style={{ color: PRIMARY, textDecoration: "none" }}>Sign in</a>
               </p>
             </>
           )}
         </div>
 
-        <div style={{ textAlign: "center", marginTop: 14, color: "#555", fontSize: 11 }}>
+        <div style={{ textAlign: "center", marginTop: 14, color: "#555", fontSize: 13 }}>
           <a href="/pricing" style={{ color: "#888", textDecoration: "none" }}>← Back to pricing</a>
         </div>
       </div>
@@ -227,13 +227,13 @@ const inp: React.CSSProperties = {
   border: "1px solid #1e1e2e",
   background: "#0d0d15",
   color: "#e2e2e8",
-  fontSize: 14,
+  fontSize: 16,
   fontFamily: "inherit",
   boxSizing: "border-box",
 };
 
 const lbl: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 13,
   color: "#888",
   fontFamily: "Oswald, sans-serif",
   textTransform: "uppercase",

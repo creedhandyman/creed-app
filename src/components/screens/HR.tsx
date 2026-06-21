@@ -30,7 +30,7 @@ export default function HR() {
   if (!user) {
     return (
       <div className="cd">
-        <p className="dim" style={{ fontSize: 12 }}>Sign in to manage time off.</p>
+        <p className="dim" style={{ fontSize: 14 }}>Sign in to manage time off.</p>
       </div>
     );
   }
@@ -45,7 +45,7 @@ export default function HR() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
         <Icon name="worker" size={22} color="var(--color-primary)" />
         HR
       </h2>
@@ -56,12 +56,12 @@ export default function HR() {
 
       {isAdmin && (
         <div className="cd mb">
-          <h4 style={{ fontSize: 13, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <h4 style={{ fontSize: 15, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Icon name="bell" size={14} color="var(--color-warning)" />
             Pending Time Off ({pending.length})
           </h4>
           {pending.length === 0 ? (
-            <p className="dim" style={{ fontSize: 12 }}>No pending requests.</p>
+            <p className="dim" style={{ fontSize: 14 }}>No pending requests.</p>
           ) : (
             pending.map((r) => (
               <RequestRow key={r.id} req={r} actor={user.name} onChange={loadAll} />
@@ -70,7 +70,7 @@ export default function HR() {
         </div>
       )}
 
-      <p className="dim" style={{ fontSize: 11 }}>
+      <p className="dim" style={{ fontSize: 13 }}>
         More HR features (employee notes, contacts, documents) coming soon.
       </p>
     </div>
@@ -145,11 +145,11 @@ function NewRequestForm({
   return (
     <div className="cd mb">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <h4 style={{ fontSize: 13 }}>Request Time Off</h4>
+        <h4 style={{ fontSize: 15 }}>Request Time Off</h4>
         <button
           className="bb"
           onClick={() => setOpen(!open)}
-          style={{ fontSize: 12, padding: "4px 12px" }}
+          style={{ fontSize: 14, padding: "4px 12px" }}
         >
           {open ? "Cancel" : "+ New Request"}
         </button>
@@ -158,28 +158,28 @@ function NewRequestForm({
         <div style={{ marginTop: 10 }}>
           <div className="g2 mb">
             <div>
-              <label style={{ fontSize: 10 }} className="dim">Start date</label>
+              <label style={{ fontSize: 12 }} className="dim">Start date</label>
               <input
                 type="date"
                 value={start}
                 onChange={(e) => { setStart(e.target.value); recomputeHours(e.target.value, end); }}
-                style={{ fontSize: 13 }}
+                style={{ fontSize: 15 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 10 }} className="dim">End date</label>
+              <label style={{ fontSize: 12 }} className="dim">End date</label>
               <input
                 type="date"
                 value={end}
                 onChange={(e) => { setEnd(e.target.value); recomputeHours(start, e.target.value); }}
-                style={{ fontSize: 13 }}
+                style={{ fontSize: 15 }}
               />
             </div>
           </div>
           <div className="g2 mb">
             <div>
-              <label style={{ fontSize: 10 }} className="dim">Kind</label>
-              <select value={kind} onChange={(e) => setKind(e.target.value as TimeOffKind)} style={{ fontSize: 13 }}>
+              <label style={{ fontSize: 12 }} className="dim">Kind</label>
+              <select value={kind} onChange={(e) => setKind(e.target.value as TimeOffKind)} style={{ fontSize: 15 }}>
                 <option value="vacation">Vacation</option>
                 <option value="personal">Personal</option>
                 <option value="sick">Sick</option>
@@ -187,35 +187,35 @@ function NewRequestForm({
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 10 }} className="dim">Hours requested</label>
+              <label style={{ fontSize: 12 }} className="dim">Hours requested</label>
               <input
                 type="number"
                 value={hours}
                 onChange={(e) => setHours(e.target.value)}
                 min="0"
                 step="0.5"
-                style={{ fontSize: 13 }}
+                style={{ fontSize: 15 }}
               />
             </div>
           </div>
           <div style={{ marginBottom: 8 }}>
-            <label style={{ fontSize: 10 }} className="dim">Reason (optional)</label>
+            <label style={{ fontSize: 12 }} className="dim">Reason (optional)</label>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Out of town for a wedding"
-              style={{ fontSize: 13 }}
+              style={{ fontSize: 15 }}
             />
           </div>
           <button
             className="bg"
             onClick={submit}
             disabled={busy}
-            style={{ width: "100%", fontSize: 13, padding: "6px 12px", opacity: busy ? 0.5 : 1 }}
+            style={{ width: "100%", fontSize: 15, padding: "6px 12px", opacity: busy ? 0.5 : 1 }}
           >
             {busy ? "Submitting..." : "Submit Request"}
           </button>
-          <p className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+          <p className="dim" style={{ fontSize: 13, marginTop: 6 }}>
             Your manager will review the request and approve or deny it.
           </p>
         </div>
@@ -227,19 +227,19 @@ function NewRequestForm({
 function MyRequests({ requests }: { requests: TimeOffRequest[] }) {
   return (
     <div className="cd mb">
-      <h4 style={{ fontSize: 13, marginBottom: 8 }}>Your Requests ({requests.length})</h4>
+      <h4 style={{ fontSize: 15, marginBottom: 8 }}>Your Requests ({requests.length})</h4>
       {requests.length === 0 ? (
-        <p className="dim" style={{ fontSize: 12 }}>No time-off requests yet.</p>
+        <p className="dim" style={{ fontSize: 14 }}>No time-off requests yet.</p>
       ) : (
         requests.map((r) => (
-          <div key={r.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "6px 0", flexWrap: "wrap", gap: 6 }}>
+          <div key={r.id} className="sep" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, padding: "6px 0", flexWrap: "wrap", gap: 6 }}>
             <div style={{ flex: "1 1 140px" }}>
               <span style={{ fontWeight: 600 }}>{kindLabel(r.kind)}</span>
               <span className="dim" style={{ marginLeft: 6 }}>{fmtRange(r.start_date, r.end_date)} · {num(r.hours).toFixed(0)}h</span>
-              {r.reason && <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>&ldquo;{r.reason}&rdquo;</div>}
+              {r.reason && <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>&ldquo;{r.reason}&rdquo;</div>}
             </div>
             <span style={{
-              fontSize: 10,
+              fontSize: 12,
               padding: "2px 8px",
               borderRadius: 8,
               background: r.status === "approved" ? "var(--color-success)22"
@@ -285,24 +285,24 @@ function RequestRow({
 
   return (
     <div className="sep" style={{ padding: "6px 0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, gap: 6, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, gap: 6, flexWrap: "wrap" }}>
         <div>
           <b>{req.user_name}</b>
           <span className="dim" style={{ marginLeft: 6 }}>— {kindLabel(req.kind)}</span>
         </div>
-        <div className="dim" style={{ fontSize: 11, fontFamily: "Oswald" }}>
+        <div className="dim" style={{ fontSize: 13, fontFamily: "Oswald" }}>
           {fmtRange(req.start_date, req.end_date)} · {num(req.hours).toFixed(0)}h
         </div>
       </div>
       {req.reason && (
-        <div style={{ fontSize: 12, marginTop: 4, color: "#666" }}>&ldquo;{req.reason}&rdquo;</div>
+        <div style={{ fontSize: 14, marginTop: 4, color: "#666" }}>&ldquo;{req.reason}&rdquo;</div>
       )}
       <div className="row" style={{ marginTop: 6, gap: 6 }}>
         <button
           className="bg"
           onClick={() => decide("approved")}
           disabled={busy}
-          style={{ fontSize: 11, padding: "4px 12px" }}
+          style={{ fontSize: 13, padding: "4px 12px" }}
         >
           {busy ? "..." : "✓ Approve"}
         </button>
@@ -310,7 +310,7 @@ function RequestRow({
           className="br"
           onClick={() => decide("denied")}
           disabled={busy}
-          style={{ fontSize: 11, padding: "4px 12px" }}
+          style={{ fontSize: 13, padding: "4px 12px" }}
         >
           {busy ? "..." : "✕ Deny"}
         </button>

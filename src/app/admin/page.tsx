@@ -73,16 +73,16 @@ export default function AdminPage() {
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && load()}
             placeholder="Admin password"
-            style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8", padding: "10px 14px", borderRadius: 8, width: "100%", fontSize: 14, marginBottom: 10 }}
+            style={{ background: "#1a1a28", border: "1px solid #1e1e2e", color: "#e2e2e8", padding: "10px 14px", borderRadius: 8, width: "100%", fontSize: 16, marginBottom: 10 }}
           />
           <button
             onClick={load}
             disabled={loading}
-            style={{ width: "100%", padding: 10, fontSize: 14, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", background: "#2E75B6", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
+            style={{ width: "100%", padding: 10, fontSize: 16, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", background: "#2E75B6", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
           >
             {loading ? "Loading..." : "Access Dashboard"}
           </button>
-          {error && <div style={{ color: "#C00000", fontSize: 13, marginTop: 8 }}>{error}</div>}
+          {error && <div style={{ color: "#C00000", fontSize: 15, marginTop: 8 }}>{error}</div>}
         </div>
       </div>
     );
@@ -90,9 +90,9 @@ export default function AdminPage() {
 
   const statCard = (label: string, value: string | number, color: string, sub?: string) => (
     <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, textAlign: "center", borderLeft: `3px solid ${color}` }}>
-      <div style={{ fontSize: 12, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".08em" }}>{label}</div>
+      <div style={{ fontSize: 14, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".08em" }}>{label}</div>
       <div style={{ fontSize: 28, fontFamily: "Oswald, sans-serif", fontWeight: 700, color, marginTop: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 14, color: "#666", marginTop: 2 }}>{sub}</div>}
     </div>
   );
 
@@ -108,7 +108,7 @@ export default function AdminPage() {
         <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#2E75B6" }}>
           CREED ADMIN DASHBOARD
         </h1>
-        <button onClick={() => setData(null)} style={{ background: "none", color: "#888", fontSize: 12, fontFamily: "Oswald, sans-serif", border: "1px solid #1e1e2e", padding: "4px 12px", borderRadius: 6, cursor: "pointer" }}>
+        <button onClick={() => setData(null)} style={{ background: "none", color: "#888", fontSize: 14, fontFamily: "Oswald, sans-serif", border: "1px solid #1e1e2e", padding: "4px 12px", borderRadius: 6, cursor: "pointer" }}>
           Logout
         </button>
       </div>
@@ -138,12 +138,12 @@ export default function AdminPage() {
       {/* Recent activity */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16 }}>
-          <h3 style={{ fontSize: 14, color: "#2E75B6", fontFamily: "Oswald, sans-serif", marginBottom: 8 }}>SIGNUPS (30 DAYS)</h3>
+          <h3 style={{ fontSize: 16, color: "#2E75B6", fontFamily: "Oswald, sans-serif", marginBottom: 8 }}>SIGNUPS (30 DAYS)</h3>
           {signupDays.length === 0 ? (
-            <div style={{ color: "#555", fontSize: 13 }}>No signups yet</div>
+            <div style={{ color: "#555", fontSize: 15 }}>No signups yet</div>
           ) : (
             signupDays.slice(-10).map(([day, count]) => (
-              <div key={day} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: "1px solid #1e1e2e" }}>
+              <div key={day} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "3px 0", borderBottom: "1px solid #1e1e2e" }}>
                 <span style={{ color: "#888" }}>{day}</span>
                 <span style={{ color: "#00cc66", fontFamily: "Oswald" }}>{count}</span>
               </div>
@@ -151,12 +151,12 @@ export default function AdminPage() {
           )}
         </div>
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16 }}>
-          <h3 style={{ fontSize: 14, color: "#ff8800", fontFamily: "Oswald, sans-serif", marginBottom: 8 }}>JOBS CREATED (30 DAYS)</h3>
+          <h3 style={{ fontSize: 16, color: "#ff8800", fontFamily: "Oswald, sans-serif", marginBottom: 8 }}>JOBS CREATED (30 DAYS)</h3>
           {jobDays.length === 0 ? (
-            <div style={{ color: "#555", fontSize: 13 }}>No jobs yet</div>
+            <div style={{ color: "#555", fontSize: 15 }}>No jobs yet</div>
           ) : (
             jobDays.slice(-10).map(([day, count]) => (
-              <div key={day} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: "1px solid #1e1e2e" }}>
+              <div key={day} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "3px 0", borderBottom: "1px solid #1e1e2e" }}>
                 <span style={{ color: "#888" }}>{day}</span>
                 <span style={{ color: "#ff8800", fontFamily: "Oswald" }}>{count}</span>
               </div>
@@ -167,13 +167,13 @@ export default function AdminPage() {
 
       {/* Org table */}
       <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16 }}>
-        <h3 style={{ fontSize: 14, color: "#2E75B6", fontFamily: "Oswald, sans-serif", marginBottom: 12 }}>ALL ORGANIZATIONS</h3>
+        <h3 style={{ fontSize: 16, color: "#2E75B6", fontFamily: "Oswald, sans-serif", marginBottom: 12 }}>ALL ORGANIZATIONS</h3>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2E75B6" }}>
                 {["Name", "Created", "Users", "Jobs", "Reviews", "Revenue", "Status", "Plan", "Stripe", "Site"].map((h) => (
-                  <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontFamily: "Oswald, sans-serif", fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: ".06em" }}>{h}</th>
+                  <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontFamily: "Oswald, sans-serif", fontSize: 13, color: "#888", textTransform: "uppercase", letterSpacing: ".06em" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -187,11 +187,11 @@ export default function AdminPage() {
                   <td style={{ padding: "6px 8px", color: "#ffcc00", fontFamily: "Oswald" }}>{o.reviews}</td>
                   <td style={{ padding: "6px 8px", color: "#00cc66", fontFamily: "Oswald" }}>${o.revenue.toLocaleString()}</td>
                   <td style={{ padding: "6px 8px" }}>
-                    <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, background: statusColor(o.status) + "22", color: statusColor(o.status) }}>{o.status}</span>
+                    <span style={{ fontSize: 13, padding: "2px 6px", borderRadius: 4, background: statusColor(o.status) + "22", color: statusColor(o.status) }}>{o.status}</span>
                   </td>
                   <td style={{ padding: "6px 8px", color: "#888" }}>{o.plan}</td>
                   <td style={{ padding: "6px 8px" }}>{o.stripe ? "✅" : "—"}</td>
-                  <td style={{ padding: "6px 8px", color: "#3D95CE", fontSize: 11 }}>{o.site || "—"}</td>
+                  <td style={{ padding: "6px 8px", color: "#3D95CE", fontSize: 13 }}>{o.site || "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -199,7 +199,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div style={{ textAlign: "center", color: "#333", fontSize: 11, marginTop: 20 }}>
+      <div style={{ textAlign: "center", color: "#333", fontSize: 13, marginTop: 20 }}>
         Creed App Admin · Data refreshes on each login
       </div>
     </div>

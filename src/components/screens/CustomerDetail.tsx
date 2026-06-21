@@ -337,10 +337,10 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={onBack} style={{ fontSize: 12, padding: "4px 8px" }}>← Back</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-warning)" }}>Customer not found</h2>
+          <button className="bo" onClick={onBack} style={{ fontSize: 14, padding: "4px 8px" }}>← Back</button>
+          <h2 style={{ fontSize: 20, color: "var(--color-warning)" }}>Customer not found</h2>
         </div>
-        <p className="dim" style={{ fontSize: 13 }}>
+        <p className="dim" style={{ fontSize: 15 }}>
           The customer record may have been deleted.
         </p>
       </div>
@@ -355,9 +355,9 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <div className="row" style={{ minWidth: 0 }}>
-          <button className="bo" onClick={onBack} style={{ fontSize: 12, padding: "4px 8px" }}>←</button>
+          <button className="bo" onClick={onBack} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>
           <h2 style={{
-            fontSize: 18, color: typeColor,
+            fontSize: 20, color: typeColor,
             display: "inline-flex", alignItems: "center", gap: 6,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
@@ -366,7 +366,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
           </h2>
         </div>
         <span style={{
-          fontSize: 11, fontFamily: "Oswald", letterSpacing: ".04em",
+          fontSize: 13, fontFamily: "Oswald", letterSpacing: ".04em",
           padding: "3px 8px", borderRadius: 10, flexShrink: 0,
           background: `${typeColor}22`, color: typeColor,
         }}>
@@ -377,17 +377,17 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       {/* Customer info card — view or edit */}
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <h4 style={{ fontSize: 13, margin: 0 }}>Info</h4>
+          <h4 style={{ fontSize: 15, margin: 0 }}>Info</h4>
           {!editing ? (
-            <button className="bo" onClick={startEdit} style={{ fontSize: 11, padding: "3px 10px" }}>
+            <button className="bo" onClick={startEdit} style={{ fontSize: 13, padding: "3px 10px" }}>
               <Icon name="edit" size={12} /> Edit
             </button>
           ) : (
             <div style={{ display: "flex", gap: 4 }}>
-              <button className="bo" onClick={() => setEditing(false)} style={{ fontSize: 11, padding: "3px 10px" }}>
+              <button className="bo" onClick={() => setEditing(false)} style={{ fontSize: 13, padding: "3px 10px" }}>
                 Cancel
               </button>
-              <button className="bb" onClick={saveEdit} style={{ fontSize: 11, padding: "3px 10px" }}>
+              <button className="bb" onClick={saveEdit} style={{ fontSize: 13, padding: "3px 10px" }}>
                 Save
               </button>
             </div>
@@ -397,35 +397,35 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
         {!editing ? (
           <>
             {customer.primary_contact && (
-              <div style={{ fontSize: 13, marginBottom: 4 }}>
-                <span className="dim" style={{ fontSize: 11 }}>Primary contact</span>
+              <div style={{ fontSize: 15, marginBottom: 4 }}>
+                <span className="dim" style={{ fontSize: 13 }}>Primary contact</span>
                 <div>👤 {customer.primary_contact}</div>
               </div>
             )}
             {customer.phone && (
-              <div style={{ fontSize: 13, marginBottom: 4 }}>
+              <div style={{ fontSize: 15, marginBottom: 4 }}>
                 ☎ {customer.phone}
               </div>
             )}
             {customer.email && (
-              <div style={{ fontSize: 13, marginBottom: 4 }}>
+              <div style={{ fontSize: 15, marginBottom: 4 }}>
                 ✉ {customer.email}
               </div>
             )}
             {customer.notes && (
-              <div style={{ fontSize: 13, marginTop: 6, padding: 8, background: darkMode ? "#0f0f18" : "#f7f7fa", borderRadius: 6, whiteSpace: "pre-wrap" }}>
+              <div style={{ fontSize: 15, marginTop: 6, padding: 8, background: darkMode ? "#0f0f18" : "#f7f7fa", borderRadius: 6, whiteSpace: "pre-wrap" }}>
                 {customer.notes}
               </div>
             )}
             {!customer.primary_contact && !customer.phone && !customer.email && !customer.notes && (
-              <p className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>No contact info on file.</p>
+              <p className="dim" style={{ fontSize: 14, fontStyle: "italic" }}>No contact info on file.</p>
             )}
           </>
         ) : (
           <>
             <div className="g2" style={{ marginBottom: 6 }}>
               <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Name *" />
-              <select value={editType} onChange={(e) => setEditType(e.target.value as CustomerType)} style={{ fontSize: 13 }}>
+              <select value={editType} onChange={(e) => setEditType(e.target.value as CustomerType)} style={{ fontSize: 15 }}>
                 <option value="individual">Individual</option>
                 <option value="business">Business</option>
                 <option value="property_manager">Property Manager</option>
@@ -447,7 +447,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
               value={editNotes}
               onChange={(e) => setEditNotes(e.target.value)}
               placeholder="Notes (gate codes, preferences, history...)"
-              style={{ width: "100%", minHeight: 60, fontSize: 13 }}
+              style={{ width: "100%", minHeight: 60, fontSize: 15 }}
             />
           </>
         )}
@@ -456,10 +456,10 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       {/* Portal */}
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <h4 style={{ fontSize: 13, margin: 0 }}>🔗 Portal Link</h4>
-          {portalBusy && <span className="dim" style={{ fontSize: 11 }}>Generating…</span>}
+          <h4 style={{ fontSize: 15, margin: 0 }}>🔗 Portal Link</h4>
+          {portalBusy && <span className="dim" style={{ fontSize: 13 }}>Generating…</span>}
         </div>
-        <p className="dim" style={{ fontSize: 12, margin: "0 0 10px" }}>
+        <p className="dim" style={{ fontSize: 14, margin: "0 0 10px" }}>
           Single-use magic link (14-day expiry). Customer can view their quotes, scheduled jobs, completed work, and request new work — all under your branding.
         </p>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -467,7 +467,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
             className="bb"
             onClick={sendPortalSms}
             disabled={portalBusy || !customer.phone}
-            style={{ fontSize: 12, padding: "5px 10px", opacity: customer.phone ? 1 : 0.4 }}
+            style={{ fontSize: 14, padding: "5px 10px", opacity: customer.phone ? 1 : 0.4 }}
             title={customer.phone ? `Text ${customer.phone}` : "No phone on file"}
           >
             📱 Text {customer.phone ? `(${customer.phone})` : ""}
@@ -476,7 +476,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
             className="bo"
             onClick={sendPortalEmail}
             disabled={portalBusy || !customer.email}
-            style={{ fontSize: 12, padding: "5px 10px", opacity: customer.email ? 1 : 0.4 }}
+            style={{ fontSize: 14, padding: "5px 10px", opacity: customer.email ? 1 : 0.4 }}
             title={customer.email ? `Email ${customer.email}` : "No email on file"}
           >
             ✉ Email
@@ -485,7 +485,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
             className="bo"
             onClick={copyPortalLink}
             disabled={portalBusy}
-            style={{ fontSize: 12, padding: "5px 10px" }}
+            style={{ fontSize: 14, padding: "5px 10px" }}
           >
             📋 Copy
           </button>
@@ -496,7 +496,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
               marginTop: 10, padding: 8, borderRadius: 6,
               background: darkMode ? "#0f0f18" : "#f7f7fa",
               border: `1px solid ${border}`,
-              fontSize: 11, wordBreak: "break-all",
+              fontSize: 13, wordBreak: "break-all",
               fontFamily: "monospace",
             }}
           >
@@ -508,16 +508,16 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       {/* Addresses */}
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <h4 style={{ fontSize: 13, margin: 0 }}>📍 Addresses ({addresses.length})</h4>
+          <h4 style={{ fontSize: 15, margin: 0 }}>📍 Addresses ({addresses.length})</h4>
           {!addrFormOpen && (
-            <button className="bo" onClick={openAddrAdd} style={{ fontSize: 11, padding: "3px 10px" }}>
+            <button className="bo" onClick={openAddrAdd} style={{ fontSize: 13, padding: "3px 10px" }}>
               + Add
             </button>
           )}
         </div>
 
         {addresses.length === 0 && !addrFormOpen && (
-          <p className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
+          <p className="dim" style={{ fontSize: 14, fontStyle: "italic" }}>
             No addresses yet — tap + Add.
           </p>
         )}
@@ -535,23 +535,23 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <b style={{ fontSize: 13 }}>{a.label || a.street || "(unlabeled)"}</b>
+                  <b style={{ fontSize: 15 }}>{a.label || a.street || "(unlabeled)"}</b>
                   {a.is_primary && (
-                    <span style={{ fontSize: 9, color: "var(--color-primary)", fontFamily: "Oswald", letterSpacing: ".04em" }}>PRIMARY</span>
+                    <span style={{ fontSize: 11, color: "var(--color-primary)", fontFamily: "Oswald", letterSpacing: ".04em" }}>PRIMARY</span>
                   )}
                 </div>
-                <div className="dim" style={{ fontSize: 12 }}>{formatAddressLine(a)}</div>
+                <div className="dim" style={{ fontSize: 14 }}>{formatAddressLine(a)}</div>
                 {a.metadata && Object.keys(a.metadata).length > 0 && (
-                  <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+                  <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>
                     {Object.entries(a.metadata).map(([k, v]) => `${k}: ${String(v)}`).join(" · ")}
                   </div>
                 )}
               </div>
               <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                <button className="bo" onClick={() => openAddrEdit(a)} style={{ fontSize: 11, padding: "3px 8px" }}>
+                <button className="bo" onClick={() => openAddrEdit(a)} style={{ fontSize: 13, padding: "3px 8px" }}>
                   Edit
                 </button>
-                <button onClick={() => removeAddress(a)} style={{ fontSize: 11, padding: "3px 8px", color: "var(--color-accent-red)", background: "transparent", border: `1px solid ${border}`, borderRadius: 6 }}>
+                <button onClick={() => removeAddress(a)} style={{ fontSize: 13, padding: "3px 8px", color: "var(--color-accent-red)", background: "transparent", border: `1px solid ${border}`, borderRadius: 6 }}>
                   ×
                 </button>
               </div>
@@ -575,7 +575,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
 
             {customer.type === "property_manager" && (
               <div style={{ marginBottom: 6 }}>
-                <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>Property-manager metadata (optional)</div>
+                <div className="dim" style={{ fontSize: 13, marginBottom: 4 }}>Property-manager metadata (optional)</div>
                 <div className="g2" style={{ marginBottom: 4 }}>
                   <input value={aUnitCount} onChange={(e) => setAUnitCount(e.target.value)} placeholder="Unit count" />
                   <input value={aOwner} onChange={(e) => setAOwner(e.target.value)} placeholder="Owner" />
@@ -588,7 +588,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
               </div>
             )}
 
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, marginBottom: 8 }}>
               <input
                 type="checkbox"
                 checked={aIsPrimary}
@@ -600,14 +600,14 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
               <button
                 className="bo"
                 onClick={() => { resetAddrForm(); setAddrFormOpen(false); }}
-                style={{ flex: 1, fontSize: 12, padding: 6 }}
+                style={{ flex: 1, fontSize: 14, padding: 6 }}
               >
                 Cancel
               </button>
               <button
                 className="bb"
                 onClick={saveAddress}
-                style={{ flex: 1, fontSize: 12, padding: 6 }}
+                style={{ flex: 1, fontSize: 14, padding: 6 }}
               >
                 {editingAddrId ? "Update" : "Add"}
               </button>
@@ -619,11 +619,11 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       {/* Related work */}
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <h4 style={{ fontSize: 13, margin: 0 }}>
+          <h4 style={{ fontSize: 15, margin: 0 }}>
             🧰 Related Work ({allRelated.length})
           </h4>
           {totalRevenue > 0 && (
-            <span className="dim" style={{ fontSize: 11 }}>
+            <span className="dim" style={{ fontSize: 13 }}>
               ${paidRevenue.toFixed(0)} paid · ${totalRevenue.toFixed(0)} total
             </span>
           )}
@@ -631,7 +631,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
 
         {relatedJobs.fuzzy.length > 0 && (
           <div style={{
-            fontSize: 11, padding: "6px 10px",
+            fontSize: 13, padding: "6px 10px",
             borderLeft: "3px solid var(--color-warning)",
             background: "var(--color-warning)11",
             borderRadius: 4, marginBottom: 8,
@@ -641,14 +641,14 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
         )}
 
         {allRelated.length === 0 ? (
-          <p className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
+          <p className="dim" style={{ fontSize: 14, fontStyle: "italic" }}>
             No jobs yet for this customer.
           </p>
         ) : (
           groupedByStatus.map(({ status, jobs: statusJobs }) => (
             <div key={status} style={{ marginBottom: 8 }}>
               <div className="dim" style={{
-                fontSize: 10, fontFamily: "Oswald", letterSpacing: ".06em",
+                fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em",
                 textTransform: "uppercase", marginBottom: 4,
                 color: statusColor(status),
               }}>
@@ -659,7 +659,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
                   key={j.id}
                   style={{
                     display: "flex", justifyContent: "space-between",
-                    fontSize: 12, padding: "4px 0",
+                    fontSize: 14, padding: "4px 0",
                     borderBottom: `1px solid ${border}`,
                   }}
                 >
@@ -683,7 +683,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       <button
         onClick={removeCustomer}
         style={{
-          width: "100%", padding: 10, fontSize: 12,
+          width: "100%", padding: 10, fontSize: 14,
           background: "transparent",
           border: `1px solid var(--color-accent-red)`,
           color: "var(--color-accent-red)",

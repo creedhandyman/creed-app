@@ -102,24 +102,24 @@ export default function Recurring() {
   return (
     <div className="fi">
       <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ fontSize: 16, display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <h3 style={{ fontSize: 18, display: "inline-flex", alignItems: "center", gap: 8 }}>
           <Icon name="refresh" size={18} color="var(--color-primary)" />
           Recurring jobs
         </h3>
-        <button className="bb" onClick={() => setShowAdd(true)} style={{ fontSize: 12 }}>
+        <button className="bb" onClick={() => setShowAdd(true)} style={{ fontSize: 14 }}>
           <Icon name="add" size={14} /> New from job
         </button>
       </div>
 
-      <div className="cd mb" style={{ background: darkMode ? "#1a1a26" : "#f8f9fb", fontSize: 12 }}>
+      <div className="cd mb" style={{ background: darkMode ? "#1a1a26" : "#f8f9fb", fontSize: 14 }}>
         Templates fire daily via cron. Each fire creates a new <strong>scheduled</strong> job copied from the template. Pause to skip without losing the schedule.
       </div>
 
       {recurringJobs.length === 0 && (
         <div className="cd" style={{ textAlign: "center", padding: 28, color: "#888" }}>
           <Icon name="refresh" size={28} color="#bbb" />
-          <div style={{ marginTop: 10, fontSize: 14 }}>No recurring templates yet.</div>
-          <div style={{ fontSize: 12, marginTop: 6 }}>
+          <div style={{ marginTop: 10, fontSize: 16 }}>No recurring templates yet.</div>
+          <div style={{ fontSize: 14, marginTop: 6 }}>
             Make any existing job recurring from its expanded row in Jobs.
           </div>
         </div>
@@ -127,7 +127,7 @@ export default function Recurring() {
 
       {active.length > 0 && (
         <>
-          <div className="dim" style={{ fontSize: 11, marginTop: 4, marginBottom: 6, letterSpacing: ".06em", textTransform: "uppercase" }}>
+          <div className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 6, letterSpacing: ".06em", textTransform: "uppercase" }}>
             Active ({active.length})
           </div>
           {active.map((r) => (
@@ -149,7 +149,7 @@ export default function Recurring() {
 
       {paused.length > 0 && (
         <>
-          <div className="dim" style={{ fontSize: 11, marginTop: 14, marginBottom: 6, letterSpacing: ".06em", textTransform: "uppercase" }}>
+          <div className="dim" style={{ fontSize: 13, marginTop: 14, marginBottom: 6, letterSpacing: ".06em", textTransform: "uppercase" }}>
             Paused ({paused.length})
           </div>
           {paused.map((r) => (
@@ -209,14 +209,14 @@ function RowCard({
     <div className="cd mb" style={{ borderLeft: `4px solid ${r.is_active ? "var(--color-success)" : "#888"}` }}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>
             {r.title || r.property || "Recurring service"}
           </div>
-          <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+          <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
             {r.client ? `${r.client} · ` : ""}
             {r.property || "—"}
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8, fontSize: 12 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8, fontSize: 14 }}>
             <span>
               <span className="dim">Cadence: </span>
               <strong>{CADENCE_LABELS[r.cadence] || r.cadence}</strong>
@@ -232,13 +232,13 @@ function RowCard({
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <button className="bo" onClick={onEdit} style={{ fontSize: 11, padding: "4px 10px" }}>
+          <button className="bo" onClick={onEdit} style={{ fontSize: 13, padding: "4px 10px" }}>
             <Icon name="edit" size={12} /> Edit
           </button>
           <button
             className={r.is_active ? "bo" : "bg"}
             onClick={onTogglePause}
-            style={{ fontSize: 11, padding: "4px 10px" }}
+            style={{ fontSize: 13, padding: "4px 10px" }}
           >
             {r.is_active ? <><Icon name="pause" size={12} /> Pause</> : <><Icon name="start" size={12} /> Resume</>}
           </button>
@@ -249,11 +249,11 @@ function RowCard({
           className="bb"
           onClick={onFire}
           disabled={isFiring}
-          style={{ fontSize: 11, padding: "4px 10px", opacity: isFiring ? 0.6 : 1 }}
+          style={{ fontSize: 13, padding: "4px 10px", opacity: isFiring ? 0.6 : 1 }}
         >
           <Icon name="rocket" size={12} /> {isFiring ? "Firing…" : "Fire now"}
         </button>
-        <button className="br" onClick={onDelete} style={{ fontSize: 11, padding: "4px 10px", marginLeft: "auto" }}>
+        <button className="br" onClick={onDelete} style={{ fontSize: 13, padding: "4px 10px", marginLeft: "auto" }}>
           <Icon name="delete" size={12} /> Delete
         </button>
       </div>
@@ -358,10 +358,10 @@ function EditPanel({ r, onSaved }: { r: RecurringJob; onSaved: () => void }) {
         </div>
       </div>
       <div className="row" style={{ marginTop: 10, gap: 6 }}>
-        <button className="bb" onClick={save} disabled={saving} style={{ fontSize: 12 }}>
+        <button className="bb" onClick={save} disabled={saving} style={{ fontSize: 14 }}>
           {saving ? "Saving…" : "Save"}
         </button>
-        <button className="bo" onClick={onSaved} style={{ fontSize: 12 }}>Cancel</button>
+        <button className="bo" onClick={onSaved} style={{ fontSize: 14 }}>Cancel</button>
       </div>
     </div>
   );
@@ -448,7 +448,7 @@ function NewFromJobPicker({
         style={{ width: "100%", maxWidth: 480 }}
       >
         <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ fontSize: 15 }}>New recurring template</h3>
+          <h3 style={{ fontSize: 17 }}>New recurring template</h3>
           <button className="bo" onClick={onClose} style={{ padding: "2px 8px" }}>
             <Icon name="close" size={14} />
           </button>
@@ -529,15 +529,15 @@ function NewFromJobPicker({
           </div>
         </div>
 
-        <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
           Next fire: <strong>{formatNextFire(computeNextFire(new Date(), cadence, { dayOfWeek: isWeekly ? dayOfWeek : undefined, dayOfMonth: !isWeekly ? dayOfMonth : undefined, hour }).toISOString())}</strong>
         </div>
 
         <div className="row" style={{ marginTop: 12, gap: 6 }}>
-          <button className="bb" onClick={save} disabled={saving} style={{ fontSize: 12 }}>
+          <button className="bb" onClick={save} disabled={saving} style={{ fontSize: 14 }}>
             {saving ? "Saving…" : "Create"}
           </button>
-          <button className="bo" onClick={onClose} style={{ fontSize: 12 }}>Cancel</button>
+          <button className="bo" onClick={onClose} style={{ fontSize: 14 }}>Cancel</button>
         </div>
       </div>
     </div>

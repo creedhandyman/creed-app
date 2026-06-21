@@ -242,7 +242,7 @@ export default function Payroll() {
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
         <Icon name="money" size={22} color="var(--color-primary)" />
         {t("pay.title")}
       </h2>
@@ -266,7 +266,7 @@ export default function Payroll() {
       {isOwner && (
         <div className="cd mb">
           <div className="row">
-            <span className="dim" style={{ fontSize: 12 }}>Employee:</span>
+            <span className="dim" style={{ fontSize: 14 }}>Employee:</span>
             <select
               value={sel}
               onChange={(e) => setSel(e.target.value)}
@@ -307,7 +307,7 @@ export default function Payroll() {
       {/* Quest bonuses earned — admin must approve before they're added to pay */}
       {earnedQuests.length > 0 && (
         <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)" }}>
-          <h4 style={{ fontSize: 13, marginBottom: 6, color: "var(--color-warning)" }}>
+          <h4 style={{ fontSize: 15, marginBottom: 6, color: "var(--color-warning)" }}>
             🎯 Quest Bonuses — Pending Review ({earnedQuests.length})
           </h4>
           {earnedQuests.map((q) => {
@@ -316,7 +316,7 @@ export default function Payroll() {
               <div
                 key={q.key}
                 className="sep"
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, gap: 8 }}
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, gap: 8 }}
               >
                 {isOwner ? (
                   <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", flex: 1 }}>
@@ -335,19 +335,19 @@ export default function Payroll() {
                     <span style={{ color: approved ? "var(--color-success)" : undefined }}>
                       {q.name}
                     </span>
-                    {approved && <span style={{ fontSize: 10, color: "var(--color-success)", fontFamily: "Oswald" }}>APPROVED</span>}
+                    {approved && <span style={{ fontSize: 12, color: "var(--color-success)", fontFamily: "Oswald" }}>APPROVED</span>}
                   </label>
                 ) : (
                   <span style={{ flex: 1 }}>
                     {q.name}
-                    <span className="dim" style={{ marginLeft: 6, fontSize: 10, fontFamily: "Oswald" }}>PENDING</span>
+                    <span className="dim" style={{ marginLeft: 6, fontSize: 12, fontFamily: "Oswald" }}>PENDING</span>
                   </span>
                 )}
                 <span style={{ color: approved ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}>${q.bonus}</span>
               </div>
             );
           })}
-          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+          <div className="dim" style={{ fontSize: 14, marginTop: 6 }}>
             {isOwner
               ? "Check each bonus to approve it for this pay cycle. Unchecked bonuses stay pending and can be reviewed again later."
               : "Bonuses are reviewed by management before payout."}
@@ -358,7 +358,7 @@ export default function Payroll() {
       {/* By Job */}
       <div className="cd mb">
         <div className="row">
-          <h4 style={{ fontSize: 13 }}>{t("pay.byJob")}</h4>
+          <h4 style={{ fontSize: 15 }}>{t("pay.byJob")}</h4>
           <div style={{ flex: 1 }} />
           {isOwner && (
             <div className="row" style={{ gap: 6 }}>
@@ -368,7 +368,7 @@ export default function Payroll() {
                 disabled={processing || !entries.length}
                 title="Email this employee a preview of what they're going to be paid (no pay stub generated yet)"
                 style={{
-                  fontSize: 12,
+                  fontSize: 14,
                   padding: "5px 10px",
                   opacity: processing || !entries.length ? 0.5 : 1,
                 }}
@@ -380,7 +380,7 @@ export default function Payroll() {
                 onClick={processPay}
                 disabled={processing || !entries.length}
                 style={{
-                  fontSize: 12,
+                  fontSize: 14,
                   padding: "5px 12px",
                   opacity: processing || !entries.length ? 0.5 : 1,
                 }}
@@ -392,13 +392,13 @@ export default function Payroll() {
         </div>
 
         {Object.keys(byJob).length === 0 ? (
-          <p className="dim" style={{ fontSize: 12, marginTop: 6 }}>{t("pay.noEntries")}</p>
+          <p className="dim" style={{ fontSize: 14, marginTop: 6 }}>{t("pay.noEntries")}</p>
         ) : (
           Object.entries(byJob).map(([job, hrs]) => (
             <div
               key={job}
               className="sep"
-              style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}
+              style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}
             >
               <span>{job}</span>
               <span>
@@ -513,7 +513,7 @@ export default function Payroll() {
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
-                    fontSize: 12,
+                    fontSize: 14,
                     cursor: "pointer",
                     alignItems: "center",
                   }}
@@ -523,7 +523,7 @@ export default function Payroll() {
                   <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
                     ${(p.amount || 0).toFixed(2)}
                   </span>
-                  <span style={{ fontSize: 12, color: "#888" }}>{isOpen ? "▲" : "▼"}</span>
+                  <span style={{ fontSize: 14, color: "#888" }}>{isOpen ? "▲" : "▼"}</span>
                 </div>
                 {isOpen && (
                   <div style={{ padding: "6px 0 6px 12px", borderLeft: "2px solid var(--color-primary)" }}>
@@ -534,7 +534,7 @@ export default function Payroll() {
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
-                            fontSize: 13,
+                            fontSize: 15,
                             padding: "2px 0",
                           }}
                         >
@@ -545,13 +545,13 @@ export default function Payroll() {
                         </div>
                       ))
                     ) : (
-                      <span className="dim" style={{ fontSize: 11 }}>No job breakdown saved</span>
+                      <span className="dim" style={{ fontSize: 13 }}>No job breakdown saved</span>
                     )}
                     {bonusDetails.length > 0 && (
                       <>
-                        <div style={{ fontSize: 12, color: "var(--color-warning)", fontWeight: 600, marginTop: 6, marginBottom: 2 }}>🎯 Quest Bonuses</div>
+                        <div style={{ fontSize: 14, color: "var(--color-warning)", fontWeight: 600, marginTop: 6, marginBottom: 2 }}>🎯 Quest Bonuses</div>
                         {bonusDetails.map((b, bi) => (
-                          <div key={bi} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "1px 0" }}>
+                          <div key={bi} style={{ display: "flex", justifyContent: "space-between", fontSize: 15, padding: "1px 0" }}>
                             <span>{b.name}</span>
                             <span style={{ color: "var(--color-success)" }}>${b.amount.toFixed(2)}</span>
                           </div>
@@ -567,7 +567,7 @@ export default function Payroll() {
                         className="bo"
                         onClick={handlePrint}
                         title="Open the pay stub in a print window"
-                        style={{ fontSize: 11, padding: "4px 10px" }}
+                        style={{ fontSize: 13, padding: "4px 10px" }}
                       >
                         🖨 Print
                       </button>
@@ -575,7 +575,7 @@ export default function Payroll() {
                         className="bo"
                         onClick={handleDownload}
                         title="Save the pay stub as an .html file (open / save-as-PDF locally)"
-                        style={{ fontSize: 11, padding: "4px 10px" }}
+                        style={{ fontSize: 13, padding: "4px 10px" }}
                       >
                         📥 Download
                       </button>
@@ -583,7 +583,7 @@ export default function Payroll() {
                         className="bo"
                         onClick={handleEmail}
                         title="Email the pay stub to the employee on file"
-                        style={{ fontSize: 11, padding: "4px 10px" }}
+                        style={{ fontSize: 13, padding: "4px 10px" }}
                       >
                         ✉ Email
                       </button>
@@ -737,12 +737,12 @@ function AutoPayrollPanel() {
           color: "inherit",
         }}
       >
-        <h4 style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <h4 style={{ fontSize: 15, display: "inline-flex", alignItems: "center", gap: 6 }}>
           🤖 Auto Payroll
         </h4>
         <span
           style={{
-            fontSize: 10,
+            fontSize: 12,
             padding: "2px 8px",
             borderRadius: 8,
             background: enabled ? "var(--color-success)22" : "#88888822",
@@ -771,12 +771,12 @@ function AutoPayrollPanel() {
               disabled={busy}
               onChange={(e) => patch({ auto_payroll_enabled: e.target.checked })}
             />
-            <span style={{ fontSize: 12, color: enabled ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}>
+            <span style={{ fontSize: 14, color: enabled ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}>
               {enabled ? "ENABLED" : "DISABLED"}
             </span>
           </label>
 
-          <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
+          <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>
             Runs payroll automatically on a schedule. Approve quest bonuses ahead of time — auto-runs include unpaid time entries only (no quest bonuses) for the configured day.
           </div>
 
@@ -822,7 +822,7 @@ function AutoPayrollPanel() {
                       style={{
                         flex: 1,
                         padding: "6px 10px",
-                        fontSize: 12,
+                        fontSize: 14,
                         fontFamily: "Oswald",
                         borderRadius: 6,
                         background: cadence === c ? "var(--color-primary)" : "transparent",
@@ -838,10 +838,10 @@ function AutoPayrollPanel() {
                 </div>
               </div>
 
-              <div style={{ fontSize: 12 }}>
+              <div style={{ fontSize: 14 }}>
                 <div><span className="dim">Next run:</span> <b>{nextRunStr}</b></div>
                 {lastRunStr && (
-                  <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+                  <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>
                     Last run: {lastRunStr}
                   </div>
                 )}
@@ -851,12 +851,12 @@ function AutoPayrollPanel() {
                 onClick={runNow}
                 disabled={busy}
                 className="bo"
-                style={{ width: "100%", marginTop: 12, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                style={{ width: "100%", marginTop: 12, fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
                 <Icon name="pay" size={14} />
                 {busy ? "Running…" : "Run now (test)"}
               </button>
-              <div className="dim" style={{ fontSize: 10.5, marginTop: 5, lineHeight: 1.5 }}>
+              <div className="dim" style={{ fontSize: 12.5, marginTop: 5, lineHeight: 1.5 }}>
                 Runs the scheduled job immediately and reports who got paid or skipped. If this pays the crew but the schedule doesn&apos;t, the day/cadence is the issue. If crew are skipped for &quot;no pay rate&quot;, set their hourly rate in Team.
               </div>
             </>
@@ -935,9 +935,9 @@ function PayrollSection({
           color: "inherit",
         }}
       >
-        <h4 style={{ fontSize: 13 }}>{title}</h4>
+        <h4 style={{ fontSize: 15 }}>{title}</h4>
         {subtitle && (
-          <span className="dim" style={{ fontSize: 11, marginLeft: 8, fontFamily: "Oswald", letterSpacing: ".04em" }}>
+          <span className="dim" style={{ fontSize: 13, marginLeft: 8, fontFamily: "Oswald", letterSpacing: ".04em" }}>
             {subtitle}
           </span>
         )}

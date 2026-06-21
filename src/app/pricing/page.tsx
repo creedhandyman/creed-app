@@ -186,7 +186,7 @@ export default function PricingPage() {
             href="https://www.creedhm.com"
             style={{
               fontFamily: "Oswald, sans-serif",
-              fontSize: 18,
+              fontSize: 20,
               color: PRIMARY,
               textTransform: "uppercase",
               letterSpacing: ".08em",
@@ -198,7 +198,7 @@ export default function PricingPage() {
           <a
             href="/"
             style={{
-              fontSize: 12,
+              fontSize: 14,
               color: "#888",
               textDecoration: "none",
               padding: "6px 12px",
@@ -227,7 +227,7 @@ export default function PricingPage() {
           </h1>
           <p
             style={{
-              fontSize: 15,
+              fontSize: 17,
               color: "#aaa",
               maxWidth: 640,
               margin: "0 auto",
@@ -274,7 +274,7 @@ export default function PricingPage() {
             <div
               style={{
                 fontFamily: "Oswald, sans-serif",
-                fontSize: 14,
+                fontSize: 16,
                 color: PRIMARY,
                 textTransform: "uppercase",
                 letterSpacing: ".08em",
@@ -283,7 +283,7 @@ export default function PricingPage() {
             >
               Property Manager add-on
             </div>
-            <div style={{ fontSize: 14, color: "#ccc", lineHeight: 1.5 }}>
+            <div style={{ fontSize: 16, color: "#ccc", lineHeight: 1.5 }}>
               Managing properties? Add <strong>$2/door/month</strong> above 10
               doors. Bring your full portfolio in. Works with any plan, billed
               alongside your subscription.
@@ -298,7 +298,7 @@ export default function PricingPage() {
               padding: "10px 16px",
               borderRadius: 8,
               fontFamily: "Oswald, sans-serif",
-              fontSize: 13,
+              fontSize: 15,
               textTransform: "uppercase",
               letterSpacing: ".06em",
               background: "transparent",
@@ -329,7 +329,7 @@ export default function PricingPage() {
                 width: "100%",
                 minWidth: 520,
                 borderCollapse: "collapse",
-                fontSize: 13,
+                fontSize: 15,
               }}
             >
               <thead>
@@ -339,7 +339,7 @@ export default function PricingPage() {
                       textAlign: "left",
                       padding: "12px 14px",
                       fontFamily: "Oswald, sans-serif",
-                      fontSize: 12,
+                      fontSize: 14,
                       color: "#888",
                       textTransform: "uppercase",
                       letterSpacing: ".06em",
@@ -355,7 +355,7 @@ export default function PricingPage() {
                         textAlign: "center",
                         padding: "12px 14px",
                         fontFamily: "Oswald, sans-serif",
-                        fontSize: 12,
+                        fontSize: 14,
                         color: n === "Crew" ? PRIMARY : "#ccc",
                         textTransform: "uppercase",
                         letterSpacing: ".06em",
@@ -402,7 +402,7 @@ export default function PricingPage() {
             paddingTop: 22,
             textAlign: "center",
             color: "#666",
-            fontSize: 12,
+            fontSize: 14,
             lineHeight: 1.7,
           }}
         >
@@ -425,7 +425,7 @@ export default function PricingPage() {
             Creed is a real, shipping product — used daily by field-service crews.
             Not vaporware.
           </div>
-          <div style={{ color: "#444", marginTop: 10, fontSize: 11 }}>
+          <div style={{ color: "#444", marginTop: 10, fontSize: 13 }}>
             © {new Date().getFullYear()} Creed App
           </div>
         </div>
@@ -471,7 +471,7 @@ function PricingCard({ tier, onCta }: { tier: Tier; onCta: () => void }) {
             background: PRIMARY,
             color: "#fff",
             fontFamily: "Oswald, sans-serif",
-            fontSize: 11,
+            fontSize: 13,
             textTransform: "uppercase",
             letterSpacing: ".08em",
             padding: "4px 12px",
@@ -491,7 +491,7 @@ function PricingCard({ tier, onCta }: { tier: Tier; onCta: () => void }) {
             right: 10,
             background: `${ACCENT}22`,
             color: ACCENT,
-            fontSize: 10,
+            fontSize: 12,
             fontFamily: "Oswald, sans-serif",
             textTransform: "uppercase",
             letterSpacing: ".06em",
@@ -507,7 +507,7 @@ function PricingCard({ tier, onCta }: { tier: Tier; onCta: () => void }) {
       <div
         style={{
           fontFamily: "Oswald, sans-serif",
-          fontSize: 22,
+          fontSize: 24,
           color: featured ? PRIMARY : "#fff",
           textTransform: "uppercase",
           letterSpacing: ".05em",
@@ -516,17 +516,17 @@ function PricingCard({ tier, onCta }: { tier: Tier; onCta: () => void }) {
       >
         {tier.name}
       </div>
-      <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>{tier.tagline}</div>
+      <div style={{ fontSize: 14, color: "#888", marginBottom: 14 }}>{tier.tagline}</div>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 6 }}>
         <span style={{ fontFamily: "Oswald, sans-serif", fontSize: 38, color: "#fff" }}>
           ${tier.price}
         </span>
-        <span style={{ fontSize: 13, color: "#888" }}>/month</span>
+        <span style={{ fontSize: 15, color: "#888" }}>/month</span>
       </div>
       <div
         style={{
-          fontSize: 12,
+          fontSize: 14,
           color: featured ? "#bbb" : "#888",
           marginBottom: 18,
           minHeight: 32,
@@ -550,7 +550,7 @@ function PricingCard({ tier, onCta }: { tier: Tier; onCta: () => void }) {
           <li
             key={b}
             style={{
-              fontSize: 13,
+              fontSize: 15,
               color: "#ccc",
               display: "flex",
               alignItems: "flex-start",
@@ -571,7 +571,7 @@ function PricingCard({ tier, onCta }: { tier: Tier; onCta: () => void }) {
           padding: "12px",
           borderRadius: 8,
           fontFamily: "Oswald, sans-serif",
-          fontSize: 14,
+          fontSize: 16,
           textTransform: "uppercase",
           letterSpacing: ".05em",
           background: featured ? PRIMARY : "transparent",
@@ -596,7 +596,7 @@ function CellValue({ v, highlight }: { v: boolean | string; highlight?: boolean 
           textAlign: "center",
           background: bg,
           color: v ? ACCENT : "#444",
-          fontSize: 16,
+          fontSize: 18,
         }}
       >
         {v ? "✓" : "—"}
@@ -610,7 +610,7 @@ function CellValue({ v, highlight }: { v: boolean | string; highlight?: boolean 
         textAlign: "center",
         background: bg,
         color: "#ccc",
-        fontSize: 13,
+        fontSize: 15,
       }}
     >
       {v}
@@ -623,7 +623,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     <h2
       style={{
         fontFamily: "Oswald, sans-serif",
-        fontSize: 20,
+        fontSize: 22,
         color: "#fff",
         textTransform: "uppercase",
         letterSpacing: ".05em",
@@ -656,7 +656,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
           border: "none",
           padding: "14px 16px",
           color: "#e2e2e8",
-          fontSize: 14,
+          fontSize: 16,
           cursor: "pointer",
           display: "flex",
           justifyContent: "space-between",
@@ -669,7 +669,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
         <span
           style={{
             color: PRIMARY,
-            fontSize: 18,
+            fontSize: 20,
             lineHeight: 1,
             transform: open ? "rotate(45deg)" : "none",
             transition: "transform .15s",
@@ -683,7 +683,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
           style={{
             padding: "0 16px 14px",
             color: "#aaa",
-            fontSize: 13,
+            fontSize: 15,
             lineHeight: 1.55,
           }}
         >
@@ -777,7 +777,7 @@ function WaitlistModal({
             background: "none",
             border: "none",
             color: "#888",
-            fontSize: 20,
+            fontSize: 22,
             cursor: "pointer",
             lineHeight: 1,
             padding: 6,
@@ -792,7 +792,7 @@ function WaitlistModal({
             <h2
               style={{
                 fontFamily: "Oswald, sans-serif",
-                fontSize: 20,
+                fontSize: 22,
                 color: ACCENT,
                 textTransform: "uppercase",
                 margin: "0 0 8px",
@@ -800,7 +800,7 @@ function WaitlistModal({
             >
               You&apos;re on the list
             </h2>
-            <p style={{ color: "#aaa", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+            <p style={{ color: "#aaa", fontSize: 15, lineHeight: 1.5, margin: 0 }}>
               We&apos;ll email <strong style={{ color: "#ddd" }}>{email}</strong> as
               soon as the {plan === "solo" ? "Solo" : plan === "crew" ? "Crew" : "Pro"} plan
               is open for signup.
@@ -815,7 +815,7 @@ function WaitlistModal({
                 border: "none",
                 borderRadius: 8,
                 fontFamily: "Oswald, sans-serif",
-                fontSize: 13,
+                fontSize: 15,
                 textTransform: "uppercase",
                 letterSpacing: ".05em",
                 cursor: "pointer",
@@ -829,7 +829,7 @@ function WaitlistModal({
             <h2
               style={{
                 fontFamily: "Oswald, sans-serif",
-                fontSize: 20,
+                fontSize: 22,
                 color: "#fff",
                 textTransform: "uppercase",
                 margin: "0 0 4px",
@@ -837,7 +837,7 @@ function WaitlistModal({
             >
               Get on the launch list
             </h2>
-            <p style={{ color: "#888", fontSize: 12, margin: "0 0 18px" }}>
+            <p style={{ color: "#888", fontSize: 14, margin: "0 0 18px" }}>
               Interested in the{" "}
               <strong style={{ color: PRIMARY }}>
                 {plan === "solo" ? "Solo" : plan === "crew" ? "Crew" : "Pro"}
@@ -868,7 +868,7 @@ function WaitlistModal({
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                fontSize: 12,
+                fontSize: 14,
                 color: "#aaa",
                 marginBottom: 14,
                 cursor: "pointer",
@@ -891,7 +891,7 @@ function WaitlistModal({
                   borderRadius: 6,
                   padding: "8px 10px",
                   marginBottom: 12,
-                  fontSize: 12,
+                  fontSize: 14,
                   color: "#ff8888",
                 }}
               >
@@ -907,7 +907,7 @@ function WaitlistModal({
                 padding: "12px",
                 borderRadius: 8,
                 fontFamily: "Oswald, sans-serif",
-                fontSize: 14,
+                fontSize: 16,
                 textTransform: "uppercase",
                 letterSpacing: ".05em",
                 background: PRIMARY,
@@ -922,7 +922,7 @@ function WaitlistModal({
             <p
               style={{
                 color: "#555",
-                fontSize: 11,
+                fontSize: 13,
                 textAlign: "center",
                 margin: "10px 0 0",
               }}
@@ -943,13 +943,13 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #1e1e2e",
   background: "#0d0d15",
   color: "#e2e2e8",
-  fontSize: 14,
+  fontSize: 16,
   fontFamily: "inherit",
   boxSizing: "border-box",
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 13,
   color: "#888",
   fontFamily: "Oswald, sans-serif",
   textTransform: "uppercase",

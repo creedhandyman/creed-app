@@ -40,7 +40,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 8 }}>
         <Icon name="menu" size={22} color="var(--color-primary)" /> More
       </h2>
 
@@ -48,8 +48,8 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
       <div className="cd mb" onClick={openSettings} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: 13 }}>
         <div style={{ width: 42, height: 42, borderRadius: "50%", background: "var(--color-card-dark-3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, color: "#cdd6e6", flexShrink: 0 }}>{initials}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>{name}</div>
-          <div style={{ fontSize: 11, color: "var(--color-success)" }}>{roleLabel}{org?.name ? ` · ${org.name}` : ""}</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17 }}>{name}</div>
+          <div style={{ fontSize: 13, color: "var(--color-success)" }}>{roleLabel}{org?.name ? ` · ${org.name}` : ""}</div>
         </div>
         <Icon name="next" size={18} color="var(--color-dim)" />
       </div>
@@ -61,8 +61,8 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
             <div style={{ width: 40, height: 40, borderRadius: 12, background: tile.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
               <Icon name={tile.icon} size={20} color={tile.color} />
             </div>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".3px" }}>{tile.name}</div>
-            <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 2 }}>{tile.sub}</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px" }}>{tile.name}</div>
+            <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{tile.sub}</div>
           </div>
         ))}
       </div>
@@ -73,8 +73,8 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
           <Icon name="help" size={19} color="#aab" />
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600 }}>Help &amp; user guide</div>
-          <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>How Creed works</div>
+          <div style={{ fontSize: 15.5, fontWeight: 600 }}>Help &amp; user guide</div>
+          <div style={{ fontSize: 13.5, color: "var(--color-dim)" }}>How Creed works</div>
         </div>
         <Icon name="next" size={17} color="var(--color-dim)" />
       </div>

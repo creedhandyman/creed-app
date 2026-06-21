@@ -106,7 +106,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
 
   if (!job) return null;
 
-  const btnSize = compact ? { fontSize: 11, padding: "4px 8px" } : { fontSize: 12, padding: "5px 10px" };
+  const btnSize = compact ? { fontSize: 13, padding: "4px 8px" } : { fontSize: 14, padding: "5px 10px" };
   const noPhoneTitle = phone ? undefined : "No phone on file — link a customer with a phone number to enable.";
 
   const popup = open ? (
@@ -117,13 +117,13 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         border: "1px solid var(--color-primary)",
         borderRadius: 8,
         padding: 10,
-        fontSize: 12,
+        fontSize: 14,
         gridColumn: variant === "grid" ? "1 / -1" : undefined,
       }}
     >
       {open === "late" && (
         <div style={{ display: "flex", gap: 4, marginBottom: 8, alignItems: "center" }}>
-          <span className="dim" style={{ fontSize: 11, marginRight: 4 }}>How late?</span>
+          <span className="dim" style={{ fontSize: 13, marginRight: 4 }}>How late?</span>
           {LATE_OPTIONS.map((m) => (
             <button
               key={m}
@@ -134,7 +134,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
               style={{
                 padding: "3px 8px",
                 borderRadius: 4,
-                fontSize: 11,
+                fontSize: 13,
                 background: lateMinutes === m ? "var(--color-primary)" : "transparent",
                 color: lateMinutes === m ? "#fff" : "#888",
                 border: `1px solid ${lateMinutes === m ? "var(--color-primary)" : "#444"}`,
@@ -146,7 +146,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
           ))}
         </div>
       )}
-      <div className="dim" style={{ fontSize: 10, marginBottom: 4 }}>
+      <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
         To {phone} · edit before sending if needed
       </div>
       <textarea
@@ -155,7 +155,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         rows={4}
         style={{
           width: "100%",
-          fontSize: 12,
+          fontSize: 14,
           padding: 8,
           borderRadius: 6,
           border: "1px solid #1e1e2e",
@@ -170,7 +170,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
           className="bg"
           onClick={send}
           disabled={sending || !draft.trim()}
-          style={{ fontSize: 12, padding: "5px 12px" }}
+          style={{ fontSize: 14, padding: "5px 12px" }}
         >
           {sending ? "Sending…" : "📱 Send"}
         </button>
@@ -178,7 +178,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
           className="bo"
           onClick={() => setOpen(null)}
           disabled={sending}
-          style={{ fontSize: 12, padding: "5px 12px" }}
+          style={{ fontSize: 14, padding: "5px 12px" }}
         >
           Cancel
         </button>
@@ -223,13 +223,13 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
             >
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(false); openTemplate("enroute"); }}
-                style={{ fontSize: 12, padding: "5px 8px", textAlign: "left", background: "transparent", color: "inherit", border: "none", cursor: "pointer", borderRadius: 4 }}
+                style={{ fontSize: 14, padding: "5px 8px", textAlign: "left", background: "transparent", color: "inherit", border: "none", cursor: "pointer", borderRadius: 4 }}
               >
                 🚗 On the way
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(false); openTemplate("late"); }}
-                style={{ fontSize: 12, padding: "5px 8px", textAlign: "left", background: "transparent", color: "inherit", border: "none", cursor: "pointer", borderRadius: 4 }}
+                style={{ fontSize: 14, padding: "5px 8px", textAlign: "left", background: "transparent", color: "inherit", border: "none", cursor: "pointer", borderRadius: 4 }}
               >
                 ⏱ Running late
               </button>

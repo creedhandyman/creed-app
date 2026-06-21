@@ -38,7 +38,7 @@ export default function Settings({ onClose }: Props) {
     <div className="fi" style={{ maxWidth: 500, margin: "0 auto", padding: "16px 12px" }}>
       <div className="row mb">
         <button className="bo" onClick={onClose}>← Back</button>
-        <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚙️ {t("settings.title")}</h2>
+        <h2 style={{ fontSize: 22, color: "var(--color-primary)" }}>⚙️ {t("settings.title")}</h2>
       </div>
 
       {/* Tab bar */}
@@ -50,7 +50,7 @@ export default function Settings({ onClose }: Props) {
             style={{
               padding: "5px 12px",
               borderRadius: 6,
-              fontSize: 13,
+              fontSize: 15,
               whiteSpace: "nowrap",
               background: tab === tb ? "var(--color-primary)" : "transparent",
               color: tab === tb ? "#fff" : "#888",
@@ -74,7 +74,7 @@ export default function Settings({ onClose }: Props) {
 
           {/* User info */}
           <div className="cd mb">
-            <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.yourProfile")}</h4>
+            <h4 style={{ fontSize: 16, marginBottom: 8 }}>{t("settings.yourProfile")}</h4>
             {[
               { label: "Name", value: user.name, field: "name" },
               { label: "Email", value: user.email, field: "" },
@@ -83,7 +83,7 @@ export default function Settings({ onClose }: Props) {
               { label: "Rate", value: "$" + (user.rate || 55) + "/hr", field: "" },
               { label: "Start Date", value: user.start_date, field: "" },
             ].map((f, i) => (
-              <div key={i} className="sep" style={{ fontSize: 13 }}>
+              <div key={i} className="sep" style={{ fontSize: 15 }}>
                 <span className="dim">{f.label}:</span> {f.value || "—"}
               </div>
             ))}
@@ -93,8 +93,8 @@ export default function Settings({ onClose }: Props) {
               dashboard bell) are always on; these gate the SMS channel and
               which events reach you. */}
           <div className="cd mb">
-            <h4 style={{ fontSize: 14, marginBottom: 4 }}>🔔 {t("settings.notifications")}</h4>
-            <div className="dim" style={{ fontSize: 11.5, marginBottom: 10 }}>{t("settings.notifDesc")}</div>
+            <h4 style={{ fontSize: 16, marginBottom: 4 }}>🔔 {t("settings.notifications")}</h4>
+            <div className="dim" style={{ fontSize: 13.5, marginBottom: 10 }}>{t("settings.notifDesc")}</div>
             <div className="row" style={{ marginBottom: 2 }}>
               <input
                 type="tel"
@@ -120,7 +120,7 @@ export default function Settings({ onClose }: Props) {
               const on = user[row.key] !== false; // undefined = opted in (default)
               return (
                 <div key={row.key} className="sep row" style={{ justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 13 }}>{row.label}</span>
+                  <span style={{ fontSize: 15 }}>{row.label}</span>
                   <div onClick={() => saveNotif({ [row.key]: !on } as Partial<Profile>)} style={{ width: 44, height: 24, borderRadius: 12, background: on ? "var(--color-primary)" : "#ccc", position: "relative", cursor: "pointer" }}>
                     <div style={{ width: 18, height: 18, borderRadius: 9, background: "#fff", position: "absolute", top: 3, left: on ? 23 : 3, transition: "0.3s" }} />
                   </div>
@@ -130,7 +130,7 @@ export default function Settings({ onClose }: Props) {
           </div>
 
           <div className="cd mb">
-            <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.changePassword")}</h4>
+            <h4 style={{ fontSize: 16, marginBottom: 8 }}>{t("settings.changePassword")}</h4>
             <div className="row">
               <input
                 type="password"
@@ -172,7 +172,7 @@ export default function Settings({ onClose }: Props) {
                 logout();
                 onClose();
               }}
-              style={{ width: "100%", fontSize: 12, color: "var(--color-accent-red)" }}
+              style={{ width: "100%", fontSize: 14, color: "var(--color-accent-red)" }}
             >
               {t("settings.deleteAccount")}
             </button>
@@ -186,7 +186,7 @@ export default function Settings({ onClose }: Props) {
       {/* Appearance — renders first in General tab */}
       {tab === "general" && (
         <div className="cd mb">
-          <h4 style={{ fontSize: 14, marginBottom: 8 }}>{t("settings.appearance")}</h4>
+          <h4 style={{ fontSize: 16, marginBottom: 8 }}>{t("settings.appearance")}</h4>
           <div className="sep row" style={{ justifyContent: "space-between" }}>
             <span>{t("settings.darkMode")}</span>
             <div onClick={toggleDark} style={{ width: 44, height: 24, borderRadius: 12, background: darkMode ? "var(--color-primary)" : "#ccc", position: "relative", cursor: "pointer" }}>
@@ -198,7 +198,7 @@ export default function Settings({ onClose }: Props) {
             <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
               {[{ key: "right", label: "Right" }, { key: "left", label: "Left" }, { key: "bottom", label: "Bottom" }].map((opt) => {
                 const isActive = opt.key === "bottom" ? navBottom : opt.key === "left" ? navLeft && !navBottom : !navLeft && !navBottom;
-                return (<button key={opt.key} onClick={() => { if (opt.key === "bottom") toggleNavBottom(); else if (opt.key === "left") { if (navBottom) toggleNavBottom(); toggleNavSide(); } else { if (navBottom) toggleNavBottom(); if (navLeft) toggleNavSide(); } }} style={{ padding: "4px 10px", fontSize: 12, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
+                return (<button key={opt.key} onClick={() => { if (opt.key === "bottom") toggleNavBottom(); else if (opt.key === "left") { if (navBottom) toggleNavBottom(); toggleNavSide(); } else { if (navBottom) toggleNavBottom(); if (navLeft) toggleNavSide(); } }} style={{ padding: "4px 10px", fontSize: 14, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
               })}
             </div>
           </div>
@@ -207,7 +207,7 @@ export default function Settings({ onClose }: Props) {
             <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
               {[{ key: "en", label: "English" }, { key: "es", label: "Español" }].map((opt) => {
                 const isActive = (typeof window !== "undefined" ? localStorage.getItem("c_lang") : "en") === opt.key || (!localStorage.getItem("c_lang") && opt.key === "en");
-                return (<button key={opt.key} onClick={() => { localStorage.setItem("c_lang", opt.key); window.location.reload(); }} style={{ padding: "4px 12px", fontSize: 12, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
+                return (<button key={opt.key} onClick={() => { localStorage.setItem("c_lang", opt.key); window.location.reload(); }} style={{ padding: "4px 12px", fontSize: 14, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
               })}
             </div>
           </div>
@@ -217,8 +217,8 @@ export default function Settings({ onClose }: Props) {
       {/* Quest Config — after appearance */}
       {tab === "general" && isOwner && (
         <div className="cd" style={{ marginTop: 14 }}>
-          <h4 style={{ fontSize: 14, marginBottom: 10 }}>🎯 Quest Bonuses</h4>
-          <div className="dim" style={{ fontSize: 12, marginBottom: 10 }}>Toggle quests on/off and set custom bonus amounts for your team.</div>
+          <h4 style={{ fontSize: 16, marginBottom: 10 }}>🎯 Quest Bonuses</h4>
+          <div className="dim" style={{ fontSize: 14, marginBottom: 10 }}>Toggle quests on/off and set custom bonus amounts for your team.</div>
           {(() => {
             const defaultQuests = [
               { key: "review_favor", name: "Review Favor", desc: "15 positive reviews", defaultBonus: 75 },
@@ -259,17 +259,17 @@ export default function Settings({ onClose }: Props) {
                       style={{ width: "auto", accentColor: "var(--color-primary)" }}
                     />
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, opacity: c.enabled === false ? 0.4 : 1 }}>{q.name}</div>
-                      <div className="dim" style={{ fontSize: 9 }}>{q.desc}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, opacity: c.enabled === false ? 0.4 : 1 }}>{q.name}</div>
+                      <div className="dim" style={{ fontSize: 11 }}>{q.desc}</div>
                     </div>
                   </div>
                   <div className="row" style={{ gap: 2 }}>
-                    <span style={{ fontSize: 11 }}>$</span>
+                    <span style={{ fontSize: 13 }}>$</span>
                     <input
                       type="number"
                       defaultValue={c.bonus}
                       min="0"
-                      style={{ width: 55, fontSize: 13, padding: "2px 4px", textAlign: "center" }}
+                      style={{ width: 55, fontSize: 15, padding: "2px 4px", textAlign: "center" }}
                       onBlur={async (e) => {
                         const val = parseFloat(e.target.value) || 0;
                         if (val !== c.bonus) {

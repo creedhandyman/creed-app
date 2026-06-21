@@ -287,7 +287,7 @@ export default function CustomerPicker({
       />
       <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 6 }}>
         {items.length === 0 ? (
-          <div style={{ fontSize: 11, color: "#888", padding: "6px 4px" }}>
+          <div style={{ fontSize: 13, color: "#888", padding: "6px 4px" }}>
             {emptyLabel}
           </div>
         ) : (
@@ -301,7 +301,7 @@ export default function CustomerPicker({
                 textAlign: "left",
                 padding: "6px 8px",
                 marginBottom: 2,
-                fontSize: 12,
+                fontSize: 14,
                 background: "transparent",
                 color: "#e2e2e8",
                 border: "1px solid transparent",
@@ -319,7 +319,7 @@ export default function CustomerPicker({
             >
               <div style={{ fontWeight: 600 }}>{it.label}</div>
               {it.sub && (
-                <div style={{ fontSize: 10, color: "#888", marginTop: 1 }}>
+                <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>
                   {it.sub}
                 </div>
               )}
@@ -331,14 +331,14 @@ export default function CustomerPicker({
         <button
           className="bo"
           onClick={onNew}
-          style={{ fontSize: 11, padding: "4px 10px", color: "var(--color-primary)" }}
+          style={{ fontSize: 13, padding: "4px 10px", color: "var(--color-primary)" }}
         >
           + New
         </button>
         <button
           className="bo"
           onClick={onCancel}
-          style={{ fontSize: 11, padding: "4px 10px", marginLeft: "auto" }}
+          style={{ fontSize: 13, padding: "4px 10px", marginLeft: "auto" }}
         >
           Cancel
         </button>
@@ -357,7 +357,7 @@ export default function CustomerPicker({
           <button
             className="bo"
             onClick={unlink}
-            style={{ fontSize: 11, padding: "2px 8px", marginLeft: "auto" }}
+            style={{ fontSize: 13, padding: "2px 8px", marginLeft: "auto" }}
           >
             Unlink
           </button>
@@ -426,14 +426,14 @@ export default function CustomerPicker({
                 value={newAddrStreet}
                 onChange={(e) => setNewAddrStreet(e.target.value)}
                 placeholder="Street *"
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 14 }}
                 autoFocus
               />
               <input
                 value={newAddrLabel}
                 onChange={(e) => setNewAddrLabel(e.target.value)}
                 placeholder="Label (optional)"
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 14 }}
               />
             </div>
             <div className="row">
@@ -441,7 +441,7 @@ export default function CustomerPicker({
                 className="bg"
                 disabled={creatingAddress}
                 onClick={createAddress}
-                style={{ fontSize: 12, padding: "4px 10px" }}
+                style={{ fontSize: 14, padding: "4px 10px" }}
               >
                 {creatingAddress ? "..." : "Create"}
               </button>
@@ -452,7 +452,7 @@ export default function CustomerPicker({
                   setNewAddrStreet("");
                   setNewAddrLabel("");
                 }}
-                style={{ fontSize: 12, padding: "4px 10px" }}
+                style={{ fontSize: 14, padding: "4px 10px" }}
               >
                 Cancel
               </button>
@@ -534,14 +534,14 @@ export default function CustomerPicker({
               value={newCustomerName}
               onChange={(e) => setNewCustomerName(e.target.value)}
               placeholder="Name *"
-              style={{ fontSize: 12 }}
+              style={{ fontSize: 14 }}
               autoFocus
             />
             <input
               value={newCustomerPhone}
               onChange={(e) => setNewCustomerPhone(e.target.value)}
               placeholder="Phone"
-              style={{ fontSize: 12 }}
+              style={{ fontSize: 14 }}
             />
           </div>
           <div className="row mb" style={{ flexWrap: "wrap" }}>
@@ -552,7 +552,7 @@ export default function CustomerPicker({
                 style={{
                   padding: "3px 8px",
                   borderRadius: 4,
-                  fontSize: 11,
+                  fontSize: 13,
                   background: newCustomerType === t ? "var(--color-primary)" : "transparent",
                   color: newCustomerType === t ? "#fff" : "#888",
                   border: `1px solid ${newCustomerType === t ? "var(--color-primary)" : "#444"}`,
@@ -567,7 +567,7 @@ export default function CustomerPicker({
               className="bg"
               disabled={creatingCustomer}
               onClick={createCustomer}
-              style={{ fontSize: 12, padding: "4px 10px" }}
+              style={{ fontSize: 14, padding: "4px 10px" }}
             >
               {creatingCustomer ? "..." : "Create"}
             </button>
@@ -579,7 +579,7 @@ export default function CustomerPicker({
                 setNewCustomerPhone("");
                 setNewCustomerType("individual");
               }}
-              style={{ fontSize: 12, padding: "4px 10px" }}
+              style={{ fontSize: 14, padding: "4px 10px" }}
             >
               Cancel
             </button>

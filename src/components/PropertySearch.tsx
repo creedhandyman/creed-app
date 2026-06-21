@@ -211,7 +211,7 @@ export default function PropertySearch<T>({
                 color: popoverColor,
                 background: i === highlight ? "var(--color-primary)" + "22" : "transparent",
                 borderTop: i === 0 ? "none" : `1px solid ${popoverBorder}`,
-                fontSize: 13,
+                fontSize: 15,
               }}
             >
               {render(item)}
@@ -236,7 +236,7 @@ export default function PropertySearch<T>({
             borderRadius: 8,
             zIndex: 50,
             padding: "10px 12px",
-            fontSize: 12,
+            fontSize: 14,
           }}
         >
           No matches for &ldquo;{q}&rdquo;.

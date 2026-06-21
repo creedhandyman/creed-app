@@ -712,7 +712,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
       <div className="fi">
         <div className="row mb">
           <button className="bo" onClick={() => { if (!isEditing) clearSaved(); onCancel(); }}>←</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Icon name="search" size={18} color="var(--color-primary)" />{isEditing ? "Edit Inspection" : "New Inspection"}
           </h2>
         </div>
@@ -729,8 +729,8 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               padding: 10,
             }}
           >
-            <b style={{ fontSize: 13 }}>⚠ This inspection has {editing!.linkedQuoteCount} linked quote{editing!.linkedQuoteCount === 1 ? "" : "s"}</b>
-            <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+            <b style={{ fontSize: 15 }}>⚠ This inspection has {editing!.linkedQuoteCount} linked quote{editing!.linkedQuoteCount === 1 ? "" : "s"}</b>
+            <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>
               Edits will not auto-update the existing quote{editing!.linkedQuoteCount === 1 ? "" : "s"} — regenerate from this inspection to flow the changes through.
             </div>
           </div>
@@ -748,8 +748,8 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             }}
           >
             <div>
-              <b style={{ fontSize: 13 }}>Resume inspection?</b>
-              <div className="dim" style={{ fontSize: 11 }}>
+              <b style={{ fontSize: 15 }}>Resume inspection?</b>
+              <div className="dim" style={{ fontSize: 13 }}>
                 {property || "Untitled"} · {roomData.length} areas
               </div>
             </div>
@@ -757,7 +757,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               <button
                 className="bb"
                 onClick={() => { setStep(roomData.length ? "inspect" : "rooms"); setShowResume(false); }}
-                style={{ fontSize: 12, padding: "5px 12px" }}
+                style={{ fontSize: 14, padding: "5px 12px" }}
               >
                 Resume
               </button>
@@ -774,7 +774,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   setCurrentRoomIdx(0);
                   setShowResume(false);
                 }}
-                style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}
+                style={{ fontSize: 14, padding: "5px 10px", color: "var(--color-accent-red)" }}
               >
                 Discard
               </button>
@@ -805,7 +805,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             etc.; Move-Out → Yard drops them because Yard has its own
             area set). */}
         <div className="cd mb" style={{ padding: 10 }}>
-          <h4 style={{ fontSize: 13, marginBottom: 6 }}>Inspection Type</h4>
+          <h4 style={{ fontSize: 15, marginBottom: 6 }}>Inspection Type</h4>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
             {INSPECTION_TYPES.map((t) => {
               const active = t.id === inspectionType;
@@ -827,7 +827,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                     flexShrink: 0,
                     padding: "6px 12px",
                     borderRadius: 16,
-                    fontSize: 12,
+                    fontSize: 14,
                     fontFamily: "Oswald",
                     letterSpacing: ".04em",
                     background: active ? "var(--color-primary)" : "transparent",
@@ -851,14 +851,14 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               );
             })}
           </div>
-          <p className="dim" style={{ fontSize: 11, margin: "6px 0 0" }}>
+          <p className="dim" style={{ fontSize: 13, margin: "6px 0 0" }}>
             {activeTypeConfig.description}
           </p>
         </div>
 
         {/* Room checklist */}
         <div className="cd mb">
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>Select Areas to Inspect</h4>
+          <h4 style={{ fontSize: 15, marginBottom: 8 }}>Select Areas to Inspect</h4>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
             {activeTypeConfig.suggestedRooms.map((room) => {
               const checked = selectedRooms.includes(room);
@@ -873,12 +873,12 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                     padding: "6px 8px",
                     borderRadius: 6,
                     cursor: "pointer",
-                    fontSize: 12,
+                    fontSize: 14,
                     background: checked ? "var(--color-primary)" + "22" : "transparent",
                     border: `1px solid ${checked ? "var(--color-primary)" : border}`,
                   }}
                 >
-                  <span style={{ color: checked ? "var(--color-primary)" : "#888", fontSize: 14 }}>
+                  <span style={{ color: checked ? "var(--color-primary)" : "#888", fontSize: 16 }}>
                     {checked ? "☑" : "☐"}
                   </span>
                   {room}
@@ -893,10 +893,10 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               value={customRoom}
               onChange={(e) => setCustomRoom(e.target.value)}
               placeholder="Add custom area"
-              style={{ flex: 1, fontSize: 12 }}
+              style={{ flex: 1, fontSize: 14 }}
               onKeyDown={(e) => e.key === "Enter" && addCustomRoom()}
             />
-            <button className="bo" onClick={addCustomRoom} style={{ fontSize: 12, padding: "5px 10px" }}>
+            <button className="bo" onClick={addCustomRoom} style={{ fontSize: 14, padding: "5px 10px" }}>
               + Add
             </button>
           </div>
@@ -913,7 +913,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   gap: 4,
                   padding: "3px 8px",
                   borderRadius: 12,
-                  fontSize: 13,
+                  fontSize: 15,
                   background: "var(--color-primary)" + "22",
                   color: "var(--color-primary)",
                   margin: "4px 4px 0 0",
@@ -938,13 +938,13 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           style={{
             width: "100%",
             padding: 12,
-            fontSize: 15,
+            fontSize: 17,
             opacity: !selectedRooms.length || !property ? 0.5 : 1,
           }}
         >
           {isEditing ? "Continue Editing" : "Start Inspection"} ({selectedRooms.length} areas) →
         </button>
-        <p className="dim" style={{ fontSize: 11, textAlign: "center", marginTop: 6 }}>
+        <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 6 }}>
           Each room has a Voice mic — tap it inside the inspection to record continuously and let AI fill the checklist.
         </p>
       </div>
@@ -1043,8 +1043,8 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         {/* Header */}
         <div className="row mb" style={{ justifyContent: "space-between" }}>
           <div className="row">
-            <button className="bo" onClick={() => setStep("rooms")} style={{ fontSize: 12, padding: "4px 8px" }}>←</button>
-            <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>{room.name}</h2>
+            <button className="bo" onClick={() => setStep("rooms")} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>
+            <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>{room.name}</h2>
           </div>
           <div className="row" style={{ gap: 8 }}>
             {/* Per-room voice walk: tap to open a one-continuous-recording
@@ -1059,7 +1059,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 border: "none",
                 borderRadius: 16,
                 padding: "5px 12px",
-                fontSize: 13,
+                fontSize: 15,
                 fontFamily: "Oswald",
                 letterSpacing: ".04em",
                 display: "inline-flex",
@@ -1070,7 +1070,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               <Icon name="mic" size={14} color="#fff" strokeWidth={2.25} />
               Voice
             </button>
-            <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald" }}>
+            <span className="dim" style={{ fontSize: 15, fontFamily: "Oswald" }}>
               {currentRoomIdx + 1} / {roomData.length}
             </span>
           </div>
@@ -1078,7 +1078,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
 
         {/* Upload indicator */}
         {uploadCount > 0 && (
-          <div style={{ fontSize: 12, color: "var(--color-primary)", textAlign: "center", marginBottom: 6 }}>
+          <div style={{ fontSize: 14, color: "var(--color-primary)", textAlign: "center", marginBottom: 6 }}>
             📤 Uploading {uploadCount} photo{uploadCount > 1 ? "s" : ""}...
           </div>
         )}
@@ -1100,7 +1100,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 key={ri}
                 onClick={() => setCurrentRoomIdx(ri)}
                 style={{
-                  padding: "4px 8px", borderRadius: 6, fontSize: 11, whiteSpace: "nowrap",
+                  padding: "4px 8px", borderRadius: 6, fontSize: 13, whiteSpace: "nowrap",
                   background: ri === currentRoomIdx ? "var(--color-primary)" : "transparent",
                   color: ri === currentRoomIdx ? "#fff" : hasFindings ? "var(--color-warning)" : "#888",
                   border: `1px solid ${ri === currentRoomIdx ? "var(--color-primary)" : border}`,
@@ -1135,7 +1135,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 placeholder="W"
                 min="0"
                 step="0.1"
-                style={{ fontSize: 13, width: 70, textAlign: "center" }}
+                style={{ fontSize: 15, width: 70, textAlign: "center" }}
                 onChange={(e) => {
                   const w = parseFloat(e.target.value) || 0;
                   setRoomData((prev) =>
@@ -1145,7 +1145,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   );
                 }}
               />
-              <span style={{ fontSize: 14, color: "#888" }}>×</span>
+              <span style={{ fontSize: 16, color: "#888" }}>×</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -1153,7 +1153,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 placeholder="L"
                 min="0"
                 step="0.1"
-                style={{ fontSize: 13, width: 70, textAlign: "center" }}
+                style={{ fontSize: 15, width: 70, textAlign: "center" }}
                 onChange={(e) => {
                   const l = parseFloat(e.target.value) || 0;
                   setRoomData((prev) =>
@@ -1163,13 +1163,13 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   );
                 }}
               />
-              <span style={{ fontSize: 11, color: "#888" }}>ft</span>
+              <span style={{ fontSize: 13, color: "#888" }}>ft</span>
             </div>
           </div>
           {room.sqft > 0 && (
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 18, fontFamily: "Oswald", color: "var(--color-primary)", lineHeight: 1 }}>{room.sqft}</div>
-              <div className="dim" style={{ fontSize: 8 }}>sq ft</div>
+              <div style={{ fontSize: 20, fontFamily: "Oswald", color: "var(--color-primary)", lineHeight: 1 }}>{room.sqft}</div>
+              <div className="dim" style={{ fontSize: 10 }}>sq ft</div>
             </div>
           )}
         </div>
@@ -1194,7 +1194,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   background: "transparent",
                   border: "none",
                   fontWeight: 600,
-                  fontSize: 13,
+                  fontSize: 15,
                   padding: 0,
                   width: "auto",
                   flex: 1,
@@ -1241,7 +1241,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   <Icon name="upload" size={16} />
                 </button>
                 {item.photos.length > 0 && (
-                  <span style={{ fontSize: 13, color: "var(--color-success)", alignSelf: "center" }}>
+                  <span style={{ fontSize: 15, color: "var(--color-success)", alignSelf: "center" }}>
                     {item.photos.length}
                   </span>
                 )}
@@ -1258,7 +1258,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                     flex: 1,
                     padding: "4px 0",
                     borderRadius: 4,
-                    fontSize: 12,
+                    fontSize: 14,
                     fontFamily: "Oswald",
                     background: item.condition === c.code ? c.bg : "transparent",
                     color: item.condition === c.code ? c.color : "#666",
@@ -1304,7 +1304,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                       updateItem(currentRoomIdx, itemIdx, "notes", updated);
                     }}
                     style={{
-                      fontSize: 11, padding: "2px 6px", borderRadius: 4,
+                      fontSize: 13, padding: "2px 6px", borderRadius: 4,
                       background: "transparent", border: `1px solid ${border}`,
                       color: item.notes?.toLowerCase().includes(preset.toLowerCase()) ? "var(--color-primary)" : "#888",
                       cursor: "pointer",
@@ -1318,7 +1318,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 value={item.notes}
                 onChange={(e) => updateItem(currentRoomIdx, itemIdx, "notes", e.target.value)}
                 placeholder="Describe the issue..."
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 14 }}
               />
             </>)}
 
@@ -1352,7 +1352,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                         borderRadius: "50%",
                         width: 14,
                         height: 14,
-                        fontSize: 13,
+                        fontSize: 15,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -1372,7 +1372,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         <button
           className="bo"
           onClick={() => addItemToRoom(currentRoomIdx)}
-          style={{ fontSize: 12, padding: "5px 12px", marginBottom: 12 }}
+          style={{ fontSize: 14, padding: "5px 12px", marginBottom: 12 }}
         >
           + Add Item
         </button>
@@ -1385,7 +1385,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             <button
               className="bo"
               onClick={() => setCurrentRoomIdx((prev) => prev - 1)}
-              style={{ flex: 1, padding: 10, fontSize: 13 }}
+              style={{ flex: 1, padding: 10, fontSize: 15 }}
             >
               ← {roomData[currentRoomIdx - 1]?.name}
             </button>
@@ -1394,7 +1394,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             <button
               className="bb"
               onClick={() => setCurrentRoomIdx((prev) => prev + 1)}
-              style={{ flex: 1, padding: 10, fontSize: 13 }}
+              style={{ flex: 1, padding: 10, fontSize: 15 }}
             >
               {roomData[currentRoomIdx + 1]?.name} →
             </button>
@@ -1402,7 +1402,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             <button
               className="bg"
               onClick={() => setStep("review")}
-              style={{ flex: 1, padding: 10, fontSize: 13 }}
+              style={{ flex: 1, padding: 10, fontSize: 15 }}
             >
               Review Inspection →
             </button>
@@ -1418,15 +1418,15 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   return (
     <div className="fi">
       <div className="row mb">
-        <button className="bo" onClick={() => setStep("inspect")} style={{ fontSize: 12, padding: "4px 8px" }}>← Edit</button>
-        <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <button className="bo" onClick={() => setStep("inspect")} style={{ fontSize: 14, padding: "4px 8px" }}>← Edit</button>
+        <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="search" size={18} color="var(--color-primary)" />Inspection Review
         </h2>
       </div>
 
       {/* Property */}
       <div className="cd mb">
-        <div style={{ fontSize: 13 }}>
+        <div style={{ fontSize: 15 }}>
           <b>{property}</b>
           {client && <span className="dim"> · {client}</span>}
         </div>
@@ -1461,8 +1461,8 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <b style={{ fontSize: 13 }}>{room.name}</b>
-                <div className="dim" style={{ fontSize: 11 }}>
+                <b style={{ fontSize: 15 }}>{room.name}</b>
+                <div className="dim" style={{ fontSize: 13 }}>
                   {issues.length} issue{issues.length !== 1 ? "s" : ""}
                   {room.sqft > 0 && ` · ${room.sqft} sqft`}
                   {roomPhotos > 0 && ` · ${roomPhotos} photo${roomPhotos !== 1 ? "s" : ""}`}
@@ -1499,7 +1499,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           style={{
             width: "100%",
             padding: 14,
-            fontSize: 16,
+            fontSize: 18,
             background: !isEditing && findingsCount === 0 ? "#333" : "var(--color-primary)",
             opacity: !isEditing && findingsCount === 0 ? 0.5 : 1,
           }}
@@ -1509,7 +1509,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             : `🤖 Generate Quote (${findingsCount} findings)`}
         </button>
         {!isEditing && findingsCount === 0 && (
-          <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 6 }}>
+          <p className="dim" style={{ fontSize: 15, textAlign: "center", marginTop: 6 }}>
             Mark at least one item as Fair, Poor, or Damaged to generate a quote
           </p>
         )}

@@ -54,7 +54,7 @@ export default function DashboardCardPreview() {
               onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
             />
           ) : (
-            <span style={{ fontFamily: "Oswald, sans-serif", color: "var(--color-primary)", fontSize: 18 }}>
+            <span style={{ fontFamily: "Oswald, sans-serif", color: "var(--color-primary)", fontSize: 20 }}>
               {(org.name || "?").slice(0, 2).toUpperCase()}
             </span>
           )}
@@ -62,24 +62,24 @@ export default function DashboardCardPreview() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-            <h4 style={{ fontSize: 13, margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <h4 style={{ fontSize: 15, margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
               <Icon name="card" size={15} color="var(--color-primary)" />
               My business card
             </h4>
-            <span style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            <span style={{ fontSize: 12, fontFamily: "Oswald, sans-serif", color: "var(--color-primary)", textTransform: "uppercase", letterSpacing: ".06em" }}>
               {slug ? "Tap to share" : "Set slug"}
             </span>
           </div>
-          <div className="dim" style={{ fontSize: 12, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div className="dim" style={{ fontSize: 14, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {org.name}
             {org.phone ? ` · ${org.phone}` : ""}
           </div>
           {slug ? (
-            <div style={{ fontSize: 11, color: "#888", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>
+            <div style={{ fontSize: 13, color: "#888", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>
               /card/{slug}
             </div>
           ) : (
-            <div style={{ fontSize: 11, color: "var(--color-warning)", marginTop: 2 }}>
+            <div style={{ fontSize: 13, color: "var(--color-warning)", marginTop: 2 }}>
               Pick a URL slug under Operations → Settings to unlock the card.
             </div>
           )}
@@ -113,7 +113,7 @@ export default function DashboardCardPreview() {
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 16, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center", gap: 8 }}>
                 <Icon name="card" size={18} color="var(--color-primary)" />
                 Share my card
               </h3>
@@ -123,7 +123,7 @@ export default function DashboardCardPreview() {
                 style={{
                   background: "transparent", border: "none",
                   color: darkMode ? "#888" : "#555",
-                  fontSize: 22, lineHeight: 1, cursor: "pointer",
+                  fontSize: 24, lineHeight: 1, cursor: "pointer",
                   padding: 4,
                 }}
               >

@@ -154,7 +154,7 @@ export default function PortalPage() {
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: PRIMARY, fontFamily: "Oswald, sans-serif", fontSize: 18 }}>Loading…</div>
+        <div style={{ color: PRIMARY, fontFamily: "Oswald, sans-serif", fontSize: 20 }}>Loading…</div>
       </div>
     );
   }
@@ -163,8 +163,8 @@ export default function PortalPage() {
       <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: "#C00000" }}>Portal unavailable</h1>
-          <p style={{ color: "#888", fontSize: 13, marginTop: 8 }}>
+          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#C00000" }}>Portal unavailable</h1>
+          <p style={{ color: "#888", fontSize: 15, marginTop: 8 }}>
             We couldn&apos;t load your data. <a href="/portal/login" style={{ color: PRIMARY }}>Request a new link</a>.
           </p>
         </div>
@@ -188,11 +188,11 @@ export default function PortalPage() {
               onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
             />
           )}
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: 0 }}>
+          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: 0 }}>
             {org?.name || "Customer Portal"}
           </h1>
           {org?.phone && (
-            <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+            <div style={{ fontSize: 14, color: "#666", marginTop: 4 }}>
               <a href={`tel:${org.phone}`} style={{ color: "#888", textDecoration: "none" }}>{org.phone}</a>
             </div>
           )}
@@ -200,10 +200,10 @@ export default function PortalPage() {
 
         {/* Greeting */}
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 18, marginBottom: 16 }}>
-          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: "#e2e2e8", margin: 0 }}>
+          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "#e2e2e8", margin: 0 }}>
             Hi {greetName} 👋
           </h2>
-          <p style={{ color: "#888", fontSize: 13, margin: "6px 0 0" }}>
+          <p style={{ color: "#888", fontSize: 15, margin: "6px 0 0" }}>
             Welcome to your portal. Track open quotes, scheduled work, completed jobs, and request something new.
           </p>
         </div>
@@ -243,7 +243,7 @@ export default function PortalPage() {
         <RenderingsSection jobs={data.jobs} />
 
         {/* Footer */}
-        <div style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 24 }}>
+        <div style={{ textAlign: "center", color: "#555", fontSize: 13, marginTop: 24 }}>
           {org?.license_num && <div>License #{org.license_num}</div>}
           <div style={{ marginTop: 4 }}>Powered by Creed App</div>
         </div>
@@ -261,7 +261,7 @@ function RequestWorkButton({ addressId }: { addressId?: string }) {
         display: "block", textAlign: "center",
         padding: "12px", borderRadius: 8, marginBottom: 16,
         background: PRIMARY, color: "#fff",
-        fontFamily: "Oswald, sans-serif", fontSize: 14,
+        fontFamily: "Oswald, sans-serif", fontSize: 16,
         textTransform: "uppercase", letterSpacing: ".05em",
         textDecoration: "none",
       }}
@@ -291,10 +291,10 @@ function PropertySection({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 15, color: PRIMARY, margin: 0, textTransform: "uppercase", letterSpacing: ".04em" }}>
+        <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 17, color: PRIMARY, margin: 0, textTransform: "uppercase", letterSpacing: ".04em" }}>
           📍 {address ? formatAddress(address) : "Other"}
         </h3>
-        <span style={{ fontSize: 11, color: "#666" }}>
+        <span style={{ fontSize: 13, color: "#666" }}>
           {jobs.length} {jobs.length === 1 ? "job" : "jobs"}
         </span>
       </div>
@@ -314,7 +314,7 @@ function FlatSections({ jobs, receipts, compact }: { jobs: Job[]; receipts: Rece
 
   if (jobs.length === 0) {
     return (
-      <p style={{ color: "#666", fontSize: 12, fontStyle: "italic", margin: compact ? "0" : "10px 0" }}>
+      <p style={{ color: "#666", fontSize: 14, fontStyle: "italic", margin: compact ? "0" : "10px 0" }}>
         Nothing here yet.
       </p>
     );
@@ -356,7 +356,7 @@ function Section({ title, tint, children }: { title: string; tint: string; child
     <div style={{ marginBottom: 14 }}>
       <h4
         style={{
-          fontFamily: "Oswald, sans-serif", fontSize: 11,
+          fontFamily: "Oswald, sans-serif", fontSize: 13,
           color: tint, textTransform: "uppercase", letterSpacing: ".08em",
           margin: "0 0 6px",
         }}
@@ -373,7 +373,7 @@ function statusBadge(status: string) {
   return (
     <span
       style={{
-        fontSize: 10, fontFamily: "Oswald, sans-serif", letterSpacing: ".06em",
+        fontSize: 12, fontFamily: "Oswald, sans-serif", letterSpacing: ".06em",
         padding: "2px 7px", borderRadius: 10, textTransform: "uppercase",
         background: `${color}22`, color,
       }}
@@ -394,14 +394,14 @@ function QuoteCard({ job }: { job: Job }) {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b style={{ fontSize: 13 }}>{job.property || "(address pending)"}</b>
+        <b style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
         {statusBadge(job.status)}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
         <span style={{ color: "#888" }}>{fmtDate(job.job_date) || fmtDate(job.created_at)}</span>
         {job.total > 0 && <b style={{ color: "#00cc66" }}>{fmtMoney(job.total)}</b>}
       </div>
-      <div style={{ fontSize: 11, color: PRIMARY, marginTop: 6 }}>
+      <div style={{ fontSize: 13, color: PRIMARY, marginTop: 6 }}>
         {job.client_signature ? "View status" : "Approve & sign →"}
       </div>
     </a>
@@ -424,19 +424,19 @@ function ScheduledCard({ job }: { job: Job }) {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b style={{ fontSize: 13 }}>{job.property || "(address pending)"}</b>
+        <b style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
         {statusBadge(job.status)}
       </div>
-      <div style={{ fontSize: 12, color: "#888" }}>
+      <div style={{ fontSize: 14, color: "#888" }}>
         {fmtDate(job.job_date) || fmtDate(job.created_at)}
         {job.requested_tech && <> · 👷 {job.requested_tech}</>}
       </div>
       {note && (
-        <div style={{ fontSize: 12, color: "#bbb", marginTop: 6, fontStyle: "italic" }}>
+        <div style={{ fontSize: 14, color: "#bbb", marginTop: 6, fontStyle: "italic" }}>
           {note}
         </div>
       )}
-      <div style={{ fontSize: 11, color: PRIMARY, marginTop: 6 }}>View status →</div>
+      <div style={{ fontSize: 13, color: PRIMARY, marginTop: 6 }}>View status →</div>
     </a>
   );
 }
@@ -454,10 +454,10 @@ function CompletedCard({ job }: { job: Job }) {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b style={{ fontSize: 13 }}>{job.property || "(address pending)"}</b>
+        <b style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
         {statusBadge(job.status)}
       </div>
-      <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>
+      <div style={{ fontSize: 14, color: "#888", marginBottom: 8 }}>
         {fmtDate(job.job_date) || fmtDate(job.created_at)}
         {job.trade && <> · {job.trade}</>}
       </div>
@@ -468,7 +468,7 @@ function CompletedCard({ job }: { job: Job }) {
       )}
       <a
         href={`/status?job=${job.id}`}
-        style={{ fontSize: 11, color: PRIMARY, textDecoration: "none", display: "inline-block", marginTop: 6 }}
+        style={{ fontSize: 13, color: PRIMARY, textDecoration: "none", display: "inline-block", marginTop: 6 }}
       >
         View details →
       </a>
@@ -479,7 +479,7 @@ function CompletedCard({ job }: { job: Job }) {
 function PhotoStrip({ label, photos }: { label: string; photos: { url: string; label?: string }[] }) {
   return (
     <div style={{ marginBottom: 6 }}>
-      <div style={{ fontSize: 10, color: "#666", fontFamily: "Oswald, sans-serif", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>
+      <div style={{ fontSize: 12, color: "#666", fontFamily: "Oswald, sans-serif", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>
         {label}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 4 }}>
@@ -689,10 +689,10 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
 
   return (
     <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-      <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 12, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 4px" }}>
+      <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 14, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 4px" }}>
         📄 Documents
       </h3>
-      <div style={{ fontSize: 11, color: "#666", marginBottom: 10 }}>
+      <div style={{ fontSize: 13, color: "#666", marginBottom: 10 }}>
         Tap a row to open a printable PDF. Use your browser to save or share.
       </div>
       <div style={{ background: "#0a0a0f", border: "1px solid #1e1e2e", borderRadius: 8, overflow: "hidden" }}>
@@ -716,15 +716,15 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
                 width: 32, height: 32, borderRadius: 6,
                 background: tint + "22", color: tint,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 14, flexShrink: 0,
+                fontSize: 16, flexShrink: 0,
               }}>
                 {icon}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: "#e2e2e8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 15, color: "#e2e2e8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {row.label} — {row.job.property || "(no address)"}
                 </div>
-                <div style={{ fontSize: 11, color: "#666" }}>
+                <div style={{ fontSize: 13, color: "#666" }}>
                   PDF · {row.date}
                   {row.total > 0 && row.type !== "report" ? ` · ${fmtMoney(row.total)}` : ""}
                 </div>
@@ -737,7 +737,7 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
                     flexShrink: 0,
                     padding: "5px 12px", borderRadius: 6,
                     border: `1px solid ${tint}`, background: "transparent",
-                    color: tint, fontSize: 11, fontFamily: "Oswald, sans-serif",
+                    color: tint, fontSize: 13, fontFamily: "Oswald, sans-serif",
                     textTransform: "uppercase", letterSpacing: ".06em",
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.5 : 1,
                   }}
@@ -753,7 +753,7 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
                     flexShrink: 0,
                     padding: "5px 12px", borderRadius: 6,
                     border: `1px solid ${tint}`, background: "transparent",
-                    color: tint, fontSize: 11, fontFamily: "Oswald, sans-serif",
+                    color: tint, fontSize: 13, fontFamily: "Oswald, sans-serif",
                     textTransform: "uppercase", letterSpacing: ".06em",
                     cursor: busy ? "wait" : "pointer", opacity: busy ? 0.5 : 1,
                   }}
@@ -768,7 +768,7 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
                     flexShrink: 0,
                     padding: "5px 12px", borderRadius: 6,
                     border: `1px solid ${tint}`, background: "transparent",
-                    color: tint, fontSize: 11, fontFamily: "Oswald, sans-serif",
+                    color: tint, fontSize: 13, fontFamily: "Oswald, sans-serif",
                     textTransform: "uppercase", letterSpacing: ".06em",
                     textDecoration: "none",
                   }}
@@ -802,15 +802,15 @@ function RenderingsSection({ jobs }: { jobs: Job[] }) {
 
   return (
     <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-      <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 12, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 4px" }}>
+      <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 14, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 4px" }}>
         🖼 Project Renderings
       </h3>
-      <div style={{ fontSize: 11, color: "#666", marginBottom: 10 }}>
+      <div style={{ fontSize: 13, color: "#666", marginBottom: 10 }}>
         Photos from inspections, work-in-progress, and finished jobs. Tap any image to open it full-size.
       </div>
       {groups.map((g) => (
         <div key={g.jobId} style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
+          <div style={{ fontSize: 13, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
             {g.property}
             <span style={{ color: "#555", marginLeft: 6 }}>· {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}</span>
           </div>
@@ -831,7 +831,7 @@ function RenderingsSection({ jobs }: { jobs: Job[] }) {
                   onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
                 />
                 {(p.label || p.type) && (
-                  <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "10px 4px 3px", background: "linear-gradient(transparent, rgba(0,0,0,.85))", fontSize: 10, color: "#ddd", textAlign: "center" }}>
+                  <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "10px 4px 3px", background: "linear-gradient(transparent, rgba(0,0,0,.85))", fontSize: 12, color: "#ddd", textAlign: "center" }}>
                     {p.label || p.type}
                   </div>
                 )}
@@ -855,21 +855,21 @@ function InvoiceCard({ job, receipts }: { job: Job; receipts: Receipt[] }) {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b style={{ fontSize: 13 }}>{job.property || "(address pending)"}</b>
+        <b style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
         {statusBadge(job.status)}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
         <span style={{ color: "#888" }}>{fmtDate(job.job_date) || fmtDate(job.created_at)}</span>
         {job.total > 0 && (
           <b style={{ color: job.status === "paid" ? "#9b59b6" : "#00cc66" }}>{fmtMoney(job.total)}</b>
         )}
       </div>
       {receipts.length > 0 && (
-        <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
           {receipts.length} receipt{receipts.length === 1 ? "" : "s"} on file
         </div>
       )}
-      <div style={{ fontSize: 11, color: PRIMARY, marginTop: 6 }}>
+      <div style={{ fontSize: 13, color: PRIMARY, marginTop: 6 }}>
         {job.status === "paid" ? "View paid invoice →" : "Pay invoice →"}
       </div>
     </a>

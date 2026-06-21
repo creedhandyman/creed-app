@@ -42,10 +42,10 @@ export default function Toast() {
         animation: "toastIn 0.32s cubic-bezier(0.22, 1, 0.36, 1)",
       }}
     >
-      <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1 }}>{c.icon}</span>
+      <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1 }}>{c.icon}</span>
       <span
         style={{
-          fontSize: 13.5,
+          fontSize: 15.5,
           color: "#e8e8ee",
           fontFamily: "Source Sans 3, sans-serif",
           lineHeight: 1.4,

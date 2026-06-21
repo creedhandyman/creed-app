@@ -37,22 +37,22 @@ class SubTabErrorBoundary extends Component<
     if (!this.state.error) return this.props.children;
     return (
       <div className="cd" style={{ borderLeft: "3px solid var(--color-accent-red)" }}>
-        <h4 style={{ color: "var(--color-accent-red)", fontSize: 14, marginBottom: 8 }}>
+        <h4 style={{ color: "var(--color-accent-red)", fontSize: 16, marginBottom: 8 }}>
           {this.props.label} tab crashed
         </h4>
-        <p style={{ fontSize: 12, marginBottom: 8 }}>
+        <p style={{ fontSize: 14, marginBottom: 8 }}>
           {String(this.state.error?.message || this.state.error)}
         </p>
-        <details style={{ fontSize: 11, color: "#888" }}>
+        <details style={{ fontSize: 13, color: "#888" }}>
           <summary style={{ cursor: "pointer" }}>Stack</summary>
-          <pre style={{ whiteSpace: "pre-wrap", marginTop: 6, fontSize: 10, fontFamily: "monospace" }}>
+          <pre style={{ whiteSpace: "pre-wrap", marginTop: 6, fontSize: 12, fontFamily: "monospace" }}>
             {(this.state.error?.stack || "") + "\n" + this.state.info}
           </pre>
         </details>
         <button
           className="bo"
           onClick={() => this.setState({ error: null, info: "" })}
-          style={{ fontSize: 12, padding: "4px 10px", marginTop: 8 }}
+          style={{ fontSize: 14, padding: "4px 10px", marginTop: 8 }}
         >
           Retry
         </button>
@@ -88,8 +88,8 @@ function OpsSettings() {
 
       {/* Licensed Trades */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 14, marginBottom: 8 }}>🔑 {t("ops.licensedTrades")}</h4>
-        <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>{t("ops.licensedHelp")}</div>
+        <h4 style={{ fontSize: 16, marginBottom: 8 }}>🔑 {t("ops.licensedTrades")}</h4>
+        <div className="dim" style={{ fontSize: 14, marginBottom: 8 }}>{t("ops.licensedHelp")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
           {["Electrical", "Plumbing", "HVAC", "Roofing", "Gas Fitting", "Fire Protection", "Structural", "Asbestos/Mold"].map((trade) => {
             const isLicensed = licensed.includes(trade);
@@ -103,12 +103,12 @@ function OpsSettings() {
                 }}
                 style={{
                   display: "flex", alignItems: "center", gap: 6, padding: "5px 8px",
-                  borderRadius: 6, cursor: "pointer", fontSize: 12,
+                  borderRadius: 6, cursor: "pointer", fontSize: 14,
                   background: isLicensed ? "var(--color-success)15" : "transparent",
                   border: `1px solid ${isLicensed ? "var(--color-success)" : darkMode ? "#1e1e2e" : "#ddd"}`,
                 }}
               >
-                <span style={{ fontSize: 14, color: isLicensed ? "var(--color-success)" : "#555" }}>{isLicensed ? "☑" : "☐"}</span>
+                <span style={{ fontSize: 16, color: isLicensed ? "var(--color-success)" : "#555" }}>{isLicensed ? "☑" : "☐"}</span>
                 {trade}
               </label>
             );
@@ -118,7 +118,7 @@ function OpsSettings() {
 
       {/* Quote Settings */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 14, marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <h4 style={{ fontSize: 16, marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="trending" size={16} color="var(--color-primary)" />
           {t("ops.quoteSettings")}
         </h4>
@@ -127,7 +127,7 @@ function OpsSettings() {
             <label className="sl">{t("ops.markup")}</label>
             <input type="number" key={`mk-${org.markup_pct}`} defaultValue={org.markup_pct || 0} min="0" step="1" placeholder="0" style={{ marginTop: 4 }}
               onBlur={async (e) => { await db.patch("organizations", org.id, { markup_pct: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.markupHelp")}</div>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.markupHelp")}</div>
           </div>
           <div>
             <label className="sl">{t("ops.tax")}</label>
@@ -146,7 +146,7 @@ function OpsSettings() {
                 key={`txm-${org.tax_mode || "total"}`}
                 defaultValue={org.tax_mode || "total"}
                 onChange={async (e) => { await db.patch("organizations", org.id, { tax_mode: e.target.value }); refreshOrg(); }}
-                style={{ flex: 1, fontSize: 12 }}
+                style={{ flex: 1, fontSize: 14 }}
                 title={t("ops.taxModeHelp")}
               >
                 <option value="materials">{t("ops.taxMode.materials")}</option>
@@ -154,7 +154,7 @@ function OpsSettings() {
                 <option value="none">{t("ops.taxMode.none")}</option>
               </select>
             </div>
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.taxHelp")}</div>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.taxHelp")}</div>
           </div>
         </div>
         <div className="g2">
@@ -162,7 +162,7 @@ function OpsSettings() {
             <label className="sl">{t("ops.tripFee")}</label>
             <input type="number" key={`tf-${org.trip_fee}`} defaultValue={org.trip_fee || 0} min="0" step="5" placeholder="0" style={{ marginTop: 4 }}
               onBlur={async (e) => { await db.patch("organizations", org.id, { trip_fee: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.tripFeeHelp")}</div>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.tripFeeHelp")}</div>
           </div>
           <div>
             <label className="sl">{t("ops.minLaborHours")}</label>
@@ -181,31 +181,31 @@ function OpsSettings() {
                 refreshOrg();
               }}
             />
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t("ops.minLaborHoursHelp")}</div>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.minLaborHoursHelp")}</div>
           </div>
         </div>
       </div>
 
       {/* Trade Rates */}
       <div className="cd mb">
-        <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="money" size={16} color="var(--color-primary)" />
           {t("ops.customRates")}
         </h4>
-        <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>{t("ops.customRatesHelp")}</div>
+        <div className="dim" style={{ fontSize: 14, marginBottom: 8 }}>{t("ops.customRatesHelp")}</div>
         {["Plumbing", "Electrical", "Carpentry", "HVAC", "Painting", "Flooring", "General"].map((trade) => (
           <div key={trade} className="row" style={{ marginBottom: 4 }}>
-            <span style={{ fontSize: 12, width: 80 }}>{trade}</span>
+            <span style={{ fontSize: 14, width: 80 }}>{trade}</span>
             <span>$</span>
-            <input type="number" key={`${trade}-${tradeRates[trade] || ""}`} defaultValue={tradeRates[trade] || ""} placeholder="55" min="0" step="1" style={{ width: 70, fontSize: 12 }}
+            <input type="number" key={`${trade}-${tradeRates[trade] || ""}`} defaultValue={tradeRates[trade] || ""} placeholder="55" min="0" step="1" style={{ width: 70, fontSize: 14 }}
               onBlur={async (e) => {
                 const val = parseFloat(e.target.value);
                 const updated = { ...tradeRates };
                 if (val && val > 0) updated[trade] = val; else delete updated[trade];
                 await db.patch("organizations", org.id, { trade_rates: JSON.stringify(updated) }); refreshOrg();
               }} />
-            <span style={{ fontSize: 11 }}>/hr</span>
-            {tradeRates[trade] && <span style={{ fontSize: 12, color: "var(--color-success)" }}>✓</span>}
+            <span style={{ fontSize: 13 }}>/hr</span>
+            {tradeRates[trade] && <span style={{ fontSize: 14, color: "var(--color-success)" }}>✓</span>}
           </div>
         ))}
       </div>
@@ -239,11 +239,11 @@ function ReviewAutomationCard({
 
   return (
     <div className="cd">
-      <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
         <Icon name="star" size={16} color="var(--color-primary)" />
         Review Automation
       </h4>
-      <div className="dim" style={{ fontSize: 12, marginBottom: 12 }}>
+      <div className="dim" style={{ fontSize: 14, marginBottom: 12 }}>
         Auto-send a review request after a paid invoice. Closes the loop on the gamification quests and drives Google reviews without you having to remember.
       </div>
 
@@ -259,7 +259,7 @@ function ReviewAutomationCard({
           }}
           style={{ width: 16, height: 16, cursor: "pointer" }}
         />
-        <span style={{ fontSize: 13, fontWeight: 500 }}>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>
           {enabled ? "Enabled" : "Disabled"} — automatically request a review after payment
         </span>
       </label>
@@ -284,7 +284,7 @@ function ReviewAutomationCard({
                   refreshOrg();
                 }}
               />
-              <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+              <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
                 How long to wait so you don&apos;t bombard the customer at payment.
               </div>
             </div>
@@ -302,7 +302,7 @@ function ReviewAutomationCard({
                 <option value="email">Email only</option>
                 <option value="both">Both</option>
               </select>
-              <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+              <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
                 Email needs RESEND_API_KEY on Vercel to actually send.
               </div>
             </div>
@@ -321,7 +321,7 @@ function ReviewAutomationCard({
                 refreshOrg();
               }}
             />
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
               The link the message points the customer at. Leave blank to fall back to a generic &quot;reply with a star rating 1-5&quot; message.
             </div>
           </div>
@@ -333,14 +333,14 @@ function ReviewAutomationCard({
               defaultValue={template}
               placeholder={defaultTemplate}
               rows={4}
-              style={{ marginTop: 4, width: "100%", fontSize: 12, fontFamily: "inherit" }}
+              style={{ marginTop: 4, width: "100%", fontSize: 14, fontFamily: "inherit" }}
               onBlur={async (e) => {
                 const v = e.target.value.trim();
                 await db.patch("organizations", org.id, { review_request_message: v || null });
                 refreshOrg();
               }}
             />
-            <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
               Variables: <code>{"{customer_name}"}</code>, <code>{"{business_name}"}</code>, <code>{"{job_property}"}</code>, <code>{"{review_link}"}</code>. Leave blank for the default.
             </div>
           </div>
@@ -408,7 +408,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
               style={{
                 padding: "6px 12px",
                 borderRadius: 6,
-                fontSize: 12,
+                fontSize: 14,
                 whiteSpace: "nowrap",
                 background: active ? "var(--color-primary)" : "transparent",
                 color: active ? "#fff" : "#888",
@@ -423,7 +423,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
               {t.badge && t.badge > 0 ? (
                 <span
                   style={{
-                    fontSize: 10,
+                    fontSize: 12,
                     fontFamily: "Oswald",
                     background: active ? "#fff" : "var(--color-accent-red)",
                     color: active ? "var(--color-primary)" : "#fff",

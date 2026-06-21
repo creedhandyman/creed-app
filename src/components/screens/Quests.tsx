@@ -343,7 +343,7 @@ export default function Quests() {
     <div className="fi">
       {/* Topbar — QUEST HUB + trophy */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <h2 style={{ fontSize: 20, fontFamily: "Oswald", fontWeight: 700, letterSpacing: ".5px", margin: 0, textTransform: "uppercase" }}>
+        <h2 style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, letterSpacing: ".5px", margin: 0, textTransform: "uppercase" }}>
           {t("quest.title")}
         </h2>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(157,78,221,.14)", border: "1px solid rgba(157,78,221,.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -369,7 +369,7 @@ export default function Quests() {
                 textAlign: "center",
                 fontFamily: "Oswald",
                 fontWeight: 600,
-                fontSize: 10.5,
+                fontSize: 12.5,
                 padding: "8px 2px",
                 borderRadius: 9,
                 border: `1px solid ${on ? VIOLET : "var(--color-border-dark-2)"}`,
@@ -389,7 +389,7 @@ export default function Quests() {
         <div>
           {/* Battle-pass hero */}
           <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(135deg,#2a1b52,#15102e)", border: "1px solid #3a2c6a", borderRadius: 20, padding: 15, marginBottom: 12, boxShadow: "0 0 42px -16px rgba(157,78,221,.65)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#c9a6ff" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#c9a6ff" }}>
               <span>{cycleLabel}</span>
               <span style={{ color: "#ffd76b", display: "inline-flex", alignItems: "center", gap: 4 }}>
                 <Icon name="time" size={11} color="#ffd76b" /> {daysLeft}d {hoursLeft}h
@@ -397,14 +397,14 @@ export default function Quests() {
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "9px 0 2px" }}>
               <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 34, color: "#fff", lineHeight: 1 }}>${bonusEarned}</div>
-              <div style={{ fontSize: 11.5, color: "#c9a6ff" }}>of ${maxPayout.toLocaleString()} max</div>
+              <div style={{ fontSize: 13.5, color: "#c9a6ff" }}>of ${maxPayout.toLocaleString()} max</div>
             </div>
             <div style={{ display: "flex", gap: 3, marginTop: 11 }}>
               {allQuests.map((q, i) => (
                 <span key={i} style={{ flex: 1, height: 8, borderRadius: 3, background: i < completedCount ? "linear-gradient(90deg,#9d4edd,#f5b400)" : "rgba(255,255,255,.09)", boxShadow: i < completedCount ? "0 0 8px -1px rgba(245,180,0,.7)" : "none" }} />
               ))}
             </div>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 10, color: "#c9a6ff", marginTop: 7, letterSpacing: ".06em" }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#c9a6ff", marginTop: 7, letterSpacing: ".06em" }}>
               {completedCount} / {allQuests.length} QUESTS COMPLETE
             </div>
           </div>
@@ -417,9 +417,9 @@ export default function Quests() {
             return (
               <div key={tier.name} style={{ marginBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 1px 8px" }}>
-                  <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 9, letterSpacing: ".06em", padding: "3px 8px", borderRadius: 7, color: "#0d0d15", background: tier.color }}>{badge}</span>
-                  <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 11, letterSpacing: ".12em", color: "var(--color-dim)" }}>{tname}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--color-dim)" }}>{doneInTier} / {tier.quests.length}</span>
+                  <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 11, letterSpacing: ".06em", padding: "3px 8px", borderRadius: 7, color: "#0d0d15", background: tier.color }}>{badge}</span>
+                  <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".12em", color: "var(--color-dim)" }}>{tname}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-dim)" }}>{doneInTier} / {tier.quests.length}</span>
                 </div>
 
                 {tier.quests.map((q) => {
@@ -429,16 +429,16 @@ export default function Quests() {
                     <div key={q.name} style={{ position: "relative", overflow: "hidden", background: "var(--color-card-dark-3)", border: `1px solid ${isDone ? "rgba(245,180,0,.5)" : "var(--color-border-dark-2)"}`, borderRadius: 15, padding: "12px 13px", marginBottom: 9, boxShadow: isDone ? "0 0 24px -11px rgba(245,180,0,.7)" : "none" }}>
                       <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: isDone ? "#f5b400" : q.tierColor }} />
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                        <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".3px" }}>{q.name}</div>
-                        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 12, color: "#5a3d00", background: "linear-gradient(135deg,#ffe08a,#f5b400)", borderRadius: 99, padding: "4px 10px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3, boxShadow: "0 0 14px -3px rgba(245,180,0,.6)" }}>
+                        <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{q.name}</div>
+                        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 14, color: "#5a3d00", background: "linear-gradient(135deg,#ffe08a,#f5b400)", borderRadius: 99, padding: "4px 10px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3, boxShadow: "0 0 14px -3px rgba(245,180,0,.6)" }}>
                           <Icon name="money" size={11} color="#5a3d00" /> {q.bonus}
                         </span>
                       </div>
-                      <div style={{ fontSize: 10, color: "var(--color-dim)", margin: "2px 0 9px" }}>{q.desc}</div>
+                      <div style={{ fontSize: 12, color: "var(--color-dim)", margin: "2px 0 9px" }}>{q.desc}</div>
                       <div style={{ height: 7, background: "var(--color-border-dark)", borderRadius: 5, overflow: "hidden" }}>
                         <div style={{ height: "100%", borderRadius: 5, width: `${pct}%`, background: isDone ? "#f5b400" : q.tierColor, transition: "width .3s" }} />
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, color: "var(--color-dim)", marginTop: 5 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--color-dim)", marginTop: 5 }}>
                         {isDone ? (
                           <span style={{ color: "#3ee08f", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <Icon name="checkCircle" size={12} color="#3ee08f" /> Done · pending
@@ -456,8 +456,8 @@ export default function Quests() {
           })}
 
           {/* Annual potential */}
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--color-dim)", marginTop: 6 }}>
-            {t("quest.maxAnnual")} · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 13 }}>${(maxPayout * 2).toLocaleString()}+</b>
+          <div style={{ textAlign: "center", fontSize: 12, color: "var(--color-dim)", marginTop: 6 }}>
+            {t("quest.maxAnnual")} · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 15 }}>${(maxPayout * 2).toLocaleString()}+</b>
           </div>
         </div>
       )}
@@ -466,7 +466,7 @@ export default function Quests() {
       {tab === "team" && (
         <div>
           {teamBoard.length === 0 ? (
-            <div className="dim" style={{ textAlign: "center", fontSize: 12, padding: 20 }}>No team members yet.</div>
+            <div className="dim" style={{ textAlign: "center", fontSize: 14, padding: 20 }}>No team members yet.</div>
           ) : (
             <>
               {/* Podium (top 3) */}
@@ -491,9 +491,9 @@ export default function Quests() {
                         )}
                         {m.initials}
                       </div>
-                      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 11 }}>{m.name.split(/\s+/)[0]}</div>
-                      <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 13, color: "#f5b400" }}>${m.earned.toLocaleString()}</div>
-                      <div style={{ fontSize: 9, color: "var(--color-dim)" }}>{first ? "Leader" : place === 2 ? "2nd" : "3rd"}</div>
+                      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{m.name.split(/\s+/)[0]}</div>
+                      <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 15, color: "#f5b400" }}>${m.earned.toLocaleString()}</div>
+                      <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{first ? "Leader" : place === 2 ? "2nd" : "3rd"}</div>
                     </div>
                   );
                 })}
@@ -502,20 +502,20 @@ export default function Quests() {
               {/* Rows 4+ */}
               {teamBoard.slice(3).map((m, i) => (
                 <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 11, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: "9px 12px", marginBottom: 7 }}>
-                  <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 13, color: "var(--color-dim)", width: 18 }}>{i + 4}</span>
-                  <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--color-border-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#cdd6e6" }}>{m.initials}</span>
+                  <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 15, color: "var(--color-dim)", width: 18 }}>{i + 4}</span>
+                  <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--color-border-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, color: "#cdd6e6" }}>{m.initials}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 500 }}>{m.name}</div>
-                    <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 500 }}>{m.name}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>
                       {m.quests} quest{m.quests === 1 ? "" : "s"}{m.fiveStars ? ` · 5★ ×${m.fiveStars}` : ""}
                     </div>
                   </div>
-                  <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 13, color: "#f5b400" }}>${m.earned.toLocaleString()}</span>
+                  <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 15, color: "#f5b400" }}>${m.earned.toLocaleString()}</span>
                 </div>
               ))}
 
-              <div style={{ textAlign: "center", fontSize: 10, color: "var(--color-dim)", marginTop: 4 }}>
-                Team cycle payout so far · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 13 }}>${teamTotal.toLocaleString()}</b>
+              <div style={{ textAlign: "center", fontSize: 12, color: "var(--color-dim)", marginTop: 4 }}>
+                Team cycle payout so far · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 15 }}>${teamTotal.toLocaleString()}</b>
               </div>
             </>
           )}
@@ -528,10 +528,10 @@ export default function Quests() {
           {/* Star hero */}
           <div style={{ background: "linear-gradient(135deg,#3a2c10,#1a1308)", border: "1px solid #5a4413", borderRadius: 20, padding: 15, marginBottom: 12, textAlign: "center", boxShadow: "0 0 38px -16px rgba(245,180,0,.6)" }}>
             <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, color: "#f5b400", lineHeight: 1 }}>{reviews.length ? reviewAvg.toFixed(1) : "—"}</div>
-            <div style={{ color: "#f5b400", fontSize: 15, letterSpacing: 2, margin: "4px 0" }}>
+            <div style={{ color: "#f5b400", fontSize: 17, letterSpacing: 2, margin: "4px 0" }}>
               {"★".repeat(Math.round(reviewAvg))}{"☆".repeat(Math.max(0, 5 - Math.round(reviewAvg)))}
             </div>
-            <div style={{ fontSize: 10.5, color: "#e9c879" }}>{reviews.length} reviews · {fiveStarCycleAll} five-star this cycle</div>
+            <div style={{ fontSize: 12.5, color: "#e9c879" }}>{reviews.length} reviews · {fiveStarCycleAll} five-star this cycle</div>
           </div>
 
           {/* Review quest chips */}
@@ -544,12 +544,12 @@ export default function Quests() {
           {reviews.map((r) => (
             <div key={r.id} style={{ background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "11px 12px", marginBottom: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: (r.rating || 0) >= 5 ? "#f5b400" : "#888", fontSize: 12, letterSpacing: 1 }}>
+                <span style={{ color: (r.rating || 0) >= 5 ? "#f5b400" : "#888", fontSize: 14, letterSpacing: 1 }}>
                   {"★".repeat(r.rating || 0)}{"☆".repeat(5 - (r.rating || 0))}
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {r.created_at && (
-                    <span style={{ fontSize: 9, color: "var(--color-dim)" }}>
+                    <span style={{ fontSize: 11, color: "var(--color-dim)" }}>
                       {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </span>
                   )}
@@ -565,11 +565,11 @@ export default function Quests() {
                   </button>
                 </div>
               </div>
-              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12, marginTop: 5 }}>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, marginTop: 5 }}>
                 {r.client_name}{r.employee_names ? ` · ${r.employee_names}` : ""}
               </div>
               {r.review_text && (
-                <div style={{ fontSize: 10.5, color: "var(--color-dim)", marginTop: 3, fontStyle: "italic", lineHeight: 1.5 }}>
+                <div style={{ fontSize: 12.5, color: "var(--color-dim)", marginTop: 3, fontStyle: "italic", lineHeight: 1.5 }}>
                   &ldquo;{r.review_text}&rdquo;
                 </div>
               )}
@@ -578,7 +578,7 @@ export default function Quests() {
 
           {/* Collect via QR (function preserved) */}
           <div className="cd mb" style={{ textAlign: "center", padding: 16, marginTop: 4 }}>
-            <h4 style={{ fontSize: 13, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <h4 style={{ fontSize: 15, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
               <Icon name="qr" size={15} /> Client review QR
             </h4>
             <div style={{ background: "#fff", display: "inline-block", padding: 12, borderRadius: 8, marginBottom: 8 }}>
@@ -588,7 +588,7 @@ export default function Quests() {
                 level="M"
               />
             </div>
-            <p className="dim" style={{ fontSize: 11 }}>Scan to leave a review — share with clients after a job</p>
+            <p className="dim" style={{ fontSize: 13 }}>Scan to leave a review — share with clients after a job</p>
             <button
               className="bo"
               onClick={() => {
@@ -596,7 +596,7 @@ export default function Quests() {
                 navigator.clipboard.writeText(url);
                 useStore.getState().showToast("Review link copied!", "success");
               }}
-              style={{ fontSize: 12, padding: "4px 12px", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 6 }}
+              style={{ fontSize: 14, padding: "4px 12px", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               <Icon name="link" size={13} /> {t("quest.copyLink")}
             </button>
@@ -604,7 +604,7 @@ export default function Quests() {
 
           {/* Manual add (function preserved) */}
           <div className="cd mb">
-            <h4 style={{ fontSize: 13, marginBottom: 8 }}>{t("quest.addReview")}</h4>
+            <h4 style={{ fontSize: 15, marginBottom: 8 }}>{t("quest.addReview")}</h4>
             <div className="row mb">
               <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder="Client" style={{ flex: 1 }} />
               <select value={rr} onChange={(e) => setRr(Number(e.target.value))} style={{ width: 60 }}>
@@ -614,7 +614,7 @@ export default function Quests() {
               </select>
             </div>
             <textarea value={rt} onChange={(e) => setRt(e.target.value)} placeholder="Review..." style={{ height: 50, marginBottom: 6 }} />
-            <button className="bb" onClick={addReview} style={{ fontSize: 11 }}>Add</button>
+            <button className="bb" onClick={addReview} style={{ fontSize: 13 }}>Add</button>
           </div>
         </div>
       )}
@@ -631,7 +631,7 @@ export default function Quests() {
           {/* Refer CTA (opens the add form) */}
           <button
             onClick={() => setShowRefForm((v) => !v)}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(0,204,102,.13)", border: "1.5px solid rgba(0,204,102,.6)", borderRadius: 14, padding: 13, fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".4px", color: "#fff", marginBottom: 12, boxShadow: "0 0 24px -8px rgba(0,204,102,.5)", cursor: "pointer" }}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(0,204,102,.13)", border: "1.5px solid rgba(0,204,102,.6)", borderRadius: 14, padding: 13, fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".4px", color: "#fff", marginBottom: 12, boxShadow: "0 0 24px -8px rgba(0,204,102,.5)", cursor: "pointer" }}
           >
             <Icon name="link" size={17} color="#3ee08f" /> {t("quest.addReferral")}
           </button>
@@ -641,7 +641,7 @@ export default function Quests() {
               <div className="row">
                 <input value={fn} onChange={(e) => setFn(e.target.value)} placeholder="Name" style={{ flex: 1 }} />
                 <input value={fs} onChange={(e) => setFs(e.target.value)} placeholder="Referred by" style={{ flex: 1 }} />
-                <button className="bb" onClick={addReferral} style={{ fontSize: 11 }}>Add</button>
+                <button className="bb" onClick={addReferral} style={{ fontSize: 13 }}>Add</button>
               </div>
             </div>
           )}
@@ -657,10 +657,10 @@ export default function Quests() {
                 : { bg: "var(--color-border-dark)", c: "var(--color-dim)" };
             return (
               <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "10px 12px", marginBottom: 8 }}>
-                <span style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--color-border-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#cdd6e6", flex: "none" }}>{initials}</span>
+                <span style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--color-border-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: "#cdd6e6", flex: "none" }}>{initials}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{r.name}</div>
-                  <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{r.source || "—"}{r.ref_date ? ` · ${r.ref_date}` : ""}</div>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>{r.name}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>{r.source || "—"}{r.ref_date ? ` · ${r.ref_date}` : ""}</div>
                 </div>
                 <select
                   value={r.status}
@@ -668,7 +668,7 @@ export default function Quests() {
                     await db.patch("referrals", r.id, { status: e.target.value });
                     loadAll();
                   }}
-                  style={{ width: "auto", fontSize: 9, fontWeight: 600, padding: "4px 9px", borderRadius: 99, border: "none", background: chip.bg, color: chip.c, fontFamily: "Oswald", letterSpacing: ".04em" }}
+                  style={{ width: "auto", fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 99, border: "none", background: chip.bg, color: chip.c, fontFamily: "Oswald", letterSpacing: ".04em" }}
                 >
                   <option value="pending">Pending</option>
                   <option value="contacted">Contacted</option>
@@ -678,8 +678,8 @@ export default function Quests() {
             );
           })}
 
-          <div style={{ textAlign: "center", fontSize: 10, color: "var(--color-dim)", marginTop: 4 }}>
-            Referral payout this cycle · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 13 }}>${referralPayout.toLocaleString()}</b>
+          <div style={{ textAlign: "center", fontSize: 12, color: "var(--color-dim)", marginTop: 4 }}>
+            Referral payout this cycle · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 15 }}>${referralPayout.toLocaleString()}</b>
           </div>
         </div>
       )}
@@ -700,13 +700,13 @@ export default function Quests() {
             <div style={{ width: 88, height: 88, borderRadius: "50%", margin: "0 auto 16px", background: "radial-gradient(circle at 40% 35%,#ffe08a,#f5b400 65%,#b67d00)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 50px -6px rgba(245,180,0,.9)", animation: "qpop .6s ease-out 1" }}>
               <Icon name="trophy" size={42} color="#5a3d00" />
             </div>
-            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 13, letterSpacing: ".2em", color: "#3ee08f" }}>QUEST COMPLETE</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 15, letterSpacing: ".2em", color: "#3ee08f" }}>QUEST COMPLETE</div>
             <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 26, letterSpacing: ".5px", margin: "4px 0", background: "linear-gradient(90deg,#d8b6ff,#ffd76b)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>{celebrate.name}</div>
-            <div style={{ fontSize: 13, color: "#f1f2f6", marginBottom: 14 }}>{celebrate.desc}</div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "Oswald", fontWeight: 700, fontSize: 22, color: "#5a3d00", background: "linear-gradient(135deg,#ffe08a,#f5b400)", borderRadius: 99, padding: "8px 22px", boxShadow: "0 0 28px -4px rgba(245,180,0,.8)" }}>
+            <div style={{ fontSize: 15, color: "#f1f2f6", marginBottom: 14 }}>{celebrate.desc}</div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "Oswald", fontWeight: 700, fontSize: 24, color: "#5a3d00", background: "linear-gradient(135deg,#ffe08a,#f5b400)", borderRadius: 99, padding: "8px 22px", boxShadow: "0 0 28px -4px rgba(245,180,0,.8)" }}>
               <Icon name="money" size={18} color="#5a3d00" /> +{celebrate.bonus}
             </div>
-            <div style={{ marginTop: 18, fontSize: 11, color: "var(--color-dim)" }}>Bonus pending approval · tap to continue</div>
+            <div style={{ marginTop: 18, fontSize: 13, color: "var(--color-dim)" }}>Bonus pending approval · tap to continue</div>
           </div>
         </div>
       )}
@@ -718,8 +718,8 @@ export default function Quests() {
 function QuestChip({ label, value, done, color }: { label: string; value: string; done: boolean; color: string }) {
   return (
     <div style={{ flex: 1, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 11, padding: 8, textAlign: "center" }}>
-      <div style={{ fontSize: 9, color: "var(--color-dim)" }}>{label}</div>
-      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12, marginTop: 2, color }}>
+      <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{label}</div>
+      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, marginTop: 2, color }}>
         {value}{done ? " ✓" : ""}
       </div>
     </div>

@@ -620,10 +620,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         <>
           {/* Topbar — back · JOB · print */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
-            <button className="bo" onClick={() => setDetailJobId(null)} style={{ fontSize: 12, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <button className="bo" onClick={() => setDetailJobId(null)} style={{ fontSize: 14, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
               <Icon name="back" size={15} /> Jobs
             </button>
-            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px" }}>JOB</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px" }}>JOB</div>
             <button className="bo" onClick={() => generateInvoice(dj)} title="Print / invoice" style={{ padding: "6px 9px", display: "inline-flex", alignItems: "center" }}>
               <Icon name="print" size={15} />
             </button>
@@ -632,7 +632,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           {/* Detail header */}
           <div className="dhead">
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".1em", textTransform: "uppercase", color: "#9db4d6", flexShrink: 0 }}>Job #</span>
+              <span style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".1em", textTransform: "uppercase", color: "#9db4d6", flexShrink: 0 }}>Job #</span>
               <input
                 key={dj.id}
                 defaultValue={djJobNumber}
@@ -649,13 +649,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     await loadAll();
                   });
                 }}
-                style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid #243a5e", borderRadius: 6, padding: "3px 8px", fontFamily: "Oswald", fontSize: 13, color: "inherit", maxWidth: 150 }}
+                style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid #243a5e", borderRadius: 6, padding: "3px 8px", fontFamily: "Oswald", fontSize: 15, color: "inherit", maxWidth: 150 }}
               />
             </div>
-            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".4px" }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".4px" }}>
               {dj.property || "(no address)"}
             </div>
-            {dj.client && <div style={{ fontSize: 11.5, color: "#9db4d6", marginTop: 2 }}>{dj.client}</div>}
+            {dj.client && <div style={{ fontSize: 13.5, color: "#9db4d6", marginTop: 2 }}>{dj.client}</div>}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 8 }}>
               <select
                 value={dj.status || "quoted"}
@@ -663,7 +663,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 aria-label="Job status"
                 style={{
                   WebkitAppearance: "none", MozAppearance: "none", appearance: "none",
-                  fontFamily: "Oswald", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em",
+                  fontFamily: "Oswald", fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em",
                   color: statusColor(dj.status), backgroundColor: statusColor(dj.status) + "1f",
                   border: `1px solid ${statusColor(dj.status)}66`, borderRadius: 999,
                   padding: "3px 20px 3px 10px", cursor: "pointer",
@@ -680,13 +680,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <option value="invoiced"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.invoiced")}</option>
                 <option value="paid"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.paid")}</option>
               </select>
-              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, color: "var(--color-money)" }}>${(dj.total || 0).toFixed(0)}</div>
+              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, color: "var(--color-money)" }}>${(dj.total || 0).toFixed(0)}</div>
             </div>
             {dj.property && (
               <a
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dj.property)}`}
                 target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 11, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 9, textDecoration: "none" }}
+                style={{ fontSize: 13, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 9, textDecoration: "none" }}
               >
                 <Icon name="mapPin" size={13} /> Show on map
               </a>
@@ -695,7 +695,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
           {/* Status-aware primary action */}
           {cta && (
-            <button className="bb mb" onClick={cta.onClick} style={{ width: "100%", padding: "11px", fontFamily: "Oswald", fontSize: 14, letterSpacing: ".4px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <button className="bb mb" onClick={cta.onClick} style={{ width: "100%", padding: "11px", fontFamily: "Oswald", fontSize: 16, letterSpacing: ".4px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               <Icon name={cta.icon} size={16} /> {cta.label}
             </button>
           )}
@@ -707,7 +707,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <Icon name="star" size={13} /> Request from prospect
               </div>
               {djLead.description && (
-                <div style={{ fontSize: 13, whiteSpace: "pre-wrap", padding: djLead.photos.length ? "0 0 8px" : "0 0 4px" }}>
+                <div style={{ fontSize: 15, whiteSpace: "pre-wrap", padding: djLead.photos.length ? "0 0 8px" : "0 0 4px" }}>
                   {djLead.description}
                 </div>
               )}
@@ -729,7 +729,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             <div className="drow">
               <span className="l">Trade</span>
               <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)" }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{dj.trade || "None"}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{dj.trade || "None"}</span>
                 <Icon name="expand" size={12} color="var(--color-dim)" />
                 <select
                   value={dj.trade || ""}
@@ -751,7 +751,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             <div className="drow">
               <span className="l">Requested tech</span>
               <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)" }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{dj.requested_tech || "Anyone"}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{dj.requested_tech || "Anyone"}</span>
                 <Icon name="expand" size={12} color="var(--color-dim)" />
                 <select
                   value={dj.requested_tech || ""}
@@ -802,7 +802,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             <div className="seclabel"><Icon name="money" size={13} /> Money</div>
             <div className="drow">
               <span className="l">Quote total</span>
-              <span className="v" style={{ fontFamily: "Oswald", fontSize: 14, color: "var(--color-money)" }}>
+              <span className="v" style={{ fontFamily: "Oswald", fontSize: 16, color: "var(--color-money)" }}>
                 ${(dj.total || 0).toFixed(0)}
                 {onEditJob && (
                   <button onClick={() => onEditJob(dj.id)} title="Edit quote" style={{ background: "transparent", border: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0, marginLeft: 6, display: "inline-flex", alignItems: "center" }}>
@@ -821,18 +821,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <div style={{ display: "flex", gap: 6, paddingTop: 8 }}>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
                     <div className="sl">Labor</div>
-                    <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 14 }}>${(dj.total_labor || 0).toFixed(0)}</div>
+                    <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 16 }}>${(dj.total_labor || 0).toFixed(0)}</div>
                   </div>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
                     <div className="sl">Materials</div>
-                    <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 14 }}>${(dj.total_mat || 0).toFixed(0)}</div>
+                    <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 16 }}>${(dj.total_mat || 0).toFixed(0)}</div>
                   </div>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
                     <div className="sl">Hours</div>
-                    <div style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 14 }}>{quoted.toFixed(1)}</div>
+                    <div style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 16 }}>{quoted.toFixed(1)}</div>
                     {labor.totalHrs > 0 && (
                       <div
-                        style={{ fontSize: 9, marginTop: 2, color: overBudget ? "var(--color-accent-red)" : underBudget ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}
+                        style={{ fontSize: 11, marginTop: 2, color: overBudget ? "var(--color-accent-red)" : underBudget ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}
                         title="Actual hours logged via Timer"
                       >
                         {labor.totalHrs.toFixed(1)}h actual{quoted > 0 && ` (${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%)`}
@@ -847,7 +847,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <button
                   className="bo"
                   onClick={() => { generateInvoice(dj); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }}
-                  style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 >
                   <Icon name="receipt" size={14} /> {dj.status === "complete" ? "Invoice" : "View invoice"}
                 </button>
@@ -863,7 +863,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                           else useStore.getState().showToast("Error: " + (data.error || "Could not create payment link"), "error");
                         } catch { useStore.getState().showToast("Failed to create payment link", "error"); }
                       }}
-                      style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                      style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                     >
                       <Icon name="link" size={14} /> Send link
                     </button>
@@ -877,7 +877,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                           else useStore.getState().showToast("Error: " + (data.error || "Could not create payment"), "error");
                         } catch { useStore.getState().showToast("Failed to create payment", "error"); }
                       }}
-                      style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                      style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                     >
                       <Icon name="qr" size={14} /> Collect now
                     </button>
@@ -887,7 +887,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   <button
                     className="bg"
                     onClick={() => setStatus(dj.id, "paid")}
-                    style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                    style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                   >
                     <Icon name="check" size={14} /> Mark paid
                   </button>
@@ -933,7 +933,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   navigator.clipboard.writeText(msg);
                   useStore.getState().showToast("Message copied! Paste & send to client.", "success");
                 }}
-                style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
                 <Icon name="send" size={13} /> Send to client
               </button>
@@ -941,7 +941,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <button
                   className="bo"
                   onClick={() => setReviewJob(dj)}
-                  style={{ fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: dj.review_requested_at ? "#888" : "var(--color-highlight)" }}
+                  style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: dj.review_requested_at ? "#888" : "var(--color-highlight)" }}
                 >
                   <Icon name={dj.review_requested_at ? "mail" : "star"} size={13} /> {dj.review_requested_at ? "Review sent" : "Request review"}
                 </button>
@@ -978,7 +978,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               } else { return null; }
               return (
                 <div
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, padding: "4px 8px", borderRadius: 6, background: darkMode ? "#0f0f18" : "#f5f5f8", color, marginTop: 8, fontFamily: "Oswald", letterSpacing: ".02em" }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, padding: "4px 8px", borderRadius: 6, background: darkMode ? "#0f0f18" : "#f5f5f8", color, marginTop: 8, fontFamily: "Oswald", letterSpacing: ".02em" }}
                   title={rr?.error || label}
                 >
                   <Icon name={icon} size={12} color={color} />
@@ -991,7 +991,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <button
                   className="bo"
                   onClick={async () => { await db.patch("jobs", dj.id, { archived: true, archived_at: new Date().toISOString() }); loadAll(); }}
-                  style={{ flex: 1, fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 >
                   <Icon name="package" size={14} /> Archive
                 </button>
@@ -999,7 +999,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <button
                   className="bo"
                   onClick={async () => { await db.patch("jobs", dj.id, { archived: false, archived_at: null }); loadAll(); }}
-                  style={{ flex: 1, fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 >
                   <Icon name="refresh" size={14} /> Restore
                 </button>
@@ -1007,7 +1007,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <button
                 className="br"
                 onClick={() => deleteJob(dj.id)}
-                style={{ flex: 1, fontSize: 12, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
                 <Icon name="delete" size={14} /> Delete
               </button>
@@ -1029,15 +1029,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     return (
       <>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <button className="bo" onClick={() => setSubScreen(null)} style={{ fontSize: 12, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <button className="bo" onClick={() => setSubScreen(null)} style={{ fontSize: 14, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
             <Icon name="back" size={15} /> Job
           </button>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, letterSpacing: ".5px" }}>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px" }}>
             {subScreen.kind === "workorder" ? "WORK ORDER" : "RECEIPTS"}
           </div>
           <span style={{ width: 56 }} />
         </div>
-        <div className="dim" style={{ fontSize: 11.5, marginBottom: 11 }}>{sj.property}</div>
+        <div className="dim" style={{ fontSize: 13.5, marginBottom: 11 }}>{sj.property}</div>
 
         {subScreen.kind === "workorder" && (() => {
           let jobData: Record<string, unknown> = {};
@@ -1046,7 +1046,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           if (!workOrder.length) {
             return (
               <div className="section">
-                <div style={{ fontSize: 12, color: "var(--color-dim)", padding: "12px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 14, color: "var(--color-dim)", padding: "12px 0", textAlign: "center" }}>
                   No work-order items on this job yet.
                 </div>
               </div>
@@ -1059,7 +1059,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <div style={{ height: 7, background: "var(--color-card-dark-3)", borderRadius: 5, marginBottom: 4 }}>
                 <div style={{ height: 7, background: "var(--color-success)", borderRadius: 5, width: `${(done / total) * 100}%`, transition: "width 0.3s" }} />
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--color-dim)", marginBottom: 11 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--color-dim)", marginBottom: 11 }}>
                 <span>Progress</span><span>{done} / {total} done</span>
               </div>
               {workOrder.map((w, wi) => (
@@ -1084,17 +1084,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark)", borderRadius: 12, padding: "9px 10px", marginBottom: 7, cursor: "pointer", opacity: w.done ? 0.6 : 1 }}
                 >
-                  <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, border: `2px solid ${w.done ? "var(--color-success)" : "#555"}`, background: w.done ? "var(--color-success)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff" }}>
+                  <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, border: `2px solid ${w.done ? "var(--color-success)" : "#555"}`, background: w.done ? "var(--color-success)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: "#fff" }}>
                     {w.done && "✓"}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 500, textDecoration: w.done ? "line-through" : "none" }}>
-                      <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, marginRight: 5, background: w.pri === "HIGH" ? "#C0000033" : w.pri === "MED" ? "#ff880033" : "#00cc6633", color: w.pri === "HIGH" ? "var(--color-accent-red)" : w.pri === "MED" ? "var(--color-warning)" : "var(--color-success)" }}>{w.pri}</span>
+                    <div style={{ fontSize: 13.5, fontWeight: 500, textDecoration: w.done ? "line-through" : "none" }}>
+                      <span style={{ fontSize: 11, padding: "1px 5px", borderRadius: 4, marginRight: 5, background: w.pri === "HIGH" ? "#C0000033" : w.pri === "MED" ? "#ff880033" : "#00cc6633", color: w.pri === "HIGH" ? "var(--color-accent-red)" : w.pri === "MED" ? "var(--color-warning)" : "var(--color-success)" }}>{w.pri}</span>
                       <b style={{ color: "var(--color-primary)" }}>{w.room}</b> — {w.detail}
                     </div>
-                    {w.action && <div className="dim" style={{ fontSize: 10, marginTop: 1 }}>{w.action}</div>}
+                    {w.action && <div className="dim" style={{ fontSize: 12, marginTop: 1 }}>{w.action}</div>}
                   </div>
-                  <span className="dim" style={{ fontSize: 10, flexShrink: 0 }}>{w.hrs}h</span>
+                  <span className="dim" style={{ fontSize: 12, flexShrink: 0 }}>{w.hrs}h</span>
                 </div>
               ))}
             </div>
@@ -1109,7 +1109,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <div className="seclabel"><Icon name="camera" size={13} /> Add receipt</div>
               <div
                 onClick={() => { if (!scanning) setReceiptCam(true); }}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 12, border: "1.5px dashed var(--color-border-dark-2)", color: scanning ? "var(--color-warning)" : "var(--color-primary)", cursor: scanning ? "wait" : "pointer", fontFamily: "Oswald", fontSize: 13, marginTop: 8 }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 12, border: "1.5px dashed var(--color-border-dark-2)", color: scanning ? "var(--color-warning)" : "var(--color-primary)", cursor: scanning ? "wait" : "pointer", fontFamily: "Oswald", fontSize: 15, marginTop: 8 }}
               >
                 <Icon name="camera" size={15} />
                 {scanning ? "Scanning receipt…" : rPhoto ? rPhoto.name : "Attach photo · auto-scan"}
@@ -1123,14 +1123,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
                 <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={scanning ? "Scanning…" : "Note / vendor"} style={{ flex: 1 }} disabled={scanning} />
                 <input type="number" value={ra} onChange={(e) => setRa(e.target.value)} placeholder="$" style={{ width: 72 }} disabled={scanning} />
-                <button className="bg" onClick={() => addReceipt(sj.id)} style={{ fontSize: 12, padding: "6px 12px" }} disabled={uploading || scanning}>
+                <button className="bg" onClick={() => addReceipt(sj.id)} style={{ fontSize: 14, padding: "6px 12px" }} disabled={uploading || scanning}>
                   {uploading ? "…" : "Add"}
                 </button>
               </div>
               {rPhoto && !scanning && (
                 <button
                   onClick={() => { setRPhoto(null); setScannedPhotoUrl(""); setScannedItems([]); setScannedVendor(""); if (photoRef.current) photoRef.current.value = ""; }}
-                  style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 12, padding: "8px 0 0", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                  style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, padding: "8px 0 0", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                 >
                   <Icon name="close" size={12} /> Remove photo
                 </button>
@@ -1141,7 +1141,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             <div className="section">
               <div className="seclabel"><Icon name="receipt" size={13} /> Receipts</div>
               {receipts.filter((r) => r.job_id === sj.id).length === 0 ? (
-                <div style={{ fontSize: 12, color: "var(--color-dim)", padding: "10px 0", textAlign: "center" }}>No receipts on this job yet.</div>
+                <div style={{ fontSize: 14, color: "var(--color-dim)", padding: "10px 0", textAlign: "center" }}>No receipts on this job yet.</div>
               ) : (
                 receipts.filter((r) => r.job_id === sj.id).map((r) => (
                   <div key={r.id} className="drow">
@@ -1150,15 +1150,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                         <img src={r.photo_url} alt="" onClick={() => setViewPhoto(r.photo_url)} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", cursor: "pointer", flexShrink: 0, border: "1px solid var(--color-border-dark)" }} />
                       )}
                       <span style={{ minWidth: 0 }}>
-                        <span style={{ fontSize: 12.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.note || "Receipt"}</span>
-                        <span className="dim" style={{ fontSize: 10 }}>{r.receipt_date}</span>
+                        <span style={{ fontSize: 14.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.note || "Receipt"}</span>
+                        <span className="dim" style={{ fontSize: 12 }}>{r.receipt_date}</span>
                       </span>
                     </span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                      <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 13 }}>${(r.amount || 0).toFixed(2)}</span>
+                      <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 15 }}>${(r.amount || 0).toFixed(2)}</span>
                       <button
                         onClick={async () => { if (await useStore.getState().showConfirm("Delete Receipt", "Delete receipt?")) { await db.del("receipts", r.id); loadAll(); } }}
-                        style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 13, cursor: "pointer", padding: 0 }}
+                        style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 15, cursor: "pointer", padding: 0 }}
                       >
                         ✕
                       </button>
@@ -1177,7 +1177,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     <div className="fi">
       {subScreenJsx || detailScreen || (
         <>
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
         <Icon name="jobs" size={22} color="var(--color-primary)" />
         Jobs
       </h2>
@@ -1208,7 +1208,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 style={{
                   padding: "5px 12px",
                   borderRadius: 6,
-                  fontSize: 13,
+                  fontSize: 15,
                   background: jobTab === tab.id ? tab.c : "transparent",
                   color: jobTab === tab.id ? "#fff" : "#888",
                   fontFamily: "Oswald",
@@ -1245,7 +1245,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <b>{j.property || "(no address)"}</b>
                 {j.client && <span className="dim"> · {j.client}</span>}
               </span>
-              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 11, flexShrink: 0 }}>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 13, flexShrink: 0 }}>
                 {j.status}
               </span>
             </div>
@@ -1262,7 +1262,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <div className="sl">Ready to Invoice</div>
-              <div style={{ fontSize: 20, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-warning)" }}>
+              <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-warning)" }}>
                 ${jobs.filter((j) => j.status === "complete" || j.status === "invoiced").reduce((s, j) => s + (j.total || 0), 0).toLocaleString()}
               </div>
             </div>
@@ -1307,7 +1307,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     setConnectingStripe(false);
                   }
                 }}
-                style={{ fontSize: 12, padding: "5px 10px" }}
+                style={{ fontSize: 14, padding: "5px 10px" }}
               >
                 {connectingStripe ? "Connecting…" : `${t("jobs.connectStripe")} →`}
               </button>
@@ -1393,9 +1393,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 {/* Row 1 — client headline + address (map pin) · amount */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17, letterSpacing: ".3px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       {j.status === "lead" && (
-                        <span style={{ fontSize: 9, fontFamily: "Oswald", letterSpacing: ".08em", padding: "2px 6px", borderRadius: 4, background: "#ff3d6e", color: "#fff" }}>
+                        <span style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".08em", padding: "2px 6px", borderRadius: 4, background: "#ff3d6e", color: "#fff" }}>
                           NEW LEAD
                         </span>
                       )}
@@ -1416,12 +1416,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       )}
                     </div>
                     {j.client && (
-                      <div className="dim" style={{ fontSize: 11.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div className="dim" style={{ fontSize: 13.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {j.client}
                       </div>
                     )}
                   </div>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, whiteSpace: "nowrap", color: "var(--color-money)" }}>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, whiteSpace: "nowrap", color: "var(--color-money)" }}>
                     ${(j.total || 0).toFixed(0)}
                   </div>
                 </div>
@@ -1441,7 +1441,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   >
                     {j.status === "lead" ? "Lead" : (t(`status.${j.status}`) || j.status)}
                   </span>
-                  <span className="dim" style={{ fontSize: 10.5, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0 }}>
+                  <span className="dim" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0 }}>
                     <Icon name={hint.icon} size={12} />
                     {hint.text}
                     <Icon name="next" size={14} />
@@ -1454,7 +1454,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       })()}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
-        <p className="dim" style={{ fontSize: 12 }}>
+        <p className="dim" style={{ fontSize: 14 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
             <Icon name="tip" size={14} color="var(--color-highlight)" />
             {jobTab === "active" ? "Next step: Schedule a job → then start the Timer" : jobTab === "billing" ? "Send payment links to collect from clients" : "All paid — great work!"}
@@ -1479,7 +1479,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             onClick={(e) => e.stopPropagation()}
             style={{ textAlign: "center", cursor: "default" }}
           >
-            <div style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>
+            <div style={{ fontSize: 16, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>
               Scan to Pay
             </div>
             <div style={{ background: "#fff", display: "inline-block", padding: 16, borderRadius: 12, marginBottom: 12 }}>
@@ -1488,13 +1488,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             <div style={{ fontSize: 32, fontFamily: "Oswald", fontWeight: 700, color: "#00cc66", marginBottom: 4 }}>
               ${payQR.amount.toLocaleString()}
             </div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>
+            <div style={{ fontSize: 14, color: "#888", marginBottom: 16 }}>
               Customer scans with phone camera → pays with Apple Pay, Google Pay, or card
             </div>
             <button
               className="bo"
               onClick={() => setPayQR(null)}
-              style={{ fontSize: 13, padding: "6px 16px", color: "#888" }}
+              style={{ fontSize: 15, padding: "6px 16px", color: "#888" }}
             >
               Close
             </button>
@@ -1552,7 +1552,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               position: "fixed",
               top: 16,
               left: 16,
-              fontSize: 12,
+              fontSize: 14,
               color: "rgba(255,255,255,0.7)",
               textDecoration: "underline",
               zIndex: 10000,
@@ -1669,13 +1669,13 @@ function MakeRecurringModal({
         style={{ width: "100%", maxWidth: 480 }}
       >
         <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ fontSize: 15 }}>Make recurring</h3>
+          <h3 style={{ fontSize: 17 }}>Make recurring</h3>
           <button className="bo" onClick={onClose} style={{ padding: "2px 8px" }}>
             <Icon name="close" size={14} />
           </button>
         </div>
 
-        <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>
+        <div style={{ fontSize: 14, color: "#888", marginBottom: 10 }}>
           From <strong>{job.property}</strong>{job.client ? ` · ${job.client}` : ""}.
           A new scheduled job will be created on every fire, with the same line items + work order.
         </div>
@@ -1741,15 +1741,15 @@ function MakeRecurringModal({
           </div>
         </div>
 
-        <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
           First fire: <strong>{formatNextFire(computeNextFire(new Date(), cadence, { dayOfWeek: isWeekly ? dayOfWeek : undefined, dayOfMonth: !isWeekly ? dayOfMonth : undefined, hour }).toISOString())}</strong>
         </div>
 
         <div className="row" style={{ marginTop: 12, gap: 6 }}>
-          <button className="bb" onClick={save} disabled={saving} style={{ fontSize: 12 }}>
+          <button className="bb" onClick={save} disabled={saving} style={{ fontSize: 14 }}>
             {saving ? "Saving…" : "Create"}
           </button>
-          <button className="bo" onClick={onClose} style={{ fontSize: 12 }}>Cancel</button>
+          <button className="bo" onClick={onClose} style={{ fontSize: 14 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -1805,7 +1805,7 @@ function JobNotesInput({ job }: { job: Job }) {
         save(valueRef.current);
       }}
       onClick={(e) => e.stopPropagation()}
-      style={{ fontSize: 12, height: 50, resize: "vertical" }}
+      style={{ fontSize: 14, height: 50, resize: "vertical" }}
     />
   );
 }

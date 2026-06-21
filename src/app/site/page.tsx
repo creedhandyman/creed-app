@@ -61,7 +61,7 @@ function SitePageContent() {
       <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center", color: "#888" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔗</div>
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: "#C00000" }}>Page Not Found</h1>
+          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#C00000" }}>Page Not Found</h1>
         </div>
       </div>
     );
@@ -79,17 +79,17 @@ function SitePageContent() {
         }}>
           <img src={gallery[lightbox].url} alt="" style={{ maxWidth: "90vw", maxHeight: "85vh", borderRadius: 8 }} />
           {gallery[lightbox].caption && (
-            <div style={{ position: "absolute", bottom: 32, color: "#fff", fontSize: 14, textAlign: "center" }}>
+            <div style={{ position: "absolute", bottom: 32, color: "#fff", fontSize: 16, textAlign: "center" }}>
               {gallery[lightbox].caption}
             </div>
           )}
           {lightbox > 0 && (
             <button onClick={(e) => { e.stopPropagation(); setLightbox(lightbox - 1); }}
-              style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,.6)", color: "#fff", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: 20, cursor: "pointer" }}>‹</button>
+              style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,.6)", color: "#fff", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: 22, cursor: "pointer" }}>‹</button>
           )}
           {lightbox < gallery.length - 1 && (
             <button onClick={(e) => { e.stopPropagation(); setLightbox(lightbox + 1); }}
-              style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,.6)", color: "#fff", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: 20, cursor: "pointer" }}>›</button>
+              style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,.6)", color: "#fff", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: 22, cursor: "pointer" }}>›</button>
           )}
         </div>
       )}
@@ -103,15 +103,15 @@ function SitePageContent() {
         <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 36, color: pc, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8 }}>
           {org.name}
         </h1>
-        <p style={{ fontSize: 20, color: "#fff", maxWidth: 600, margin: "0 auto 12px", fontFamily: "Source Sans 3, sans-serif" }}>{content.headline}</p>
-        <p style={{ fontSize: 14, color: "#888", maxWidth: 500, margin: "0 auto 24px" }}>{content.subheadline}</p>
+        <p style={{ fontSize: 22, color: "#fff", maxWidth: 600, margin: "0 auto 12px", fontFamily: "Source Sans 3, sans-serif" }}>{content.headline}</p>
+        <p style={{ fontSize: 16, color: "#888", maxWidth: 500, margin: "0 auto 24px" }}>{content.subheadline}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           {org.phone && (
-            <a href={`tel:${org.phone}`} style={{ padding: "12px 28px", borderRadius: 8, fontSize: 16, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", background: pc, color: "#fff", textDecoration: "none" }}>
+            <a href={`tel:${org.phone}`} style={{ padding: "12px 28px", borderRadius: 8, fontSize: 18, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", background: pc, color: "#fff", textDecoration: "none" }}>
               📞 Call Now
             </a>
           )}
-          <a href={`/review?org=${orgId}`} style={{ padding: "12px 28px", borderRadius: 8, fontSize: 16, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", background: "transparent", color: pc, textDecoration: "none", border: `1px solid ${pc}` }}>
+          <a href={`/review?org=${orgId}`} style={{ padding: "12px 28px", borderRadius: 8, fontSize: 18, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", background: "transparent", color: pc, textDecoration: "none", border: `1px solid ${pc}` }}>
             ⭐ Leave a Review
           </a>
         </div>
@@ -121,10 +121,10 @@ function SitePageContent() {
         {/* Services */}
         {theme.showServices && (
           <div style={{ padding: "40px 0" }}>
-            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: pc, textTransform: "uppercase", textAlign: "center", marginBottom: 24 }}>Our Services</h2>
+            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: pc, textTransform: "uppercase", textAlign: "center", marginBottom: 24 }}>Our Services</h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
               {content.services.map((s, i) => (
-                <div key={i} style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 10, padding: "16px", textAlign: "center", fontSize: 14 }}>{s}</div>
+                <div key={i} style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 10, padding: "16px", textAlign: "center", fontSize: 16 }}>{s}</div>
               ))}
             </div>
           </div>
@@ -133,11 +133,11 @@ function SitePageContent() {
         {/* Why Us */}
         {theme.showWhyUs && (
           <div style={{ padding: "30px 0", borderTop: "1px solid #1e1e2e" }}>
-            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: pc, textTransform: "uppercase", textAlign: "center", marginBottom: 24 }}>{content.cta || "Why Choose Us"}</h2>
+            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: pc, textTransform: "uppercase", textAlign: "center", marginBottom: 24 }}>{content.cta || "Why Choose Us"}</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {content.whyUs.map((w, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13 }}>
-                  <span style={{ color: "#00cc66", fontSize: 16, flexShrink: 0 }}>✓</span>
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 15 }}>
+                  <span style={{ color: "#00cc66", fontSize: 18, flexShrink: 0 }}>✓</span>
                   <span>{w}</span>
                 </div>
               ))}
@@ -148,15 +148,15 @@ function SitePageContent() {
         {/* About */}
         {theme.showAbout && content.about && (
           <div style={{ padding: "30px 0", borderTop: "1px solid #1e1e2e", textAlign: "center" }}>
-            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: pc, textTransform: "uppercase", marginBottom: 12 }}>About Us</h2>
-            <p style={{ fontSize: 14, color: "#aaa", maxWidth: 600, margin: "0 auto", lineHeight: 1.6 }}>{content.about}</p>
+            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: pc, textTransform: "uppercase", marginBottom: 12 }}>About Us</h2>
+            <p style={{ fontSize: 16, color: "#aaa", maxWidth: 600, margin: "0 auto", lineHeight: 1.6 }}>{content.about}</p>
           </div>
         )}
 
         {/* Gallery */}
         {theme.showGallery && gallery.length > 0 && (
           <div style={{ padding: "30px 0", borderTop: "1px solid #1e1e2e" }}>
-            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: pc, textTransform: "uppercase", textAlign: "center", marginBottom: 24 }}>Our Work</h2>
+            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: pc, textTransform: "uppercase", textAlign: "center", marginBottom: 24 }}>Our Work</h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
               {gallery.map((p, i) => (
                 <div key={i} onClick={() => setLightbox(i)} style={{ cursor: "pointer", position: "relative", overflow: "hidden", borderRadius: 10, border: "1px solid #1e1e2e" }}>
@@ -164,7 +164,7 @@ function SitePageContent() {
                     onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
                     onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")} />
                   {p.caption && (
-                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 8px 6px", background: "linear-gradient(transparent, rgba(0,0,0,.8))", fontSize: 11, color: "#ddd", textAlign: "center" }}>
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 8px 6px", background: "linear-gradient(transparent, rgba(0,0,0,.8))", fontSize: 13, color: "#ddd", textAlign: "center" }}>
                       {p.caption}
                     </div>
                   )}
@@ -177,13 +177,13 @@ function SitePageContent() {
         {/* Reviews */}
         {theme.showReviews && reviews.length > 0 && (
           <div style={{ padding: "30px 0", borderTop: "1px solid #1e1e2e" }}>
-            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: pc, textTransform: "uppercase", textAlign: "center", marginBottom: 24 }}>What Our Clients Say</h2>
+            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: pc, textTransform: "uppercase", textAlign: "center", marginBottom: 24 }}>What Our Clients Say</h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
               {reviews.map((r) => (
                 <div key={r.id} style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 10, padding: 16 }}>
-                  <div style={{ color: "#ffcc00", fontSize: 14, marginBottom: 6 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</div>
-                  <p style={{ fontSize: 12, color: "#aaa", fontStyle: "italic", marginBottom: 6 }}>&ldquo;{r.review_text?.slice(0, 120)}{r.review_text?.length > 120 ? "..." : ""}&rdquo;</p>
-                  <div style={{ fontSize: 11, color: "#666" }}>— {r.client_name}</div>
+                  <div style={{ color: "#ffcc00", fontSize: 16, marginBottom: 6 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</div>
+                  <p style={{ fontSize: 14, color: "#aaa", fontStyle: "italic", marginBottom: 6 }}>&ldquo;{r.review_text?.slice(0, 120)}{r.review_text?.length > 120 ? "..." : ""}&rdquo;</p>
+                  <div style={{ fontSize: 13, color: "#666" }}>— {r.client_name}</div>
                 </div>
               ))}
             </div>
@@ -195,8 +195,8 @@ function SitePageContent() {
 
         {/* Contact */}
         <div style={{ padding: "40px 0", borderTop: "1px solid #1e1e2e", textAlign: "center" }}>
-          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: pc, textTransform: "uppercase", marginBottom: 16 }}>Get in Touch</h2>
-          <div style={{ fontSize: 14, color: "#888", lineHeight: 2 }}>
+          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: pc, textTransform: "uppercase", marginBottom: 16 }}>Get in Touch</h2>
+          <div style={{ fontSize: 16, color: "#888", lineHeight: 2 }}>
             {org.phone && <div>📞 <a href={`tel:${org.phone}`} style={{ color: pc, textDecoration: "none" }}>{org.phone}</a></div>}
             {org.email && <div>✉ <a href={`mailto:${org.email}`} style={{ color: pc, textDecoration: "none" }}>{org.email}</a></div>}
             {org.address && <div>📍 {org.address}</div>}
@@ -204,7 +204,7 @@ function SitePageContent() {
           </div>
         </div>
 
-        <div style={{ padding: "16px 0", borderTop: "1px solid #1e1e2e", textAlign: "center", fontSize: 10, color: "#555" }}>
+        <div style={{ padding: "16px 0", borderTop: "1px solid #1e1e2e", textAlign: "center", fontSize: 12, color: "#555" }}>
           Powered by Creed App
         </div>
       </div>

@@ -717,14 +717,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return (
       <div className="fi">
         <div className="row mb" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
             <Icon name="worker" size={22} color="var(--color-primary)" />
             {t("wv.title")}
           </h2>
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Dashboard</button>
+          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px" }}>← Dashboard</button>
         </div>
 
-        <div className="dim" style={{ fontSize: 13, margin: "0 2px 14px" }}>{t("wv.selectJob")}</div>
+        <div className="dim" style={{ fontSize: 15, margin: "0 2px 14px" }}>{t("wv.selectJob")}</div>
 
         {/* Today's schedule — tap a card to clock in */}
         {todaySchedule.length > 0 && (
@@ -736,8 +736,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   <Icon name="start" size={17} color="var(--color-success)" />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{s.job}</div>
-                  <div className="dim" style={{ fontSize: 11.5, marginTop: 2 }}>{s.note || "Scheduled today"}</div>
+                  <div style={{ fontWeight: 600, fontSize: 16 }}>{s.job}</div>
+                  <div className="dim" style={{ fontSize: 13.5, marginTop: 2 }}>{s.note || "Scheduled today"}</div>
                 </div>
                 <Icon name="next" size={16} color="var(--color-success)" />
               </div>
@@ -749,7 +749,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         <div className="sl" style={{ margin: todaySchedule.length > 0 ? "12px 2px 7px" : "0 2px 7px" }}>{t("wv.allActive")}</div>
         {(() => {
           const active = jobs.filter((j) => !j.archived && !["complete", "invoiced", "paid"].includes(j.status));
-          if (active.length === 0) return <div className="cd" style={{ textAlign: "center", padding: 20 }}><p className="dim" style={{ fontSize: 12 }}>{t("wv.noActive")}</p></div>;
+          if (active.length === 0) return <div className="cd" style={{ textAlign: "center", padding: 20 }}><p className="dim" style={{ fontSize: 14 }}>{t("wv.noActive")}</p></div>;
           // Pink dot flags addresses with more than one open job so Bernard
           // notices the ones that need care before clocking in.
           const propCount: Record<string, number> = {};
@@ -761,13 +761,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.property}</span>
+                  <span style={{ fontWeight: 600, fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.property}</span>
                   {propCount[j.property] > 1 && <span title="Multiple jobs at this address" style={{ width: 6, height: 6, borderRadius: 3, background: "#ff4d8d", flexShrink: 0 }} />}
                 </div>
-                <div className="dim" style={{ fontSize: 11.5, marginTop: 2, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                <div className="dim" style={{ fontSize: 13.5, marginTop: 2, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                   <span>{j.client} · ${(j.total || 0).toFixed(0)}</span>
-                  <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 99, background: statusColor(j.status) + "22", color: statusColor(j.status), fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>{j.status}</span>
-                  <span style={{ fontFamily: "Oswald", fontSize: 11 }}>#{j.id.slice(-6).toUpperCase()}</span>
+                  <span style={{ fontSize: 12, padding: "1px 6px", borderRadius: 99, background: statusColor(j.status) + "22", color: statusColor(j.status), fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>{j.status}</span>
+                  <span style={{ fontFamily: "Oswald", fontSize: 13 }}>#{j.id.slice(-6).toUpperCase()}</span>
                 </div>
               </div>
               <Icon name="next" size={16} color="var(--color-primary)" />
@@ -785,25 +785,25 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button className="iconbtn" onClick={() => setPage("dash")} aria-label="Back"><Icon name="back" size={18} /></button>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("wv.title")}</span>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("wv.title")}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={clockOut} aria-label="Clock out" style={{ fontSize: 10, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 99, padding: "5px 9px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <button onClick={clockOut} aria-label="Clock out" style={{ fontSize: 12, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 99, padding: "5px 9px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
             <Icon name="stop" size={11} color="#ff9d9d" /> {t("wv.clockOut")}
           </button>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
           </span>
         </div>
       </div>
       {/* Job row + Map */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
-        <div className="dim" style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div className="dim" style={{ fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <span style={{ fontWeight: 600 }}>{sj || "General"}</span>
           {activeJob?.client ? ` · ${activeJob.client}` : ""}{activeJob ? ` · #${activeJob.id.slice(-6).toUpperCase()}` : ""}
         </div>
         {activeJob && (
-          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeJob.property)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, fontWeight: 600, color: "#7fb6ff", background: "rgba(46,139,255,.12)", border: "1px solid rgba(46,139,255,.38)", padding: "5px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none" }}>
+          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeJob.property)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, color: "#7fb6ff", background: "rgba(46,139,255,.12)", border: "1px solid rgba(46,139,255,.38)", padding: "5px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none" }}>
             <Icon name="mapPin" size={12} color="#7fb6ff" /> Map
           </a>
         )}
@@ -823,7 +823,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               key={s.id}
               onClick={() => setSection(s.id)}
               style={{
-                flex: 1, textAlign: "center", padding: "8px 2px", borderRadius: 10, fontSize: 10.5,
+                flex: 1, textAlign: "center", padding: "8px 2px", borderRadius: 10, fontSize: 12.5,
                 fontFamily: "Oswald", fontWeight: 600, letterSpacing: ".04em",
                 background: on ? "var(--color-primary)" : "var(--color-card-dark-2)",
                 color: on ? "#fff" : "var(--color-dim)",
@@ -873,7 +873,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               <div style={{ height: 7, borderRadius: 5, background: "var(--color-card-dark-2)", overflow: "hidden", margin: "2px 0" }}>
                 <div style={{ height: "100%", borderRadius: 5, background: "var(--color-success)", width: `${(workOrder.filter((w) => w.done).length / workOrder.length) * 100}%`, boxShadow: "0 0 12px -2px var(--color-success)", transition: "width .3s" }} />
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", margin: "5px 1px 10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-dim)", margin: "5px 1px 10px" }}>
                 <span>Work order</span>
                 <span>{workOrder.filter((w) => w.done).length} / {workOrder.length} done</span>
               </div>
@@ -892,7 +892,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 return (
                   <Fragment key={w._idx}>
                   {showHeader && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "10px 2px 6px", fontFamily: "Oswald", fontWeight: 600, fontSize: 10.5, letterSpacing: ".1em", color: "var(--color-dim)", textTransform: "uppercase" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "10px 2px 6px", fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, letterSpacing: ".1em", color: "var(--color-dim)", textTransform: "uppercase" }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: tradeDot(w.room), flexShrink: 0 }} />
                       {w.room || "General"}
                     </div>
@@ -930,10 +930,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         style={{ flex: 1, cursor: "pointer" }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, textDecoration: w.done ? "line-through" : "none" }}>{w.detail}</div>
+                          <div style={{ fontSize: 16, fontWeight: 600, textDecoration: w.done ? "line-through" : "none" }}>{w.detail}</div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                             {!w.done && (
-                              <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: priColor(w.pri) + "22", color: priColor(w.pri), fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                              <span style={{ fontSize: 12, padding: "1px 6px", borderRadius: 4, background: priColor(w.pri) + "22", color: priColor(w.pri), fontFamily: "Oswald", letterSpacing: ".06em" }}>
                                 {priLabel(w.pri)}
                               </span>
                             )}
@@ -943,8 +943,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                             <Icon name={isOpen ? "collapse" : "expand"} size={14} color="#888" />
                           </div>
                         </div>
-                        <div className="dim" style={{ fontSize: 13, marginTop: 3, lineHeight: 1.4 }}>{w.action}</div>
-                        <div style={{ fontSize: 12, marginTop: 4, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                        <div className="dim" style={{ fontSize: 15, marginTop: 3, lineHeight: 1.4 }}>{w.action}</div>
+                        <div style={{ fontSize: 14, marginTop: 4, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                           <span style={{ color: "var(--color-primary)", fontFamily: "Oswald" }}>{w.hrs}h</span>
                           <span className="dim">{w.room}</span>
                           {matTotal > 0 && (
@@ -955,7 +955,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                           {conditionLabel && (
                             <span
                               style={{
-                                fontSize: 9,
+                                fontSize: 11,
                                 padding: "1px 5px",
                                 borderRadius: 3,
                                 background: enriched.condition === "D" ? "var(--color-accent-red)22" : enriched.condition === "P" ? "var(--color-warning)22" : "var(--color-highlight)22",
@@ -981,19 +981,19 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       >
                         {enriched.comment && (
                           <div style={{ marginBottom: 10 }}>
-                            <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>{t("wv.inspectionNote")}</div>
-                            <div style={{ fontSize: 13, color: darkMode ? "#cfd4dc" : "#333", lineHeight: 1.5 }}>
+                            <div className="sl" style={{ fontSize: 12, marginBottom: 4 }}>{t("wv.inspectionNote")}</div>
+                            <div style={{ fontSize: 15, color: darkMode ? "#cfd4dc" : "#333", lineHeight: 1.5 }}>
                               {enriched.comment}
                             </div>
                           </div>
                         )}
                         {enriched.materials.length > 0 && (
                           <div style={{ marginBottom: 10 }}>
-                            <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>
+                            <div className="sl" style={{ fontSize: 12, marginBottom: 4 }}>
                               {t("wv.materials")} ({matTotal > 0 ? `$${matTotal.toFixed(0)}` : "—"})
                             </div>
                             {enriched.materials.map((m, mi) => (
-                              <div key={mi} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "2px 0" }}>
+                              <div key={mi} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "2px 0" }}>
                                 <span>{m.n}</span>
                                 <span style={{ color: "var(--color-success)", fontFamily: "Oswald", flexShrink: 0, marginLeft: 8 }}>
                                   ${(m.c || 0).toFixed(0)}
@@ -1004,7 +1004,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         )}
                         {enriched.photos.length > 0 && (
                           <div>
-                            <div className="sl" style={{ fontSize: 10, marginBottom: 4 }}>
+                            <div className="sl" style={{ fontSize: 12, marginBottom: 4 }}>
                               {t("wv.beforePhotos")} ({enriched.photos.length})
                             </div>
                             <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
@@ -1027,7 +1027,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                           </div>
                         )}
                         {!enriched.comment && enriched.materials.length === 0 && enriched.photos.length === 0 && (
-                          <div className="dim" style={{ fontSize: 12, fontStyle: "italic" }}>
+                          <div className="dim" style={{ fontSize: 14, fontStyle: "italic" }}>
                             {t("wv.noContext")}
                           </div>
                         )}
@@ -1045,7 +1045,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             </div>
           )}
           {/* Complete job — full-width green CTA at the bottom of Tasks (mock) */}
-          <button onClick={completeJob} className="bg" style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".4px", textTransform: "uppercase", padding: 12, borderRadius: 13, marginTop: 10, boxShadow: "0 0 26px -6px rgba(0,204,102,.6)" }}>
+          <button onClick={completeJob} className="bg" style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".4px", textTransform: "uppercase", padding: 12, borderRadius: 13, marginTop: 10, boxShadow: "0 0 26px -6px rgba(0,204,102,.6)" }}>
             <Icon name="check" size={15} color="#fff" strokeWidth={2.5} /> {t("wv.completeJob")}
           </button>
         </div>
@@ -1148,16 +1148,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               {/* Tools */}
               <div className="cd mb">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <h4 style={{ fontSize: 13, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <h4 style={{ fontSize: 15, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <Icon name="hammer" size={14} color="var(--color-primary)" />
                     {t("wv.toolsNeeded")} ({allTools.length})
                   </h4>
-                  <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                  <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald", letterSpacing: ".06em" }}>
                     {checkedTools.length}/{allTools.length} packed
                   </span>
                 </div>
                 {allTools.length === 0 && (
-                  <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>No tools listed.</div>
+                  <div className="dim" style={{ fontSize: 14, padding: "4px 0" }}>No tools listed.</div>
                 )}
                 {allTools.map((tool, i) => {
                   const done = checkedTools.includes(tool);
@@ -1167,7 +1167,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       onClick={() => toggleTool(tool)}
                       style={{
                         display: "flex", alignItems: "center", gap: 8,
-                        fontSize: 13, padding: "6px 0",
+                        fontSize: 15, padding: "6px 0",
                         borderBottom: `1px solid ${border}`,
                         cursor: "pointer",
                         textDecoration: done ? "line-through" : "none",
@@ -1194,7 +1194,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     value={newTool}
                     onChange={(e) => setNewTool(e.target.value)}
                     placeholder="Add tool…"
-                    style={{ flex: 1, fontSize: 13, padding: "6px 10px" }}
+                    style={{ flex: 1, fontSize: 15, padding: "6px 10px" }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && newTool.trim()) {
                         addCustomTool(newTool.trim());
@@ -1220,16 +1220,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               {/* Shopping */}
               <div className="cd">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <h4 style={{ fontSize: 13, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <h4 style={{ fontSize: 15, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <Icon name="cart" size={14} color="var(--color-warning)" />
                     {t("wv.shoppingList")} (${shopTotal.toFixed(0)})
                   </h4>
-                  <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                  <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald", letterSpacing: ".06em" }}>
                     ${shopRemaining.toFixed(0)} left
                   </span>
                 </div>
                 {allShop.length === 0 && (
-                  <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>No shopping items.</div>
+                  <div className="dim" style={{ fontSize: 14, padding: "4px 0" }}>No shopping items.</div>
                 )}
                 {allShop.map((s, i) => {
                   const done = checkedShop.includes(shopKey(s));
@@ -1241,7 +1241,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       {showHeader && (
                         <div
                           style={{
-                            fontSize: 11,
+                            fontSize: 13,
                             fontWeight: 600,
                             color: "var(--color-primary)",
                             marginTop: i > 0 ? 12 : 0,
@@ -1256,8 +1256,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       )}
                       {editShopKey === shopKey(s) ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 6px 4px", borderBottom: `1px solid ${border}` }}>
-                          <input value={editShopName} onChange={(e) => setEditShopName(e.target.value)} autoFocus style={{ flex: 1, fontSize: 13, padding: "5px 8px", minWidth: 0 }} />
-                          <input type="number" value={editShopCost} onChange={(e) => setEditShopCost(e.target.value)} placeholder="$" style={{ width: 58, fontSize: 13, padding: "5px 6px" }} />
+                          <input value={editShopName} onChange={(e) => setEditShopName(e.target.value)} autoFocus style={{ flex: 1, fontSize: 15, padding: "5px 8px", minWidth: 0 }} />
+                          <input type="number" value={editShopCost} onChange={(e) => setEditShopCost(e.target.value)} placeholder="$" style={{ width: 58, fontSize: 15, padding: "5px 6px" }} />
                           <button onClick={() => saveEditShop(s)} aria-label="Save" style={{ background: "none", border: "none", color: "var(--color-success)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="check" size={18} /></button>
                           <button onClick={() => deleteShop(s)} aria-label="Delete" style={{ background: "none", border: "none", color: "var(--color-accent-red)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="delete" size={16} /></button>
                           <button onClick={cancelEditShop} aria-label="Cancel" style={{ background: "none", border: "none", color: "var(--color-dim)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="close" size={16} /></button>
@@ -1266,7 +1266,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         <div
                           style={{
                             display: "flex", justifyContent: "space-between", alignItems: "center",
-                            fontSize: 13, padding: "6px 0 6px 4px",
+                            fontSize: 15, padding: "6px 0 6px 4px",
                             borderBottom: `1px solid ${border}`,
                             textDecoration: done ? "line-through" : "none",
                             opacity: done ? 0.5 : 1,
@@ -1303,14 +1303,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     value={newShopName}
                     onChange={(e) => setNewShopName(e.target.value)}
                     placeholder="Item name…"
-                    style={{ flex: 1, fontSize: 13, padding: "6px 10px" }}
+                    style={{ flex: 1, fontSize: 15, padding: "6px 10px" }}
                   />
                   <input
                     type="number"
                     value={newShopCost}
                     onChange={(e) => setNewShopCost(e.target.value)}
                     placeholder="$"
-                    style={{ width: 64, fontSize: 13, padding: "6px 8px" }}
+                    style={{ width: 64, fontSize: 15, padding: "6px 8px" }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && newShopName.trim()) {
                         addCustomShop({
@@ -1352,7 +1352,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* ── NOTES TAB ── */}
       {section === "notes" && activeJob && (
         <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>📝 {t("wv.jobNotes")}</h4>
+          <h4 style={{ fontSize: 15, marginBottom: 8 }}>📝 {t("wv.jobNotes")}</h4>
           {/* Keyed on activeJob.id so switching jobs remounts with the new
               job's notes (and flushes any pending save for the prior job). */}
           <JobNotesEditor key={activeJob.id} jobId={activeJob.id} />
@@ -1363,7 +1363,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {section === "photos" && (
         <div className="cd">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
-            <h4 style={{ fontSize: 13 }}>📸 {t("wv.jobPhotos")}</h4>
+            <h4 style={{ fontSize: 15 }}>📸 {t("wv.jobPhotos")}</h4>
             <div className="row" style={{ gap: 4 }}>
               <button
                 className="bb"
@@ -1372,7 +1372,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   multiple: true,
                   onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f)),
                 })}
-                style={{ fontSize: 12, padding: "5px 10px" }}
+                style={{ fontSize: 14, padding: "5px 10px" }}
                 title={`Photo will be saved as a ${photoType === "after" ? "completion" : photoType} photo`}
               >
                 📷 {photoType === "after" ? "Completion Photo" : photoType === "before" ? "Before Photo" : "Work Photo"}
@@ -1390,7 +1390,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   };
                   input.click();
                 }}
-                style={{ fontSize: 12, padding: "5px 10px" }}
+                style={{ fontSize: 14, padding: "5px 10px" }}
               >
                 📁 {t("common.upload")}
               </button>
@@ -1401,7 +1401,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 className="bo"
                 onClick={() => setWvCam({ title: "Receipt", multiple: false, onFiles: (fs) => { const f = fs[0]; if (f) uploadReceipt(f); } })}
                 disabled={uploadingReceipt}
-                style={{ fontSize: 12, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 4, opacity: uploadingReceipt ? 0.5 : 1 }}
+                style={{ fontSize: 14, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 4, opacity: uploadingReceipt ? 0.5 : 1 }}
                 title="Snap a receipt photo — AI extracts vendor, items, and total"
               >
                 <Icon name="receipt" size={13} />
@@ -1416,7 +1416,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               counts. Tech can flip to "Before" or "Work" before
               snapping if they're documenting earlier phases. */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-            <span className="dim" style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>
+            <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase" }}>
               Tag as:
             </span>
             <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: `1px solid ${border}` }}>
@@ -1433,7 +1433,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     key={opt.key}
                     onClick={() => setPhotoType(opt.key)}
                     style={{
-                      padding: "4px 10px", fontSize: 11,
+                      padding: "4px 10px", fontSize: 13,
                       fontFamily: "Oswald, sans-serif", letterSpacing: ".05em",
                       background: active ? opt.color : "transparent",
                       color: active ? "#fff" : "#888",
@@ -1450,7 +1450,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           </div>
 
           {/* After photos prompt */}
-          <div style={{ marginBottom: 10, padding: 8, borderRadius: 6, background: darkMode ? "#1a1a0a" : "#fffbe6", border: "1px solid var(--color-warning)", fontSize: 12 }}>
+          <div style={{ marginBottom: 10, padding: 8, borderRadius: 6, background: darkMode ? "#1a1a0a" : "#fffbe6", border: "1px solid var(--color-warning)", fontSize: 14 }}>
             💡 {t("wv.photosTip")}
           </div>
 
@@ -1468,7 +1468,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       <div key={i} style={{ position: "relative" }}>
                         <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: `1px solid ${border}` }} />
                         {p.type && (
-                          <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: 9, padding: "1px 4px", borderRadius: 3, background: p.type === "before" ? "#ff8800" : p.type === "after" ? "#00cc66" : "#2E75B6", color: "#fff" }}>
+                          <span style={{ position: "absolute", bottom: 2, left: 2, fontSize: 11, padding: "1px 4px", borderRadius: 3, background: p.type === "before" ? "#ff8800" : p.type === "after" ? "#00cc66" : "#2E75B6", color: "#fff" }}>
                             {p.type}
                           </span>
                         )}
@@ -1489,7 +1489,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                             color: "#fff",
                             border: "1px solid rgba(255,255,255,0.25)",
                             cursor: "pointer",
-                            fontSize: 13,
+                            fontSize: 15,
                             lineHeight: "24px",
                             padding: 0,
                             display: "flex",
@@ -1508,11 +1508,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
                 {/* ── Renderings section ── */}
                 <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${border}` }}>
-                  <h4 style={{ fontSize: 13, marginBottom: 8 }}>
+                  <h4 style={{ fontSize: 15, marginBottom: 8 }}>
                     ✨ {t("wv.renderingsHeader")} ({rendered.length})
                   </h4>
                   {rendered.length === 0 ? (
-                    <p className="dim" style={{ fontSize: 12, textAlign: "center", padding: 12 }}>
+                    <p className="dim" style={{ fontSize: 14, textAlign: "center", padding: 12 }}>
                       {t("wv.renderingsEmpty")}
                     </p>
                   ) : (
@@ -1530,7 +1530,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                           }}
                         >
                           <div>
-                            <div style={{ fontSize: 9, textTransform: "uppercase", color: "#888", marginBottom: 3, letterSpacing: ".05em" }}>
+                            <div style={{ fontSize: 11, textTransform: "uppercase", color: "#888", marginBottom: 3, letterSpacing: ".05em" }}>
                               {t("wv.renderSource")}
                             </div>
                             {p.sourceUrl ? (
@@ -1540,13 +1540,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                                 style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 6 }}
                               />
                             ) : (
-                              <div style={{ aspectRatio: "1", background: darkMode ? "#222" : "#eee", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "#888", fontSize: 10 }}>
+                              <div style={{ aspectRatio: "1", background: darkMode ? "#222" : "#eee", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "#888", fontSize: 12 }}>
                                 —
                               </div>
                             )}
                           </div>
                           <div>
-                            <div style={{ fontSize: 9, textTransform: "uppercase", color: "#9b59b6", marginBottom: 3, letterSpacing: ".05em" }}>
+                            <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9b59b6", marginBottom: 3, letterSpacing: ".05em" }}>
                               {t("wv.renderResult")}
                             </div>
                             <a href={p.url} target="_blank" rel="noopener noreferrer">
@@ -1558,7 +1558,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                             </a>
                           </div>
                           {p.prompt && (
-                            <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#888", fontStyle: "italic", lineHeight: 1.4 }}>
+                            <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "#888", fontStyle: "italic", lineHeight: 1.4 }}>
                               “{p.prompt}”
                             </div>
                           )}
@@ -1611,7 +1611,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             <h3
               style={{
                 fontFamily: "Oswald, sans-serif",
-                fontSize: 17,
+                fontSize: 19,
                 textTransform: "uppercase",
                 color: "#9b59b6",
                 marginBottom: 14,
@@ -1625,7 +1625,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             {/* Source / Result preview */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
               <div>
-                <div style={{ fontSize: 9, textTransform: "uppercase", color: "#888", marginBottom: 4, letterSpacing: ".05em" }}>
+                <div style={{ fontSize: 11, textTransform: "uppercase", color: "#888", marginBottom: 4, letterSpacing: ".05em" }}>
                   {t("wv.renderSource")}
                 </div>
                 <img
@@ -1635,7 +1635,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 />
               </div>
               <div>
-                <div style={{ fontSize: 9, textTransform: "uppercase", color: "#9b59b6", marginBottom: 4, letterSpacing: ".05em" }}>
+                <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9b59b6", marginBottom: 4, letterSpacing: ".05em" }}>
                   {t("wv.renderResult")}
                 </div>
                 {rendering ? (
@@ -1649,7 +1649,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       alignItems: "center",
                       justifyContent: "center",
                       color: "#9b59b6",
-                      fontSize: 11,
+                      fontSize: 13,
                       textAlign: "center",
                       padding: 8,
                       animation: "pulse 1.6s ease-in-out infinite",
@@ -1687,7 +1687,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             <label
               style={{
                 display: "block",
-                fontSize: 11,
+                fontSize: 13,
                 textTransform: "uppercase",
                 color: "#aaa",
                 marginBottom: 6,
@@ -1704,7 +1704,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               rows={5}
               style={{
                 width: "100%",
-                fontSize: 13,
+                fontSize: 15,
                 padding: 10,
                 borderRadius: 8,
                 border: "1px solid #2a2a3a",
@@ -1725,7 +1725,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 style={{
                   padding: "9px 18px",
                   borderRadius: 10,
-                  fontSize: 13,
+                  fontSize: 15,
                   fontFamily: "Oswald, sans-serif",
                   textTransform: "uppercase",
                   letterSpacing: ".06em",
@@ -1745,7 +1745,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   style={{
                     padding: "9px 22px",
                     borderRadius: 10,
-                    fontSize: 13,
+                    fontSize: 15,
                     fontFamily: "Oswald, sans-serif",
                     textTransform: "uppercase",
                     letterSpacing: ".06em",
@@ -1765,7 +1765,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   style={{
                     padding: "9px 22px",
                     borderRadius: 10,
-                    fontSize: 13,
+                    fontSize: 15,
                     fontFamily: "Oswald, sans-serif",
                     textTransform: "uppercase",
                     letterSpacing: ".06em",
@@ -1878,7 +1878,7 @@ function JobNotesEditor({ jobId }: { jobId: string }) {
         save(valueRef.current);
       }}
       placeholder={t("wv.notesPlaceholder")}
-      style={{ height: 120, fontSize: 14, resize: "vertical", width: "100%" }}
+      style={{ height: 120, fontSize: 16, resize: "vertical", width: "100%" }}
     />
   );
 }

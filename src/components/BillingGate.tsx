@@ -104,7 +104,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
            org.subscription_status === "past_due" ? "Payment Past Due" :
            "Trial Expired"}
         </h1>
-        <p style={{ color: "#888", fontSize: 14, marginBottom: 24, fontFamily: "Source Sans 3, sans-serif" }}>
+        <p style={{ color: "#888", fontSize: 16, marginBottom: 24, fontFamily: "Source Sans 3, sans-serif" }}>
           {org.subscription_status === "past_due"
             ? "Please update your payment method to continue using Creed App."
             : "Your 30-day free trial has ended. Subscribe to keep using Creed App."}
@@ -126,14 +126,14 @@ export default function BillingGate({ children }: { children: React.ReactNode })
                     transition: "all .15s",
                   }}
                 >
-                  <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 16, color: selectedPlan === p.key ? "#2E75B6" : "#e2e2e8" }}>
+                  <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: selectedPlan === p.key ? "#2E75B6" : "#e2e2e8" }}>
                     {p.name}
                   </div>
                   <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#2E75B6", margin: "6px 0" }}>
                     {p.price}
                   </div>
-                  <div style={{ fontSize: 13, color: "#888" }}>/month</div>
-                  <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>{p.desc}</div>
+                  <div style={{ fontSize: 15, color: "#888" }}>/month</div>
+                  <div style={{ fontSize: 14, color: "#666", marginTop: 4 }}>{p.desc}</div>
                 </div>
               ))}
             </div>
@@ -142,7 +142,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
               onClick={handleSubscribe}
               disabled={loading}
               style={{
-                width: "100%", maxWidth: 400, padding: 14, fontSize: 16,
+                width: "100%", maxWidth: 400, padding: 14, fontSize: 18,
                 fontFamily: "Oswald, sans-serif", textTransform: "uppercase",
                 background: loading ? "#333" : "#2E75B6", color: "#fff",
                 border: "none", borderRadius: 8, cursor: loading ? "wait" : "pointer",
@@ -166,7 +166,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
                     const data = await res.json();
                     if (data.url) window.location.href = data.url;
                   }}
-                  style={{ color: "#888", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+                  style={{ color: "#888", fontSize: 14, cursor: "pointer", textDecoration: "underline" }}
                 >
                   Manage existing billing
                 </span>
@@ -180,13 +180,13 @@ export default function BillingGate({ children }: { children: React.ReactNode })
           </>
         ) : (
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 10, padding: 20 }}>
-            <p style={{ color: "#888", fontSize: 13 }}>
+            <p style={{ color: "#888", fontSize: 15 }}>
               Ask your business owner to subscribe to continue using Creed App.
             </p>
           </div>
         )}
 
-        <div style={{ marginTop: 20, fontSize: 12, color: "#555" }}>
+        <div style={{ marginTop: 20, fontSize: 14, color: "#555" }}>
           Powered by Creed App
         </div>
       </div>
@@ -207,7 +207,7 @@ function PaywallPromoCode({ orgId }: { orgId: string }) {
       <div style={{ marginTop: 8 }}>
         <span
           onClick={() => setOpen(true)}
-          style={{ color: "#888", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+          style={{ color: "#888", fontSize: 14, cursor: "pointer", textDecoration: "underline" }}
         >
           Have a promo code?
         </span>
@@ -222,7 +222,7 @@ function PaywallPromoCode({ orgId }: { orgId: string }) {
         onChange={(e) => setCode(e.target.value)}
         placeholder="Promo code"
         style={{
-          fontSize: 13, padding: "6px 10px", borderRadius: 6,
+          fontSize: 15, padding: "6px 10px", borderRadius: 6,
           border: "1px solid #2E75B6", background: "#0a0a0f", color: "#fff",
           textTransform: "uppercase", minWidth: 180,
         }}
@@ -246,7 +246,7 @@ function PaywallPromoCode({ orgId }: { orgId: string }) {
         disabled={busy || !code.trim()}
         style={{
           background: busy || !code.trim() ? "#333" : "#2E75B6", color: "#fff",
-          border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 13,
+          border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 15,
           cursor: busy || !code.trim() ? "wait" : "pointer",
         }}
       >
@@ -256,7 +256,7 @@ function PaywallPromoCode({ orgId }: { orgId: string }) {
         onClick={() => { setOpen(false); setCode(""); }}
         style={{
           background: "transparent", color: "#888", border: "none",
-          fontSize: 12, padding: "6px 8px", cursor: "pointer",
+          fontSize: 14, padding: "6px 8px", cursor: "pointer",
         }}
       >
         Cancel
@@ -289,7 +289,7 @@ function TrialBanner({
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
           background: daysLeft <= 3 ? "#C00000" : "#D4760A",
           color: "#fff", textAlign: "center", padding: "6px 32px 6px 12px",
-          fontSize: 12, fontFamily: "Source Sans 3, sans-serif",
+          fontSize: 14, fontFamily: "Source Sans 3, sans-serif",
         }}>
           ⏳ Trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""} —{" "}
           <span
@@ -325,7 +325,7 @@ function TrialBanner({
             style={{
               position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
               background: "transparent", border: "none", color: "#fff",
-              fontSize: 14, lineHeight: 1, padding: "2px 6px", cursor: "pointer",
+              fontSize: 16, lineHeight: 1, padding: "2px 6px", cursor: "pointer",
               opacity: 0.85,
             }}
           >

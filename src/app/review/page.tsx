@@ -77,7 +77,7 @@ function ReviewContent() {
           <h1
             style={{
               fontFamily: "Oswald, sans-serif",
-              fontSize: 22,
+              fontSize: 24,
               color: "#2E75B6",
               textTransform: "uppercase",
               letterSpacing: ".05em",
@@ -86,7 +86,7 @@ function ReviewContent() {
             {orgData?.name || "Leave a Review"}
           </h1>
           {orgData?.phone && (
-            <div style={{ fontSize: 10, color: "#888", marginTop: 4 }}>{orgData.phone}</div>
+            <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{orgData.phone}</div>
           )}
         </div>
 
@@ -104,7 +104,7 @@ function ReviewContent() {
             <h2
               style={{
                 fontFamily: "Oswald, sans-serif",
-                fontSize: 20,
+                fontSize: 22,
                 color: "#00cc66",
                 textTransform: "uppercase",
                 marginBottom: 8,
@@ -112,10 +112,10 @@ function ReviewContent() {
             >
               Thank You!
             </h2>
-            <p style={{ color: "#888", fontSize: 14, fontFamily: "Source Sans 3, sans-serif" }}>
+            <p style={{ color: "#888", fontSize: 16, fontFamily: "Source Sans 3, sans-serif" }}>
               Your review means a lot to us. We appreciate your business and look forward to serving you again.
             </p>
-            <div style={{ marginTop: 16, color: "#555", fontSize: 11 }}>
+            <div style={{ marginTop: 16, color: "#555", fontSize: 13 }}>
               — Thank you for choosing us
             </div>
           </div>
@@ -131,7 +131,7 @@ function ReviewContent() {
             <h2
               style={{
                 fontFamily: "Oswald, sans-serif",
-                fontSize: 18,
+                fontSize: 20,
                 color: "#e2e2e8",
                 textTransform: "uppercase",
                 textAlign: "center",
@@ -166,7 +166,7 @@ function ReviewContent() {
                         style={{
                           padding: "6px 14px",
                           borderRadius: 20,
-                          fontSize: 13,
+                          fontSize: 15,
                           fontFamily: "Source Sans 3, sans-serif",
                           textTransform: "none",
                           letterSpacing: "normal",
@@ -232,7 +232,7 @@ function ReviewContent() {
                 color: "#fff",
                 border: "none",
                 borderRadius: 8,
-                fontSize: 15,
+                fontSize: 17,
                 fontFamily: "Oswald, sans-serif",
                 textTransform: "uppercase",
                 letterSpacing: ".06em",
@@ -244,7 +244,7 @@ function ReviewContent() {
           </div>
         )}
 
-        <div style={{ textAlign: "center", marginTop: 16, color: "#555", fontSize: 10 }}>
+        <div style={{ textAlign: "center", marginTop: 16, color: "#555", fontSize: 12 }}>
           Powered by Creed App
         </div>
       </div>
@@ -253,7 +253,7 @@ function ReviewContent() {
 }
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 13,
   color: "#888",
   fontFamily: "Oswald, sans-serif",
   textTransform: "uppercase",
@@ -269,7 +269,7 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #1e1e2e",
   borderRadius: 8,
   color: "#e2e2e8",
-  fontSize: 14,
+  fontSize: 16,
   fontFamily: "Source Sans 3, sans-serif",
   outline: "none",
   boxSizing: "border-box",

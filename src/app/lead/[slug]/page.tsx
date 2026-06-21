@@ -23,12 +23,12 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #1e1e2e",
   background: "#12121a",
   color: "#e2e2e8",
-  fontSize: 14,
+  fontSize: 16,
   fontFamily: "Source Sans 3, sans-serif",
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 13,
   color: "#888",
   fontFamily: "Oswald, sans-serif",
   textTransform: "uppercase",
@@ -167,8 +167,8 @@ function LeadIntakeInner() {
       <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: "#C00000" }}>Page Not Found</h1>
-          <p style={{ color: "#888", fontSize: 13, marginTop: 8 }}>This link may be invalid.</p>
+          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#C00000" }}>Page Not Found</h1>
+          <p style={{ color: "#888", fontSize: 15, marginTop: 8 }}>This link may be invalid.</p>
         </div>
       </div>
     );
@@ -184,19 +184,19 @@ function LeadIntakeInner() {
           )}
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 28 }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: "#00cc66", textTransform: "uppercase", marginBottom: 8 }}>
+            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#00cc66", textTransform: "uppercase", marginBottom: 8 }}>
               Thanks!
             </h2>
-            <p style={{ color: "#aaa", fontSize: 14, lineHeight: 1.5 }}>
+            <p style={{ color: "#aaa", fontSize: 16, lineHeight: 1.5 }}>
               We&apos;ve got your request. {org.name} will be in touch shortly with a quote.
             </p>
             {org.phone && (
-              <p style={{ color: "#666", fontSize: 12, marginTop: 12 }}>
+              <p style={{ color: "#666", fontSize: 14, marginTop: 12 }}>
                 Need to reach us? <a href={`tel:${org.phone}`} style={{ color: PRIMARY, textDecoration: "none" }}>{org.phone}</a>
               </p>
             )}
           </div>
-          <div style={{ color: "#555", fontSize: 10, marginTop: 16 }}>Powered by Creed App</div>
+          <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
         </div>
       </div>
     );
@@ -215,15 +215,15 @@ function LeadIntakeInner() {
             {org.name}
           </h1>
           {org.phone && (
-            <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>{org.phone}</div>
+            <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>{org.phone}</div>
           )}
         </div>
 
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 20 }}>
-          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: "#e2e2e8", textTransform: "uppercase", textAlign: "center", marginTop: 0, marginBottom: 4 }}>
+          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "#e2e2e8", textTransform: "uppercase", textAlign: "center", marginTop: 0, marginBottom: 4 }}>
             Request a Quote
           </h2>
-          <p style={{ color: "#888", fontSize: 12, textAlign: "center", margin: "0 0 18px" }}>
+          <p style={{ color: "#888", fontSize: 14, textAlign: "center", margin: "0 0 18px" }}>
             Tell us what you need. We&apos;ll get back to you with a detailed quote.
           </p>
 
@@ -296,7 +296,7 @@ function LeadIntakeInner() {
                 border: "1px dashed #444",
                 background: "#0a0a0f",
                 color: "#888",
-                fontSize: 12,
+                fontSize: 14,
                 textAlign: "center",
                 cursor: "pointer",
               }}
@@ -325,7 +325,7 @@ function LeadIntakeInner() {
                       style={{
                         position: "absolute", top: 2, right: 2,
                         background: "rgba(0,0,0,0.7)", color: "#fff", border: "none",
-                        borderRadius: "50%", width: 18, height: 18, fontSize: 12,
+                        borderRadius: "50%", width: 18, height: 18, fontSize: 14,
                         cursor: "pointer", lineHeight: 1,
                       }}
                     >
@@ -338,7 +338,7 @@ function LeadIntakeInner() {
           </div>
 
           {error && (
-            <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 12, color: "#ff8888" }}>
+            <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 14, color: "#ff8888" }}>
               {error}
             </div>
           )}
@@ -350,7 +350,7 @@ function LeadIntakeInner() {
               width: "100%",
               padding: "13px",
               borderRadius: 8,
-              fontSize: 15,
+              fontSize: 17,
               fontFamily: "Oswald, sans-serif",
               textTransform: "uppercase",
               letterSpacing: ".05em",
@@ -363,12 +363,12 @@ function LeadIntakeInner() {
           >
             {submitting ? "Submitting..." : "📋 Send My Request"}
           </button>
-          <p style={{ color: "#555", fontSize: 11, textAlign: "center", margin: "10px 0 0" }}>
+          <p style={{ color: "#555", fontSize: 13, textAlign: "center", margin: "10px 0 0" }}>
             We typically respond within one business day.
           </p>
         </div>
 
-        <div style={{ textAlign: "center", color: "#555", fontSize: 10, marginTop: 16 }}>
+        <div style={{ textAlign: "center", color: "#555", fontSize: 12, marginTop: 16 }}>
           Powered by Creed App
         </div>
       </div>

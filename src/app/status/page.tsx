@@ -198,7 +198,7 @@ function StatusContent() {
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "#2E75B6", fontFamily: "Oswald", fontSize: 18 }}>Loading...</div>
+        <div style={{ color: "#2E75B6", fontFamily: "Oswald", fontSize: 20 }}>Loading...</div>
       </div>
     );
   }
@@ -208,8 +208,8 @@ function StatusContent() {
       <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
-          <h1 style={{ fontFamily: "Oswald", fontSize: 22, color: "#C00000" }}>Job Not Found</h1>
-          <p style={{ color: "#888", fontSize: 13, marginTop: 8 }}>This link may be invalid or the job has been removed.</p>
+          <h1 style={{ fontFamily: "Oswald", fontSize: 24, color: "#C00000" }}>Job Not Found</h1>
+          <p style={{ color: "#888", fontSize: 15, marginTop: 8 }}>This link may be invalid or the job has been removed.</p>
         </div>
       </div>
     );
@@ -224,16 +224,16 @@ function StatusContent() {
             <img src={org.logo_url} alt="" style={{ height: 50, display: "block", margin: "0 auto 8px" }}
               onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
           )}
-          <h1 style={{ fontFamily: "Oswald", fontSize: 20, color: "#2E75B6", textTransform: "uppercase" }}>
+          <h1 style={{ fontFamily: "Oswald", fontSize: 22, color: "#2E75B6", textTransform: "uppercase" }}>
             {org?.name || "Job Status"}
           </h1>
-          {org?.phone && <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>{org.phone}</div>}
+          {org?.phone && <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>{org.phone}</div>}
         </div>
 
         {/* Job info */}
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <h2 style={{ fontFamily: "Oswald", fontSize: 16, color: "#e2e2e8", marginBottom: 8 }}>{job.property}</h2>
-          <div style={{ fontSize: 12, color: "#888" }}>
+          <h2 style={{ fontFamily: "Oswald", fontSize: 18, color: "#e2e2e8", marginBottom: 8 }}>{job.property}</h2>
+          <div style={{ fontSize: 14, color: "#888" }}>
             {job.client && <div>Client: {job.client}</div>}
             {job.job_date && <div>Date: {job.job_date}</div>}
           </div>
@@ -241,7 +241,7 @@ function StatusContent() {
 
         {/* Status timeline */}
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <h3 style={{ fontFamily: "Oswald", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>
+          <h3 style={{ fontFamily: "Oswald", fontSize: 14, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>
             Status
           </h3>
           {STATUS_STEPS.map((step, i) => {
@@ -256,7 +256,7 @@ function StatusContent() {
                     background: isDone ? (isCurrent ? "#2E75B6" : "#00cc66") : "#1e1e2e",
                     border: `2px solid ${isDone ? (isCurrent ? "#2E75B6" : "#00cc66") : "#333"}`,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 10, color: "#fff",
+                    fontSize: 12, color: "#fff",
                     boxShadow: isCurrent ? "0 0 10px rgba(46,117,182,0.5)" : "none",
                   }}>
                     {isDone ? (isCurrent ? step.icon : "✓") : ""}
@@ -267,7 +267,7 @@ function StatusContent() {
                 </div>
                 {/* Label */}
                 <div style={{
-                  fontSize: 12, fontFamily: isCurrent ? "Oswald" : "Source Sans 3",
+                  fontSize: 14, fontFamily: isCurrent ? "Oswald" : "Source Sans 3",
                   color: isDone ? (isCurrent ? "#2E75B6" : "#00cc66") : "#555",
                   fontWeight: isCurrent ? 700 : 400,
                   paddingBottom: i < STATUS_STEPS.length - 1 ? 16 : 0,
@@ -282,12 +282,12 @@ function StatusContent() {
         {/* Work order progress */}
         {workOrder.length > 0 && (
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-            <h3 style={{ fontFamily: "Oswald", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
+            <h3 style={{ fontFamily: "Oswald", fontSize: 14, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
               Work Progress
             </h3>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ fontSize: 11, color: "#888" }}>{completedCount} of {workOrder.length} tasks</span>
-              <span style={{ fontSize: 11, color: completedCount === workOrder.length ? "#00cc66" : "#2E75B6", fontFamily: "Oswald" }}>
+              <span style={{ fontSize: 13, color: "#888" }}>{completedCount} of {workOrder.length} tasks</span>
+              <span style={{ fontSize: 13, color: completedCount === workOrder.length ? "#00cc66" : "#2E75B6", fontFamily: "Oswald" }}>
                 {Math.round((completedCount / workOrder.length) * 100)}%
               </span>
             </div>
@@ -301,14 +301,14 @@ function StatusContent() {
             <div style={{ marginTop: 10 }}>
               {workOrder.map((w, i) => (
                 <div key={i} style={{
-                  fontSize: 11, padding: "4px 0",
+                  fontSize: 13, padding: "4px 0",
                   borderBottom: i < workOrder.length - 1 ? "1px solid #1e1e2e" : "none",
                   display: "flex", alignItems: "center", gap: 6,
                   opacity: w.done ? 0.5 : 1,
                   textDecoration: w.done ? "line-through" : "none",
                   color: "#ccc",
                 }}>
-                  <span style={{ fontSize: 12 }}>{w.done ? "✅" : "⬜"}</span>
+                  <span style={{ fontSize: 14 }}>{w.done ? "✅" : "⬜"}</span>
                   <span><b style={{ color: "#2E75B6" }}>{w.room}</b> — {w.detail}</span>
                 </div>
               ))}
@@ -319,14 +319,14 @@ function StatusContent() {
         {/* Total */}
         {job.total > 0 && (
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, textAlign: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 10, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            <div style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
               {job.status === "paid" ? "Amount Paid" : "Quote Total"}
             </div>
             <div style={{ fontSize: 28, fontFamily: "Oswald", fontWeight: 700, color: job.status === "paid" ? "#00cc66" : "#2E75B6" }}>
               ${job.total.toLocaleString()}
             </div>
             {discount && (
-              <div style={{ fontSize: 12, color: "#00cc66", marginTop: 6, fontFamily: "Source Sans 3" }}>
+              <div style={{ fontSize: 14, color: "#00cc66", marginTop: 6, fontFamily: "Source Sans 3" }}>
                 ✓ {discount.label && discount.label.trim()
                   ? discount.label.trim()
                   : (discount.type === "percent"
@@ -339,13 +339,13 @@ function StatusContent() {
 
         {/* Signature + approval */}
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <h3 style={{ fontFamily: "Oswald", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
+          <h3 style={{ fontFamily: "Oswald", fontSize: 14, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
             Approve & Sign
           </h3>
 
           {job.client_signature ? (
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: "#00cc66", marginBottom: 6 }}>
+              <div style={{ fontSize: 13, color: "#00cc66", marginBottom: 6 }}>
                 ✅ Approved on {job.signature_date}
               </div>
               {/* Canvas signatures are data URLs (start with "data:");
@@ -383,7 +383,7 @@ function StatusContent() {
                       flex: 1,
                       padding: "7px 0",
                       borderRadius: 6,
-                      fontSize: 12,
+                      fontSize: 14,
                       fontFamily: "Oswald",
                       textTransform: "uppercase",
                       letterSpacing: ".05em",
@@ -412,12 +412,12 @@ function StatusContent() {
                       border: "1px solid #1e1e2e",
                       background: "#0a0a0f",
                       color: "#e2e2e8",
-                      fontSize: 16,
+                      fontSize: 18,
                       marginBottom: 10,
                       fontFamily: "Source Sans 3, sans-serif",
                     }}
                   />
-                  <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 12, color: "#aaa", marginBottom: 10 }}>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 14, color: "#aaa", marginBottom: 10 }}>
                     <input
                       type="checkbox"
                       checked={authorized}
@@ -435,7 +435,7 @@ function StatusContent() {
                       width: "100%",
                       padding: "11px",
                       borderRadius: 8,
-                      fontSize: 13,
+                      fontSize: 15,
                       fontFamily: "Oswald",
                       textTransform: "uppercase",
                       letterSpacing: ".05em",
@@ -451,7 +451,7 @@ function StatusContent() {
                 </div>
               ) : (
                 <div>
-                  <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
+                  <div style={{ fontSize: 13, color: "#888", marginBottom: 6 }}>
                     Draw your signature below to approve this work:
                   </div>
                   <canvas
@@ -478,7 +478,7 @@ function StatusContent() {
                   <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
                     <button
                       onClick={clearSig}
-                      style={{ background: "none", color: "#888", fontSize: 11, padding: 0, textDecoration: "underline" }}
+                      style={{ background: "none", color: "#888", fontSize: 13, padding: 0, textDecoration: "underline" }}
                     >
                       Clear
                     </button>
@@ -486,7 +486,7 @@ function StatusContent() {
                       onClick={submitCanvasSignature}
                       disabled={!signed || submittingSig}
                       style={{
-                        padding: "8px 20px", borderRadius: 8, fontSize: 13,
+                        padding: "8px 20px", borderRadius: 8, fontSize: 15,
                         fontFamily: "Oswald", textTransform: "uppercase",
                         background: signed ? "#00cc66" : "#333",
                         color: "#fff", opacity: signed ? 1 : 0.5,
@@ -500,7 +500,7 @@ function StatusContent() {
               )}
 
               {signError && (
-                <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "#3a0d0d", border: "1px solid #C00000", fontSize: 12, color: "#ff8888" }}>
+                <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "#3a0d0d", border: "1px solid #C00000", fontSize: 14, color: "#ff8888" }}>
                   {signError}
                 </div>
               )}
@@ -514,7 +514,7 @@ function StatusContent() {
             up front) before being routed to Stripe Checkout. */}
         {job.client_signature && job.total > 0 && job.status !== "paid" && org?.stripe_connected && (
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-            <h3 style={{ fontFamily: "Oswald", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
+            <h3 style={{ fontFamily: "Oswald", fontSize: 14, color: "#888", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>
               Pay Deposit
             </h3>
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -526,7 +526,7 @@ function StatusContent() {
                     flex: 1,
                     padding: "8px 0",
                     borderRadius: 6,
-                    fontSize: 12,
+                    fontSize: 14,
                     fontFamily: "Oswald",
                     background: depositPct === p ? "#2E75B6" : "transparent",
                     color: depositPct === p ? "#fff" : "#888",
@@ -545,7 +545,7 @@ function StatusContent() {
                 width: "100%",
                 padding: "12px",
                 borderRadius: 8,
-                fontSize: 14,
+                fontSize: 16,
                 fontFamily: "Oswald",
                 textTransform: "uppercase",
                 letterSpacing: ".05em",
@@ -558,7 +558,7 @@ function StatusContent() {
             >
               {depositLoading ? "Redirecting..." : `💳 Pay $${(job.total * (depositPct / 100)).toFixed(2)} now`}
             </button>
-            <p style={{ fontSize: 10, color: "#555", textAlign: "center", margin: "8px 0 0" }}>
+            <p style={{ fontSize: 12, color: "#555", textAlign: "center", margin: "8px 0 0" }}>
               Secure checkout via Stripe.
               {depositPct < 100 && ` Remaining $${(job.total * ((100 - depositPct) / 100)).toFixed(2)} due on completion.`}
             </p>
@@ -566,7 +566,7 @@ function StatusContent() {
         )}
 
         {/* Footer */}
-        <div style={{ textAlign: "center", color: "#555", fontSize: 10, marginTop: 16 }}>
+        <div style={{ textAlign: "center", color: "#555", fontSize: 12, marginTop: 16 }}>
           Powered by Creed App
         </div>
       </div>

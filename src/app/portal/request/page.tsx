@@ -28,11 +28,11 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #1e1e2e",
   background: "#12121a",
   color: "#e2e2e8",
-  fontSize: 14,
+  fontSize: 16,
   fontFamily: "Source Sans 3, sans-serif",
 };
 const labelStyle: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 13,
   color: "#888",
   fontFamily: "Oswald, sans-serif",
   textTransform: "uppercase",
@@ -180,7 +180,7 @@ function RequestInner() {
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: PRIMARY, fontFamily: "Oswald, sans-serif", fontSize: 18 }}>Loading…</div>
+        <div style={{ color: PRIMARY, fontFamily: "Oswald, sans-serif", fontSize: 20 }}>Loading…</div>
       </div>
     );
   }
@@ -191,10 +191,10 @@ function RequestInner() {
         <div style={{ width: "100%", maxWidth: 420, textAlign: "center" }}>
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 28 }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: "#00cc66", textTransform: "uppercase", marginBottom: 8 }}>
+            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#00cc66", textTransform: "uppercase", marginBottom: 8 }}>
               Request received
             </h2>
-            <p style={{ color: "#aaa", fontSize: 14, lineHeight: 1.5 }}>
+            <p style={{ color: "#aaa", fontSize: 16, lineHeight: 1.5 }}>
               {orgName} will review your request and get back to you with a quote.
             </p>
             <a
@@ -203,7 +203,7 @@ function RequestInner() {
                 display: "inline-block", marginTop: 16,
                 padding: "10px 18px", borderRadius: 8,
                 background: PRIMARY, color: "#fff",
-                fontFamily: "Oswald, sans-serif", fontSize: 13,
+                fontFamily: "Oswald, sans-serif", fontSize: 15,
                 textTransform: "uppercase", letterSpacing: ".05em",
                 textDecoration: "none",
               }}
@@ -211,7 +211,7 @@ function RequestInner() {
               ← Back to portal
             </a>
           </div>
-          <div style={{ color: "#555", fontSize: 10, marginTop: 16 }}>Powered by Creed App</div>
+          <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
         </div>
       </div>
     );
@@ -223,17 +223,17 @@ function RequestInner() {
         <div style={{ marginBottom: 14 }}>
           <a
             href="/portal"
-            style={{ color: "#888", fontSize: 12, textDecoration: "none" }}
+            style={{ color: "#888", fontSize: 14, textDecoration: "none" }}
           >
             ← Back to portal
           </a>
         </div>
 
         <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 22 }}>
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: "0 0 4px", textAlign: "center" }}>
+          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: "0 0 4px", textAlign: "center" }}>
             Request Work
           </h1>
-          <p style={{ color: "#888", fontSize: 12, textAlign: "center", margin: "0 0 18px" }}>
+          <p style={{ color: "#888", fontSize: 14, textAlign: "center", margin: "0 0 18px" }}>
             We&apos;ll review your request and follow up with a quote.
           </p>
 
@@ -244,7 +244,7 @@ function RequestInner() {
               <select
                 value={addressId}
                 onChange={(e) => setAddressId(e.target.value)}
-                style={{ ...inputStyle, fontSize: 14 }}
+                style={{ ...inputStyle, fontSize: 16 }}
               >
                 {sortedAddresses.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -255,7 +255,7 @@ function RequestInner() {
               </select>
             </div>
           ) : (
-            <div style={{ marginBottom: 12, padding: "8px 10px", borderRadius: 6, background: "#1a1a28", fontSize: 12, color: "#bbb" }}>
+            <div style={{ marginBottom: 12, padding: "8px 10px", borderRadius: 6, background: "#1a1a28", fontSize: 14, color: "#bbb" }}>
               No address on file — your contractor will follow up to confirm where the work is.
             </div>
           )}
@@ -282,7 +282,7 @@ function RequestInner() {
                 border: "1px dashed #444",
                 background: "#0a0a0f",
                 color: "#888",
-                fontSize: 12,
+                fontSize: 14,
                 textAlign: "center",
                 cursor: uploading || photos.length >= 8 ? "not-allowed" : "pointer",
                 opacity: photos.length >= 8 ? 0.5 : 1,
@@ -322,7 +322,7 @@ function RequestInner() {
                       style={{
                         position: "absolute", top: 2, right: 2,
                         background: "rgba(0,0,0,0.7)", color: "#fff", border: "none",
-                        borderRadius: "50%", width: 18, height: 18, fontSize: 12,
+                        borderRadius: "50%", width: 18, height: 18, fontSize: 14,
                         cursor: "pointer", lineHeight: 1,
                       }}
                     >
@@ -335,7 +335,7 @@ function RequestInner() {
           </div>
 
           {error && (
-            <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 12, color: "#ff8888" }}>
+            <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 14, color: "#ff8888" }}>
               {error}
             </div>
           )}
@@ -344,7 +344,7 @@ function RequestInner() {
             onClick={submit}
             disabled={submitting || uploading}
             style={{
-              width: "100%", padding: 13, borderRadius: 8, fontSize: 15,
+              width: "100%", padding: 13, borderRadius: 8, fontSize: 17,
               fontFamily: "Oswald, sans-serif", textTransform: "uppercase",
               letterSpacing: ".05em", background: PRIMARY, color: "#fff",
               border: "none", cursor: submitting ? "wait" : "pointer",
@@ -353,7 +353,7 @@ function RequestInner() {
           >
             {submitting ? "Sending…" : "📋 Send my request"}
           </button>
-          <p style={{ color: "#555", fontSize: 11, textAlign: "center", margin: "10px 0 0" }}>
+          <p style={{ color: "#555", fontSize: 13, textAlign: "center", margin: "10px 0 0" }}>
             Typical response within one business day.
           </p>
         </div>

@@ -103,7 +103,7 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
             style={{ position: "relative", color: active ? color : undefined }}
           >
             <Icon name={iconName} size={20} strokeWidth={active ? 2 : 1.75} />
-            <span style={{ fontSize: 9, marginTop: 2, fontWeight: active ? 600 : undefined }}>{label}</span>
+            <span style={{ fontSize: 11, marginTop: 2, fontWeight: active ? 600 : undefined }}>{label}</span>
             {showLeadDot && (
               <span
                 aria-label={`${leadCount} new ${leadCount === 1 ? "lead" : "leads"}`}
@@ -117,7 +117,7 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
                   borderRadius: 7,
                   background: "#ff3d6e",
                   color: "#fff",
-                  fontSize: 9,
+                  fontSize: 11,
                   fontFamily: "Oswald",
                   display: "flex",
                   alignItems: "center",

@@ -132,7 +132,7 @@ export default function OnboardingPage() {
       <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", color: "#888" }}>
         <div style={{ textAlign: "center" }}>
           <div className="spinner" style={{ width: 36, height: 36, border: "3px solid #1e1e2e", borderTopColor: PRIMARY, borderRadius: "50%", margin: "0 auto 12px", animation: "spin 800ms linear infinite" }} />
-          <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 13, letterSpacing: ".08em", textTransform: "uppercase" }}>Loading…</div>
+          <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 15, letterSpacing: ".08em", textTransform: "uppercase" }}>Loading…</div>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       </div>
@@ -234,7 +234,7 @@ export default function OnboardingPage() {
                   background: i <= currentIdx ? PRIMARY : "#1e1e2e",
                   color: i <= currentIdx ? "#fff" : "#666",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "Oswald, sans-serif", fontSize: 13,
+                  fontFamily: "Oswald, sans-serif", fontSize: 15,
                   border: i === currentIdx ? `2px solid ${PRIMARY}` : "1px solid #1e1e2e",
                 }}
               >
@@ -246,7 +246,7 @@ export default function OnboardingPage() {
             </div>
           ))}
         </div>
-        <div style={{ textAlign: "center", fontFamily: "Oswald, sans-serif", fontSize: 11, color: "#888", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 18 }}>
+        <div style={{ textAlign: "center", fontFamily: "Oswald, sans-serif", fontSize: 13, color: "#888", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 18 }}>
           Step {currentIdx + 1} of {STEPS.length} · {STEPS[currentIdx].label}
         </div>
 
@@ -266,7 +266,7 @@ export default function OnboardingPage() {
           {step === "checkout" && <CheckoutStep org={org} plan={plan} />}
 
           {err && (
-            <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginTop: 12, fontSize: 12, color: "#ff8888" }}>
+            <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginTop: 12, fontSize: 14, color: "#ff8888" }}>
               {err}
             </div>
           )}
@@ -295,7 +295,7 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <div style={{ textAlign: "center", marginTop: 14, color: "#555", fontSize: 11 }}>
+        <div style={{ textAlign: "center", marginTop: 14, color: "#555", fontSize: 13 }}>
           You can edit any of this later in Operations → Settings.
         </div>
       </div>
@@ -343,7 +343,7 @@ function BusinessStep({
         placeholder="Plumbing, Electrical, Painting, Drywall"
         style={inp}
       />
-      <div style={{ fontSize: 11, color: "#666", marginTop: 6 }}>
+      <div style={{ fontSize: 13, color: "#666", marginTop: 6 }}>
         Comma-separated. We&apos;ll surface these on your customer card.
       </div>
     </>
@@ -402,7 +402,7 @@ function LogoStep({ org, onUploaded }: { org: Organization; onUploaded: () => Pr
         ) : (
           <div style={{ fontSize: 38, marginBottom: 6 }}>📤</div>
         )}
-        <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 13, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 15, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".06em" }}>
           {uploading ? "Uploading…" : preview ? "Replace logo" : "Click or drag to upload"}
         </div>
         <input
@@ -413,7 +413,7 @@ function LogoStep({ org, onUploaded }: { org: Organization; onUploaded: () => Pr
           style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", clipPath: "inset(50%)" }}
         />
       </label>
-      <div style={{ fontSize: 11, color: "#666", textAlign: "center" }}>
+      <div style={{ fontSize: 13, color: "#666", textAlign: "center" }}>
         Skip this step if you don&apos;t have a logo handy — you can add one later in Operations → Settings.
       </div>
     </>
@@ -437,21 +437,21 @@ function SlugStep({ slug, setSlug }: { slug: string; setSlug: (v: string) => voi
         autoCorrect="off"
         spellCheck={false}
       />
-      <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>
+      <div style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>
         Lowercase letters, numbers, and hyphens. 3 characters minimum.
       </div>
 
       <div style={{ background: "#0d0d15", border: "1px solid #1e1e2e", borderRadius: 8, padding: 12 }}>
-        <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>
+        <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 13, color: "#888", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>
           Live preview
         </div>
-        <div style={{ fontSize: 13, color: "#ddd", marginBottom: 4 }}>
+        <div style={{ fontSize: 15, color: "#ddd", marginBottom: 4 }}>
           Customer portal: <span style={{ color: PRIMARY }}>{previewBase}/portal</span>
         </div>
-        <div style={{ fontSize: 13, color: "#ddd", marginBottom: 4 }}>
+        <div style={{ fontSize: 15, color: "#ddd", marginBottom: 4 }}>
           Business card: <span style={{ color: PRIMARY }}>{previewBase}/card/{cleaned || "your-slug"}</span>
         </div>
-        <div style={{ fontSize: 13, color: "#ddd" }}>
+        <div style={{ fontSize: 15, color: "#ddd" }}>
           Lead intake: <span style={{ color: PRIMARY }}>{previewBase}/lead/{cleaned || "your-slug"}</span>
         </div>
       </div>
@@ -483,27 +483,27 @@ function PlanStep({ plan, setPlan }: { plan: Plan; setPlan: (p: Plan) => void })
               }}
             >
               {p.featured && (
-                <span style={{ position: "absolute", top: -10, right: 12, background: PRIMARY, color: "#fff", fontSize: 10, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", padding: "2px 8px", borderRadius: 10 }}>
+                <span style={{ position: "absolute", top: -10, right: 12, background: PRIMARY, color: "#fff", fontSize: 12, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", padding: "2px 8px", borderRadius: 10 }}>
                   ★ Most Popular
                 </span>
               )}
               <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 16, color: active ? PRIMARY : "#fff", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: active ? PRIMARY : "#fff", textTransform: "uppercase", letterSpacing: ".05em" }}>
                   {p.name}
                 </div>
-                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{p.tagline}</div>
-                <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>{p.cap}</div>
+                <div style={{ fontSize: 14, color: "#888", marginTop: 2 }}>{p.tagline}</div>
+                <div style={{ fontSize: 14, color: "#aaa", marginTop: 4 }}>{p.cap}</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#fff" }}>${p.price}</div>
-                <div style={{ fontSize: 11, color: "#888" }}>/month</div>
+                <div style={{ fontSize: 13, color: "#888" }}>/month</div>
               </div>
             </button>
           );
         })}
       </div>
 
-      <div style={{ fontSize: 11, color: "#666", marginTop: 12, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 13, color: "#666", marginTop: 12, lineHeight: 1.5 }}>
         Managing properties? You can enable the <strong style={{ color: "#aaa" }}>Property Manager</strong> add-on
         ($2/door above 10 doors) from your billing dashboard after signup.
       </div>
@@ -524,7 +524,7 @@ function CheckoutStep({ org, plan }: { org: Organization; plan: Plan }) {
         {org.site_slug && <Row label="URL">creedhm.com/card/{org.site_slug}</Row>}
       </div>
 
-      <div style={{ background: "#13182a", border: `1px solid ${PRIMARY}55`, borderRadius: 8, padding: 12, fontSize: 12, color: "#aabbd4", lineHeight: 1.5 }}>
+      <div style={{ background: "#13182a", border: `1px solid ${PRIMARY}55`, borderRadius: 8, padding: 12, fontSize: 14, color: "#aabbd4", lineHeight: 1.5 }}>
         Next, we&apos;ll route you to Stripe to confirm your payment method.
         You won&apos;t be charged today — your card is held for after the
         30-day trial. Cancel anytime from your billing dashboard.
@@ -536,18 +536,18 @@ function CheckoutStep({ org, plan }: { org: Organization; plan: Plan }) {
 function StepHeader({ title, sub }: { title: string; sub: string }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: "#fff", textTransform: "uppercase", letterSpacing: ".04em", margin: "0 0 4px" }}>
+      <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "#fff", textTransform: "uppercase", letterSpacing: ".04em", margin: "0 0 4px" }}>
         {title}
       </h2>
-      <p style={{ color: "#888", fontSize: 12, margin: 0, lineHeight: 1.5 }}>{sub}</p>
+      <p style={{ color: "#888", fontSize: 14, margin: 0, lineHeight: 1.5 }}>{sub}</p>
     </div>
   );
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #1e1e2e", fontSize: 13 }}>
-      <span style={{ color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", fontSize: 11, letterSpacing: ".06em" }}>{label}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #1e1e2e", fontSize: 15 }}>
+      <span style={{ color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", fontSize: 13, letterSpacing: ".06em" }}>{label}</span>
       <span style={{ color: "#ddd" }}>{children}</span>
     </div>
   );
@@ -560,13 +560,13 @@ const inp: React.CSSProperties = {
   border: "1px solid #1e1e2e",
   background: "#0d0d15",
   color: "#e2e2e8",
-  fontSize: 14,
+  fontSize: 16,
   fontFamily: "inherit",
   boxSizing: "border-box",
 };
 
 const lbl: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 13,
   color: "#888",
   fontFamily: "Oswald, sans-serif",
   textTransform: "uppercase",
@@ -577,7 +577,7 @@ const lbl: React.CSSProperties = {
 
 const btnPrimary: React.CSSProperties = {
   padding: 12, borderRadius: 8,
-  fontFamily: "Oswald, sans-serif", fontSize: 14,
+  fontFamily: "Oswald, sans-serif", fontSize: 16,
   textTransform: "uppercase", letterSpacing: ".05em",
   background: PRIMARY, color: "#fff",
   border: "none",
@@ -585,7 +585,7 @@ const btnPrimary: React.CSSProperties = {
 
 const btnGhost: React.CSSProperties = {
   padding: "12px 16px", borderRadius: 8,
-  fontFamily: "Oswald, sans-serif", fontSize: 13,
+  fontFamily: "Oswald, sans-serif", fontSize: 15,
   textTransform: "uppercase", letterSpacing: ".05em",
   background: "transparent", color: "#888",
   border: "1px solid #1e1e2e",

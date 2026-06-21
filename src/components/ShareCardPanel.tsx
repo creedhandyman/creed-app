@@ -59,9 +59,9 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
   if (!slug) {
     return (
       <div className="cd mb">
-        {!noTitle && <h4 style={{ fontSize: 13, marginBottom: 6 }}>📇 Share my card</h4>}
-        <p className="dim" style={{ fontSize: 12, margin: 0 }}>
-          Set a custom URL slug under Operations → Settings first, then this card unlocks at <code style={{ fontSize: 11 }}>creedhm.com/card/&lt;slug&gt;</code>.
+        {!noTitle && <h4 style={{ fontSize: 15, marginBottom: 6 }}>📇 Share my card</h4>}
+        <p className="dim" style={{ fontSize: 14, margin: 0 }}>
+          Set a custom URL slug under Operations → Settings first, then this card unlocks at <code style={{ fontSize: 13 }}>creedhm.com/card/&lt;slug&gt;</code>.
         </p>
       </div>
     );
@@ -150,11 +150,11 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
   return (
     <div className="cd mb">
       {!noTitle && (
-        <h4 style={{ fontSize: 13, marginBottom: 6 }}>📇 Share my card</h4>
+        <h4 style={{ fontSize: 15, marginBottom: 6 }}>📇 Share my card</h4>
       )}
-      <p className="dim" style={{ fontSize: 12, margin: "0 0 10px" }}>
+      <p className="dim" style={{ fontSize: 14, margin: "0 0 10px" }}>
         Public digital business card with tap-to-call, vCard download, and a
-        QR for in-person handoffs. Lives at <code style={{ fontSize: 11 }}>{`/card/${slug}`}</code>.
+        QR for in-person handoffs. Lives at <code style={{ fontSize: 13 }}>{`/card/${slug}`}</code>.
       </p>
 
       {/* Action row */}
@@ -162,7 +162,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
         <button
           className="bb"
           onClick={shareUniversal}
-          style={{ fontSize: 12, padding: "5px 10px" }}
+          style={{ fontSize: 14, padding: "5px 10px" }}
           title="Open native share sheet (mobile) or copy"
         >
           📤 Share
@@ -171,7 +171,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
           className="bo"
           onClick={() => sms(customer ? customSms : undefined)}
           disabled={smsBusy}
-          style={{ fontSize: 12, padding: "5px 10px" }}
+          style={{ fontSize: 14, padding: "5px 10px" }}
           title={customer?.phone ? `Text ${customer.phone}` : "Open SMS composer"}
         >
           📱 SMS{customer?.phone ? ` (${customer.phone})` : ""}
@@ -180,7 +180,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
           <button
             className="bo"
             onClick={email}
-            style={{ fontSize: 12, padding: "5px 10px" }}
+            style={{ fontSize: 14, padding: "5px 10px" }}
           >
             ✉ Email
           </button>
@@ -188,7 +188,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
         <button
           className="bo"
           onClick={copy}
-          style={{ fontSize: 12, padding: "5px 10px" }}
+          style={{ fontSize: 14, padding: "5px 10px" }}
         >
           📋 Copy
         </button>
@@ -196,7 +196,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
           href={`/card/${slug}`}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ fontSize: 12, padding: "5px 10px", textDecoration: "none", color: PRIMARY, border: "1px solid var(--color-border-dark)", borderRadius: 6, display: "inline-flex", alignItems: "center", gap: 4 }}
+          style={{ fontSize: 14, padding: "5px 10px", textDecoration: "none", color: PRIMARY, border: "1px solid var(--color-border-dark)", borderRadius: 6, display: "inline-flex", alignItems: "center", gap: 4 }}
         >
           ↗ Preview
         </a>
@@ -208,7 +208,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
           padding: "6px 10px", borderRadius: 6,
           background: darkMode ? "#0f0f18" : "#f7f7fa",
           border: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
-          fontSize: 11, wordBreak: "break-all",
+          fontSize: 13, wordBreak: "break-all",
           fontFamily: "monospace", marginBottom: 12,
         }}
       >
@@ -229,7 +229,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
           <QRCodeSVG value={cardUrl} size={180} level="M" includeMargin={false} />
         </div>
       </div>
-      <p className="dim" style={{ fontSize: 11, textAlign: "center", margin: "8px 0 0" }}>
+      <p className="dim" style={{ fontSize: 13, textAlign: "center", margin: "8px 0 0" }}>
         Show this QR on your phone — anyone can scan it to get the card.
       </p>
 
@@ -308,7 +308,7 @@ function CardCustomizer() {
           padding: "4px 0",
           color: "var(--color-primary)",
           fontFamily: "Oswald, sans-serif",
-          fontSize: 12,
+          fontSize: 14,
           letterSpacing: ".06em",
           textTransform: "uppercase",
           cursor: "pointer",
@@ -323,7 +323,7 @@ function CardCustomizer() {
 
       {open && (
         <div style={{ marginTop: 8 }}>
-          <label className="sl" style={{ fontSize: 11 }}>
+          <label className="sl" style={{ fontSize: 13 }}>
             Tagline (one sentence — appears under your business name)
           </label>
           <input
@@ -331,19 +331,19 @@ function CardCustomizer() {
             onChange={(e) => setHeadline(e.target.value)}
             placeholder='e.g. "Property maintenance done right, on time"'
             maxLength={120}
-            style={{ marginTop: 4, marginBottom: 10, fontSize: 13 }}
+            style={{ marginTop: 4, marginBottom: 10, fontSize: 15 }}
           />
 
-          <label className="sl" style={{ fontSize: 11 }}>
+          <label className="sl" style={{ fontSize: 13 }}>
             Services (one per line — shown as bullets)
           </label>
           <textarea
             value={services}
             onChange={(e) => setServices(e.target.value)}
             placeholder={"Repairs & maintenance\nRemodels & renovations\nInspections & estimates"}
-            style={{ marginTop: 4, height: 100, fontSize: 13, fontFamily: "inherit" }}
+            style={{ marginTop: 4, height: 100, fontSize: 15, fontFamily: "inherit" }}
           />
-          <p className="dim" style={{ fontSize: 11, marginTop: 4, marginBottom: 8 }}>
+          <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 8 }}>
             Leave services blank to fall back to your licensed-trades list.
           </p>
 
@@ -352,7 +352,7 @@ function CardCustomizer() {
               className="bb"
               disabled={!dirty || saving}
               onClick={save}
-              style={{ fontSize: 12, padding: "6px 14px", opacity: !dirty || saving ? 0.5 : 1 }}
+              style={{ fontSize: 14, padding: "6px 14px", opacity: !dirty || saving ? 0.5 : 1 }}
             >
               {saving ? "Saving…" : "Save"}
             </button>
@@ -363,7 +363,7 @@ function CardCustomizer() {
                   setHeadline(initial.headline || "");
                   setServices(initialServices);
                 }}
-                style={{ fontSize: 12, padding: "6px 12px" }}
+                style={{ fontSize: 14, padding: "6px 12px" }}
               >
                 Reset
               </button>

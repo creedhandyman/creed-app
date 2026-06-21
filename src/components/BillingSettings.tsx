@@ -24,7 +24,7 @@ export default function BillingSettings() {
     <div>
       {/* ── Stripe Connect ── */}
       <div className="cd">
-        <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="money" size={16} color="var(--color-primary)" />
           {t("billing.processing")}
         </h4>
@@ -33,19 +33,19 @@ export default function BillingSettings() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <Icon name="checkCircle" size={20} color="var(--color-success)" />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{t("billing.connected")}</div>
-                <div className="dim" style={{ fontSize: 11 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{t("billing.connected")}</div>
+                <div className="dim" style={{ fontSize: 13 }}>
                   Account: {org.stripe_account_id?.slice(0, 12)}...
                 </div>
               </div>
             </div>
-            <p className="dim" style={{ fontSize: 11 }}>
+            <p className="dim" style={{ fontSize: 13 }}>
               {t("billing.connectedHelp")}
             </p>
           </div>
         ) : (
           <div>
-            <p style={{ fontSize: 12, marginBottom: 12, color: darkMode ? "#ccc" : "#333" }}>
+            <p style={{ fontSize: 14, marginBottom: 12, color: darkMode ? "#ccc" : "#333" }}>
               {t("billing.connectIntro")}
             </p>
             {isOwner ? (
@@ -96,13 +96,13 @@ export default function BillingSettings() {
                       );
                   }
                 }}
-                style={{ fontSize: 13, padding: "10px 20px", display: "inline-flex", alignItems: "center", gap: 6 }}
+                style={{ fontSize: 15, padding: "10px 20px", display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 <Icon name="link" size={14} />
                 {t("billing.connect")}
               </button>
             ) : (
-              <p className="dim" style={{ fontSize: 11 }}>
+              <p className="dim" style={{ fontSize: 13 }}>
                 Ask your business owner to connect Stripe.
               </p>
             )}
@@ -115,7 +115,7 @@ export default function BillingSettings() {
         <div className="cd" style={{ marginTop: 14 }}>
           <h4
             style={{
-              fontSize: 14,
+              fontSize: 16,
               marginBottom: 10,
               display: "inline-flex",
               alignItems: "center",
@@ -163,7 +163,7 @@ export default function BillingSettings() {
                 >
                   <span
                     style={{
-                      fontSize: 13,
+                      fontSize: 15,
                       padding: "2px 10px",
                       borderRadius: 10,
                       fontFamily: "Oswald",
@@ -191,13 +191,13 @@ export default function BillingSettings() {
                       ? "Canceled"
                       : status}
                   </span>
-                  <span className="dim" style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                  <span className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em" }}>
                     {planLabel}
                   </span>
                 </div>
 
                 {(status === "trial" || status === "trialing") && (
-                  <div className="dim" style={{ fontSize: 13, marginBottom: 10, lineHeight: 1.45 }}>
+                  <div className="dim" style={{ fontSize: 15, marginBottom: 10, lineHeight: 1.45 }}>
                     Your free trial {daysLeft > 0 ? `ends ${trialEnd.toLocaleDateString()}` : "has ended"}. Subscribe to keep all features.
                   </div>
                 )}
@@ -214,7 +214,7 @@ export default function BillingSettings() {
                     <button
                       className="bb"
                       onClick={() => { window.location.href = "/onboarding?step=plan"; }}
-                      style={{ fontSize: 13, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
+                      style={{ fontSize: 15, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
                     >
                       <Icon name="money" size={14} />
                       Subscribe Now
@@ -239,7 +239,7 @@ export default function BillingSettings() {
                             .getState()
                             .showToast(data.error || "Failed to open billing portal", "error");
                       }}
-                      style={{ fontSize: 13, padding: "6px 14px" }}
+                      style={{ fontSize: 15, padding: "6px 14px" }}
                     >
                       Manage Subscription
                     </button>
@@ -256,7 +256,7 @@ export default function BillingSettings() {
                         const orgs = await db.get<Organization>("organizations", { id: org.id });
                         if (orgs.length) setOrg(orgs[0]);
                       }}
-                      style={{ width: "auto", fontSize: 12, padding: "3px 6px" }}
+                      style={{ width: "auto", fontSize: 14, padding: "3px 6px" }}
                     >
                       <option value="solo">Solo — $19/mo (1 user)</option>
                       <option value="crew">Crew — $49/mo (up to 8)</option>
@@ -309,7 +309,7 @@ function InspectionUsageRow({ orgId, plan }: { orgId: string; plan: string }) {
     : "var(--color-success)";
   return (
     <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed #1e1e2e" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
         <span className="dim" style={{ fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}>
           Inspections this month
         </span>
@@ -321,7 +321,7 @@ function InspectionUsageRow({ orgId, plan }: { orgId: string; plan: string }) {
         <div style={{ width: `${pct}%`, height: "100%", background: color, transition: "width .25s" }} />
       </div>
       {usage.blocked && (
-        <div style={{ fontSize: 11, color: "var(--color-accent-red)", marginTop: 6 }}>
+        <div style={{ fontSize: 13, color: "var(--color-accent-red)", marginTop: 6 }}>
           Included quota used. Additional inspections this month bill at $0.50 each — upgrade for a larger included pool.
         </div>
       )}
@@ -345,7 +345,7 @@ function PromoCodeForm({ orgId }: { orgId: string }) {
         style={{
           background: "none",
           color: "var(--color-primary)",
-          fontSize: 11,
+          fontSize: 13,
           padding: 0,
           marginTop: 10,
           textDecoration: "underline",
@@ -363,7 +363,7 @@ function PromoCodeForm({ orgId }: { orgId: string }) {
         value={code}
         onChange={(e) => setCode(e.target.value)}
         placeholder="Promo code"
-        style={{ flex: 1, fontSize: 12, padding: "4px 8px", textTransform: "uppercase" }}
+        style={{ flex: 1, fontSize: 14, padding: "4px 8px", textTransform: "uppercase" }}
         autoFocus
       />
       <button
@@ -383,7 +383,7 @@ function PromoCodeForm({ orgId }: { orgId: string }) {
           }
           setBusy(false);
         }}
-        style={{ fontSize: 12, padding: "4px 10px" }}
+        style={{ fontSize: 14, padding: "4px 10px" }}
       >
         {busy ? "..." : "Apply"}
       </button>
@@ -392,7 +392,7 @@ function PromoCodeForm({ orgId }: { orgId: string }) {
         style={{
           background: "none",
           color: "#888",
-          fontSize: 12,
+          fontSize: 14,
           padding: "4px 6px",
           cursor: "pointer",
         }}

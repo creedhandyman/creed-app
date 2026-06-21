@@ -289,7 +289,7 @@ export function CameraModal({
         >
           <Icon name="close" size={20} color="#fff" />
         </button>
-        <div style={{ fontFamily: "Oswald", fontSize: 15, letterSpacing: ".04em" }}>{title}</div>
+        <div style={{ fontFamily: "Oswald", fontSize: 17, letterSpacing: ".04em" }}>{title}</div>
         {torchAvailable ? (
           <button
             onClick={toggleTorch}
@@ -336,7 +336,7 @@ export function CameraModal({
         {error && (
           <div style={{ textAlign: "center", color: "#ddd", padding: 28, maxWidth: 320 }}>
             <Icon name="camera" size={34} color="#666" />
-            <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}>{error}</div>
+            <div style={{ marginTop: 12, fontSize: 16, lineHeight: 1.5 }}>{error}</div>
             {allowLibrary && (
               <button
                 className="bb"
@@ -351,7 +351,7 @@ export function CameraModal({
           </div>
         )}
         {!error && !ready && (
-          <div style={{ position: "absolute", color: "#bbb", fontSize: 13 }}>Starting camera…</div>
+          <div style={{ position: "absolute", color: "#bbb", fontSize: 15 }}>Starting camera…</div>
         )}
       </div>
 
@@ -401,7 +401,7 @@ export function CameraModal({
               <button
                 onClick={onClose}
                 className="bg"
-                style={{ fontSize: 12, padding: "6px 12px", whiteSpace: "nowrap" }}
+                style={{ fontSize: 14, padding: "6px 12px", whiteSpace: "nowrap" }}
               >
                 Done ({shotCount})
               </button>

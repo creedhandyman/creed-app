@@ -146,7 +146,7 @@ export default function BrandingSettings() {
             gap: 6,
             padding: "7px 16px",
             fontFamily: "Oswald, sans-serif",
-            fontSize: 12,
+            fontSize: 14,
             textTransform: "uppercase",
             letterSpacing: ".06em",
             border: "1px solid var(--color-border-dark)",
@@ -196,7 +196,7 @@ export default function BrandingSettings() {
             style={{
               background: "none",
               color: "var(--color-accent-red)",
-              fontSize: 11,
+              fontSize: 13,
               padding: "6px 12px",
               marginLeft: 6,
               fontFamily: "Oswald, sans-serif",
@@ -207,7 +207,7 @@ export default function BrandingSettings() {
             Remove
           </button>
         )}
-        <div className="dim" style={{ fontSize: 10, marginTop: 8 }}>
+        <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
           PNG, JPG, WEBP, or SVG · square or wide images work best
         </div>
       </div>
@@ -216,7 +216,7 @@ export default function BrandingSettings() {
       <div className="cd mb">
         <h4
           style={{
-            fontSize: 14,
+            fontSize: 16,
             marginBottom: 8,
             display: "inline-flex",
             alignItems: "center",
@@ -235,7 +235,7 @@ export default function BrandingSettings() {
         ].map((f, i) => (
           <div key={f.field}>
             <div style={{ marginBottom: 6 }}>
-              <label className="sl" style={{ fontSize: 12 }}>
+              <label className="sl" style={{ fontSize: 14 }}>
                 {f.label}
               </label>
               <input
@@ -249,14 +249,14 @@ export default function BrandingSettings() {
                     useStore.getState().showToast(`${f.label} updated`, "success");
                   }
                 }}
-                style={{ fontSize: 13 }}
+                style={{ fontSize: 15 }}
               />
             </div>
             {/* Slug sits right under Business Name — it's the public-facing
                 URL handle so it pairs with the business identity. */}
             {i === 0 && (
               <div style={{ marginBottom: 6 }}>
-                <label className="sl" style={{ fontSize: 12 }}>
+                <label className="sl" style={{ fontSize: 14 }}>
                   Public URL slug
                 </label>
                 <input
@@ -268,9 +268,9 @@ export default function BrandingSettings() {
                   }}
                   disabled={savingSlug}
                   placeholder="your-business"
-                  style={{ fontSize: 13 }}
+                  style={{ fontSize: 15 }}
                 />
-                <div className="dim" style={{ fontSize: 10, marginTop: 4 }}>
+                <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
                   Your card: www.creedhm.com/card/
                   <span style={{ color: "var(--color-primary)" }}>
                     {normalizeSlug(slugDraft) || "your-slug"}

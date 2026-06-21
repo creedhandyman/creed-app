@@ -134,8 +134,8 @@ export default function Customers({ setPage, onSelect }: Props) {
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <div className="row">
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 8px" }}>←</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>
+          <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Icon name="clients" size={18} color="var(--color-primary)" />
             Customers
           </h2>
@@ -143,7 +143,7 @@ export default function Customers({ setPage, onSelect }: Props) {
         <button
           className="bb"
           onClick={() => setShowAdd((v) => !v)}
-          style={{ fontSize: 13, padding: "6px 14px" }}
+          style={{ fontSize: 15, padding: "6px 14px" }}
         >
           {showAdd ? "Cancel" : "+ Add"}
         </button>
@@ -152,10 +152,10 @@ export default function Customers({ setPage, onSelect }: Props) {
       {/* Add form */}
       {showAdd && (
         <div className="cd mb" style={{ borderLeft: "3px solid var(--color-primary)" }}>
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>New Customer</h4>
+          <h4 style={{ fontSize: 15, marginBottom: 8 }}>New Customer</h4>
           <div className="g2" style={{ marginBottom: 6 }}>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name *" />
-            <select value={type} onChange={(e) => setType(e.target.value as CustomerType)} style={{ fontSize: 13 }}>
+            <select value={type} onChange={(e) => setType(e.target.value as CustomerType)} style={{ fontSize: 15 }}>
               <option value="individual">Individual</option>
               <option value="business">Business</option>
               <option value="property_manager">Property Manager</option>
@@ -177,7 +177,7 @@ export default function Customers({ setPage, onSelect }: Props) {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Notes (gate codes, preferences, history...)"
-            style={{ width: "100%", minHeight: 50, fontSize: 13, marginBottom: 8 }}
+            style={{ width: "100%", minHeight: 50, fontSize: 15, marginBottom: 8 }}
           />
           <button className="bb" onClick={addCustomer} style={{ width: "100%", padding: 10 }}>
             Save Customer
@@ -206,7 +206,7 @@ export default function Customers({ setPage, onSelect }: Props) {
                 {c.primary_contact && <span className="dim"> · {c.primary_contact}</span>}
                 {c.phone && <span className="dim"> · {c.phone}</span>}
               </span>
-              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 11, flexShrink: 0 }}>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 13, flexShrink: 0 }}>
                 {c.type}
               </span>
             </div>
@@ -230,7 +230,7 @@ export default function Customers({ setPage, onSelect }: Props) {
               key={f.id}
               onClick={() => setTypeFilter(f.id)}
               style={{
-                padding: "5px 10px", borderRadius: 14, fontSize: 11, whiteSpace: "nowrap",
+                padding: "5px 10px", borderRadius: 14, fontSize: 13, whiteSpace: "nowrap",
                 background: active ? c : "transparent",
                 color: active ? "#fff" : c,
                 border: `1px solid ${c}`,
@@ -256,7 +256,7 @@ export default function Customers({ setPage, onSelect }: Props) {
           </div>
           <div className="cd" style={{ textAlign: "center", padding: 10 }}>
             <div className="sl">Revenue</div>
-            <div className="sv" style={{ color: "var(--color-highlight)", fontSize: 18 }}>
+            <div className="sv" style={{ color: "var(--color-highlight)", fontSize: 20 }}>
               ${totalRevenue >= 1000 ? `${(totalRevenue / 1000).toFixed(1)}k` : totalRevenue.toFixed(0)}
             </div>
           </div>
@@ -267,7 +267,7 @@ export default function Customers({ setPage, onSelect }: Props) {
       {filtered.length === 0 && (
         <div className="cd" style={{ textAlign: "center", padding: 24 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>👥</div>
-          <p className="dim" style={{ fontSize: 13 }}>
+          <p className="dim" style={{ fontSize: 15 }}>
             {total === 0
               ? "No customers yet — tap + Add to create one."
               : "No matches — adjust the search or filter."}
@@ -289,9 +289,9 @@ export default function Customers({ setPage, onSelect }: Props) {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <b style={{ fontSize: 14 }}>{c.name}</b>
+                <b style={{ fontSize: 16 }}>{c.name}</b>
                 <span style={{
-                  fontSize: 10, fontFamily: "Oswald", letterSpacing: ".04em",
+                  fontSize: 12, fontFamily: "Oswald", letterSpacing: ".04em",
                   padding: "1px 6px", borderRadius: 8,
                   background: `${typeColor}22`, color: typeColor,
                 }}>
@@ -301,7 +301,7 @@ export default function Customers({ setPage, onSelect }: Props) {
                   <span
                     title="Jobs matched by name only — confirm via the backfill tool"
                     style={{
-                      fontSize: 10, fontFamily: "Oswald", letterSpacing: ".04em",
+                      fontSize: 12, fontFamily: "Oswald", letterSpacing: ".04em",
                       padding: "1px 6px", borderRadius: 8,
                       background: "var(--color-warning)22", color: "var(--color-warning)",
                     }}
@@ -310,16 +310,16 @@ export default function Customers({ setPage, onSelect }: Props) {
                   </span>
                 )}
               </div>
-              <span className="dim" style={{ fontSize: 11 }}>
+              <span className="dim" style={{ fontSize: 13 }}>
                 {c.lastService || "—"}
               </span>
             </div>
             {c.primary_contact && (
-              <div className="dim" style={{ fontSize: 12, marginBottom: 2 }}>
+              <div className="dim" style={{ fontSize: 14, marginBottom: 2 }}>
                 👤 {c.primary_contact}
               </div>
             )}
-            <div className="dim" style={{ fontSize: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div className="dim" style={{ fontSize: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <span>📍 {c.addrCount} address{c.addrCount === 1 ? "" : "es"}</span>
               <span>🧰 {c.jobCount} job{c.jobCount === 1 ? "" : "s"}</span>
               {c.revenue > 0 && (

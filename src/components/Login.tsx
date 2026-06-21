@@ -73,7 +73,7 @@ export default function Login() {
           <p
             style={{
               fontFamily: "Oswald, sans-serif",
-              fontSize: 11,
+              fontSize: 13,
               letterSpacing: "0.1em",
               color: "#9aa6b5",
               margin: 0,
@@ -88,7 +88,7 @@ export default function Login() {
           <p
             style={{
               fontFamily: "Oswald, sans-serif",
-              fontSize: 9,
+              fontSize: 11,
               letterSpacing: "0.12em",
               color: "#6c7480",
               margin: "3px 0 0",
@@ -116,7 +116,7 @@ export default function Login() {
               textAlign: "center",
               marginBottom: 14,
               color: "#e2e2e8",
-              fontSize: 16,
+              fontSize: 18,
             }}
           >
             {mode === "login" ? t("login.signIn") : t("login.signUp")}
@@ -160,7 +160,7 @@ export default function Login() {
                 top: "50%",
                 transform: "translateY(-50%)",
                 cursor: "pointer",
-                fontSize: 16,
+                fontSize: 18,
                 userSelect: "none",
               }}
             >
@@ -169,22 +169,22 @@ export default function Login() {
           </div>
 
           {err && (
-            <div style={{ color: "#C00000", fontSize: 12, marginBottom: 8, textAlign: "center" }}>
+            <div style={{ color: "#C00000", fontSize: 14, marginBottom: 8, textAlign: "center" }}>
               {err}
             </div>
           )}
 
           {emailSent && (
-            <div style={{ color: "#00cc66", fontSize: 12, marginBottom: 8, textAlign: "center", padding: 12, background: "#00cc6611", borderRadius: 6 }}>
+            <div style={{ color: "#00cc66", fontSize: 14, marginBottom: 8, textAlign: "center", padding: 12, background: "#00cc6611", borderRadius: 6 }}>
               ✉ Check your email to verify your account. After verifying, come back here and sign in with your email and password.
             </div>
           )}
 
-          <button className="bb" onClick={submit} style={{ width: "100%", padding: 11, fontSize: 15 }}>
+          <button className="bb" onClick={submit} style={{ width: "100%", padding: 11, fontSize: 17 }}>
             {mode === "login" ? t("login.signIn") : t("login.signUp")}
           </button>
 
-          <div style={{ textAlign: "center", marginTop: 12, fontSize: 12, color: "#888" }}>
+          <div style={{ textAlign: "center", marginTop: 12, fontSize: 14, color: "#888" }}>
             {mode === "login" ? t("login.noAccount") + " " : t("login.haveAccount") + " "}
             <span
               onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErr(""); setEmailSent(false); }}
@@ -194,7 +194,7 @@ export default function Login() {
             </span>
           </div>
           {mode === "login" && (
-            <div style={{ textAlign: "center", marginTop: 6, fontSize: 11 }}>
+            <div style={{ textAlign: "center", marginTop: 6, fontSize: 13 }}>
               <span
                 onClick={async () => {
                   if (!email.trim()) { setErr("Enter your email first"); return; }
@@ -212,7 +212,7 @@ export default function Login() {
         </div>
 
         {/* Footer */}
-        <div style={{ textAlign: "center", marginTop: 14, color: "#888", fontSize: 10 }}>
+        <div style={{ textAlign: "center", marginTop: 14, color: "#888", fontSize: 12 }}>
           Powered by Creedhm
         </div>
       </div>

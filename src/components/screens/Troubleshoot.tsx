@@ -138,8 +138,8 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between", flexShrink: 0 }}>
         <div className="row">
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 12, padding: "4px 10px" }}>← Back</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px" }}>← Back</button>
+          <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
             <Icon name="troubleshoot" size={20} color="var(--color-primary)" />
             AI Troubleshooter
           </h2>
@@ -148,7 +148,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
           <button
             className="bo"
             onClick={() => setMessages([])}
-            style={{ fontSize: 12, padding: "4px 10px" }}
+            style={{ fontSize: 14, padding: "4px 10px" }}
           >
             New Session
           </button>
@@ -166,10 +166,10 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
         {messages.length === 0 && !loading && (
           <div style={{ textAlign: "center", padding: "40px 20px" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🔧</div>
-            <h3 style={{ color: "var(--color-primary)", fontSize: 16, marginBottom: 8 }}>
+            <h3 style={{ color: "var(--color-primary)", fontSize: 18, marginBottom: 8 }}>
               What needs fixing?
             </h3>
-            <p className="dim" style={{ fontSize: 13, maxWidth: 350, margin: "0 auto", lineHeight: 1.6 }}>
+            <p className="dim" style={{ fontSize: 15, maxWidth: 350, margin: "0 auto", lineHeight: 1.6 }}>
               Describe the issue or upload a photo of the equipment. I&apos;ll walk you through diagnosing and fixing it step by step.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginTop: 16 }}>
@@ -185,7 +185,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
                   key={q}
                   onClick={() => { setInput(q); }}
                   style={{
-                    fontSize: 12, padding: "6px 12px", borderRadius: 20,
+                    fontSize: 14, padding: "6px 12px", borderRadius: 20,
                     background: darkMode ? "#1a1a28" : "#f0f0f5",
                     border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
                     color: darkMode ? "#aaa" : "#555", cursor: "pointer",
@@ -220,7 +220,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
                 ))}
               </div>
             )}
-            <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+            <div style={{ fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
               {m.content.split(/\*\*(.*?)\*\*/g).map((part, pi) =>
                 pi % 2 === 1 ? <b key={pi}>{part}</b> : <span key={pi}>{part}</span>
               )}
@@ -233,7 +233,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
             alignSelf: "flex-start", padding: "10px 14px", borderRadius: "14px 14px 14px 4px",
             background: darkMode ? "#12121a" : "#f0f2f5", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
           }}>
-            <div className="dim" style={{ fontSize: 13 }}>Thinking...</div>
+            <div className="dim" style={{ fontSize: 15 }}>Thinking...</div>
           </div>
         )}
       </div>
@@ -246,7 +246,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
               <img src={p} alt="" style={{ width: 50, height: 50, objectFit: "cover", borderRadius: 6, border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}` }} />
               <button
                 onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
-                style={{ position: "absolute", top: -4, right: -4, background: "#C00000", color: "#fff", border: "none", borderRadius: "50%", width: 16, height: 16, fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ position: "absolute", top: -4, right: -4, background: "#C00000", color: "#fff", border: "none", borderRadius: "50%", width: 16, height: 16, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
               >✕</button>
             </div>
           ))}
@@ -260,7 +260,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
           disabled={uploading || photos.length >= 6}
           style={{
             background: "none", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-            borderRadius: 8, padding: "8px 10px", fontSize: 16, cursor: "pointer",
+            borderRadius: 8, padding: "8px 10px", fontSize: 18, cursor: "pointer",
             color: darkMode ? "#888" : "#666", flexShrink: 0,
           }}
         >
@@ -279,7 +279,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !loading && send()}
           placeholder={messages.length ? "Describe what happened..." : "What needs fixing?"}
-          style={{ flex: 1, fontSize: 14, padding: "10px 14px" }}
+          style={{ flex: 1, fontSize: 16, padding: "10px 14px" }}
           disabled={loading}
         />
         <button
@@ -287,7 +287,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
           disabled={loading || (!input.trim() && !photos.length)}
           style={{
             background: "var(--color-primary)", color: "#fff", border: "none",
-            borderRadius: 8, padding: "8px 16px", fontSize: 14,
+            borderRadius: 8, padding: "8px 16px", fontSize: 16,
             fontFamily: "Oswald, sans-serif", cursor: loading ? "wait" : "pointer",
             opacity: loading || (!input.trim() && !photos.length) ? 0.5 : 1,
             flexShrink: 0,

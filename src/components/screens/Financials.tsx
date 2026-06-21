@@ -313,8 +313,8 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   const statCard = (label: string, value: string | number, color: string, sub?: string) => (
     <div className="cd" style={{ textAlign: "center", padding: 12, borderLeft: `3px solid ${color}` }}>
       <div className="sl">{label}</div>
-      <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color, marginTop: 4 }}>{value}</div>
-      {sub && <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{sub}</div>}
+      <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color, marginTop: 4 }}>{value}</div>
+      {sub && <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{sub}</div>}
     </div>
   );
 
@@ -323,7 +323,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
       {/* Header — Financials is rendered inside the Ops tabs, so the
           old "← Dashboard" back button is redundant and removed. */}
       <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
           <Icon name="trending" size={22} color="var(--color-primary)" />
           Financials
         </h2>
@@ -332,7 +332,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
           onClick={printPL}
           disabled={printing}
           style={{
-            fontSize: 12,
+            fontSize: 14,
             padding: "5px 12px",
             display: "inline-flex",
             alignItems: "center",
@@ -359,7 +359,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
             key={r.key}
             onClick={() => setRange(r.key)}
             style={{
-              padding: "5px 12px", borderRadius: 6, fontSize: 12,
+              padding: "5px 12px", borderRadius: 6, fontSize: 14,
               background: range === r.key ? "var(--color-primary)" : "transparent",
               color: range === r.key ? "#fff" : "#888", fontFamily: "Oswald",
             }}
@@ -380,7 +380,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
       {/* Funnel + Profit */}
       <div className="g2 mb">
         <div className="cd" style={{ padding: 14 }}>
-          <h4 style={{ fontSize: 13, color: "var(--color-primary)", marginBottom: 10 }}>Quote Funnel</h4>
+          <h4 style={{ fontSize: 15, color: "var(--color-primary)", marginBottom: 10 }}>Quote Funnel</h4>
           {(() => {
             // Bars are scaled to the largest stage so the visual is a true
             // funnel. Lead is hidden when zero so a contractor with no
@@ -395,7 +395,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
             const maxStage = Math.max(1, ...stages.map((s) => s.count));
             return stages.map((s) => (
               <div key={s.label} style={{ marginBottom: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 2 }}>
                   <span>{s.label}</span>
                   <span style={{ fontFamily: "Oswald", color: s.color }}>{s.count}</span>
                 </div>
@@ -405,15 +405,15 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               </div>
             ));
           })()}
-          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+          <div className="dim" style={{ fontSize: 14, marginTop: 6 }}>
             Close rate: <b>{closeRate}%</b>
-            <span style={{ marginLeft: 6, fontSize: 11 }}>(of {issuedQuotes.length} quotes sent)</span>
+            <span style={{ marginLeft: 6, fontSize: 13 }}>(of {issuedQuotes.length} quotes sent)</span>
           </div>
         </div>
 
         <div className="cd" style={{ padding: 14 }}>
-          <h4 style={{ fontSize: 13, color: "var(--color-success)", marginBottom: 10 }}>Profit Breakdown</h4>
-          <div style={{ fontSize: 13, lineHeight: 2 }}>
+          <h4 style={{ fontSize: 15, color: "var(--color-success)", marginBottom: 10 }}>Profit Breakdown</h4>
+          <div style={{ fontSize: 15, lineHeight: 2 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span>Revenue (jobs completed)</span>
               <span style={{ fontFamily: "Oswald", color: "var(--color-success)" }}>${completedRevenue.toLocaleString()}</span>
@@ -437,12 +437,12 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               <span style={{ fontFamily: "Oswald", color: "var(--color-accent-red)" }}>-${crewCostOnCompleted.toLocaleString()}</span>
             </div>
             {crewCostOnActive > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: 12, fontSize: 11 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: 12, fontSize: 13 }}>
                 <span className="dim">↳ Plus ${crewCostOnActive.toLocaleString()} on active jobs (work-in-progress, not yet booked)</span>
               </div>
             )}
             {(crewCostPaid > 0 || crewCostOwed > 0) && (
-              <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: 12, fontSize: 11 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: 12, fontSize: 13 }}>
                 <span className="dim">↳ Of ${crewCost.toLocaleString()} total: paid ${crewCostPaid.toLocaleString()} · owed ${crewCostOwed.toLocaleString()}</span>
                 <span className="dim" style={{ fontFamily: "Oswald" }}>
                   {crewCostOwed > 0 ? `${Math.round((crewCostOwed / crewCost) * 100)}% unpaid` : "all paid"}
@@ -450,14 +450,14 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", borderTop: `2px solid var(--color-primary)`, paddingTop: 6, marginTop: 6 }}>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>Net Profit</span>
-              <span style={{ fontFamily: "Oswald", fontSize: 18, color: profit > 0 ? "var(--color-success)" : "var(--color-accent-red)" }}>${profit.toLocaleString()}</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Net Profit</span>
+              <span style={{ fontFamily: "Oswald", fontSize: 20, color: profit > 0 ? "var(--color-success)" : "var(--color-accent-red)" }}>${profit.toLocaleString()}</span>
             </div>
           </div>
-          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+          <div className="dim" style={{ fontSize: 14, marginTop: 6 }}>
             Margin: <b>{completedRevenue > 0 ? Math.round((profit / completedRevenue) * 100) : 0}%</b>
             {actualMaterialsSpent === 0 && totalMaterials > 0 && (
-              <span style={{ marginLeft: 8, color: "var(--color-warning)", fontSize: 11 }}>
+              <span style={{ marginLeft: 8, color: "var(--color-warning)", fontSize: 13 }}>
                 · Add receipts for true material cost
               </span>
             )}
@@ -495,16 +495,16 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
         return (
           <div className="cd mb" style={{ padding: 14, borderLeft: `3px solid ${overdueTotal > 0 ? "var(--color-warning)" : "var(--color-success)"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-              <h4 style={{ fontSize: 13, color: "var(--color-warning)", margin: 0 }}>
+              <h4 style={{ fontSize: 15, color: "var(--color-warning)", margin: 0 }}>
                 A/R Aging — Outstanding Invoices
               </h4>
-              <span style={{ fontFamily: "Oswald", fontSize: 14, color: "var(--color-warning)" }}>
+              <span style={{ fontFamily: "Oswald", fontSize: 16, color: "var(--color-warning)" }}>
                 ${grandTotal.toLocaleString()}
               </span>
             </div>
             {buckets.map((b) => (
               <div key={b.label} style={{ marginBottom: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 2 }}>
                   <span>{b.label} <span className="dim">({b.count})</span></span>
                   <span style={{ fontFamily: "Oswald", color: b.color }}>${b.total.toLocaleString()}</span>
                 </div>
@@ -514,7 +514,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               </div>
             ))}
             {overdueTotal > 0 && (
-              <div className="dim" style={{ fontSize: 11, marginTop: 6, color: "var(--color-warning)" }}>
+              <div className="dim" style={{ fontSize: 13, marginTop: 6, color: "var(--color-warning)" }}>
                 ${overdueTotal.toLocaleString()} past due — worth a follow-up.
               </div>
             )}
@@ -524,7 +524,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
 
       {/* Jobs per week chart */}
       <div className="cd mb" style={{ padding: 14 }}>
-        <h4 style={{ fontSize: 13, color: "var(--color-primary)", marginBottom: 10 }}>Jobs Per Week</h4>
+        <h4 style={{ fontSize: 15, color: "var(--color-primary)", marginBottom: 10 }}>Jobs Per Week</h4>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80 }}>
           {weekData.map(([label, count]) => (
             <div key={label} style={{ flex: 1, textAlign: "center" }}>
@@ -533,8 +533,8 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
                 background: "var(--color-primary)", borderRadius: "4px 4px 0 0",
                 margin: "0 auto", width: "80%", transition: "height .3s",
               }} />
-              <div style={{ fontSize: 10, color: "var(--color-primary)", fontFamily: "Oswald", marginTop: 2 }}>{count}</div>
-              <div className="dim" style={{ fontSize: 8, marginTop: 1 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "var(--color-primary)", fontFamily: "Oswald", marginTop: 2 }}>{count}</div>
+              <div className="dim" style={{ fontSize: 10, marginTop: 1 }}>{label}</div>
             </div>
           ))}
         </div>
@@ -542,13 +542,13 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
 
       {/* Revenue by trade */}
       <div className="cd mb" style={{ padding: 14 }}>
-        <h4 style={{ fontSize: 13, color: "var(--color-warning)", marginBottom: 10 }}>Revenue by Trade</h4>
+        <h4 style={{ fontSize: 15, color: "var(--color-warning)", marginBottom: 10 }}>Revenue by Trade</h4>
         {tradeEntries.length === 0 ? (
-          <p className="dim" style={{ fontSize: 12 }}>No completed jobs yet</p>
+          <p className="dim" style={{ fontSize: 14 }}>No completed jobs yet</p>
         ) : (
           tradeEntries.map(([trade, data]) => (
             <div key={trade} style={{ marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 2 }}>
                 <span>{trade} ({data.jobs})</span>
                 <span style={{ fontFamily: "Oswald", color: "var(--color-warning)" }}>${data.revenue.toLocaleString()}</span>
               </div>
@@ -563,12 +563,12 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
       {/* Team performance + Top clients */}
       <div className="g2 mb">
         <div className="cd" style={{ padding: 14 }}>
-          <h4 style={{ fontSize: 13, color: "var(--color-highlight)", marginBottom: 8 }}>Team Performance</h4>
+          <h4 style={{ fontSize: 15, color: "var(--color-highlight)", marginBottom: 8 }}>Team Performance</h4>
           {techEntries.length === 0 ? (
-            <p className="dim" style={{ fontSize: 12 }}>No time logged</p>
+            <p className="dim" style={{ fontSize: 14 }}>No time logged</p>
           ) : (
             techEntries.map(([name, data]) => (
-              <div key={name} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <div key={name} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
                 <span style={{ fontWeight: 600 }}>{name}</span>
                 <span>
                   <span style={{ fontFamily: "Oswald", color: "var(--color-primary)" }}>{data.hours.toFixed(1)}h</span>
@@ -580,12 +580,12 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
         </div>
 
         <div className="cd" style={{ padding: 14 }}>
-          <h4 style={{ fontSize: 13, color: "var(--color-success)", marginBottom: 8 }}>Top Clients</h4>
+          <h4 style={{ fontSize: 15, color: "var(--color-success)", marginBottom: 8 }}>Top Clients</h4>
           {clientEntries.length === 0 ? (
-            <p className="dim" style={{ fontSize: 12 }}>No completed jobs</p>
+            <p className="dim" style={{ fontSize: 14 }}>No completed jobs</p>
           ) : (
             clientEntries.map((c) => (
-              <div key={c.name + c.jobs} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <div key={c.name + c.jobs} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
                 <span>{c.name} ({c.jobs})</span>
                 <span style={{ fontFamily: "Oswald", color: "var(--color-success)" }}>${c.revenue.toLocaleString()}</span>
               </div>

@@ -203,8 +203,8 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     <div className="fi">
       {/* Topbar — title + date nav (tap label = today) */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
-        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("sched.title")}</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>
+        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("sched.title")}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>
           <button onClick={() => stepView(-1)} aria-label="Previous" style={{ width: 26, height: 26, borderRadius: 8, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", color: "var(--color-dim)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Icon name="back" size={14} /></button>
           <span onClick={goToday} title="Jump to today" style={{ cursor: "pointer", minWidth: 96, textAlign: "center" }}>{periodLabel}</span>
           <button onClick={() => stepView(1)} aria-label="Next" style={{ width: 26, height: 26, borderRadius: 8, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", color: "var(--color-dim)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Icon name="next" size={14} /></button>
@@ -225,7 +225,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 <b>{s.job || "(no address)"}</b>
                 {s.note && <span className="dim"> · {s.note.slice(0, 40)}</span>}
               </span>
-              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 11, flexShrink: 0 }}>
+              <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 13, flexShrink: 0 }}>
                 {s.sched_date}
               </span>
             </div>
@@ -280,10 +280,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             borderRadius: 12, padding: 18, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
           }}
         >
-          <h4 style={{ fontSize: 14, color: "var(--color-primary)", marginBottom: 6 }}>{t("sched.scheduleJob")}</h4>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{armedJob}</div>
+          <h4 style={{ fontSize: 16, color: "var(--color-primary)", marginBottom: 6 }}>{t("sched.scheduleJob")}</h4>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{armedJob}</div>
           <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 11 }}>Day</label>
+            <label className="sl" style={{ fontSize: 13 }}>Day</label>
             <input
               type="date"
               value={dropTarget || ""}
@@ -294,13 +294,13 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           {suggestion && suggestion.date !== dropTarget && (
             <div
               onClick={() => setDropTarget(suggestion.date)}
-              style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.35)", borderRadius: 10, padding: "7px 10px", marginBottom: 10, fontSize: 10.5, color: "#c9a6ff", cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.35)", borderRadius: 10, padding: "7px 10px", marginBottom: 10, fontSize: 12.5, color: "#c9a6ff", cursor: "pointer" }}
             >
               <Icon name="sparkle" size={14} color="#c9a6ff" /> Nearby — use {new Date(suggestion.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
             </div>
           )}
           <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 11 }}>{t("sched.time")}</label>
+            <label className="sl" style={{ fontSize: 13 }}>{t("sched.time")}</label>
             <input
               type="time"
               value={qsTime}
@@ -309,7 +309,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             />
           </div>
           <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 11 }}>{t("sched.workers")}</label>
+            <label className="sl" style={{ fontSize: 13 }}>{t("sched.workers")}</label>
             <div className="row" style={{ marginTop: 4 }}>
               {profiles.map((p) => {
                 const sel = qsWorkers.includes(p.name);
@@ -318,7 +318,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                     key={p.id}
                     onClick={() => setQsWorkers((prev) => sel ? prev.filter((n) => n !== p.name) : [...prev, p.name])}
                     style={{
-                      padding: "3px 10px", borderRadius: 16, fontSize: 12,
+                      padding: "3px 10px", borderRadius: 16, fontSize: 14,
                       background: sel ? "var(--color-primary)" + "33" : "transparent",
                       color: sel ? "var(--color-primary)" : "#888",
                       border: `1px solid ${sel ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
@@ -331,7 +331,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
-            <label className="sl" style={{ fontSize: 11 }}>{t("sched.notes")}</label>
+            <label className="sl" style={{ fontSize: 13 }}>{t("sched.notes")}</label>
             <input
               value={qsNote}
               onChange={(e) => setQsNote(e.target.value)}
@@ -343,11 +343,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             <button
               onClick={() => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
               className="bo"
-              style={{ flex: 1, fontSize: 12 }}
+              style={{ flex: 1, fontSize: 14 }}
             >
               {t("common.cancel")}
             </button>
-            <button onClick={quickAdd} className="bg" style={{ flex: 2, fontSize: 13 }}>
+            <button onClick={quickAdd} className="bg" style={{ flex: 2, fontSize: 15 }}>
               {t("sched.scheduleAction")}
             </button>
           </div>
@@ -362,7 +362,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             key={v}
             onClick={() => setView(v)}
             style={{
-              flex: 1, textAlign: "center", padding: 8, borderRadius: 10, fontSize: 12,
+              flex: 1, textAlign: "center", padding: 8, borderRadius: 10, fontSize: 14,
               fontFamily: "Oswald", fontWeight: 600, letterSpacing: ".04em", textTransform: "capitalize",
               background: view === v ? "var(--color-primary)" : "var(--color-card-dark-2)",
               color: view === v ? "#fff" : "var(--color-dim)",
@@ -381,8 +381,8 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           const isAll = w.id === null;
           return (
             <button key={w.id || "all"} onClick={() => setWorkerFilter(w.id)} style={{ flexShrink: 0, textAlign: "center", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              <div style={{ width: 38, height: 38, borderRadius: "50%", margin: "0 auto 3px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, background: isAll ? "var(--color-primary)" : "var(--color-card-dark-2)", color: (isAll || wOn) ? "#fff" : "#cdd6e6", border: `2px solid ${wOn ? "var(--color-primary)" : "transparent"}`, boxShadow: wOn ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>{w.badge}</div>
-              <div style={{ fontSize: 8.5, color: wOn ? "inherit" : "var(--color-dim)" }}>{w.short}</div>
+              <div style={{ width: 38, height: 38, borderRadius: "50%", margin: "0 auto 3px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, background: isAll ? "var(--color-primary)" : "var(--color-card-dark-2)", color: (isAll || wOn) ? "#fff" : "#cdd6e6", border: `2px solid ${wOn ? "var(--color-primary)" : "transparent"}`, boxShadow: wOn ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>{w.badge}</div>
+              <div style={{ fontSize: 10.5, color: wOn ? "inherit" : "var(--color-dim)" }}>{w.short}</div>
             </button>
           );
         })}
@@ -398,7 +398,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         return (
           <div className="mb">
             {dayEntries.length === 0 && (
-              <div className="cd" style={{ textAlign: "center", padding: 20, marginBottom: 8 }}><p className="dim" style={{ fontSize: 12 }}>No jobs scheduled this day</p></div>
+              <div className="cd" style={{ textAlign: "center", padding: 20, marginBottom: 8 }}><p className="dim" style={{ fontSize: 14 }}>No jobs scheduled this day</p></div>
             )}
             {dayEntries.map((s) => {
               const j = jobFor(s.job);
@@ -408,15 +408,15 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               const meta = j ? `${j.trade || "Job"} · ${(j.total_hrs || 0).toFixed(1)}h` : (s.note?.replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/, "").replace(/👷\s*[^·]+·?\s*/, "").trim() || "Scheduled");
               return (
                 <div key={s.id} style={{ display: "flex", gap: 9, marginBottom: 8 }}>
-                  <div style={{ width: 44, flexShrink: 0, fontSize: 10, color: "var(--color-dim)", fontFamily: "Oswald", fontWeight: 600, paddingTop: 11, textAlign: "right" }}>{time ? fmt12(time) : "—"}</div>
+                  <div style={{ width: 44, flexShrink: 0, fontSize: 12, color: "var(--color-dim)", fontFamily: "Oswald", fontWeight: 600, paddingTop: 11, textAlign: "right" }}>{time ? fmt12(time) : "—"}</div>
                   <div onClick={() => setSelectedDay(s.sched_date)} style={{ flex: 1, position: "relative", overflow: "hidden", background: darkMode ? "#16161f" : "#fff", border: "1px solid var(--color-border-dark)", borderRadius: 13, padding: "10px 11px 10px 15px", cursor: "pointer" }}>
                     <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: color }} />
-                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".3px" }}>{s.job}</div>
-                    <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 2 }}>{meta}</div>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px" }}>{s.job}</div>
+                    <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{meta}</div>
                     {crew.length > 0 && (
                       <div style={{ display: "flex", marginTop: 7 }}>
                         {crew.map((wn, ci) => (
-                          <span key={ci} title={wn} style={{ width: 21, height: 21, borderRadius: "50%", background: "var(--color-card-dark-2)", border: `1.5px solid ${darkMode ? "#16161f" : "#fff"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8.5, fontWeight: 600, color: "#cdd6e6", marginLeft: ci ? -5 : 0 }}>{initialsOf(wn)}</span>
+                          <span key={ci} title={wn} style={{ width: 21, height: 21, borderRadius: "50%", background: "var(--color-card-dark-2)", border: `1.5px solid ${darkMode ? "#16161f" : "#fff"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 600, color: "#cdd6e6", marginLeft: ci ? -5 : 0 }}>{initialsOf(wn)}</span>
                         ))}
                       </div>
                     )}
@@ -425,9 +425,9 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               );
             })}
             {unscheduled.length > 0 && (<>
-              <div style={{ fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "13px 2px 8px", display: "flex", alignItems: "center", gap: 7 }}><Icon name="folder" size={13} color="var(--color-dim)" /> Unscheduled</div>
+              <div style={{ fontSize: 12.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "13px 2px 8px", display: "flex", alignItems: "center", gap: 7 }}><Icon name="folder" size={13} color="var(--color-dim)" /> Unscheduled</div>
               {suggestion && (
-                <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.35)", borderRadius: 12, padding: "9px 11px", marginBottom: 8, fontSize: 10.5, color: "#c9a6ff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.35)", borderRadius: 12, padding: "9px 11px", marginBottom: 8, fontSize: 12.5, color: "#c9a6ff" }}>
                   <Icon name="sparkle" size={15} color="#c9a6ff" /> {suggestion.reason}
                 </div>
               )}
@@ -435,10 +435,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 10, background: darkMode ? "#16161f" : "#fff", border: "1px dashed var(--color-border-dark)", borderRadius: 12, padding: "9px 11px 9px 14px", position: "relative", overflow: "hidden", marginBottom: 6 }}>
                   <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: statusColor(j.status) }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12 }}>{j.property}</div>
-                    <div style={{ fontSize: 9.5, color: "var(--color-dim)", textTransform: "capitalize" }}>{j.status} · no day yet</div>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14 }}>{j.property}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--color-dim)", textTransform: "capitalize" }}>{j.status} · no day yet</div>
                   </div>
-                  <button onClick={() => { setArmedJob(j.property); setDropTarget(ds); }} style={{ fontSize: 10.5, fontWeight: 600, color: "#fff", background: "var(--color-primary)", borderRadius: 8, padding: "6px 10px", border: "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0 }}>
+                  <button onClick={() => { setArmedJob(j.property); setDropTarget(ds); }} style={{ fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--color-primary)", borderRadius: 8, padding: "6px 10px", border: "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0 }}>
                     <Icon name="schedule" size={12} color="#fff" /> Assign
                   </button>
                 </div>
@@ -459,11 +459,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             return (
               <div key={i} onClick={() => setSelectedDay(ds)} style={{ background: darkMode ? "#16161f" : "#fff", border: `1px solid ${isToday ? "rgba(46,139,255,.5)" : "var(--color-border-dark)"}`, boxShadow: isToday ? "0 0 0 1px rgba(46,139,255,.2)" : "none", borderRadius: 13, padding: "10px 11px", marginBottom: 8, opacity: dayEntries.length ? 1 : 0.5, cursor: "pointer" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: dayEntries.length ? 7 : 0 }}>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{DAY_NAMES[d.getDay()]}<span style={{ color: "var(--color-dim)", fontWeight: 400, fontSize: 11, marginLeft: 5 }}>{MONTH_NAMES[d.getMonth()].slice(0, 3)} {d.getDate()}</span></div>
-                  {dayEntries.length > 0 && <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{dayEntries.length} job{dayEntries.length !== 1 ? "s" : ""}{totalHrs ? ` · ${totalHrs.toFixed(1)}h` : ""}</div>}
+                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>{DAY_NAMES[d.getDay()]}<span style={{ color: "var(--color-dim)", fontWeight: 400, fontSize: 13, marginLeft: 5 }}>{MONTH_NAMES[d.getMonth()].slice(0, 3)} {d.getDate()}</span></div>
+                  {dayEntries.length > 0 && <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>{dayEntries.length} job{dayEntries.length !== 1 ? "s" : ""}{totalHrs ? ` · ${totalHrs.toFixed(1)}h` : ""}</div>}
                 </div>
                 {dayEntries.length === 0 ? (
-                  <div style={{ fontSize: 10.5, color: "var(--color-dim)" }}>No jobs</div>
+                  <div style={{ fontSize: 12.5, color: "var(--color-dim)" }}>No jobs</div>
                 ) : dayEntries.map((s) => {
                   const j = jobFor(s.job);
                   const color = j ? statusColor(j.status) : "var(--color-primary)";
@@ -473,10 +473,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   if (workerFilter) { const others = crew.filter((n) => n !== workerFilter); wlabel = others.length ? `+${others.map((n) => n.split(" ")[0]).join(", ")}` : "solo"; }
                   else { wlabel = crew.map((n) => initialsOf(n)).join(" "); }
                   return (
-                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, padding: "5px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4 }}>
+                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, padding: "5px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4 }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
                       <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.job}{time ? ` · ${fmt12(time)}` : ""}</span>
-                      {wlabel && <span style={{ fontSize: 9, color: "var(--color-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{wlabel}</span>}
+                      {wlabel && <span style={{ fontSize: 11, color: "var(--color-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{wlabel}</span>}
                     </div>
                   );
                 })}
@@ -490,7 +490,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
       {view === "month" && (
         <div className="mb">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 5 }}>
-            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 8.5, color: "var(--color-dim)", fontWeight: 600 }}>{d}</div>)}
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 10.5, color: "var(--color-dim)", fontWeight: 600 }}>{d}</div>)}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
             {monthCells.map((d, i) => {
@@ -502,7 +502,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               const dots = dayEntries.slice(0, 4).map((s) => { const j = jobFor(s.job); return j ? statusColor(j.status) : "var(--color-primary)"; });
               return (
                 <div key={i} onClick={() => setSelectedDay(isSel ? null : ds)} style={{ aspectRatio: ".92", borderRadius: 8, padding: "3px 2px", display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer", background: isSel ? "rgba(46,139,255,.16)" : (darkMode ? "#16161f" : "#fff"), border: `1px solid ${isSel || isToday ? "var(--color-primary)" : "var(--color-border-dark)"}` }}>
-                  <div style={{ fontSize: 9.5, color: isToday ? "var(--color-primary)" : "inherit", fontWeight: isToday ? 700 : 400 }}>{d.getDate()}</div>
+                  <div style={{ fontSize: 11.5, color: isToday ? "var(--color-primary)" : "inherit", fontWeight: isToday ? 700 : 400 }}>{d.getDate()}</div>
                   <div style={{ display: "flex", gap: 2, marginTop: "auto", flexWrap: "wrap", justifyContent: "center", paddingBottom: 1 }}>
                     {dots.map((c, di) => <i key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: c, display: "block" }} />)}
                   </div>
@@ -524,11 +524,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           return (
             <div id="schedule-day-detail" style={{ marginTop: 10, padding: 10, borderTop: `2px solid var(--color-primary)` }}>
               <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
-                <h4 style={{ fontSize: 13, color: "var(--color-primary)" }}>{dayLabel}</h4>
-                <span className="dim" style={{ fontSize: 10 }}>{dayItems.length} job{dayItems.length !== 1 ? "s" : ""}</span>
+                <h4 style={{ fontSize: 15, color: "var(--color-primary)" }}>{dayLabel}</h4>
+                <span className="dim" style={{ fontSize: 12 }}>{dayItems.length} job{dayItems.length !== 1 ? "s" : ""}</span>
               </div>
               {dayItems.length === 0 ? (
-                <p className="dim" style={{ fontSize: 11 }}>{t("sched.noJobs")}</p>
+                <p className="dim" style={{ fontSize: 13 }}>{t("sched.noJobs")}</p>
               ) : (
                 dayItems.map((s) => {
                   // Match the schedule entry's free-text property string back
@@ -539,7 +539,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                     .filter((j) => j.property === s.job && !j.archived)
                     .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
                   return (
-                    <div key={s.id} className="sep" style={{ fontSize: 12, padding: "8px 0" }}>
+                    <div key={s.id} className="sep" style={{ fontSize: 14, padding: "8px 0" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: linkedJob ? 6 : 0, gap: 6 }}>
                         <div style={{ minWidth: 0 }}>
                           <b
@@ -552,13 +552,13 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                             const crew = parseWorkers(s.note);
                             const freeform = (s.note || "").replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/, "").replace(/👷\s*[^·]+·?\s*/, "").trim();
                             const bits = [time ? fmt12(time) : "", crew.join(", "), freeform].filter(Boolean);
-                            return bits.length ? <div className="dim" style={{ fontSize: 10 }}>{bits.join(" · ")}</div> : null;
+                            return bits.length ? <div className="dim" style={{ fontSize: 12 }}>{bits.join(" · ")}</div> : null;
                           })()}
                         </div>
                         <button
                           className="bb"
                           onClick={() => setPage("time")}
-                          style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}
+                          style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}
                         >
                           <Icon name="start" size={12} color="#fff" /> Start
                         </button>
@@ -638,7 +638,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 useStore.getState().showToast("Allow popups to print schedule", "error");
               }
             }}
-            style={{ fontSize: 10 }}
+            style={{ fontSize: 12 }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
               <Icon name="print" size={12} />{t("sched.printSchedule")}
@@ -647,7 +647,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           <button
             className="bb"
             onClick={() => setPage("time")}
-            style={{ fontSize: 12, padding: "5px 14px", display: "inline-flex", alignItems: "center", gap: 5 }}
+            style={{ fontSize: 14, padding: "5px 14px", display: "inline-flex", alignItems: "center", gap: 5 }}
           >
             <Icon name="start" size={13} color="#fff" /> Start Working
           </button>
@@ -655,7 +655,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
       </div>
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
-        <p className="dim" style={{ fontSize: 12 }}>
+        <p className="dim" style={{ fontSize: 14 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
             <Icon name="tip" size={14} color="var(--color-highlight)" />
             Next: Start the Timer on today&apos;s scheduled job

@@ -49,14 +49,14 @@ export default function OnboardingDonePage() {
         <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 26, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: "0 0 10px" }}>
           You&apos;re in
         </h1>
-        <p style={{ color: "#aaa", fontSize: 14, lineHeight: 1.55, margin: "0 0 20px" }}>
+        <p style={{ color: "#aaa", fontSize: 16, lineHeight: 1.55, margin: "0 0 20px" }}>
           Your 30-day trial just started — no charges until it ends.
           Setting up your dashboard now…
         </p>
         <div style={{ display: "inline-block", width: 28, height: 28, border: "3px solid #1e1e2e", borderTopColor: PRIMARY, borderRadius: "50%", animation: "spin 800ms linear infinite" }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ marginTop: 22 }}>
-          <a href="/" style={{ color: "#666", fontSize: 12, textDecoration: "none" }}>
+          <a href="/" style={{ color: "#666", fontSize: 14, textDecoration: "none" }}>
             Skip the wait →
           </a>
         </div>

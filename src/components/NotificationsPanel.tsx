@@ -75,11 +75,11 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", borderBottom: "1px solid var(--color-border-dark)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="bell" size={16} color="var(--color-primary)" />
-            <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".4px", textTransform: "uppercase" }}>{t("notif.title")}</span>
+            <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17, letterSpacing: ".4px", textTransform: "uppercase" }}>{t("notif.title")}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {unread > 0 && (
-              <button onClick={() => markAll()} style={{ background: "none", border: "none", color: "var(--color-primary)", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: 2 }}>
+              <button onClick={() => markAll()} style={{ background: "none", border: "none", color: "var(--color-primary)", fontSize: 13.5, fontWeight: 600, cursor: "pointer", padding: 2 }}>
                 {t("notif.markAll")}
               </button>
             )}
@@ -94,7 +94,7 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
           {sorted.length === 0 ? (
             <div style={{ textAlign: "center", padding: "38px 18px", color: "var(--color-dim)" }}>
               <Icon name="bell" size={28} color="var(--color-dim)" />
-              <div style={{ fontSize: 13, marginTop: 10 }}>{t("notif.empty")}</div>
+              <div style={{ fontSize: 15, marginTop: 10 }}>{t("notif.empty")}</div>
             </div>
           ) : (
             sorted.map((n) => {
@@ -118,10 +118,10 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{n.title}</span>
-                      <span className="dim" style={{ fontSize: 10.5, whiteSpace: "nowrap", flexShrink: 0 }}>{ago(n.created_at)}</span>
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>{n.title}</span>
+                      <span className="dim" style={{ fontSize: 12.5, whiteSpace: "nowrap", flexShrink: 0 }}>{ago(n.created_at)}</span>
                     </div>
-                    <div className="dim" style={{ fontSize: 11.5, marginTop: 2, lineHeight: 1.35 }}>{n.body}</div>
+                    <div className="dim" style={{ fontSize: 13.5, marginTop: 2, lineHeight: 1.35 }}>{n.body}</div>
                   </div>
                   {isUnread && (
                     <span style={{ width: 8, height: 8, borderRadius: 4, background: "var(--color-primary)", flexShrink: 0, marginTop: 6 }} />

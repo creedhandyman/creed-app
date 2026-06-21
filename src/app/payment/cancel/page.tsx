@@ -23,7 +23,7 @@ export default function PaymentCancel() {
         >
           Payment Cancelled
         </h1>
-        <p style={{ color: "#888", fontSize: 14, fontFamily: "Source Sans 3, sans-serif", marginBottom: 24 }}>
+        <p style={{ color: "#888", fontSize: 16, fontFamily: "Source Sans 3, sans-serif", marginBottom: 24 }}>
           Your payment was not processed. You can try again from your invoice.
         </p>
         <a
@@ -37,7 +37,7 @@ export default function PaymentCancel() {
             textDecoration: "none",
             fontFamily: "Oswald, sans-serif",
             textTransform: "uppercase",
-            fontSize: 14,
+            fontSize: 16,
           }}
         >
           Back to App

@@ -225,7 +225,7 @@ export default function UserGuideModal({ onClose }: Props) {
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 18, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center", gap: 8 }}>
             <Icon name="help" size={20} color="var(--color-primary)" />
             User Guide
           </h3>
@@ -235,7 +235,7 @@ export default function UserGuideModal({ onClose }: Props) {
             style={{
               background: "transparent", border: "none",
               color: darkMode ? "#888" : "#555",
-              fontSize: 22, lineHeight: 1, cursor: "pointer",
+              fontSize: 24, lineHeight: 1, cursor: "pointer",
               padding: 4,
             }}
           >
@@ -243,7 +243,7 @@ export default function UserGuideModal({ onClose }: Props) {
           </button>
         </div>
 
-        <p className="dim" style={{ fontSize: 12, margin: "0 0 14px", lineHeight: 1.5 }}>
+        <p className="dim" style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.5 }}>
           A quick walkthrough of the app, in the order you'll use it on a real job. Tap any section to expand.
         </p>
 
@@ -268,7 +268,7 @@ export default function UserGuideModal({ onClose }: Props) {
                   background: open ? "var(--color-primary)" + "15" : "transparent",
                   border: "none", cursor: "pointer",
                   color: "inherit", textAlign: "left",
-                  fontFamily: "Oswald, sans-serif", fontSize: 13,
+                  fontFamily: "Oswald, sans-serif", fontSize: 15,
                   textTransform: "uppercase", letterSpacing: ".05em",
                 }}
               >
@@ -282,10 +282,10 @@ export default function UserGuideModal({ onClose }: Props) {
                 <div style={{ padding: "4px 14px 14px" }}>
                   {sec.body.map((b) => (
                     <div key={b.heading} style={{ marginTop: 10 }}>
-                      <h4 style={{ fontSize: 12, marginBottom: 4, color: "var(--color-primary)", fontFamily: "Oswald, sans-serif", letterSpacing: ".04em" }}>
+                      <h4 style={{ fontSize: 14, marginBottom: 4, color: "var(--color-primary)", fontFamily: "Oswald, sans-serif", letterSpacing: ".04em" }}>
                         {b.heading}
                       </h4>
-                      <ul style={{ paddingLeft: 18, margin: 0, fontSize: 13, lineHeight: 1.55, color: darkMode ? "#ccc" : "#333" }}>
+                      <ul style={{ paddingLeft: 18, margin: 0, fontSize: 15, lineHeight: 1.55, color: darkMode ? "#ccc" : "#333" }}>
                         {b.lines.map((line, i) => (
                           <li key={i} style={{ marginBottom: 4 }}>{line}</li>
                         ))}
@@ -298,7 +298,7 @@ export default function UserGuideModal({ onClose }: Props) {
           );
         })}
 
-        <p className="dim" style={{ fontSize: 11, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>
+        <p className="dim" style={{ fontSize: 13, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>
           Stuck? Most workflows have built-in tooltips and toasts that explain what just happened. The Troubleshoot screen on the dashboard is your reset button when something looks off.
         </p>
       </div>

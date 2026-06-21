@@ -100,8 +100,8 @@ export default function TeamStats() {
 
   const StatPill = ({ label, value, color }: { label: string; value: string; color: string }) => (
     <div style={{ flex: 1, minWidth: 80, padding: "6px 8px", background: darkMode ? "#0d0d14" : "#f7f7fa", borderRadius: 6, textAlign: "center" }}>
-      <div className="dim" style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".06em" }}>{label}</div>
-      <div style={{ fontSize: 14, fontFamily: "Oswald", fontWeight: 700, color, marginTop: 2 }}>{value}</div>
+      <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em" }}>{label}</div>
+      <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color, marginTop: 2 }}>{value}</div>
     </div>
   );
 
@@ -120,7 +120,7 @@ export default function TeamStats() {
           <div className="sl" style={{ marginBottom: 4 }}>
             Invite Code (share with team)
           </div>
-          <div style={{ fontFamily: "monospace", fontSize: 13, color: "var(--color-primary)", wordBreak: "break-all" }}>
+          <div style={{ fontFamily: "monospace", fontSize: 15, color: "var(--color-primary)", wordBreak: "break-all" }}>
             {user.org_id}
           </div>
           <button
@@ -128,23 +128,23 @@ export default function TeamStats() {
               navigator.clipboard.writeText(user.org_id);
               useStore.getState().showToast("Copied!", "success");
             }}
-            style={{ fontSize: 12, marginTop: 4, background: "none", color: "var(--color-primary)", padding: 0, textDecoration: "underline" }}
+            style={{ fontSize: 14, marginTop: 4, background: "none", color: "var(--color-primary)", padding: 0, textDecoration: "underline" }}
           >
             Copy to clipboard
           </button>
         </div>
       )}
 
-      <h4 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
         <Icon name="clients" size={15} color="var(--color-primary)" />
-        Team ({profiles.length}) <span className="dim" style={{ fontSize: 11, fontWeight: 400 }}>· tap a row for career stats</span>
+        Team ({profiles.length}) <span className="dim" style={{ fontSize: 13, fontWeight: 400 }}>· tap a row for career stats</span>
       </h4>
 
       {profiles.map((u: Profile) => {
         const stats = careerStats(u);
         const isOpen = expanded === u.id;
         return (
-          <div key={u.id} className="sep" style={{ fontSize: 13 }}>
+          <div key={u.id} className="sep" style={{ fontSize: 15 }}>
             <div className="row" style={{ justifyContent: "space-between", cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : u.id)}>
               <div className="row" style={{ gap: 8 }}>
                 {/* Avatar (click to upload, owner-or-self) */}
@@ -155,7 +155,7 @@ export default function TeamStats() {
                     width: 36, height: 36, borderRadius: "50%",
                     background: u.photo_url ? `url(${u.photo_url}) center/cover` : "var(--color-primary)",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "#fff", fontFamily: "Oswald", fontSize: 14, fontWeight: 700,
+                    color: "#fff", fontFamily: "Oswald", fontSize: 16, fontWeight: 700,
                     cursor: isOwner || u.id === user.id ? "pointer" : "default",
                     flexShrink: 0, border: "2px solid var(--color-border-dark)", overflow: "hidden",
                   }}
@@ -188,7 +188,7 @@ export default function TeamStats() {
                 </label>
                 <div>
                   <b>{u.name}</b> <span className="dim">#{u.emp_num}</span>
-                  <div className="dim" style={{ fontSize: 11 }}>
+                  <div className="dim" style={{ fontSize: 13 }}>
                     {u.role} · {stats.tenureLabel} on team{stats.totalHours > 0 ? ` · ${stats.totalHours.toFixed(0)}h all-time` : ""}
                   </div>
                 </div>
@@ -197,7 +197,7 @@ export default function TeamStats() {
                 <div className="row" onClick={(e) => e.stopPropagation()}>
                   <select
                     defaultValue={u.role}
-                    style={{ width: "auto", fontSize: 12, padding: "2px 4px" }}
+                    style={{ width: "auto", fontSize: 14, padding: "2px 4px" }}
                     onChange={async (e) => {
                       if (u.id === user.id && (e.target.value === "tech" || e.target.value === "apprentice")) {
                         if (!(await useStore.getState().showConfirm("Warning", "Demoting yourself will lock you out of admin settings. Are you sure?"))) {
@@ -219,7 +219,7 @@ export default function TeamStats() {
                   <input
                     type="number"
                     defaultValue={u.rate}
-                    style={{ width: 55, padding: "2px 4px", fontSize: 12 }}
+                    style={{ width: 55, padding: "2px 4px", fontSize: 14 }}
                     onBlur={async (e) => {
                       const newRate = parseFloat(e.target.value) || 0;
                       await db.patch("profiles", u.id, { rate: newRate });
@@ -227,7 +227,7 @@ export default function TeamStats() {
                       if (u.id === user.id) setUser({ ...user, rate: newRate });
                     }}
                   />
-                  <span style={{ fontSize: 11 }}>/hr</span>
+                  <span style={{ fontSize: 13 }}>/hr</span>
                   {u.id !== user.id && (
                     <button
                       onClick={async () => {
@@ -250,7 +250,7 @@ export default function TeamStats() {
             {/* Career stats — expanded view */}
             {isOpen && (
               <div style={{ marginTop: 8, padding: 10, background: darkMode ? "#0a0a10" : "#fafbfc", borderRadius: 8, borderLeft: `3px solid var(--color-primary)` }}>
-                <div className="dim" style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".06em", marginBottom: 6 }}>
+                <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em", marginBottom: 6 }}>
                   ALL-TIME CAREER STATS · NEVER RESETS
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -261,13 +261,13 @@ export default function TeamStats() {
                 </div>
 
                 {/* Employee number + start date — editable by owner */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 12, marginBottom: 8 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 14, marginBottom: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <span className="dim">Emp #</span>
                     {isOwner ? (
                       <input
                         defaultValue={u.emp_num}
-                        style={{ width: 70, padding: "2px 4px", fontSize: 12 }}
+                        style={{ width: 70, padding: "2px 4px", fontSize: 14 }}
                         onBlur={async (e) => {
                           if (e.target.value !== u.emp_num) {
                             await db.patch("profiles", u.id, { emp_num: e.target.value });
@@ -285,7 +285,7 @@ export default function TeamStats() {
                       <input
                         type="date"
                         defaultValue={u.start_date || ""}
-                        style={{ padding: "2px 4px", fontSize: 12 }}
+                        style={{ padding: "2px 4px", fontSize: 14 }}
                         onChange={async (e) => {
                           await db.patch("profiles", u.id, { start_date: e.target.value });
                           await loadAll();
@@ -300,7 +300,7 @@ export default function TeamStats() {
                 {/* Top trades */}
                 {stats.topTrades.length > 0 && (
                   <div style={{ marginBottom: 6 }}>
-                    <div className="dim" style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".06em", marginBottom: 4 }}>
+                    <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em", marginBottom: 4 }}>
                       TOP TRADES (by hours)
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -308,7 +308,7 @@ export default function TeamStats() {
                         <span
                           key={t.trade}
                           style={{
-                            fontSize: 11, padding: "2px 8px", borderRadius: 10,
+                            fontSize: 13, padding: "2px 8px", borderRadius: 10,
                             background: "var(--color-primary)15",
                             color: "var(--color-primary)",
                             fontFamily: "Oswald", letterSpacing: ".04em",
@@ -323,9 +323,9 @@ export default function TeamStats() {
 
                 {/* Review rating */}
                 {stats.reviewCount > 0 && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
                     <span className="dim">Client rating</span>
-                    <span style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 14 }}>
+                    <span style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 16 }}>
                       ★ {stats.avgRating.toFixed(1)}
                     </span>
                     <span className="dim">· {stats.reviewCount} review{stats.reviewCount === 1 ? "" : "s"}</span>
@@ -333,13 +333,13 @@ export default function TeamStats() {
                 )}
 
                 {stats.totalHours === 0 && stats.reviewCount === 0 && (
-                  <div className="dim" style={{ fontSize: 11, fontStyle: "italic", padding: "4px 0" }}>
+                  <div className="dim" style={{ fontSize: 13, fontStyle: "italic", padding: "4px 0" }}>
                     Career stats build as {u.name?.split(/\s+/)[0] || "this tech"} clocks in and works jobs. Numbers here will never reset.
                   </div>
                 )}
 
                 <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${border}` }}>
-                  <div className="dim" style={{ fontSize: 10, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                  <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em" }}>
                     {u.email}
                   </div>
                 </div>

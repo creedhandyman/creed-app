@@ -125,8 +125,8 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
         <div style={{ flex: 1, minWidth: 0 }}>
           {nextJob ? (
             <>
-              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, letterSpacing: ".3px" }}>{nextJob.job}</div>
-              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16.5, letterSpacing: ".3px" }}>{nextJob.job}</div>
+              <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>
                 {(() => {
                   const d = new Date(nextJob.sched_date + "T12:00:00");
                   const dayStr = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -138,8 +138,8 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
             </>
           ) : (
             <>
-              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".3px" }}>{t("dash.noNextJob")}</div>
-              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>Tap to schedule a job</div>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px" }}>{t("dash.noNextJob")}</div>
+              <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>Tap to schedule a job</div>
             </>
           )}
         </div>
@@ -153,14 +153,14 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
       {/* Topbar — greeting + name + help / settings */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <div>
-          <div className="dim" style={{ fontSize: 12 }}>{isAdmin ? "Welcome back" : "Let's get it"}</div>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".8px", textTransform: "uppercase" }}>{user.name}</div>
+          <div className="dim" style={{ fontSize: 14 }}>{isAdmin ? "Welcome back" : "Let's get it"}</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 23, letterSpacing: ".8px", textTransform: "uppercase" }}>{user.name}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setShowNotifs(true)} aria-label="Notifications" title="Notifications" className="iconbtn" style={{ position: "relative" }}>
             <Icon name="bell" size={18} />
             {unreadCount > 0 && (
-              <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, border: "1.5px solid var(--color-dark-bg)" }}>
+              <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 12, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, border: "1.5px solid var(--color-dark-bg)" }}>
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -178,13 +178,13 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Icon name="rocket" size={18} color="var(--color-primary)" />
-              <h4 style={{ fontSize: 14, color: "var(--color-primary)" }}>{t("dash.gettingStarted")}</h4>
+              <h4 style={{ fontSize: 16, color: "var(--color-primary)" }}>{t("dash.gettingStarted")}</h4>
             </div>
             <button onClick={() => { localStorage.setItem("c_guide_dismissed", "1"); setGuideDismissed(true); }} aria-label="Dismiss" style={{ background: "none", padding: 4, color: "#555", display: "inline-flex", alignItems: "center" }}>
               <Icon name="close" size={16} />
             </button>
           </div>
-          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>Create a quote → Schedule the job → Clock in → Complete → Get paid</div>
+          <div className="dim" style={{ fontSize: 14, marginTop: 6 }}>Create a quote → Schedule the job → Clock in → Complete → Get paid</div>
         </div>
       )}
 
@@ -205,7 +205,7 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
                   <div key={a.l} className="cd" onClick={() => setPage("jobs")} style={{ position: "relative", overflow: "hidden", textAlign: "center", padding: "13px 8px", cursor: "pointer" }}>
                     <span style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: a.c }} />
                     <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, lineHeight: 1, color: a.c }}>{a.n}</div>
-                    <div className="dim" style={{ fontSize: 10, marginTop: 4 }}>{a.l}</div>
+                    <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>{a.l}</div>
                   </div>
                 ))}
               </div>
@@ -217,8 +217,8 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
                 { l: "Pipeline", v: pipeline >= 1000 ? `$${(pipeline / 1000).toFixed(1)}k` : `$${pipeline.toFixed(0)}`, green: false },
               ].map((m, i) => (
                 <div key={m.l} style={{ flex: 1, textAlign: "center", borderLeft: i ? "1px solid var(--color-border-dark)" : "none" }}>
-                  <div className="sl" style={{ fontSize: 9.5 }}>{m.l}</div>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, marginTop: 3, color: m.green ? "var(--color-money)" : "inherit" }}>{m.v}</div>
+                  <div className="sl" style={{ fontSize: 11.5 }}>{m.l}</div>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, marginTop: 3, color: m.green ? "var(--color-money)" : "inherit" }}>{m.v}</div>
                 </div>
               ))}
             </div>
@@ -230,19 +230,19 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
             <div className="cd" style={{ background: "rgba(0,204,102,.09)", border: "1px solid rgba(0,204,102,.4)", borderRadius: 18, padding: 16, boxShadow: "0 0 30px -14px rgba(0,204,102,.5)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <div style={{ fontSize: 10, letterSpacing: ".15em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
+                  <div style={{ fontSize: 12, letterSpacing: ".15em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
                   <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}>${checkPay.toFixed(0)}</div>
                 </div>
-                <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
                   <Icon name="trending" size={12} color="#3ee08f" /> {lastWeekPay > 0 ? (toBeat > 0 ? "keep going" : "ahead of last week") : `${checkHrs.toFixed(1)} hrs`}
                 </span>
               </div>
-              <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>{checkHrs.toFixed(1)} hrs unpaid · ${rate}/hr{lastPayDate ? ` · since ${lastPayDate}` : ""}</div>
+              <div className="dim" style={{ fontSize: 13.5, marginTop: 6 }}>{checkHrs.toFixed(1)} hrs unpaid · ${rate}/hr{lastPayDate ? ` · since ${lastPayDate}` : ""}</div>
               {/* This week vs last week — the come-back-tomorrow incentive */}
               <div style={{ height: 8, background: "rgba(255,255,255,.07)", borderRadius: 5, overflow: "hidden", marginTop: 12 }}>
                 <div style={{ height: "100%", width: `${weekProgress}%`, background: "var(--color-success)", borderRadius: 5, boxShadow: "0 0 12px -1px var(--color-success)" }} />
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginTop: 5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-dim)", marginTop: 5 }}>
                 <span>This week ${weekPay.toFixed(0)}</span>
                 <span>{lastWeekPay > 0 ? (toBeat > 0 ? `$${toBeat.toFixed(0)} to beat last week ($${lastWeekPay.toFixed(0)})` : "Beat last week!") : "Build your streak"}</span>
               </div>
@@ -257,12 +257,12 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
                   <Icon name="trophy" size={17} color="var(--color-violet)" />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{closest.name} · {closest.bonus} bonus</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 600 }}>{closest.name} · {closest.bonus} bonus</div>
                   <div style={{ height: 6, background: "var(--color-card-dark-3)", borderRadius: 4, overflow: "hidden", marginTop: 5 }}>
                     <div style={{ height: "100%", width: `${Math.min(100, (closest.p / closest.g) * 100)}%`, background: "var(--color-violet)", borderRadius: 4 }} />
                   </div>
                 </div>
-                <div style={{ fontFamily: "Oswald", fontWeight: 700, color: "var(--color-violet)", fontSize: 13, whiteSpace: "nowrap" }}>{closest.p}/{closest.g}</div>
+                <div style={{ fontFamily: "Oswald", fontWeight: 700, color: "var(--color-violet)", fontSize: 15, whiteSpace: "nowrap" }}>{closest.p}/{closest.g}</div>
               </div>
             )}
           </>

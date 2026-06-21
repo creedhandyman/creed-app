@@ -144,10 +144,10 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
         }}
       >
         <div style={{ fontSize: 28, textAlign: "center", marginBottom: 4 }}>⭐</div>
-        <h3 style={{ fontSize: 16, color: "var(--color-primary)", textAlign: "center", marginBottom: 4 }}>
+        <h3 style={{ fontSize: 18, color: "var(--color-primary)", textAlign: "center", marginBottom: 4 }}>
           Ask for a Review?
         </h3>
-        <p className="dim" style={{ fontSize: 12, textAlign: "center", margin: "0 0 12px" }}>
+        <p className="dim" style={{ fontSize: 14, textAlign: "center", margin: "0 0 12px" }}>
           {job.client || "Client"} just had work completed at {job.property}. Send them the review link while it&apos;s fresh.
         </p>
 
@@ -158,7 +158,7 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
           rows={5}
           style={{
             width: "100%",
-            fontSize: 12,
+            fontSize: 14,
             padding: 8,
             borderRadius: 6,
             border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
@@ -174,7 +174,7 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
             className="bb"
             onClick={sendSms}
             disabled={!phone}
-            style={{ fontSize: 13, padding: "8px 12px", opacity: phone ? 1 : 0.5 }}
+            style={{ fontSize: 15, padding: "8px 12px", opacity: phone ? 1 : 0.5 }}
             title={phone ? `Text ${phone}` : "No phone number on file"}
           >
             📱 Send via Text {phone ? `(${phone})` : "(no phone on file)"}
@@ -183,7 +183,7 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
             className="bo"
             onClick={sendEmail}
             disabled={!email}
-            style={{ fontSize: 13, padding: "8px 12px", opacity: email ? 1 : 0.5 }}
+            style={{ fontSize: 15, padding: "8px 12px", opacity: email ? 1 : 0.5 }}
             title={email ? `Email ${email}` : "No email on file"}
           >
             ✉ Send via Email {email ? `(${email})` : "(no email on file)"}
@@ -191,14 +191,14 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
           <button
             className="bo"
             onClick={copy}
-            style={{ fontSize: 13, padding: "8px 12px" }}
+            style={{ fontSize: 15, padding: "8px 12px" }}
           >
             📋 Copy Message
           </button>
           <button
             onClick={skip}
             style={{
-              fontSize: 11,
+              fontSize: 13,
               padding: "6px",
               background: "none",
               color: darkMode ? "#888" : "#666",
