@@ -991,20 +991,20 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
           preview or the snap button. 4:3 landscape aspect keeps it
           short so the checklist stays visible right beneath. */}
       {inspecting && (
-        <div className="mb" style={{ position: "sticky", top: 4, zIndex: 10 }}>
-          <div
-            style={{
-              position: "relative",
-              background: "#000",
-              borderRadius: 12,
-              overflow: "hidden",
-              height: "min(64vh, 560px)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: darkMode ? "0 2px 10px rgba(0,0,0,0.5)" : "0 2px 10px rgba(0,0,0,0.15)",
-            }}
-          >
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "#000",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <style>{`@keyframes vw-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }`}</style>
+
+          {/* Camera fills everything above the control bar */}
+          <div style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <video
               ref={videoRef}
               autoPlay
@@ -1019,13 +1019,13 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
             />
             {!cameraOn && (
               <div style={{ color: "#bbb", fontSize: 14, padding: 16, textAlign: "center" }}>
-                {cameraError || "Starting camera..."}
+                {cameraError || "Starting camera…"}
               </div>
             )}
 
-            {/* TOP overlay: scrim + REC/count/torch row, then the checklist
-                chips. Items live ON the camera so the preview can fill the
-                screen; each chip glows green the moment its keyword is
+            {/* TOP overlay: room · REC · counts · flash, then the checklist
+                chips. Items live ON the camera so the preview fills the
+                screen; each chip glows green the instant its keyword is
                 heard (or it's tapped). */}
             <div
               style={{
@@ -1033,15 +1033,29 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                 top: 0,
                 left: 0,
                 right: 0,
-                padding: "8px 8px 22px",
-                background: "linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0) 100%)",
+                padding: "calc(10px + env(safe-area-inset-top)) 10px 26px",
+                background: "linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.35) 58%, rgba(0,0,0,0) 100%)",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 13, fontFamily: "Oswald", padding: "3px 8px", borderRadius: 12, letterSpacing: ".06em" }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-accent-red)", animation: "vw-pulse 1.5s ease-in-out infinite" }} />
-                  REC {elapsedDisplay}
-                </span>
+              {currentRoom && (
+                <div style={{ textAlign: "center", marginBottom: 7 }}>
+                  <span style={{ background: "rgba(0,0,0,0.5)", color: "#fff", fontFamily: "Oswald", fontSize: 13, letterSpacing: ".04em", padding: "3px 12px", borderRadius: 12 }}>
+                    {currentRoom}
+                  </span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 13, fontFamily: "Oswald", padding: "3px 8px", borderRadius: 12, letterSpacing: ".06em" }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-accent-red)", animation: "vw-pulse 1.5s ease-in-out infinite" }} />
+                    REC {elapsedDisplay}
+                  </span>
+                  {(uploading > 0 || thisRoomPhotos.length > 0) && (
+                    <span style={{ background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 13, fontFamily: "Oswald", padding: "3px 8px", borderRadius: 12, whiteSpace: "nowrap" }}>
+                      {uploading > 0 ? `↑ ${uploading}` : `📷 ${thisRoomPhotos.length}`}
+                    </span>
+                  )}
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {items.length > 0 && (
                     <span style={{ background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 13, fontFamily: "Oswald", padding: "3px 8px", borderRadius: 12 }}>
@@ -1054,8 +1068,8 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                       aria-label={torchOn ? "Turn flash off" : "Turn flash on"}
                       title={torchOn ? "Flash on" : "Flash off"}
                       style={{
-                        width: 34,
-                        height: 34,
+                        width: 36,
+                        height: 36,
                         borderRadius: "50%",
                         border: "none",
                         background: torchOn ? "rgba(255,204,0,0.95)" : "rgba(0,0,0,0.55)",
@@ -1067,14 +1081,14 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                         flexShrink: 0,
                       }}
                     >
-                      <Icon name="flash" size={17} color={torchOn ? "#1a1a1a" : "#fff"} />
+                      <Icon name="flash" size={18} color={torchOn ? "#1a1a1a" : "#fff"} />
                     </button>
                   )}
                 </div>
               </div>
 
               {items.length > 0 ? (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, maxHeight: "30vh", overflowY: "auto" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: "34vh", overflowY: "auto" }}>
                   {items.map((item) => {
                     const isChecked = checkedSet.has(item);
                     return (
@@ -1085,8 +1099,8 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                           display: "inline-flex",
                           alignItems: "center",
                           gap: 4,
-                          padding: "3px 9px",
-                          borderRadius: 13,
+                          padding: "4px 10px",
+                          borderRadius: 14,
                           fontSize: 13,
                           fontWeight: isChecked ? 700 : 500,
                           color: "#fff",
@@ -1112,46 +1126,74 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
               )}
             </div>
 
-            {/* BOTTOM overlay: scrim + gallery / shutter / photo count */}
-            <div
+            {/* HEARING peek — what speech recognition is catching live, pinned
+                to the bottom of the camera area (just above the control bar). */}
+            {supported && (
+              <div style={{ position: "absolute", left: 10, right: 10, bottom: 10, display: "flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.5)", borderRadius: 10, padding: "5px 9px" }}>
+                <span style={{ fontFamily: "Oswald", letterSpacing: ".06em", fontSize: 11, color: "#9fe3b6", flexShrink: 0 }}>HEARING</span>
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "#fff", fontStyle: liveInterim ? "italic" : "normal" }}>
+                  {liveInterim || currentRec?.transcript?.split(/\s+/).slice(-10).join(" ") || "Listening…"}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* CONTROL BAR — gallery · shutter · stop. A real flex row below the
+              camera, so nothing scrolls or overlaps. Done lives on the normal
+              review screen that appears once you Stop. */}
+          <div
+            style={{
+              flexShrink: 0,
+              background: "#000",
+              display: "grid",
+              gridTemplateColumns: "1fr auto 1fr",
+              alignItems: "center",
+              padding: "14px 22px calc(16px + env(safe-area-inset-bottom))",
+            }}
+          >
+            <button
+              onClick={() => fileFallbackRef.current?.click()}
+              aria-label="Pick from gallery"
+              title="Pick from gallery instead"
+              style={{ justifySelf: "start", width: 46, height: 46, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+            >
+              <Icon name="photo" size={21} color="#fff" />
+            </button>
+            <button
+              onClick={snapFromVideo}
+              disabled={!cameraOn || uploading > 0}
+              aria-label="Snap photo"
               style={{
-                position: "absolute",
-                bottom: 0,
-                left: 0,
-                right: 0,
-                padding: "26px 18px 14px",
-                background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%)",
-                display: "flex",
+                justifySelf: "center",
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                border: "5px solid rgba(255,255,255,0.85)",
+                background: cameraOn && uploading === 0 ? "#fff" : "rgba(255,255,255,0.4)",
+                cursor: cameraOn && uploading === 0 ? "pointer" : "default",
+              }}
+            />
+            <button
+              onClick={() => setInspecting(false)}
+              aria-label="Stop recording"
+              style={{
+                justifySelf: "end",
+                display: "inline-flex",
                 alignItems: "center",
-                justifyContent: "space-between",
+                gap: 6,
+                background: "var(--color-accent-red)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 22,
+                padding: "11px 16px",
+                fontFamily: "Oswald",
+                fontSize: 14,
+                letterSpacing: ".04em",
+                cursor: "pointer",
               }}
             >
-              <button
-                onClick={() => fileFallbackRef.current?.click()}
-                aria-label="Pick from gallery"
-                title="Pick from gallery instead"
-                style={{ width: 44, height: 44, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-              >
-                <Icon name="photo" size={20} color="#fff" />
-              </button>
-              <button
-                onClick={snapFromVideo}
-                disabled={!cameraOn || uploading > 0}
-                aria-label="Snap photo"
-                style={{
-                  width: 68,
-                  height: 68,
-                  borderRadius: "50%",
-                  border: "4px solid rgba(255,255,255,0.85)",
-                  background: cameraOn && uploading === 0 ? "#fff" : "rgba(255,255,255,0.4)",
-                  boxShadow: "0 0 0 2px rgba(0,0,0,0.4)",
-                  cursor: cameraOn && uploading === 0 ? "pointer" : "default",
-                }}
-              />
-              <div style={{ width: 44, textAlign: "right", color: "#fff", fontSize: 13, fontFamily: "Oswald" }}>
-                {uploading > 0 ? `↑ ${uploading}` : thisRoomPhotos.length > 0 ? `📷 ${thisRoomPhotos.length}` : ""}
-              </div>
-            </div>
+              <Icon name="stop" size={15} color="#fff" /> Stop
+            </button>
           </div>
         </div>
       )}
