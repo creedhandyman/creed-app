@@ -270,10 +270,14 @@ src/
   = status-dot grid + the shared selected-day detail. The **worker filter**
   parses the schedule note's `👷 names` (+ linked `job.requested_tech`
   fallback via `entryWorkers`/`matchesWorker`) — name-based, no new schema.
-  Kept: drag palette, quick-add modal, proximity, status auto-bump. Dropped
-  per request: the standalone Add-to-Schedule form + the All-Scheduled list
-  (and the old `renderDayCell` grid). NOTE: `PropertySearch` + the drag
-  palette still sit ABOVE the views — could move below so the calendar leads.
+  **Assign flow**: Day-view Unscheduled → per-job **Assign** opens the
+  quick-add modal, which now has a **date picker** (pick any day; defaults to
+  the viewed day) + a proximity hint, plus time/workers/notes. Status
+  auto-bump + proximity kept. Dropped per request: the standalone
+  Add-to-Schedule form, the All-Scheduled list, the old `renderDayCell` grid,
+  AND the drag-and-drop palette + all emoji (📍/⏱/👆/⭐ → Lucide icons; the
+  day-detail note is parsed, not shown raw). `PropertySearch` still above the
+  views. The note still STORES `🕐/👷` (parsed by `parseTime`/`parseWorkers`).
 - **Time + WorkVision visual redesign (from mockups)**: both screens already
   had the logic — this was a restyle toward the `Creed_Time_WorkVision_v2` /
   `Creed_WorkVision_Full` mockups, no plumbing changes. **Time** (`Timer.tsx`):

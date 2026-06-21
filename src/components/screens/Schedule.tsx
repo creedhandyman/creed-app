@@ -31,13 +31,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const [view, setView] = useState<"day" | "week" | "month">("week");
   const [workerFilter, setWorkerFilter] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<{ date: string; reason: string } | null>(null);
-  // Quick-schedule state: a job "armed" from the unscheduled palette, plus
-  // the day the user dropped/tapped onto. Drives the modal form.
-  // Arm from preSelectJob (Jobs → "Schedule this job") so tapping a day
-  // schedules it; the old standalone add-form that consumed preSelectJob is gone.
+  // Quick-schedule modal state: the "armed" job + the chosen day. Opened from a
+  // job's Assign button (Day-view Unscheduled) or a preSelectJob deep-link
+  // (Jobs → "Schedule this job"), which defaults the day to today.
   const [armedJob, setArmedJob] = useState<string | null>(preSelectJob || null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const [hoverDay, setHoverDay] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(preSelectJob ? new Date().toISOString().split("T")[0] : null);
   // Last-used time and workers persist between drops so back-to-back
   // scheduling sessions don't require re-typing the same defaults.
   const loadStr = (k: string, fb: string) => {
@@ -252,143 +250,12 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         />
       </div>
 
-      {/* ── Quick Schedule: drag or tap-arm a job, then drop/tap a day ── */}
-      {(() => {
-        // Palette shows accepted (ready to schedule for the first time),
-        // scheduled (already on calendar — drop to add another visit), and
-        // active (mid-job — drop to add a return visit or follow-up day).
-        // Archived jobs are excluded. Sorted accepted → scheduled → active
-        // so the newest work is what the user sees first.
-        const STATUS_ORDER: Record<string, number> = { accepted: 0, scheduled: 1, active: 2 };
-        const palette = jobs
-          .filter((j) => !j.archived && (j.status === "accepted" || j.status === "scheduled" || j.status === "active"))
-          .sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
-        if (palette.length === 0) return null;
-        const acceptedCount = palette.filter((j) => j.status === "accepted").length;
-        const scheduledCount = palette.filter((j) => j.status === "scheduled").length;
-        const activeCount = palette.filter((j) => j.status === "active").length;
-        return (
-          <div className="cd mb" style={{ borderLeft: "3px solid var(--color-success)" }}>
-            <h4 style={{ fontSize: 13, marginBottom: 6 }}>
-              👆 {t("sched.quickSchedule")}
-              <span className="dim" style={{ fontSize: 11, fontWeight: 400, marginLeft: 6 }}>
-                ({[
-                  acceptedCount && `${acceptedCount} accepted`,
-                  scheduledCount && `${scheduledCount} scheduled`,
-                  activeCount && `${activeCount} active`,
-                ].filter(Boolean).join(", ")})
-              </span>
-              {armedJob && (
-                <span style={{ marginLeft: 8, color: "var(--color-success)", fontSize: 11, fontFamily: "Oswald" }}>
-                  • {t("sched.armed")}: {armedJob.slice(0, 30)}{armedJob.length > 30 ? "…" : ""}
-                </span>
-              )}
-            </h4>
-            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-              {palette.map((j) => {
-                const isArmed = armedJob === j.property;
-                const isScheduled = j.status === "scheduled";
-                const isActive = j.status === "active";
-                // Accepted = solid green (new work, ready to schedule).
-                // Scheduled = dashed primary (already on calendar; drop to
-                // add another visit).
-                // Active = solid highlight/yellow (mid-job; drop to schedule
-                // a return or follow-up day).
-                const baseColor = isActive
-                  ? "var(--color-highlight)"
-                  : isScheduled
-                  ? "var(--color-primary)"
-                  : "var(--color-success)";
-                const prefix = isArmed ? "✓ " : isActive ? "⚡ " : isScheduled ? "📅 " : "";
-                const tip = isActive
-                  ? "In progress — drop on a day to schedule a return visit"
-                  : isScheduled
-                  ? "Already scheduled — drop on a day to add another visit"
-                  : "Accepted — drop on a day to schedule";
-                return (
-                  <button
-                    key={j.id}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/plain", j.property);
-                      e.dataTransfer.effectAllowed = "copy";
-                      setArmedJob(j.property);
-                    }}
-                    onDragEnd={() => setHoverDay(null)}
-                    onClick={() => setArmedJob(isArmed ? null : j.property)}
-                    title={tip}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 16,
-                      whiteSpace: "nowrap",
-                      background: isArmed ? baseColor : "transparent",
-                      color: isArmed ? "#fff" : baseColor,
-                      border: `1px ${isScheduled && !isArmed ? "dashed" : "solid"} ${baseColor}`,
-                      fontSize: 12,
-                      flexShrink: 0,
-                      cursor: "grab",
-                      opacity: isScheduled && !isArmed ? 0.85 : 1,
-                    }}
-                  >
-                    {prefix}
-                    {j.property.length > 28 ? j.property.slice(0, 28) + "…" : j.property}
-                  </button>
-                );
-              })}
-            </div>
-            {armedJob && (
-              <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
-                {t("sched.tapADay")}
-                <button
-                  onClick={() => setArmedJob(null)}
-                  style={{ background: "none", color: "var(--color-accent-red)", fontSize: 11, marginLeft: 6, padding: 0 }}
-                >
-                  × {t("common.cancel").toLowerCase()}
-                </button>
-              </div>
-            )}
-            {armedJob && suggestion && (
-              <div
-                onClick={() => { setDropTarget(suggestion.date); }}
-                title="Drop on the highlighted day"
-                style={{
-                  marginTop: 6,
-                  padding: "5px 10px",
-                  borderRadius: 6,
-                  background: "var(--color-highlight)" + "1f",
-                  border: "1px solid var(--color-highlight)",
-                  fontSize: 11,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <span>⭐</span>
-                <span>
-                  Suggested:{" "}
-                  <b>
-                    {new Date(suggestion.date + "T12:00:00").toLocaleDateString("en-US", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </b>
-                  <span className="dim"> — {suggestion.reason}</span>
-                </span>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Quick-Schedule Modal — opens when a job is dropped or tapped onto a day.
-          Uses a flex container so the modal is reliably centered in the viewport
-          on mobile (fixed + transform-centered breaks if any ancestor has a
-          transform; this layout works regardless). */}
+      {/* Quick-Schedule Modal — opens from a job's "Assign" button. Centered
+          via a flex container so it's reliable on mobile regardless of any
+          ancestor transform. */}
       {armedJob && dropTarget && (
         <div
-          onClick={() => { setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
+          onClick={() => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
           style={{
             position: "fixed",
             inset: 0,
@@ -414,11 +281,24 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           }}
         >
           <h4 style={{ fontSize: 14, color: "var(--color-primary)", marginBottom: 6 }}>{t("sched.scheduleJob")}</h4>
-          <div style={{ fontSize: 12, marginBottom: 12 }}>
-            <b>{armedJob}</b>
-            <span className="dim"> on </span>
-            <b>{new Date(dropTarget + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</b>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{armedJob}</div>
+          <div style={{ marginBottom: 10 }}>
+            <label className="sl" style={{ fontSize: 11 }}>Day</label>
+            <input
+              type="date"
+              value={dropTarget || ""}
+              onChange={(e) => setDropTarget(e.target.value)}
+              style={{ marginTop: 4, color: "var(--color-primary)", fontWeight: 600 }}
+            />
           </div>
+          {suggestion && suggestion.date !== dropTarget && (
+            <div
+              onClick={() => setDropTarget(suggestion.date)}
+              style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.35)", borderRadius: 10, padding: "7px 10px", marginBottom: 10, fontSize: 10.5, color: "#c9a6ff", cursor: "pointer" }}
+            >
+              <Icon name="sparkle" size={14} color="#c9a6ff" /> Nearby — use {new Date(suggestion.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+            </div>
+          )}
           <div style={{ marginBottom: 10 }}>
             <label className="sl" style={{ fontSize: 11 }}>{t("sched.time")}</label>
             <input
@@ -444,7 +324,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                       border: `1px solid ${sel ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
                     }}
                   >
-                    {sel ? "✓ " : ""}{p.name}
+                    {p.name}
                   </button>
                 );
               })}
@@ -461,7 +341,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button
-              onClick={() => { setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
+              onClick={() => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
               className="bo"
               style={{ flex: 1, fontSize: 12 }}
             >
@@ -577,7 +457,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             const isToday = ds === todayStr;
             const totalHrs = dayEntries.reduce((sum, e) => sum + (jobFor(e.job)?.total_hrs || 0), 0);
             return (
-              <div key={i} onClick={() => { if (armedJob) { setDropTarget(ds); return; } setSelectedDay(ds); }} style={{ background: darkMode ? "#16161f" : "#fff", border: `1px solid ${isToday ? "rgba(46,139,255,.5)" : "var(--color-border-dark)"}`, boxShadow: isToday ? "0 0 0 1px rgba(46,139,255,.2)" : "none", borderRadius: 13, padding: "10px 11px", marginBottom: 8, opacity: dayEntries.length ? 1 : 0.5, cursor: "pointer" }}>
+              <div key={i} onClick={() => setSelectedDay(ds)} style={{ background: darkMode ? "#16161f" : "#fff", border: `1px solid ${isToday ? "rgba(46,139,255,.5)" : "var(--color-border-dark)"}`, boxShadow: isToday ? "0 0 0 1px rgba(46,139,255,.2)" : "none", borderRadius: 13, padding: "10px 11px", marginBottom: 8, opacity: dayEntries.length ? 1 : 0.5, cursor: "pointer" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: dayEntries.length ? 7 : 0 }}>
                   <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{DAY_NAMES[d.getDay()]}<span style={{ color: "var(--color-dim)", fontWeight: 400, fontSize: 11, marginLeft: 5 }}>{MONTH_NAMES[d.getMonth()].slice(0, 3)} {d.getDate()}</span></div>
                   {dayEntries.length > 0 && <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{dayEntries.length} job{dayEntries.length !== 1 ? "s" : ""}{totalHrs ? ` · ${totalHrs.toFixed(1)}h` : ""}</div>}
@@ -621,7 +501,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               const isSel = ds === selectedDay;
               const dots = dayEntries.slice(0, 4).map((s) => { const j = jobFor(s.job); return j ? statusColor(j.status) : "var(--color-primary)"; });
               return (
-                <div key={i} onClick={() => { if (armedJob) { setDropTarget(ds); return; } setSelectedDay(isSel ? null : ds); }} style={{ aspectRatio: ".92", borderRadius: 8, padding: "3px 2px", display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer", background: isSel ? "rgba(46,139,255,.16)" : (darkMode ? "#16161f" : "#fff"), border: `1px solid ${isSel || isToday ? "var(--color-primary)" : "var(--color-border-dark)"}` }}>
+                <div key={i} onClick={() => setSelectedDay(isSel ? null : ds)} style={{ aspectRatio: ".92", borderRadius: 8, padding: "3px 2px", display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer", background: isSel ? "rgba(46,139,255,.16)" : (darkMode ? "#16161f" : "#fff"), border: `1px solid ${isSel || isToday ? "var(--color-primary)" : "var(--color-border-dark)"}` }}>
                   <div style={{ fontSize: 9.5, color: isToday ? "var(--color-primary)" : "inherit", fontWeight: isToday ? 700 : 400 }}>{d.getDate()}</div>
                   <div style={{ display: "flex", gap: 2, marginTop: "auto", flexWrap: "wrap", justifyContent: "center", paddingBottom: 1 }}>
                     {dots.map((c, di) => <i key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: c, display: "block" }} />)}
@@ -661,20 +541,26 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   return (
                     <div key={s.id} className="sep" style={{ fontSize: 12, padding: "8px 0" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: linkedJob ? 6 : 0, gap: 6 }}>
-                        <div>
+                        <div style={{ minWidth: 0 }}>
                           <b
                             onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
-                            style={{ color: "var(--color-primary)", cursor: "pointer" }}
+                            style={{ color: "var(--color-primary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                             title="Open in Google Maps"
-                          >📍 {s.job}</b>
-                          {s.note && <div className="dim" style={{ fontSize: 10 }}>{s.note}</div>}
+                          ><Icon name="mapPin" size={12} color="var(--color-primary)" /> {s.job}</b>
+                          {(() => {
+                            const time = parseTime(s.note);
+                            const crew = parseWorkers(s.note);
+                            const freeform = (s.note || "").replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/, "").replace(/👷\s*[^·]+·?\s*/, "").trim();
+                            const bits = [time ? fmt12(time) : "", crew.join(", "), freeform].filter(Boolean);
+                            return bits.length ? <div className="dim" style={{ fontSize: 10 }}>{bits.join(" · ")}</div> : null;
+                          })()}
                         </div>
                         <button
                           className="bb"
                           onClick={() => setPage("time")}
-                          style={{ fontSize: 13, padding: "3px 8px" }}
+                          style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}
                         >
-                          ⏱ Start
+                          <Icon name="start" size={12} color="#fff" /> Start
                         </button>
                       </div>
                       {linkedJob && <SmsNotifyButtons jobId={linkedJob.id} compact />}
@@ -761,9 +647,9 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           <button
             className="bb"
             onClick={() => setPage("time")}
-            style={{ fontSize: 12, padding: "5px 14px" }}
+            style={{ fontSize: 12, padding: "5px 14px", display: "inline-flex", alignItems: "center", gap: 5 }}
           >
-            ⏱ Start Working →
+            <Icon name="start" size={13} color="#fff" /> Start Working
           </button>
         </div>
       </div>
