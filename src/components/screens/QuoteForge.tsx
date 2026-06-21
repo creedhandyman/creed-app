@@ -1325,117 +1325,84 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
   if (!mode) {
     return (
       <div className="fi">
-        <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <Icon name="quote" size={22} color="var(--color-primary)" />
-          QuoteForge Pro
-        </h2>
+        {/* Topbar — title + eyebrow */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px", textTransform: "uppercase" }}>QuoteForge</span>
+          <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>New quote</span>
+        </div>
         {parsing && (
           <div className="cd mb">
             <AiLoadingDisplay status={parseStatus} />
           </div>
         )}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-          {/* Quick Quote */}
-          <div
-            onClick={() => setMode("quick")}
-            style={{
-              background: darkMode ? "#12121a" : "#fff",
-              border: `2px solid var(--color-primary)`,
-              borderRadius: 12,
-              padding: "20px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              position: "relative",
-            }}
-          >
-            <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-primary)", fontFamily: "Oswald" }}>Small jobs</span>
-            <Icon name="quote" size={36} color="var(--color-primary)" strokeWidth={2} />
-            <div>
-              <h4 style={{ color: "var(--color-primary)", fontSize: 16, margin: 0 }}>Quick Quote</h4>
-              <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
-                Describe the issue, add photos → AI generates a quote
-              </p>
-            </div>
-          </div>
 
-          {/* Inspect — every plan can run inspections; the cap controls
-              what's included vs. overage. At-cap orgs see an "Upgrade or
-              pay overage" toast but are still allowed to proceed (overage
-              billing kicks in via Stripe). Orgs at >= 80% of cap see a
-              quiet "X inspections left this month" info nudge. */}
-          <div
-            onClick={async () => {
-              const plan = org?.subscription_plan || org?.plan || "solo";
-              if (!org?.id) { setMode("inspect"); return; }
-              const usage = await getUsage(org.id, plan);
-              if (usage.blocked) {
-                useStore.getState().showToast(
-                  `You've used all ${usage.cap} included inspections this month — extras bill at $0.50 each. Manage in Ops → Billing.`,
-                  "warning",
-                );
-              } else if (usage.warning) {
-                useStore.getState().showToast(
-                  `${usage.remaining} inspection${usage.remaining === 1 ? "" : "s"} left this month`,
-                  "info",
-                );
-              }
-              setMode("inspect");
-            }}
-            style={{
-              background: darkMode ? "#12121a" : "#fff",
-              border: `2px solid var(--color-success)`,
-              borderRadius: 12,
-              padding: "20px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              position: "relative",
-            }}
-          >
-            <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-success)", fontFamily: "Oswald" }}>Most accurate</span>
-            <Icon name="search" size={36} color="var(--color-success)" strokeWidth={2} />
-            <div>
-              <h4 style={{ color: "var(--color-success)", fontSize: 16, margin: 0 }}>Full Inspection</h4>
-              <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
-                Area-by-area walkthrough. Tap the Voice mic in any room to record one continuous take — AI transcribes and fills the checklist.
-              </p>
-            </div>
+        {/* Quick Quote — gold glow */}
+        <div
+          onClick={() => setMode("quick")}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, marginBottom: 11, cursor: "pointer", background: "rgba(245,180,0,.13)", border: "1.5px solid rgba(245,180,0,.75)", boxShadow: "0 0 24px -3px rgba(245,180,0,.5), inset 0 0 22px -8px rgba(245,180,0,.4)" }}
+        >
+          <div style={{ width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="quote" size={23} color="#f5b400" strokeWidth={2} />
           </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px", color: "#fff" }}>QUICK QUOTE</div>
+            <div style={{ fontSize: 10.5, color: "#ffffffb0" }}>Describe it, add photos → AI prices it</div>
+          </div>
+          <span style={{ fontSize: 8.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(245,180,0,.2)", color: "#f5b400" }}>SMALL JOBS</span>
+        </div>
 
-          {/* Upload PDF */}
-          <div
-            onClick={() => fileRef.current?.click()}
-            style={{
-              background: darkMode ? "#12121a" : "#fff",
-              border: `2px solid var(--color-warning)`,
-              borderRadius: 12,
-              padding: "20px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              position: "relative",
-            }}
-          >
-            <span style={{ position: "absolute", top: 8, right: 10, fontSize: 11, color: "var(--color-warning)", fontFamily: "Oswald" }}>PDF reports</span>
-            <Icon name="doc" size={36} color="var(--color-warning)" strokeWidth={2} />
-            <div>
-              <h4 style={{ color: "var(--color-warning)", fontSize: 16, margin: 0 }}>Upload Report</h4>
-              <p style={{ color: "#888", fontSize: 13, fontFamily: "Source Sans 3", textTransform: "none", letterSpacing: "normal", margin: "2px 0 0" }}>
-                Upload a PDF inspection report for AI analysis
-              </p>
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.txt"
-              style={{ display: "none" }}
-              onChange={handleFile}
-            />
+        {/* Full Inspection — green glow. Every plan can run inspections; the
+            cap controls included vs. overage (toast nudges, never blocks). */}
+        <div
+          onClick={async () => {
+            const plan = org?.subscription_plan || org?.plan || "solo";
+            if (!org?.id) { setMode("inspect"); return; }
+            const usage = await getUsage(org.id, plan);
+            if (usage.blocked) {
+              useStore.getState().showToast(
+                `You've used all ${usage.cap} included inspections this month — extras bill at $0.50 each. Manage in Ops → Billing.`,
+                "warning",
+              );
+            } else if (usage.warning) {
+              useStore.getState().showToast(
+                `${usage.remaining} inspection${usage.remaining === 1 ? "" : "s"} left this month`,
+                "info",
+              );
+            }
+            setMode("inspect");
+          }}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, marginBottom: 11, cursor: "pointer", background: "rgba(0,204,102,.13)", border: "1.5px solid rgba(0,204,102,.7)", boxShadow: "0 0 24px -3px rgba(0,204,102,.45), inset 0 0 22px -8px rgba(0,204,102,.4)" }}
+        >
+          <div style={{ width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="search" size={23} color="#3ee08f" strokeWidth={2} />
           </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px", color: "#fff" }}>FULL INSPECTION</div>
+            <div style={{ fontSize: 10.5, color: "#ffffffb0" }}>Area-by-area walkthrough · voice</div>
+          </div>
+          <span style={{ fontSize: 8.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(0,204,102,.2)", color: "#3ee08f" }}>MOST ACCURATE</span>
+        </div>
+
+        {/* Upload Report — blue glow */}
+        <div
+          onClick={() => fileRef.current?.click()}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, marginBottom: 11, cursor: "pointer", background: "rgba(46,139,255,.13)", border: "1.5px solid rgba(46,139,255,.75)", boxShadow: "0 0 24px -3px rgba(46,139,255,.5), inset 0 0 22px -8px rgba(46,139,255,.4)" }}
+        >
+          <div style={{ width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="doc" size={23} color="#8cc0ff" strokeWidth={2} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px", color: "#fff" }}>UPLOAD REPORT</div>
+            <div style={{ fontSize: 10.5, color: "#ffffffb0" }}>PDF inspection → AI analysis</div>
+          </div>
+          <span style={{ fontSize: 8.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(46,139,255,.2)", color: "#8cc0ff" }}>PDF</span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,.txt"
+            style={{ display: "none" }}
+            onChange={handleFile}
+          />
         </div>
 
       <SavedInspections jobs={jobs} onQuote={handleInspectionComplete} onEdit={openInspectionEdit} onPrint={printInspection} onDelete={async (id) => { await db.del("jobs", id); loadAll(); }} />
@@ -3611,44 +3578,35 @@ function SavedInspections({ jobs, onQuote, onEdit, onPrint, onDelete }: { jobs: 
       <button
         onClick={() => setOpen((v) => !v)}
         style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "10px 14px",
-          borderRadius: 8,
-          fontSize: 13,
-          fontFamily: "Oswald",
-          textTransform: "uppercase",
-          letterSpacing: ".05em",
-          border: "1px solid var(--color-primary)",
-          background: open ? "var(--color-primary)22" : "transparent",
-          color: "var(--color-primary)",
-          cursor: "pointer",
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "none", border: "none", padding: "9px 2px",
+          fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, letterSpacing: ".06em",
+          color: "var(--color-dim)", cursor: "pointer",
         }}
       >
-        <span>🗂 {t("qf.savedInspections")} ({inspections.length})</span>
-        <span style={{ fontSize: 12 }}>{open ? "▼" : "▶"}</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+          <Icon name="folder" size={15} color="var(--color-dim)" /> {t("qf.savedInspections")} · {inspections.length}
+        </span>
+        <Icon name={open ? "collapse" : "expand"} size={15} color="var(--color-dim)" />
       </button>
       {open && (
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 6 }}>
           {inspections.map((insp) => {
             let inspData: Record<string, unknown> = {};
             try { inspData = typeof insp.rooms === "string" ? JSON.parse(insp.rooms) : insp.rooms || {}; } catch { inspData = {}; }
             const inspection = inspData.inspection as { rooms?: { name: string; items: { name: string; condition: string; comment: string; photos?: string[] }[] }[] } | undefined;
             const roomCount = inspection?.rooms?.length || 0;
             const findingsCount = inspection?.rooms?.reduce((s, r) => s + r.items.filter((it) => it.condition !== "S").length, 0) || 0;
+            const mini: React.CSSProperties = { width: 28, height: 28, borderRadius: 8, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", color: "var(--color-dim)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 };
 
             return (
-              <div key={insp.id} className="cd mb" style={{ padding: 12 }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{insp.property || "Untitled"}</div>
-                  <div className="dim" style={{ fontSize: 12 }}>
-                    {insp.client || "No client"} · {insp.job_date} · {roomCount} areas · {findingsCount} findings
-                  </div>
+              <div key={insp.id} className="cd mb" style={{ padding: "11px 12px" }}>
+                <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{insp.property || "Untitled"}</div>
+                <div className="dim" style={{ fontSize: 10, margin: "2px 0 8px" }}>
+                  {insp.client || "No client"} · {insp.job_date} · {roomCount} areas · {findingsCount} findings
                 </div>
-                <div className="row" style={{ marginTop: 8, gap: 6 }}>
-                  <button className="bb" onClick={() => {
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <button onClick={() => {
                     if (!inspection) return;
                     // Normalize the saved-inspection shape (which uses
                     // `comment`) back into InspectionData (which uses
@@ -3673,22 +3631,16 @@ function SavedInspections({ jobs, onQuote, onEdit, onPrint, onDelete }: { jobs: 
                       address_id: insp.address_id || undefined,
                     };
                     onQuote(normalized, insp.id);
-                  }} style={{ fontSize: 12, padding: "5px 10px" }}>
+                  }} style={{ fontSize: 10.5, fontWeight: 600, color: "#1a1305", background: "#f5b400", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", marginRight: "auto" }}>
                     {t("qf.quoteThis")}
                   </button>
-                  <button className="bo" onClick={() => onEdit(insp)} style={{ fontSize: 12, padding: "5px 10px" }}>
-                    ✏️ Edit
-                  </button>
-                  <button className="bo" onClick={() => onPrint(insp, inspData, roomCount, findingsCount)} style={{ fontSize: 12, padding: "5px 10px" }}>
-                    {t("qf.print")}
-                  </button>
-                  <button className="bo" onClick={async () => {
+                  <button onClick={() => onEdit(insp)} aria-label="Edit" style={mini}><Icon name="edit" size={14} /></button>
+                  <button onClick={() => onPrint(insp, inspData, roomCount, findingsCount)} aria-label="Print" style={mini}><Icon name="print" size={14} /></button>
+                  <button onClick={async () => {
                     if (await useStore.getState().showConfirm("Delete Inspection", "Delete this saved inspection?")) {
                       onDelete(insp.id);
                     }
-                  }} style={{ fontSize: 12, padding: "5px 10px", color: "var(--color-accent-red)" }}>
-                    Delete
-                  </button>
+                  }} aria-label="Delete" style={{ ...mini, color: "var(--color-accent-red)" }}><Icon name="delete" size={14} /></button>
                 </div>
               </div>
             );
