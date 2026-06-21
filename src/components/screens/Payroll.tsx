@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { openPrint } from "@/lib/print-template";
 import { buildStubHtml, runPayrollForUser, type StubInput } from "@/lib/payroll-runner";
+import { computeQuests } from "@/lib/quests";
 
 /** Trigger a browser download of an HTML string as a .html file. Used by
  *  the per-entry Download button so the employee can save the stub
@@ -70,36 +71,19 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   let questConfig: Record<string, { enabled: boolean; bonus: number }> = {};
   try { questConfig = org?.quest_config ? JSON.parse(org.quest_config) : {}; } catch { /* */ }
 
-  const defaultBonuses: Record<string, number> = {
-    review_favor: 75, five_star: 100, super_handy: 50, network_scout: 50,
-    critical_referral: 150, deal_closer: 25, repeat_machine: 100,
-    skill_mastery: 100, make_ready: 350, zero_callback: 150, mr_speed: 25, handy_king: 750,
-  };
-
-  const getBonus = (key: string) => questConfig[key]?.bonus ?? defaultBonuses[key] ?? 0;
-  const isEnabled = (key: string) => questConfig[key]?.enabled !== false;
-
-  // Check completions for selected user
-  const completedJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
-  const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3).length;
-  const fiveStarReviews = reviews.filter((r) => r.rating === 5).length;
-  const convertedReferrals = referrals.filter((r) => r.status === "converted").length;
-  const upsellJobs = jobs.filter((j) => j.is_upsell).length;
-  const bigJobs = jobs.filter((j) => (j.status === "complete" || j.status === "paid") && (j.total_hrs || 0) >= 24).length;
-
-  const earnedQuests: { key: string; name: string; bonus: number }[] = [];
-  if (isEnabled("review_favor") && positiveReviews >= 15 && !paidQuests.includes("review_favor"))
-    earnedQuests.push({ key: "review_favor", name: "Review Favor", bonus: getBonus("review_favor") });
-  if (isEnabled("five_star") && fiveStarReviews >= 10 && !paidQuests.includes("five_star"))
-    earnedQuests.push({ key: "five_star", name: "Five Star Tech", bonus: getBonus("five_star") });
-  if (isEnabled("super_handy") && completedJobs >= 10 && !paidQuests.includes("super_handy"))
-    earnedQuests.push({ key: "super_handy", name: "Super Handy", bonus: getBonus("super_handy") });
-  if (isEnabled("network_scout") && convertedReferrals >= 1 && !paidQuests.includes("network_scout"))
-    earnedQuests.push({ key: "network_scout", name: "Network Scout", bonus: getBonus("network_scout") });
-  if (isEnabled("deal_closer") && upsellJobs >= 1 && !paidQuests.includes("deal_closer"))
-    earnedQuests.push({ key: "deal_closer", name: "Deal Closer", bonus: getBonus("deal_closer") });
-  if (isEnabled("make_ready") && bigJobs >= 7 && !paidQuests.includes("make_ready"))
-    earnedQuests.push({ key: "make_ready", name: "Make Ready Pro", bonus: getBonus("make_ready") });
+  // All completed-but-unpaid quests for the selected employee, computed with
+  // the SAME per-tech, per-cycle engine the tech sees on their Quests screen —
+  // so payroll covers all 12 quests and the amounts always agree (it used to
+  // only know 6, measured org-wide/all-time).
+  const earnedQuests = computeQuests({
+    userId: sel,
+    userName: selUser.name || "",
+    jobs, reviews, referrals, timeEntries,
+    questConfig,
+    cycleStart,
+  }).allQuests
+    .filter((q) => q.progress >= q.goal && !paidQuests.includes(q.key))
+    .map((q) => ({ key: q.key, name: q.name, bonus: q.bonusAmount }));
 
   // Admins must explicitly approve each earned bonus before it's added to pay.
   // Quests start as "pending" and aren't paid until checked.
