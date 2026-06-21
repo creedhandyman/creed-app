@@ -59,16 +59,6 @@ const TAB_COLOR: Record<string, string> = {
   troubleshoot: "#94a3b8",// Help — slate
 };
 
-// White or near-black label, whichever reads better on the tab color — keeps
-// the light tabs (e.g. the yellow Quote tab) legible when filled.
-function textOn(hex: string): string {
-  const c = hex.replace("#", "");
-  const r = parseInt(c.slice(0, 2), 16);
-  const g = parseInt(c.slice(2, 4), 16);
-  const b = parseInt(c.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#1a1a1a" : "#fff";
-}
-
 interface Props {
   page: string;
   setPage: (p: string) => void;
@@ -102,22 +92,18 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
         const active = isMore ? onOverflow : page === item.id;
         const color = isMore ? (TAB_COLOR[page] || TAB_COLOR.more) : (TAB_COLOR[item.id] || TAB_COLOR.dash);
         const showLeadDot = item.id === "jobs" && leadCount > 0;
-        // Active = filled in the tab's signature color (overrides the .act
-        // gradient); inactive falls back to the default class styling.
-        const activeStyle = active
-          ? { background: color, color: textOn(color), boxShadow: `0 4px 16px ${color}73` }
-          : {};
 
         return (
           <button
             key={i}
-            className={active ? "act" : ""}
             onClick={() => setPage(isMore ? "more" : item.id)}
             aria-label={label}
-            style={{ position: "relative", ...activeStyle }}
+            // Active = icon + label tinted in the tab's signature color (no
+            // filled box); inactive uses the default muted class color.
+            style={{ position: "relative", color: active ? color : undefined }}
           >
             <Icon name={iconName} size={20} strokeWidth={active ? 2 : 1.75} />
-            <span style={{ fontSize: 9, marginTop: 2 }}>{label}</span>
+            <span style={{ fontSize: 9, marginTop: 2, fontWeight: active ? 600 : undefined }}>{label}</span>
             {showLeadDot && (
               <span
                 aria-label={`${leadCount} new ${leadCount === 1 ? "lead" : "leads"}`}

@@ -309,8 +309,9 @@ src/
 - **Nav per-tab colors + morphing More slot; dashboard "next check"**:
   `VerticalNav.tsx` colors the active tab in its signature hue (Home blue,
   Quote yellow/gold, Jobs red, Time green, Quests purple, … — `TAB_COLOR`
-  map + `textOn()` luminance-based label color live in the file; active =
-  filled in that color, overriding the `.act` gradient). The **More** slot
+  map in the file). Active = the **icon + label tinted** in that color on a
+  transparent background (no filled box / `.act` gradient); inactive uses the
+  default muted class color. The **More** slot
   morphs into whatever overflow tab is active (its icon + label + color via
   `OVERFLOW_TABS`) and still taps through to the More hub so you can switch.
   The dashboard pay figure — tech **"Your next check"** hero + admin
