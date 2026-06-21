@@ -352,9 +352,32 @@ function ReviewAutomationCard({
 
 type OpsTab = "payroll" | "financials" | "customers" | "recurring" | "hr" | "team" | "billing" | "settings";
 
+const AREA_LABEL: Record<OpsTab, string> = {
+  payroll: "Payroll", financials: "Financials", customers: "Customers", recurring: "Recurring",
+  hr: "HR", team: "Team", billing: "Billing", settings: "Settings",
+};
+
+// Per-tile color + tint (matches the mock's launcher).
+const TILE_STYLE: Record<OpsTab, { icon: IconName; color: string; bg: string }> = {
+  payroll:    { icon: "money",    color: "#3ee08f", bg: "rgba(0,204,102,.14)" },
+  financials: { icon: "trending", color: "#8cc0ff", bg: "rgba(46,139,255,.14)" },
+  customers:  { icon: "clients",  color: "#3ee08f", bg: "rgba(0,204,102,.14)" },
+  recurring:  { icon: "refresh",  color: "#3aa0ff", bg: "rgba(58,160,255,.14)" },
+  hr:         { icon: "card",     color: "#ffb15e", bg: "rgba(255,136,0,.16)" },
+  team:       { icon: "worker",   color: "#c9a6ff", bg: "rgba(157,78,221,.16)" },
+  billing:    { icon: "receipt",  color: "#f5b400", bg: "rgba(245,180,0,.16)" },
+  settings:   { icon: "settings", color: "#aab2c0", bg: "rgba(138,138,153,.18)" },
+};
+
 export default function Operations({ setPage, initialTab }: { setPage: (p: string) => void; initialTab?: string }) {
   const user = useStore((s) => s.user);
   const isAdmin = user?.role === "owner" || user?.role === "manager";
+  const profiles = useStore((s) => s.profiles);
+  const timeEntries = useStore((s) => s.timeEntries);
+  const jobs = useStore((s) => s.jobs);
+  const customers = useStore((s) => s.customers) ?? [];
+  const recurringJobs = useStore((s) => s.recurringJobs) ?? [];
+  const org = useStore((s) => s.org);
   const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   // Pending badge is only meaningful to admins — non-admins can't act on
   // it and shouldn't see a count of org-wide pending requests.
@@ -362,85 +385,122 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
     ? timeOffRequests.filter((r) => r && r.status === "pending").length
     : 0;
 
-  // Non-admins land here only via the HR entry — default the sub-tab to
-  // "hr" so they don't briefly see an empty "payroll" surface before any
-  // filtering renders.
-  const [tab, setTab] = useState<OpsTab>(() => {
-    // Deep-link (e.g. More hub -> Customers) opens a specific sub-tab when
-    // it's a valid one; otherwise fall back to the role-appropriate default.
-    const valid = ["payroll", "financials", "customers", "recurring", "hr", "team", "billing", "settings"];
-    return initialTab && valid.includes(initialTab) ? (initialTab as OpsTab) : (isAdmin ? "payroll" : "hr");
+  // tab = null → the launcher hub (admins). A non-null tab opens that
+  // area's detail. Non-admins skip the hub entirely (HR is their root).
+  const validTabs: OpsTab[] = ["payroll", "financials", "customers", "recurring", "hr", "team", "billing", "settings"];
+  const adminOnly: OpsTab[] = ["payroll", "financials", "customers", "recurring", "team", "billing", "settings"];
+  const [tab, setTab] = useState<OpsTab | null>(() => {
+    // Deep-link (e.g. More hub → Customers) opens a specific area, but a
+    // non-admin can't reach an admin-only area — bounce them to HR.
+    if (initialTab && (validTabs as string[]).includes(initialTab)) {
+      const it = initialTab as OpsTab;
+      if (!isAdmin && adminOnly.includes(it)) return "hr";
+      return it;
+    }
+    return isAdmin ? null : "hr";
   });
-  // CustomerDetail is rendered inline within the customers sub-tab. Its
-  // state lives here so switching to a different sub-tab and back resets
-  // to the list view (rather than the user landing on a stale detail).
+  // CustomerDetail is rendered inline within the customers area. Its state
+  // lives here so leaving and re-entering customers resets to the list.
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   useEffect(() => {
     if (tab !== "customers") setSelectedCustomerId(null);
   }, [tab]);
 
-  // HR is the only sub-tab non-admins can see. The other Ops tabs are
-  // admin-only — they were implicitly gated by the page-level admin
-  // check, but now that the Ops route is open to everyone (so techs can
-  // reach HR), the per-tab gate has to be explicit. HR carries the
-  // pending-request badge for admins only.
-  const allTabs: { id: OpsTab; label: string; icon: IconName; adminOnly?: boolean; badge?: number }[] = [
-    { id: "payroll",    label: t("ops.payroll"),    icon: "money",    adminOnly: true },
-    { id: "financials", label: t("ops.financials"), icon: "trending", adminOnly: true },
-    { id: "customers",  label: "Customers",         icon: "clients",  adminOnly: true },
-    { id: "recurring",  label: t("ops.recurring"),  icon: "refresh",  adminOnly: true },
-    { id: "hr",         label: "HR",                icon: "worker", badge: pendingTimeOffCount },
-    { id: "team",       label: t("ops.team"),       icon: "worker",   adminOnly: true },
-    { id: "billing",    label: t("ops.billing"),    icon: "receipt",  adminOnly: true },
-    { id: "settings",   label: t("ops.settings"),   icon: "settings", adminOnly: true },
-  ];
-  const tabs = allTabs.filter((tb) => !tb.adminOnly || isAdmin);
+  // ── Hub KPIs + tile subs. Glanceable — the detail screens hold the
+  // exact breakdowns. Payroll due is exact (unpaid hours × each person's
+  // rate); revenue / profit are this-month approximations keyed off
+  // created_at (Financials has the precise figures). ──
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const rateOf = (uid?: string | null) => (uid ? profiles.find((p) => p.id === uid)?.rate || 0 : 0);
+  const inMonth = (d?: string) => { if (!d) return false; try { return new Date(d) >= monthStart; } catch { return false; } };
+  const payrollDue = timeEntries.filter((e) => !e.paid_at).reduce((s, e) => s + (e.hours || 0) * rateOf(e.user_id), 0);
+  const revenueMonth = jobs.filter((j) => j.status === "paid" && inMonth(j.created_at)).reduce((s, j) => s + (j.total || 0), 0);
+  const laborMonth = timeEntries.filter((e) => inMonth(e.entry_date)).reduce((s, e) => s + (e.hours || 0) * rateOf(e.user_id), 0);
+  const netProfit = revenueMonth - laborMonth;
+  const monthLabel = now.toLocaleDateString("en-US", { month: "short" });
+  const fmtMoney = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Math.round(n)}`);
+  const roleLabel = user?.role === "owner" ? "Owner" : user?.role === "manager" ? "Manager" : (user?.role || "Team");
+  const planLabel = org?.subscription_plan ? String(org.subscription_plan) : org?.plan ? String(org.plan) : "Manage";
 
+  const tileSub: Record<OpsTab, string> = {
+    payroll: `${fmtMoney(payrollDue)} due`,
+    financials: `${fmtMoney(revenueMonth)} · ${monthLabel}`,
+    customers: `${customers.length} client${customers.length === 1 ? "" : "s"}`,
+    recurring: `${recurringJobs.filter((r) => r.is_active).length} active`,
+    hr: pendingTimeOffCount ? `${pendingTimeOffCount} time-off pending` : "Time off · PTO",
+    team: `${profiles.length} member${profiles.length === 1 ? "" : "s"}`,
+    billing: planLabel,
+    settings: "Rates · tax · brand",
+  };
+
+  // ── Launcher hub (admins) ──
+  if (isAdmin && tab === null) {
+    return (
+      <div className="fi">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>Operations</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <Icon name="safety" size={12} color="#3ee08f" /> {roleLabel}
+          </span>
+        </div>
+
+        {/* KPIs */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 13 }}>
+          {[
+            { l: "Payroll due", v: fmtMoney(payrollDue), c: "var(--color-money)" },
+            { l: `Revenue · ${monthLabel}`, v: fmtMoney(revenueMonth), c: "inherit" },
+            { l: "Net profit", v: fmtMoney(netProfit), c: netProfit >= 0 ? "var(--color-money)" : "var(--color-accent-red)" },
+          ].map((k) => (
+            <div key={k.l} style={{ background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "11px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: 8.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--color-dim)" }}>{k.l}</div>
+              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: k.c }}>{k.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tiles */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {validTabs.map((id) => {
+            const st = TILE_STYLE[id];
+            const badge = id === "hr" ? pendingTimeOffCount : 0;
+            return (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                style={{ position: "relative", textAlign: "left", background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 15, padding: 13, cursor: "pointer", color: "inherit" }}
+              >
+                {badge ? (
+                  <span style={{ position: "absolute", top: 11, right: 11, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 9.5, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center" }}>{badge}</span>
+                ) : null}
+                <div style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 9, background: st.bg }}>
+                  <Icon name={st.icon} size={19} color={st.color} />
+                </div>
+                <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".3px" }}>{AREA_LABEL[id]}</div>
+                <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 2 }}>{tileSub[id]}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Area detail (back header + the existing sub-screen) ──
   return (
     <div className="fi">
-      <div style={{ display: "flex", gap: 3, marginBottom: 14, overflowX: "auto" }}>
-        {tabs.map((t) => {
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 6,
-                fontSize: 14,
-                whiteSpace: "nowrap",
-                background: active ? "var(--color-primary)" : "transparent",
-                color: active ? "#fff" : "#888",
-                fontFamily: "Oswald",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <Icon name={t.icon} size={14} strokeWidth={active ? 2 : 1.75} />
-              {t.label}
-              {t.badge && t.badge > 0 ? (
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontFamily: "Oswald",
-                    background: active ? "#fff" : "var(--color-accent-red)",
-                    color: active ? "var(--color-primary)" : "#fff",
-                    padding: "0 6px",
-                    borderRadius: 8,
-                    minWidth: 18,
-                    textAlign: "center",
-                    letterSpacing: ".04em",
-                  }}
-                >
-                  {t.badge}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      {isAdmin && tab && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <button
+            onClick={() => setTab(null)}
+            aria-label="Back to Operations"
+            style={{ width: 30, height: 30, borderRadius: 9, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit" }}
+          >
+            <Icon name="back" size={16} />
+          </button>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px", textTransform: "uppercase" }}>{AREA_LABEL[tab]}</span>
+        </div>
+      )}
 
       {tab === "payroll" && (
         <SubTabErrorBoundary label="Payroll"><Payroll /></SubTabErrorBoundary>

@@ -274,6 +274,26 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Operations remodel (from mockups, IN PROGRESS)**: `Creed_Ops_Streamlined`
+  + `Creed_Ops_Customers_Team_Settings` + `Creed_Settings_Full`. **Phase 1
+  DONE** — `Operations.tsx` is no longer an 8-tab strip; it's a **launcher
+  hub**: topbar (OPERATIONS + role chip) → 3 KPIs (Payroll due = exact unpaid
+  hrs×rate; Revenue·mo + Net profit = this-month approximations by
+  created_at) → a 2-col **tile grid** (Payroll/Financials/Customers/Recurring/
+  HR[badge=pending time-off]/Team/Billing/Settings; `TILE_STYLE` map holds
+  per-tile icon+hue). `tab` state is now `OpsTab | null` — null = hub (admins
+  only); a tile opens that area's **detail** = a back-header (chevron → hub) +
+  the SAME existing sub-component (Payroll/Financials/Customers+CustomerDetail/
+  Recurring/HR/TeamStats/Billing/OpsSettings), all unchanged. Non-admins skip
+  the hub (HR is their root, no back). Deep-link `initialTab` still works and
+  now bounces non-admins off admin-only areas. **NOT yet done** (Phases 2+):
+  restyle each detail to the mocks — Payroll (emp strip + team summary + quest
+  bonus + employee rows + Process all), Financials (period tabs + 4 stat cards
+  + pipeline statusbar/legend + top jobs), Customers (filter chips + search +
+  CRM rows), Team (baseball-card stat sheet + rows + invite), Ops Settings
+  (Branding / Quote defaults / Review-requests sections), and personal
+  Settings (profile / notifications / appearance / security).
+
 - **Quests redesign (from mockup)**: `Creed_Quests_Tabs_Confetti` mockup —
   `Quests.tsx` rebuilt to a battle-pass "QUEST HUB" while ALL the quest
   computation logic (per-user cycle stats, tiers, qBonus/qEnabled config,
