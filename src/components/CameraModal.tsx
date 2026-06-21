@@ -97,7 +97,12 @@ export function CameraModal({
       const caps = track?.getCapabilities?.() as
         | (MediaTrackCapabilities & { torch?: boolean })
         | undefined;
-      setTorchAvailable(!!caps?.torch);
+      // Offer the flash toggle when the device reports a torch (Android rear
+      // cameras), or when capabilities are unknown (some Android WebViews omit
+      // getCapabilities yet still honor the constraint). iOS Safari reports
+      // caps WITHOUT torch — there is no web torch API there — so it stays
+      // hidden rather than showing a button that can't work.
+      setTorchAvailable(caps ? !!caps.torch : true);
       setReady(true);
     } catch (err) {
       console.warn("Camera unavailable:", err);
@@ -140,6 +145,15 @@ export function CameraModal({
           c: MediaTrackConstraints & { advanced?: Array<{ torch?: boolean }> }
         ) => Promise<void>
       )({ advanced: [{ torch: next }] });
+      // Some devices accept the constraint but don't actually drive the LED —
+      // verify it took, and back out (hiding the button) if it didn't.
+      const settings = track.getSettings?.() as (MediaTrackSettings & { torch?: boolean }) | undefined;
+      if (settings && "torch" in settings && settings.torch !== next) {
+        setTorchAvailable(false);
+        setTorchOn(false);
+        useStore.getState().showToast("Flash not supported on this device", "info");
+        return;
+      }
       setTorchOn(next);
     } catch {
       setTorchAvailable(false);

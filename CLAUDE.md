@@ -281,7 +281,8 @@ src/
   own upload + AI logic, so it was a drop-in for the existing handlers.
   Extracted from VoiceWalk's proven getUserMedia primitive (single audio-less
   video call, iOS `playsInline`, torch via `applyConstraints`); **VoiceWalk
-  itself is unchanged** (its camera is entangled with audio recording). Props:
+  keeps its OWN camera** (entangled with audio recording — see its redesign
+  below), not this component. Props:
   `open / onClose / onCapture / multiple? / allowLibrary? / title? / maxSize? /
   quality?`. `multiple` keeps it open after each shot (uploads stream in) with a
   Done(N) button; single mode closes after one. Wired into the **6 spots** that
@@ -294,6 +295,21 @@ src/
   (deferred): the gallery pickers themselves, the public lead/portal customer
   photo forms, and logo/avatar uploads (BrandingSettings / onboarding /
   TeamStats) — logos especially are file uploads, not snapped photos.
+  **Flash detection** (CameraModal + VoiceWalk): the torch button shows only
+  when the video track's `getCapabilities().torch` is true (or caps are unknown
+  — some Android WebViews). iOS Safari reports caps WITHOUT torch (no web torch
+  API exists there) so the button correctly hides on iPhone instead of offering
+  one that can't fire the LED; CameraModal also verifies via `getSettings()`
+  after toggling and backs out (hides + toast) if it didn't take.
+- **VoiceWalk camera redesign (bigger preview + overlaid checklist)**: the
+  per-room camera was a small 4:3 box with the key-items checklist stacked
+  below it (cramped). Now, while recording, the camera fills the screen
+  (`height: min(64vh, 560px)`) and the checklist rides ON the preview as small
+  translucent chips along the top — each chip **glows green** (green border +
+  box-shadow) the instant its keyword is auto-ticked (or it's tapped). Shutter
+  + gallery + photo-count moved to a bottom scrim; REC timer + N/total + flash
+  to a top scrim. The separate checklist / empty-state cards render only when
+  NOT inspecting (pre-record review). Snap / upload / audio plumbing unchanged.
 - **QuoteForge redesign (from mockup)**: `Creed_Quote_Section` mockup —
   restyled the hub + editor; all AI/editing logic preserved. **Hub**: topbar
   (QUOTEFORGE + "New quote") + three glow CTAs (Quick Quote gold, Full
