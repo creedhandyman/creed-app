@@ -13,7 +13,7 @@
  */
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { Icon } from "../Icon";
+import { Icon, type IconName } from "../Icon";
 import PropertySearch from "../PropertySearch";
 import type { CustomerType } from "@/lib/types";
 
@@ -39,6 +39,12 @@ const TYPE_COLOR: Record<CustomerType, string> = {
   individual: "var(--color-primary)",
   business: "var(--color-success)",
   property_manager: "var(--color-warning)",
+};
+
+const TYPE_ICON: Record<CustomerType, IconName> = {
+  individual: "card",
+  business: "briefcase",
+  property_manager: "ops",
 };
 
 export default function Customers({ setPage, onSelect }: Props) {
@@ -105,11 +111,13 @@ export default function Customers({ setPage, onSelect }: Props) {
       .sort()
       .reverse()[0] || "";
     const revenue = allJobs.reduce((s, j) => s + (j.total || 0), 0);
-    const hasOpen = allJobs.some((j) => !["complete", "invoiced", "paid"].includes(j.status));
+    const openCount = allJobs.filter((j) => !["complete", "invoiced", "paid"].includes(j.status)).length;
+    const hasOpen = openCount > 0;
     return {
       ...c,
       addrCount: addrs.length,
       jobCount: allJobs.length,
+      openCount,
       lastService,
       revenue,
       hasOpen,
@@ -126,26 +134,17 @@ export default function Customers({ setPage, onSelect }: Props) {
     });
 
   const total = customers.length;
-  const active = customersWithStats.filter((c) => c.hasOpen).length;
-  const totalRevenue = customersWithStats.reduce((s, c) => s + c.revenue, 0);
 
   return (
     <div className="fi">
-      {/* Header */}
-      <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <div className="row">
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Icon name="clients" size={18} color="var(--color-primary)" />
-            Customers
-          </h2>
-        </div>
+      {/* Add button (the Ops back-header already shows CUSTOMERS) */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
         <button
-          className="bb"
           onClick={() => setShowAdd((v) => !v)}
-          style={{ fontSize: 15, padding: "6px 14px" }}
+          aria-label={showAdd ? "Cancel" : "Add customer"}
+          style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: showAdd ? "var(--color-card-dark-3)" : "var(--color-primary)", border: showAdd ? "1px solid var(--color-border-dark-2)" : "none", color: showAdd ? "var(--color-dim)" : "#fff" }}
         >
-          {showAdd ? "Cancel" : "+ Add"}
+          <Icon name={showAdd ? "close" : "add"} size={16} color={showAdd ? "var(--color-dim)" : "#fff"} />
         </button>
       </div>
 
@@ -217,59 +216,34 @@ export default function Customers({ setPage, onSelect }: Props) {
         />
       </div>
 
-      {/* Type filter chips */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 10, overflowX: "auto", paddingBottom: 2 }}>
+      {/* Type filter chips — mock pills */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 11 }}>
         {TYPE_FILTERS.map((f) => {
-          const count = f.id === "all"
-            ? customers.length
-            : customers.filter((c) => c.type === f.id).length;
           const active = typeFilter === f.id;
-          const c = f.id === "all" ? "var(--color-primary)" : TYPE_COLOR[f.id as CustomerType];
           return (
             <button
               key={f.id}
               onClick={() => setTypeFilter(f.id)}
               style={{
-                padding: "5px 10px", borderRadius: 14, fontSize: 13, whiteSpace: "nowrap",
-                background: active ? c : "transparent",
-                color: active ? "#fff" : c,
-                border: `1px solid ${c}`,
-                fontFamily: "Oswald", letterSpacing: ".04em", flexShrink: 0,
+                flex: 1, textAlign: "center", padding: "7px 4px", borderRadius: 99, fontSize: 10.5, fontWeight: 500, whiteSpace: "nowrap",
+                background: active ? "var(--color-primary)" : "var(--color-card-dark-3)",
+                border: `1px solid ${active ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                color: active ? "#fff" : "var(--color-dim)",
               }}
             >
-              {f.label} · {count}
+              {f.label}
             </button>
           );
         })}
       </div>
 
-      {/* Portfolio summary */}
-      {total > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-          <div className="cd" style={{ textAlign: "center", padding: 10 }}>
-            <div className="sl">Total</div>
-            <div className="sv" style={{ color: "var(--color-primary)" }}>{total}</div>
-          </div>
-          <div className="cd" style={{ textAlign: "center", padding: 10 }}>
-            <div className="sl">Active</div>
-            <div className="sv" style={{ color: "var(--color-success)" }}>{active}</div>
-          </div>
-          <div className="cd" style={{ textAlign: "center", padding: 10 }}>
-            <div className="sl">Revenue</div>
-            <div className="sv" style={{ color: "var(--color-highlight)", fontSize: 20 }}>
-              ${totalRevenue >= 1000 ? `${(totalRevenue / 1000).toFixed(1)}k` : totalRevenue.toFixed(0)}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* List */}
+      {/* List — mock CRM rows */}
       {filtered.length === 0 && (
         <div className="cd" style={{ textAlign: "center", padding: 24 }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>👥</div>
-          <p className="dim" style={{ fontSize: 15 }}>
+          <Icon name="clients" size={30} color="var(--color-dim)" />
+          <p className="dim" style={{ fontSize: 14, marginTop: 8 }}>
             {total === 0
-              ? "No customers yet — tap + Add to create one."
+              ? "No customers yet — tap + to create one."
               : "No matches — adjust the search or filter."}
           </p>
         </div>
@@ -280,55 +254,32 @@ export default function Customers({ setPage, onSelect }: Props) {
           <div
             key={c.id}
             onClick={() => onSelect?.(c.id)}
-            className="cd mb"
-            style={{
-              cursor: "pointer",
-              borderLeft: `3px solid ${typeColor}`,
-              padding: 12,
-            }}
+            style={{ display: "flex", alignItems: "center", gap: 11, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "11px 12px", marginBottom: 8, cursor: "pointer" }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <b style={{ fontSize: 16 }}>{c.name}</b>
-                <span style={{
-                  fontSize: 12, fontFamily: "Oswald", letterSpacing: ".04em",
-                  padding: "1px 6px", borderRadius: 8,
-                  background: `${typeColor}22`, color: typeColor,
-                }}>
-                  {TYPE_LABEL[c.type]}
-                </span>
+            <div style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", background: `${typeColor}22` }}>
+              <Icon name={TYPE_ICON[c.type]} size={18} color={typeColor} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".3px", display: "flex", alignItems: "center", gap: 7 }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{c.name}</span>
+                <span style={{ fontSize: 8.5, fontWeight: 600, padding: "1px 7px", borderRadius: 99, flex: "none", background: `${typeColor}22`, color: typeColor }}>{TYPE_LABEL[c.type]}</span>
                 {c.isFuzzy && (
-                  <span
-                    title="Jobs matched by name only — confirm via the backfill tool"
-                    style={{
-                      fontSize: 12, fontFamily: "Oswald", letterSpacing: ".04em",
-                      padding: "1px 6px", borderRadius: 8,
-                      background: "var(--color-warning)22", color: "var(--color-warning)",
-                    }}
-                  >
-                    UNLINKED
-                  </span>
+                  <span title="Jobs matched by name only — confirm via the backfill tool" style={{ fontSize: 8.5, fontWeight: 600, padding: "1px 7px", borderRadius: 99, flex: "none", background: "var(--color-warning)22", color: "var(--color-warning)" }}>UNLINKED</span>
                 )}
               </div>
-              <span className="dim" style={{ fontSize: 13 }}>
-                {c.lastService || "—"}
-              </span>
+              <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                {c.openCount > 0 && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#3ee08f", boxShadow: "0 0 7px #3ee08f", flex: "none" }} />}
+                {c.jobCount} job{c.jobCount === 1 ? "" : "s"}{c.openCount > 0 ? ` · ${c.openCount} open` : ""}
+              </div>
             </div>
-            {c.primary_contact && (
-              <div className="dim" style={{ fontSize: 14, marginBottom: 2 }}>
-                👤 {c.primary_contact}
+            {c.revenue > 0 && (
+              <div style={{ textAlign: "right", flex: "none" }}>
+                <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 13, color: "var(--color-money)" }}>
+                  ${c.revenue >= 1000 ? `${(c.revenue / 1000).toFixed(1)}k` : c.revenue.toFixed(0)}
+                </div>
+                <div style={{ fontSize: 8, color: "var(--color-dim)" }}>lifetime</div>
               </div>
             )}
-            <div className="dim" style={{ fontSize: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <span>📍 {c.addrCount} address{c.addrCount === 1 ? "" : "es"}</span>
-              <span>🧰 {c.jobCount} job{c.jobCount === 1 ? "" : "s"}</span>
-              {c.revenue > 0 && (
-                <span style={{ color: "var(--color-success)" }}>
-                  ${c.revenue >= 1000 ? `${(c.revenue / 1000).toFixed(1)}k` : c.revenue.toFixed(0)}
-                </span>
-              )}
-              {c.phone && <span>☎ {c.phone}</span>}
-            </div>
           </div>
         );
       })}
