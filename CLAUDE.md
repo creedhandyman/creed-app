@@ -274,25 +274,29 @@ src/
 
 ## Big systems shipped recently (for context)
 
-- **Operations remodel (from mockups, IN PROGRESS)**: `Creed_Ops_Streamlined`
-  + `Creed_Ops_Customers_Team_Settings` + `Creed_Settings_Full`. **Phase 1
-  DONE** — `Operations.tsx` is no longer an 8-tab strip; it's a **launcher
-  hub**: topbar (OPERATIONS + role chip) → 3 KPIs (Payroll due = exact unpaid
-  hrs×rate; Revenue·mo + Net profit = this-month approximations by
-  created_at) → a 2-col **tile grid** (Payroll/Financials/Customers/Recurring/
-  HR[badge=pending time-off]/Team/Billing/Settings; `TILE_STYLE` map holds
-  per-tile icon+hue). `tab` state is now `OpsTab | null` — null = hub (admins
-  only); a tile opens that area's **detail** = a back-header (chevron → hub) +
-  the SAME existing sub-component (Payroll/Financials/Customers+CustomerDetail/
-  Recurring/HR/TeamStats/Billing/OpsSettings), all unchanged. Non-admins skip
-  the hub (HR is their root, no back). Deep-link `initialTab` still works and
-  now bounces non-admins off admin-only areas. **NOT yet done** (Phases 2+):
-  restyle each detail to the mocks — Payroll (emp strip + team summary + quest
-  bonus + employee rows + Process all), Financials (period tabs + 4 stat cards
-  + pipeline statusbar/legend + top jobs), Customers (filter chips + search +
-  CRM rows), Team (baseball-card stat sheet + rows + invite), Ops Settings
-  (Branding / Quote defaults / Review-requests sections), and personal
-  Settings (profile / notifications / appearance / security).
+- **Operations remodel (from mockups)**: `Creed_Ops_Streamlined` +
+  `Creed_Ops_Customers_Team_Settings` + `Creed_Settings_Full`. **Ops tab DONE.**
+  `Operations.tsx` is no longer an 8-tab strip; it's a **launcher hub**: topbar
+  (OPERATIONS + role chip) → 3 KPIs (Payroll due = exact unpaid hrs×rate;
+  Revenue·mo + Net profit = this-month approximations by created_at) → a 2-col
+  **tile grid** (Payroll/Financials/Customers/Recurring/HR[badge=pending
+  time-off]/Team/Billing/Settings; `TILE_STYLE` map). `tab` state is `OpsTab |
+  null` — null = hub (admins only); a tile opens that area's **detail** =
+  back-header (chevron → hub) + the sub-component. Non-admins skip the hub (HR
+  is their root). Deep-link `initialTab` works + bounces non-admins off
+  admin-only areas. **Detail restyles shipped:** Payroll (avatar strip + team
+  summary + per-employee rows w/ Ready/No-rate tag + "Process all" via the safe
+  auto-run endpoint; `embedded` prop hides its H2 inside Ops; per-person
+  Process Pay + bonus approval kept), Financials (period pills + 4 P&L cards +
+  pipeline statusbar/legend; deep analytics kept below), Customers (blue-pill
+  filters + CRM rows: type icon/chip + jobs·open + lifetime $), Team
+  (baseball-card for top earner: 6-stat grid incl. questsWon + noCallbackPct +
+  top-trade bar; compact rows; edits in the expand), Ops Settings (de-emoji
+  only — branding/quote-defaults/review-automation logic untouched). **Recurring
+  / HR / Billing** open their existing components unchanged (mock didn't restyle
+  them). **NOT yet done:** the personal **Settings gear** screen
+  (`Creed_Settings_Full` screen 1 — profile / notifications / appearance /
+  security); that's a separate screen from the Ops tab.
 
 - **Quests redesign (from mockup)**: `Creed_Quests_Tabs_Confetti` mockup —
   `Quests.tsx` rebuilt to a battle-pass "QUEST HUB" while ALL the quest
