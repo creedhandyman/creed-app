@@ -303,7 +303,7 @@ export default function CustomerPicker({
                 marginBottom: 2,
                 fontSize: 14,
                 background: "transparent",
-                color: "#e2e2e8",
+                color: "inherit",
                 border: "1px solid transparent",
                 borderRadius: 4,
                 cursor: "pointer",

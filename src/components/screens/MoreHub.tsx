@@ -20,6 +20,7 @@ interface Props {
 export default function MoreHub({ setPage, openSettings, openOps }: Props) {
   const user = useStore((s) => s.user);
   const org = useStore((s) => s.org);
+  const darkMode = useStore((s) => s.darkMode);
   const [showGuide, setShowGuide] = useState(false);
 
   const name = user?.name || "—";
@@ -46,7 +47,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
 
       {/* Profile -> Settings (Account) */}
       <div className="cd mb" onClick={openSettings} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: 13 }}>
-        <div style={{ width: 42, height: 42, borderRadius: "50%", background: "var(--color-card-dark-3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, color: "#cdd6e6", flexShrink: 0 }}>{initials}</div>
+        <div style={{ width: 42, height: 42, borderRadius: "50%", background: "var(--color-card-dark-3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, color: darkMode ? "#cdd6e6" : "#5a6175", flexShrink: 0 }}>{initials}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17 }}>{name}</div>
           <div style={{ fontSize: 13, color: "var(--color-success)" }}>{roleLabel}{org?.name ? ` · ${org.name}` : ""}</div>

@@ -458,7 +458,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           const isAll = w.id === null;
           return (
             <button key={w.id || "all"} onClick={() => setWorkerFilter(w.id)} style={{ flexShrink: 0, textAlign: "center", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              <div style={{ width: 38, height: 38, borderRadius: "50%", margin: "0 auto 3px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, background: isAll ? "var(--color-primary)" : "var(--color-card-dark-2)", color: (isAll || wOn) ? "#fff" : "#cdd6e6", border: `2px solid ${wOn ? "var(--color-primary)" : "transparent"}`, boxShadow: wOn ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>{w.badge}</div>
+              <div style={{ width: 38, height: 38, borderRadius: "50%", margin: "0 auto 3px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, background: isAll ? "var(--color-primary)" : "var(--color-card-dark-2)", color: isAll ? "#fff" : darkMode ? (wOn ? "#fff" : "#cdd6e6") : (wOn ? "#1a1a2a" : "#5a6175"), border: `2px solid ${wOn ? "var(--color-primary)" : "transparent"}`, boxShadow: wOn ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>{w.badge}</div>
               <div style={{ fontSize: 10.5, color: wOn ? "inherit" : "var(--color-dim)" }}>{w.short}</div>
             </button>
           );
@@ -493,7 +493,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                     {crew.length > 0 && (
                       <div style={{ display: "flex", marginTop: 7 }}>
                         {crew.map((wn, ci) => (
-                          <span key={ci} title={wn} style={{ width: 21, height: 21, borderRadius: "50%", background: "var(--color-card-dark-2)", border: `1.5px solid ${darkMode ? "#16161f" : "#fff"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 600, color: "#cdd6e6", marginLeft: ci ? -5 : 0 }}>{initialsOf(wn)}</span>
+                          <span key={ci} title={wn} style={{ width: 21, height: 21, borderRadius: "50%", background: "var(--color-card-dark-2)", border: `1.5px solid ${darkMode ? "#16161f" : "#fff"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 600, color: darkMode ? "#cdd6e6" : "#5a6175", marginLeft: ci ? -5 : 0 }}>{initialsOf(wn)}</span>
                         ))}
                       </div>
                     )}
@@ -629,7 +629,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 <div key={p.id} className="cd" style={{ padding: "9px 11px", marginBottom: 7 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mine.length ? 7 : 0 }}>
                     <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
-                      <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#cdd6e6" }}>{initialsOf(p.name)}</span>
+                      <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: darkMode ? "#cdd6e6" : "#5a6175" }}>{initialsOf(p.name)}</span>
                       {p.name}
                     </span>
                     <span className="dim" style={{ fontSize: 11.5 }}>{mine.length ? `${mine.length} job${mine.length !== 1 ? "s" : ""}` : "Available"}</span>
