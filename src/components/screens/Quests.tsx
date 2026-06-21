@@ -289,6 +289,14 @@ export default function Quests() {
   };
 
   const VIOLET = "#9d4edd";
+  // Inline dark tokens are fixed values — they don't flip for light mode.
+  // These surface helpers keep cards/rows/tracks/avatars readable (no
+  // black-on-black) when the theme is light.
+  const surf = darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)";
+  const surfBorder = darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)";
+  const track = darkMode ? "var(--color-border-dark)" : "var(--color-border-light)";
+  const avatarBg = darkMode ? "var(--color-border-dark)" : "var(--color-border-light-2)";
+  const avatarFg = darkMode ? "#cdd6e6" : "#5a6175";
 
   return (
     <div className="fi">
@@ -323,8 +331,8 @@ export default function Quests() {
                 fontSize: 12.5,
                 padding: "8px 2px",
                 borderRadius: 9,
-                border: `1px solid ${on ? VIOLET : "var(--color-border-dark-2)"}`,
-                background: on ? VIOLET : "var(--color-card-dark-3)",
+                border: `1px solid ${on ? VIOLET : surfBorder}`,
+                background: on ? VIOLET : surf,
                 color: on ? "#fff" : "var(--color-dim)",
                 boxShadow: on ? "0 0 16px -5px rgba(157,78,221,.8)" : "none",
               }}
@@ -378,7 +386,7 @@ export default function Quests() {
                   const isPaid = isDone && paidKeys.has(q.key);
                   const pct = Math.min(100, (q.progress / q.goal) * 100);
                   return (
-                    <div key={q.name} style={{ position: "relative", overflow: "hidden", background: "var(--color-card-dark-3)", border: `1px solid ${isDone ? "rgba(245,180,0,.5)" : "var(--color-border-dark-2)"}`, borderRadius: 15, padding: "12px 13px", marginBottom: 9, boxShadow: isDone ? "0 0 24px -11px rgba(245,180,0,.7)" : "none" }}>
+                    <div key={q.name} style={{ position: "relative", overflow: "hidden", background: surf, border: `1px solid ${isDone ? "rgba(245,180,0,.5)" : surfBorder}`, borderRadius: 15, padding: "12px 13px", marginBottom: 9, boxShadow: isDone ? "0 0 24px -11px rgba(245,180,0,.7)" : "none" }}>
                       <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: isDone ? "#f5b400" : q.tierColor }} />
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 7, flexWrap: "wrap", minWidth: 0 }}>
@@ -392,7 +400,7 @@ export default function Quests() {
                         </span>
                       </div>
                       <div style={{ fontSize: 12, color: "var(--color-dim)", margin: "2px 0 9px" }}>{q.desc}</div>
-                      <div style={{ height: 7, background: "var(--color-border-dark)", borderRadius: 5, overflow: "hidden" }}>
+                      <div style={{ height: 7, background: track, borderRadius: 5, overflow: "hidden" }}>
                         <div style={{ height: "100%", borderRadius: 5, width: `${pct}%`, background: isDone ? "#f5b400" : q.tierColor, transition: "width .3s" }} />
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--color-dim)", marginTop: 5 }}>
@@ -462,9 +470,9 @@ export default function Quests() {
 
               {/* Rows 4+ */}
               {teamBoard.slice(3).map((m, i) => (
-                <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 11, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: "9px 12px", marginBottom: 7 }}>
+                <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 11, background: surf, border: `1px solid ${surfBorder}`, borderRadius: 12, padding: "9px 12px", marginBottom: 7 }}>
                   <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 15, color: "var(--color-dim)", width: 18 }}>{i + 4}</span>
-                  <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--color-border-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, color: "#cdd6e6" }}>{m.initials}</span>
+                  <span style={{ width: 30, height: 30, borderRadius: "50%", background: avatarBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, color: avatarFg }}>{m.initials}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14.5, fontWeight: 500 }}>{m.name}</div>
                     <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>
@@ -503,7 +511,7 @@ export default function Quests() {
 
           {/* Reviews list */}
           {reviews.map((r) => (
-            <div key={r.id} style={{ background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "11px 12px", marginBottom: 8 }}>
+            <div key={r.id} style={{ background: surf, border: `1px solid ${surfBorder}`, borderRadius: 13, padding: "11px 12px", marginBottom: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ color: (r.rating || 0) >= 5 ? "#f5b400" : "#888", fontSize: 14, letterSpacing: 1, textShadow: (r.rating || 0) >= 4 ? "0 0 10px rgba(245,180,0,.6)" : "none" }}>
                   {"★".repeat(r.rating || 0)}{"☆".repeat(5 - (r.rating || 0))}
@@ -615,10 +623,10 @@ export default function Quests() {
                 ? { bg: "rgba(0,204,102,.16)", c: "#3ee08f" }
                 : r.status === "contacted"
                 ? { bg: "rgba(46,139,255,.16)", c: "#8cc0ff" }
-                : { bg: "var(--color-border-dark)", c: "var(--color-dim)" };
+                : { bg: track, c: "var(--color-dim)" };
             return (
-              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "10px 12px", marginBottom: 8 }}>
-                <span style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--color-border-dark)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: "#cdd6e6", flex: "none" }}>{initials}</span>
+              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, background: surf, border: `1px solid ${surfBorder}`, borderRadius: 13, padding: "10px 12px", marginBottom: 8 }}>
+                <span style={{ width: 34, height: 34, borderRadius: "50%", background: avatarBg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: avatarFg, flex: "none" }}>{initials}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>{r.name}</div>
                   <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>{r.source || "—"}{r.ref_date ? ` · ${r.ref_date}` : ""}</div>
@@ -677,8 +685,9 @@ export default function Quests() {
 
 /** Small battle-pass quest chip (Reviews / Referrals tabs). */
 function QuestChip({ label, value, done, color }: { label: string; value: string; done: boolean; color: string }) {
+  const darkMode = useStore((s) => s.darkMode);
   return (
-    <div style={{ flex: 1, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 11, padding: 8, textAlign: "center" }}>
+    <div style={{ flex: 1, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, borderRadius: 11, padding: 8, textAlign: "center" }}>
       <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{label}</div>
       <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, marginTop: 2, color }}>
         {value}{done ? " ✓" : ""}

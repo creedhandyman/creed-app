@@ -86,6 +86,13 @@ export default function Timer({ setPage }: Props) {
   const timeEntries = useStore((s) => s.timeEntries);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+  // Inline dark tokens are fixed values — they don't flip for light mode.
+  // These helpers keep nested fills/avatars/chips readable (no black-on-black)
+  // when the theme is light.
+  const soft = darkMode ? "var(--color-card-dark-2)" : "var(--color-light-bg)";
+  const softBorder = darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)";
+  const avatarBg = darkMode ? "var(--color-card-dark-2)" : "var(--color-border-light-2)";
+  const avatarFg = darkMode ? "#cdd6e6" : "#5a6175";
   const isOwner = user.role === "owner" || user.role === "manager";
 
   const [on, setOn] = useState(() => ld("t_on", false));
@@ -393,9 +400,9 @@ export default function Timer({ setPage }: Props) {
                 style={{
                   flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
                   fontSize: 14, fontFamily: "Oswald", letterSpacing: ".04em", padding: "9px", borderRadius: 11,
-                  background: tabOn ? "var(--color-primary)" : "var(--color-card-dark-2)",
+                  background: tabOn ? "var(--color-primary)" : soft,
                   color: tabOn ? "#fff" : "var(--color-dim)",
-                  border: `1px solid ${tabOn ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                  border: `1px solid ${tabOn ? "var(--color-primary)" : softBorder}`,
                 }}
               >
                 <Icon name={tb.icon} size={14} color={tabOn ? "#fff" : "var(--color-dim)"} />
@@ -426,7 +433,7 @@ export default function Timer({ setPage }: Props) {
           {[...todayJobs.map((s) => ({ key: s.id, label: s.job, val: s.job })), { key: "general", label: t("timer.general"), val: "" }].map((c) => {
             const cOn = sj === c.val;
             return (
-              <button key={c.key} onClick={() => setSj(c.val)} style={{ fontSize: 12.5, padding: "6px 10px", borderRadius: 99, fontWeight: cOn ? 600 : 400, background: cOn ? "rgba(46,139,255,.16)" : "var(--color-card-dark-2)", border: `1px solid ${cOn ? "var(--color-primary)" : "var(--color-border-dark-2)"}`, color: cOn ? "#8cc0ff" : "var(--color-dim)" }}>{c.label}</button>
+              <button key={c.key} onClick={() => setSj(c.val)} style={{ fontSize: 12.5, padding: "6px 10px", borderRadius: 99, fontWeight: cOn ? 600 : 400, background: cOn ? "rgba(46,139,255,.16)" : soft, border: `1px solid ${cOn ? "var(--color-primary)" : softBorder}`, color: cOn ? "#8cc0ff" : "var(--color-dim)" }}>{c.label}</button>
             );
           })}
         </div>
@@ -471,7 +478,7 @@ export default function Timer({ setPage }: Props) {
 
       {/* Manual entry — collapsed dashed row that expands the form (admin) */}
       {isOwner && !showManual && (
-        <div onClick={() => setShowManual(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 13.5, color: "#8cc0ff", fontWeight: 600, background: "var(--color-card-dark-2)", border: "1px dashed var(--color-border-dark-2)", borderRadius: 11, padding: 10, marginBottom: 11, cursor: "pointer" }}>
+        <div onClick={() => setShowManual(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 13.5, color: "#8cc0ff", fontWeight: 600, background: soft, border: `1px dashed ${softBorder}`, borderRadius: 11, padding: 10, marginBottom: 11, cursor: "pointer" }}>
           <Icon name="add" size={15} color="#8cc0ff" /> Add time entry · manual
         </div>
       )}
@@ -667,7 +674,7 @@ export default function Timer({ setPage }: Props) {
               <div key={p.id} className="cd mb" style={{ padding: "10px 11px" }}>
                 {/* Header — avatar + status dot, name, location/job, duration + chip */}
                 <div onClick={() => setExpandedCrew(isExpanded ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                  <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: "#cdd6e6", flexShrink: 0 }}>
+                  <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: avatarBg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: avatarFg, flexShrink: 0 }}>
                     {initials(p.name)}
                     <span style={{ position: "absolute", right: -1, bottom: -1, width: 11, height: 11, borderRadius: "50%", border: `2px solid ${darkMode ? "#16161f" : "#fff"}`, background: isActive ? "var(--color-success)" : "#555" }} />
                   </div>
@@ -683,14 +690,14 @@ export default function Timer({ setPage }: Props) {
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, color: isActive ? "var(--color-success)" : todayHrs > 0 ? "inherit" : "var(--color-dim)" }}>
                       {isActive && activeElapsed ? activeElapsed : todayHrs > 0 ? `${todayHrs.toFixed(1)}h` : "—"}
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 2, background: isActive ? "rgba(0,204,102,.16)" : "var(--color-card-dark-2)", color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 2, background: isActive ? "rgba(0,204,102,.16)" : soft, color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
                       {isActive ? "On the clock" : "Off"}
                     </span>
                   </div>
                 </div>
                 {/* Expanded — clocked-in time, per-entry edit, force-out, add entry */}
                 {isExpanded && (
-                  <div style={{ borderTop: "1px solid var(--color-border-dark)", marginTop: 9, paddingTop: 9 }}>
+                  <div style={{ borderTop: `1px solid ${softBorder}`, marginTop: 9, paddingTop: 9 }}>
                     {isActive && activeEntry!.start_time && (
                       <div style={{ fontSize: 12.5, color: "#7fb6ff", display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                         <Icon name="mapPin" size={13} color="#7fb6ff" /> Clocked in {activeEntry!.start_time}
@@ -701,7 +708,7 @@ export default function Timer({ setPage }: Props) {
                     ) : allEntries.slice(0, 8).map((en) => {
                       const running = !en.end_time && !!en.start_time;
                       return (
-                        <div key={en.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "var(--color-card-dark-2)", borderRadius: 10, padding: "7px 9px", marginBottom: 6 }}>
+                        <div key={en.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: soft, borderRadius: 10, padding: "7px 9px", marginBottom: 6 }}>
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{en.job || t("timer.general")}</div>
                             <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{running ? `running · since ${en.start_time}` : `${en.entry_date}${en.start_time ? ` · ${en.start_time}–${en.end_time || "now"}` : ""}`}</div>
@@ -724,7 +731,7 @@ export default function Timer({ setPage }: Props) {
                         <Icon name="stop" size={12} color="#ff9d9d" /> Force clock out
                       </button>
                     )}
-                    <div onClick={() => { setMUser(p.id); setTab("time"); setShowManual(true); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 13, color: "#8cc0ff", fontWeight: 600, background: "var(--color-card-dark-2)", border: "1px dashed var(--color-border-dark-2)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
+                    <div onClick={() => { setMUser(p.id); setTab("time"); setShowManual(true); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 13, color: "#8cc0ff", fontWeight: 600, background: soft, border: `1px dashed ${softBorder}`, borderRadius: 10, padding: 8, cursor: "pointer" }}>
                       <Icon name="add" size={13} color="#8cc0ff" /> Add entry for {p.name.split(" ")[0]}
                     </div>
                   </div>

@@ -46,6 +46,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const reviewRequests = useStore((s) => s.reviewRequests);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+  // Inline dark tokens are fixed values — the Properties value-pills sit on a
+  // white .section card in light mode, so flip their fill/border or the
+  // inherited (dark) text renders black-on-black.
+  const pillBg = darkMode ? "var(--color-card-dark-2)" : "var(--color-light-bg)";
+  const pillBorder = darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)";
 
   // Serialize all `rooms` blob mutations on this screen — checkbox toggles,
   // after-photo uploads — so two quick taps can't race and clobber each
@@ -717,7 +722,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             <div className="seclabel"><Icon name="settings" size={13} /> Properties</div>
             <div className="drow">
               <span className="l">Trade</span>
-              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)" }}>
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: pillBg, border: `1px solid ${pillBorder}` }}>
                 <span style={{ fontSize: 14, fontWeight: 600 }}>{dj.trade || "None"}</span>
                 <Icon name="expand" size={12} color="var(--color-dim)" />
                 <select
@@ -739,7 +744,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             </div>
             <div className="drow">
               <span className="l">Requested tech</span>
-              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)" }}>
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: pillBg, border: `1px solid ${pillBorder}` }}>
                 <span style={{ fontSize: 14, fontWeight: 600 }}>{dj.requested_tech || "Anyone"}</span>
                 <Icon name="expand" size={12} color="var(--color-dim)" />
                 <select

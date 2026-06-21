@@ -41,7 +41,7 @@ export default function Settings({ onClose }: Props) {
         <button
           onClick={onClose}
           aria-label="Back"
-          style={{ width: 30, height: 30, borderRadius: 9, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit", flexShrink: 0 }}
+          style={{ width: 30, height: 30, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit", flexShrink: 0 }}
         >
           <Icon name="back" size={17} />
         </button>
@@ -49,7 +49,7 @@ export default function Settings({ onClose }: Props) {
       </div>
 
       {/* Tab bar — segmented control */}
-      <div style={{ display: "inline-flex", background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 10, padding: 3, marginBottom: 16 }}>
+      <div style={{ display: "inline-flex", background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, borderRadius: 10, padding: 3, marginBottom: 16 }}>
         {["account", "general"].map((tb) => (
           <button
             key={tb}

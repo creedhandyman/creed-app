@@ -34,6 +34,14 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const payHistory = useStore((s) => s.payHistory);
   const questPayouts = useStore((s) => s.questPayouts);
   const loadAll = useStore((s) => s.loadAll);
+  const darkMode = useStore((s) => s.darkMode);
+  // Inline dark tokens are fixed values — they don't flip for light mode.
+  // These surface helpers keep rows/avatars readable (no black-on-black)
+  // when the theme is light.
+  const surf = darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)";
+  const surfBorder = darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)";
+  const avatarBg = darkMode ? "var(--color-card-dark-2)" : "var(--color-border-light-2)";
+  const avatarFg = darkMode ? "#cdd6e6" : "#5a6175";
 
   const isOwner = user.role === "owner" || user.role === "manager";
   const [sel, setSel] = useState(user.id);
@@ -320,7 +328,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   onClick={() => setSel(u.id)}
                   style={{ flex: "none", width: 48, textAlign: "center", background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit" }}
                 >
-                  <div style={{ width: 40, height: 40, borderRadius: "50%", margin: "0 auto 4px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, background: "var(--color-card-dark-2)", color: on ? "#fff" : "#cdd6e6", border: `2px solid ${on ? "var(--color-primary)" : "transparent"}`, boxShadow: on ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: "50%", margin: "0 auto 4px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, background: avatarBg, color: darkMode ? (on ? "#fff" : "#cdd6e6") : "#5a6175", border: `2px solid ${on ? "var(--color-primary)" : "transparent"}`, boxShadow: on ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>
                     {u.photo_url ? <img src={u.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
                   </div>
                   <div style={{ fontSize: 8.5, color: on ? "inherit" : "var(--color-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(u.name || "").split(/\s+/)[0]}</div>
@@ -338,7 +346,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
             ].map((s) => (
               <div key={s.l} style={{ flex: 1, textAlign: "center" }}>
                 <div style={{ fontSize: 8.5, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--color-dim)" }}>{s.l}</div>
-                <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: s.c || "inherit" }}>{s.v}</div>
+                <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: s.c || (darkMode ? "inherit" : "#fff") }}>{s.v}</div>
               </div>
             ))}
           </div>
@@ -356,9 +364,9 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                 <button
                   key={r.id}
                   onClick={() => setSel(r.id)}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, background: "var(--color-card-dark-3)", border: `1px solid ${on ? "var(--color-primary)" : "var(--color-border-dark-2)"}`, borderRadius: 13, padding: "10px 12px", marginBottom: 8, cursor: "pointer", color: "inherit", textAlign: "left" }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, background: surf, border: `1px solid ${on ? "var(--color-primary)" : surfBorder}`, borderRadius: 13, padding: "10px 12px", marginBottom: 8, cursor: "pointer", color: "inherit", textAlign: "left" }}
                 >
-                  <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 11, color: "#cdd6e6", flex: "none" }}>{r.initials}</span>
+                  <span style={{ width: 30, height: 30, borderRadius: "50%", background: avatarBg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 11, color: avatarFg, flex: "none" }}>{r.initials}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600 }}>{r.name}</div>
                     <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{r.hrs.toFixed(1)}h · ${r.rate}/hr</div>

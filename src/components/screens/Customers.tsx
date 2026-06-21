@@ -67,6 +67,10 @@ export default function Customers({ setPage, onSelect }: Props) {
   const [notes, setNotes] = useState("");
 
   const border = darkMode ? "#1e1e2e" : "#eee";
+  // Inline dark tokens don't flip on their own — surface helpers keep cards/
+  // rows/pills readable (no black-on-black) in light mode.
+  const surf = darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)";
+  const surfBorder = darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)";
 
   const addCustomer = async () => {
     if (!name.trim()) {
@@ -142,7 +146,7 @@ export default function Customers({ setPage, onSelect }: Props) {
         <button
           onClick={() => setShowAdd((v) => !v)}
           aria-label={showAdd ? "Cancel" : "Add customer"}
-          style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: showAdd ? "var(--color-card-dark-3)" : "var(--color-primary)", border: showAdd ? "1px solid var(--color-border-dark-2)" : "none", color: showAdd ? "var(--color-dim)" : "#fff" }}
+          style={{ width: 32, height: 32, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: showAdd ? surf : "var(--color-primary)", border: showAdd ? `1px solid ${surfBorder}` : "none", color: showAdd ? "var(--color-dim)" : "#fff" }}
         >
           <Icon name={showAdd ? "close" : "add"} size={16} color={showAdd ? "var(--color-dim)" : "#fff"} />
         </button>
@@ -226,8 +230,8 @@ export default function Customers({ setPage, onSelect }: Props) {
               onClick={() => setTypeFilter(f.id)}
               style={{
                 flex: 1, textAlign: "center", padding: "7px 4px", borderRadius: 99, fontSize: 10.5, fontWeight: 500, whiteSpace: "nowrap",
-                background: active ? "var(--color-primary)" : "var(--color-card-dark-3)",
-                border: `1px solid ${active ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                background: active ? "var(--color-primary)" : surf,
+                border: `1px solid ${active ? "var(--color-primary)" : surfBorder}`,
                 color: active ? "#fff" : "var(--color-dim)",
               }}
             >
@@ -254,7 +258,7 @@ export default function Customers({ setPage, onSelect }: Props) {
           <div
             key={c.id}
             onClick={() => onSelect?.(c.id)}
-            style={{ display: "flex", alignItems: "center", gap: 11, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "11px 12px", marginBottom: 8, cursor: "pointer" }}
+            style={{ display: "flex", alignItems: "center", gap: 11, background: surf, border: `1px solid ${surfBorder}`, borderRadius: 13, padding: "11px 12px", marginBottom: 8, cursor: "pointer" }}
           >
             <div style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", background: `${typeColor}22` }}>
               <Icon name={TYPE_ICON[c.type]} size={18} color={typeColor} />
