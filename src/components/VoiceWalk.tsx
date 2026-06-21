@@ -685,9 +685,13 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   useEffect(() => {
     if (!currentRoom) return;
     const rec = roomRecordings[currentRoom];
+    // Match the committed transcript AND the live interim text (+ any typed
+    // fallback) so a chip greens the instant its keyword is heard, not only
+    // after Web Speech commits a final — Android Chrome lags/skips finals.
     const speechText = (rec?.transcript || "").toLowerCase();
-    const fallbackText = supported ? "" : pendingTyped.toLowerCase();
-    const text = `${speechText} ${fallbackText}`.trim();
+    const interimText = liveInterim.toLowerCase();
+    const fallbackText = pendingTyped.toLowerCase();
+    const text = `${speechText} ${interimText} ${fallbackText}`.trim();
     if (!text) return;
     const items = itemsFor(currentRoom);
     const found: string[] = [];
@@ -703,7 +707,22 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       for (const f of found) next.add(f);
       return { ...prev, [currentRoom]: next };
     });
-  }, [currentRoom, transcriptTick, pendingTyped, supported, mentioned, roomRecordings]);
+  }, [currentRoom, transcriptTick, liveInterim, pendingTyped, mentioned, roomRecordings]);
+
+  /* ── Keep Web Speech alive for the whole room ──────────────────────
+     Android Chrome ends a recognition session after each pause (onend
+     nulls recogRef). Without this, the live green ticks stop after the
+     first sentence. While inspecting, restart recognition whenever it's
+     dropped so it keeps listening for the entire take. */
+  useEffect(() => {
+    if (!inspecting || !supported) return;
+    const iv = setInterval(() => {
+      if (!recogRef.current) {
+        try { startPreviewRecognition(); } catch { /* */ }
+      }
+    }, 1200);
+    return () => clearInterval(iv);
+  }, [inspecting, supported, startPreviewRecognition]);
 
   const toggleItem = (room: string, item: string) => {
     setMentioned((prev) => {

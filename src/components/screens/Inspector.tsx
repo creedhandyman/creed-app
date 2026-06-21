@@ -524,12 +524,21 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           if (ri !== roomIdx) return r;
           const isUserEdited = (it: InspectionItem) =>
             it.condition !== "S" || !!(it.notes && it.notes.trim()) || (it.photos && it.photos.length > 0);
-          const userEditedNames = new Set(
-            r.items.filter(isUserEdited).map((it) => it.name.toLowerCase())
-          );
-          const kept = r.items.filter(isUserEdited);
-          const newAi = items.filter((it) => !userEditedNames.has(it.name.toLowerCase()));
-          return { ...r, items: [...kept, ...newAi] };
+          // Keep EVERY existing checklist item. Items the inspector didn't
+          // talk about must persist (blank, condition "S") so they can still
+          // be filled in by hand — they used to get dropped, which deleted
+          // the whole checklist except the few things mentioned. Per item:
+          // user edits always win; otherwise the AI's assessment replaces the
+          // untouched scaffold for that component; otherwise keep the scaffold
+          // as-is. Then append any AI findings that aren't on the checklist.
+          const aiByName = new Map(items.map((it) => [it.name.toLowerCase(), it]));
+          const existingNames = new Set(r.items.map((it) => it.name.toLowerCase()));
+          const merged = r.items.map((it) => {
+            if (isUserEdited(it)) return it;
+            return aiByName.get(it.name.toLowerCase()) ?? it;
+          });
+          const extra = items.filter((it) => !existingNames.has(it.name.toLowerCase()));
+          return { ...r, items: [...merged, ...extra] };
         }));
       } else {
         useStore.getState().showToast(`AI couldn't categorize "${roomName}" — checklist scaffold kept.`, "warning");
