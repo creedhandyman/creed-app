@@ -7,6 +7,7 @@ import { Icon } from "../Icon";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import PropertySearch from "../PropertySearch";
 import SmsNotifyButtons from "../SmsNotifyButtons";
+import { statusColor } from "@/lib/status";
 
 interface Props {
   setPage: (p: string) => void;
@@ -26,18 +27,15 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
-  const [sd, setSd] = useState("");
-  const [sj, setSj] = useState(preSelectJob || "");
-  const [sn, setSn] = useState("");
-  const [sTime, setSTime] = useState("");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [sTech, setSTech] = useState("");
-  const [sWorkers, setSWorkers] = useState<string[]>([]);
-  const [view, setView] = useState<"week" | "month">("week");
+  const [view, setView] = useState<"day" | "week" | "month">("week");
+  const [workerFilter, setWorkerFilter] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<{ date: string; reason: string } | null>(null);
   // Quick-schedule state: a job "armed" from the unscheduled palette, plus
   // the day the user dropped/tapped onto. Drives the modal form.
-  const [armedJob, setArmedJob] = useState<string | null>(null);
+  // Arm from preSelectJob (Jobs → "Schedule this job") so tapping a day
+  // schedules it; the old standalone add-form that consumed preSelectJob is gone.
+  const [armedJob, setArmedJob] = useState<string | null>(preSelectJob || null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [hoverDay, setHoverDay] = useState<string | null>(null);
   // Last-used time and workers persist between drops so back-to-back
@@ -53,10 +51,6 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const [qsTime, setQsTime] = useState(() => loadStr("lastTime", ""));
   const [qsWorkers, setQsWorkers] = useState<string[]>(() => loadList("lastWorkers"));
   const [qsNote, setQsNote] = useState("");
-  // "All Scheduled" list collapse state — defaults closed so the page doesn't
-  // grow a mile long once dozens of jobs accumulate.
-  const [allOpen, setAllOpen] = useState(false);
-  const [showPast, setShowPast] = useState(false);
 
   // When a job is armed via the drag palette, re-run the day-suggestion
   // logic so the user immediately sees a "schedule near nearby work" hint.
@@ -136,31 +130,6 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     useStore.getState().showToast(t("sched.scheduledToast"), "success");
   };
 
-  const addSchedule = async () => {
-    if (!sd) { useStore.getState().showToast("Select a date", "warning"); return; }
-    if (!sj) { useStore.getState().showToast("Select a job", "warning"); return; }
-    const today = new Date().toISOString().split("T")[0];
-    if (sd < today && !await useStore.getState().showConfirm("Past Date", `${sd} is in the past. Schedule anyway?`)) return;
-    const parts = [];
-    if (sTime) parts.push(`🕐 ${sTime}`);
-    if (sWorkers.length) parts.push(`👷 ${sWorkers.join(", ")}`);
-    else if (sTech) parts.push(`👷 ${sTech}`);
-    if (sn) parts.push(sn);
-    await db.post("schedule", { sched_date: sd, job: sj, note: parts.join(" · ") });
-    // Auto-update job status to "scheduled" if currently quoted or accepted
-    const matchedJob = jobs.find((j) => j.property === sj && (j.status === "quoted" || j.status === "accepted"));
-    if (matchedJob) {
-      await db.patch("jobs", matchedJob.id, { status: "scheduled" });
-    }
-    setSd("");
-    setSj("");
-    setSn("");
-    setSTime("");
-    setSTech("");
-    setSWorkers([]);
-    loadAll();
-  };
-
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0];
 
@@ -195,192 +164,54 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const stepView = (dir: -1 | 1) => {
     setViewDate((prev) => {
       const next = new Date(prev);
-      if (view === "week") next.setDate(prev.getDate() + dir * 7);
+      if (view === "day") next.setDate(prev.getDate() + dir);
+      else if (view === "week") next.setDate(prev.getDate() + dir * 7);
       else next.setMonth(prev.getMonth() + dir);
       return next;
     });
   };
   const goToday = () => setViewDate(new Date());
 
-  const renderDayCell = (d: Date | null, key: number | string) => {
-    if (!d) {
-      return (
-        <div
-          key={key}
-          style={{
-            background: darkMode ? "#0d0d14" : "#f5f5f5",
-            borderRadius: 6,
-            padding: 4,
-            minHeight: view === "month" ? 50 : 70,
-          }}
-        />
-      );
-    }
-    const ds = d.toISOString().split("T")[0];
-    const items = schedule.filter((s) => s.sched_date === ds);
-    const isToday = ds === todayStr;
-
-    const isSelected = ds === selectedDay;
-    const isHover = ds === hoverDay;
-    const isSuggested = !!armedJob && suggestion?.date === ds;
-    // Pull the earliest start-time out of the day's notes for a quick glance
-    // at when work begins. Notes look like "🕐 09:30 · 👷 …".
-    const firstTime = items.length
-      ? items
-          .map((it) => it.note?.match(/🕐\s*(\d{1,2}:\d{2})/)?.[1])
-          .filter((x): x is string => !!x)
-          .sort()[0]
-      : undefined;
-    return (
-      <div
-        key={key}
-        onClick={() => {
-          // If a job is armed (clicked from the palette), tapping a day opens
-          // the quick-schedule modal for this day. Otherwise just select it.
-          if (armedJob) {
-            setDropTarget(ds);
-            return;
-          }
-          setSelectedDay(isSelected ? null : ds);
-        }}
-        onDragOver={(e) => { e.preventDefault(); if (!isHover) setHoverDay(ds); }}
-        onDragLeave={() => setHoverDay((h) => (h === ds ? null : h))}
-        onDrop={async (e) => {
-          e.preventDefault();
-          setHoverDay(null);
-          const payload = e.dataTransfer.getData("text/plain");
-          if (!payload) return;
-          // "move:<id>" = re-arrange an existing schedule entry to this day.
-          // Anything else = a job property dragged from the unscheduled palette.
-          if (payload.startsWith("move:")) {
-            const id = payload.slice(5);
-            const entry = schedule.find((s) => s.id === id);
-            if (!entry || entry.sched_date === ds) return;
-            await db.patch("schedule", id, { sched_date: ds });
-            await loadAll();
-            useStore.getState().showToast(t("sched.scheduledToast"), "success");
-            return;
-          }
-          setArmedJob(payload);
-          setDropTarget(ds);
-        }}
-        style={{
-          background: isHover
-            ? "var(--color-success)" + "55"
-            : isSuggested
-            ? "var(--color-highlight)" + "33"
-            : armedJob
-            ? "var(--color-success)" + "11"
-            : isSelected
-            ? "var(--color-primary)" + "33"
-            : isToday
-            ? "var(--color-primary)" + "22"
-            : darkMode
-            ? "#12121a"
-            : "#fff",
-          // When a job is armed, every day cell shows a dashed green outline
-          // so it's obvious where to drop/tap. The suggested day gets a solid
-          // gold ring to draw the eye. Hovered cell goes solid + bright.
-          border: isHover
-            ? `2px solid var(--color-success)`
-            : isSuggested
-            ? `2px solid var(--color-highlight)`
-            : armedJob
-            ? `1px dashed var(--color-success)`
-            : `1px solid ${isSelected ? "var(--color-primary)" : isToday ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
-          borderRadius: 6,
-          padding: 4,
-          minHeight: view === "month" ? 50 : 70,
-          overflow: "hidden",
-          cursor: armedJob ? "copy" : "pointer",
-          transition: "background 0.1s, border-color 0.1s",
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            fontSize: view === "month" ? 10 : 12,
-            textAlign: "center",
-            fontWeight: isToday || isSelected ? 700 : 600,
-            color: isToday || isSelected ? "var(--color-primary)" : undefined,
-            marginBottom: 2,
-          }}
-        >
-          {d.getDate()}
-        </div>
-        {items.length > 0 && view === "month" && (
-          <div style={{ fontSize: 7, textAlign: "center", color: "var(--color-primary)" }}>
-            {items.length} job{items.length !== 1 ? "s" : ""}
-          </div>
-        )}
-        {items.length > 0 && view === "week" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
-            {firstTime && (
-              <div style={{ fontSize: 9, color: "var(--color-success)", fontFamily: "Oswald", textAlign: "center" }}>
-                {firstTime}
-              </div>
-            )}
-            {/* Draggable chips for the first two jobs of the day. Drag to a
-                different day cell to reschedule. Long names truncate so the
-                chip stays inside the cell on narrow viewports. */}
-            {items.slice(0, 2).map((it) => (
-              <div
-                key={it.id}
-                draggable
-                onDragStart={(e) => {
-                  e.stopPropagation();
-                  e.dataTransfer.setData("text/plain", `move:${it.id}`);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onClick={(e) => e.stopPropagation()}
-                title={`${it.job}${it.note ? " — " + it.note : ""}`}
-                style={{
-                  fontSize: 9,
-                  padding: "2px 4px",
-                  borderRadius: 3,
-                  background: "var(--color-primary)" + "22",
-                  color: "var(--color-primary)",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  cursor: "grab",
-                  border: "1px solid var(--color-primary)33",
-                }}
-              >
-                {it.job}
-              </div>
-            ))}
-            {items.length > 2 && (
-              <div style={{ fontSize: 8, color: "var(--color-primary)", textAlign: "center" }}>
-                +{items.length - 2} more
-              </div>
-            )}
-          </div>
-        )}
-        {isSuggested && (
-          <div
-            aria-hidden
-            title="Suggested — nearby work"
-            style={{
-              position: "absolute",
-              top: 2,
-              right: 2,
-              fontSize: 10,
-            }}
-          >
-            ⭐
-          </div>
-        )}
-      </div>
-    );
+  // ── Schedule view helpers ──────────────────────────────────────────
+  const periodLabel = view === "day"
+    ? `${viewDate.toLocaleDateString("en-US", { weekday: "short" })} · ${viewDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+    : view === "week"
+    ? `${MONTH_NAMES[ws.getMonth()].slice(0, 3)} ${ws.getDate()}–${week[6].getDate()}`
+    : `${MONTH_NAMES[month]} ${year}`;
+  const ymd = (d: Date) => d.toISOString().split("T")[0];
+  // Workers live in the note as "👷 Name, Name"; the linked job's
+  // requested_tech is a fallback so entries scheduled without a crew list
+  // still filter to that tech.
+  const parseWorkers = (note?: string): string[] => {
+    const m = note?.match(/👷\s*([^·]+)/);
+    return m ? m[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
   };
+  const parseTime = (note?: string): string => note?.match(/🕐\s*(\d{1,2}:\d{2})/)?.[1] || "";
+  const fmt12 = (hhmm: string): string => {
+    if (!hhmm) return "";
+    const [h, m] = hhmm.split(":").map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")}${h >= 12 ? "p" : "a"}`;
+  };
+  const initialsOf = (name: string): string => (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
+  const jobFor = (property?: string) => property ? jobs.filter((j) => j.property === property && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] : undefined;
+  const entryWorkers = (e: { note?: string; job?: string }): string[] => {
+    const w = parseWorkers(e.note);
+    const j = jobFor(e.job);
+    return (j?.requested_tech && !w.includes(j.requested_tech)) ? [...w, j.requested_tech] : w;
+  };
+  const matchesWorker = (e: { note?: string; job?: string }) => !workerFilter || entryWorkers(e).includes(workerFilter);
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 22, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <Icon name="schedule" size={22} color="var(--color-primary)" />
-        {t("sched.title")}
-      </h2>
+      {/* Topbar — title + date nav (tap label = today) */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
+        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("sched.title")}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>
+          <button onClick={() => stepView(-1)} aria-label="Previous" style={{ width: 26, height: 26, borderRadius: 8, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", color: "var(--color-dim)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Icon name="back" size={14} /></button>
+          <span onClick={goToday} title="Jump to today" style={{ cursor: "pointer", minWidth: 96, textAlign: "center" }}>{periodLabel}</span>
+          <button onClick={() => stepView(1)} aria-label="Next" style={{ width: 26, height: 26, borderRadius: 8, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", color: "var(--color-dim)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Icon name="next" size={14} /></button>
+        </div>
+      </div>
 
       {/* Property typeahead — searches scheduled entries by job address.
           Selecting a suggestion jumps the calendar to that entry's date
@@ -644,218 +475,166 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         </div>
       )}
 
-      {/* Add to Schedule */}
-      <div className="cd mb">
-        <h4 style={{ fontSize: 13, marginBottom: 8 }}>Add to Schedule</h4>
-        <div className="row">
-          <input
-            type="date"
-            value={sd}
-            onChange={(e) => setSd(e.target.value)}
-            style={{
-              width: 140,
-              color: "var(--color-accent-red)",
-              fontWeight: 600,
-            }}
-          />
-          <select
-            value={sj}
-            onChange={(e) => { setSj(e.target.value); suggestDay(e.target.value); }}
-            style={{ flex: 1 }}
-          >
-            <option value="">{t("sched.selectJob")}</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.property}>
-                {j.property} ({j.status})
-              </option>
-            ))}
-          </select>
+      {/* View toggle (Day / Week / Month) */}
+      <div style={{ display: "flex", gap: 5, marginBottom: 11 }}>
+        {(["day", "week", "month"] as const).map((v) => (
           <button
-            className="bg"
-            onClick={addSchedule}
-            style={{ fontSize: 13, padding: "6px 12px" }}
+            key={v}
+            onClick={() => setView(v)}
+            style={{
+              flex: 1, textAlign: "center", padding: 8, borderRadius: 10, fontSize: 12,
+              fontFamily: "Oswald", fontWeight: 600, letterSpacing: ".04em", textTransform: "capitalize",
+              background: view === v ? "var(--color-primary)" : "var(--color-card-dark-2)",
+              color: view === v ? "#fff" : "var(--color-dim)",
+              border: `1px solid ${view === v ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+            }}
           >
-            {t("sched.add")}
+            {v}
           </button>
-        </div>
-        {/* Time + Notes */}
-        <div className="row" style={{ marginTop: 6 }}>
-          <input
-            type="time"
-            value={sTime}
-            onChange={(e) => setSTime(e.target.value)}
-            style={{ width: 110, color: "var(--color-primary)", fontWeight: 600 }}
-          />
-          <input
-            value={sn}
-            onChange={(e) => setSn(e.target.value)}
-            placeholder="Notes (optional)"
-            style={{ flex: 1 }}
-          />
-        </div>
-        {/* Workers */}
-        <div style={{ marginTop: 6 }}>
-          <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Assign workers:</div>
-          <div className="row">
-            {profiles.map((p) => {
-              const selected = sWorkers.includes(p.name);
+        ))}
+      </div>
+
+      {/* Worker filter — ALL + each tech (filters every view) */}
+      <div style={{ display: "flex", gap: 9, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+        {[{ id: null as string | null, short: "Crew", badge: "ALL" }, ...profiles.map((p) => ({ id: p.name, short: p.name.split(" ")[0], badge: initialsOf(p.name) }))].map((w) => {
+          const wOn = workerFilter === w.id;
+          const isAll = w.id === null;
+          return (
+            <button key={w.id || "all"} onClick={() => setWorkerFilter(w.id)} style={{ flexShrink: 0, textAlign: "center", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              <div style={{ width: 38, height: 38, borderRadius: "50%", margin: "0 auto 3px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, background: isAll ? "var(--color-primary)" : "var(--color-card-dark-2)", color: (isAll || wOn) ? "#fff" : "#cdd6e6", border: `2px solid ${wOn ? "var(--color-primary)" : "transparent"}`, boxShadow: wOn ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>{w.badge}</div>
+              <div style={{ fontSize: 8.5, color: wOn ? "inherit" : "var(--color-dim)" }}>{w.short}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── DAY VIEW — time-rail blocks + Unscheduled ── */}
+      {view === "day" && (() => {
+        const ds = ymd(viewDate);
+        const dayEntries = schedule.filter((s) => s.sched_date === ds && matchesWorker(s))
+          .sort((a, b) => (parseTime(a.note) || "99:99").localeCompare(parseTime(b.note) || "99:99"));
+        const scheduledProps = new Set(schedule.map((s) => s.job));
+        const unscheduled = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !scheduledProps.has(j.property));
+        return (
+          <div className="mb">
+            {dayEntries.length === 0 && (
+              <div className="cd" style={{ textAlign: "center", padding: 20, marginBottom: 8 }}><p className="dim" style={{ fontSize: 12 }}>No jobs scheduled this day</p></div>
+            )}
+            {dayEntries.map((s) => {
+              const j = jobFor(s.job);
+              const color = j ? statusColor(j.status) : "var(--color-primary)";
+              const time = parseTime(s.note);
+              const crew = entryWorkers(s);
+              const meta = j ? `${j.trade || "Job"} · ${(j.total_hrs || 0).toFixed(1)}h` : (s.note?.replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/, "").replace(/👷\s*[^·]+·?\s*/, "").trim() || "Scheduled");
               return (
-                <button
-                  key={p.id}
-                  onClick={() => setSWorkers((prev) => selected ? prev.filter((n) => n !== p.name) : [...prev, p.name])}
-                  style={{
-                    padding: "3px 10px", borderRadius: 16, fontSize: 13,
-                    background: selected ? "var(--color-primary)" + "33" : "transparent",
-                    color: selected ? "var(--color-primary)" : "#888",
-                    border: `1px solid ${selected ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
-                  }}
-                >
-                  {selected ? "✓ " : ""}{p.name}
-                </button>
+                <div key={s.id} style={{ display: "flex", gap: 9, marginBottom: 8 }}>
+                  <div style={{ width: 44, flexShrink: 0, fontSize: 10, color: "var(--color-dim)", fontFamily: "Oswald", fontWeight: 600, paddingTop: 11, textAlign: "right" }}>{time ? fmt12(time) : "—"}</div>
+                  <div onClick={() => setSelectedDay(s.sched_date)} style={{ flex: 1, position: "relative", overflow: "hidden", background: darkMode ? "#16161f" : "#fff", border: "1px solid var(--color-border-dark)", borderRadius: 13, padding: "10px 11px 10px 15px", cursor: "pointer" }}>
+                    <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: color }} />
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".3px" }}>{s.job}</div>
+                    <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 2 }}>{meta}</div>
+                    {crew.length > 0 && (
+                      <div style={{ display: "flex", marginTop: 7 }}>
+                        {crew.map((wn, ci) => (
+                          <span key={ci} title={wn} style={{ width: 21, height: 21, borderRadius: "50%", background: "var(--color-card-dark-2)", border: `1.5px solid ${darkMode ? "#16161f" : "#fff"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8.5, fontWeight: 600, color: "#cdd6e6", marginLeft: ci ? -5 : 0 }}>{initialsOf(wn)}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {unscheduled.length > 0 && (<>
+              <div style={{ fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "13px 2px 8px", display: "flex", alignItems: "center", gap: 7 }}><Icon name="folder" size={13} color="var(--color-dim)" /> Unscheduled</div>
+              {suggestion && (
+                <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.35)", borderRadius: 12, padding: "9px 11px", marginBottom: 8, fontSize: 10.5, color: "#c9a6ff" }}>
+                  <Icon name="sparkle" size={15} color="#c9a6ff" /> {suggestion.reason}
+                </div>
+              )}
+              {unscheduled.map((j) => (
+                <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 10, background: darkMode ? "#16161f" : "#fff", border: "1px dashed var(--color-border-dark)", borderRadius: 12, padding: "9px 11px 9px 14px", position: "relative", overflow: "hidden", marginBottom: 6 }}>
+                  <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: statusColor(j.status) }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12 }}>{j.property}</div>
+                    <div style={{ fontSize: 9.5, color: "var(--color-dim)", textTransform: "capitalize" }}>{j.status} · no day yet</div>
+                  </div>
+                  <button onClick={() => { setArmedJob(j.property); setDropTarget(ds); }} style={{ fontSize: 10.5, fontWeight: 600, color: "#fff", background: "var(--color-primary)", borderRadius: 8, padding: "6px 10px", border: "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0 }}>
+                    <Icon name="schedule" size={12} color="#fff" /> Assign
+                  </button>
+                </div>
+              ))}
+            </>)}
+          </div>
+        );
+      })()}
+
+      {/* ── WEEK VIEW — day-row list ── */}
+      {view === "week" && (
+        <div className="mb">
+          {week.map((d, i) => {
+            const ds = ymd(d);
+            const dayEntries = schedule.filter((s) => s.sched_date === ds && matchesWorker(s)).sort((a, b) => (parseTime(a.note) || "99:99").localeCompare(parseTime(b.note) || "99:99"));
+            const isToday = ds === todayStr;
+            const totalHrs = dayEntries.reduce((sum, e) => sum + (jobFor(e.job)?.total_hrs || 0), 0);
+            return (
+              <div key={i} onClick={() => { if (armedJob) { setDropTarget(ds); return; } setSelectedDay(ds); }} style={{ background: darkMode ? "#16161f" : "#fff", border: `1px solid ${isToday ? "rgba(46,139,255,.5)" : "var(--color-border-dark)"}`, boxShadow: isToday ? "0 0 0 1px rgba(46,139,255,.2)" : "none", borderRadius: 13, padding: "10px 11px", marginBottom: 8, opacity: dayEntries.length ? 1 : 0.5, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: dayEntries.length ? 7 : 0 }}>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{DAY_NAMES[d.getDay()]}<span style={{ color: "var(--color-dim)", fontWeight: 400, fontSize: 11, marginLeft: 5 }}>{MONTH_NAMES[d.getMonth()].slice(0, 3)} {d.getDate()}</span></div>
+                  {dayEntries.length > 0 && <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{dayEntries.length} job{dayEntries.length !== 1 ? "s" : ""}{totalHrs ? ` · ${totalHrs.toFixed(1)}h` : ""}</div>}
+                </div>
+                {dayEntries.length === 0 ? (
+                  <div style={{ fontSize: 10.5, color: "var(--color-dim)" }}>No jobs</div>
+                ) : dayEntries.map((s) => {
+                  const j = jobFor(s.job);
+                  const color = j ? statusColor(j.status) : "var(--color-primary)";
+                  const time = parseTime(s.note);
+                  const crew = entryWorkers(s);
+                  let wlabel = "";
+                  if (workerFilter) { const others = crew.filter((n) => n !== workerFilter); wlabel = others.length ? `+${others.map((n) => n.split(" ")[0]).join(", ")}` : "solo"; }
+                  else { wlabel = crew.map((n) => initialsOf(n)).join(" "); }
+                  return (
+                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, padding: "5px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.job}{time ? ` · ${fmt12(time)}` : ""}</span>
+                      {wlabel && <span style={{ fontSize: 9, color: "var(--color-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{wlabel}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── MONTH VIEW — dot grid ── */}
+      {view === "month" && (
+        <div className="mb">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 5 }}>
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 8.5, color: "var(--color-dim)", fontWeight: 600 }}>{d}</div>)}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+            {monthCells.map((d, i) => {
+              if (!d) return <div key={`e${i}`} style={{ aspectRatio: ".92", borderRadius: 8, background: darkMode ? "#0d0d14" : "#f5f5f5", opacity: 0.28 }} />;
+              const ds = ymd(d);
+              const dayEntries = schedule.filter((s) => s.sched_date === ds && matchesWorker(s));
+              const isToday = ds === todayStr;
+              const isSel = ds === selectedDay;
+              const dots = dayEntries.slice(0, 4).map((s) => { const j = jobFor(s.job); return j ? statusColor(j.status) : "var(--color-primary)"; });
+              return (
+                <div key={i} onClick={() => { if (armedJob) { setDropTarget(ds); return; } setSelectedDay(isSel ? null : ds); }} style={{ aspectRatio: ".92", borderRadius: 8, padding: "3px 2px", display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer", background: isSel ? "rgba(46,139,255,.16)" : (darkMode ? "#16161f" : "#fff"), border: `1px solid ${isSel || isToday ? "var(--color-primary)" : "var(--color-border-dark)"}` }}>
+                  <div style={{ fontSize: 9.5, color: isToday ? "var(--color-primary)" : "inherit", fontWeight: isToday ? 700 : 400 }}>{d.getDate()}</div>
+                  <div style={{ display: "flex", gap: 2, marginTop: "auto", flexWrap: "wrap", justifyContent: "center", paddingBottom: 1 }}>
+                    {dots.map((c, di) => <i key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: c, display: "block" }} />)}
+                  </div>
+                </div>
               );
             })}
           </div>
         </div>
+      )}
 
-        {/* Scheduling suggestion */}
-        {suggestion && (
-          <div
-            onClick={() => { setSd(suggestion.date); setSuggestion(null); }}
-            style={{
-              marginTop: 6,
-              padding: "6px 10px",
-              borderRadius: 6,
-              background: "var(--color-success)" + "15",
-              border: "1px solid var(--color-success)",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <Icon name="tip" size={14} color="var(--color-success)" />
-            <div>
-              <div style={{ fontSize: 13, color: "var(--color-success)", fontWeight: 600 }}>
-                Suggested: {suggestion.date}
-              </div>
-              <div className="dim" style={{ fontSize: 10 }}>{suggestion.reason}</div>
-            </div>
-            <span style={{ fontSize: 13, color: "var(--color-success)", marginLeft: "auto" }}>Tap to use</span>
-          </div>
-        )}
-      </div>
-
-      {/* View Toggle + period nav */}
-      <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <button
-            onClick={() => stepView(-1)}
-            aria-label={view === "week" ? "Previous week" : "Previous month"}
-            title={view === "week" ? "Previous week" : "Previous month"}
-            style={{
-              padding: "2px 8px",
-              fontSize: 14,
-              background: darkMode ? "#12121a" : "#fff",
-              color: "var(--color-primary)",
-              border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-              borderRadius: 4,
-              lineHeight: 1,
-            }}
-          >◀</button>
-          <span
-            className="dim"
-            style={{ fontSize: 12, fontFamily: "Oswald", minWidth: 110, textAlign: "center" }}
-          >
-            {view === "month"
-              ? `${MONTH_NAMES[month]} ${year}`
-              : `Week of ${MONTH_NAMES[ws.getMonth()]} ${ws.getDate()}`}
-          </span>
-          <button
-            onClick={() => stepView(1)}
-            aria-label={view === "week" ? "Next week" : "Next month"}
-            title={view === "week" ? "Next week" : "Next month"}
-            style={{
-              padding: "2px 8px",
-              fontSize: 14,
-              background: darkMode ? "#12121a" : "#fff",
-              color: "var(--color-primary)",
-              border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-              borderRadius: 4,
-              lineHeight: 1,
-            }}
-          >▶</button>
-          <button
-            onClick={goToday}
-            style={{
-              marginLeft: 4,
-              padding: "2px 10px",
-              fontSize: 11,
-              fontFamily: "Oswald",
-              background: "transparent",
-              color: "var(--color-primary)",
-              border: `1px solid var(--color-primary)`,
-              borderRadius: 4,
-              lineHeight: 1.4,
-            }}
-          >Today</button>
-        </div>
-        <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
-          <button
-            onClick={() => setView("week")}
-            style={{
-              padding: "4px 12px",
-              fontSize: 12,
-              background: view === "week" ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff",
-              color: view === "week" ? "#fff" : "#888",
-              border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-              borderRadius: "6px 0 0 6px",
-              fontFamily: "Oswald",
-            }}
-          >
-            Week
-          </button>
-          <button
-            onClick={() => setView("month")}
-            style={{
-              padding: "4px 12px",
-              fontSize: 12,
-              background: view === "month" ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff",
-              color: view === "month" ? "#fff" : "#888",
-              border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-              borderRadius: "0 6px 6px 0",
-              fontFamily: "Oswald",
-            }}
-          >
-            Month
-          </button>
-        </div>
-      </div>
-
-      {/* Calendar */}
+      {/* Selected-day detail + actions */}
       <div className="cd mb">
-        {/* Day headers */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 3 }}>
-          {DAY_NAMES.map((d) => (
-            <div
-              key={d}
-              style={{
-                fontSize: 13,
-                fontFamily: "Oswald",
-                color: "#888",
-                textAlign: "center",
-              }}
-            >
-              {d}
-            </div>
-          ))}
-        </div>
-
-        {/* Day cells */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
-          {view === "week"
-            ? week.map((d, i) => renderDayCell(d, i))
-            : monthCells.map((d, i) => renderDayCell(d, `m${i}`))}
-        </div>
 
         {/* Day detail panel */}
         {selectedDay && (() => {
@@ -988,114 +767,6 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
           </button>
         </div>
       </div>
-
-      {/* All Scheduled — collapsed by default to keep the page short. Inside,
-          upcoming and past are split so the next jobs are always at the top
-          and old entries don't bury them. */}
-      {schedule.length > 0 && (() => {
-        const upcoming = schedule
-          .filter((s) => s.sched_date >= todayStr)
-          .slice()
-          .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
-        const past = schedule
-          .filter((s) => s.sched_date < todayStr)
-          .slice()
-          .sort((a, b) => b.sched_date.localeCompare(a.sched_date));
-
-        const renderRow = (s: typeof schedule[number], dim = false) => (
-          <div
-            key={s.id}
-            className="sep"
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 12,
-              alignItems: "center",
-              opacity: dim ? 0.65 : 1,
-            }}
-          >
-            <span style={{ minWidth: 80 }}>{s.sched_date}</span>
-            <span
-              onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
-              style={{ color: "var(--color-primary)", flex: 1, marginLeft: 8, cursor: "pointer", textDecoration: "underline" }}
-              title="Open in Google Maps"
-            >
-              📍 {s.job}
-            </span>
-            <span className="dim" style={{ fontSize: 11, marginRight: 8 }}>{s.note}</span>
-            <button
-              onClick={async () => {
-                if (!await useStore.getState().showConfirm("Remove Entry", "Remove from schedule?")) return;
-                await db.del("schedule", s.id);
-                loadAll();
-              }}
-              style={{
-                background: "none",
-                color: "var(--color-accent-red)",
-                fontSize: 12,
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        );
-
-        return (
-          <div className="cd">
-            <button
-              onClick={() => setAllOpen((v) => !v)}
-              style={{
-                background: "none",
-                width: "100%",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: 0,
-                fontSize: 13,
-                fontWeight: 600,
-                color: "inherit",
-              }}
-              aria-expanded={allOpen}
-            >
-              <span>
-                All Scheduled
-                <span className="dim" style={{ fontWeight: 400, marginLeft: 6 }}>
-                  ({upcoming.length} upcoming{past.length ? `, ${past.length} past` : ""})
-                </span>
-              </span>
-              <span style={{ fontSize: 11, color: "var(--color-primary)" }}>
-                {allOpen ? "▲ Hide" : "▼ Show"}
-              </span>
-            </button>
-            {allOpen && (
-              <div style={{ marginTop: 8 }}>
-                {upcoming.length === 0 ? (
-                  <p className="dim" style={{ fontSize: 12 }}>No upcoming entries.</p>
-                ) : (
-                  upcoming.map((s) => renderRow(s, false))
-                )}
-                {past.length > 0 && (
-                  <>
-                    <button
-                      onClick={() => setShowPast((v) => !v)}
-                      style={{
-                        background: "none",
-                        marginTop: 8,
-                        fontSize: 11,
-                        color: "var(--color-primary)",
-                        padding: "4px 0",
-                      }}
-                    >
-                      {showPast ? "▲ Hide past" : `▼ Show past (${past.length})`}
-                    </button>
-                    {showPast && past.map((s) => renderRow(s, true))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
         <p className="dim" style={{ fontSize: 12 }}>

@@ -259,6 +259,21 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Schedule redesign (from mockup)**: `Schedule.tsx` rebuilt to **Day /
+  Week / Month** views + a **worker-filter** avatar row (`Creed_Schedule`
+  mockup). Topbar = title + date-nav (label adapts per view, tap = today;
+  `periodLabel` + `stepView` handle day/week/month). **Day** = time-rail
+  blocks (status-color bar, trade·hrs, crew avatars) + an **Unscheduled**
+  section (proximity `suggestion` + per-job **Assign** that arms the job +
+  opens the quick-add modal). **Week** = day-row list (count·hrs; per-job
+  dot + time + `solo`/`+others` relative to the filtered worker). **Month**
+  = status-dot grid + the shared selected-day detail. The **worker filter**
+  parses the schedule note's `👷 names` (+ linked `job.requested_tech`
+  fallback via `entryWorkers`/`matchesWorker`) — name-based, no new schema.
+  Kept: drag palette, quick-add modal, proximity, status auto-bump. Dropped
+  per request: the standalone Add-to-Schedule form + the All-Scheduled list
+  (and the old `renderDayCell` grid). NOTE: `PropertySearch` + the drag
+  palette still sit ABOVE the views — could move below so the calendar leads.
 - **Time + WorkVision visual redesign (from mockups)**: both screens already
   had the logic — this was a restyle toward the `Creed_Time_WorkVision_v2` /
   `Creed_WorkVision_Full` mockups, no plumbing changes. **Time** (`Timer.tsx`):
