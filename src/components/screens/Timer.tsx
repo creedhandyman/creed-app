@@ -363,7 +363,9 @@ export default function Timer({ setPage }: Props) {
           <Icon name="time" size={19} color="#8cc0ff" />
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("timer.title")}</span>
         </div>
-        {on ? (
+        {tab === "crew" ? (
+          <span style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase", color: activeSessions.length ? "#3ee08f" : "var(--color-dim)", fontWeight: 600 }}>{activeSessions.length} on the clock</span>
+        ) : on ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
           </span>
@@ -590,219 +592,93 @@ export default function Timer({ setPage }: Props) {
 
       {/* ── Crew Activity tab (admin only) ── */}
       {tab === "crew" && isOwner && (<>
-        {/* Currently clocked in */}
-        <div className="cd mb" style={{ borderLeft: `3px solid ${activeSessions.length ? "var(--color-success)" : "#444"}` }}>
-          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-success)" }}>
-            🟢 {t("timer.currentlyClockedIn")} ({activeSessions.length})
-          </h4>
-          {!activeSessions.length ? (
-            <p className="dim" style={{ fontSize: 12 }}>{t("timer.noActiveSessions")}</p>
-          ) : (
-            activeSessions.map((e) => {
-              const owner = profiles.find((p) => p.id === e.user_id) || { name: e.user_name, rate: 55 };
-              const elapsed = e.start_time ? elapsedFrom(e.start_time, e.entry_date) : "–";
-              return (
-                <div
-                  key={e.id}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "8px 0", borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-success)", display: "inline-block", animation: "pulse 2s infinite" }} />
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{owner.name}</span>
-                    </div>
-                    <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
-                      {e.job || t("timer.general")} · {t("timer.startedAt")} {e.start_time || "?"}
+        {(() => {
+          const todayUS = new Date().toLocaleDateString("en-US");
+          const todayISO = new Date().toISOString().split("T")[0];
+          const todayPad = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+          const isOn = (p: { id: string; name: string }) => activeSessions.some((e) => e.user_id === p.id || (!e.user_id && e.user_name === p.name));
+          // On-the-clock crew float to the top, then alphabetical.
+          const sorted = [...profiles].sort((a, b) => (isOn(a) === isOn(b) ? a.name.localeCompare(b.name) : isOn(a) ? -1 : 1));
+          return sorted.map((p) => {
+            const allEntries = timeEntries.filter((e) => e.user_id === p.id || e.user_name === p.name).slice().sort(byRecentDesc);
+            const todayEntries = allEntries.filter((e) => e.entry_date === todayUS || e.entry_date === todayISO || e.entry_date === todayPad || e.entry_date === todayPad.replace(/^0/, ""));
+            const todayHrs = todayEntries.reduce((s, e) => s + (e.hours || 0), 0);
+            const rRate = p.rate || 55;
+            const activeEntry = activeSessions.find((e) => e.user_id === p.id || (!e.user_id && e.user_name === p.name));
+            const isActive = !!activeEntry;
+            const activeElapsed = activeEntry?.start_time ? elapsedFrom(activeEntry.start_time, activeEntry.entry_date) : "";
+            const isExpanded = expandedCrew === p.id;
+            const lastOut = todayEntries.find((e) => e.end_time)?.end_time;
+            return (
+              <div key={p.id} className="cd mb" style={{ padding: "10px 11px" }}>
+                {/* Header — avatar + status dot, name, location/job, duration + chip */}
+                <div onClick={() => setExpandedCrew(isExpanded ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#cdd6e6", flexShrink: 0 }}>
+                    {initials(p.name)}
+                    <span style={{ position: "absolute", right: -1, bottom: -1, width: 11, height: 11, borderRadius: "50%", border: `2px solid ${darkMode ? "#16161f" : "#fff"}`, background: isActive ? "var(--color-success)" : "#555" }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".3px" }}>{p.name}</div>
+                    <div className="dim" style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {isActive ? (<><Icon name="mapPin" size={11} color="var(--color-dim)" /> {activeEntry!.job || t("timer.general")}</>)
+                        : lastOut ? (<><Icon name="time" size={11} color="var(--color-dim)" /> Last out {lastOut} · {todayHrs.toFixed(1)}h today</>)
+                        : `${p.role} · $${rRate}/hr`}
                     </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontFamily: "Oswald", fontSize: 16, color: "var(--color-success)" }}>{elapsed}</div>
-                    <button
-                      onClick={async () => {
-                        if (!await useStore.getState().showConfirm("Force Clock-Out", `Clock out ${owner.name}? This will close the session without the employee's own clock-out.`)) return;
-                        const hrs = e.start_time ? (() => {
-                          const m = e.start_time.match(/(\d+):(\d+)\s*([AP]M)?/i);
-                          if (!m) return 0;
-                          let h = parseInt(m[1]); const mm = parseInt(m[2]);
-                          const ampm = m[3]?.toUpperCase();
-                          if (ampm === "PM" && h < 12) h += 12;
-                          if (ampm === "AM" && h === 12) h = 0;
-                          const start = new Date(); start.setHours(h, mm, 0, 0);
-                          return Math.round((Date.now() - start.getTime()) / 3600000 * 100) / 100;
-                        })() : 0;
-                        await db.patch("time_entries", e.id, {
-                          hours: hrs,
-                          amount: Math.round(hrs * (owner.rate || 55) * 100) / 100,
-                          end_time: fmtTime(Date.now()),
-                        });
-                        await loadAll();
-                      }}
-                      style={{ background: "none", color: "var(--color-accent-red)", fontSize: 10, padding: 0, marginTop: 2 }}
-                    >
-                      {t("timer.forceStop")}
-                    </button>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, color: isActive ? "var(--color-success)" : todayHrs > 0 ? "inherit" : "var(--color-dim)" }}>
+                      {isActive && activeElapsed ? activeElapsed : todayHrs > 0 ? `${todayHrs.toFixed(1)}h` : "—"}
+                    </div>
+                    <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 2, background: isActive ? "rgba(0,204,102,.16)" : "var(--color-card-dark-2)", color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
+                      {isActive ? "On the clock" : "Off"}
+                    </span>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Per-employee breakdown — today / week, with drill-down */}
-        <div className="cd">
-          <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Icon name="trending" size={14} color="var(--color-primary)" />
-            {t("timer.crewBreakdown")}
-          </h4>
-          {(() => {
-            const todayStr = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
-            const todayISO = new Date().toISOString().split("T")[0];
-            // Week totals
-            const weekStart = new Date();
-            weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-            weekStart.setHours(0, 0, 0, 0);
-
-            return profiles.map((p) => {
-              const allEntries = timeEntries
-                .filter((e) => e.user_id === p.id || e.user_name === p.name)
-                .slice()
-                .sort(byRecentDesc);
-              const todayEntries = allEntries.filter((e) =>
-                e.entry_date === todayStr || e.entry_date === todayISO || e.entry_date === todayStr.replace(/^0/, "")
-              );
-              const weekEntries = allEntries.filter((e) => {
-                try {
-                  const parts = e.entry_date?.split("/");
-                  if (parts?.length === 3) return new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1])) >= weekStart;
-                  return new Date(e.entry_date) >= weekStart;
-                } catch { return false; }
-              });
-              const todayHrs = todayEntries.reduce((s, e) => s + (e.hours || 0), 0);
-              const weekHrs = weekEntries.reduce((s, e) => s + (e.hours || 0), 0);
-              const todayPay = todayHrs * (p.rate || 55);
-              const weekPay = weekHrs * (p.rate || 55);
-              const lastEntry = todayEntries[0];
-              // Jobs worked today
-              const todayJobs = [...new Set(todayEntries.map((e) => e.job).filter(Boolean))];
-
-              const isExpanded = expandedCrew === p.id;
-              const rRate = p.rate || 55;
-              const activeEntry = activeSessions.find((e) => e.user_id === p.id || (!e.user_id && e.user_name === p.name));
-              const isActive = !!activeEntry;
-              const activeElapsed = activeEntry?.start_time ? elapsedFrom(activeEntry.start_time, activeEntry.entry_date) : "";
-              return (
-                <div key={p.id} style={{ padding: "8px 0", borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}` }}>
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
-                    onClick={() => setExpandedCrew(isExpanded ? null : p.id)}
-                  >
-                    {/* Avatar + live status dot */}
-                    <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#cdd6e6", flexShrink: 0 }}>
-                      {initials(p.name)}
-                      <span style={{ position: "absolute", right: -1, bottom: -1, width: 11, height: 11, borderRadius: "50%", border: `2px solid ${darkMode ? "#16161f" : "#fff"}`, background: isActive ? "var(--color-success)" : "#555" }} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".3px" }}>{p.name}</div>
-                      <div className="dim" style={{ fontSize: 10.5 }}>{p.role} · ${rRate}/hr</div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: isActive ? "var(--color-success)" : todayHrs > 0 ? "inherit" : "var(--color-dim)" }}>
-                        {isActive && activeElapsed ? activeElapsed : todayHrs > 0 ? `${todayHrs.toFixed(1)}h` : "—"}
+                {/* Expanded — clocked-in time, per-entry edit, force-out, add entry */}
+                {isExpanded && (
+                  <div style={{ borderTop: "1px solid var(--color-border-dark)", marginTop: 9, paddingTop: 9 }}>
+                    {isActive && activeEntry!.start_time && (
+                      <div style={{ fontSize: 10.5, color: "#7fb6ff", display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                        <Icon name="mapPin" size={13} color="#7fb6ff" /> Clocked in {activeEntry!.start_time}
                       </div>
-                      <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 1, background: isActive ? "rgba(0,204,102,.16)" : "var(--color-card-dark-2)", color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
-                        {isActive ? "On the clock" : "Off"}
-                      </span>
-                    </div>
-                    <Icon name={isExpanded ? "collapse" : "expand"} size={14} color="#888" />
-                  </div>
-                  {/* Detail row */}
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 12 }}>
-                    <div>
-                      {lastEntry && (
-                        <span className="dim">
-                          Last: {lastEntry.job}{lastEntry.start_time ? ` ${lastEntry.start_time}–${lastEntry.end_time || "now"}` : ""}
-                        </span>
-                      )}
-                      {todayJobs.length > 0 && (
-                        <div style={{ color: "var(--color-primary)", fontSize: 12, marginTop: 2 }}>
-                          Jobs: {todayJobs.join(", ")}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div className="dim">{t("timer.todayLabel")}: ${todayPay.toFixed(0)}</div>
-                      <div className="dim">{t("timer.weekLabel")}: {weekHrs.toFixed(1)}h · ${weekPay.toFixed(0)}</div>
-                    </div>
-                  </div>
-                  {isExpanded && (
-                    <div style={{ marginTop: 8, padding: 8, background: darkMode ? "#0f0f18" : "#f7f7fa", borderRadius: 6 }}>
-                      <div className="dim" style={{ fontSize: 11, marginBottom: 4 }}>
-                        {t("timer.allEntries")} ({allEntries.length})
-                      </div>
-                      {!allEntries.length ? (
-                        <p className="dim" style={{ fontSize: 12 }}>No entries</p>
-                      ) : (
-                        allEntries.map((en) => (
-                          <div
-                            key={en.id}
-                            style={{
-                              display: "flex", gap: 4, alignItems: "center",
-                              fontSize: 12, padding: "3px 0",
-                              borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
-                            }}
-                          >
-                            <span style={{ minWidth: 65 }}>{en.entry_date}</span>
-                            <span style={{ color: "var(--color-primary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {en.job}
-                              {(en.start_time || en.end_time) && (
-                                <span className="dim" style={{ marginLeft: 4 }}>
-                                  {en.start_time || "?"}–{en.end_time || "?"}
-                                </span>
-                              )}
-                            </span>
-                            <input
-                              type="number"
-                              defaultValue={en.hours}
-                              step=".25"
-                              min="0"
-                              style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 11 }}
-                              onBlur={async (ev) => {
-                                const newHrs = parseFloat(ev.target.value) || 0;
-                                if (newHrs === en.hours) return;
-                                await db.patch("time_entries", en.id, {
-                                  hours: newHrs,
-                                  amount: Math.round(newHrs * rRate * 100) / 100,
-                                });
-                                loadAll();
-                              }}
-                            />
-                            <span style={{ color: "var(--color-success)", minWidth: 45 }}>
-                              ${(en.amount || 0).toFixed(2)}
-                            </span>
-                            <button
-                              onClick={async () => {
-                                if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return;
-                                await db.del("time_entries", en.id);
-                                loadAll();
-                              }}
-                              style={{ background: "none", color: "var(--color-accent-red)", fontSize: 12 }}
-                            >
-                              ✕
-                            </button>
+                    )}
+                    {allEntries.length === 0 ? (
+                      <p className="dim" style={{ fontSize: 11.5 }}>No entries yet</p>
+                    ) : allEntries.slice(0, 8).map((en) => {
+                      const running = !en.end_time && !!en.start_time;
+                      return (
+                        <div key={en.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "var(--color-card-dark-2)", borderRadius: 10, padding: "7px 9px", marginBottom: 6 }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{en.job || t("timer.general")}</div>
+                            <div style={{ fontSize: 9, color: "var(--color-dim)" }}>{running ? `running · since ${en.start_time}` : `${en.entry_date}${en.start_time ? ` · ${en.start_time}–${en.end_time || "now"}` : ""}`}</div>
                           </div>
-                        ))
-                      )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                            <input type="number" defaultValue={en.hours} step=".25" min="0" style={{ width: 46, textAlign: "center", padding: "2px 4px", fontSize: 12, fontFamily: "Oswald", fontWeight: 600 }} onBlur={async (ev) => { const nh = parseFloat(ev.target.value) || 0; if (nh === en.hours) return; await db.patch("time_entries", en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }); loadAll(); }} />
+                            <button onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await db.del("time_entries", en.id); loadAll(); }} style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {isActive && (
+                      <button onClick={async () => {
+                        if (!await useStore.getState().showConfirm("Force Clock-Out", `Clock out ${p.name}? This closes the session without their own clock-out.`)) return;
+                        const e = activeEntry!;
+                        const hrs = e.start_time ? (() => { const m = e.start_time.match(/(\d+):(\d+)\s*([AP]M)?/i); if (!m) return 0; let h = parseInt(m[1]); const mm = parseInt(m[2]); const ap = m[3]?.toUpperCase(); if (ap === "PM" && h < 12) h += 12; if (ap === "AM" && h === 12) h = 0; const st = new Date(); st.setHours(h, mm, 0, 0); return Math.round((Date.now() - st.getTime()) / 3600000 * 100) / 100; })() : 0;
+                        await db.patch("time_entries", e.id, { hours: hrs, amount: Math.round(hrs * rRate * 100) / 100, end_time: fmtTime(Date.now()) });
+                        await loadAll();
+                      }} style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 9, padding: "7px", marginBottom: 6, cursor: "pointer" }}>
+                        <Icon name="stop" size={12} color="#ff9d9d" /> Force clock out
+                      </button>
+                    )}
+                    <div onClick={() => { setMUser(p.id); setTab("time"); setShowManual(true); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 11, color: "#8cc0ff", fontWeight: 600, background: "var(--color-card-dark-2)", border: "1px dashed var(--color-border-dark-2)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
+                      <Icon name="add" size={13} color="#8cc0ff" /> Add entry for {p.name.split(" ")[0]}
                     </div>
-                  )}
-                </div>
-              );
-            });
-          })()}
-        </div>
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
       </>)}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>

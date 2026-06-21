@@ -283,14 +283,19 @@ src/
   order** / Clock out when on. **WorkVision** (`WorkVision.tsx`): Tasks tab now
   **grouped by trade** (the work-order `room` field, with colored trade dots),
   a **per-item camera** on each task (uploads a "work" photo), and an icon
-  segmented control for Tasks/Guide/Notes/Photos. Second pass also restyled:
-  the WorkVision **clock-in picker** (tappable dark job cards), the
-  **clocked-in header** (compact topbar + live timer chip + job row w/ Map),
-  and the **Crew-activity** per-member list (avatar initials + live status
-  dot + On-the-clock/Off chip). Still original (functional — follow-ups):
-  the "Currently clocked in" force-stop card above the crew list, GPS on crew
-  (deferred), and the Guide/Notes/Photos section internals (Photos already
-  has the toggle + grid + receipt-scan + AI render).
+  segmented control for Tasks/Guide/Notes/Photos. Second pass restyled the
+  WorkVision **clock-in picker** (tappable dark job cards) + **clocked-in
+  header** (compact topbar + live timer chip + job row w/ Map). Third pass
+  **rebuilt Crew-activity to the mockup**: the topbar shows "N on the clock";
+  the body is one **crew card per teammate** (avatar + status dot, name,
+  location/job when on-the-clock or "Last out … · Xh today" when off,
+  live duration + On-the-clock/Off chip), sorted on-the-clock first. Tap a
+  card → expand: "Clocked in HH:MM", per-entry editable hours (running rows
+  show "since …"), **Force clock out** (folded in — the old standalone
+  force-stop card is gone), and **Add entry for {first name}** (jumps to My
+  time with the manual form pre-set to that person). GPS still deferred.
+  Guide/Notes/Photos internals still original (Photos has toggle + grid +
+  receipt-scan + AI render).
 - **Nav per-tab colors + morphing More slot; dashboard "next check"**:
   `VerticalNav.tsx` colors the active tab in its signature hue (Home blue,
   Quote yellow/gold, Jobs red, Time green, Quests purple, … — `TAB_COLOR`
