@@ -259,6 +259,26 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Shared in-app camera (`CameraModal.tsx`)**: one full-screen live-camera
+  component — rear-facing preview, shutter, flash/torch, front/back flip, and a
+  "choose from library" fallback for desktop / denied permission. It hands back
+  JPEG `File`s via `onCapture(files)` and does NOT upload; each screen keeps its
+  own upload + AI logic, so it was a drop-in for the existing handlers.
+  Extracted from VoiceWalk's proven getUserMedia primitive (single audio-less
+  video call, iOS `playsInline`, torch via `applyConstraints`); **VoiceWalk
+  itself is unchanged** (its camera is entangled with audio recording). Props:
+  `open / onClose / onCapture / multiple? / allowLibrary? / title? / maxSize? /
+  quality?`. `multiple` keeps it open after each shot (uploads stream in) with a
+  Done(N) button; single mode closes after one. Wired into the **6 spots** that
+  used to pop the OS camera/file picker: Quick Quote (QuoteForge), receipt scan
+  (Jobs detail **and** WorkVision Photos tab), work-order photos (WorkVision
+  per-task button **and** Photos-tab Photo button), and room inspection
+  (Inspector per-item). The **"Upload"/gallery file-pickers next to them were
+  left as-is on purpose** (the "Take Photo + Library" choice). Added `flash`
+  (Zap) + `flipCamera` (SwitchCamera) to `Icon.tsx`. NOT migrated this pass
+  (deferred): the gallery pickers themselves, the public lead/portal customer
+  photo forms, and logo/avatar uploads (BrandingSettings / onboarding /
+  TeamStats) — logos especially are file uploads, not snapped photos.
 - **QuoteForge redesign (from mockup)**: `Creed_Quote_Section` mockup —
   restyled the hub + editor; all AI/editing logic preserved. **Hub**: topbar
   (QUOTEFORGE + "New quote") + three glow CTAs (Quick Quote gold, Full

@@ -9,6 +9,7 @@ import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { Icon } from "../Icon";
+import CameraModal from "../CameraModal";
 import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import SmsNotifyButtons from "../SmsNotifyButtons";
@@ -215,6 +216,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Receipt scan state — once a photo is attached we upload + AI-scan
   // immediately so the form can auto-fill before the user hits Add.
   const [scanning, setScanning] = useState(false);
+  // Receipt camera (shared in-app camera) open state.
+  const [receiptCam, setReceiptCam] = useState(false);
   const [scannedPhotoUrl, setScannedPhotoUrl] = useState("");
   const [scannedItems, setScannedItems] = useState<{ name?: string; qty?: number; price?: number }[]>([]);
   const [scannedVendor, setScannedVendor] = useState("");
@@ -1104,20 +1107,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 via AI -> price_corrections), or type the note + amount. */}
             <div className="section">
               <div className="seclabel"><Icon name="camera" size={13} /> Add receipt</div>
-              <label
-                onClick={() => { if (!scanning) photoRef.current?.click(); }}
+              <div
+                onClick={() => { if (!scanning) setReceiptCam(true); }}
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 12, border: "1.5px dashed var(--color-border-dark-2)", color: scanning ? "var(--color-warning)" : "var(--color-primary)", cursor: scanning ? "wait" : "pointer", fontFamily: "Oswald", fontSize: 13, marginTop: 8 }}
               >
                 <Icon name="camera" size={15} />
                 {scanning ? "Scanning receipt…" : rPhoto ? rPhoto.name : "Attach photo · auto-scan"}
-              </label>
-              <input
-                ref={photoRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                style={{ display: "none" }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoAttach(f, sj.id); }}
+              </div>
+              <CameraModal
+                open={receiptCam}
+                onClose={() => setReceiptCam(false)}
+                onCapture={(fs) => { const f = fs[0]; if (f) handlePhotoAttach(f, sj.id); }}
+                title="Receipt"
               />
               <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
                 <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={scanning ? "Scanning…" : "Note / vendor"} style={{ flex: 1 }} disabled={scanning} />

@@ -24,6 +24,7 @@ import {
   Wallet,
   Search,
   Camera,
+  SwitchCamera,
   Image as ImageIcon,
   Plus,
   X,
@@ -110,6 +111,8 @@ const ICONS: Record<string, LucideIcon> = {
   // Common UI
   search: Search,
   camera: Camera,
+  flipCamera: SwitchCamera,
+  flash: Zap,
   photo: ImageIcon,
   add: Plus,
   close: X,

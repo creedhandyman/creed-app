@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import CustomerPicker from "../CustomerPicker";
 import { Icon } from "../Icon";
+import CameraModal from "../CameraModal";
 import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../VoiceWalk";
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
 
@@ -355,6 +356,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   // wrong item. Refs update synchronously so the race is gone, and we
   // don't need to re-render anything when the target changes.
   const photoTargetRef = useRef<{ room: number; item: number } | null>(null);
+  const [inspCam, setInspCam] = useState(false);
   const [showResume, setShowResume] = useState(() =>
     isEditing ? false : !!localStorage.getItem("c_inspect_roomData"),
   );
@@ -656,6 +658,14 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     });
     if (cameraRef.current) cameraRef.current.value = "";
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  // Same as handlePhotoSelect but for the in-app CameraModal, which hands
+  // back File[] directly instead of via an <input> change event.
+  const handleCapturedFiles = (files: File[]) => {
+    const target = photoTargetRef.current;
+    if (!files.length || !target) return;
+    files.forEach((file) => uploadPhoto(file, target.room, target.item));
   };
 
   const addItemToRoom = (roomIdx: number) => {
@@ -1014,13 +1024,12 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     return (
       <div className="fi">
         {/* Hidden file inputs — one for camera, one for gallery/files */}
-        <input
-          ref={cameraRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          style={{ display: "none" }}
-          onChange={handlePhotoSelect}
+        <CameraModal
+          open={inspCam}
+          onClose={() => setInspCam(false)}
+          onCapture={handleCapturedFiles}
+          multiple
+          title="Inspection photo"
         />
         <input
           ref={fileRef}
@@ -1195,12 +1204,11 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               <div style={{ display: "flex", gap: 2 }}>
                 <button
                   onClick={() => {
-                    // Stamp the target synchronously so the file input's
-                    // onChange reads the room/item the user just tapped,
-                    // even if another item's button gets tapped before
-                    // the picker is dismissed.
+                    // Stamp the target synchronously so the capture handler
+                    // reads the room/item the user just tapped, even if
+                    // another item's button gets tapped first.
                     photoTargetRef.current = { room: currentRoomIdx, item: itemIdx };
-                    cameraRef.current?.click();
+                    setInspCam(true);
                   }}
                   disabled={uploadCount > 0}
                   title="Take photo"

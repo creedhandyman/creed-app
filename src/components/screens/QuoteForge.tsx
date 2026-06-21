@@ -27,6 +27,7 @@ import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import CameraModal from "../CameraModal";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 
@@ -260,7 +261,31 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [quickDesc, setQuickDesc] = useState("");
   const [quickUploading, setQuickUploading] = useState(false);
   const quickPhotoRef = useRef<HTMLInputElement>(null);
-  const quickCameraRef = useRef<HTMLInputElement>(null);
+  const [quickCam, setQuickCam] = useState(false);
+
+  // Compress + upload one Quick Quote photo, then keep its URL. Shared by the
+  // in-app camera and the library picker below.
+  const handleQuickPhotoFile = async (file: File) => {
+    setQuickUploading(true);
+    try {
+      const canvas = document.createElement("canvas");
+      const img = new Image();
+      await new Promise<void>((res) => { img.onload = () => res(); img.src = URL.createObjectURL(file); });
+      let w = img.width, h = img.height;
+      const max = 800;
+      if (w > max || h > max) { if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b || file), "image/jpeg", 0.5));
+      const path = `quickquote/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+      const { error } = await supabase.storage.from("receipts").upload(path, blob);
+      if (!error) {
+        const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+        if (data?.publicUrl) setQuickPhotos((prev) => [...prev, data.publicUrl]);
+      }
+    } catch (err) { console.error(err); }
+    setQuickUploading(false);
+  };
   const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
   const [inspectionData, setInspectionData] = useState<InspectionData | null>(null);
   // Editable work order — null means "use auto-generated from guide.steps"
@@ -1478,7 +1503,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             <div className="row" style={{ gap: 4 }}>
               <button
                 className="bb"
-                onClick={() => quickCameraRef.current?.click()}
+                onClick={() => setQuickCam(true)}
                 disabled={quickUploading}
                 style={{ fontSize: 12, padding: "4px 10px" }}
               >
@@ -1501,37 +1526,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
 
           {quickUploading && <div className="dim" style={{ fontSize: 13, textAlign: "center", marginBottom: 6 }}>Processing photos...</div>}
 
-          <input
-            ref={quickCameraRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: "none" }}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              setQuickUploading(true);
-              try {
-                // Upload to Supabase, store only URL (not base64)
-                const canvas = document.createElement("canvas");
-                const img = new Image();
-                await new Promise<void>((res) => { img.onload = () => res(); img.src = URL.createObjectURL(file); });
-                let w = img.width, h = img.height;
-                const max = 800;
-                if (w > max || h > max) { if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
-                canvas.width = w; canvas.height = h;
-                canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-                const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b || file), "image/jpeg", 0.5));
-                const path = `quickquote/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
-                const { error } = await supabase.storage.from("receipts").upload(path, blob);
-                if (!error) {
-                  const { data } = supabase.storage.from("receipts").getPublicUrl(path);
-                  if (data?.publicUrl) setQuickPhotos((prev) => [...prev, data.publicUrl]);
-                }
-              } catch (err) { console.error(err); }
-              setQuickUploading(false);
-              if (quickCameraRef.current) quickCameraRef.current.value = "";
-            }}
+          <CameraModal
+            open={quickCam}
+            onClose={() => setQuickCam(false)}
+            onCapture={(fs) => fs.forEach(handleQuickPhotoFile)}
+            multiple
+            title="Quick Quote photo"
           />
           <input
             ref={quickPhotoRef}
@@ -1542,27 +1542,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             onChange={async (e) => {
               const files = e.target.files;
               if (!files?.length) return;
-              setQuickUploading(true);
-              for (const file of Array.from(files)) {
-                try {
-                  const canvas = document.createElement("canvas");
-                  const img = new Image();
-                  await new Promise<void>((res) => { img.onload = () => res(); img.src = URL.createObjectURL(file); });
-                  let w = img.width, h = img.height;
-                  const max = 800;
-                  if (w > max || h > max) { if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
-                  canvas.width = w; canvas.height = h;
-                  canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-                  const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b || file), "image/jpeg", 0.5));
-                  const path = `quickquote/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
-                  const { error } = await supabase.storage.from("receipts").upload(path, blob);
-                  if (!error) {
-                    const { data } = supabase.storage.from("receipts").getPublicUrl(path);
-                    if (data?.publicUrl) setQuickPhotos((prev) => [...prev, data.publicUrl]);
-                  }
-                } catch (err) { console.error(err); }
-              }
-              setQuickUploading(false);
+              for (const file of Array.from(files)) await handleQuickPhotoFile(file);
               if (quickPhotoRef.current) quickPhotoRef.current.value = "";
             }}
           />

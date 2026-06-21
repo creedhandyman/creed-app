@@ -8,6 +8,7 @@ import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
 import ReviewRequestModal from "../ReviewRequestModal";
+import CameraModal from "../CameraModal";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -620,6 +621,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
   const border = darkMode ? "#1e1e2e" : "#eee";
   const [section, setSection] = useState<"tasks" | "guide" | "notes" | "photos">("tasks");
+  // Shared in-app camera target — which upload handler the next shot feeds.
+  const [wvCam, setWvCam] = useState<
+    null | { title: string; multiple: boolean; onFiles: (files: File[]) => void }
+  >(null);
 
   // Swipe between tabs. The original implementation only tracked X and
   // fired on >60px horizontal drift, which meant a casual scroll or a
@@ -932,10 +937,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                                 {priLabel(w.pri)}
                               </span>
                             )}
-                            <label onClick={(e) => e.stopPropagation()} title="Add photo" style={{ width: 26, height: 26, borderRadius: 7, background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                            <button onClick={(e) => { e.stopPropagation(); setWvCam({ title: "Work photo", multiple: true, onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f, "work")) }); }} title="Add photo" style={{ width: 26, height: 26, borderRadius: 7, background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, border: "none" }}>
                               <Icon name="camera" size={13} color="#7fb6ff" />
-                              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadWorkPhoto(f, "work"); e.currentTarget.value = ""; }} />
-                            </label>
+                            </button>
                             <Icon name={isOpen ? "collapse" : "expand"} size={14} color="#888" />
                           </div>
                         </div>
@@ -1363,12 +1367,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             <div className="row" style={{ gap: 4 }}>
               <button
                 className="bb"
-                onClick={() => {
-                  const input = document.createElement("input");
-                  input.type = "file"; input.accept = "image/*"; input.capture = "environment";
-                  input.onchange = () => { if (input.files?.[0]) uploadWorkPhoto(input.files[0]); };
-                  input.click();
-                }}
+                onClick={() => setWvCam({
+                  title: photoType === "after" ? "Completion photo" : photoType === "before" ? "Before photo" : "Work photo",
+                  multiple: true,
+                  onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f)),
+                })}
                 style={{ fontSize: 12, padding: "5px 10px" }}
                 title={`Photo will be saved as a ${photoType === "after" ? "completion" : photoType} photo`}
               >
@@ -1396,12 +1399,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   amount, and feeds price_corrections for the quoter. */}
               <button
                 className="bo"
-                onClick={() => {
-                  const input = document.createElement("input");
-                  input.type = "file"; input.accept = "image/*"; input.capture = "environment";
-                  input.onchange = () => { if (input.files?.[0]) uploadReceipt(input.files[0]); };
-                  input.click();
-                }}
+                onClick={() => setWvCam({ title: "Receipt", multiple: false, onFiles: (fs) => { const f = fs[0]; if (f) uploadReceipt(f); } })}
                 disabled={uploadingReceipt}
                 style={{ fontSize: 12, padding: "5px 10px", display: "inline-flex", alignItems: "center", gap: 4, opacity: uploadingReceipt ? 0.5 : 1 }}
                 title="Snap a receipt photo — AI extracts vendor, items, and total"
@@ -1804,6 +1802,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         job={reviewJob}
         onClose={() => { setReviewJob(null); setPage("dash"); }}
         onSent={() => loadAll()}
+      />
+      <CameraModal
+        open={!!wvCam}
+        onClose={() => setWvCam(null)}
+        onCapture={(fs) => wvCam?.onFiles(fs)}
+        multiple={wvCam?.multiple ?? false}
+        title={wvCam?.title}
       />
     </div>
   );
