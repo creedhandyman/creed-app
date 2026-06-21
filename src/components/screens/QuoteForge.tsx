@@ -1731,7 +1731,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       <div className="fi">
         <div className="row mb">
           <button className="bo" onClick={() => { setMode(null); setParsing(false); setParseStatus(""); }}>←</button>
-          <h2 style={{ fontSize: 18, color: "var(--color-primary)" }}>⚡ Building Quote</h2>
+          <h2 style={{ fontSize: 18, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="sparkle" size={18} color="var(--color-primary)" /> Building Quote</h2>
         </div>
         <div className="cd">
           <AiLoadingDisplay status={parseStatus || "Processing inspection..."} />
@@ -1764,7 +1764,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         </span>
       </div>
 
-      {/* Property + Total */}
+      {/* Property + Total — gold total card (mock) */}
       <div
         className="cd mb"
         style={{
@@ -1773,6 +1773,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           alignItems: "center",
           flexWrap: "wrap",
           gap: 8,
+          background: "linear-gradient(135deg,#2a2410,#181308)",
+          border: "1px solid #4a3d12",
         }}
       >
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>
@@ -1789,15 +1791,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           />
         </div>
         <div style={{ textAlign: "right" }}>
-          <div className="sl">Total</div>
-          <div
-            style={{
-              fontSize: 28,
-              fontFamily: "Oswald",
-              fontWeight: 700,
-              color: "var(--color-success)",
-            }}
-          >
+          <div style={{ fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "#f5b400", fontWeight: 600 }}>Total</div>
+          <div style={{ fontSize: 30, fontFamily: "Oswald", fontWeight: 700, color: "#fff", lineHeight: 1.1 }}>
             ${gt.toFixed(2)}
           </div>
         </div>
@@ -2358,52 +2353,43 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 }`,
               }}
             >
-              {workers.includes(u.id) ? "✓ " : ""}
               {u.name}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 3, marginBottom: 12, flexWrap: "wrap" }}>
+      {/* Tabs — clean segmented (gold active) */}
+      <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
         {[
-          { id: "quote", l: "📄Quote" },
-          { id: "guide", l: "🔧Guide" },
-          { id: "issues", l: "⚠️Issues" },
-          { id: "photos", l: "📸Photos" },
-          { id: "add", l: "➕Add" },
-        ].map((x) => (
-          <button
-            key={x.id}
-            onClick={() => setTab(x.id)}
-            style={{
-              padding: "5px 12px",
-              background:
-                tab === x.id
-                  ? "var(--color-primary)"
-                  : darkMode
-                  ? "#12121a"
-                  : "#fff",
-              color: tab === x.id ? "#fff" : "#888",
-              border: `1px solid ${
-                tab === x.id
-                  ? "var(--color-primary)"
-                  : darkMode
-                  ? "#1e1e2e"
-                  : "#ddd"
-              }`,
-              borderRadius: "6px 6px 0 0",
-              fontFamily: "Oswald",
-              fontSize: 13,
-            }}
-          >
-            {x.l}
-          </button>
-        ))}
-        <div style={{ flex: 1 }} />
+          { id: "quote", l: t("qf.tabQuote") },
+          { id: "guide", l: t("qf.tabGuide") },
+          { id: "issues", l: t("qf.tabIssues") },
+          { id: "photos", l: t("qf.tabPhotos") },
+          { id: "add", l: "Add" },
+        ].map((x) => {
+          const on = tab === x.id;
+          return (
+            <button
+              key={x.id}
+              onClick={() => setTab(x.id)}
+              style={{
+                flex: 1, textAlign: "center", padding: "7px 2px", borderRadius: 9, fontSize: 10.5,
+                fontFamily: "Oswald", fontWeight: 600, letterSpacing: ".04em",
+                background: on ? "#f5b400" : "var(--color-card-dark-2)",
+                color: on ? "#1a1305" : "var(--color-dim)",
+                border: `1px solid ${on ? "#f5b400" : "var(--color-border-dark-2)"}`,
+              }}
+            >
+              {x.l}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Action bar — PDF / Send / Save (Save = green primary) */}
+      <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
         <button
-          className="bo"
           onClick={() =>
             (() => {
               const o = useStore.getState().org;
@@ -2445,12 +2431,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               });
             })()
           }
-          style={{ fontSize: 12, padding: "6px 16px" }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
         >
-          📄 Export PDF
+          <Icon name="doc" size={14} /> PDF
         </button>
         <button
-          className="bo"
           onClick={() => {
             const customerData = customerId
               ? useStore.getState().customers.find((c) => c.id === customerId)
@@ -2469,16 +2454,15 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             );
             window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_self");
           }}
-          style={{ fontSize: 12, padding: "6px 16px" }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)", color: "inherit", cursor: "pointer" }}
         >
-          ✉ Send Quote
+          <Icon name="send" size={14} /> Send
         </button>
         <button
-          className="bg"
           onClick={saveJob}
-          style={{ fontSize: 12, padding: "6px 16px" }}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-success)", background: "var(--color-success)", color: "#06371f", boxShadow: "0 0 22px -6px rgba(0,204,102,.6)", cursor: "pointer" }}
         >
-          {editingId ? "Update Job →" : "Save & Create Job →"}
+          <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? "Update" : "Save job"}
         </button>
       </div>
 
@@ -2687,21 +2671,17 @@ function QuoteTab({
   getRateForRoom?: (roomName: string) => number;
 }) {
   const [expandedMat, setExpandedMat] = useState<string | null>(null);
+  // Colored trade dot for each room/area header (matches the mock's tradehdr).
+  const TRADE_DOT: Record<string, string> = { plumbing: "#3aa0ff", electrical: "#ffcc00", carpentry: "#ff8800", hvac: "#9d4edd", painting: "#00cc66", flooring: "#ff5b5b", general: "#8a8a99", drywall: "#06b6d4" };
+  const dotFor = (n: string) => TRADE_DOT[(n || "").toLowerCase().trim()] || "var(--color-primary)";
   return (
     <>
       {rooms.map((rm) => (
         <div key={rm.name} style={{ marginBottom: 12 }}>
-          <h4
-            style={{
-              color: "var(--color-primary)",
-              fontSize: 13,
-              marginBottom: 4,
-              borderBottom: `1px solid ${darkMode ? "#1e1e2e" : "#eee"}`,
-              paddingBottom: 3,
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "8px 1px 7px", fontFamily: "Oswald", fontWeight: 600, fontSize: 11, letterSpacing: ".1em", color: "var(--color-dim)", textTransform: "uppercase" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: dotFor(rm.name), flexShrink: 0 }} />
             {rm.name}
-          </h4>
+          </div>
           {rm.items.map((it) => {
             const roomRate = getRateForRoom ? getRateForRoom(rm.name) : rate;
             const { lc: _lc, mc: _mc, tot } = calculateCost(it, roomRate);

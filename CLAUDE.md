@@ -259,6 +259,21 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **QuoteForge redesign (from mockup)**: `Creed_Quote_Section` mockup —
+  restyled the hub + editor; all AI/editing logic preserved. **Hub**: topbar
+  (QUOTEFORGE + "New quote") + three glow CTAs (Quick Quote gold, Full
+  Inspection green, Upload Report blue) with icon/title/subtitle/tag pill;
+  `SavedInspections` is now a folder header + cards with a gold "Quote this"
+  + mini edit/print/delete icon buttons (no emoji). **Editor**: gold-gradient
+  total card; clean gold-active segmented tabs (Quote/Guide/Issues/Photos/
+  Add); a separate **action bar** (PDF / Send / Save = green primary) split
+  out of the old crammed tab row; trade-dot room headers in `QuoteTab`; emoji
+  removed (incl. the worker chips). Kept as-is (functional, richer than the
+  mock): the expanded pricing controls (labor/discount/tax), the stats `.g4`
+  grid, AI Assist, and the editable hrs/mat/sqft line-item inputs + material
+  modal. NOT yet matched: compact pricing tiles, action bar pinned to the
+  very bottom, and the AI-build loading screen (still the shared
+  `AiLoadingDisplay`; only its header was de-emoji'd).
 - **Schedule redesign (from mockup)**: `Schedule.tsx` rebuilt to **Day /
   Week / Month** views + a **worker-filter** avatar row (`Creed_Schedule`
   mockup). Topbar = title + date-nav (label adapts per view, tap = today;
