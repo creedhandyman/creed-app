@@ -28,7 +28,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const darkMode = useStore((s) => s.darkMode);
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [view, setView] = useState<"day" | "week" | "month">("week");
+  const [view, setView] = useState<"day" | "week" | "month" | "dispatch">("week");
   const [workerFilter, setWorkerFilter] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<{ date: string; reason: string } | null>(null);
   // Quick-schedule modal state: the "armed" job + the chosen day. Opened from a
@@ -51,8 +51,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const [qsNote, setQsNote] = useState("");
   // Optional end day for multi-day jobs — an entry spans sched_date..end_date.
   const [endTarget, setEndTarget] = useState<string | null>(null);
-  // Clear the multi-day end whenever the schedule modal closes (any path).
-  useEffect(() => { if (!armedJob) setEndTarget(null); }, [armedJob]);
+  // When set, the modal is editing/moving an existing entry (patch) rather than
+  // creating a new one (post).
+  const [editSched, setEditSched] = useState<typeof schedule[number] | null>(null);
+  // Reset the multi-day end + edit target whenever the modal closes (any path).
+  useEffect(() => { if (!armedJob) { setEndTarget(null); setEditSched(null); } }, [armedJob]);
 
   // When a job is armed via the drag palette, re-run the day-suggestion
   // logic so the user immediately sees a "schedule near nearby work" hint.
@@ -111,14 +114,27 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     if (qsTime) parts.push(`🕐 ${qsTime}`);
     if (qsWorkers.length) parts.push(`👷 ${qsWorkers.join(", ")}`);
     if (qsNote) parts.push(qsNote);
-    const payload: Record<string, unknown> = { sched_date: dropTarget, job: armedJob, note: parts.join(" · ") };
-    // Multi-day jobs span sched_date..end_date. Only send end_date for a real
-    // multi-day range so single-day scheduling still works before the
-    // `end_date` column migration runs.
-    if (endTarget && endTarget > dropTarget) payload.end_date = endTarget;
-    await db.post("schedule", payload);
-    const matched = jobs.find((j) => j.property === armedJob && (j.status === "quoted" || j.status === "accepted"));
-    if (matched) await db.patch("jobs", matched.id, { status: "scheduled" });
+    const note = parts.join(" · ");
+    // Multi-day jobs span sched_date..end_date.
+    const endDate = endTarget && endTarget > dropTarget ? endTarget : null;
+    if (editSched) {
+      // Edit / move an existing entry.
+      const patch: Record<string, unknown> = { sched_date: dropTarget, note };
+      // Set end_date for a multi-day range, or clear it when an existing
+      // multi-day entry is shortened to a single day. Left untouched for
+      // single→single edits so the column isn't referenced pre-migration.
+      if (endDate) patch.end_date = endDate;
+      else if (editSched.end_date) patch.end_date = null;
+      await db.patch("schedule", editSched.id, patch);
+    } else {
+      // Only send end_date for a real range so single-day scheduling still
+      // works before the `end_date` column migration runs.
+      const payload: Record<string, unknown> = { sched_date: dropTarget, job: armedJob, note };
+      if (endDate) payload.end_date = endDate;
+      await db.post("schedule", payload);
+      const matched = jobs.find((j) => j.property === armedJob && (j.status === "quoted" || j.status === "accepted"));
+      if (matched) await db.patch("jobs", matched.id, { status: "scheduled" });
+    }
     // Persist time + workers so the next drop pre-fills with the same
     // defaults — the common case is scheduling several jobs in a row at
     // the same start time with the same crew.
@@ -128,13 +144,14 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         localStorage.setItem("c_sched_lastWorkers", JSON.stringify(qsWorkers));
       }
     } catch { /* ignore quota errors */ }
+    const wasEdit = !!editSched;
     setArmedJob(null);
     setDropTarget(null);
     // Keep qsTime + qsWorkers as-is; only the note clears so it doesn't
     // get accidentally reused on the next job.
     setQsNote("");
     await loadAll();
-    useStore.getState().showToast(t("sched.scheduledToast"), "success");
+    useStore.getState().showToast(wasEdit ? "Schedule updated" : t("sched.scheduledToast"), "success");
   };
 
   const now = new Date();
@@ -222,6 +239,26 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   };
   const matchesWorker = (e: { note?: string; job?: string }) => !workerFilter || entryWorkers(e).includes(workerFilter);
 
+  // Open the quick-schedule modal pre-filled to EDIT/MOVE an existing entry
+  // (change its day(s), time, crew, notes — or unschedule it).
+  const openEdit = (s: typeof schedule[number]) => {
+    setEditSched(s);
+    setArmedJob(s.job);
+    setDropTarget(s.sched_date);
+    setEndTarget(s.end_date || null);
+    setQsTime(parseTime(s.note));
+    setQsWorkers(parseWorkers(s.note));
+    setQsNote((s.note || "").replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/g, "").replace(/👷\s*[^·]+·?\s*/g, "").trim());
+  };
+  const deleteSched = async () => {
+    if (!editSched) return;
+    if (!await useStore.getState().showConfirm("Remove from schedule", `Unschedule ${editSched.job}?`)) return;
+    await db.del("schedule", editSched.id);
+    setArmedJob(null); setDropTarget(null); setQsNote("");
+    await loadAll();
+    useStore.getState().showToast("Removed from schedule", "info");
+  };
+
   return (
     <div className="fi">
       {/* Topbar — title + date nav (tap label = today) */}
@@ -303,7 +340,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             borderRadius: 12, padding: 18, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
           }}
         >
-          <h4 style={{ fontSize: 16, color: "var(--color-primary)", marginBottom: 6 }}>{t("sched.scheduleJob")}</h4>
+          <h4 style={{ fontSize: 16, color: "var(--color-primary)", marginBottom: 6 }}>{editSched ? "Edit / move job" : t("sched.scheduleJob")}</h4>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{armedJob}</div>
           <div style={{ marginBottom: 10 }}>
             <label className="sl" style={{ fontSize: 13 }}>Day</label>
@@ -375,6 +412,11 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             />
           </div>
           <div className="row" style={{ gap: 8 }}>
+            {editSched && (
+              <button onClick={deleteSched} className="br" style={{ flex: 1, fontSize: 14 }}>
+                Unschedule
+              </button>
+            )}
             <button
               onClick={() => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
               className="bo"
@@ -383,7 +425,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               {t("common.cancel")}
             </button>
             <button onClick={quickAdd} className="bg" style={{ flex: 2, fontSize: 15 }}>
-              {t("sched.scheduleAction")}
+              {editSched ? "Save changes" : t("sched.scheduleAction")}
             </button>
           </div>
         </div>
@@ -392,7 +434,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
 
       {/* View toggle (Day / Week / Month) */}
       <div style={{ display: "flex", gap: 5, marginBottom: 11 }}>
-        {(["day", "week", "month"] as const).map((v) => (
+        {(["day", "week", "month", "dispatch"] as const).map((v) => (
           <button
             key={v}
             onClick={() => setView(v)}
@@ -548,6 +590,71 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         </div>
       )}
 
+      {/* ── DISPATCH VIEW — assign jobs to days + techs ── */}
+      {view === "dispatch" && (() => {
+        const scheduledProps = new Set(schedule.map((s) => s.job));
+        const needScheduling = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !scheduledProps.has(j.property));
+        const weekDates = week.map((d) => ymd(d));
+        const weekStart = weekDates[0];
+        const weekEnd = weekDates[weekDates.length - 1];
+        const weekEntries = schedule.filter((s) => (s.end_date || s.sched_date) >= weekStart && s.sched_date <= weekEnd);
+        return (
+          <div className="mb">
+            {/* Needs scheduling — pool of unassigned jobs */}
+            <div style={{ fontSize: 12.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "2px 2px 8px", display: "flex", alignItems: "center", gap: 7 }}>
+              <Icon name="folder" size={13} color="var(--color-dim)" /> Needs scheduling ({needScheduling.length})
+            </div>
+            {needScheduling.length === 0 ? (
+              <div className="cd" style={{ textAlign: "center", padding: 14, marginBottom: 10 }}><p className="dim" style={{ fontSize: 13 }}>Everything is assigned ✓</p></div>
+            ) : needScheduling.map((j) => (
+              <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 10, background: darkMode ? "#16161f" : "#fff", border: "1px dashed var(--color-border-dark)", borderRadius: 12, padding: "9px 11px 9px 14px", position: "relative", overflow: "hidden", marginBottom: 6 }}>
+                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: statusColor(j.status) }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.property}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>{j.trade || "Job"} · {(j.total_hrs || 0).toFixed(1)}h · {j.status}</div>
+                </div>
+                <button onClick={() => { setArmedJob(j.property); setDropTarget(todayStr); }} style={{ fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--color-primary)", borderRadius: 8, padding: "6px 12px", border: "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0 }}>
+                  <Icon name="schedule" size={12} color="#fff" /> Assign
+                </button>
+              </div>
+            ))}
+
+            {/* This week, grouped by tech — tap a job to edit / move it */}
+            <div style={{ fontSize: 12.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "16px 2px 8px", display: "flex", alignItems: "center", gap: 7 }}>
+              <Icon name="worker" size={13} color="var(--color-dim)" /> This week · by tech
+            </div>
+            {profiles.map((p) => {
+              const mine = weekEntries.filter((s) => entryWorkers(s).includes(p.name)).sort((a, b) => a.sched_date.localeCompare(b.sched_date));
+              return (
+                <div key={p.id} className="cd" style={{ padding: "9px 11px", marginBottom: 7 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mine.length ? 7 : 0 }}>
+                    <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
+                      <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#cdd6e6" }}>{initialsOf(p.name)}</span>
+                      {p.name}
+                    </span>
+                    <span className="dim" style={{ fontSize: 11.5 }}>{mine.length ? `${mine.length} job${mine.length !== 1 ? "s" : ""}` : "Available"}</span>
+                  </div>
+                  {mine.map((s) => {
+                    const j = jobFor(s.job);
+                    const multi = !!(s.end_date && s.end_date > s.sched_date);
+                    const dlabel = multi
+                      ? `${new Date(s.sched_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}–${new Date((s.end_date as string) + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                      : new Date(s.sched_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", day: "numeric" });
+                    return (
+                      <div key={s.id} onClick={() => openEdit(s)} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, padding: "5px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4, cursor: "pointer" }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: j ? statusColor(j.status) : "var(--color-primary)", flexShrink: 0 }} />
+                        <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.job}</span>
+                        <span style={{ fontSize: 11, color: "var(--color-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{dlabel}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* Selected-day detail + actions */}
       <div className="cd mb">
 
@@ -590,13 +697,22 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                             return bits.length ? <div className="dim" style={{ fontSize: 12 }}>{bits.join(" · ")}</div> : null;
                           })()}
                         </div>
-                        <button
-                          className="bb"
-                          onClick={() => setPage("time")}
-                          style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0 }}
-                        >
-                          <Icon name="start" size={12} color="#fff" /> Start
-                        </button>
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          <button
+                            className="bo"
+                            onClick={() => openEdit(s)}
+                            style={{ fontSize: 13, padding: "4px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}
+                          >
+                            <Icon name="edit" size={12} /> Edit
+                          </button>
+                          <button
+                            className="bb"
+                            onClick={() => setPage("time")}
+                            style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}
+                          >
+                            <Icon name="start" size={12} color="#fff" /> Start
+                          </button>
+                        </div>
                       </div>
                       {linkedJob && <SmsNotifyButtons jobId={linkedJob.id} compact />}
                     </div>
