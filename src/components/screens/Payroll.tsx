@@ -240,6 +240,14 @@ export default function Payroll() {
 
   const userPayHistory = payHistory.filter((p) => p.user_id === sel);
 
+  // Team-wide summary (the gradient bar in the mock) — all unpaid hours
+  // and what they total at each person's rate. Glanceable; the per-person
+  // breakdown below is the actual pay-run surface.
+  const rateForUser = (uid?: string | null) => (uid ? profiles.find((p) => p.id === uid)?.rate || 0 : 0);
+  const teamUnpaidEntries = timeEntries.filter((e) => !e.paid_at);
+  const teamUnpaidHours = teamUnpaidEntries.reduce((s, e) => s + (e.hours || 0), 0);
+  const teamCycleTotal = teamUnpaidEntries.reduce((s, e) => s + (e.hours || 0) * rateForUser(e.user_id), 0);
+
   return (
     <div className="fi">
       <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -257,28 +265,46 @@ export default function Payroll() {
           header shows the selected employee + total so the at-a-glance
           number is still visible without expanding. */}
       <PayrollSection
-        title="📋 Current Pay"
+        title="Current Pay"
         subtitle={`${selUser.name} · ${totalHrs.toFixed(1)}h · $${totalPay.toFixed(2)}`}
         storageKey="payroll.main.collapsed"
         defaultCollapsed={false}
       >
-      {/* Employee selector */}
+      {/* Employee avatar strip — tap to switch whose pay you're running. */}
       {isOwner && (
-        <div className="cd mb">
-          <div className="row">
-            <span className="dim" style={{ fontSize: 14 }}>Employee:</span>
-            <select
-              value={sel}
-              onChange={(e) => setSel(e.target.value)}
-              style={{ flex: 1 }}
-            >
-              {profiles.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} (${u.rate}/hr)
-                </option>
-              ))}
-            </select>
-          </div>
+        <div style={{ display: "flex", gap: 9, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+          {profiles.map((u) => {
+            const on = sel === u.id;
+            const initials = (u.name || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+            return (
+              <button
+                key={u.id}
+                onClick={() => setSel(u.id)}
+                style={{ flex: "none", width: 48, textAlign: "center", background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit" }}
+              >
+                <div style={{ width: 40, height: 40, borderRadius: "50%", margin: "0 auto 4px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, background: "var(--color-card-dark-2)", color: on ? "#fff" : "#cdd6e6", border: `2px solid ${on ? "var(--color-primary)" : "transparent"}`, boxShadow: on ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>
+                  {u.photo_url ? <img src={u.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
+                </div>
+                <div style={{ fontSize: 8.5, color: on ? "inherit" : "var(--color-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(u.name || "").split(/\s+/)[0]}</div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Team summary bar */}
+      {isOwner && (
+        <div style={{ display: "flex", background: "linear-gradient(135deg,#14233d,#101a2e)", border: "1px solid #243a5e", borderRadius: 15, padding: "13px 8px", marginBottom: 14 }}>
+          {[
+            { l: "Staff", v: String(profiles.length) },
+            { l: "Unpaid hrs", v: teamUnpaidHours.toFixed(1) },
+            { l: "Cycle total", v: "$" + Math.round(teamCycleTotal).toLocaleString(), c: "var(--color-money)" },
+          ].map((s) => (
+            <div key={s.l} style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 8.5, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--color-dim)" }}>{s.l}</div>
+              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: s.c || "inherit" }}>{s.v}</div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -294,7 +320,7 @@ export default function Payroll() {
         </div>
         {totalBonus > 0 && (
           <div className="cd" style={{ textAlign: "center", borderLeft: "3px solid var(--color-warning)" }}>
-            <div className="sl">🎯 Bonus</div>
+            <div className="sl">Bonus</div>
             <div className="sv" style={{ color: "var(--color-warning)" }}>${totalBonus}</div>
           </div>
         )}
@@ -307,8 +333,8 @@ export default function Payroll() {
       {/* Quest bonuses earned — admin must approve before they're added to pay */}
       {earnedQuests.length > 0 && (
         <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)" }}>
-          <h4 style={{ fontSize: 15, marginBottom: 6, color: "var(--color-warning)" }}>
-            🎯 Quest Bonuses — Pending Review ({earnedQuests.length})
+          <h4 style={{ fontSize: 15, marginBottom: 6, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Icon name="trophy" size={15} color="var(--color-warning)" /> Quest Bonuses — Pending Review ({earnedQuests.length})
           </h4>
           {earnedQuests.map((q) => {
             const approved = approvedBonusKeys.has(q.key);
@@ -373,7 +399,7 @@ export default function Payroll() {
                   opacity: processing || !entries.length ? 0.5 : 1,
                 }}
               >
-                ✉ Notify
+                <Icon name="send" size={13} /> Notify
               </button>
               <button
                 className="bg"
@@ -738,7 +764,7 @@ function AutoPayrollPanel() {
         }}
       >
         <h4 style={{ fontSize: 15, display: "inline-flex", alignItems: "center", gap: 6 }}>
-          🤖 Auto Payroll
+          <Icon name="refresh" size={14} color="var(--color-success)" /> Auto Payroll
         </h4>
         <span
           style={{
