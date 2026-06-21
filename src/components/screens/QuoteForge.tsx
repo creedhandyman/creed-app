@@ -1363,14 +1363,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         {/* Quick Quote — gold glow */}
         <div
           onClick={() => setMode("quick")}
-          style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, marginBottom: 11, cursor: "pointer", background: "rgba(245,180,0,.13)", border: "1.5px solid rgba(245,180,0,.75)", boxShadow: "0 0 24px -3px rgba(245,180,0,.5), inset 0 0 22px -8px rgba(245,180,0,.4)" }}
+          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", background: "rgba(245,180,0,.13)", border: "1.5px solid rgba(245,180,0,.75)", boxShadow: "0 0 24px -3px rgba(245,180,0,.5), inset 0 0 22px -8px rgba(245,180,0,.4)" }}
         >
-          <div style={{ width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="quote" size={23} color="#f5b400" strokeWidth={2} />
+          <div style={{ width: 50, height: 50, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="quote" size={26} color="#f5b400" strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17.5, letterSpacing: ".3px", color: "#fff" }}>QUICK QUOTE</div>
-            <div style={{ fontSize: 12.5, color: "#ffffffb0" }}>Describe it, add photos → AI prices it</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: "#fff" }}>QUICK QUOTE</div>
+            <div style={{ fontSize: 13, color: "#ffffffb0" }}>Describe it, add photos → AI prices it</div>
           </div>
           <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(245,180,0,.2)", color: "#f5b400" }}>SMALL JOBS</span>
         </div>
@@ -1395,14 +1395,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             }
             setMode("inspect");
           }}
-          style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, marginBottom: 11, cursor: "pointer", background: "rgba(0,204,102,.13)", border: "1.5px solid rgba(0,204,102,.7)", boxShadow: "0 0 24px -3px rgba(0,204,102,.45), inset 0 0 22px -8px rgba(0,204,102,.4)" }}
+          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", background: "rgba(0,204,102,.13)", border: "1.5px solid rgba(0,204,102,.7)", boxShadow: "0 0 24px -3px rgba(0,204,102,.45), inset 0 0 22px -8px rgba(0,204,102,.4)" }}
         >
-          <div style={{ width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="search" size={23} color="#3ee08f" strokeWidth={2} />
+          <div style={{ width: 50, height: 50, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="search" size={26} color="#3ee08f" strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17.5, letterSpacing: ".3px", color: "#fff" }}>FULL INSPECTION</div>
-            <div style={{ fontSize: 12.5, color: "#ffffffb0" }}>Area-by-area walkthrough · voice</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: "#fff" }}>FULL INSPECTION</div>
+            <div style={{ fontSize: 13, color: "#ffffffb0" }}>Area-by-area walkthrough · voice</div>
           </div>
           <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(0,204,102,.2)", color: "#3ee08f" }}>MOST ACCURATE</span>
         </div>
@@ -1410,14 +1410,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         {/* Upload Report — blue glow */}
         <div
           onClick={() => fileRef.current?.click()}
-          style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, marginBottom: 11, cursor: "pointer", background: "rgba(46,139,255,.13)", border: "1.5px solid rgba(46,139,255,.75)", boxShadow: "0 0 24px -3px rgba(46,139,255,.5), inset 0 0 22px -8px rgba(46,139,255,.4)" }}
+          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", background: "rgba(46,139,255,.13)", border: "1.5px solid rgba(46,139,255,.75)", boxShadow: "0 0 24px -3px rgba(46,139,255,.5), inset 0 0 22px -8px rgba(46,139,255,.4)" }}
         >
-          <div style={{ width: 44, height: 44, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="doc" size={23} color="#8cc0ff" strokeWidth={2} />
+          <div style={{ width: 50, height: 50, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="doc" size={26} color="#8cc0ff" strokeWidth={2} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17.5, letterSpacing: ".3px", color: "#fff" }}>UPLOAD REPORT</div>
-            <div style={{ fontSize: 12.5, color: "#ffffffb0" }}>PDF inspection → AI analysis</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: "#fff" }}>UPLOAD REPORT</div>
+            <div style={{ fontSize: 13, color: "#ffffffb0" }}>PDF inspection → AI analysis</div>
           </div>
           <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: "rgba(46,139,255,.2)", color: "#8cc0ff" }}>PDF</span>
           <input
