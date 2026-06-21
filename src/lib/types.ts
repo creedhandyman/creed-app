@@ -282,7 +282,8 @@ export interface Referral {
 
 export interface ScheduleEntry {
   id: string;
-  sched_date: string;
+  sched_date: string;       // start day (YYYY-MM-DD)
+  end_date?: string;        // last day for multi-day jobs; absent = single day
   job: string;
   note: string;
   created_at?: string;

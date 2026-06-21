@@ -49,6 +49,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   const [qsTime, setQsTime] = useState(() => loadStr("lastTime", ""));
   const [qsWorkers, setQsWorkers] = useState<string[]>(() => loadList("lastWorkers"));
   const [qsNote, setQsNote] = useState("");
+  // Optional end day for multi-day jobs — an entry spans sched_date..end_date.
+  const [endTarget, setEndTarget] = useState<string | null>(null);
+  // Clear the multi-day end whenever the schedule modal closes (any path).
+  useEffect(() => { if (!armedJob) setEndTarget(null); }, [armedJob]);
 
   // When a job is armed via the drag palette, re-run the day-suggestion
   // logic so the user immediately sees a "schedule near nearby work" hint.
@@ -107,7 +111,12 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     if (qsTime) parts.push(`🕐 ${qsTime}`);
     if (qsWorkers.length) parts.push(`👷 ${qsWorkers.join(", ")}`);
     if (qsNote) parts.push(qsNote);
-    await db.post("schedule", { sched_date: dropTarget, job: armedJob, note: parts.join(" · ") });
+    const payload: Record<string, unknown> = { sched_date: dropTarget, job: armedJob, note: parts.join(" · ") };
+    // Multi-day jobs span sched_date..end_date. Only send end_date for a real
+    // multi-day range so single-day scheduling still works before the
+    // `end_date` column migration runs.
+    if (endTarget && endTarget > dropTarget) payload.end_date = endTarget;
+    await db.post("schedule", payload);
     const matched = jobs.find((j) => j.property === armedJob && (j.status === "quoted" || j.status === "accepted"));
     if (matched) await db.patch("jobs", matched.id, { status: "scheduled" });
     // Persist time + workers so the next drop pre-fills with the same
@@ -189,6 +198,20 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     if (!hhmm) return "";
     const [h, m] = hhmm.split(":").map(Number);
     return `${h % 12 || 12}:${String(m).padStart(2, "0")}${h >= 12 ? "p" : "a"}`;
+  };
+  // Multi-day: an entry covers every day from sched_date..end_date (end_date
+  // defaults to sched_date for single-day jobs, including pre-migration rows).
+  const spansDay = (s: { sched_date: string; end_date?: string }, day: string) =>
+    day >= s.sched_date && day <= (s.end_date || s.sched_date);
+  // "Day k of N" badge data — null for single-day entries.
+  const dayOfSpan = (s: { sched_date: string; end_date?: string }, day: string): { idx: number; total: number } | null => {
+    const end = s.end_date || s.sched_date;
+    if (end <= s.sched_date) return null;
+    const DAY = 86400000;
+    const start = new Date(s.sched_date + "T12:00:00").getTime();
+    const total = Math.round((new Date(end + "T12:00:00").getTime() - start) / DAY) + 1;
+    const idx = Math.round((new Date(day + "T12:00:00").getTime() - start) / DAY) + 1;
+    return total > 1 ? { idx, total } : null;
   };
   const initialsOf = (name: string): string => (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
   const jobFor = (property?: string) => property ? jobs.filter((j) => j.property === property && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] : undefined;
@@ -288,6 +311,18 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               type="date"
               value={dropTarget || ""}
               onChange={(e) => setDropTarget(e.target.value)}
+              style={{ marginTop: 4, color: "var(--color-primary)", fontWeight: 600 }}
+            />
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <label className="sl" style={{ fontSize: 13 }}>
+              End day <span className="dim" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>· optional, for multi-day jobs</span>
+            </label>
+            <input
+              type="date"
+              value={endTarget || ""}
+              min={dropTarget || undefined}
+              onChange={(e) => setEndTarget(e.target.value || null)}
               style={{ marginTop: 4, color: "var(--color-primary)", fontWeight: 600 }}
             />
           </div>
@@ -391,7 +426,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
       {/* ── DAY VIEW — time-rail blocks + Unscheduled ── */}
       {view === "day" && (() => {
         const ds = ymd(viewDate);
-        const dayEntries = schedule.filter((s) => s.sched_date === ds && matchesWorker(s))
+        const dayEntries = schedule.filter((s) => spansDay(s, ds) && matchesWorker(s))
           .sort((a, b) => (parseTime(a.note) || "99:99").localeCompare(parseTime(b.note) || "99:99"));
         const scheduledProps = new Set(schedule.map((s) => s.job));
         const unscheduled = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !scheduledProps.has(j.property));
@@ -412,7 +447,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   <div onClick={() => setSelectedDay(s.sched_date)} style={{ flex: 1, position: "relative", overflow: "hidden", background: darkMode ? "#16161f" : "#fff", border: "1px solid var(--color-border-dark)", borderRadius: 13, padding: "10px 11px 10px 15px", cursor: "pointer" }}>
                     <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: color }} />
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px" }}>{s.job}</div>
-                    <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{meta}</div>
+                    <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{meta}{(() => { const sp = dayOfSpan(s, ds); return sp ? ` · Day ${sp.idx} of ${sp.total}` : ""; })()}</div>
                     {crew.length > 0 && (
                       <div style={{ display: "flex", marginTop: 7 }}>
                         {crew.map((wn, ci) => (
@@ -453,7 +488,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         <div className="mb">
           {week.map((d, i) => {
             const ds = ymd(d);
-            const dayEntries = schedule.filter((s) => s.sched_date === ds && matchesWorker(s)).sort((a, b) => (parseTime(a.note) || "99:99").localeCompare(parseTime(b.note) || "99:99"));
+            const dayEntries = schedule.filter((s) => spansDay(s, ds) && matchesWorker(s)).sort((a, b) => (parseTime(a.note) || "99:99").localeCompare(parseTime(b.note) || "99:99"));
             const isToday = ds === todayStr;
             const totalHrs = dayEntries.reduce((sum, e) => sum + (jobFor(e.job)?.total_hrs || 0), 0);
             return (
@@ -475,7 +510,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   return (
                     <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, padding: "5px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4 }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                      <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.job}{time ? ` · ${fmt12(time)}` : ""}</span>
+                      <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.job}{time ? ` · ${fmt12(time)}` : ""}{(() => { const sp = dayOfSpan(s, ds); return sp ? ` · D${sp.idx}/${sp.total}` : ""; })()}</span>
                       {wlabel && <span style={{ fontSize: 11, color: "var(--color-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{wlabel}</span>}
                     </div>
                   );
@@ -496,7 +531,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             {monthCells.map((d, i) => {
               if (!d) return <div key={`e${i}`} style={{ aspectRatio: ".92", borderRadius: 8, background: darkMode ? "#0d0d14" : "#f5f5f5", opacity: 0.28 }} />;
               const ds = ymd(d);
-              const dayEntries = schedule.filter((s) => s.sched_date === ds && matchesWorker(s));
+              const dayEntries = schedule.filter((s) => spansDay(s, ds) && matchesWorker(s));
               const isToday = ds === todayStr;
               const isSel = ds === selectedDay;
               const dots = dayEntries.slice(0, 4).map((s) => { const j = jobFor(s.job); return j ? statusColor(j.status) : "var(--color-primary)"; });
@@ -518,7 +553,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
 
         {/* Day detail panel */}
         {selectedDay && (() => {
-          const dayItems = schedule.filter((s) => s.sched_date === selectedDay);
+          const dayItems = schedule.filter((s) => spansDay(s, selectedDay));
           const dayDate = new Date(selectedDay + "T12:00:00");
           const dayLabel = dayDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
           return (

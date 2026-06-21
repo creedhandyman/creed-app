@@ -30,6 +30,7 @@ import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import CameraModal from "../CameraModal";
+import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 
@@ -937,6 +938,44 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     );
   };
 
+  // Keep a live ref to rooms so the on-blur edit logger reads the FINAL value,
+  // not a stale render closure.
+  const roomsRef = useRef(rooms);
+  roomsRef.current = rooms;
+  // Snapshot of an item's pre-edit hrs+materials, captured when editing starts
+  // (hrs focus / material modal open). We log ONE clean AI-vs-final correction
+  // on finalize instead of the old per-keystroke chain — which logged every
+  // mid-typing value (e.g. $55→$7→$75) and polluted the self-learning data.
+  const editOrigRef = useRef<Record<string, { hrs: number; mat: number }>>({});
+  const snapItemEdit = (rn: string, id: string) => {
+    if (id in editOrigRef.current) return;
+    const item = roomsRef.current.find((r) => r.name === rn)?.items.find((i) => i.id === id);
+    if (item) editOrigRef.current[id] = { hrs: item.laborHrs, mat: item.materials.reduce((s, m) => s + (m.c || 0), 0) };
+  };
+  const logItemEdit = (rn: string, id: string) => {
+    const snap = editOrigRef.current[id];
+    if (!snap) return;
+    delete editOrigRef.current[id];
+    const item = roomsRef.current.find((r) => r.name === rn)?.items.find((i) => i.id === id);
+    if (!item) return;
+    const finalHrs = item.laborHrs;
+    const finalMat = item.materials.reduce((s, m) => s + (m.c || 0), 0);
+    if (Math.abs(finalHrs - snap.hrs) > 0.1 || Math.abs(finalMat - snap.mat) > 2) {
+      logCorrection({
+        item_name: item.detail,
+        original_hours: snap.hrs,
+        corrected_hours: finalHrs,
+        original_mat_cost: snap.mat,
+        corrected_mat_cost: finalMat,
+        material_name: item.materials.map((m) => m.n).join(", "),
+        trade: rn,
+        zip: extractZip(prop),
+        source: "quote_edit",
+        job_id: editingId || null,
+      });
+    }
+  };
+
   const upItem = (rn: string, id: string, field: string, value: number | Material[]) => {
     // Defensive: refuse to operate on a falsy id. Without this guard,
     // `i.id === id` would match every other item whose id is also undefined
@@ -944,28 +983,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     if (!id) {
       console.warn("upItem called without an item id — refusing to update");
       return;
-    }
-    // Track corrections for AI learning
-    const room = rooms.find((r) => r.name === rn);
-    const item = room?.items.find((i) => i.id === id);
-    if (item && (field === "laborHrs" || field === "materials")) {
-      const origHrs = item.laborHrs;
-      const origMat = item.materials.reduce((s, m) => s + (m.c || 0), 0);
-      const newHrs = field === "laborHrs" ? (value as number) : origHrs;
-      const newMat = field === "materials" ? (value as Material[]).reduce((s, m) => s + (m.c || 0), 0) : origMat;
-      // Only log if there's a meaningful change
-      if (Math.abs(newHrs - origHrs) > 0.1 || Math.abs(newMat - origMat) > 2) {
-        db.post("price_corrections", {
-          item_name: item.detail,
-          original_hours: origHrs,
-          corrected_hours: newHrs,
-          original_mat_cost: origMat,
-          corrected_mat_cost: newMat,
-          material_name: field === "materials" ? (value as Material[]).map((m) => m.n).join(", ") : item.materials.map((m) => m.n).join(", "),
-          trade: rn,
-          zip: extractZip(prop),
-        });
-      }
     }
     setRooms(
       rooms.map((r) =>
@@ -2510,7 +2527,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       />
 
       {/* QUOTE TAB */}
-      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} />}
+      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} />}
 
       {/* GUIDE TAB */}
       {tab === "guide" && (
@@ -2705,6 +2722,8 @@ function QuoteTab({
   upItem,
   rmItem,
   getRateForRoom,
+  snapItemEdit,
+  logItemEdit,
 }: {
   rooms: Room[];
   rate: number;
@@ -2712,6 +2731,8 @@ function QuoteTab({
   upItem: (rn: string, id: string, field: string, value: number | Material[]) => void;
   rmItem: (rn: string, id: string) => void;
   getRateForRoom?: (roomName: string) => number;
+  snapItemEdit: (rn: string, id: string) => void;
+  logItemEdit: (rn: string, id: string) => void;
 }) {
   const [expandedMat, setExpandedMat] = useState<string | null>(null);
   // Colored trade dot for each room/area header (matches the mock's tradehdr).
@@ -2771,12 +2792,13 @@ function QuoteTab({
                         placeholder="0"
                         step=".25"
                         min="0"
-                        onFocus={(e) => e.target.select()}
+                        onFocus={(e) => { e.target.select(); snapItemEdit(rm.name, it.id); }}
                         onChange={(e) => {
                           const raw = e.target.value;
                           const v = raw === "" ? 0 : (parseFloat(raw) || 0);
                           upItem(rm.name, it.id, "laborHrs", v);
                         }}
+                        onBlur={() => logItemEdit(rm.name, it.id)}
                         style={{ width: 45, textAlign: "center", padding: "2px", fontSize: 13 }}
                       />
                     </div>
@@ -2785,7 +2807,8 @@ function QuoteTab({
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
-                          setExpandedMat(expandedMat === it.id ? null : it.id);
+                          if (expandedMat === it.id) { logItemEdit(rm.name, it.id); setExpandedMat(null); }
+                          else { snapItemEdit(rm.name, it.id); setExpandedMat(it.id); }
                         }}
                         style={{ width: 50, textAlign: "center", padding: "2px", fontSize: 13, cursor: "pointer", color: "var(--color-warning)", fontFamily: "Oswald", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, borderRadius: 4 }}
                       >
@@ -2798,7 +2821,7 @@ function QuoteTab({
                           fold. */}
                       {expandedMat === it.id && typeof document !== "undefined" && createPortal(
                         <>
-                        <div onClick={() => setExpandedMat(null)} style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.4)" }} />
+                        <div onClick={() => { logItemEdit(rm.name, it.id); setExpandedMat(null); }} style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.4)" }} />
                         <div onClick={(e) => e.stopPropagation()} style={{
                           position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
                           zIndex: 200, width: "90%", maxWidth: 360, maxHeight: "70vh", overflowY: "auto",

@@ -125,6 +125,10 @@ src/
   fields fall through). `lib/learning.ts` `recordJobOutcome` writes the rows.
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
+- Multi-day scheduling: `ALTER TABLE schedule ADD COLUMN IF NOT EXISTS end_date TEXT;`
+  (YYYY-MM-DD; absent/equal to sched_date = single day). Schedule.tsx treats
+  an entry as covering `sched_date..end_date` (`spansDay()` helper). Single-day
+  scheduling omits `end_date` on insert, so it still works before this runs.
 - Auto Payroll columns (cron at `/api/payroll/auto-run` reads these,
   Payroll.tsx's AutoPayrollPanel writes them):
   ```sql
