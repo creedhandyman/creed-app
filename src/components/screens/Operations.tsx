@@ -2,6 +2,7 @@
 import { Component, useEffect, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { parseEntryDate } from "@/lib/dates";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Customers from "./Customers";
@@ -413,7 +414,11 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const rateOf = (uid?: string | null) => (uid ? profiles.find((p) => p.id === uid)?.rate || 0 : 0);
-  const inMonth = (d?: string) => { if (!d) return false; try { return new Date(d) >= monthStart; } catch { return false; } };
+  // parseEntryDate parses LOCAL (handles "M/D/YYYY" + "YYYY-MM-DD") — raw
+  // `new Date("YYYY-MM-DD")` is UTC midnight = the previous evening in US zones,
+  // which dropped 1st-of-month jobs (revenue) and manual ISO entries (labor)
+  // out of the month and skewed Net profit.
+  const inMonth = (d?: string) => { const dt = parseEntryDate(d); return dt ? dt >= monthStart : false; };
   const payrollDue = timeEntries.filter((e) => !e.paid_at).reduce((s, e) => s + (e.hours || 0) * rateOf(e.user_id), 0);
   const revenueMonth = jobs.filter((j) => j.status === "paid" && inMonth(j.created_at)).reduce((s, j) => s + (j.total || 0), 0);
   const laborMonth = timeEntries.filter((e) => inMonth(e.entry_date)).reduce((s, e) => s + (e.hours || 0) * rateOf(e.user_id), 0);

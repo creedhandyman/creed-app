@@ -76,8 +76,16 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
 
   // ── Owner money + pipeline triage ──
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Bucket by job/created date with parseEntryDate (LOCAL — same as the week
+  // stats above). Raw `new Date("YYYY-MM-DD")` parses as UTC midnight, which in
+  // any US time zone is the PREVIOUS evening, so jobs dated on the 1st (and the
+  // boundary) were dropping out of "this month" and undercounting the figure.
   const earnedMonth = jobs
-    .filter((j) => ["complete", "invoiced", "paid"].includes(j.status) && (() => { try { return new Date(j.job_date || j.created_at) >= monthStart; } catch { return false; } })())
+    .filter((j) => {
+      if (!["complete", "invoiced", "paid"].includes(j.status)) return false;
+      const d = parseEntryDate(j.job_date || j.created_at);
+      return d ? d >= monthStart : false;
+    })
     .reduce((s, j) => s + (j.total || 0), 0);
   const open = jobs.filter((j) => !j.archived);
   const toSend = open.filter((j) => j.status === "quoted").length;
