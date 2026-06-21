@@ -388,10 +388,10 @@ export default function Quests() {
       {tab === "quests" && (
         <div>
           {/* Battle-pass hero */}
-          <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(135deg,#2a1b52,#15102e)", border: "1px solid #3a2c6a", borderRadius: 20, padding: 15, marginBottom: 12, boxShadow: "0 0 42px -16px rgba(157,78,221,.65)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#c9a6ff" }}>
+          <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(135deg, rgba(124,58,237,.32), rgba(45,24,90,.55))", border: "1px solid rgba(157,78,221,.55)", borderRadius: 20, padding: 15, marginBottom: 12, boxShadow: "0 0 52px -12px rgba(157,78,221,.85), inset 0 0 46px -18px rgba(157,78,221,.5)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#c9a6ff" }}>
               <span>{cycleLabel}</span>
-              <span style={{ color: "#ffd76b", display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ color: "#ffd76b", display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,180,0,.12)", border: "1px solid rgba(245,180,0,.3)", borderRadius: 99, padding: "2px 8px", boxShadow: "0 0 14px -3px rgba(245,180,0,.6)" }}>
                 <Icon name="time" size={11} color="#ffd76b" /> {daysLeft}d {hoursLeft}h
               </span>
             </div>
@@ -526,9 +526,9 @@ export default function Quests() {
       {tab === "reviews" && (
         <div>
           {/* Star hero */}
-          <div style={{ background: "linear-gradient(135deg,#3a2c10,#1a1308)", border: "1px solid #5a4413", borderRadius: 20, padding: 15, marginBottom: 12, textAlign: "center", boxShadow: "0 0 38px -16px rgba(245,180,0,.6)" }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, color: "#f5b400", lineHeight: 1 }}>{reviews.length ? reviewAvg.toFixed(1) : "—"}</div>
-            <div style={{ color: "#f5b400", fontSize: 17, letterSpacing: 2, margin: "4px 0" }}>
+          <div style={{ background: "linear-gradient(135deg,#4a3712,#1c1409)", border: "1px solid rgba(245,180,0,.5)", borderRadius: 20, padding: 15, marginBottom: 12, textAlign: "center", boxShadow: "0 0 50px -12px rgba(245,180,0,.8), inset 0 0 42px -18px rgba(245,180,0,.6)" }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, color: "#f5b400", lineHeight: 1, filter: "drop-shadow(0 0 16px rgba(245,180,0,.85))" }}>{reviews.length ? reviewAvg.toFixed(1) : "—"}</div>
+            <div style={{ color: "#f5b400", fontSize: 17, letterSpacing: 2, margin: "4px 0", textShadow: "0 0 14px rgba(245,180,0,.8)" }}>
               {"★".repeat(Math.round(reviewAvg))}{"☆".repeat(Math.max(0, 5 - Math.round(reviewAvg)))}
             </div>
             <div style={{ fontSize: 12.5, color: "#e9c879" }}>{reviews.length} reviews · {fiveStarCycleAll} five-star this cycle</div>
@@ -544,12 +544,12 @@ export default function Quests() {
           {reviews.map((r) => (
             <div key={r.id} style={{ background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "11px 12px", marginBottom: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: (r.rating || 0) >= 5 ? "#f5b400" : "#888", fontSize: 14, letterSpacing: 1 }}>
+                <span style={{ color: (r.rating || 0) >= 5 ? "#f5b400" : "#888", fontSize: 14, letterSpacing: 1, textShadow: (r.rating || 0) >= 4 ? "0 0 10px rgba(245,180,0,.6)" : "none" }}>
                   {"★".repeat(r.rating || 0)}{"☆".repeat(5 - (r.rating || 0))}
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {r.created_at && (
-                    <span style={{ fontSize: 11, color: "var(--color-dim)" }}>
+                    <span style={{ fontSize: 10.5, color: "#ffd76b", background: "rgba(245,180,0,.1)", border: "1px solid rgba(245,180,0,.28)", borderRadius: 99, padding: "2px 8px", boxShadow: "0 0 12px -3px rgba(245,180,0,.55)" }}>
                       {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </span>
                   )}
