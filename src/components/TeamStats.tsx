@@ -23,6 +23,7 @@ export default function TeamStats() {
   const timeEntries = useStore((s) => s.timeEntries);
   const jobs = useStore((s) => s.jobs);
   const reviews = useStore((s) => s.reviews);
+  const questPayouts = useStore((s) => s.questPayouts);
   const setUser = useStore((s) => s.setUser);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
@@ -86,6 +87,16 @@ export default function TeamStats() {
       ? techReviews.reduce((s, r) => s + (r.rating || 0), 0) / techReviews.length
       : 0;
 
+    // Quests won (distinct paid quest keys) + no-callback rate over the
+    // tech's completed jobs (matched by job_id or property name).
+    const questsWon = new Set(questPayouts.filter((qp) => qp.user_id === p.id).map((qp) => qp.quest_key)).size;
+    const jobIds = new Set(allEntries.map((e) => e.job_id).filter((x): x is string => !!x));
+    const jobNames = new Set(allEntries.map((e) => e.job).filter((x): x is string => !!x && x !== "General"));
+    const techJobs = jobs.filter((j) => jobIds.has(j.id) || (!!j.property && jobNames.has(j.property)));
+    const completedTechJobs = techJobs.filter((j) => ["complete", "invoiced", "paid"].includes(j.status));
+    const callbacks = completedTechJobs.filter((j) => j.callback).length;
+    const noCallbackPct = completedTechJobs.length > 0 ? Math.round((1 - callbacks / completedTechJobs.length) * 100) : 100;
+
     return {
       totalHours,
       totalEarned,
@@ -95,6 +106,8 @@ export default function TeamStats() {
       topTrades,
       reviewCount: techReviews.length,
       avgRating,
+      questsWon,
+      noCallbackPct,
     };
   };
 
@@ -105,160 +118,197 @@ export default function TeamStats() {
     </div>
   );
 
+  // Photo avatar with inline upload (owner or self). Reused by the baseball
+  // card and the compact rows.
+  const photoAvatar = (u: Profile, size: number, fontSize: number) => (
+    <label
+      onClick={(e) => e.stopPropagation()}
+      title={isOwner || u.id === user.id ? "Change photo" : ""}
+      style={{
+        width: size, height: size, borderRadius: "50%",
+        background: u.photo_url ? `url(${u.photo_url}) center/cover` : "var(--color-primary)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "#fff", fontFamily: "Oswald", fontSize, fontWeight: 700,
+        cursor: isOwner || u.id === user.id ? "pointer" : "default",
+        flexShrink: 0, overflow: "hidden",
+      }}
+    >
+      {!u.photo_url && (u.name?.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?")}
+      {(isOwner || u.id === user.id) && (
+        <input
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const ext = file.name.split(".").pop() || "jpg";
+            const path = `avatars/${u.id}_${Date.now()}.${ext}`;
+            const { error } = await supabase.storage.from("receipts").upload(path, file);
+            if (error) { useStore.getState().showToast("Photo upload failed: " + error.message, "error"); return; }
+            const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+            await db.patch("profiles", u.id, { photo_url: data.publicUrl });
+            await loadAll();
+            if (u.id === user.id) setUser({ ...user, photo_url: data.publicUrl });
+            useStore.getState().showToast("Photo updated", "success");
+            e.target.value = "";
+          }}
+        />
+      )}
+    </label>
+  );
+
+  // Rank by lifetime earnings — the top earner gets the baseball card.
+  const ranked = profiles
+    .map((p) => ({ p, stats: careerStats(p) }))
+    .sort((a, b) => b.stats.totalEarned - a.stats.totalEarned);
+
+  // Shared editable controls (role / rate / remove) — owner only.
+  const editControls = (u: Profile) => (
+    <div className="row" style={{ gap: 6, marginBottom: 10, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+      <select
+        defaultValue={u.role}
+        style={{ width: "auto", fontSize: 14, padding: "3px 6px" }}
+        onChange={async (e) => {
+          if (u.id === user.id && (e.target.value === "tech" || e.target.value === "apprentice")) {
+            if (!(await useStore.getState().showConfirm("Warning", "Demoting yourself will lock you out of admin settings. Are you sure?"))) {
+              e.target.value = u.role;
+              return;
+            }
+          }
+          await db.patch("profiles", u.id, { role: e.target.value });
+          if (u.id === user.id) setUser({ ...user, role: e.target.value as Profile["role"] });
+          loadAll();
+        }}
+      >
+        <option value="apprentice">Apprentice</option>
+        <option value="tech">Tech</option>
+        <option value="manager">Manager</option>
+        <option value="owner">Owner</option>
+      </select>
+      <span>$</span>
+      <input
+        type="number"
+        defaultValue={u.rate}
+        style={{ width: 60, padding: "3px 6px", fontSize: 14 }}
+        onBlur={async (e) => {
+          const newRate = parseFloat(e.target.value) || 0;
+          await db.patch("profiles", u.id, { rate: newRate });
+          await loadAll();
+          if (u.id === user.id) setUser({ ...user, rate: newRate });
+        }}
+      />
+      <span style={{ fontSize: 13 }}>/hr</span>
+      {u.id !== user.id && (
+        <button
+          onClick={async () => {
+            if (!(await useStore.getState().showConfirm("Remove Team Member", `Remove ${u.name} from the team?`))) return;
+            await db.del("profiles", u.id);
+            loadAll();
+          }}
+          aria-label={`Remove ${u.name}`}
+          style={{ marginLeft: "auto", background: "none", color: "var(--color-accent-red)", padding: "0 4px", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13 }}
+        >
+          <Icon name="close" size={14} /> Remove
+        </button>
+      )}
+    </div>
+  );
+
   return (
-    <div className="cd">
-      {/* Invite code (admin only) — preserved from TeamSettings */}
+    <div>
+      {/* Invite CTA */}
       {isOwner && user.org_id && (
         <div
-          style={{
-            marginBottom: 12,
-            padding: 10,
-            background: darkMode ? "#1a1a28" : "#f0f4f8",
-            borderRadius: 8,
-          }}
+          onClick={() => { navigator.clipboard.writeText(user.org_id); useStore.getState().showToast("Invite code copied!", "success"); }}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(46,139,255,.12)", border: "1.5px dashed rgba(46,139,255,.5)", borderRadius: 13, padding: 12, fontFamily: "Oswald", fontWeight: 600, fontSize: 13, color: "#8cc0ff", marginBottom: 13, cursor: "pointer" }}
         >
-          <div className="sl" style={{ marginBottom: 4 }}>
-            Invite Code (share with team)
-          </div>
-          <div style={{ fontFamily: "monospace", fontSize: 15, color: "var(--color-primary)", wordBreak: "break-all" }}>
-            {user.org_id}
-          </div>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(user.org_id);
-              useStore.getState().showToast("Copied!", "success");
-            }}
-            style={{ fontSize: 14, marginTop: 4, background: "none", color: "var(--color-primary)", padding: 0, textDecoration: "underline" }}
-          >
-            Copy to clipboard
-          </button>
+          <Icon name="clients" size={16} color="#8cc0ff" /> Invite teammate · tap to copy code
         </div>
       )}
 
-      <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <Icon name="clients" size={15} color="var(--color-primary)" />
-        Team ({profiles.length}) <span className="dim" style={{ fontSize: 13, fontWeight: 400 }}>· tap a row for career stats</span>
-      </h4>
-
-      {profiles.map((u: Profile) => {
-        const stats = careerStats(u);
+      {ranked.map(({ p: u, stats }, idx) => {
         const isOpen = expanded === u.id;
+        const isTop = idx === 0 && stats.totalEarned > 0;
         return (
-          <div key={u.id} className="sep" style={{ fontSize: 15 }}>
-            <div className="row" style={{ justifyContent: "space-between", cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : u.id)}>
-              <div className="row" style={{ gap: 8 }}>
-                {/* Avatar (click to upload, owner-or-self) */}
-                <label
-                  onClick={(e) => e.stopPropagation()}
-                  title={isOwner || u.id === user.id ? "Click to change photo" : ""}
-                  style={{
-                    width: 36, height: 36, borderRadius: "50%",
-                    background: u.photo_url ? `url(${u.photo_url}) center/cover` : "var(--color-primary)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "#fff", fontFamily: "Oswald", fontSize: 16, fontWeight: 700,
-                    cursor: isOwner || u.id === user.id ? "pointer" : "default",
-                    flexShrink: 0, border: "2px solid var(--color-border-dark)", overflow: "hidden",
-                  }}
-                >
-                  {!u.photo_url && (u.name?.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?")}
-                  {(isOwner || u.id === user.id) && (
-                    <input
-                      type="file"
-                      accept="image/*"
-                      style={{ display: "none" }}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const ext = file.name.split(".").pop() || "jpg";
-                        const path = `avatars/${u.id}_${Date.now()}.${ext}`;
-                        const { error } = await supabase.storage.from("receipts").upload(path, file);
-                        if (error) {
-                          useStore.getState().showToast("Photo upload failed: " + error.message, "error");
-                          return;
-                        }
-                        const { data } = supabase.storage.from("receipts").getPublicUrl(path);
-                        await db.patch("profiles", u.id, { photo_url: data.publicUrl });
-                        await loadAll();
-                        if (u.id === user.id) setUser({ ...user, photo_url: data.publicUrl });
-                        useStore.getState().showToast("Photo updated", "success");
-                        e.target.value = "";
-                      }}
-                    />
-                  )}
-                </label>
-                <div>
-                  <b>{u.name}</b> <span className="dim">#{u.emp_num}</span>
-                  <div className="dim" style={{ fontSize: 13 }}>
-                    {u.role} · {stats.tenureLabel} on team{stats.totalHours > 0 ? ` · ${stats.totalHours.toFixed(0)}h all-time` : ""}
+          <div key={u.id} style={{ marginBottom: 8 }}>
+            {isTop ? (
+              /* ── Baseball card (top earner) ── */
+              <div style={{ background: "linear-gradient(165deg,#1c2746,#0f1320)", border: "1px solid #2c3a5e", borderRadius: 20, overflow: "hidden", boxShadow: "0 0 42px -16px rgba(46,139,255,.55)" }}>
+                <div style={{ height: 54, background: "linear-gradient(120deg,#2e8bff,#1a4d8a)", position: "relative" }}>
+                  <span style={{ position: "absolute", right: 14, top: 11, fontFamily: "Oswald", fontWeight: 700, fontSize: 10, letterSpacing: ".1em", color: "#cfe4ff", background: "rgba(0,0,0,.22)", padding: "3px 9px", borderRadius: 99 }}>★ TOP EARNER</span>
+                </div>
+                <div style={{ display: "flex", gap: 12, padding: "0 16px" }}>
+                  <div style={{ marginTop: -34, border: "3px solid #0f1320", borderRadius: "50%", flexShrink: 0 }}>{photoAvatar(u, 70, 26)}</div>
+                  <div style={{ paddingTop: 9, minWidth: 0 }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".4px" }}>{u.name}</div>
+                    <div style={{ fontSize: 10, color: "#8cc0ff", marginTop: 1, textTransform: "capitalize" }}>{u.role}{u.emp_num ? ` · #${u.emp_num}` : ""} · ${u.rate}/hr</div>
+                    <div style={{ fontSize: 9.5, color: "var(--color-dim)", marginTop: 3 }}>{u.start_date ? `Since ${new Date(u.start_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · ` : ""}{stats.tenureLabel} on team</div>
                   </div>
                 </div>
-              </div>
-              {isOwner ? (
-                <div className="row" onClick={(e) => e.stopPropagation()}>
-                  <select
-                    defaultValue={u.role}
-                    style={{ width: "auto", fontSize: 14, padding: "2px 4px" }}
-                    onChange={async (e) => {
-                      if (u.id === user.id && (e.target.value === "tech" || e.target.value === "apprentice")) {
-                        if (!(await useStore.getState().showConfirm("Warning", "Demoting yourself will lock you out of admin settings. Are you sure?"))) {
-                          e.target.value = u.role;
-                          return;
-                        }
-                      }
-                      await db.patch("profiles", u.id, { role: e.target.value });
-                      if (u.id === user.id) setUser({ ...user, role: e.target.value as Profile["role"] });
-                      loadAll();
-                    }}
-                  >
-                    <option value="apprentice">Apprentice</option>
-                    <option value="tech">Tech</option>
-                    <option value="manager">Manager</option>
-                    <option value="owner">Owner</option>
-                  </select>
-                  <span>$</span>
-                  <input
-                    type="number"
-                    defaultValue={u.rate}
-                    style={{ width: 55, padding: "2px 4px", fontSize: 14 }}
-                    onBlur={async (e) => {
-                      const newRate = parseFloat(e.target.value) || 0;
-                      await db.patch("profiles", u.id, { rate: newRate });
-                      await loadAll();
-                      if (u.id === user.id) setUser({ ...user, rate: newRate });
-                    }}
-                  />
-                  <span style={{ fontSize: 13 }}>/hr</span>
-                  {u.id !== user.id && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1, background: "var(--color-border-dark-2)", marginTop: 13, borderTop: "1px solid var(--color-border-dark-2)" }}>
+                  {[
+                    { v: stats.totalHours.toFixed(0), l: "Lifetime hrs", c: "inherit" },
+                    { v: stats.totalEarned >= 1000 ? `$${(stats.totalEarned / 1000).toFixed(1)}k` : `$${Math.round(stats.totalEarned)}`, l: "Earned", c: "var(--color-money)" },
+                    { v: String(stats.jobsWorked), l: "Jobs", c: "inherit" },
+                    { v: stats.avgRating > 0 ? `${stats.avgRating.toFixed(1)}★` : "—", l: "Avg rating", c: "#f5b400" },
+                    { v: String(stats.questsWon), l: "Quests won", c: "#c9a6ff" },
+                    { v: `${stats.noCallbackPct}%`, l: "No callback", c: "inherit" },
+                  ].map((s) => (
+                    <div key={s.l} style={{ background: "#12172a", padding: "11px 6px", textAlign: "center" }}>
+                      <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, lineHeight: 1, color: s.c }}>{s.v}</div>
+                      <div style={{ fontSize: 8, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--color-dim)", marginTop: 3 }}>{s.l}</div>
+                    </div>
+                  ))}
+                </div>
+                {stats.topTrades.length > 0 && (
+                  <div style={{ padding: "11px 16px 0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginBottom: 5 }}>
+                      <span>Top trade</span>
+                      <b style={{ fontFamily: "Oswald", fontWeight: 600 }}>{stats.topTrades[0].trade} · {stats.topTrades[0].hrs.toFixed(0)}h</b>
+                    </div>
+                    <div style={{ height: 7, background: "#1c2740", borderRadius: 5, overflow: "hidden" }}>
+                      <div style={{ height: "100%", borderRadius: 5, background: "linear-gradient(90deg,#2e8bff,#9d4edd)", width: `${Math.min(100, stats.totalHours > 0 ? (stats.topTrades[0].hrs / stats.totalHours) * 100 : 0)}%` }} />
+                    </div>
+                  </div>
+                )}
+                {isOwner && (
+                  <div style={{ padding: 14 }}>
                     <button
-                      onClick={async () => {
-                        if (!(await useStore.getState().showConfirm("Remove Team Member", `Remove ${u.name} from the team?`))) return;
-                        await db.del("profiles", u.id);
-                        loadAll();
-                      }}
-                      aria-label={`Remove ${u.name}`}
-                      style={{ background: "none", color: "var(--color-accent-red)", padding: "0 4px", display: "inline-flex", alignItems: "center" }}
+                      onClick={() => setExpanded(isOpen ? null : u.id)}
+                      style={{ width: "100%", fontSize: 10.5, fontWeight: 600, padding: 9, borderRadius: 10, border: "1px solid var(--color-border-dark-2)", background: "rgba(255,255,255,.04)", color: "inherit", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                     >
-                      <Icon name="close" size={14} />
+                      <Icon name={isOpen ? "collapse" : "edit"} size={13} /> {isOpen ? "Close" : "Rate / role · details"}
                     </button>
-                  )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* ── Compact row ── */
+              <div onClick={() => setExpanded(isOpen ? null : u.id)} style={{ display: "flex", alignItems: "center", gap: 11, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "10px 12px", cursor: "pointer" }}>
+                {photoAvatar(u, 34, 13)}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{u.name}</div>
+                  <div style={{ fontSize: 9.5, color: "var(--color-dim)", textTransform: "capitalize" }}>{u.role}{u.emp_num ? ` · #${u.emp_num}` : ""}</div>
                 </div>
-              ) : (
-                <span>${u.id === user.id ? user.rate : "—"}/hr</span>
-              )}
-            </div>
+                <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "var(--color-dim)" }}>${(isOwner || u.id === user.id) ? u.rate : "—"}/hr</span>
+                <Icon name={isOpen ? "collapse" : "next"} size={15} color="var(--color-dim)" />
+              </div>
+            )}
 
-            {/* Career stats — expanded view */}
+            {/* ── Expanded: edits + career detail ── */}
             {isOpen && (
-              <div style={{ marginTop: 8, padding: 10, background: darkMode ? "#0a0a10" : "#fafbfc", borderRadius: 8, borderLeft: `3px solid var(--color-primary)` }}>
-                <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em", marginBottom: 6 }}>
-                  ALL-TIME CAREER STATS · NEVER RESETS
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                  <StatPill label="HOURS" value={stats.totalHours.toFixed(1)} color="var(--color-primary)" />
-                  <StatPill label="EARNED" value={`$${Math.round(stats.totalEarned).toLocaleString()}`} color="var(--color-success)" />
-                  <StatPill label="JOBS" value={String(stats.jobsWorked)} color="var(--color-warning)" />
-                  <StatPill label="TENURE" value={stats.tenureLabel} color="var(--color-highlight)" />
-                </div>
+              <div style={{ marginTop: 8, padding: 12, background: "var(--color-card-dark-2)", borderRadius: 13, border: "1px solid var(--color-border-dark-2)" }}>
+                {isOwner && editControls(u)}
+
+                {!isTop && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    <StatPill label="HOURS" value={stats.totalHours.toFixed(1)} color="var(--color-primary)" />
+                    <StatPill label="EARNED" value={`$${Math.round(stats.totalEarned).toLocaleString()}`} color="var(--color-success)" />
+                    <StatPill label="JOBS" value={String(stats.jobsWorked)} color="var(--color-warning)" />
+                    <StatPill label="TENURE" value={stats.tenureLabel} color="var(--color-highlight)" />
+                  </div>
+                )}
 
                 {/* Employee number + start date — editable by owner */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 14, marginBottom: 8 }}>
@@ -338,11 +388,13 @@ export default function TeamStats() {
                   </div>
                 )}
 
-                <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${border}` }}>
-                  <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-                    {u.email}
+                {u.email && (
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${border}` }}>
+                    <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                      {u.email}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
