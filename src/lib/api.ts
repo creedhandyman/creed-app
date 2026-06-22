@@ -21,3 +21,25 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
   }
   return fetch(input, { ...init, headers });
 }
+
+/**
+ * Build a customer-facing /status link for a job, carrying a server-signed
+ * approval token so only the customer who was sent the link can approve the
+ * quote. Falls back to an untokenized link if the token can't be minted — the
+ * link still works for viewing status; only the approve action needs the token.
+ */
+export async function getStatusLink(jobId: string): Promise<string> {
+  const base = `${window.location.origin}/status?job=${jobId}`;
+  try {
+    const res = await apiFetch("/api/status-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.token) return `${base}&t=${encodeURIComponent(data.token)}`;
+  } catch {
+    // fall through to the plain link
+  }
+  return base;
+}

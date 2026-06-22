@@ -1,5 +1,5 @@
 "use client";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getStatusLink } from "@/lib/api";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
@@ -920,8 +920,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
               <button
                 className="bo"
-                onClick={() => {
-                  const url = `${window.location.origin}/status?job=${dj.id}`;
+                onClick={async () => {
+                  const url = await getStatusLink(dj.id);
                   const msg = dj.status === "quoted" || dj.status === "accepted"
                     ? `Hi! Here's your quote from ${org?.name || "us"} for ${dj.property}:\n\nTotal: $${(dj.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
                     : `Hi! Here's the status update for your job at ${dj.property}:\n\nView progress: ${url}`;

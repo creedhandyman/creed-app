@@ -1,5 +1,5 @@
 "use client";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getStatusLink } from "@/lib/api";
 import { useState, useRef, useEffect, useMemo } from "react";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
@@ -2491,7 +2491,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <Icon name="sparkle" size={14} color={darkMode ? "#d8b6ff" : "#fff"} /> Render
         </button>
         <button
-          onClick={() => {
+          onClick={async () => {
             // Need a saved job so the email can link the customer to their
             // status page (approve + download PDF). Mirrors PDF/Render gating.
             if (!editingId) {
@@ -2503,7 +2503,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               : undefined;
             const email = customerData?.email || "";
             const orgName = useStore.getState().org?.name || "Service Provider";
-            const statusUrl = `${window.location.origin}/status?job=${editingId}`;
+            const statusUrl = await getStatusLink(editingId);
             const subject = encodeURIComponent(`Quote — ${prop}`);
             const body = encodeURIComponent(
               `Hi ${client || "there"},\n\n` +

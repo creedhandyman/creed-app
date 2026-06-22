@@ -487,7 +487,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 <div key={s.id} style={{ display: "flex", gap: 9, marginBottom: 8 }}>
                   <div style={{ width: 44, flexShrink: 0, fontSize: 12, color: "var(--color-dim)", fontFamily: "Oswald", fontWeight: 600, paddingTop: 11, textAlign: "right" }}>{time ? fmt12(time) : "—"}</div>
                   <div onClick={() => setSelectedDay(s.sched_date)} style={{ flex: 1, position: "relative", overflow: "hidden", background: darkMode ? "#16161f" : "#fff", border: "1px solid var(--color-border-dark)", borderRadius: 13, padding: "10px 11px 10px 15px", cursor: "pointer" }}>
-                    <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: color, boxShadow: `0 0 10px ${color}, 0 0 20px -2px ${color}` }} />
+                    <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: color, boxShadow: darkMode ? `0 0 10px ${color}, 0 0 20px -2px ${color}` : "none" }} />
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px" }}>{s.job}</div>
                     <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{meta}{(() => { const sp = dayOfSpan(s, ds); return sp ? ` · Day ${sp.idx} of ${sp.total}` : ""; })()}</div>
                     {crew.length > 0 && (
@@ -510,7 +510,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               )}
               {unscheduled.map((j) => (
                 <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 10, background: darkMode ? "#16161f" : "#fff", border: "1px dashed var(--color-border-dark)", borderRadius: 12, padding: "9px 11px 9px 14px", position: "relative", overflow: "hidden", marginBottom: 6 }}>
-                  <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: statusColor(j.status), boxShadow: `0 0 10px ${statusColor(j.status)}, 0 0 20px -2px ${statusColor(j.status)}` }} />
+                  <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: statusColor(j.status), boxShadow: darkMode ? `0 0 10px ${statusColor(j.status)}, 0 0 20px -2px ${statusColor(j.status)}` : "none" }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14 }}>{j.property}</div>
                     <div style={{ fontSize: 11.5, color: "var(--color-dim)", textTransform: "capitalize" }}>{j.status} · no day yet</div>
@@ -608,7 +608,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               <div className="cd" style={{ textAlign: "center", padding: 14, marginBottom: 10 }}><p className="dim" style={{ fontSize: 13 }}>Everything is assigned ✓</p></div>
             ) : needScheduling.map((j) => (
               <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 10, background: darkMode ? "#16161f" : "#fff", border: "1px dashed var(--color-border-dark)", borderRadius: 12, padding: "9px 11px 9px 14px", position: "relative", overflow: "hidden", marginBottom: 6 }}>
-                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: statusColor(j.status), boxShadow: `0 0 10px ${statusColor(j.status)}, 0 0 20px -2px ${statusColor(j.status)}` }} />
+                <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: statusColor(j.status), boxShadow: darkMode ? `0 0 10px ${statusColor(j.status)}, 0 0 20px -2px ${statusColor(j.status)}` : "none" }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.property}</div>
                   <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>{j.trade || "Job"} · {(j.total_hrs || 0).toFixed(1)}h · {j.status}</div>

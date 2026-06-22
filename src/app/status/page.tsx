@@ -33,6 +33,7 @@ const STATUS_HERO: Record<string, { label: string; desc: string; color: string; 
 function StatusContent() {
   const params = useSearchParams();
   const jobId = params.get("job");
+  const token = params.get("t");
 
   const [job, setJob] = useState<Job | null>(null);
   const [org, setOrg] = useState<Organization | null>(null);
@@ -146,7 +147,7 @@ function StatusContent() {
       const res = await fetch("/api/jobs/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId, signatureType, signatureValue }),
+        body: JSON.stringify({ jobId, token, signatureType, signatureValue }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

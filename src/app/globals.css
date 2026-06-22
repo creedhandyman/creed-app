@@ -431,6 +431,8 @@ button:focus-visible {
   background: var(--c, var(--color-primary));
   box-shadow: 0 0 10px 0 var(--c), 0 0 20px -2px var(--c);
 }
+/* Light mode: drop the neon glow on the status strip — keep the clean 4px bar. */
+.light .statusstrip::before { box-shadow: none; }
 .statusstrip::after {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 60px; z-index: -1; pointer-events: none;
   background: linear-gradient(90deg, color-mix(in srgb, var(--c) 22%, transparent), transparent);

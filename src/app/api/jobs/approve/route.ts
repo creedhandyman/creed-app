@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { serviceClient } from "@/lib/api-auth";
+import { verifyJobToken } from "@/lib/job-token";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export const dynamic = "force-dynamic";
 
 interface Body {
   jobId: string;
+  /** Server-signed approval token from the /status link (see job-token.ts). */
+  token: string;
   signatureType: "typed" | "canvas";
   /** For typed: the customer's typed full name. For canvas: a
    *  base64 data URL of the inked PNG. */
@@ -41,6 +44,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Body;
     const jobId = trim(body.jobId);
+    const token = trim(body.token);
     const signatureType = body.signatureType;
     const signatureValue = trim(body.signatureValue);
 
@@ -50,23 +54,34 @@ export async function POST(req: NextRequest) {
     if (signatureType !== "typed" && signatureType !== "canvas") {
       return NextResponse.json({ error: "Invalid signatureType" }, { status: 400 });
     }
+    // The approval link carries a server-signed token bound to this job — proof
+    // the caller was actually sent the quote. Without it, anyone who learns a
+    // job id could forge an approval/signature.
+    if (!verifyJobToken(jobId, token)) {
+      return NextResponse.json(
+        { error: "This approval link is invalid or expired — please ask for a new link." },
+        { status: 403 },
+      );
+    }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const supabase = serviceClient();
 
     // Pull the current job to decide whether to promote status. Only
     // "quoted" rolls forward — re-signing a paid invoice or an
     // already-accepted job shouldn't reset the workflow.
     const { data: jobs, error: getErr } = await supabase
       .from("jobs")
-      .select("id, status")
+      .select("id, status, client_signature")
       .eq("id", jobId)
       .limit(1);
     if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 });
     if (!jobs?.length) return NextResponse.json({ error: "Job not found" }, { status: 404 });
     const job = jobs[0];
+
+    // Never overwrite an existing approval — once signed, it's locked.
+    if (job.client_signature) {
+      return NextResponse.json({ error: "This quote has already been approved." }, { status: 409 });
+    }
 
     const ip = getClientIp(req);
     const nowIso = new Date().toISOString();
