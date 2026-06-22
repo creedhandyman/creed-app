@@ -676,7 +676,7 @@ export default function Timer({ setPage }: Props) {
                 <div onClick={() => setExpandedCrew(isExpanded ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                   <div style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", background: avatarBg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: avatarFg, flexShrink: 0 }}>
                     {initials(p.name)}
-                    <span style={{ position: "absolute", right: -1, bottom: -1, width: 11, height: 11, borderRadius: "50%", border: `2px solid ${darkMode ? "#16161f" : "#fff"}`, background: isActive ? "var(--color-success)" : "#555" }} />
+                    <span style={{ position: "absolute", right: -1, bottom: -1, width: 11, height: 11, borderRadius: "50%", border: `2px solid ${darkMode ? "#16161f" : "#fff"}`, background: isActive ? "var(--color-success)" : "#555", boxShadow: isActive ? "0 0 7px var(--color-success)" : "none", animation: isActive ? "dotLive 1.8s ease-in-out infinite" : undefined }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{p.name}</div>

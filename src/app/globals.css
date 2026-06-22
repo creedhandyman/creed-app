@@ -607,6 +607,14 @@ button:focus-visible {
   50%      { transform: scale(1.1); opacity: 0.7; }
 }
 
+/* Active-worker status dot — a soft breathing green glow so an
+   on-the-clock teammate reads as "on". Animates only the box-shadow
+   (not transform), so the corner-anchored dot never jitters. */
+@keyframes dotLive {
+  0%, 100% { box-shadow: 0 0 3px var(--color-success); }
+  50%      { box-shadow: 0 0 9px var(--color-success); }
+}
+
 /* Skeleton loader — apply via .sk class */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
