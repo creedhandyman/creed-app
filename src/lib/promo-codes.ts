@@ -1,33 +1,31 @@
-import { db } from "./supabase";
+import { apiFetch } from "./api";
 
 /**
- * Promo codes that comp an org out of billing entirely. Stored client-side
- * because Bernard's intent is to comp HIS own deploys, not run a public
- * coupon program. If this app opens up to more orgs and the codes become
- * worth gaming, move validation behind a /api/promo-validate endpoint so
- * the code list isn't shipped to the browser.
+ * Apply a comp code to the current org.
  *
- * Apply path: a valid code sets `organizations.billing_enforced = false`,
- * which is the same flag BillingGate already short-circuits on (line 22).
- * The paywall and trial banner stop showing immediately on next render.
+ * Validation and the `billing_enforced` write now happen SERVER-SIDE
+ * (/api/promo/apply): the valid-code list is no longer shipped to the browser,
+ * and the entitlement write goes through the service role after an owner-session
+ * check — so a logged-in user can no longer comp themselves from the console.
+ * The valid codes live in the PROMO_CODES env var on the server.
+ *
+ * `orgId` is kept in the signature for the existing call sites, but the server
+ * derives the org from the authenticated session and does not trust it.
  */
-const VALID_CODES = new Set<string>([
-  "CREED971824",
-]);
-
-export function isValidPromoCode(code: string): boolean {
-  return VALID_CODES.has(code.trim().toUpperCase());
-}
-
 export async function applyPromoCode(
-  orgId: string,
+  _orgId: string,
   code: string,
 ): Promise<{ ok: boolean; reason?: string }> {
-  if (!isValidPromoCode(code)) {
-    return { ok: false, reason: "Invalid promo code" };
-  }
   try {
-    await db.patch("organizations", orgId, { billing_enforced: false });
+    const res = await apiFetch("/api/promo/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      return { ok: false, reason: data.error || "Invalid promo code" };
+    }
     return { ok: true };
   } catch {
     return { ok: false, reason: "Could not apply code — try again" };
