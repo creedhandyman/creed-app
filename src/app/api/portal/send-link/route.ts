@@ -67,7 +67,9 @@ export async function POST(req: NextRequest) {
     // Build the redeem URL using the request origin so previews and
     // production both work without a hardcoded NEXT_PUBLIC_APP_URL.
     const origin = req.headers.get("origin") || `https://${req.headers.get("host") || "creed-app.vercel.app"}`;
-    const link = `${origin}/portal/redeem/${token}`;
+    // Must hit the API route (sets the session cookie + redirects to /portal).
+    // There is no /portal/redeem PAGE — without /api this 404s.
+    const link = `${origin}/api/portal/redeem/${token}`;
 
     return NextResponse.json({
       ok: true,

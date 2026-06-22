@@ -386,6 +386,24 @@ export function wrapPrint(brand: PrintBrand, bodyHtml: string): string {
  * triggers window.print() once all images have loaded.
  */
 export function openPrint(html: string): boolean {
+  // Prefer a Blob URL — it loads as a real HTML document, which renders and
+  // prints far more reliably than document.write into a blank window,
+  // especially on mobile Safari/Chrome (where customers download quotes from
+  // the status page). Falls back to document.write if Blob URLs are blocked.
+  try {
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (win) {
+      // Revoke later so the new tab has time to load (revoking immediately
+      // can cancel the navigation mid-load).
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return true;
+    }
+    URL.revokeObjectURL(url);
+  } catch {
+    /* fall through */
+  }
   const win = window.open("", "_blank");
   if (!win) return false;
   win.document.write(html);
