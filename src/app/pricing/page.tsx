@@ -125,13 +125,14 @@ interface FAQ {
   a: string;
 }
 
-// Marketing FAQ copy (from the mockup). Note: payments messaging assumes the
-// current Stripe Connect model (no platform cut). If a platform fee is added
-// later, update the "Do you take a cut" answer here.
+// Marketing FAQ copy (from the mockup). Payments answer reflects the LIVE 2%
+// platform fee — the source of truth is PLATFORM_FEE_PERCENT in
+// src/app/api/checkout/route.ts (and the billing copy in src/lib/i18n.ts).
+// Keep all three in sync if the rate ever changes.
 const FAQS: FAQ[] = [
   { q: "Is there really a free month?", a: "Yes — every plan's first month is free. No charge until it ends, and you can cancel anytime before then." },
   { q: "What counts as an “inspection”?", a: "Each AI quote or photo render you generate. Most solo operators stay well under 50 a month; upgrade anytime if you grow." },
-  { q: "Do you take a cut of my payments?", a: "No. Payments run through your own Stripe account and land in your bank — we never hold them. Standard Stripe processing fees apply; your Creed subscription is separate." },
+  { q: "Do you take a cut of my payments?", a: "A small one. Customer payments run through your own Stripe account and land in your bank — Creed adds a 2% platform fee on payments processed through the app, plus the standard Stripe processing fees. Your monthly subscription is separate." },
   { q: "Can I change plans later?", a: "Anytime, up or down. Add crew seats as you hire — your plan grows with the business." },
 ];
 
