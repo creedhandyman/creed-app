@@ -22,7 +22,7 @@ export default function PrivacyPage() {
       <div className="phead"><div className="wrap">
         <div className="kick">Legal</div>
         <div className="h1">Privacy <span className="g">Policy</span></div>
-        <div className="lead">Plain-language summary of what we collect and how it's used. Last updated June 2026.</div>
+        <div className="lead">Plain-language summary of what we collect and how it&apos;s used. Last updated June 2026.</div>
       </div></div>
       <div className="wrap" style={{ maxWidth: 800, padding: "20px 24px 80px" }}>
         {SECTIONS.map((s) => (
