@@ -2142,7 +2142,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514",
+                    model: "claude-sonnet-4-6",
                     max_tokens: 4000,
                     messages: [{ role: "user", content: [{ type: "text", text: userMsg }] }],
                     system:
