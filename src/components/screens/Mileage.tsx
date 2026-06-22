@@ -339,12 +339,12 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 
       {/* Stats */}
       <div className="g2 mb">
-        <div className="cd" style={{ textAlign: "center", borderLeft: "3px solid var(--color-primary)" }}>
+        <div className="cd statusstrip" style={{ textAlign: "center", ["--c" as any]: "var(--color-primary)" }}>
           <div className="sl">This Week</div>
           <div className="sv" style={{ color: "var(--color-primary)" }}>{thisWeek.toFixed(1)}</div>
           <div className="dim" style={{ fontSize: 12 }}>miles</div>
         </div>
-        <div className="cd" style={{ textAlign: "center", borderLeft: "3px solid var(--color-success)" }}>
+        <div className="cd statusstrip" style={{ textAlign: "center", ["--c" as any]: "var(--color-success)" }}>
           <div className="sl">All Time</div>
           <div className="sv" style={{ color: "var(--color-success)" }}>{totalMiles.toFixed(1)}</div>
           <div className="dim" style={{ fontSize: 12 }}>miles</div>

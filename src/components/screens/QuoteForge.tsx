@@ -3443,7 +3443,7 @@ function IssuesTab({
   return (
     <>
       {sections.map((s, i) => (
-        <div key={i} className="cd mb" style={{ borderLeft: `3px solid ${s.c}` }}>
+        <div key={i} className="cd mb statusstrip" style={{ ["--c" as any]: s.c }}>
           <h4 style={{ color: s.c, fontSize: 15, marginBottom: 4 }}>
             {s.t} ({s.it.length})
           </h4>

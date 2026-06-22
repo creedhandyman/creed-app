@@ -412,7 +412,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
           <div className="sv">${selUser.rate || 55}/hr</div>
         </div>
         {totalBonus > 0 && (
-          <div className="cd" style={{ textAlign: "center", borderLeft: "3px solid var(--color-warning)" }}>
+          <div className="cd statusstrip" style={{ textAlign: "center", ["--c" as any]: "var(--color-warning)" }}>
             <div className="sl">Bonus</div>
             <div className="sv" style={{ color: "var(--color-warning)" }}>${totalBonus}</div>
           </div>
@@ -425,7 +425,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
 
       {/* Quest bonuses earned — admin must approve before they're added to pay */}
       {earnedQuests.length > 0 && (
-        <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)" }}>
+        <div className="cd mb statusstrip" style={{ ["--c" as any]: "var(--color-warning)" }}>
           <h4 style={{ fontSize: 15, marginBottom: 6, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Icon name="trophy" size={15} color="var(--color-warning)" /> Quest Bonuses — Pending Review ({earnedQuests.length})
           </h4>
@@ -645,7 +645,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   <span style={{ fontSize: 14, color: "#888" }}>{isOpen ? "▲" : "▼"}</span>
                 </div>
                 {isOpen && (
-                  <div style={{ padding: "6px 0 6px 12px", borderLeft: "2px solid var(--color-primary)" }}>
+                  <div className="statusstrip" style={{ padding: "6px 0 6px 12px", ["--c" as any]: "var(--color-primary)" }}>
                     {jobDetails.length > 0 ? (
                       jobDetails.map((d, i) => (
                         <div
@@ -839,7 +839,7 @@ function AutoPayrollPanel() {
     : "OFF";
 
   return (
-    <div className="cd mb" style={{ borderLeft: `3px solid ${enabled ? "var(--color-success)" : "#888"}` }}>
+    <div className="cd mb statusstrip" style={{ ["--c" as any]: enabled ? "var(--color-success)" : "#888" }}>
       <button
         type="button"
         onClick={toggleCollapsed}

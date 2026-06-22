@@ -311,7 +311,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   };
 
   const statCard = (label: string, value: string | number, color: string, sub?: string) => (
-    <div className="cd" style={{ textAlign: "center", padding: 12, borderLeft: `3px solid ${color}` }}>
+    <div className="cd statusstrip" style={{ textAlign: "center", padding: 12, ["--c" as any]: color }}>
       <div className="sl">{label}</div>
       <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color, marginTop: 4 }}>{value}</div>
       {sub && <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{sub}</div>}
@@ -534,7 +534,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
         const grandTotal = buckets.reduce((s, b) => s + b.total, 0);
         const overdueTotal = buckets.slice(1).reduce((s, b) => s + b.total, 0);
         return (
-          <div className="cd mb" style={{ padding: 14, borderLeft: `3px solid ${overdueTotal > 0 ? "var(--color-warning)" : "var(--color-success)"}` }}>
+          <div className="cd mb statusstrip" style={{ padding: 14, ["--c" as any]: overdueTotal > 0 ? "var(--color-warning)" : "var(--color-success)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
               <h4 style={{ fontSize: 15, color: "var(--color-warning)", margin: 0 }}>
                 A/R Aging — Outstanding Invoices

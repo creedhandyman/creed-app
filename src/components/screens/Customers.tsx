@@ -154,7 +154,7 @@ export default function Customers({ setPage, onSelect }: Props) {
 
       {/* Add form */}
       {showAdd && (
-        <div className="cd mb" style={{ borderLeft: "3px solid var(--color-primary)" }}>
+        <div className="cd mb statusstrip" style={{ ["--c" as any]: "var(--color-primary)" }}>
           <h4 style={{ fontSize: 15, marginBottom: 8 }}>New Customer</h4>
           <div className="g2" style={{ marginBottom: 6 }}>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name *" />

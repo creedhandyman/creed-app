@@ -972,8 +972,8 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
 
       {!supported && (
         <div
-          className="cd mb"
-          style={{ borderLeft: "3px solid var(--color-warning)", fontSize: 14 }}
+          className="cd mb statusstrip"
+          style={{ ["--c" as any]: "var(--color-warning)", fontSize: 14 }}
         >
           <b style={{ color: "var(--color-warning)" }}>Voice not available</b>
           <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>

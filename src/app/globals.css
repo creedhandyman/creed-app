@@ -415,6 +415,27 @@ button:focus-visible {
   transform: translateY(-2px);
 }
 
+/* ─── GLOW STATUS STRIP ────────────────────────────────
+   Soft colored left-glow for status cards. This class sets
+   position:relative + overflow:hidden; set --c to the strip
+   color (Form 1: drop the inline borderLeft, add this class,
+   pass style={{ ["--c"]: color }}). Defaults to primary.
+   Schedule's absolute <span> bars instead add the box-shadow
+   inline (Form 2) since they're already positioned. */
+.statusstrip { position: relative; overflow: hidden; }
+.statusstrip::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: var(--c, var(--color-primary));
+  box-shadow: 0 0 10px 0 var(--c), 0 0 20px -2px var(--c);
+}
+.statusstrip::after {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 60px; pointer-events: none;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 22%, transparent), transparent);
+}
+.light .statusstrip::after {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 12%, transparent), transparent);
+}
+
 /* ─── LAYOUT UTILS ─────────────────────────────────── */
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

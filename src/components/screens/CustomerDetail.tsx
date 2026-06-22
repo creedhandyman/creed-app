@@ -630,9 +630,9 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
         </div>
 
         {relatedJobs.fuzzy.length > 0 && (
-          <div style={{
+          <div className="statusstrip" style={{
             fontSize: 13, padding: "6px 10px",
-            borderLeft: "3px solid var(--color-warning)",
+            ["--c" as any]: "var(--color-warning)",
             background: "var(--color-warning)11",
             borderRadius: 4, marginBottom: 8,
           }}>

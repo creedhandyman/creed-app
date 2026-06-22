@@ -732,9 +732,9 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             regenerate if they want the changes flowed through. */}
         {isEditing && (editing?.linkedQuoteCount ?? 0) > 0 && (
           <div
-            className="cd mb"
+            className="cd mb statusstrip"
             style={{
-              borderLeft: "3px solid var(--color-accent-red)",
+              ["--c" as any]: "var(--color-accent-red)",
               padding: 10,
             }}
           >
@@ -748,9 +748,9 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         {/* Resume banner */}
         {showResume && roomData.length > 0 && (
           <div
-            className="cd mb"
+            className="cd mb statusstrip"
             style={{
-              borderLeft: "3px solid var(--color-warning)",
+              ["--c" as any]: "var(--color-warning)",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -1187,11 +1187,11 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         {room.items.map((item, itemIdx) => (
           <div
             key={itemIdx}
-            className="cd"
+            className="cd statusstrip"
             style={{
               marginBottom: 6,
               padding: 10,
-              borderLeft: `3px solid ${CONDITIONS.find((c) => c.code === item.condition)?.color || "#888"}`,
+              ["--c" as any]: CONDITIONS.find((c) => c.code === item.condition)?.color || "#888",
             }}
           >
             {/* Item name (editable for custom items) */}

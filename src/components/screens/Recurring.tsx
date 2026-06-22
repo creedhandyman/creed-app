@@ -207,7 +207,7 @@ function RowCard({
   onSavedEdit: () => void;
 }) {
   return (
-    <div className="cd mb" style={{ borderLeft: `4px solid ${r.is_active ? "var(--color-success)" : "#888"}` }}>
+    <div className="cd mb statusstrip" style={{ ["--c" as any]: r.is_active ? "var(--color-success)" : "#888" }}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 600 }}>

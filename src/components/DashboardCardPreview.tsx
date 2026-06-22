@@ -26,9 +26,9 @@ export default function DashboardCardPreview() {
         role="button"
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setOpen(true); }}
-        className="cd"
+        className="cd statusstrip"
         style={{
-          borderLeft: "3px solid var(--color-primary)",
+          ["--c" as any]: "var(--color-primary)",
           cursor: "pointer",
           display: "flex",
           alignItems: "center",

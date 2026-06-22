@@ -1378,7 +1378,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           })();
 
           return (
-            <div key={j.id} id={`job-row-${j.id}`} className="cd mb" style={{ borderLeft: `4px solid ${statusColor(j.status)}` }}>
+            <div key={j.id} id={`job-row-${j.id}`} className="cd mb statusstrip" style={{ ["--c" as any]: statusColor(j.status) }}>
               {/* Collapsed header */}
               <div
                 style={{ cursor: "pointer" }}

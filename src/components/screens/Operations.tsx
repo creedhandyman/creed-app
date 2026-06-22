@@ -37,7 +37,7 @@ class SubTabErrorBoundary extends Component<
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="cd" style={{ borderLeft: "3px solid var(--color-accent-red)" }}>
+      <div className="cd statusstrip" style={{ ["--c" as any]: "var(--color-accent-red)" }}>
         <h4 style={{ color: "var(--color-accent-red)", fontSize: 16, marginBottom: 8 }}>
           {this.props.label} tab crashed
         </h4>
