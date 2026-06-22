@@ -131,6 +131,24 @@ function StatusContent() {
 
   const stopDraw = useCallback(() => setIsDrawing(false), []);
 
+  // Stop the page from scrolling/panning under the finger while signing.
+  // React registers onTouchMove as a PASSIVE listener (so it can't
+  // preventDefault), and iOS Safari doesn't reliably honor touch-action:none
+  // on a canvas by itself — so attach a native non-passive touch listener that
+  // preventDefaults. Only while the draw canvas is actually mounted.
+  useEffect(() => {
+    if (signMode !== "draw") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const block = (e: TouchEvent) => e.preventDefault();
+    canvas.addEventListener("touchstart", block, { passive: false });
+    canvas.addEventListener("touchmove", block, { passive: false });
+    return () => {
+      canvas.removeEventListener("touchstart", block);
+      canvas.removeEventListener("touchmove", block);
+    };
+  }, [signMode]);
+
   const clearSig = () => {
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx && canvasRef.current) {
