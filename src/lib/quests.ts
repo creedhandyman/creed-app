@@ -110,8 +110,10 @@ export function computeQuests(input: QuestEngineInput): QuestEngineResult {
   const completedJobs = cycleJobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
   const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3 && inCycle(r.created_at) && reviewTagsUser(r)).length;
   const fiveStarReviews = reviews.filter((r) => r.rating === 5 && inCycle(r.created_at) && reviewTagsUser(r)).length;
-  // Referrals don't currently carry an employee tag — keep org-wide for now.
-  const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at)).length;
+  // Network Scout is per-tech: only referrals THIS user brought in (stamped
+  // referred_by_user_id at creation) count. Legacy rows + public website
+  // submissions have no referrer, so they credit no individual tech.
+  const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at) && r.referred_by_user_id === userId).length;
 
   // Repeat clients with 5+ jobs (cycle). Exclude leads.
   const jobsByClient: Record<string, number> = {};

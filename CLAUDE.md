@@ -282,6 +282,15 @@ src/
   Defaults are TRUE = opt-out model. Existing logged-in sessions read the
   new pref fields as `undefined` until the user re-logs / initAuth runs;
   the UI + send path treat `undefined` as opted-in so that's harmless.
+- Per-tech referrals (scopes the **Network Scout** quest per-user):
+  `ALTER TABLE referrals ADD COLUMN referred_by_user_id UUID;`
+  Stamped on creation from Quests → Referrals (the logged-in tech). The
+  quest engine (`lib/quests.ts`) + the Quests screen now count only
+  converted referrals where `referred_by_user_id = <user>`. Legacy rows +
+  public/website submissions have a NULL referrer and credit no individual
+  tech; backfill with `UPDATE referrals SET referred_by_user_id = '<uid>'
+  WHERE …` to make old ones count. Until the column exists, adding a
+  referral from the Quests tab toasts a "column does not exist" error.
 
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices.)

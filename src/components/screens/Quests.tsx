@@ -77,10 +77,10 @@ export default function Quests() {
   const completedJobs = cycleJobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
   const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3 && inCycle(r.created_at) && reviewTagsUser(r)).length;
   const fiveStarReviews = reviews.filter((r) => r.rating === 5 && inCycle(r.created_at) && reviewTagsUser(r)).length;
-  // Referrals don't currently carry an employee tag — keep org-wide for
-  // now (everyone's "Network Scout" quest credits any converted lead).
-  // When referrals gain a `referred_by_user_id`, filter to it.
-  const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at)).length;
+  // Network Scout is now per-tech: only referrals THIS user brought in
+  // (stamped referred_by_user_id on creation) count. Legacy rows + public
+  // website submissions have no referrer and credit no individual tech.
+  const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at) && r.referred_by_user_id === user.id).length;
 
   // Group jobs by client to find repeat clients with 5+ jobs (cycle).
   // Exclude leads — a prospect submitting 5 intake forms isn't 5 jobs.
@@ -288,6 +288,8 @@ export default function Quests() {
       source: fs,
       status: "pending",
       ref_date: new Date().toLocaleDateString(),
+      // Stamp the referrer so Network Scout credits THIS tech, not the org.
+      referred_by_user_id: user.id,
     });
     setFn("");
     setFs("");

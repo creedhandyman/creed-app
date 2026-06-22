@@ -278,6 +278,11 @@ export interface Referral {
   status: "pending" | "contacted" | "converted";
   ref_date: string;
   created_at?: string;
+  /** The tech who brought in this referral — scopes the Network Scout quest
+   *  per-user. Stamped on creation from the Quests → Referrals tab. Absent on
+   *  legacy rows and public/website submissions (those credit no individual
+   *  tech). Requires the `referred_by_user_id` column migration. */
+  referred_by_user_id?: string;
 }
 
 export interface ScheduleEntry {
