@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { db } from "@/lib/supabase";
 import type { Organization, Review } from "@/lib/types";
 import WorkOrderForm from "@/components/WorkOrderForm";
+import { Icon } from "@/components/Icon";
 
 interface SiteContent {
   headline: string;
@@ -50,13 +51,13 @@ export default function SlugSitePage() {
     });
   }, [slug]);
 
-  if (loading) return <div style={{ minHeight: "100vh", background: "#0a0a0f" }} />;
+  if (loading) return <div className="pub" />;
   if (!org || !content) {
     return (
-      <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center", color: "#888" }}>
+      <div className="pub" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔗</div>
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#C00000" }}>Page Not Found</h1>
+          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#ff7a7a", textTransform: "uppercase" }}>Page Not Found</h1>
         </div>
       </div>
     );
@@ -65,7 +66,7 @@ export default function SlugSitePage() {
   const pc = theme.primaryColor;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#e2e2e8" }}>
+    <div className="pub" style={{ padding: 0 }}>
       {/* Lightbox */}
       {lightbox !== null && gallery[lightbox] && (
         <div onClick={() => setLightbox(null)} style={{
@@ -102,12 +103,12 @@ export default function SlugSitePage() {
         <p style={{ fontSize: 16, color: "#888", maxWidth: 500, margin: "0 auto 24px" }}>{content.subheadline}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           {org.phone && (
-            <a href={`tel:${org.phone}`} style={{ padding: "12px 28px", borderRadius: 8, fontSize: 18, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", background: pc, color: "#fff", textDecoration: "none" }}>
-              📞 Call Now
+            <a href={`tel:${org.phone}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 28px", borderRadius: 12, fontSize: 17, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".04em", background: pc, color: "#fff", textDecoration: "none", boxShadow: `0 0 26px -6px ${pc}` }}>
+              <Icon name="phone" size={18} color="#fff" /> Call Now
             </a>
           )}
-          <a href={`/review?org=${org.id}`} style={{ padding: "12px 28px", borderRadius: 8, fontSize: 18, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", background: "transparent", color: pc, textDecoration: "none", border: `1px solid ${pc}` }}>
-            ⭐ Leave a Review
+          <a href={`/review?org=${org.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 28px", borderRadius: 12, fontSize: 17, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".04em", background: "transparent", color: pc, textDecoration: "none", border: `1px solid ${pc}` }}>
+            <Icon name="star" size={18} color={pc} /> Leave a Review
           </a>
         </div>
       </div>
@@ -191,11 +192,11 @@ export default function SlugSitePage() {
         {/* Contact */}
         <div style={{ padding: "40px 0", borderTop: "1px solid #1e1e2e", textAlign: "center" }}>
           <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: pc, textTransform: "uppercase", marginBottom: 16 }}>Get in Touch</h2>
-          <div style={{ fontSize: 16, color: "#888", lineHeight: 2 }}>
-            {org.phone && <div>📞 <a href={`tel:${org.phone}`} style={{ color: pc, textDecoration: "none" }}>{org.phone}</a></div>}
-            {org.email && <div>✉ <a href={`mailto:${org.email}`} style={{ color: pc, textDecoration: "none" }}>{org.email}</a></div>}
-            {org.address && <div>📍 {org.address}</div>}
-            {org.license_num && <div>License #{org.license_num}</div>}
+          <div style={{ display: "inline-flex", flexDirection: "column", gap: 9, fontSize: 15, color: "#cfd2da" }}>
+            {org.phone && <a href={`tel:${org.phone}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#cfd2da", textDecoration: "none" }}><Icon name="phone" size={15} color={pc} /> {org.phone}</a>}
+            {org.email && <a href={`mailto:${org.email}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#cfd2da", textDecoration: "none" }}><Icon name="mail" size={15} color={pc} /> {org.email}</a>}
+            {org.address && <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="pin" size={15} color={pc} /> {org.address}</div>}
+            {org.license_num && <div style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#8a8a99" }}><Icon name="safety" size={15} color={pc} /> License #{org.license_num}</div>}
           </div>
         </div>
 

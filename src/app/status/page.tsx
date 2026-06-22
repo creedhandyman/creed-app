@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { db } from "@/lib/supabase";
-import type { Job, Organization } from "@/lib/types";
+import type { Job, Organization, Room } from "@/lib/types";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
 
@@ -40,6 +40,10 @@ function StatusContent() {
   // Per-quote discount surfaced from the rooms JSON blob — so customers
   // see "$200 off" or "10% return-customer discount" right above the total.
   const [discount, setDiscount] = useState<{ type: "percent" | "fixed"; value: number; label?: string } | null>(null);
+  // Quote scope for the customer-facing line-item breakdown. Mirrors the
+  // category aggregation the quote PDF uses (export-pdf.ts).
+  const [quoteRooms, setQuoteRooms] = useState<Room[]>([]);
+  const [laborRate, setLaborRate] = useState<number | null>(null);
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return; }
@@ -57,6 +61,8 @@ function StatusContent() {
           if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
             setDiscount({ type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined });
           }
+          if (Array.isArray(data?.rooms)) setQuoteRooms(data.rooms as Room[]);
+          if (typeof data?.laborRate === "number" && data.laborRate > 0) setLaborRate(data.laborRate);
         } catch { /* */ }
         // Load org
         if (j.org_id) {
@@ -232,6 +238,31 @@ function StatusContent() {
   const hero = STATUS_HERO[job.status] || STATUS_HERO.quoted;
   const pct = workOrder.length ? Math.round((completedCount / workOrder.length) * 100) : 0;
 
+  // Per-category quote breakdown (same aggregation as the PDF estimate
+  // summary): collapse rooms by name, section total = hrs × rate + raw
+  // materials. rate resolves per-quote override → org default → $55.
+  const rate = laborRate || org?.default_rate || 55;
+  const breakdown = (() => {
+    const byCat: Record<string, { name: string; hrs: number; mat: number; count: number; details: string[] }> = {};
+    const order: string[] = [];
+    for (const rm of quoteRooms) {
+      if (!rm?.items?.length) continue;
+      const key = rm.name.trim().toLowerCase();
+      if (!byCat[key]) { byCat[key] = { name: rm.name, hrs: 0, mat: 0, count: 0, details: [] }; order.push(key); }
+      for (const it of rm.items) {
+        byCat[key].hrs += it.laborHrs || 0;
+        byCat[key].mat += (it.materials || []).reduce((s, m) => s + (m.c || 0), 0);
+        byCat[key].count += 1;
+        if (it.detail) byCat[key].details.push(it.detail);
+      }
+    }
+    return order.map((k) => {
+      const c = byCat[k];
+      return { name: c.name, total: c.hrs * rate + c.mat, blurb: c.details.slice(0, 3).join(", "), count: c.count };
+    });
+  })();
+  const itemCount = breakdown.reduce((s, b) => s + b.count, 0);
+
   return (
     <div className="pub">
       <div className="pub-wrap">
@@ -318,10 +349,24 @@ function StatusContent() {
           </div>
         )}
 
+        {/* Quote breakdown — per-category scope + cost (mirrors the PDF) */}
+        {breakdown.length > 0 && (
+          <div className="card">
+            <div className="lbl">Quote breakdown{itemCount > 0 ? ` · ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""}</div>
+            {breakdown.map((b, i) => (
+              <div className="wo" key={i}>
+                <b style={{ color: "#7fb6ff", minWidth: 84, display: "inline-block", flexShrink: 0 }}>{b.name}</b>
+                <span style={{ flex: 1, color: "#cfd2da", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.blurb}</span>
+                <span style={{ fontFamily: "Oswald, sans-serif", marginLeft: 8, flexShrink: 0 }}>${Math.round(b.total).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Total */}
         {job.total > 0 && (
           <div className="total">
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="lbl" style={{ margin: 0, color: "#3ee08f" }}>{job.status === "paid" ? "Amount Paid" : "Quote Total"}</div>
               <div className="n">${job.total.toLocaleString()}</div>
               {discount && (
