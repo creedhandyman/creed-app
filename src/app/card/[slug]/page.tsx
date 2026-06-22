@@ -3,22 +3,35 @@
  * Public digital business card. Lives at /card/[slug] using the same
  * site_slug as /s/[slug] and /lead/[slug] so contractors share one
  * URL prefix. Designed for in-the-wild handoffs:
- *   - QR code prominently displayed so the contractor can pull this
- *     page up on their phone and have a prospect scan it
- *   - Tap-to-call / tap-to-email / vCard download for native contacts
- *   - Quote-request CTA → /lead/[slug] (existing intake form)
- *   - Returning-customer portal link → /portal/login
+ *   - Glowing identity hero (logo tile + gradient name + trust chips)
+ *   - Tap-to-call / tap-to-email split, with a green-glow "Request a
+ *     quote" as the hero action (the money move)
+ *   - Services rendered as ROYGBIV trade-dot chips
+ *   - QR code ("Scan to save my card") for the in-person handoff
+ *   - vCard download + returning-customer portal link as quiet ghosts
  *
- * No auth, no tracking, no app shell — just the card.
+ * All content is the org's existing fields — name, logo, license,
+ * address→city, plus an editable headline + services list stored in
+ * `site_content` (Operations → Settings → Public card). No new schema.
+ * No auth, no tracking, no app shell — just the card. Always dark
+ * (matches the other public /s, /status, /lead pages).
  */
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import { Phone, Mail, FileText, Home, Download, ScanLine } from "lucide-react";
+import {
+  Phone, Mail, FileText, Download, ShieldCheck, BadgeCheck,
+  Star, Hammer, ScanLine, UserRound, Zap,
+} from "lucide-react";
 import { db } from "@/lib/supabase";
-import type { Organization } from "@/lib/types";
+import type { Organization, Review } from "@/lib/types";
 
-const PRIMARY = "#2E75B6";
+const BLUE = "#2E75B6";
+const BLUE_SOFT = "#7fb6ff";
+
+// ROYGBIV-ish trade palette — the services chips cycle these dots so the
+// card echoes the app's trade colors. Order picked for visual contrast.
+const TRADE_DOTS = ["#9d4edd", "#ff8800", "#2E75B6", "#00cc66", "#ffcc00", "#6a3de8", "#ff3d6e"];
 
 interface SiteContent {
   headline?: string;
@@ -76,6 +89,7 @@ function CardPageInner() {
 
   const [org, setOrg] = useState<Organization | null>(null);
   const [content, setContent] = useState<SiteContent | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [cardUrl, setCardUrl] = useState("");
 
@@ -97,11 +111,18 @@ function CardPageInner() {
 
   useEffect(() => {
     if (!slug) { setLoading(false); return; }
-    db.get<Organization>("organizations", { site_slug: slug }).then((orgs) => {
+    db.get<Organization>("organizations", { site_slug: slug }).then(async (orgs) => {
       if (orgs.length) {
         const o = orgs[0];
         setOrg(o);
         try { if (o.site_content) setContent(JSON.parse(o.site_content)); } catch { /* */ }
+        // Real review rating powers the ★ trust chip. Best-effort — the
+        // reviews table is public-readable by org_id (same as /s/[slug]);
+        // if it returns nothing the chip simply hides.
+        try {
+          const revs = await db.get<Review>("reviews", { org_id: o.id });
+          setReviews(revs);
+        } catch { /* no rating chip */ }
       }
       setLoading(false);
     });
@@ -129,10 +150,16 @@ function CardPageInner() {
     return parts[0] || "";
   }, [org]);
 
+  // Average star rating across all reviews (one decimal), or 0 if none.
+  const rating = useMemo(() => {
+    if (!reviews.length) return 0;
+    return reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length;
+  }, [reviews]);
+
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: PRIMARY, fontFamily: "Oswald, sans-serif", fontSize: 20 }}>Loading…</div>
+        <div style={{ color: BLUE, fontFamily: "Oswald, sans-serif", fontSize: 20 }}>Loading…</div>
       </div>
     );
   }
@@ -149,141 +176,190 @@ function CardPageInner() {
     );
   }
 
+  const tagline = content?.headline || (cityFromAddress ? `Serving ${cityFromAddress}` : "");
+  const monogram = (org.name || "?").slice(0, 2).toUpperCase();
+
+  // ── shared inline styles (the card is always dark) ──
+  const sec: React.CSSProperties = {
+    background: "#12121a", border: "1px solid #1e1e2e",
+    borderRadius: 15, padding: 15, marginTop: 13,
+  };
+  const lbl: React.CSSProperties = {
+    fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 12,
+    letterSpacing: ".09em", textTransform: "uppercase", color: "#8a8a99",
+    marginBottom: 11, display: "flex", alignItems: "center", gap: 6,
+  };
+  const tchip: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5,
+    fontWeight: 600, padding: "4px 10px", borderRadius: 99,
+    background: "#16161f", border: "1px solid #2a2a3a", color: "#cfd2da",
+  };
+  const ghost: React.CSSProperties = {
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    width: "100%", marginTop: 11, padding: 13, borderRadius: 13,
+    background: "transparent", border: "1px solid #2a2a3a", color: "#8a8a99",
+    fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 14,
+    letterSpacing: ".04em", textTransform: "uppercase", cursor: "pointer",
+    textDecoration: "none",
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", color: "#e2e2e8", padding: "24px 16px 60px" }}>
-      <div style={{ maxWidth: 460, margin: "0 auto" }}>
-        {/* Identity */}
-        <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 16, padding: "26px 22px", textAlign: "center", marginBottom: 14 }}>
-          {org.logo_url && (
-            <img
-              src={org.logo_url}
-              alt=""
-              style={{ height: 84, width: 84, objectFit: "contain", borderRadius: 14, background: "#0a0a0f", padding: 8, margin: "0 auto 12px", display: "block", border: "1px solid #1e1e2e" }}
-              onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
-            />
-          )}
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 26, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: 0 }}>
-            {org.name}
-          </h1>
-          {(content?.headline || cityFromAddress) && (
-            <div style={{ fontSize: 15, color: "#aaa", marginTop: 6 }}>
-              {content?.headline || `Serving ${cityFromAddress}`}
+    <div style={{ minHeight: "100vh", background: "radial-gradient(1000px 520px at 50% -8%, #0d1530 0%, #0a0a0f 60%)", color: "#f1f2f6", padding: "8px 16px 60px" }}>
+      <div style={{ maxWidth: 440, margin: "0 auto" }}>
+
+        {/* ── Identity hero ── */}
+        <div style={{ position: "relative", textAlign: "center", padding: "30px 18px 18px" }}>
+          {/* radial glow behind the logo */}
+          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(420px 200px at 50% -10%, rgba(46,117,182,.35), transparent 70%)", pointerEvents: "none" }} />
+          <div style={{ position: "relative" }}>
+            <div
+              style={{
+                width: 84, height: 84, borderRadius: 22, margin: "0 auto 12px",
+                background: org.logo_url ? "#0a0a0f" : "linear-gradient(135deg,#2E75B6,#16365a)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 34, color: "#fff",
+                boxShadow: "0 0 30px -6px rgba(46,117,182,.7), inset 0 1px 0 rgba(255,255,255,.18)",
+                border: "1px solid rgba(127,182,255,.3)", overflow: "hidden",
+              }}
+            >
+              {org.logo_url ? (
+                <img
+                  src={org.logo_url}
+                  alt=""
+                  style={{ width: "100%", height: "100%", objectFit: "contain", padding: 8 }}
+                  onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+                />
+              ) : (
+                monogram
+              )}
             </div>
-          )}
-          <div style={{ fontSize: 13, color: "#666", marginTop: 8, lineHeight: 1.6 }}>
-            {org.license_num && <div>License #{org.license_num}</div>}
-            {org.address && <div>{org.address}</div>}
+            <div
+              style={{
+                fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 27,
+                letterSpacing: ".04em", textTransform: "uppercase", lineHeight: 1.05,
+                background: "linear-gradient(90deg,#cfe3ff,#7fb6ff)",
+                WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+              }}
+            >
+              {org.name}
+            </div>
+            {tagline && <div style={{ fontSize: 14, color: "#b6bccb", marginTop: 5 }}>{tagline}</div>}
+
+            {/* Trust chips */}
+            {(org.license_num || rating > 0) && (
+              <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+                {org.license_num && (
+                  <span style={{ ...tchip, color: "#7dffb8", borderColor: "rgba(0,204,102,.35)", background: "rgba(0,204,102,.1)" }}>
+                    <ShieldCheck size={12} strokeWidth={2} /> Licensed &amp; insured
+                  </span>
+                )}
+                {org.license_num && (
+                  <span style={tchip}>
+                    <BadgeCheck size={12} strokeWidth={2} /> Lic #{org.license_num}
+                  </span>
+                )}
+                {rating > 0 && (
+                  <span style={{ ...tchip, color: "#ffd76b", borderColor: "rgba(245,180,0,.4)", background: "rgba(245,180,0,.1)" }}>
+                    <Star size={12} strokeWidth={2} fill="#ffd76b" /> {rating.toFixed(1)}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Tap-to-call / tap-to-email row */}
-        <div style={{ display: "grid", gridTemplateColumns: org.phone && org.email ? "1fr 1fr" : "1fr", gap: 8, marginBottom: 14 }}>
-          {org.phone && (
-            <a
-              href={`tel:${org.phone}`}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                padding: "14px", borderRadius: 10,
-                background: PRIMARY, color: "#fff",
-                fontFamily: "Oswald, sans-serif", fontSize: 16, textTransform: "uppercase", letterSpacing: ".05em",
-                textDecoration: "none",
-              }}
-            >
-              <Phone size={16} strokeWidth={2} /> Call
-            </a>
-          )}
-          {org.email && (
-            <a
-              href={`mailto:${org.email}`}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                padding: "14px", borderRadius: 10,
-                background: "transparent", border: `1px solid ${PRIMARY}`,
-                color: PRIMARY,
-                fontFamily: "Oswald, sans-serif", fontSize: 16, textTransform: "uppercase", letterSpacing: ".05em",
-                textDecoration: "none",
-              }}
-            >
-              <Mail size={16} strokeWidth={2} /> Email
-            </a>
-          )}
-        </div>
-
-        {/* Services */}
-        <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 14 }}>
-          <div style={{ fontSize: 13, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>
-            Services
-          </div>
-          <ul style={{ margin: 0, padding: "0 0 0 18px", fontSize: 15, color: "#ccc", lineHeight: 1.6 }}>
-            {services.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
-        </div>
-
-        {/* CTAs */}
-        <a
-          href={`/lead/${slug}${techParam ? `?tech=${encodeURIComponent(techParam)}` : ""}`}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            padding: "13px", borderRadius: 10, marginBottom: 8,
-            background: PRIMARY, color: "#fff",
-            fontFamily: "Oswald, sans-serif", fontSize: 16,
-            textTransform: "uppercase", letterSpacing: ".05em",
-            textDecoration: "none",
-          }}
-        >
-          <FileText size={16} strokeWidth={2} /> Request a quote
-        </a>
-        <a
-          href="/portal/login"
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            padding: "13px", borderRadius: 10, marginBottom: 14,
-            background: "transparent", border: "1px solid #1e1e2e",
-            color: "#e2e2e8",
-            fontFamily: "Oswald, sans-serif", fontSize: 16,
-            textTransform: "uppercase", letterSpacing: ".05em",
-            textDecoration: "none",
-          }}
-        >
-          <Home size={16} strokeWidth={2} /> Customer portal sign-in
-        </a>
-
-        {/* QR */}
-        {cardUrl && (
-          <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 18, marginBottom: 14, textAlign: "center" }}>
-            <div style={{ fontSize: 13, color: "#888", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <ScanLine size={13} strokeWidth={2} /> Scan to share
-            </div>
-            <div style={{ display: "inline-block", padding: 12, borderRadius: 10, background: "#fff" }}>
-              <QRCodeSVG value={cardUrl} size={180} level="M" includeMargin={false} />
-            </div>
-            <div style={{ fontSize: 13, color: "#555", marginTop: 10, wordBreak: "break-all" }}>
-              {cardUrl}
-            </div>
+        {/* ── Contact row ── */}
+        {(org.phone || org.email) && (
+          <div style={{ display: "grid", gridTemplateColumns: org.phone && org.email ? "1fr 1fr" : "1fr", gap: 9, marginTop: 6 }}>
+            {org.phone && (
+              <a
+                href={`tel:${org.phone}`}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  padding: 14, borderRadius: 13, background: BLUE, color: "#fff",
+                  fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 15,
+                  letterSpacing: ".04em", textTransform: "uppercase", textDecoration: "none",
+                  boxShadow: "0 8px 20px -8px rgba(46,117,182,.8)",
+                }}
+              >
+                <Phone size={17} strokeWidth={2} /> Call
+              </a>
+            )}
+            {org.email && (
+              <a
+                href={`mailto:${org.email}`}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  padding: 14, borderRadius: 13, background: "transparent",
+                  border: `1.5px solid ${BLUE}`, color: BLUE_SOFT,
+                  fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 15,
+                  letterSpacing: ".04em", textTransform: "uppercase", textDecoration: "none",
+                }}
+              >
+                <Mail size={17} strokeWidth={2} /> Email
+              </a>
+            )}
           </div>
         )}
 
-        {/* vCard */}
-        <button
-          onClick={() => downloadVCard(org, cardUrl)}
+        {/* ── Primary CTA — the money action ── */}
+        <a
+          href={`/lead/${slug}${techParam ? `?tech=${encodeURIComponent(techParam)}` : ""}`}
           style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            width: "100%",
-            padding: "12px", borderRadius: 10, marginBottom: 16,
-            background: "transparent", border: "1px solid #1e1e2e",
-            color: "#aaa",
-            fontFamily: "Oswald, sans-serif", fontSize: 15,
-            textTransform: "uppercase", letterSpacing: ".05em",
-            cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
+            width: "100%", marginTop: 11, padding: 15, borderRadius: 14,
+            background: "rgba(0,204,102,.16)", border: "1.5px solid rgba(0,204,102,.85)",
+            color: "#7dffb8", boxShadow: "0 0 26px -4px rgba(0,204,102,.55), inset 0 0 22px -10px rgba(0,204,102,.5)",
+            fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 16,
+            letterSpacing: ".4px", textTransform: "uppercase", textDecoration: "none",
           }}
         >
-          <Download size={15} strokeWidth={2} /> Save contact (vCard)
-        </button>
+          <FileText size={18} strokeWidth={2} /> Request a Quote
+        </a>
 
-        <div style={{ textAlign: "center", color: "#555", fontSize: 12 }}>
-          Powered by Creed App
+        {/* ── Services ── */}
+        <div style={sec}>
+          <div style={lbl}><Hammer size={14} strokeWidth={2} color={BLUE_SOFT} /> Services</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+            {services.map((s, i) => (
+              <span
+                key={i}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13,
+                  fontWeight: 500, padding: "7px 12px", borderRadius: 10,
+                  background: "#16161f", border: "1px solid #2a2a3a",
+                }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: TRADE_DOTS[i % TRADE_DOTS.length] }} />
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* ── QR ── */}
+        {cardUrl && (
+          <div style={{ ...sec, textAlign: "center" }}>
+            <div style={{ ...lbl, justifyContent: "center" }}>
+              <ScanLine size={14} strokeWidth={2} color={BLUE_SOFT} /> Scan to save my card
+            </div>
+            <div style={{ display: "inline-block", padding: 14, borderRadius: 16, background: "#fff", boxShadow: "0 0 30px -8px rgba(127,182,255,.5)" }}>
+              <QRCodeSVG value={cardUrl} size={160} level="M" includeMargin={false} />
+            </div>
+            <div style={{ fontSize: 12, color: "#666", marginTop: 11, wordBreak: "break-all" }}>{cardUrl}</div>
+          </div>
+        )}
+
+        {/* ── Quiet ghost actions ── */}
+        <button type="button" onClick={() => downloadVCard(org, cardUrl)} style={ghost}>
+          <Download size={15} strokeWidth={2} /> Save Contact (vCard)
+        </button>
+        <a href="/portal/login" style={ghost}>
+          <UserRound size={15} strokeWidth={2} /> Customer Portal Sign-in
+        </a>
+
+        <div style={{ textAlign: "center", color: "#666", fontSize: 12, marginTop: 18, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+          <Zap size={12} strokeWidth={2} /> Powered by Creed
         </div>
       </div>
     </div>

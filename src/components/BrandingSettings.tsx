@@ -32,11 +32,32 @@ export default function BrandingSettings() {
     setSlugDraft(org?.site_slug || "");
   }, [org?.site_slug]);
 
+  // Public-card content — headline (tagline) + services list. Both live in
+  // the org's `site_content` JSON (shared with the marketing site); the
+  // /card/[slug] page reads them. Drafts resync if the org reloads.
+  const [headlineDraft, setHeadlineDraft] = useState("");
+  const [servicesDraft, setServicesDraft] = useState("");
+  useEffect(() => {
+    let c: { headline?: string; services?: string[] } = {};
+    try { c = org?.site_content ? JSON.parse(org.site_content) : {}; } catch { /* */ }
+    setHeadlineDraft(c.headline || "");
+    setServicesDraft(Array.isArray(c.services) ? c.services.join("\n") : "");
+  }, [org?.site_content]);
+
   if (!isOwner || !org) return null;
 
   const refreshOrg = async () => {
     const orgs = await db.get<Organization>("organizations", { id: org.id });
     if (orgs.length) setOrg(orgs[0]);
+  };
+
+  // Merge a patch into the org's site_content JSON without clobbering the
+  // marketing-site fields (whyUs / about / cta / etc.) that live alongside.
+  const saveCardContent = async (patch: { headline?: string; services?: string[] }) => {
+    let current: Record<string, unknown> = {};
+    try { current = org.site_content ? JSON.parse(org.site_content) : {}; } catch { /* */ }
+    await db.patch("organizations", org.id, { site_content: JSON.stringify({ ...current, ...patch }) });
+    await refreshOrg();
   };
 
   const normalizeSlug = (raw: string) =>
@@ -281,6 +302,74 @@ export default function BrandingSettings() {
             )}
           </div>
         ))}
+      </div>
+
+      {/* Public card content — headline + services shown on /card/[slug]. */}
+      <div className="cd mb">
+        <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="card" size={16} color="var(--color-primary)" />
+          Public card
+        </h4>
+        <div className="dim" style={{ fontSize: 12.5, marginBottom: 12 }}>
+          Headline &amp; services on your shareable business card
+          {org.site_slug && (
+            <>
+              {" · "}
+              <a href={`/card/${org.site_slug}`} target="_blank" rel="noreferrer" style={{ color: "var(--color-primary)" }}>
+                preview
+              </a>
+            </>
+          )}
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <label className="sl" style={{ fontSize: 14 }}>Headline / tagline</label>
+          <input
+            value={headlineDraft}
+            onChange={(e) => setHeadlineDraft(e.target.value)}
+            onBlur={async () => {
+              const v = headlineDraft.trim();
+              let cur = "";
+              try { cur = (org.site_content ? JSON.parse(org.site_content).headline : "") || ""; } catch { /* */ }
+              if (v !== cur) {
+                await saveCardContent({ headline: v });
+                useStore.getState().showToast("Headline updated", "success");
+              }
+            }}
+            placeholder="Serving the greater metro area"
+            style={{ fontSize: 15 }}
+          />
+          <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
+            Blank = &ldquo;Serving {"{city}"}&rdquo; from your address.
+          </div>
+        </div>
+
+        <div>
+          <label className="sl" style={{ fontSize: 14 }}>
+            Services <span className="dim">· one per line</span>
+          </label>
+          <textarea
+            value={servicesDraft}
+            onChange={(e) => setServicesDraft(e.target.value)}
+            onBlur={async () => {
+              const arr = servicesDraft.split("\n").map((s) => s.trim()).filter(Boolean);
+              let cur: string[] = [];
+              try {
+                const c = org.site_content ? JSON.parse(org.site_content) : {};
+                cur = Array.isArray(c.services) ? c.services : [];
+              } catch { /* */ }
+              if (JSON.stringify(arr) !== JSON.stringify(cur)) {
+                await saveCardContent({ services: arr });
+                useStore.getState().showToast("Services updated", "success");
+              }
+            }}
+            placeholder={"Repairs & maintenance\nRemodels & renovations\nInspections & estimates"}
+            style={{ fontSize: 15, minHeight: 94, width: "100%" }}
+          />
+          <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
+            Up to 6 show as colored chips. Blank = your licensed trades, then a default list.
+          </div>
+        </div>
       </div>
     </>
   );
