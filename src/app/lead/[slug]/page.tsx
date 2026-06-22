@@ -5,37 +5,23 @@
  * the org server-side, finds-or-creates a Customer, attaches an
  * Address, and inserts a Job with status="lead".
  *
- * Visual styling matches /status, /review, and /s/[slug] — same
- * dark gradient, Oswald headings, brand-blue accent. Mobile-first
- * since prospects are typically on a phone.
+ * Visual styling matches /status, /review via the shared `.pub` design
+ * system (globals.css) — same dark brand, Oswald headings, glow CTA.
+ * Mobile-first since prospects are typically on a phone.
  */
 import { Suspense, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { db, supabase } from "@/lib/supabase";
 import type { Organization } from "@/lib/types";
+import { Icon, type IconName } from "@/components/Icon";
 
-const PRIMARY = "#2E75B6";
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "11px 13px",
-  borderRadius: 8,
-  border: "1px solid #1e1e2e",
-  background: "#12121a",
-  color: "#e2e2e8",
-  fontSize: 16,
-  fontFamily: "Source Sans 3, sans-serif",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: "#888",
-  fontFamily: "Oswald, sans-serif",
-  textTransform: "uppercase",
-  letterSpacing: ".06em",
-  marginBottom: 4,
-  display: "block",
-};
+// Job-type quick picker (from the render). Folded into the description on
+// submit so it's captured without an /api/leads contract change.
+const JOB_TYPES: { key: string; icon: IconName }[] = [
+  { key: "Repair", icon: "hammer" },
+  { key: "Remodel", icon: "paint" },
+  { key: "Turnover", icon: "home" },
+];
 
 function LeadIntakeInner() {
   const { slug } = useParams<{ slug: string }>();
@@ -61,6 +47,7 @@ function LeadIntakeInner() {
   const [org, setOrg] = useState<Organization | null>(null);
   const [orgLoading, setOrgLoading] = useState(true);
 
+  const [jobType, setJobType] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -140,7 +127,8 @@ function LeadIntakeInner() {
           city: city.trim(),
           state: state.trim(),
           zip: zip.trim(),
-          description: description.trim(),
+          // Prepend the chosen job type so the crew sees it on the lead.
+          description: (jobType ? `[${jobType}] ` : "") + description.trim(),
           photos,
           referrer_tech_id: techId || undefined,
         }),
@@ -159,16 +147,16 @@ function LeadIntakeInner() {
   };
 
   if (orgLoading) {
-    return <div style={{ minHeight: "100vh", background: "#0a0a0f" }} />;
+    return <div className="pub" />;
   }
 
   if (!org) {
     return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="pub" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#C00000" }}>Page Not Found</h1>
-          <p style={{ color: "#888", fontSize: 15, marginTop: 8 }}>This link may be invalid.</p>
+          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#ff7a7a", textTransform: "uppercase" }}>Page Not Found</h1>
+          <p style={{ color: "#8a8a99", fontSize: 15, marginTop: 8 }}>This link may be invalid.</p>
         </div>
       </div>
     );
@@ -176,138 +164,102 @@ function LeadIntakeInner() {
 
   if (submitted) {
     return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-        <div style={{ width: "100%", maxWidth: 420, textAlign: "center" }}>
-          {org.logo_url && (
-            <img src={org.logo_url} alt="" style={{ height: 56, marginBottom: 16 }}
-              onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
-          )}
-          <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 28 }}>
+      <div className="pub" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="pub-wrap" style={{ textAlign: "center" }}>
+          <div className="bh">
+            <div className="logo">
+              {org.logo_url
+                ? <img src={org.logo_url} alt="" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+                : (org.name?.[0]?.toUpperCase() || "C")}
+            </div>
+            <div className="nm">{org.name}</div>
+          </div>
+          <div className="card" style={{ textAlign: "center", padding: 28 }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#00cc66", textTransform: "uppercase", marginBottom: 8 }}>
-              Thanks!
-            </h2>
-            <p style={{ color: "#aaa", fontSize: 16, lineHeight: 1.5 }}>
+            <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#3ee08f", textTransform: "uppercase", marginBottom: 8 }}>Thanks!</h2>
+            <p className="muted" style={{ fontSize: 15, lineHeight: 1.5 }}>
               We&apos;ve got your request. {org.name} will be in touch shortly with a quote.
             </p>
             {org.phone && (
-              <p style={{ color: "#666", fontSize: 14, marginTop: 12 }}>
-                Need to reach us? <a href={`tel:${org.phone}`} style={{ color: PRIMARY, textDecoration: "none" }}>{org.phone}</a>
+              <p style={{ color: "#8a8a99", fontSize: 14, marginTop: 12 }}>
+                Need to reach us? <a href={`tel:${org.phone}`} style={{ color: "#7fb6ff", textDecoration: "none" }}>{org.phone}</a>
               </p>
             )}
           </div>
-          <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
+          <div style={{ color: "#666", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", padding: "24px 16px 40px" }}>
-      <div style={{ maxWidth: 480, margin: "0 auto" }}>
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          {org.logo_url && (
-            <img src={org.logo_url} alt="" style={{ height: 56, display: "block", margin: "0 auto 10px" }}
-              onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
-          )}
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: 0 }}>
-            {org.name}
-          </h1>
-          {org.phone && (
-            <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>{org.phone}</div>
-          )}
+    <div className="pub">
+      <div className="pub-wrap">
+        {/* Brand header */}
+        <div className="bh">
+          <div className="logo">
+            {org.logo_url
+              ? <img src={org.logo_url} alt="" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+              : (org.name?.[0]?.toUpperCase() || "C")}
+          </div>
+          <div className="nm">{org.name}</div>
+          {org.phone && <div className="ph">{org.phone}</div>}
         </div>
 
-        <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 20 }}>
-          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "#e2e2e8", textTransform: "uppercase", textAlign: "center", marginTop: 0, marginBottom: 4 }}>
-            Request a Quote
-          </h2>
-          <p style={{ color: "#888", fontSize: 14, textAlign: "center", margin: "0 0 18px" }}>
-            Tell us what you need. We&apos;ll get back to you with a detailed quote.
-          </p>
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: ".4px", textTransform: "uppercase" }}>Get a Free Quote</div>
+          <div className="muted" style={{ marginTop: 3 }}>Tell us what you need — we reply same day.</div>
+        </div>
 
-          {/* Contact */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>Your Name *</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" style={inputStyle} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-            <div>
-              <label style={labelStyle}>Phone</label>
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="555-555-5555"
-                inputMode="tel"
-                autoComplete="tel"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Email</label>
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                inputMode="email"
-                autoComplete="email"
-                style={inputStyle}
-              />
-            </div>
-          </div>
-
-          {/* Address */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>Property Address</label>
-            <input
-              value={street}
-              onChange={(e) => setStreet(e.target.value)}
-              placeholder="Street"
-              autoComplete="street-address"
-              style={{ ...inputStyle, marginBottom: 8 }}
-            />
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8 }}>
-              <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" autoComplete="address-level2" style={inputStyle} />
-              <input value={state} onChange={(e) => setState(e.target.value)} placeholder="ST" autoComplete="address-level1" style={inputStyle} />
-              <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="ZIP" autoComplete="postal-code" inputMode="numeric" style={inputStyle} />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>What do you need done? *</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Kitchen faucet leaking, bathroom door won't latch, missing outlet covers in bedroom..."
-              style={{ ...inputStyle, height: 110, resize: "vertical" }}
-            />
-          </div>
-
-          {/* Photos */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Photos (optional, up to 8)</label>
-            <label
-              style={{
-                display: "block",
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px dashed #444",
-                background: "#0a0a0f",
-                color: "#888",
-                fontSize: 14,
-                textAlign: "center",
-                cursor: "pointer",
-              }}
+        {/* Job type */}
+        <div className="lbl">What&apos;s the job?</div>
+        <div className="seg">
+          {JOB_TYPES.map((t) => (
+            <div
+              key={t.key}
+              className={`segb${jobType === t.key ? " on" : ""}`}
+              onClick={() => setJobType(jobType === t.key ? "" : t.key)}
             >
-              {uploading ? "Uploading..." : photos.length === 0 ? "📷 Tap to add photos" : `+ Add another (${photos.length} added)`}
+              <Icon name={t.icon} size={19} /> {t.key}
+            </div>
+          ))}
+        </div>
+
+        {/* Contact */}
+        <input className="in" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name" />
+        <div className="row" style={{ marginBottom: 10 }}>
+          <input className="in" style={{ marginBottom: 0 }} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" inputMode="tel" autoComplete="tel" />
+          <input className="in" style={{ marginBottom: 0 }} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" inputMode="email" autoComplete="email" />
+        </div>
+
+        {/* Address */}
+        <input className="in" value={street} onChange={(e) => setStreet(e.target.value)} placeholder="Property address" autoComplete="street-address" />
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+          <input className="in" style={{ marginBottom: 0 }} value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" autoComplete="address-level2" />
+          <input className="in" style={{ marginBottom: 0 }} value={state} onChange={(e) => setState(e.target.value)} placeholder="ST" autoComplete="address-level1" />
+          <input className="in" style={{ marginBottom: 0 }} value={zip} onChange={(e) => setZip(e.target.value)} placeholder="ZIP" autoComplete="postal-code" inputMode="numeric" />
+        </div>
+
+        {/* Description */}
+        <textarea className="in" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the work…" rows={3} style={{ resize: "vertical" }} />
+
+        {/* Photos */}
+        <div className="lbl">Photos help us quote faster</div>
+        <div className="photos">
+          {photos.map((url, i) => (
+            <div key={i} className="ph-img" style={{ backgroundImage: `url(${url})` }}>
+              <span className="x" onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}><Icon name="close" size={11} color="#fff" /></span>
+            </div>
+          ))}
+          {photos.length < 8 && (
+            <label className="ph-tile">
+              {uploading ? "…" : <Icon name="camera" size={20} />}
               <input
                 type="file"
                 accept="image/*"
                 multiple
                 style={{ display: "none" }}
-                disabled={uploading || photos.length >= 8}
+                disabled={uploading}
                 onChange={async (e) => {
                   const files = Array.from(e.target.files || []).slice(0, 8 - photos.length);
                   for (const f of files) await uploadPhoto(f);
@@ -315,62 +267,23 @@ function LeadIntakeInner() {
                 }}
               />
             </label>
-            {photos.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(70px, 1fr))", gap: 6, marginTop: 8 }}>
-                {photos.map((url, i) => (
-                  <div key={i} style={{ position: "relative" }}>
-                    <img src={url} alt="" style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 6, border: "1px solid #1e1e2e" }} />
-                    <button
-                      onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
-                      style={{
-                        position: "absolute", top: 2, right: 2,
-                        background: "rgba(0,0,0,0.7)", color: "#fff", border: "none",
-                        borderRadius: "50%", width: 18, height: 18, fontSize: 14,
-                        cursor: "pointer", lineHeight: 1,
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {error && (
-            <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 6, padding: "8px 10px", marginBottom: 12, fontSize: 14, color: "#ff8888" }}>
-              {error}
-            </div>
           )}
-
-          <button
-            onClick={submit}
-            disabled={submitting || uploading}
-            style={{
-              width: "100%",
-              padding: "13px",
-              borderRadius: 8,
-              fontSize: 17,
-              fontFamily: "Oswald, sans-serif",
-              textTransform: "uppercase",
-              letterSpacing: ".05em",
-              background: PRIMARY,
-              color: "#fff",
-              border: "none",
-              cursor: submitting ? "wait" : "pointer",
-              opacity: submitting || uploading ? 0.6 : 1,
-            }}
-          >
-            {submitting ? "Submitting..." : "📋 Send My Request"}
-          </button>
-          <p style={{ color: "#555", fontSize: 13, textAlign: "center", margin: "10px 0 0" }}>
-            We typically respond within one business day.
-          </p>
         </div>
 
-        <div style={{ textAlign: "center", color: "#555", fontSize: 12, marginTop: 16 }}>
-          Powered by Creed App
+        {error && (
+          <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 8, padding: "8px 10px", marginBottom: 11, fontSize: 14, color: "#ff8888" }}>
+            {error}
+          </div>
+        )}
+
+        <button className="btn glow-green" onClick={submit} disabled={submitting || uploading}>
+          <Icon name="send" size={17} /> {submitting ? "Submitting…" : "Send My Request"}
+        </button>
+        <div className="muted" style={{ textAlign: "center", marginTop: 9, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+          <Icon name="safety" size={12} /> No spam. We only use this to quote your job.
         </div>
+
+        <div style={{ textAlign: "center", color: "#666", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
       </div>
     </div>
   );
@@ -378,7 +291,7 @@ function LeadIntakeInner() {
 
 export default function LeadIntakePage() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0a0a0f" }} />}>
+    <Suspense fallback={<div className="pub" />}>
       <LeadIntakeInner />
     </Suspense>
   );
