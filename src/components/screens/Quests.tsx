@@ -45,135 +45,21 @@ export default function Quests() {
     try { return new Date(dateStr) >= cycleStart; } catch { return false; }
   };
 
-  // PER-USER QUEST FILTERING. Quests track the logged-in user's
-  // progress, not the whole org — Bernard wanted each tech to see
-  // their own bonuses. The "this user worked on this job" join is
-  // built from time_entries (the most reliable signal — every clock-in
-  // / manual entry stamps user_id and job_id). Fallback to job-name
-  // matching covers legacy time_entries with NULL job_id.
-  const userTimeEntries = timeEntries.filter((e) => e.user_id === user.id);
-  const userJobIds = new Set(
-    userTimeEntries.map((e) => e.job_id).filter((id): id is string => !!id),
-  );
-  // Name fallback ONLY for legacy entries with no job_id — entries that carry
-  // a job_id are matched precisely above, so adding their address here would
-  // re-attribute OTHER jobs at the same property (cross-tech bleed).
-  const userJobNames = new Set(
-    userTimeEntries
-      .filter((e) => !e.job_id)
-      .map((e) => e.job)
-      .filter((n): n is string => !!n && n !== "General"),
-  );
-  const isUserJob = (j: { id: string; property?: string }) =>
-    userJobIds.has(j.id) || (!!j.property && userJobNames.has(j.property));
-  const userNameLc = user.name.toLowerCase();
-  const reviewTagsUser = (r: { employee_names?: string }) => {
-    if (!r.employee_names) return false;
-    return r.employee_names.toLowerCase().split(",").map((s) => s.trim()).includes(userNameLc);
-  };
-
-  // Computed stats — filtered to current 6-month cycle AND to this user.
-  const cycleJobs = jobs.filter((j) => inCycle(j.created_at) && isUserJob(j));
-  const completedJobs = cycleJobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
-  const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3 && inCycle(r.created_at) && reviewTagsUser(r)).length;
-  const fiveStarReviews = reviews.filter((r) => r.rating === 5 && inCycle(r.created_at) && reviewTagsUser(r)).length;
-  // Network Scout is now per-tech: only referrals THIS user brought in
-  // (stamped referred_by_user_id on creation) count. Legacy rows + public
-  // website submissions have no referrer and credit no individual tech.
-  const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at) && r.referred_by_user_id === user.id).length;
-
-  // Group jobs by client to find repeat clients with 5+ jobs (cycle).
-  // Exclude leads — a prospect submitting 5 intake forms isn't 5 jobs.
-  const jobsByClient: Record<string, number> = {};
-  cycleJobs.filter((j) => j.client && j.status !== "lead").forEach((j) => {
-    jobsByClient[j.client] = (jobsByClient[j.client] || 0) + 1;
-  });
-  const repeatClients = Object.values(jobsByClient).filter((c) => c >= 5).length;
-
-  // Big jobs (24+ hours, cycle) — counts a user-worked job whose total
-  // org-wide hours hit 24; their own share of that contribution is
-  // already captured by isUserJob.
-  const bigJobs = cycleJobs.filter((j) => (j.status === "complete" || j.status === "paid") && (j.total_hrs || 0) >= 24).length;
-
-  // Total hours logged — THIS USER's hours in cycle only.
-  const totalHours = userTimeEntries
-    .filter((e) => inCycle(e.entry_date))
-    .reduce((s, e) => s + (e.hours || 0), 0);
-
-  // Skill Mastery: completed jobs per trade — only user's jobs.
-  const jobsByTrade: Record<string, number> = {};
-  cycleJobs.filter((j) => (j.status === "complete" || j.status === "paid") && j.trade).forEach((j) => {
-    jobsByTrade[j.trade] = (jobsByTrade[j.trade] || 0) + 1;
-  });
-  const tradesMastered = Object.values(jobsByTrade).filter((c) => c >= 10).length;
-  const bestTradeCount = Math.max(0, ...Object.values(jobsByTrade));
-  void tradesMastered;
-
-  // Zero Callback streak — over the user's own completed jobs.
-  const completedJobsSorted = cycleJobs
-    .filter((j) => j.status === "complete" || j.status === "paid")
-    .sort((a, b) => (a.created_at > b.created_at ? -1 : 1));
-  let zeroCallbackStreak = 0;
-  for (const j of completedJobsSorted) {
-    if (j.callback) break;
-    zeroCallbackStreak++;
-  }
-
-  // Mr.Speed: user days with 5+ completed jobs.
-  const jobsByDate: Record<string, number> = {};
-  cycleJobs.filter((j) => j.status === "complete" || j.status === "paid").forEach((j) => {
-    const d = j.job_date || j.created_at?.split("T")[0] || "";
-    if (d) jobsByDate[d] = (jobsByDate[d] || 0) + 1;
-  });
-  const speedDays = Object.values(jobsByDate).filter((c) => c >= 5).length;
-
-  // Deal Closer: user's upsell jobs.
-  const upsellCount = cycleJobs.filter((j) => j.is_upsell).length;
-
-  // Repeat Machine: how many distinct clients requested THIS user
-  // specifically (was: how many techs in the whole org cleared the
-  // 3-client bar). Now this user's progress is just their own
-  // requested-by-name client count.
-  const myRequestClients = new Set<string>();
-  jobs
-    .filter((j) => inCycle(j.created_at) && j.requested_tech && j.client)
-    .forEach((j) => {
-      if (j.requested_tech!.toLowerCase() === userNameLc) {
-        myRequestClients.add(j.client!);
-      }
-    });
-  // Carried over to keep the HandyKing aggregate working: "this user
-  // qualifies for Repeat Machine" (1 if 3+ distinct clients requested
-  // them by name, else 0).
-  const techsRequestedByName = myRequestClients.size >= 3 ? 1 : 0;
-
-  // HandyKing: count how many of the other 11 quests are complete
-  const handyKingProgress = [
-    positiveReviews >= 15,
-    fiveStarReviews >= 10,
-    completedJobs >= 10,
-    convertedReferrals >= 1,
-    repeatClients >= 1,
-    upsellCount >= 1,
-    techsRequestedByName >= 1,
-    bestTradeCount >= 10,
-    bigJobs >= 7,
-    zeroCallbackStreak >= 20,
-    speedDays >= 1,
-  ].filter(Boolean).length;
-
-  // The quest list now comes from the shared engine (lib/quests) so this
-  // screen and Payroll always show identical per-tech, per-cycle numbers. The
-  // metric vars computed above still feed the Reviews/Referrals tab chips.
+  // Quest progress AND the Reviews/Referrals chip counts both come from the
+  // shared engine (lib/quests) — one source of truth, so this screen,
+  // Payroll, and the chips can never drift. `metrics` is the per-tech,
+  // per-cycle stat bag (completedJobs, fiveStarReviews, convertedReferrals,
+  // repeatClients, …); the per-user job/review attribution (time-entry join,
+  // legacy job-name fallback, review name-tag) all lives in the engine now.
   let questConfig: Record<string, { enabled?: boolean; bonus?: number }> = {};
   try { questConfig = org?.quest_config ? JSON.parse(org.quest_config) : {}; } catch { /* */ }
-  const tiers = computeQuests({
+  const { tiers, metrics } = computeQuests({
     userId: user.id,
     userName: user.name,
     jobs, reviews, referrals, timeEntries,
     questConfig,
     cycleStart,
-  }).tiers;
+  });
 
   // Remove empty tiers
   const activeTiers = tiers.filter((tr) => tr.quests.length > 0);
@@ -513,8 +399,8 @@ export default function Quests() {
 
           {/* Review quest chips */}
           <div style={{ display: "flex", gap: 7, marginBottom: 11 }}>
-            <QuestChip label="Five Star Tech" value={`${fiveStarReviews} / 10`} done={fiveStarReviews >= 10} color="#8cc0ff" />
-            <QuestChip label="Review Favor" value={`${positiveReviews} / 15`} done={positiveReviews >= 15} color="#f5b400" />
+            <QuestChip label="Five Star Tech" value={`${metrics.fiveStarReviews} / 10`} done={metrics.fiveStarReviews >= 10} color="#8cc0ff" />
+            <QuestChip label="Review Favor" value={`${metrics.positiveReviews} / 15`} done={metrics.positiveReviews >= 15} color="#f5b400" />
           </div>
 
           {/* Reviews list */}
@@ -601,8 +487,8 @@ export default function Quests() {
         <div>
           {/* Referral quest chips */}
           <div style={{ display: "flex", gap: 7, marginBottom: 11 }}>
-            <QuestChip label="Network Scout" value={`${convertedReferrals} / 1`} done={convertedReferrals >= 1} color="#3ee08f" />
-            <QuestChip label="Critical Referral" value={`${repeatClients} / 1`} done={repeatClients >= 1} color="#00cc66" />
+            <QuestChip label="Network Scout" value={`${metrics.convertedReferrals} / 1`} done={metrics.convertedReferrals >= 1} color="#3ee08f" />
+            <QuestChip label="Critical Referral" value={`${metrics.repeatClients} / 1`} done={metrics.repeatClients >= 1} color="#00cc66" />
           </div>
 
           {/* Refer CTA (opens the add form) */}
