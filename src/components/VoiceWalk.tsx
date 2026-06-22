@@ -119,19 +119,7 @@ function presetItemsFor(room: string): string[] {
    We find the longest suffix of `prev` that is also a prefix of `next`,
    strip it, and return the remainder.
 */
-function dedupOverlap(prev: string, next: string): string {
-  const p = prev.trim();
-  const n = next.trim();
-  if (!p) return n;
-  if (!n) return "";
-  const maxLen = Math.min(p.length, n.length);
-  for (let len = maxLen; len > 0; len--) {
-    if (p.endsWith(n.slice(0, len))) {
-      return n.slice(len).trim();
-    }
-  }
-  return n;
-}
+// (dedupOverlap removed — it was only used by the live Web Speech recognizer.)
 
 /* ── Component ─────────────────────────────────────────────────────── */
 
@@ -219,10 +207,6 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
 
   // Refs that survive renders
   const fileFallbackRef = useRef<HTMLInputElement>(null);
-  const recogRef = useRef<SpeechRecognitionLike | null>(null);
-  // (Web Speech dedup refs removed — Whisper now owns the canonical
-  // transcript and handles its own correctness. Web Speech only sets
-  // liveInterim for the visual peek.)
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -250,7 +234,6 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   // default. The user lands on each room with everything quiet, taps
   // Start to begin recording, taps Stop to pause.
   const [inspecting, setInspecting] = useState(false);
-  const [liveInterim, setLiveInterim] = useState(""); // interim words, replaced each event
   const [pendingTyped, setPendingTyped] = useState(""); // typed-fallback buffer when speech unsupported
 
   // Per-room state — ONE recording per room, append-only across pause/resume.
@@ -336,104 +319,10 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
      Chrome desktop; for the first ~5–10s on iOS until the first
      session ends naturally).
   ─────────────────────────────────────────────────────────────────── */
-  const finalsProcessedThroughRef = useRef(-1);
-  const lastFinalTextRef = useRef("");
-
-  const killRecognizer = (rec: SpeechRecognitionLike | null) => {
-    if (!rec) return;
-    try { (rec as unknown as { onstart: unknown }).onstart = null; } catch { /* */ }
-    try { rec.onend = null; rec.onresult = null; rec.onerror = null; } catch { /* */ }
-    try { rec.abort(); } catch { /* */ }
-    try { rec.stop(); } catch { /* */ }
-  };
-
-  /** Append a final fragment from Web Speech onto the room's transcript
-   *  so the auto-tick effect can read it during recording. Whisper
-   *  overwrites this wholesale at end-of-room with the canonical text.
-   */
-  const appendLiveTranscript = useCallback((finalText: string) => {
-    const room = currentRoomRef.current;
-    if (!room || !finalText.trim()) return;
-    setRoomRecordings((prev) => {
-      const cur = prev[room] || emptyRecording();
-      const sep = cur.transcript && !cur.transcript.endsWith(" ") ? " " : "";
-      return {
-        ...prev,
-        [room]: { ...cur, transcript: cur.transcript + sep + finalText.trim() },
-      };
-    });
-    setTranscriptTick((t) => t + 1);
-  }, []);
-
-  const startPreviewRecognition = useCallback(() => {
-    const Ctor = getSpeechRecognition();
-    if (!Ctor) return;
-    killRecognizer(recogRef.current);
-    recogRef.current = null;
-    finalsProcessedThroughRef.current = -1;
-    lastFinalTextRef.current = "";
-
-    const r = new Ctor();
-    r.continuous = true;
-    r.interimResults = true;
-    r.lang = "en-US";
-    r.onresult = (e) => {
-      if (recogRef.current !== r) return;
-      // Walk every results entry, dedupe progressive supersets
-      // (iOS quirk — see dedupOverlap), and append only NEW final
-      // text past our watermark.
-      let interim = "";
-      let newFinalText = "";
-      let highestFinalIdx = finalsProcessedThroughRef.current;
-      let lastFinal = lastFinalTextRef.current;
-      for (let i = 0; i < e.results.length; i++) {
-        const result = e.results[i];
-        const text = result[0]?.transcript || "";
-        if (result.isFinal) {
-          if (i > finalsProcessedThroughRef.current) {
-            const trimmed = text.trim();
-            const toAdd = dedupOverlap(lastFinal, trimmed);
-            if (toAdd) newFinalText += (newFinalText ? " " : "") + toAdd;
-            if (
-              trimmed.length > lastFinal.length ||
-              !trimmed.startsWith(lastFinal.slice(0, Math.min(lastFinal.length, trimmed.length)))
-            ) {
-              lastFinal = trimmed;
-            }
-            if (i > highestFinalIdx) highestFinalIdx = i;
-          }
-        } else {
-          interim += text;
-        }
-      }
-      finalsProcessedThroughRef.current = highestFinalIdx;
-      lastFinalTextRef.current = lastFinal;
-      if (newFinalText) appendLiveTranscript(newFinalText);
-      setLiveInterim(interim);
-    };
-    r.onend = () => {
-      // No auto-restart. iOS will end the session after each utterance;
-      // when that happens, the user just stops seeing live ticks. The
-      // recording itself continues via MediaRecorder, and Whisper at
-      // end-of-room fills in everything that was missed.
-      if (recogRef.current === r) recogRef.current = null;
-      setLiveInterim("");
-    };
-    r.onerror = (ev) => {
-      if (ev.error && ev.error !== "no-speech" && ev.error !== "aborted") {
-        console.warn("SpeechRecognition preview error:", ev.error);
-      }
-    };
-    recogRef.current = r;
-    try { r.start(); } catch { /* */ }
-  }, [appendLiveTranscript]);
-
-  const stopPreviewRecognition = useCallback(() => {
-    const prev = recogRef.current;
-    recogRef.current = null;
-    killRecognizer(prev);
-    setLiveInterim("");
-  }, []);
+  // (Live Web Speech recognizer + live-transcript helpers removed — the
+  //  per-pause restart re-armed the mic every few seconds, firing a
+  //  continuous OS beep. The canonical transcript is produced by the
+  //  parent from the MediaRecorder audio via Whisper; see onComplete.)
 
   /* ── MediaRecorder lifecycle (CANONICAL audio) ──────────────────── */
   const pickRecorderMime = (): string => {
@@ -660,23 +549,19 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
     if (inspecting) {
       beginSegment();
       startCameraAndRecorder();
-      if (supported) startPreviewRecognition();
     } else {
-      stopPreviewRecognition();
       stopCameraAndRecorder();
       endSegment();
     }
     return () => {
-      stopPreviewRecognition();
       stopCameraAndRecorder();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspecting, supported]);
+  }, [inspecting]);
 
   // Force-pause when changing rooms; the new room starts cold.
   useEffect(() => {
     setInspecting(false);
-    setLiveInterim("");
     setPendingTyped("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx]);
@@ -685,13 +570,12 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   useEffect(() => {
     if (!currentRoom) return;
     const rec = roomRecordings[currentRoom];
-    // Match the committed transcript AND the live interim text (+ any typed
-    // fallback) so a chip greens the instant its keyword is heard, not only
-    // after Web Speech commits a final — Android Chrome lags/skips finals.
+    // Tick items off the room transcript (the typed-narration fallback, or
+    // whatever the parent writes back) — the live mic preview was removed,
+    // so there are no interim words to match.
     const speechText = (rec?.transcript || "").toLowerCase();
-    const interimText = liveInterim.toLowerCase();
     const fallbackText = pendingTyped.toLowerCase();
-    const text = `${speechText} ${interimText} ${fallbackText}`.trim();
+    const text = `${speechText} ${fallbackText}`.trim();
     if (!text) return;
     const items = itemsFor(currentRoom);
     const found: string[] = [];
@@ -707,22 +591,15 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       for (const f of found) next.add(f);
       return { ...prev, [currentRoom]: next };
     });
-  }, [currentRoom, transcriptTick, liveInterim, pendingTyped, mentioned, roomRecordings]);
+  }, [currentRoom, transcriptTick, pendingTyped, mentioned, roomRecordings]);
 
   /* ── Keep Web Speech alive for the whole room ──────────────────────
      Android Chrome ends a recognition session after each pause (onend
      nulls recogRef). Without this, the live green ticks stop after the
      first sentence. While inspecting, restart recognition whenever it's
      dropped so it keeps listening for the entire take. */
-  useEffect(() => {
-    if (!inspecting || !supported) return;
-    const iv = setInterval(() => {
-      if (!recogRef.current) {
-        try { startPreviewRecognition(); } catch { /* */ }
-      }
-    }, 1200);
-    return () => clearInterval(iv);
-  }, [inspecting, supported, startPreviewRecognition]);
+  // (Web Speech restart loop removed — re-arming the recognizer on every
+  //  pause is what fired the OS mic beep every few seconds.)
 
   const toggleItem = (room: string, item: string) => {
     setMentioned((prev) => {
@@ -835,7 +712,6 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       };
     });
     setMentioned((prev) => ({ ...prev, [room]: new Set<string>() }));
-    setLiveInterim("");
     setInspecting(true);
   }, [stopRecorderAndWait]);
 
@@ -903,7 +779,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
         <button
           className="bo"
           disabled={uploading > 0}
-          onClick={() => { stopPreviewRecognition(); stopCameraAndRecorder(); onCancel(); }}
+          onClick={() => { stopCameraAndRecorder(); onCancel(); }}
           title={uploading > 0 ? "Wait for photo upload to finish…" : "Cancel"}
           style={{ fontSize: 14, padding: "4px 8px", opacity: uploading > 0 ? 0.5 : 1 }}
         >← Cancel</button>
@@ -1145,16 +1021,7 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
               )}
             </div>
 
-            {/* HEARING peek — what speech recognition is catching live, pinned
-                to the bottom of the camera area (just above the control bar). */}
-            {supported && (
-              <div style={{ position: "absolute", left: 10, right: 10, bottom: 10, display: "flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.5)", borderRadius: 10, padding: "5px 9px" }}>
-                <span style={{ fontFamily: "Oswald", letterSpacing: ".06em", fontSize: 11, color: "#9fe3b6", flexShrink: 0 }}>HEARING</span>
-                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "#fff", fontStyle: liveInterim ? "italic" : "normal" }}>
-                  {liveInterim || currentRec?.transcript?.split(/\s+/).slice(-10).join(" ") || "Listening…"}
-                </span>
-              </div>
-            )}
+            {/* (Live "HEARING" peek removed with the speech recognizer.) */}
           </div>
 
           {/* CONTROL BAR — gallery · shutter · stop. A real flex row below the
@@ -1363,37 +1230,8 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
         </div>
       )}
 
-      {/* Live transcript — compact peek strip while inspecting (so it doesn't
-          dominate the screen). Below this is the typed-fallback for browsers
-          without speech support. */}
-      {inspecting && supported && (
-        <div
-          className="cd mb"
-          style={{
-            padding: "6px 10px",
-            background: darkMode ? "#0d0d14" : "#f7f7fa",
-            border: `1px dashed ${border}`,
-            fontSize: 13,
-            color: "#888",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            minHeight: 28,
-          }}
-        >
-          <span style={{ fontFamily: "Oswald", letterSpacing: ".06em", flexShrink: 0 }}>HEARING</span>
-          <span style={{
-            flex: 1,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            color: liveInterim || (currentRec?.transcript) ? "inherit" : "#888",
-            fontStyle: liveInterim ? "italic" : "normal",
-          }}>
-            {liveInterim || currentRec?.transcript?.split(/\s+/).slice(-12).join(" ") || "Listening…"}
-          </span>
-        </div>
-      )}
+      {/* (Live transcript peek removed with the speech recognizer — checklist
+          items tick by tap, and from the typed narration fallback below.) */}
       {!supported && (
         <div className="cd mb" style={{ padding: 10 }}>
           <div className="dim" style={{ fontSize: 13, marginBottom: 4, fontFamily: "Oswald", letterSpacing: ".06em" }}>
