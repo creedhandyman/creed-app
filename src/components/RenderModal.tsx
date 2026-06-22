@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
@@ -60,7 +61,7 @@ export default function RenderModal({
     setRendering(true);
     setResult(null);
     try {
-      const res = await fetch("/api/render", {
+      const res = await apiFetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photoUrl: source, prompt: prompt.trim(), jobId }),

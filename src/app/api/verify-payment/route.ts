@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { type SupabaseClient } from "@supabase/supabase-js";
+import { serviceClient } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -82,22 +83,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Cross-check the session's stored job_id matches what the client claims,
-    // so a valid session can't be used to mark a different job as paid.
+    // The session MUST carry the job_id we created it with, and it must match
+    // the job the caller claims. Requiring PRESENCE matters: without it, any
+    // unrelated paid session (e.g. a subscription checkout) could be replayed
+    // to mark an arbitrary job paid.
     const sessionJobId = session.metadata?.job_id;
-    if (sessionJobId && sessionJobId !== jobId) {
-      return NextResponse.json({ error: "Job mismatch for session" }, { status: 400 });
+    if (!sessionJobId || sessionJobId !== jobId) {
+      return NextResponse.json({ error: "Session does not match this job" }, { status: 400 });
     }
 
     // Use service role so the update bypasses RLS (the customer isn't logged in).
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const supabase = serviceClient();
+
+    // Confirm the job exists and, when the session carries an org_id, that it
+    // matches the job's org — then scope the write by org too.
+    const { data: job, error: jobErr } = await supabase
+      .from("jobs")
+      .select("id, org_id")
+      .eq("id", jobId)
+      .single();
+    if (jobErr || !job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+    const sessionOrgId = session.metadata?.org_id;
+    if (sessionOrgId && sessionOrgId !== job.org_id) {
+      return NextResponse.json({ error: "Session/job org mismatch" }, { status: 400 });
+    }
+
     const { error } = await supabase
       .from("jobs")
       .update({ status: "paid" })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .eq("org_id", job.org_id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }

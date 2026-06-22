@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 /**
  * SmsNotifyButtons — three one-tap SMS templates the contractor fires
  * to a customer's phone for a specific job: "On the way", "Running
@@ -86,7 +87,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
     if (!phone || !draft.trim() || !job) return;
     setSending(true);
     try {
-      const res = await fetch("/api/sms", {
+      const res = await apiFetch("/api/sms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: phone, body: draft.trim(), jobId: job.id }),

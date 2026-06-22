@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
@@ -110,7 +111,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
         return { role: m.role, content };
       });
 
-      const res = await fetch("/api/ai", {
+      const res = await apiFetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

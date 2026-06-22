@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
@@ -279,7 +280,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       const photoUrl = await uploadPhoto(file, jobId);
       setScannedPhotoUrl(photoUrl);
 
-      const res = await fetch("/api/ai/receipt", {
+      const res = await apiFetch("/api/ai/receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageUrl: photoUrl }),
@@ -762,7 +763,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       const tech = profiles.find((p) => p.name === techName);
                       const orgId = user.org_id || org?.id;
                       if (tech && orgId && tech.id !== user.id) {
-                        fetch("/api/notify", {
+                        apiFetch("/api/notify", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ type: "job_assigned", orgId, jobId: dj.id, recipientId: tech.id, techName, actorId: user.id }),
@@ -1267,7 +1268,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 onClick={async () => {
                   setConnectingStripe(true);
                   try {
-                    const res = await fetch("/api/stripe/connect", {
+                    const res = await apiFetch("/api/stripe/connect", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({

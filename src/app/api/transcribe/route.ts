@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/api-auth";
 
 /**
  * Transcribe an audio blob via OpenAI Whisper.
@@ -17,6 +18,9 @@ import { NextRequest, NextResponse } from "next/server";
  * Response: { text: string } on success, { error: string } on failure.
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(

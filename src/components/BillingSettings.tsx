@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
@@ -55,7 +56,7 @@ export default function BillingSettings() {
                   const btn = document.activeElement as HTMLButtonElement;
                   if (btn) btn.textContent = "Connecting...";
                   try {
-                    const res = await fetch("/api/stripe/connect", {
+                    const res = await apiFetch("/api/stripe/connect", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
@@ -224,7 +225,7 @@ export default function BillingSettings() {
                     <button
                       className="bo"
                       onClick={async () => {
-                        const res = await fetch("/api/stripe/portal", {
+                        const res = await apiFetch("/api/stripe/portal", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({

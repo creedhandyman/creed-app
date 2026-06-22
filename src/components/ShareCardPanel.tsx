@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 /**
  * Share-card panel — rendered inside the dashboard's "My business
  * card" tap-to-expand modal. Contains:
@@ -105,7 +106,7 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
     if (phone) {
       setSmsBusy(true);
       try {
-        const res = await fetch("/api/sms", {
+        const res = await apiFetch("/api/sms", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ to: phone, body: message }),

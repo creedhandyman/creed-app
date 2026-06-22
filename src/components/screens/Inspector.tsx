@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
@@ -453,7 +454,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         try {
           const fd = new FormData();
           fd.append("audio", result.audioBlob, `voicewalk-${roomName.replace(/\W+/g, "-")}.webm`);
-          const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+          const res = await apiFetch("/api/transcribe", { method: "POST", body: fd });
           if (res.ok) {
             const data = await res.json();
             const text = (data.text as string) || "";

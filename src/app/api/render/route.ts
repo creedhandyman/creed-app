@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAuth, isSupabaseStorageUrl } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 // Image generation can take 20–50s end to end; give it room.
@@ -29,6 +30,9 @@ export const maxDuration = 60;
  * Response: { url: string } | { error: string }
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -42,6 +46,12 @@ export async function POST(req: NextRequest) {
     if (!photoUrl || !prompt || !jobId) {
       return NextResponse.json(
         { error: "Missing photoUrl, prompt, or jobId" },
+        { status: 400 }
+      );
+    }
+    if (!isSupabaseStorageUrl(photoUrl)) {
+      return NextResponse.json(
+        { error: "photoUrl must be a Supabase Storage URL" },
         { status: 400 }
       );
     }

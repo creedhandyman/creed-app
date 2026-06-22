@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
@@ -436,7 +437,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Mirrors Jobs.tsx scanAndLearn — same shape, plus an amount update on
   // the receipt row since WorkVision uploads default to amount=0.
   const scanReceiptAndLearn = async (receiptId: string, photoUrl: string, jobId: string) => {
-    const res = await fetch("/api/ai/receipt", {
+    const res = await apiFetch("/api/ai/receipt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ imageUrl: photoUrl }),

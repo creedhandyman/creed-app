@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
@@ -70,7 +71,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
       // that uses STRIPE_PRICE_<PLAN> env vars + a 30-day trial.
       await db.patch("organizations", org.id, { plan: selectedPlan, subscription_plan: selectedPlan });
 
-      const res = await fetch("/api/stripe/create-checkout-session", {
+      const res = await apiFetch("/api/stripe/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -155,7 +156,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
               <div style={{ marginTop: 12 }}>
                 <span
                   onClick={async () => {
-                    const res = await fetch("/api/stripe/portal", {
+                    const res = await apiFetch("/api/stripe/portal", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
@@ -297,7 +298,7 @@ function TrialBanner({
               if (loading) return;
               setLoading(true);
               try {
-                const res = await fetch("/api/stripe/create-checkout-session", {
+                const res = await apiFetch("/api/stripe/create-checkout-session", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({

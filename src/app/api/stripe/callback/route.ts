@@ -24,16 +24,19 @@ export async function GET(req: NextRequest) {
     if (!serviceKey) {
       return NextResponse.redirect(new URL("/?stripe=error&reason=no_service_key", origin));
     }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceKey
-    );
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceKey);
 
     const account = await stripe.accounts.retrieve(accountId);
-    // Treat "onboarding finished" as connected for UI purposes — charges_enabled
-    // can lag a few minutes while Stripe verifies. details_submitted means the
-    // user finished the onboarding flow, which is what the UI should react to.
+
+    // Anti-rebind: the account must carry the org_id we stamped at create time,
+    // and it must match the org_id in the callback URL. Without this check,
+    // anyone could GET ?account_id=<theirs>&org_id=<victim> to repoint payouts.
+    if (account.metadata?.org_id !== orgId) {
+      return NextResponse.redirect(new URL("/?stripe=error&reason=org_mismatch", origin));
+    }
+
+    // "Onboarding finished" → connected for UI purposes. charges_enabled can lag
+    // a few minutes while Stripe verifies; details_submitted means they finished.
     const detailsDone = !!account.details_submitted;
     const chargesReady = !!account.charges_enabled;
     const connected = detailsDone || chargesReady;
@@ -48,8 +51,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(`/?stripe=error&reason=db_update_failed`, origin));
     }
 
-    // Success when charges are live; pending when onboarding done but verification
-    // still in progress; error/restart if they bailed early.
     const status = chargesReady ? "success" : detailsDone ? "pending" : "error";
     return NextResponse.redirect(new URL(`/?stripe=${status}`, origin));
   } catch (e) {

@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 /**
  * /onboarding — five-step wizard that finishes everything /signup
  * couldn't fit into a single form. Steps are held in component state
@@ -185,7 +186,7 @@ export default function OnboardingPage() {
         // plan first so it survives a Stripe-side cancel (the cancel_url
         // routes back here with ?step=plan).
         await db.patch("organizations", org.id, { plan });
-        const res = await fetch("/api/stripe/create-checkout-session", {
+        const res = await apiFetch("/api/stripe/create-checkout-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

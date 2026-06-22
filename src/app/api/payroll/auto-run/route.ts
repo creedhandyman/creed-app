@@ -87,8 +87,8 @@ function isAuthorized(req: NextRequest): boolean {
   // Vercel always sets x-vercel-cron=1 on legitimate cron invocations.
   if (req.headers.get("x-vercel-cron") === "1") return true;
   const adminToken = req.headers.get("x-admin-token");
-  const adminPw = process.env.ADMIN_PASSWORD || "creed2026";
-  if (adminToken && adminToken === adminPw) return true;
+  const adminPw = process.env.ADMIN_PASSWORD;
+  if (adminPw && adminToken && adminToken === adminPw) return true;
   return false;
 }
 

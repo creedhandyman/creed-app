@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { generatePortalToken } from "@/lib/portal-session";
+import { sendSms } from "@/lib/sms";
 
 export const dynamic = "force-dynamic";
 
@@ -89,11 +90,7 @@ export async function POST(req: NextRequest) {
       // to resend manually. We don't surface failures to the requester
       // because we shouldn't leak which phone numbers exist.
       try {
-        await fetch(`${origin}/api/sms`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ to: c.phone || phoneInput, body: message }),
-        });
+        await sendSms(c.phone || phoneInput, message);
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("portal/request-link SMS error:", e);

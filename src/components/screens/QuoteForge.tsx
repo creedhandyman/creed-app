@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 import { useState, useRef, useEffect, useMemo } from "react";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
@@ -2137,7 +2138,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   `\n\nCURRENT PRICING META: ${JSON.stringify(currentMetaContext)}\n\n` +
                   `USER REQUEST: ${quickDesc}\n\n` +
                   `Return the structured add/update/remove/setLaborRate/setDiscount JSON described in the AI ASSIST EDIT MODE section.`;
-                const res = await fetch("/api/ai", {
+                const res = await apiFetch("/api/ai", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({

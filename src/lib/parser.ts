@@ -1,5 +1,6 @@
 import type { Room, RoomItem, Material, InspectionRoom } from "./types";
 import { db, supabase } from "./supabase";
+import { apiFetch } from "./api";
 import { MATERIALS_DB } from "./materials-db";
 
 /* ====== PDF LOADING ====== */
@@ -1356,7 +1357,7 @@ async function aiParsePdfSingle(
       text: "Parse this inspection report following the quoting engine rules exactly. Process ONLY the detailed room breakdowns, skip the summary table. Return ONLY the JSON.",
     });
 
-    const res = await fetch("/api/ai", {
+    const res = await apiFetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1444,7 +1445,7 @@ async function aiParsePdfSingle(
 /** Check if AI parsing is available (API key configured) */
 export async function checkAiAvailable(): Promise<boolean> {
   try {
-    const res = await fetch("/api/ai", {
+    const res = await apiFetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2179,7 +2180,7 @@ Output ONLY valid JSON of this shape:
   ]
 }`;
 
-  const res = await fetch("/api/ai", {
+  const res = await apiFetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

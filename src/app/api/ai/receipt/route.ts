@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, isSupabaseStorageUrl } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -8,6 +9,9 @@ export const maxDuration = 30;
 // (Supabase storage); OpenAI fetches the URL directly so we don't have to
 // shuttle the bytes through this route.
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
@@ -17,6 +21,9 @@ export async function POST(req: NextRequest) {
     const { imageUrl } = await req.json();
     if (!imageUrl) {
       return NextResponse.json({ error: "Missing imageUrl" }, { status: 400 });
+    }
+    if (!isSupabaseStorageUrl(imageUrl)) {
+      return NextResponse.json({ error: "imageUrl must be a Supabase Storage URL" }, { status: 400 });
     }
 
     const prompt = `Extract this receipt into JSON. Return ONLY valid JSON matching this exact shape:

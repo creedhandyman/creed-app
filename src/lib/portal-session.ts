@@ -10,7 +10,13 @@ import crypto from "crypto";
 // Single-use magic-link redemption is enforced via the portal_tokens table
 // (used_at), but once redeemed the cookie itself is the source of truth.
 
-const SECRET = process.env.PORTAL_SESSION_SECRET || "creed-portal-fallback-secret-change-me";
+function secret(): string {
+  const s = process.env.PORTAL_SESSION_SECRET;
+  if (!s) {
+    throw new Error("PORTAL_SESSION_SECRET is not set — refusing to sign/verify portal sessions with a default secret.");
+  }
+  return s;
+}
 const COOKIE_NAME = "creed_portal";
 // 30-day session — long enough that customers don't need a fresh magic link
 // every visit, short enough that a stolen cookie eventually expires.
@@ -32,7 +38,7 @@ function fromB64url(s: string): Buffer {
 
 export function signSession(session: PortalSession): string {
   const payload = b64url(Buffer.from(JSON.stringify(session)));
-  const sig = b64url(crypto.createHmac("sha256", SECRET).update(payload).digest());
+  const sig = b64url(crypto.createHmac("sha256", secret()).update(payload).digest());
   return `${payload}.${sig}`;
 }
 
@@ -41,7 +47,7 @@ export function verifySession(cookie: string | undefined | null): PortalSession 
   const parts = cookie.split(".");
   if (parts.length !== 2) return null;
   const [payload, sig] = parts;
-  const expected = b64url(crypto.createHmac("sha256", SECRET).update(payload).digest());
+  const expected = b64url(crypto.createHmac("sha256", secret()).update(payload).digest());
   // Length-checked timing-safe compare so a wrong-length sig doesn't throw.
   if (sig.length !== expected.length) return null;
   if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;

@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/api";
 /**
  * CustomerDetail — full edit + address management + related work.
  *
@@ -104,7 +105,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
     const orgName = org?.name || "us";
     const message = `Your customer portal link from ${orgName}: ${link} (expires in 14 days)`;
     try {
-      const res = await fetch("/api/sms", {
+      const res = await apiFetch("/api/sms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: customer.phone, body: message }),

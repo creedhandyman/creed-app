@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
+
+// Length-independent constant-time compare (hash both, then timing-safe eq).
+function safeEqual(a: string, b: string): boolean {
+  const ha = crypto.createHash("sha256").update(a).digest();
+  const hb = crypto.createHash("sha256").update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
 
 export async function POST(req: NextRequest) {
   try {
     const { password } = await req.json();
 
-    // Simple admin password — set ADMIN_PASSWORD in Vercel env vars
-    const adminPw = process.env.ADMIN_PASSWORD || "creed2026";
-    if (password !== adminPw) {
+    // Admin password MUST be set in Vercel env — no hardcoded default (fail closed).
+    const adminPw = process.env.ADMIN_PASSWORD;
+    if (!adminPw || typeof password !== "string" || !safeEqual(password, adminPw)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

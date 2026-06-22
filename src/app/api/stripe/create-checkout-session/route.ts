@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthedProfile } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
  */
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 type Plan = "solo" | "crew" | "pro";
@@ -31,15 +32,19 @@ const PRICE_ENV: Record<Plan, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { orgId, plan, returnUrl } = (await req.json()) as {
-      orgId?: string;
+    // Owner/manager session required; the org is taken from the session, not the
+    // body, so a caller can only start checkout for their OWN org.
+    const prof = await getAuthedProfile(req);
+    if (!prof || !prof.orgId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const orgId = prof.orgId;
+
+    const { plan, returnUrl } = (await req.json()) as {
       plan?: Plan;
       returnUrl?: string;
     };
 
-    if (!orgId) {
-      return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
-    }
     if (!plan || !(plan in PRICE_ENV)) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }

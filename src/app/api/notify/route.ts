@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { dispatchNotifications } from "@/lib/notify-server";
+import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +36,15 @@ const trim = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
 export async function POST(req: NextRequest) {
   try {
+    // Logged-in staff only; the org comes from the session, not the body, so a
+    // caller can only ever notify within their own org.
+    const prof = await getAuthedProfile(req);
+    if (!prof || !prof.orgId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const body = (await req.json()) as Body;
     const type = trim(body.type);
-    const orgId = trim(body.orgId);
+    const orgId = prof.orgId;
     const jobId = trim(body.jobId);
     const recipientId = trim(body.recipientId);
     const techName = trim(body.techName);
@@ -51,10 +57,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing orgId, jobId, or recipient" }, { status: 400 });
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
+    const supabase = serviceClient();
 
     // Resolve the recipient profile (scoped to the org), by id when we have
     // it, else by exact name match against requested_tech.

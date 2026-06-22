@@ -1,39 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { requireOwner, serviceClient } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/stripe/portal
  *
- * Mints a Stripe Customer Portal session URL for the logged-in org
- * owner. Used by the Settings → Billing "Manage subscription" button
- * to let the owner swap payment methods, see invoices, change plan,
- * and cancel/resume — without us implementing any of that UI.
+ * Mints a Stripe Customer Portal session for the caller's OWN org (owner or
+ * manager only). The org is resolved from the authenticated session — it is no
+ * longer taken from the request body, which previously let anyone open another
+ * org's billing portal (view invoices, cancel the subscription) by passing an
+ * arbitrary orgId.
  *
- * Body: { orgId: string, returnUrl?: string }
- * Returns: { url: string }
+ * Body: { returnUrl?: string }   Returns: { url: string }
  */
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 export async function POST(req: NextRequest) {
+  const prof = await requireOwner(req);
+  if (prof instanceof NextResponse) return prof;
+
   try {
-    const { orgId, returnUrl } = (await req.json()) as {
-      orgId?: string;
-      returnUrl?: string;
-    };
+    const { returnUrl } = (await req.json().catch(() => ({}))) as { returnUrl?: string };
 
-    if (!orgId) {
-      return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
-    }
-
+    const supabase = serviceClient();
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
       .select("stripe_customer_id")
-      .eq("id", orgId)
+      .eq("id", prof.orgId!)
       .single();
 
     if (orgErr || !org) {
@@ -48,7 +40,6 @@ export async function POST(req: NextRequest) {
 
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
     const origin = returnUrl || req.headers.get("origin") || "https://www.creedhm.com";
 
     const portal = await stripe.billingPortal.sessions.create({
