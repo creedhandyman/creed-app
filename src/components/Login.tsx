@@ -2,17 +2,29 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
-import { t } from "@/lib/i18n";
+import { Icon } from "@/components/Icon";
 
+/**
+ * Sign-in / Create-account form, re-skinned to the marketing split layout.
+ * Visual only — the auth flow is unchanged: store login()/signup(), the
+ * "CHECK_EMAIL" verify state, show/hide password, and reset-password all work
+ * exactly as before. Rendered at /signin inside <MarketingShell> (which
+ * supplies the `.mkt` scope, nav, and footer). Reads ?mode=signup to open on
+ * the Create-account tab (the marketing CTAs link there).
+ */
 export default function Login() {
   const login = useStore((s) => s.login);
   const signup = useStore((s) => s.signup);
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup">(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mode") === "signup") return "signup";
+    return "login";
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim()) { setErr("Enter your email"); return; }
@@ -21,199 +33,88 @@ export default function Login() {
     if (e) setErr(e);
   };
 
-  const [emailSent, setEmailSent] = useState(false);
-
   const handleSignup = async () => {
     if (!name.trim()) { setErr("Enter your name"); return; }
     if (!email.trim()) { setErr("Enter your email"); return; }
     if (password.length < 6) { setErr("Password must be at least 6 characters"); return; }
     const e = await signup(email.trim(), password, name.trim());
-    if (e === "CHECK_EMAIL") {
-      setEmailSent(true);
-      setErr("");
-      return;
-    }
+    if (e === "CHECK_EMAIL") { setEmailSent(true); setErr(""); return; }
     if (e) setErr(e);
   };
 
   const submit = mode === "login" ? handleLogin : handleSignup;
+  const switchMode = (m: "login" | "signup") => { setMode(m); setErr(""); setEmailSent(false); };
+
+  const forgot = async () => {
+    if (!email.trim()) { setErr("Enter your email first"); return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    if (error) { setErr(error.message); return; }
+    setErr("");
+    setEmailSent(true);
+  };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(135deg, #0a0a0f, #0d1530)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <div style={{ width: 340 }}>
-        {/* Title + Logo */}
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <h1
-            style={{
-              fontFamily: "Oswald, sans-serif",
-              fontSize: 36,
-              fontWeight: 700,
-              letterSpacing: "0.18em",
-              color: "#2E75B6",
-              margin: "0 0 12px",
-              textTransform: "uppercase",
-            }}
-          >
-            C.H.M
-          </h1>
-          <img
-            src="/CREED_LOGO.png"
-            alt=""
-            style={{ height: 156, display: "block", margin: "0 auto 8px" }}
-            onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
-          />
-          <p
-            style={{
-              fontFamily: "Oswald, sans-serif",
-              fontSize: 13,
-              letterSpacing: "0.1em",
-              color: "#9aa6b5",
-              margin: 0,
-              textTransform: "uppercase",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Walk the Property
-            <span style={{ color: "#2E75B6", margin: "0 5px" }}>·</span>
-            We Write the Quote
-          </p>
-          <p
-            style={{
-              fontFamily: "Oswald, sans-serif",
-              fontSize: 11,
-              letterSpacing: "0.12em",
-              color: "#6c7480",
-              margin: "3px 0 0",
-              textTransform: "uppercase",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Field-Service Manager
-            <span style={{ color: "#2E75B6", margin: "0 5px" }}>·</span>
-            Self-Improving A.I.
-          </p>
+    <div className="signwrap">
+      {/* Brand panel (hidden on mobile) */}
+      <div className="signbrand">
+        <span className="blogo">C</span>
+        <h2>Welcome back to<br /><span className="g">Creed Handy Manager</span></h2>
+        <p>The whole business — quotes, crew, and payments — waiting right where you left it.</p>
+        <div className="sigfeat">
+          <div><Icon name="sparkle" size={18} color="#3ee08f" /> Quote a job in minutes with AI</div>
+          <div><Icon name="schedule" size={18} color="#3ee08f" /> Dispatch the crew &amp; track time</div>
+          <div><Icon name="money" size={18} color="#3ee08f" /> Get paid through Stripe</div>
         </div>
+      </div>
 
-        {/* Card */}
-        <div
-          className="cd"
-          style={{
-            padding: 24,
-            background: "#12121a",
-            border: "1px solid #1e1e2e",
-          }}
-        >
-          <h3
-            style={{
-              textAlign: "center",
-              marginBottom: 14,
-              color: "#e2e2e8",
-              fontSize: 18,
-            }}
-          >
-            {mode === "login" ? t("login.signIn") : t("login.signUp")}
-          </h3>
+      {/* Form card */}
+      <div className="signform">
+        <div className="formcard">
+          <div className="seg">
+            <b className={mode === "login" ? "on" : ""} onClick={() => switchMode("login")}>Sign in</b>
+            <b className={mode === "signup" ? "on" : ""} onClick={() => switchMode("signup")}>Create account</b>
+          </div>
+          <h3>{mode === "login" ? "Sign in" : "Create account"}</h3>
+          <div className="fsub">{mode === "login" ? "Welcome back — let's get to work." : "Start your free month — no card needed."}</div>
 
           {mode === "signup" && (
-            <div style={{ marginBottom: 8 }}>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-                style={{ background: "#1a1a28", color: "#e2e2e8", border: "1px solid #1e1e2e" }}
-              />
+            <div className="field">
+              <label>Your name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jordan Creed" autoComplete="name" />
             </div>
           )}
-
-          <div style={{ marginBottom: 8 }}>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
-              style={{ background: "#1a1a28", color: "#e2e2e8", border: "1px solid #1e1e2e" }}
-            />
+          <div className="field">
+            <label>Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@business.com" autoComplete="email" />
           </div>
-
-          <div style={{ marginBottom: 12, position: "relative" }}>
+          <div className="field">
+            <label>Password</label>
             <input
               type={showPw ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
               onKeyDown={(e) => e.key === "Enter" && submit()}
-              style={{ background: "#1a1a28", color: "#e2e2e8", border: "1px solid #1e1e2e", paddingRight: 40 }}
+              placeholder="••••••••"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
-            <span
-              onClick={() => setShowPw(!showPw)}
-              style={{
-                position: "absolute",
-                right: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                cursor: "pointer",
-                fontSize: 18,
-                userSelect: "none",
-              }}
-            >
-              {showPw ? "🙈" : "👁"}
-            </span>
+            <button type="button" className="eye" onClick={() => setShowPw(!showPw)} aria-label={showPw ? "Hide password" : "Show password"}>{showPw ? "🙈" : "👁"}</button>
+          </div>
+          <div className="frow-sm">
+            <span>{mode === "signup" ? "Min 6 characters" : ""}</span>
+            {mode === "login" && <a onClick={forgot}>Forgot password?</a>}
           </div>
 
-          {err && (
-            <div style={{ color: "#C00000", fontSize: 14, marginBottom: 8, textAlign: "center" }}>
-              {err}
-            </div>
-          )}
+          {err && <div className="signerr">{err}</div>}
+          {emailSent && <div className="signok">✉ Check your email to verify your account, then come back here and sign in.</div>}
 
-          {emailSent && (
-            <div style={{ color: "#00cc66", fontSize: 14, marginBottom: 8, textAlign: "center", padding: 12, background: "#00cc6611", borderRadius: 6 }}>
-              ✉ Check your email to verify your account. After verifying, come back here and sign in with your email and password.
-            </div>
-          )}
-
-          <button className="bb" onClick={submit} style={{ width: "100%", padding: 11, fontSize: 17 }}>
-            {mode === "login" ? t("login.signIn") : t("login.signUp")}
+          <button className="btn btn-glow btn-full btn-lg" onClick={submit}>
+            <Icon name={mode === "login" ? "check" : "rocket"} size={18} /> {mode === "login" ? "Sign in" : "Create account"}
           </button>
 
-          <div style={{ textAlign: "center", marginTop: 12, fontSize: 14, color: "#888" }}>
-            {mode === "login" ? t("login.noAccount") + " " : t("login.haveAccount") + " "}
-            <span
-              onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErr(""); setEmailSent(false); }}
-              style={{ color: "#2E75B6", cursor: "pointer", textDecoration: "underline" }}
-            >
-              {mode === "login" ? t("login.signUp") : t("login.signIn")}
-            </span>
+          <div className="altline">
+            {mode === "login" ? "New to Creed? " : "Already have an account? "}
+            <a onClick={() => switchMode(mode === "login" ? "signup" : "login")}>{mode === "login" ? "Create an account" : "Sign in"}</a>
           </div>
-          {mode === "login" && (
-            <div style={{ textAlign: "center", marginTop: 6, fontSize: 13 }}>
-              <span
-                onClick={async () => {
-                  if (!email.trim()) { setErr("Enter your email first"); return; }
-                  const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
-                  if (error) { setErr(error.message); return; }
-                  setErr("");
-                  setEmailSent(true);
-                }}
-                style={{ color: "#888", cursor: "pointer", textDecoration: "underline" }}
-              >
-                Forgot password?
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ textAlign: "center", marginTop: 14, color: "#888", fontSize: 12 }}>
-          Powered by Creedhm
         </div>
       </div>
     </div>

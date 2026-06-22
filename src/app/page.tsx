@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
-import Login from "@/components/Login";
+import Landing from "@/components/marketing/Landing";
 import Onboarding from "@/components/Onboarding";
 import AppShell from "@/components/AppShell";
 import BillingGate from "@/components/BillingGate";
@@ -80,7 +80,9 @@ export default function Home() {
     );
   }
 
-  if (!user) return <Login />;
+  // Logged-out visitors get the marketing landing; signed-in users never
+  // see it (they fall through to onboarding / the app below).
+  if (!user) return <Landing />;
 
   // User exists but no org — needs onboarding
   if (!user.org_id) return <Onboarding />;
