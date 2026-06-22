@@ -280,8 +280,7 @@ export default function Quests() {
                   const isPaid = isDone && paidKeys.has(q.key);
                   const pct = Math.min(100, (q.progress / q.goal) * 100);
                   return (
-                    <div key={q.name} style={{ position: "relative", overflow: "hidden", background: surf, border: `1px solid ${isDone ? "rgba(245,180,0,.5)" : surfBorder}`, borderRadius: 15, padding: "12px 13px", marginBottom: 9, boxShadow: isDone ? "0 0 24px -11px rgba(245,180,0,.7)" : "none" }}>
-                      <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: isDone ? "#f5b400" : q.tierColor }} />
+                    <div key={q.name} className="statusstrip" style={{ ["--c" as any]: isDone ? "#f5b400" : q.tierColor, background: surf, border: `1px solid ${isDone ? "rgba(245,180,0,.5)" : surfBorder}`, borderRadius: 15, padding: "12px 13px", marginBottom: 9, boxShadow: isDone ? "0 0 24px -11px rgba(245,180,0,.7)" : "none" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 7, flexWrap: "wrap", minWidth: 0 }}>
                           <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{q.name}</span>

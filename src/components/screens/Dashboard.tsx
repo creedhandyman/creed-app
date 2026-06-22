@@ -204,15 +204,15 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
             {upNext}
             <div>
               <div className="sl" style={{ margin: "0 2px 7px" }}>Needs attention</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                 {[
                   { n: toSend, l: "To send", c: "#ff5b5b" },
                   { n: toInvoice, l: "To invoice", c: "#2e8bff" },
                   { n: unpaid, l: "Unpaid", c: "#7b54f0" },
                 ].map((a) => (
-                  <div key={a.l} className="cd statusstrip" onClick={() => setPage("jobs")} style={{ ["--c" as any]: a.c, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", cursor: "pointer" }}>
-                    <div className="dim" style={{ fontSize: 13.5 }}>{a.l}</div>
-                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, lineHeight: 1, color: a.c }}>{a.n}</div>
+                  <div key={a.l} className="cd statusstrip top" onClick={() => setPage("jobs")} style={{ ["--c" as any]: a.c, padding: "14px 10px 12px", cursor: "pointer", textAlign: "center" }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, lineHeight: 1, color: a.c }}>{a.n}</div>
+                    <div className="dim" style={{ fontSize: 12, marginTop: 5 }}>{a.l}</div>
                   </div>
                 ))}
               </div>

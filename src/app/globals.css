@@ -422,18 +422,30 @@ button:focus-visible {
    pass style={{ ["--c"]: color }}). Defaults to primary.
    Schedule's absolute <span> bars instead add the box-shadow
    inline (Form 2) since they're already positioned. */
-.statusstrip { position: relative; overflow: hidden; }
+/* isolation + z-index:-1 keep the bar/gradient BEHIND the card content (above
+   the card's own bg, below text) so the address/title never sits under the
+   glow. Add `.top` for a top-down glow (bar across the top) instead of left. */
+.statusstrip { position: relative; overflow: hidden; isolation: isolate; }
 .statusstrip::before {
-  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; z-index: -1;
   background: var(--c, var(--color-primary));
   box-shadow: 0 0 10px 0 var(--c), 0 0 20px -2px var(--c);
 }
 .statusstrip::after {
-  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 60px; pointer-events: none;
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 60px; z-index: -1; pointer-events: none;
   background: linear-gradient(90deg, color-mix(in srgb, var(--c) 22%, transparent), transparent);
 }
 .light .statusstrip::after {
   background: linear-gradient(90deg, color-mix(in srgb, var(--c) 12%, transparent), transparent);
+}
+/* Top-down variant: bar across the top edge, glow falls downward. */
+.statusstrip.top::before { left: 0; right: 0; top: 0; bottom: auto; width: auto; height: 4px; }
+.statusstrip.top::after {
+  left: 0; right: 0; top: 0; bottom: auto; width: auto; height: 60px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 22%, transparent), transparent);
+}
+.light .statusstrip.top::after {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 12%, transparent), transparent);
 }
 
 /* ─── LAYOUT UTILS ─────────────────────────────────── */
