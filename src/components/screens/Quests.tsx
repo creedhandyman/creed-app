@@ -250,7 +250,7 @@ export default function Quests() {
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "9px 0 2px" }}>
               <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 34, color: "#fff", lineHeight: 1 }}>${bonusEarned}</div>
-              <div style={{ fontSize: 13.5, color: "#c9a6ff" }}>of ${maxPayout.toLocaleString()} max</div>
+              <div style={{ fontSize: 13.5, color: "#c9a6ff" }}>{t("quest.ofMax").replace("{max}", maxPayout.toLocaleString())}</div>
             </div>
             <div style={{ display: "flex", gap: 3, marginTop: 11 }}>
               {allQuests.map((q, i) => (
@@ -258,7 +258,7 @@ export default function Quests() {
               ))}
             </div>
             <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "#c9a6ff", marginTop: 7, letterSpacing: ".06em" }}>
-              {completedCount} / {allQuests.length} QUESTS COMPLETE
+              {completedCount} / {allQuests.length} {t("quest.questsCompleteLabel")}
             </div>
           </div>
 
@@ -299,14 +299,14 @@ export default function Quests() {
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--color-dim)", marginTop: 5 }}>
                         {isPaid ? (
                           <span style={{ color: "#c9a6ff", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            <Icon name="checkCircle" size={12} color="#c9a6ff" /> Paid ✓
+                            <Icon name="checkCircle" size={12} color="#c9a6ff" /> {t("quest.paid")} ✓
                           </span>
                         ) : isDone ? (
                           <span style={{ color: "#3ee08f", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            <Icon name="checkCircle" size={12} color="#3ee08f" /> Done · pending
+                            <Icon name="checkCircle" size={12} color="#3ee08f" /> {t("quest.donePending")}
                           </span>
                         ) : (
-                          <span>{q.progress} of {q.goal} {q.unit}</span>
+                          <span>{q.progress} {t("quest.of")} {q.goal} {q.unit}</span>
                         )}
                         <span>{isDone ? `${q.goal}/${q.goal}` : `${Math.round(pct)}%`}</span>
                       </div>
@@ -328,7 +328,7 @@ export default function Quests() {
       {tab === "team" && (
         <div>
           {teamBoard.length === 0 ? (
-            <div className="dim" style={{ textAlign: "center", fontSize: 14, padding: 20 }}>No team members yet.</div>
+            <div className="dim" style={{ textAlign: "center", fontSize: 14, padding: 20 }}>{t("quest.noTeamYet")}</div>
           ) : (
             <>
               {/* Podium (top 3) */}
@@ -355,7 +355,7 @@ export default function Quests() {
                       </div>
                       <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{m.name.split(/\s+/)[0]}</div>
                       <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 15, color: "#f5b400" }}>${m.earned.toLocaleString()}</div>
-                      <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{first ? "Leader" : place === 2 ? "2nd" : "3rd"}</div>
+                      <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{first ? t("quest.leader") : place === 2 ? t("quest.secondPlace") : t("quest.thirdPlace")}</div>
                     </div>
                   );
                 })}
@@ -369,7 +369,7 @@ export default function Quests() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14.5, fontWeight: 500 }}>{m.name}</div>
                     <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>
-                      {m.quests} quest{m.quests === 1 ? "" : "s"}{m.fiveStars ? ` · 5★ ×${m.fiveStars}` : ""}
+                      {m.quests} {m.quests === 1 ? t("quest.questSingular") : t("quest.questPlural")}{m.fiveStars ? ` · 5★ ×${m.fiveStars}` : ""}
                     </div>
                   </div>
                   <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 15, color: "#f5b400" }}>${m.earned.toLocaleString()}</span>
@@ -377,7 +377,7 @@ export default function Quests() {
               ))}
 
               <div style={{ textAlign: "center", fontSize: 12, color: "var(--color-dim)", marginTop: 4 }}>
-                Team cycle payout so far · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 15 }}>${teamTotal.toLocaleString()}</b>
+                {t("quest.teamCyclePayout")} · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 15 }}>${teamTotal.toLocaleString()}</b>
               </div>
             </>
           )}
@@ -393,13 +393,13 @@ export default function Quests() {
             <div style={{ color: "#f5b400", fontSize: 17, letterSpacing: 2, margin: "4px 0", textShadow: "0 0 14px rgba(245,180,0,.8)" }}>
               {"★".repeat(Math.round(reviewAvg))}{"☆".repeat(Math.max(0, 5 - Math.round(reviewAvg)))}
             </div>
-            <div style={{ fontSize: 12.5, color: "#e9c879" }}>{reviews.length} reviews · {fiveStarCycleAll} five-star this cycle</div>
+            <div style={{ fontSize: 12.5, color: "#e9c879" }}>{reviews.length} {t("quest.reviewsLower")} · {fiveStarCycleAll} {t("quest.fiveStarThisCycle")}</div>
           </div>
 
           {/* Review quest chips */}
           <div style={{ display: "flex", gap: 7, marginBottom: 11 }}>
-            <QuestChip label="Five Star Tech" value={`${metrics.fiveStarReviews} / 10`} done={metrics.fiveStarReviews >= 10} color="#8cc0ff" />
-            <QuestChip label="Review Favor" value={`${metrics.positiveReviews} / 15`} done={metrics.positiveReviews >= 15} color="#f5b400" />
+            <QuestChip label={t("quest.fiveStarTech")} value={`${metrics.fiveStarReviews} / 10`} done={metrics.fiveStarReviews >= 10} color="#8cc0ff" />
+            <QuestChip label={t("quest.reviewFavor")} value={`${metrics.positiveReviews} / 15`} done={metrics.positiveReviews >= 15} color="#f5b400" />
           </div>
 
           {/* Reviews list */}
@@ -417,7 +417,7 @@ export default function Quests() {
                   )}
                   <button
                     onClick={async () => {
-                      if (!await useStore.getState().showConfirm("Delete Review", `Delete review from ${r.client_name}?`)) return;
+                      if (!await useStore.getState().showConfirm(t("quest.deleteReview"), `${t("quest.deleteReviewFrom")} ${r.client_name}?`)) return;
                       await db.del("reviews", r.id);
                       loadAll();
                     }}
@@ -441,7 +441,7 @@ export default function Quests() {
           {/* Collect via QR (function preserved) */}
           <div className="cd mb" style={{ textAlign: "center", padding: 16, marginTop: 4 }}>
             <h4 style={{ fontSize: 15, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Icon name="qr" size={15} /> Client review QR
+              <Icon name="qr" size={15} /> {t("quest.clientReviewQr")}
             </h4>
             <div style={{ background: "#fff", display: "inline-block", padding: 12, borderRadius: 8, marginBottom: 8 }}>
               <QRCodeSVG
@@ -450,13 +450,13 @@ export default function Quests() {
                 level="M"
               />
             </div>
-            <p className="dim" style={{ fontSize: 13 }}>Scan to leave a review — share with clients after a job</p>
+            <p className="dim" style={{ fontSize: 13 }}>{t("quest.scanToReview")}</p>
             <button
               className="bo"
               onClick={() => {
                 const url = `${window.location.origin}/review${user.org_id ? "?org=" + user.org_id : ""}`;
                 navigator.clipboard.writeText(url);
-                useStore.getState().showToast("Review link copied!", "success");
+                useStore.getState().showToast(t("quest.reviewLinkCopied"), "success");
               }}
               style={{ fontSize: 14, padding: "4px 12px", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
@@ -468,15 +468,15 @@ export default function Quests() {
           <div className="cd mb">
             <h4 style={{ fontSize: 15, marginBottom: 8 }}>{t("quest.addReview")}</h4>
             <div className="row mb">
-              <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder="Client" style={{ flex: 1 }} />
+              <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={t("quest.client")} style={{ flex: 1 }} />
               <select value={rr} onChange={(e) => setRr(Number(e.target.value))} style={{ width: 60 }}>
                 {[5, 4, 3, 2, 1].map((x) => (
                   <option key={x} value={x}>{x}★</option>
                 ))}
               </select>
             </div>
-            <textarea value={rt} onChange={(e) => setRt(e.target.value)} placeholder="Review..." style={{ height: 50, marginBottom: 6 }} />
-            <button className="bb" onClick={addReview} style={{ fontSize: 13 }}>Add</button>
+            <textarea value={rt} onChange={(e) => setRt(e.target.value)} placeholder={t("quest.reviewPlaceholder")} style={{ height: 50, marginBottom: 6 }} />
+            <button className="bb" onClick={addReview} style={{ fontSize: 13 }}>{t("common.add")}</button>
           </div>
         </div>
       )}

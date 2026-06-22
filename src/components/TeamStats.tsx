@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import type { Profile } from "@/lib/types";
+import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 
 /**
@@ -134,7 +135,7 @@ export default function TeamStats() {
     return (
       <label
         onClick={(e) => e.stopPropagation()}
-        title={editable ? "Change photo" : ""}
+        title={editable ? t("team.changePhoto") : ""}
         style={{
           position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
           width: size, height: size, borderRadius: radius, flexShrink: 0,
@@ -148,7 +149,7 @@ export default function TeamStats() {
         {!u.photo_url && (u.name?.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?")}
         {onClock && (
           <span
-            title="On the clock"
+            title={t("team.onTheClock")}
             style={{ position: "absolute", top: -3, right: -3, width: 15, height: 15, borderRadius: "50%", background: "var(--color-success)", border: "2px solid #0f1320", boxShadow: "0 0 7px var(--color-success)", animation: "dotLive 1.8s ease-in-out infinite" }}
           />
         )}
@@ -168,12 +169,12 @@ export default function TeamStats() {
               const ext = file.name.split(".").pop() || "jpg";
               const path = `avatars/${u.id}_${Date.now()}.${ext}`;
               const { error } = await supabase.storage.from("receipts").upload(path, file);
-              if (error) { useStore.getState().showToast("Photo upload failed: " + error.message, "error"); return; }
+              if (error) { useStore.getState().showToast(t("team.photoUploadFailed") + error.message, "error"); return; }
               const { data } = supabase.storage.from("receipts").getPublicUrl(path);
               await db.patch("profiles", u.id, { photo_url: data.publicUrl });
               await loadAll();
               if (u.id === user.id) setUser({ ...user, photo_url: data.publicUrl });
-              useStore.getState().showToast("Photo updated", "success");
+              useStore.getState().showToast(t("team.photoUpdated"), "success");
               e.target.value = "";
             }}
           />
@@ -195,7 +196,7 @@ export default function TeamStats() {
         style={{ width: "auto", fontSize: 14, padding: "3px 6px" }}
         onChange={async (e) => {
           if (u.id === user.id && (e.target.value === "tech" || e.target.value === "apprentice")) {
-            if (!(await useStore.getState().showConfirm("Warning", "Demoting yourself will lock you out of admin settings. Are you sure?"))) {
+            if (!(await useStore.getState().showConfirm(t("team.warning"), t("team.demoteWarning")))) {
               e.target.value = u.role;
               return;
             }
@@ -205,10 +206,10 @@ export default function TeamStats() {
           loadAll();
         }}
       >
-        <option value="apprentice">Apprentice</option>
-        <option value="tech">Tech</option>
-        <option value="manager">Manager</option>
-        <option value="owner">Owner</option>
+        <option value="apprentice">{t("team.roleApprentice")}</option>
+        <option value="tech">{t("team.roleTech")}</option>
+        <option value="manager">{t("team.roleManager")}</option>
+        <option value="owner">{t("team.roleOwner")}</option>
       </select>
       <span>$</span>
       <input
@@ -222,18 +223,18 @@ export default function TeamStats() {
           if (u.id === user.id) setUser({ ...user, rate: newRate });
         }}
       />
-      <span style={{ fontSize: 13 }}>/hr</span>
+      <span style={{ fontSize: 13 }}>{t("team.perHr")}</span>
       {u.id !== user.id && (
         <button
           onClick={async () => {
-            if (!(await useStore.getState().showConfirm("Remove Team Member", `Remove ${u.name} from the team?`))) return;
+            if (!(await useStore.getState().showConfirm(t("team.removeMember"), `${t("team.removeConfirmPre")} ${u.name} ${t("team.removeConfirmPost")}`))) return;
             await db.del("profiles", u.id);
             loadAll();
           }}
-          aria-label={`Remove ${u.name}`}
+          aria-label={`${t("common.remove")} ${u.name}`}
           style={{ marginLeft: "auto", background: "none", color: "var(--color-accent-red)", padding: "0 4px", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13 }}
         >
-          <Icon name="close" size={14} /> Remove
+          <Icon name="close" size={14} /> {t("common.remove")}
         </button>
       )}
     </div>
@@ -244,10 +245,10 @@ export default function TeamStats() {
       {/* Invite CTA */}
       {isOwner && user.org_id && (
         <div
-          onClick={() => { navigator.clipboard.writeText(user.org_id); useStore.getState().showToast("Invite code copied!", "success"); }}
+          onClick={() => { navigator.clipboard.writeText(user.org_id); useStore.getState().showToast(t("team.inviteCopied"), "success"); }}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(46,139,255,.12)", border: "1.5px dashed rgba(46,139,255,.5)", borderRadius: 13, padding: 12, fontFamily: "Oswald", fontWeight: 600, fontSize: 13, color: "#8cc0ff", marginBottom: 13, cursor: "pointer" }}
         >
-          <Icon name="clients" size={16} color="#8cc0ff" /> Invite teammate · tap to copy code
+          <Icon name="clients" size={16} color="#8cc0ff" /> {t("team.inviteTeammate")}
         </div>
       )}
 
@@ -262,12 +263,12 @@ export default function TeamStats() {
         const photoTop = isTop ? 18 : 14;
         const headPad = 16 + photoSize + 12;
         const stat6 = [
-          { v: stats.totalHours.toFixed(0), l: "Lifetime hrs", c: "#eaf0fb" },
-          { v: stats.totalEarned >= 1000 ? `$${(stats.totalEarned / 1000).toFixed(1)}k` : `$${Math.round(stats.totalEarned)}`, l: "Earned", c: "var(--color-money)" },
-          { v: String(stats.jobsWorked), l: "Jobs", c: "#eaf0fb" },
-          { v: stats.avgRating > 0 ? `${stats.avgRating.toFixed(1)}★` : "—", l: "Avg rating", c: "#f5b400" },
-          { v: String(stats.questsWon), l: "Quests won", c: "#c9a6ff" },
-          { v: `${stats.noCallbackPct}%`, l: "No callback", c: "#eaf0fb" },
+          { v: stats.totalHours.toFixed(0), l: t("team.lifetimeHrs"), c: "#eaf0fb" },
+          { v: stats.totalEarned >= 1000 ? `$${(stats.totalEarned / 1000).toFixed(1)}k` : `$${Math.round(stats.totalEarned)}`, l: t("team.earned"), c: "var(--color-money)" },
+          { v: String(stats.jobsWorked), l: t("team.jobs"), c: "#eaf0fb" },
+          { v: stats.avgRating > 0 ? `${stats.avgRating.toFixed(1)}★` : "—", l: t("team.avgRating"), c: "#f5b400" },
+          { v: String(stats.questsWon), l: t("team.questsWon"), c: "#c9a6ff" },
+          { v: `${stats.noCallbackPct}%`, l: t("team.noCallback"), c: "#eaf0fb" },
         ];
         return (
           <div key={u.id} style={{ marginBottom: 12 }}>
