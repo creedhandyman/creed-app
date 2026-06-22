@@ -8,14 +8,19 @@ import { Icon } from "./Icon";
 /**
  * Team Stats — supersets the old TeamSettings panel. Keeps every admin
  * action that was there (invite code, photo upload, role/rate edit, remove,
- * employee number) AND adds an "all-time career stats" expansion per tech:
- * total hours logged ever, total earnings, distinct jobs worked, tenure,
- * top trades by hours, average review rating.
+ * employee number) AND gives every teammate an "all-time career stats"
+ * baseball card: total hours logged ever, total earnings, distinct jobs
+ * worked, tenure, top trades by hours, average review rating, quests won,
+ * no-callback rate.
  *
  * The career numbers come from time_entries / jobs / reviews already in the
  * store — they're computed live, never stored, and never reset. Period
  * filters (week/month/quarter on Payroll/Financials) are display filters,
  * not data resets, so a tech's all-time history is always intact.
+ *
+ * The cards are deliberately dark in both themes (a "trading card" look,
+ * matching the digital business card) — text is light-on-dark, never
+ * black-on-black.
  */
 export default function TeamStats() {
   const user = useStore((s) => s.user)!;
@@ -111,54 +116,73 @@ export default function TeamStats() {
     };
   };
 
-  const StatPill = ({ label, value, color }: { label: string; value: string; color: string }) => (
-    <div style={{ flex: 1, minWidth: 80, padding: "6px 8px", background: darkMode ? "#0d0d14" : "#f7f7fa", borderRadius: 6, textAlign: "center" }}>
-      <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em" }}>{label}</div>
-      <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color, marginTop: 2 }}>{value}</div>
-    </div>
-  );
+  // Is this teammate currently clocked in? (a running time entry with a
+  // start but no end). Drives the live green "on the clock" glow dot.
+  const isOnClock = (p: Profile) =>
+    timeEntries.some(
+      (e) => (e.user_id === p.id || (!e.user_id && e.user_name === p.name)) && !!e.start_time && !e.end_time,
+    );
 
-  // Photo avatar with inline upload (owner or self). Reused by the baseball
-  // card and the compact rows.
-  const photoAvatar = (u: Profile, size: number, fontSize: number) => (
-    <label
-      onClick={(e) => e.stopPropagation()}
-      title={isOwner || u.id === user.id ? "Change photo" : ""}
-      style={{
-        width: size, height: size, borderRadius: "50%",
-        background: u.photo_url ? `url(${u.photo_url}) center/cover` : "var(--color-primary)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#fff", fontFamily: "Oswald", fontSize, fontWeight: 700,
-        cursor: isOwner || u.id === user.id ? "pointer" : "default",
-        flexShrink: 0, overflow: "hidden",
-      }}
-    >
-      {!u.photo_url && (u.name?.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?")}
-      {(isOwner || u.id === user.id) && (
-        <input
-          type="file"
-          accept="image/*"
-          style={{ display: "none" }}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const ext = file.name.split(".").pop() || "jpg";
-            const path = `avatars/${u.id}_${Date.now()}.${ext}`;
-            const { error } = await supabase.storage.from("receipts").upload(path, file);
-            if (error) { useStore.getState().showToast("Photo upload failed: " + error.message, "error"); return; }
-            const { data } = supabase.storage.from("receipts").getPublicUrl(path);
-            await db.patch("profiles", u.id, { photo_url: data.publicUrl });
-            await loadAll();
-            if (u.id === user.id) setUser({ ...user, photo_url: data.publicUrl });
-            useStore.getState().showToast("Photo updated", "success");
-            e.target.value = "";
-          }}
-        />
-      )}
-    </label>
-  );
+  // Baseball-card photo — rounded-square avatar with inline upload (owner or
+  // self), a soft blue glow, a camera affordance, and a breathing green dot
+  // when the teammate is on the clock. Positioned by the caller so it can
+  // straddle the banner; it paints ABOVE the banner (the old version got
+  // covered because the relative-positioned banner painted over the static
+  // avatar).
+  const bballPhoto = (u: Profile, size: number, radius: number, fontSize: number, onClock: boolean) => {
+    const editable = isOwner || u.id === user.id;
+    return (
+      <label
+        onClick={(e) => e.stopPropagation()}
+        title={editable ? "Change photo" : ""}
+        style={{
+          position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
+          width: size, height: size, borderRadius: radius, flexShrink: 0,
+          background: u.photo_url ? `url(${u.photo_url}) center/cover` : "linear-gradient(135deg,#3a4a6a,#222a3e)",
+          border: "3px solid #0f1320", color: "#dce6f7",
+          fontFamily: "Oswald", fontWeight: 700, fontSize,
+          cursor: editable ? "pointer" : "default",
+          boxShadow: "0 0 18px -5px rgba(46,139,255,.7)",
+        }}
+      >
+        {!u.photo_url && (u.name?.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?")}
+        {onClock && (
+          <span
+            title="On the clock"
+            style={{ position: "absolute", top: -3, right: -3, width: 15, height: 15, borderRadius: "50%", background: "var(--color-success)", border: "2px solid #0f1320", boxShadow: "0 0 7px var(--color-success)", animation: "dotLive 1.8s ease-in-out infinite" }}
+          />
+        )}
+        {editable && (
+          <span style={{ position: "absolute", right: -3, bottom: -3, width: 22, height: 22, borderRadius: "50%", background: "var(--color-primary)", border: "2px solid #0f1320", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+            <Icon name="camera" size={11} color="#fff" />
+          </span>
+        )}
+        {editable && (
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const ext = file.name.split(".").pop() || "jpg";
+              const path = `avatars/${u.id}_${Date.now()}.${ext}`;
+              const { error } = await supabase.storage.from("receipts").upload(path, file);
+              if (error) { useStore.getState().showToast("Photo upload failed: " + error.message, "error"); return; }
+              const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+              await db.patch("profiles", u.id, { photo_url: data.publicUrl });
+              await loadAll();
+              if (u.id === user.id) setUser({ ...user, photo_url: data.publicUrl });
+              useStore.getState().showToast("Photo updated", "success");
+              e.target.value = "";
+            }}
+          />
+        )}
+      </label>
+    );
+  };
 
-  // Rank by lifetime earnings — the top earner gets the baseball card.
+  // Rank by lifetime earnings — #1 gets the gold "TOP EARNER" treatment.
   const ranked = profiles
     .map((p) => ({ p, stats: careerStats(p) }))
     .sort((a, b) => b.stats.totalEarned - a.stats.totalEarned);
@@ -230,173 +254,166 @@ export default function TeamStats() {
       {ranked.map(({ p: u, stats }, idx) => {
         const isOpen = expanded === u.id;
         const isTop = idx === 0 && stats.totalEarned > 0;
+        const rank = idx + 1;
+        const onClock = isOnClock(u);
+        const photoSize = isTop ? 76 : 62;
+        const photoRadius = isTop ? 18 : 15;
+        const bannerH = isTop ? 58 : 44;
+        const photoTop = isTop ? 18 : 14;
+        const headPad = 16 + photoSize + 12;
+        const stat6 = [
+          { v: stats.totalHours.toFixed(0), l: "Lifetime hrs", c: "#eaf0fb" },
+          { v: stats.totalEarned >= 1000 ? `$${(stats.totalEarned / 1000).toFixed(1)}k` : `$${Math.round(stats.totalEarned)}`, l: "Earned", c: "var(--color-money)" },
+          { v: String(stats.jobsWorked), l: "Jobs", c: "#eaf0fb" },
+          { v: stats.avgRating > 0 ? `${stats.avgRating.toFixed(1)}★` : "—", l: "Avg rating", c: "#f5b400" },
+          { v: String(stats.questsWon), l: "Quests won", c: "#c9a6ff" },
+          { v: `${stats.noCallbackPct}%`, l: "No callback", c: "#eaf0fb" },
+        ];
         return (
-          <div key={u.id} style={{ marginBottom: 8 }}>
-            {isTop ? (
-              /* ── Baseball card (top earner) ── */
-              <div style={{ background: "linear-gradient(165deg,#1c2746,#0f1320)", border: "1px solid #2c3a5e", borderRadius: 20, overflow: "hidden", boxShadow: "0 0 42px -16px rgba(46,139,255,.55)" }}>
-                <div style={{ height: 54, background: "linear-gradient(120deg,#2e8bff,#1a4d8a)", position: "relative" }}>
-                  <span style={{ position: "absolute", right: 14, top: 11, fontFamily: "Oswald", fontWeight: 700, fontSize: 10, letterSpacing: ".1em", color: "#cfe4ff", background: "rgba(0,0,0,.22)", padding: "3px 9px", borderRadius: 99 }}>★ TOP EARNER</span>
-                </div>
-                <div style={{ display: "flex", gap: 12, padding: "0 16px" }}>
-                  <div style={{ marginTop: -34, border: "3px solid #0f1320", borderRadius: "50%", flexShrink: 0 }}>{photoAvatar(u, 70, 26)}</div>
-                  <div style={{ paddingTop: 9, minWidth: 0 }}>
-                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".4px" }}>{u.name}</div>
-                    <div style={{ fontSize: 10, color: "#8cc0ff", marginTop: 1, textTransform: "capitalize" }}>{u.role}{u.emp_num ? ` · #${u.emp_num}` : ""} · ${u.rate}/hr</div>
-                    <div style={{ fontSize: 9.5, color: "var(--color-dim)", marginTop: 3 }}>{u.start_date ? `Since ${new Date(u.start_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · ` : ""}{stats.tenureLabel} on team</div>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1, background: "var(--color-border-dark-2)", marginTop: 13, borderTop: "1px solid var(--color-border-dark-2)" }}>
-                  {[
-                    { v: stats.totalHours.toFixed(0), l: "Lifetime hrs", c: "inherit" },
-                    { v: stats.totalEarned >= 1000 ? `$${(stats.totalEarned / 1000).toFixed(1)}k` : `$${Math.round(stats.totalEarned)}`, l: "Earned", c: "var(--color-money)" },
-                    { v: String(stats.jobsWorked), l: "Jobs", c: "inherit" },
-                    { v: stats.avgRating > 0 ? `${stats.avgRating.toFixed(1)}★` : "—", l: "Avg rating", c: "#f5b400" },
-                    { v: String(stats.questsWon), l: "Quests won", c: "#c9a6ff" },
-                    { v: `${stats.noCallbackPct}%`, l: "No callback", c: "inherit" },
-                  ].map((s) => (
-                    <div key={s.l} style={{ background: "#12172a", padding: "11px 6px", textAlign: "center" }}>
-                      <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, lineHeight: 1, color: s.c }}>{s.v}</div>
-                      <div style={{ fontSize: 8, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--color-dim)", marginTop: 3 }}>{s.l}</div>
-                    </div>
-                  ))}
-                </div>
-                {stats.topTrades.length > 0 && (
-                  <div style={{ padding: "11px 16px 0" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginBottom: 5 }}>
-                      <span>Top trade</span>
-                      <b style={{ fontFamily: "Oswald", fontWeight: 600 }}>{stats.topTrades[0].trade} · {stats.topTrades[0].hrs.toFixed(0)}h</b>
-                    </div>
-                    <div style={{ height: 7, background: "#1c2740", borderRadius: 5, overflow: "hidden" }}>
-                      <div style={{ height: "100%", borderRadius: 5, background: "linear-gradient(90deg,#2e8bff,#9d4edd)", width: `${Math.min(100, stats.totalHours > 0 ? (stats.topTrades[0].hrs / stats.totalHours) * 100 : 0)}%` }} />
-                    </div>
-                  </div>
-                )}
-                {isOwner && (
-                  <div style={{ padding: 14 }}>
-                    <button
-                      onClick={() => setExpanded(isOpen ? null : u.id)}
-                      style={{ width: "100%", fontSize: 10.5, fontWeight: 600, padding: 9, borderRadius: 10, border: "1px solid var(--color-border-dark-2)", background: "rgba(255,255,255,.04)", color: "inherit", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                    >
-                      <Icon name={isOpen ? "collapse" : "edit"} size={13} /> {isOpen ? "Close" : "Rate / role · details"}
-                    </button>
-                  </div>
-                )}
+          <div key={u.id} style={{ marginBottom: 12 }}>
+            <div
+              style={{
+                position: "relative",
+                background: "linear-gradient(165deg,#1c2746,#0f1320)",
+                border: `1px solid ${isTop ? "#3a5da0" : "#2c3a5e"}`,
+                borderRadius: 20, overflow: "hidden",
+                boxShadow: isTop ? "0 0 42px -14px rgba(46,139,255,.6)" : "0 0 26px -18px rgba(46,139,255,.45)",
+              }}
+            >
+              {/* Banner */}
+              <div style={{ height: bannerH, position: "relative", background: isTop ? "linear-gradient(120deg,#2e8bff,#1a4d8a)" : "linear-gradient(120deg,#283655,#161c2c)" }}>
+                <span
+                  style={{
+                    position: "absolute", right: 14, top: isTop ? 11 : 8,
+                    fontFamily: "Oswald", fontWeight: 700, fontSize: 10, letterSpacing: ".1em",
+                    padding: "3px 9px", borderRadius: 99,
+                    ...(isTop
+                      ? { color: "#5a3d00", background: "linear-gradient(135deg,#ffe08a,#f5b400)", boxShadow: "0 0 14px -3px rgba(245,180,0,.7)" }
+                      : { color: "#cfe4ff", background: "rgba(0,0,0,.28)" }),
+                  }}
+                >
+                  {isTop ? "★ TOP EARNER" : `#${rank}`}
+                </span>
               </div>
-            ) : (
-              /* ── Compact row ── */
-              <div onClick={() => setExpanded(isOpen ? null : u.id)} style={{ display: "flex", alignItems: "center", gap: 11, background: "var(--color-card-dark-3)", border: "1px solid var(--color-border-dark-2)", borderRadius: 13, padding: "10px 12px", cursor: "pointer" }}>
-                {photoAvatar(u, 34, 13)}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13 }}>{u.name}</div>
-                  <div style={{ fontSize: 9.5, color: "var(--color-dim)", textTransform: "capitalize" }}>{u.role}{u.emp_num ? ` · #${u.emp_num}` : ""}</div>
-                </div>
-                <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12, color: "var(--color-dim)" }}>${(isOwner || u.id === user.id) ? u.rate : "—"}/hr</span>
-                <Icon name={isOpen ? "collapse" : "next"} size={15} color="var(--color-dim)" />
+
+              {/* Photo — absolutely positioned ABOVE the banner so it's never cut off */}
+              <div style={{ position: "absolute", left: 16, top: photoTop, zIndex: 2 }}>
+                {bballPhoto(u, photoSize, photoRadius, isTop ? 26 : 22, onClock)}
               </div>
-            )}
 
-            {/* ── Expanded: edits + career detail ── */}
-            {isOpen && (
-              <div style={{ marginTop: 8, padding: 12, background: "var(--color-card-dark-2)", borderRadius: 13, border: "1px solid var(--color-border-dark-2)" }}>
-                {isOwner && editControls(u)}
+              {/* Header (beside the photo) */}
+              <div style={{ padding: `10px 16px 0 ${headPad}px`, minHeight: photoTop + photoSize - bannerH + 8 }}>
+                <div
+                  style={{
+                    fontFamily: "Oswald", fontWeight: 700, fontSize: isTop ? 18 : 16, letterSpacing: ".4px",
+                    ...(isTop
+                      ? { background: "linear-gradient(90deg,#cfe3ff,#7fb6ff)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }
+                      : { color: "#eaf0fb" }),
+                  }}
+                >
+                  {u.name}
+                </div>
+                <div style={{ fontSize: 10, color: "#8cc0ff", marginTop: 1, textTransform: "capitalize" }}>
+                  {u.role}{u.emp_num ? ` · #${u.emp_num}` : ""}{(isOwner || u.id === user.id) ? ` · $${u.rate}/hr` : ""}
+                </div>
+                <div style={{ fontSize: 9.5, color: "var(--color-dim)", marginTop: 3 }}>
+                  {u.start_date ? `Since ${new Date(u.start_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · ` : ""}{stats.tenureLabel} on team
+                  {onClock && <span style={{ color: "#3ee08f", fontWeight: 600 }}> · on the clock</span>}
+                </div>
+              </div>
 
-                {!isTop && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                    <StatPill label="HOURS" value={stats.totalHours.toFixed(1)} color="var(--color-primary)" />
-                    <StatPill label="EARNED" value={`$${Math.round(stats.totalEarned).toLocaleString()}`} color="var(--color-success)" />
-                    <StatPill label="JOBS" value={String(stats.jobsWorked)} color="var(--color-warning)" />
-                    <StatPill label="TENURE" value={stats.tenureLabel} color="var(--color-highlight)" />
+              {/* Stat grid (6) */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1, background: "#243456", marginTop: 13, borderTop: "1px solid #243456" }}>
+                {stat6.map((s) => (
+                  <div key={s.l} style={{ background: "#12172a", padding: "11px 6px", textAlign: "center" }}>
+                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, lineHeight: 1, color: s.c }}>{s.v}</div>
+                    <div style={{ fontSize: 8, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--color-dim)", marginTop: 3 }}>{s.l}</div>
                   </div>
-                )}
+                ))}
+              </div>
 
-                {/* Employee number + start date — editable by owner */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 14, marginBottom: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span className="dim">Emp #</span>
-                    {isOwner ? (
-                      <input
-                        defaultValue={u.emp_num}
-                        style={{ width: 70, padding: "2px 4px", fontSize: 14 }}
-                        onBlur={async (e) => {
-                          if (e.target.value !== u.emp_num) {
-                            await db.patch("profiles", u.id, { emp_num: e.target.value });
-                            await loadAll();
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span style={{ fontFamily: "Oswald" }}>{u.emp_num || "—"}</span>
+              {/* Top trade bar */}
+              {stats.topTrades.length > 0 && (
+                <div style={{ padding: "11px 16px 0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginBottom: 5 }}>
+                    <span>Top trade</span>
+                    <b style={{ fontFamily: "Oswald", fontWeight: 600, color: "#eaf0fb" }}>{stats.topTrades[0].trade} · {stats.topTrades[0].hrs.toFixed(0)}h</b>
+                  </div>
+                  <div style={{ height: 7, background: "#1c2740", borderRadius: 5, overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 5, background: "linear-gradient(90deg,#2e8bff,#9d4edd)", width: `${Math.min(100, stats.totalHours > 0 ? (stats.topTrades[0].hrs / stats.totalHours) * 100 : 0)}%`, boxShadow: "0 0 10px -1px rgba(157,78,221,.6)" }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Owner edit toggle */}
+              {isOwner && (
+                <div style={{ padding: 14 }}>
+                  <button
+                    onClick={() => setExpanded(isOpen ? null : u.id)}
+                    style={{ width: "100%", fontSize: 10.5, fontWeight: 600, padding: 9, borderRadius: 10, border: "1px solid #2c3a5e", background: "rgba(255,255,255,.05)", color: "#eaf0fb", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  >
+                    <Icon name={isOpen ? "collapse" : "edit"} size={13} /> {isOpen ? "Close" : "Rate / role · details"}
+                  </button>
+                </div>
+              )}
+
+              {/* Expanded — edits + emp#/start/email */}
+              {isOpen && (
+                <div style={{ padding: "0 14px 14px" }}>
+                  <div style={{ padding: 12, background: "#0f1422", borderRadius: 13, border: "1px solid #243456" }}>
+                    {isOwner && editControls(u)}
+
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span className="dim">Emp #</span>
+                        {isOwner ? (
+                          <input
+                            defaultValue={u.emp_num}
+                            style={{ width: 70, padding: "2px 4px", fontSize: 14 }}
+                            onBlur={async (e) => {
+                              if (e.target.value !== u.emp_num) {
+                                await db.patch("profiles", u.id, { emp_num: e.target.value });
+                                await loadAll();
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span style={{ fontFamily: "Oswald" }}>{u.emp_num || "—"}</span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span className="dim">Start date</span>
+                        {isOwner ? (
+                          <input
+                            type="date"
+                            defaultValue={u.start_date || ""}
+                            style={{ padding: "2px 4px", fontSize: 14 }}
+                            onChange={async (e) => {
+                              await db.patch("profiles", u.id, { start_date: e.target.value });
+                              await loadAll();
+                            }}
+                          />
+                        ) : (
+                          <span style={{ fontFamily: "Oswald" }}>{u.start_date || "—"}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {u.email && (
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${border}` }}>
+                        <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em" }}>{u.email}</div>
+                      </div>
+                    )}
+
+                    {stats.totalHours === 0 && stats.reviewCount === 0 && (
+                      <div className="dim" style={{ fontSize: 13, fontStyle: "italic", marginTop: 8 }}>
+                        Career stats build as {u.name?.split(/\s+/)[0] || "this tech"} clocks in and works jobs. Numbers never reset.
+                      </div>
                     )}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span className="dim">Start date</span>
-                    {isOwner ? (
-                      <input
-                        type="date"
-                        defaultValue={u.start_date || ""}
-                        style={{ padding: "2px 4px", fontSize: 14 }}
-                        onChange={async (e) => {
-                          await db.patch("profiles", u.id, { start_date: e.target.value });
-                          await loadAll();
-                        }}
-                      />
-                    ) : (
-                      <span style={{ fontFamily: "Oswald" }}>{u.start_date || "—"}</span>
-                    )}
-                  </div>
                 </div>
-
-                {/* Top trades */}
-                {stats.topTrades.length > 0 && (
-                  <div style={{ marginBottom: 6 }}>
-                    <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em", marginBottom: 4 }}>
-                      TOP TRADES (by hours)
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {stats.topTrades.map((t) => (
-                        <span
-                          key={t.trade}
-                          style={{
-                            fontSize: 13, padding: "2px 8px", borderRadius: 10,
-                            background: "var(--color-primary)15",
-                            color: "var(--color-primary)",
-                            fontFamily: "Oswald", letterSpacing: ".04em",
-                          }}
-                        >
-                          {t.trade} · {t.hrs.toFixed(0)}h
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Review rating */}
-                {stats.reviewCount > 0 && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
-                    <span className="dim">Client rating</span>
-                    <span style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 16 }}>
-                      ★ {stats.avgRating.toFixed(1)}
-                    </span>
-                    <span className="dim">· {stats.reviewCount} review{stats.reviewCount === 1 ? "" : "s"}</span>
-                  </div>
-                )}
-
-                {stats.totalHours === 0 && stats.reviewCount === 0 && (
-                  <div className="dim" style={{ fontSize: 13, fontStyle: "italic", padding: "4px 0" }}>
-                    Career stats build as {u.name?.split(/\s+/)[0] || "this tech"} clocks in and works jobs. Numbers here will never reset.
-                  </div>
-                )}
-
-                {u.email && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${border}` }}>
-                    <div className="dim" style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-                      {u.email}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         );
       })}
