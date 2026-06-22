@@ -551,7 +551,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   else { wlabel = crew.map((n) => initialsOf(n)).join(" "); }
                   return (
                     <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, padding: "5px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, boxShadow: `0 0 6px ${color}`, flexShrink: 0 }} />
                       <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.job}{time ? ` · ${fmt12(time)}` : ""}{(() => { const sp = dayOfSpan(s, ds); return sp ? ` · D${sp.idx}/${sp.total}` : ""; })()}</span>
                       {wlabel && <span style={{ fontSize: 11, color: "var(--color-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{wlabel}</span>}
                     </div>
@@ -581,7 +581,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 <div key={i} onClick={() => setSelectedDay(isSel ? null : ds)} style={{ aspectRatio: ".92", borderRadius: 8, padding: "3px 2px", display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer", background: isSel ? "rgba(46,139,255,.16)" : (darkMode ? "#16161f" : "#fff"), border: `1px solid ${isSel || isToday ? "var(--color-primary)" : "var(--color-border-dark)"}` }}>
                   <div style={{ fontSize: 11.5, color: isToday ? "var(--color-primary)" : "inherit", fontWeight: isToday ? 700 : 400 }}>{d.getDate()}</div>
                   <div style={{ display: "flex", gap: 2, marginTop: "auto", flexWrap: "wrap", justifyContent: "center", paddingBottom: 1 }}>
-                    {dots.map((c, di) => <i key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: c, display: "block" }} />)}
+                    {dots.map((c, di) => <i key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: c, boxShadow: `0 0 5px ${c}`, display: "block" }} />)}
                   </div>
                 </div>
               );
@@ -642,7 +642,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                       : new Date(s.sched_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", day: "numeric" });
                     return (
                       <div key={s.id} onClick={() => openEdit(s)} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, padding: "5px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4, cursor: "pointer" }}>
-                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: j ? statusColor(j.status) : "var(--color-primary)", flexShrink: 0 }} />
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: j ? statusColor(j.status) : "var(--color-primary)", boxShadow: `0 0 6px ${j ? statusColor(j.status) : "var(--color-primary)"}`, flexShrink: 0 }} />
                         <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.job}</span>
                         <span style={{ fontSize: 11, color: "var(--color-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{dlabel}</span>
                       </div>
