@@ -21,6 +21,7 @@ import type { Customer, Address, Job, Receipt, Organization, Room } from "@/lib/
 import { exportQuotePdf } from "@/lib/export-pdf";
 import { exportJobReport } from "@/lib/export-job-report";
 import { statusColor } from "@/lib/status";
+import { Icon } from "@/components/Icon";
 
 const PRIMARY = "#2E75B6";
 
@@ -153,19 +154,19 @@ export default function PortalPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: PRIMARY, fontFamily: "Oswald, sans-serif", fontSize: 20 }}>Loading…</div>
+      <div className="pub" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: "#7fb6ff", fontFamily: "Oswald, sans-serif", fontSize: 20 }}>Loading…</div>
       </div>
     );
   }
   if (errored || !data) {
     return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="pub" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#C00000" }}>Portal unavailable</h1>
-          <p style={{ color: "#888", fontSize: 15, marginTop: 8 }}>
-            We couldn&apos;t load your data. <a href="/portal/login" style={{ color: PRIMARY }}>Request a new link</a>.
+          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: "#ff7a7a", textTransform: "uppercase" }}>Portal unavailable</h1>
+          <p style={{ color: "#8a8a99", fontSize: 15, marginTop: 8 }}>
+            We couldn&apos;t load your data. <a href="/portal/login" style={{ color: "#7fb6ff" }}>Request a new link</a>.
           </p>
         </div>
       </div>
@@ -175,37 +176,33 @@ export default function PortalPage() {
   const { customer, org } = data;
   const greetName = (customer.primary_contact || customer.name || "").split(/\s+/)[0] || "there";
 
+  const activeCount = data.jobs.filter((j) => !["paid", "complete"].includes(j.status)).length;
+
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", padding: "24px 16px 60px", color: "#e2e2e8" }}>
-      <div style={{ maxWidth: 640, margin: "0 auto" }}>
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 22 }}>
-          {org?.logo_url && (
-            <img
-              src={org.logo_url}
-              alt=""
-              style={{ height: 56, display: "block", margin: "0 auto 10px" }}
-              onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
-            />
-          )}
-          <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".05em", margin: 0 }}>
-            {org?.name || "Customer Portal"}
-          </h1>
+    <div className="pub">
+      <div className="pub-wrap" style={{ maxWidth: 600 }}>
+        {/* Brand header */}
+        <div className="bh">
+          <div className="logo">
+            {org?.logo_url
+              ? <img src={org.logo_url} alt="" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+              : (org?.name?.[0]?.toUpperCase() || "C")}
+          </div>
+          <div className="nm">{org?.name || "Customer Portal"}</div>
           {org?.phone && (
-            <div style={{ fontSize: 14, color: "#666", marginTop: 4 }}>
-              <a href={`tel:${org.phone}`} style={{ color: "#888", textDecoration: "none" }}>{org.phone}</a>
-            </div>
+            <div className="ph"><a href={`tel:${org.phone}`} style={{ color: "inherit", textDecoration: "none" }}>{org.phone}</a></div>
           )}
         </div>
 
         {/* Greeting */}
-        <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 18, marginBottom: 16 }}>
-          <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "#e2e2e8", margin: 0 }}>
-            Hi {greetName} 👋
-          </h2>
-          <p style={{ color: "#888", fontSize: 15, margin: "6px 0 0" }}>
-            Welcome to your portal. Track open quotes, scheduled work, completed jobs, and request something new.
-          </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 24 }}>👋</span>
+          <div>
+            <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 19 }}>Hi, {greetName}</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {activeCount > 0 ? `${activeCount} active job${activeCount === 1 ? "" : "s"}` : "Track quotes, work, and completed jobs below"}
+            </div>
+          </div>
         </div>
 
         {/* Top-level Request work CTA */}
@@ -255,18 +252,8 @@ export default function PortalPage() {
 function RequestWorkButton({ addressId }: { addressId?: string }) {
   const href = addressId ? `/portal/request?address=${addressId}` : "/portal/request";
   return (
-    <a
-      href={href}
-      style={{
-        display: "block", textAlign: "center",
-        padding: "12px", borderRadius: 8, marginBottom: 16,
-        background: PRIMARY, color: "#fff",
-        fontFamily: "Oswald, sans-serif", fontSize: 16,
-        textTransform: "uppercase", letterSpacing: ".05em",
-        textDecoration: "none",
-      }}
-    >
-      ＋ Request Work
+    <a href={href} className="btn glow-blue" style={{ textDecoration: "none", marginBottom: 16 }}>
+      <Icon name="add" size={17} /> Request Work
     </a>
   );
 }
@@ -371,13 +358,7 @@ function Section({ title, tint, children }: { title: string; tint: string; child
 function statusBadge(status: string) {
   const color = statusColor(status);
   return (
-    <span
-      style={{
-        fontSize: 12, fontFamily: "Oswald, sans-serif", letterSpacing: ".06em",
-        padding: "2px 7px", borderRadius: 10, textTransform: "uppercase",
-        background: `${color}22`, color,
-      }}
-    >
+    <span className="chip" style={{ background: `${color}22`, color, flexShrink: 0 }}>
       {STATUS_LABEL[status] || status}
     </span>
   );
@@ -385,25 +366,21 @@ function statusBadge(status: string) {
 
 function QuoteCard({ job }: { job: Job }) {
   return (
-    <a
-      href={`/status?job=${job.id}`}
-      style={{
-        display: "block",
-        background: "#0a0a0f", border: "1px solid #1e1e2e",
-        borderRadius: 8, padding: 12, textDecoration: "none", color: "inherit",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
-        {statusBadge(job.status)}
+    <a href={`/status?job=${job.id}`} className="jobrow" style={{ textDecoration: "none", color: "inherit" }}>
+      <div className="bar-left" style={{ background: statusColor(job.status) }} />
+      <div className="pl" style={{ flex: 1 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="prop" style={{ fontSize: 15 }}>{job.property || "(address pending)"}</div>
+          <div className="sub">
+            {fmtDate(job.job_date) || fmtDate(job.created_at)}
+            {job.total > 0 ? ` · ${fmtMoney(job.total)}` : ""}
+          </div>
+          <div style={{ fontSize: 12.5, color: "#7fb6ff", marginTop: 4 }}>
+            {job.client_signature ? "View status →" : "Approve & sign →"}
+          </div>
+        </div>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
-        <span style={{ color: "#888" }}>{fmtDate(job.job_date) || fmtDate(job.created_at)}</span>
-        {job.total > 0 && <b style={{ color: "#00cc66" }}>{fmtMoney(job.total)}</b>}
-      </div>
-      <div style={{ fontSize: 13, color: PRIMARY, marginTop: 6 }}>
-        {job.client_signature ? "View status" : "Approve & sign →"}
-      </div>
+      {statusBadge(job.status)}
     </a>
   );
 }
@@ -415,28 +392,20 @@ function ScheduledCard({ job }: { job: Job }) {
     note = data?.scheduleNote || data?.notes || "";
   } catch { /* no note */ }
   return (
-    <a
-      href={`/status?job=${job.id}`}
-      style={{
-        display: "block",
-        background: "#0a0a0f", border: "1px solid #1e1e2e",
-        borderRadius: 8, padding: 12, textDecoration: "none", color: "inherit",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
-        {statusBadge(job.status)}
-      </div>
-      <div style={{ fontSize: 14, color: "#888" }}>
-        {fmtDate(job.job_date) || fmtDate(job.created_at)}
-        {job.requested_tech && <> · 👷 {job.requested_tech}</>}
-      </div>
-      {note && (
-        <div style={{ fontSize: 14, color: "#bbb", marginTop: 6, fontStyle: "italic" }}>
-          {note}
+    <a href={`/status?job=${job.id}`} className="jobrow" style={{ textDecoration: "none", color: "inherit" }}>
+      <div className="bar-left" style={{ background: statusColor(job.status) }} />
+      <div className="pl" style={{ flex: 1 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="prop" style={{ fontSize: 15 }}>{job.property || "(address pending)"}</div>
+          <div className="sub">
+            {fmtDate(job.job_date) || fmtDate(job.created_at)}
+            {job.requested_tech && <> · {job.requested_tech}</>}
+          </div>
+          {note && <div style={{ fontSize: 13, color: "#bbb", marginTop: 4, fontStyle: "italic" }}>{note}</div>}
+          <div style={{ fontSize: 12.5, color: "#7fb6ff", marginTop: 4 }}>View status →</div>
         </div>
-      )}
-      <div style={{ fontSize: 13, color: PRIMARY, marginTop: 6 }}>View status →</div>
+      </div>
+      {statusBadge(job.status)}
     </a>
   );
 }
@@ -449,12 +418,12 @@ function CompletedCard({ job }: { job: Job }) {
   return (
     <div
       style={{
-        background: "#0a0a0f", border: "1px solid #1e1e2e",
-        borderRadius: 8, padding: 12,
+        background: "#0d0d15", border: "1px solid #1e1e2e",
+        borderRadius: 12, padding: 12,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
+        <b className="prop" style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
         {statusBadge(job.status)}
       </div>
       <div style={{ fontSize: 14, color: "#888", marginBottom: 8 }}>
@@ -468,7 +437,7 @@ function CompletedCard({ job }: { job: Job }) {
       )}
       <a
         href={`/status?job=${job.id}`}
-        style={{ fontSize: 13, color: PRIMARY, textDecoration: "none", display: "inline-block", marginTop: 6 }}
+        style={{ fontSize: 13, color: "#7fb6ff", textDecoration: "none", display: "inline-block", marginTop: 6 }}
       >
         View details →
       </a>
@@ -846,32 +815,26 @@ function RenderingsSection({ jobs }: { jobs: Job[] }) {
 
 function InvoiceCard({ job, receipts }: { job: Job; receipts: Receipt[] }) {
   return (
-    <a
-      href={`/status?job=${job.id}`}
-      style={{
-        display: "block",
-        background: "#0a0a0f", border: "1px solid #1e1e2e",
-        borderRadius: 8, padding: 12, textDecoration: "none", color: "inherit",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
-        {statusBadge(job.status)}
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14 }}>
-        <span style={{ color: "#888" }}>{fmtDate(job.job_date) || fmtDate(job.created_at)}</span>
-        {job.total > 0 && (
-          <b style={{ color: job.status === "paid" ? "#9b59b6" : "#00cc66" }}>{fmtMoney(job.total)}</b>
-        )}
-      </div>
-      {receipts.length > 0 && (
-        <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
-          {receipts.length} receipt{receipts.length === 1 ? "" : "s"} on file
+    <a href={`/status?job=${job.id}`} className="jobrow" style={{ textDecoration: "none", color: "inherit" }}>
+      <div className="bar-left" style={{ background: statusColor(job.status) }} />
+      <div className="pl" style={{ flex: 1 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="prop" style={{ fontSize: 15 }}>{job.property || "(address pending)"}</div>
+          <div className="sub">
+            {fmtDate(job.job_date) || fmtDate(job.created_at)}
+            {job.total > 0 && <> · <b style={{ color: job.status === "paid" ? "#d8b6ff" : "#3ee08f" }}>{fmtMoney(job.total)}</b></>}
+          </div>
+          {receipts.length > 0 && (
+            <div style={{ fontSize: 12.5, color: "#666", marginTop: 3 }}>
+              {receipts.length} receipt{receipts.length === 1 ? "" : "s"} on file
+            </div>
+          )}
+          <div style={{ fontSize: 12.5, color: "#7fb6ff", marginTop: 4 }}>
+            {job.status === "paid" ? "View paid invoice →" : "Pay invoice →"}
+          </div>
         </div>
-      )}
-      <div style={{ fontSize: 13, color: PRIMARY, marginTop: 6 }}>
-        {job.status === "paid" ? "View paid invoice →" : "Pay invoice →"}
       </div>
+      {statusBadge(job.status)}
     </a>
   );
 }
