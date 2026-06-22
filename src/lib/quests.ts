@@ -87,8 +87,15 @@ export function computeQuests(input: QuestEngineInput): QuestEngineResult {
   const userJobIds = new Set(
     userTimeEntries.map((e) => e.job_id).filter((id): id is string => !!id),
   );
+  // Name fallback applies ONLY to legacy entries with no job_id. Entries that
+  // DO carry a job_id are already matched precisely via userJobIds above —
+  // adding their address here would re-attribute OTHER jobs at the same
+  // property to this user (cross-tech bleed when two techs work one address).
   const userJobNames = new Set(
-    userTimeEntries.map((e) => e.job).filter((n): n is string => !!n && n !== "General"),
+    userTimeEntries
+      .filter((e) => !e.job_id)
+      .map((e) => e.job)
+      .filter((n): n is string => !!n && n !== "General"),
   );
   const isUserJob = (j: Job) =>
     userJobIds.has(j.id) || (!!j.property && userJobNames.has(j.property));

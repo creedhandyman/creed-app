@@ -55,8 +55,14 @@ export default function Quests() {
   const userJobIds = new Set(
     userTimeEntries.map((e) => e.job_id).filter((id): id is string => !!id),
   );
+  // Name fallback ONLY for legacy entries with no job_id — entries that carry
+  // a job_id are matched precisely above, so adding their address here would
+  // re-attribute OTHER jobs at the same property (cross-tech bleed).
   const userJobNames = new Set(
-    userTimeEntries.map((e) => e.job).filter((n): n is string => !!n && n !== "General"),
+    userTimeEntries
+      .filter((e) => !e.job_id)
+      .map((e) => e.job)
+      .filter((n): n is string => !!n && n !== "General"),
   );
   const isUserJob = (j: { id: string; property?: string }) =>
     userJobIds.has(j.id) || (!!j.property && userJobNames.has(j.property));
