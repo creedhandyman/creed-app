@@ -17,8 +17,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Customer, Address, Job, Receipt, Organization, Room } from "@/lib/types";
-import { exportQuotePdf } from "@/lib/export-pdf";
+import type { Customer, Address, Job, Receipt, Organization } from "@/lib/types";
+import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { exportJobReport } from "@/lib/export-job-report";
 import { statusColor } from "@/lib/status";
 import { Icon } from "@/components/Icon";
@@ -549,87 +549,10 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
   if (rows.length === 0) return null;
 
   const openQuote = (doc: DocRow) => {
-    const job = doc.job;
-    let rooms: Room[] = [];
-    let workers: { id: string; name: string }[] = [];
-    let photos: { url: string; label: string; type: string }[] = [];
-    // Pull per-quote pricing overrides off the rooms JSON blob
-    // (discount = Feature 1, laborRate = Feature 2).
-    let discount: import("@/lib/types").JobDiscount | null = null;
-    let laborRateOverride: number | null = null;
-    // Per-quote minimum-labor-hours override. null = inherit org default.
-    let minLaborHoursOverride: number | null = null;
-    // Per-quote tax-mode override. null = inherit org default.
-    let taxModeOverride: "total" | "materials" | "none" | null = null;
-    try {
-      const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-      rooms = (data?.rooms || []) as Room[];
-      workers = (data?.workers || []).map((w: { id?: string; name?: string }) => ({
-        id: w.id || "",
-        name: w.name || "",
-      }));
-      photos = (data?.photos || []).map((p: { url?: string; label?: string; type?: string }) => ({
-        url: p.url || "",
-        label: p.label || "",
-        type: p.type || "",
-      }));
-      const d = data?.discount;
-      if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
-        discount = { type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined };
-      }
-      if (typeof data?.laborRate === "number" && data.laborRate > 0) {
-        laborRateOverride = data.laborRate;
-      }
-      if (typeof data?.minLaborHours === "number" && data.minLaborHours >= 0) {
-        minLaborHoursOverride = data.minLaborHours;
-      }
-      const tm = data?.taxMode;
-      if (tm === "total" || tm === "materials" || tm === "none") {
-        taxModeOverride = tm;
-      }
-    } catch { /* malformed rooms — render with defaults */ }
-    // Resolve the effective floor: per-quote override → org default → 1.
-    const orgMin = org?.min_labor_hours;
-    const effectiveMinLaborHours =
-      minLaborHoursOverride !== null
-        ? minLaborHoursOverride
-        : (typeof orgMin === "number" && orgMin >= 0 ? orgMin : 1);
-    // Resolve tax-mode: per-quote override → org default → "total" (legacy).
-    const orgTaxMode = org?.tax_mode;
-    const effectiveTaxMode: "total" | "materials" | "none" =
-      taxModeOverride ??
-      (orgTaxMode === "materials" || orgTaxMode === "none" || orgTaxMode === "total"
-        ? orgTaxMode
-        : "total");
-
     setBusyId(doc.id);
-    exportQuotePdf({
-      property: job.property,
-      client: job.client,
-      rooms,
-      rate: laborRateOverride || org?.default_rate || 55,
-      workers,
-      grandTotal: job.total || 0,
-      totalLabor: job.total_labor || 0,
-      totalMat: job.total_mat || 0,
-      totalHrs: job.total_hrs || 0,
-      trade: job.trade,
-      jobId: job.id,
-      orgName: org?.name,
-      orgPhone: org?.phone,
-      orgEmail: org?.email,
-      orgLicense: org?.license_num,
-      orgAddress: org?.address,
-      orgLogo: org?.logo_url,
-      photos,
-      markupPct: org?.markup_pct,
-      taxPct: org?.tax_pct,
-      tripFee: org?.trip_fee,
-      discount,
-      minLaborHours: effectiveMinLaborHours,
-      taxMode: effectiveTaxMode,
-      statusUrl: typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : "",
-    });
+    // Shared builder (src/lib/quote-pdf.ts) — same estimate the status page
+    // serves, so portal + status can't drift on pricing.
+    openJobQuotePdf(doc.job, org);
     clearBusy();
   };
 

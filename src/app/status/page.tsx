@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 import type { Job, Organization, Room } from "@/lib/types";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
+import { openJobQuotePdf } from "@/lib/quote-pdf";
 
 const STATUS_STEPS = [
   { key: "quoted", label: "Quoted", icon: "📝" },
@@ -381,6 +382,14 @@ function StatusContent() {
             </div>
             <span className="chip" style={{ background: "rgba(0,204,102,.16)", color: "#3ee08f" }}>{job.status === "paid" ? "Paid" : "Quote"}</span>
           </div>
+        )}
+
+        {/* Download the full quote PDF — same estimate the contractor sends
+            (shared builder with the customer portal's Documents section). */}
+        {job.total > 0 && (
+          <button className="btn ghost" onClick={() => openJobQuotePdf(job, org)} style={{ marginBottom: 13 }}>
+            <Icon name="download" size={16} /> Download Quote (PDF)
+          </button>
         )}
 
         {/* Signature + approval */}

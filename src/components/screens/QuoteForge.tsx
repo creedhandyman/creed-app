@@ -2491,11 +2491,18 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         </button>
         <button
           onClick={() => {
+            // Need a saved job so the email can link the customer to their
+            // status page (approve + download PDF). Mirrors PDF/Render gating.
+            if (!editingId) {
+              useStore.getState().showToast("Save the quote once, then send — so the customer gets an approve & download link.", "info");
+              return;
+            }
             const customerData = customerId
               ? useStore.getState().customers.find((c) => c.id === customerId)
               : undefined;
             const email = customerData?.email || "";
             const orgName = useStore.getState().org?.name || "Service Provider";
+            const statusUrl = `${window.location.origin}/status?job=${editingId}`;
             const subject = encodeURIComponent(`Quote — ${prop}`);
             const body = encodeURIComponent(
               `Hi ${client || "there"},\n\n` +
@@ -2503,6 +2510,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               `Total: $${gt.toFixed(2)}\n` +
               `Labor: $${tl.toFixed(2)} (${th.toFixed(1)} hours)\n` +
               `Materials: $${tm.toFixed(2)}\n\n` +
+              `Review, approve, and download your quote here:\n${statusUrl}\n\n` +
               `This quote is valid for 30 days.\n\n` +
               `Thank you,\n${orgName}\n`
             );
