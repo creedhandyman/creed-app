@@ -144,7 +144,13 @@ export const useStore = create<AppState>((set, get) => ({
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },
+      options: {
+        data: { name },
+        // Land the confirmation link on /onboarding (which bootstraps the org +
+        // profile). Without this it falls back to Supabase's Site URL and the
+        // link can dead-end. The redirect host must be in Supabase's allow-list.
+        emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/onboarding` : undefined,
+      },
     });
     if (error) return error.message;
     if (!data.user) return "Signup failed";
