@@ -108,6 +108,17 @@ src/
   notifications (job-assigned / new-lead). Unset/`"0"` = in-app feed only
   (the v1 default — texting is the fast-follow). Reuses the existing
   `TWILIO_*` creds. `src/lib/notify-server.ts` reads it.
+- `PORTAL_SESSION_SECRET` — **REQUIRED** HMAC secret (any long random
+  string, e.g. `openssl rand -hex 32`). Signs BOTH the customer-portal
+  session cookie (`lib/portal-session.ts`) and the quote-approval token
+  (`lib/job-token.ts`); both THROW if it's unset (no default, by design).
+  Without it: the customer portal can't establish a session, AND the
+  /status "Approve & Sign" fails with "this approval link is invalid or
+  expired" — because `/api/status-link` minting throws, so `getStatusLink`
+  silently drops the token from the owner's Send-Quote link. Use the SAME
+  value across all environments or previously-sent links/sessions stop
+  validating. (The token is a stable HMAC of the job id — no expiry — so
+  "expired" in that error really means "no/!matching token".)
 - (Stripe / Supabase keys per existing setup.)
 
 ## Schema migrations the user should run in Supabase
