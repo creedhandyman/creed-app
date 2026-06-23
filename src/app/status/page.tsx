@@ -107,14 +107,21 @@ function StatusContent() {
     return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top };
   }, []);
 
+  // Block page scroll for the whole stroke. Attaching this at the DOCUMENT
+  // level on touch-start (before the first touch-move) reliably stops iOS
+  // panning — canvas-only touch-action:none wasn't enough. Removed on
+  // stop/cancel/unmount. Stable ref so add/remove match.
+  const preventScroll = useCallback((e: TouchEvent) => e.preventDefault(), []);
+
   const startDraw = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
     setIsDrawing(true);
+    if ("touches" in e) document.addEventListener("touchmove", preventScroll, { passive: false });
     const { x, y } = getPos(e);
     ctx.beginPath();
     ctx.moveTo(x, y);
-  }, [getPos]);
+  }, [getPos, preventScroll]);
 
   const draw = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     if (!isDrawing) return;
@@ -129,25 +136,14 @@ function StatusContent() {
     setSigned(true);
   }, [isDrawing, getPos]);
 
-  const stopDraw = useCallback(() => setIsDrawing(false), []);
+  const stopDraw = useCallback(() => {
+    setIsDrawing(false);
+    document.removeEventListener("touchmove", preventScroll);
+  }, [preventScroll]);
 
-  // Stop the page from scrolling/panning under the finger while signing.
-  // React registers onTouchMove as a PASSIVE listener (so it can't
-  // preventDefault), and iOS Safari doesn't reliably honor touch-action:none
-  // on a canvas by itself — so attach a native non-passive touch listener that
-  // preventDefaults. Only while the draw canvas is actually mounted.
-  useEffect(() => {
-    if (signMode !== "draw") return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const block = (e: TouchEvent) => e.preventDefault();
-    canvas.addEventListener("touchstart", block, { passive: false });
-    canvas.addEventListener("touchmove", block, { passive: false });
-    return () => {
-      canvas.removeEventListener("touchstart", block);
-      canvas.removeEventListener("touchmove", block);
-    };
-  }, [signMode]);
+  // Safety net: if the page unmounts mid-stroke, drop the global scroll-block
+  // so the rest of the app can scroll normally again.
+  useEffect(() => () => document.removeEventListener("touchmove", preventScroll), [preventScroll]);
 
   const clearSig = () => {
     const ctx = canvasRef.current?.getContext("2d");
@@ -482,6 +478,7 @@ function StatusContent() {
                     onTouchStart={startDraw}
                     onTouchMove={draw}
                     onTouchEnd={stopDraw}
+                    onTouchCancel={stopDraw}
                     style={{ width: "100%", height: 100, border: "1px solid #2a2a3a", borderRadius: 11, background: "#0d0d15", cursor: "crosshair", touchAction: "none" }}
                   />
                   <div className="row" style={{ marginTop: 8, justifyContent: "space-between", alignItems: "center" }}>
