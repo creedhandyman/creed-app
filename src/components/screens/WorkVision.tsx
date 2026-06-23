@@ -708,7 +708,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         {/* All active jobs — tap a card to clock in */}
         <div className="sl" style={{ margin: todaySchedule.length > 0 ? "12px 2px 7px" : "0 2px 7px" }}>{t("wv.allActive")}</div>
         {(() => {
-          const active = jobs.filter((j) => !j.archived && !["complete", "invoiced", "paid"].includes(j.status));
+          // Inspections are pre-quote walkthroughs, not billable work — keep
+          // them out of the clock-in picker so techs can't clock into one.
+          const active = jobs.filter((j) => !j.archived && !["complete", "invoiced", "paid", "inspection"].includes(j.status));
           if (active.length === 0) return <div className="cd" style={{ textAlign: "center", padding: 20 }}><p className="dim" style={{ fontSize: 14 }}>{t("wv.noActive")}</p></div>;
           // Pink dot flags addresses with more than one open job so Bernard
           // notices the ones that need care before clocking in.
