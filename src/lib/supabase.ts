@@ -83,12 +83,35 @@ function isTransientNetworkError(err: unknown): boolean {
   return false;
 }
 
-// Debounce the "Syncing data…" indicator so the 11 parallel db.get calls
-// in loadAll don't fire 11 toasts when the whole batch fails together.
+/**
+ * Supabase auth-token expiry. While the app is backgrounded the access token
+ * can lapse; supabase-js refreshes it when the tab becomes visible again, but
+ * loadAll's parallel reads (the 15s poll + the resume refresh) can race AHEAD
+ * of that refresh and come back 401 / "JWT expired" (PostgREST code PGRST301).
+ * For READS this is transient — the next poll, after the refresh lands,
+ * succeeds — so we treat it like a network blip (a quiet "Syncing…") instead
+ * of a wall of red "load addresses failed" toasts on every return-to-app.
+ * Writes still surface loudly: a failed save is real and the user must retry.
+ */
+function isAuthExpiryError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: string; message?: string; status?: number; __isAuthError?: boolean };
+  if (e.code === "PGRST301") return true;       // PostgREST: JWT expired / invalid
+  if (e.status === 401) return true;
+  if (e.__isAuthError) return true;             // supabase-js GoTrue errors
+  const m = (e.message || "").toLowerCase();
+  return /jwt (expired|is expired|invalid)|token (has )?expired|expired.*token|invalid (jwt|token|claim)/.test(m);
+}
+
+// Debounce the "Syncing data…" indicator so the parallel db.get calls
+// in loadAll don't fire a toast each when the whole batch fails together.
 let lastSyncToastAt = 0;
 
 function reportDbError(table: string, op: string, err: unknown) {
-  const transient = isTransientNetworkError(err);
+  // Auth-token expiry on the resume poll is transient for READS only — it
+  // self-heals once supabase-js refreshes the session. Failed writes still
+  // toast loudly so the user knows their action didn't save.
+  const transient = isTransientNetworkError(err) || (op === "load" && isAuthExpiryError(err));
   // eslint-disable-next-line no-console
   console[transient ? "warn" : "error"](`[db] ${op} ${table} failed${transient ? " (transient — will retry on next interaction)" : ""}:`, err);
   if (typeof window === "undefined") return;
