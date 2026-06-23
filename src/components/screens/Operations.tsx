@@ -39,7 +39,7 @@ class SubTabErrorBoundary extends Component<
     return (
       <div className="cd statusstrip" style={{ ["--c" as any]: "var(--color-accent-red)" }}>
         <h4 style={{ color: "var(--color-accent-red)", fontSize: 16, marginBottom: 8 }}>
-          {this.props.label} tab crashed
+          {this.props.label} {t("ops.tabCrashed")}
         </h4>
         <p style={{ fontSize: 14, marginBottom: 8 }}>
           {String(this.state.error?.message || this.state.error)}
@@ -55,7 +55,7 @@ class SubTabErrorBoundary extends Component<
           onClick={() => this.setState({ error: null, info: "" })}
           style={{ fontSize: 14, padding: "4px 10px", marginTop: 8 }}
         >
-          Retry
+          {t("common.tryAgain")}
         </button>
       </div>
     );
@@ -236,16 +236,16 @@ function ReviewAutomationCard({
   const template = org.review_request_message ?? "";
   const reviewUrl = org.google_review_url ?? "";
 
-  const defaultTemplate = "Hi {customer_name}, thanks for choosing {business_name} for your {job_property} project. If we earned it, we'd love a quick Google review: {review_link}";
+  const defaultTemplate = t("ops.reviewTemplateDefault");
 
   return (
     <div className="cd">
       <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
         <Icon name="star" size={16} color="var(--color-primary)" />
-        Review Automation
+        {t("ops.reviewAutomation")}
       </h4>
       <div className="dim" style={{ fontSize: 14, marginBottom: 12 }}>
-        Auto-send a review request after a paid invoice. Closes the loop on the gamification quests and drives Google reviews without you having to remember.
+        {t("ops.reviewAutomationHelp")}
       </div>
 
       {/* Enable toggle — primary affordance, pinned to the top so the
@@ -261,7 +261,7 @@ function ReviewAutomationCard({
           style={{ width: 16, height: 16, cursor: "pointer" }}
         />
         <span style={{ fontSize: 15, fontWeight: 500 }}>
-          {enabled ? "Enabled" : "Disabled"} — automatically request a review after payment
+          {enabled ? t("ops.enabled") : t("ops.disabled")} — {t("ops.reviewToggleLabel")}
         </span>
       </label>
 
@@ -269,7 +269,7 @@ function ReviewAutomationCard({
         <>
           <div className="g2 mb">
             <div>
-              <label className="sl">Delay after payment (hours)</label>
+              <label className="sl">{t("ops.delayAfterPayment")}</label>
               <input
                 type="number"
                 key={`rrd-${delayHours}`}
@@ -286,11 +286,11 @@ function ReviewAutomationCard({
                 }}
               />
               <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
-                How long to wait so you don&apos;t bombard the customer at payment.
+                {t("ops.delayAfterPaymentHelp")}
               </div>
             </div>
             <div>
-              <label className="sl">Channel</label>
+              <label className="sl">{t("ops.channel")}</label>
               <select
                 value={channel}
                 onChange={async (e) => {
@@ -299,18 +299,18 @@ function ReviewAutomationCard({
                 }}
                 style={{ marginTop: 4 }}
               >
-                <option value="sms">SMS only</option>
-                <option value="email">Email only</option>
-                <option value="both">Both</option>
+                <option value="sms">{t("ops.channelSmsOnly")}</option>
+                <option value="email">{t("ops.channelEmailOnly")}</option>
+                <option value="both">{t("ops.channelBoth")}</option>
               </select>
               <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
-                Email needs RESEND_API_KEY on Vercel to actually send.
+                {t("ops.channelEmailHelp")}
               </div>
             </div>
           </div>
 
           <div className="mb">
-            <label className="sl">Google review URL</label>
+            <label className="sl">{t("ops.googleReviewUrl")}</label>
             <input
               type="url"
               key={`gr-${reviewUrl}`}
@@ -323,12 +323,12 @@ function ReviewAutomationCard({
               }}
             />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
-              The link the message points the customer at. Leave blank to fall back to a generic &quot;reply with a star rating 1-5&quot; message.
+              {t("ops.googleReviewUrlHelp")}
             </div>
           </div>
 
           <div>
-            <label className="sl">Message template</label>
+            <label className="sl">{t("ops.messageTemplate")}</label>
             <textarea
               key={`tpl-${template.slice(0, 20)}`}
               defaultValue={template}
@@ -342,7 +342,7 @@ function ReviewAutomationCard({
               }}
             />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
-              Variables: <code>{"{customer_name}"}</code>, <code>{"{business_name}"}</code>, <code>{"{job_property}"}</code>, <code>{"{review_link}"}</code>. Leave blank for the default.
+              {t("ops.variables")}: <code>{"{customer_name}"}</code>, <code>{"{business_name}"}</code>, <code>{"{job_property}"}</code>, <code>{"{review_link}"}</code>. {t("ops.leaveBlankDefault")}
             </div>
           </div>
         </>
@@ -353,10 +353,11 @@ function ReviewAutomationCard({
 
 type OpsTab = "payroll" | "financials" | "customers" | "recurring" | "hr" | "team" | "billing" | "settings";
 
-const AREA_LABEL: Record<OpsTab, string> = {
-  payroll: "Payroll", financials: "Financials", customers: "Customers", recurring: "Recurring",
-  hr: "HR", team: "Team", billing: "Billing", settings: "Settings",
+const AREA_LABEL_KEY: Record<OpsTab, string> = {
+  payroll: "ops.payroll", financials: "ops.financials", customers: "ops.customers", recurring: "ops.recurring",
+  hr: "ops.hr", team: "ops.team", billing: "ops.billing", settings: "ops.settings",
 };
+const areaLabel = (tab: OpsTab): string => t(AREA_LABEL_KEY[tab]);
 
 // Per-tile color + tint (matches the mock's launcher).
 const TILE_STYLE: Record<OpsTab, { icon: IconName; color: string; bg: string }> = {
@@ -426,18 +427,18 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   const netProfit = revenueMonth - laborMonth;
   const monthLabel = now.toLocaleDateString("en-US", { month: "short" });
   const fmtMoney = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Math.round(n)}`);
-  const roleLabel = user?.role === "owner" ? "Owner" : user?.role === "manager" ? "Manager" : (user?.role || "Team");
-  const planLabel = org?.subscription_plan ? String(org.subscription_plan) : org?.plan ? String(org.plan) : "Manage";
+  const roleLabel = user?.role === "owner" ? t("team.roleOwner") : user?.role === "manager" ? t("team.roleManager") : (user?.role || t("ops.roleTeam"));
+  const planLabel = org?.subscription_plan ? String(org.subscription_plan) : org?.plan ? String(org.plan) : t("ops.manage");
 
   const tileSub: Record<OpsTab, string> = {
-    payroll: `${fmtMoney(payrollDue)} due`,
+    payroll: `${fmtMoney(payrollDue)} ${t("ops.due")}`,
     financials: `${fmtMoney(revenueMonth)} · ${monthLabel}`,
-    customers: `${customers.length} client${customers.length === 1 ? "" : "s"}`,
-    recurring: `${recurringJobs.filter((r) => r.is_active).length} active`,
-    hr: pendingTimeOffCount ? `${pendingTimeOffCount} time-off pending` : "Time off · PTO",
-    team: `${profiles.length} member${profiles.length === 1 ? "" : "s"}`,
+    customers: `${customers.length} ${customers.length === 1 ? t("ops.clientSingular") : t("ops.clientPlural")}`,
+    recurring: `${recurringJobs.filter((r) => r.is_active).length} ${t("ops.active")}`,
+    hr: pendingTimeOffCount ? `${pendingTimeOffCount} ${t("ops.timeOffPending")}` : t("ops.timeOffPto"),
+    team: `${profiles.length} ${profiles.length === 1 ? t("ops.memberSingular") : t("ops.memberPlural")}`,
     billing: planLabel,
-    settings: "Rates · tax · brand",
+    settings: t("ops.ratesTaxBrand"),
   };
 
   // ── Launcher hub (admins) ──
@@ -445,7 +446,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
     return (
       <div className="fi">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>Operations</span>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("settings.operations")}</span>
           <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4 }}>
             <Icon name="safety" size={12} color="#3ee08f" /> {roleLabel}
           </span>
@@ -454,9 +455,9 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
         {/* KPIs */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 13 }}>
           {[
-            { l: "Payroll due", v: fmtMoney(payrollDue), c: "var(--color-money)" },
-            { l: `Revenue · ${monthLabel}`, v: fmtMoney(revenueMonth), c: "inherit" },
-            { l: "Net profit", v: fmtMoney(netProfit), c: netProfit >= 0 ? "var(--color-money)" : "var(--color-accent-red)" },
+            { l: t("ops.payrollDue"), v: fmtMoney(payrollDue), c: "var(--color-money)" },
+            { l: `${t("ops.revenue")} · ${monthLabel}`, v: fmtMoney(revenueMonth), c: "inherit" },
+            { l: t("ops.netProfit"), v: fmtMoney(netProfit), c: netProfit >= 0 ? "var(--color-money)" : "var(--color-accent-red)" },
           ].map((k) => (
             <div key={k.l} style={{ background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, borderRadius: 13, padding: "11px 6px", textAlign: "center" }}>
               <div style={{ fontSize: 8.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--color-dim)" }}>{k.l}</div>
@@ -482,7 +483,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
                 <div style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 9, background: st.bg }}>
                   <Icon name={st.icon} size={19} color={st.color} />
                 </div>
-                <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".3px" }}>{AREA_LABEL[id]}</div>
+                <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".3px" }}>{areaLabel(id)}</div>
                 <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 2 }}>{tileSub[id]}</div>
               </button>
             );
@@ -499,12 +500,12 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <button
             onClick={() => setTab(null)}
-            aria-label="Back to Operations"
+            aria-label={t("ops.backToOperations")}
             style={{ width: 30, height: 30, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit" }}
           >
             <Icon name="back" size={16} />
           </button>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px", textTransform: "uppercase" }}>{AREA_LABEL[tab]}</span>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px", textTransform: "uppercase" }}>{areaLabel(tab)}</span>
         </div>
       )}
 

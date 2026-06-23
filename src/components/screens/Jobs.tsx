@@ -288,7 +288,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         useStore.getState().showToast(
-          "Scan failed — fill in manually: " + (err?.error || res.statusText),
+          t("jobs.scanFailedManual") + " " + (err?.error || res.statusText),
           "warning",
         );
         return;
@@ -320,14 +320,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
       useStore.getState().showToast(
         total > 0
-          ? `Scanned: $${total.toFixed(2)}${vendor ? ` at ${vendor}` : ""} — review & Add`
-          : "Scanned — review fields & Add",
+          ? `${t("jobs.scanned")}: $${total.toFixed(2)}${vendor ? ` ${t("jobs.scannedAt")} ${vendor}` : ""} — ${t("jobs.reviewAndAdd")}`
+          : t("jobs.scannedReviewFields"),
         "success",
       );
     } catch (err) {
       console.error("receipt scan error:", err);
       useStore.getState().showToast(
-        "Scan failed — fill in manually: " + (err instanceof Error ? err.message : String(err)),
+        t("jobs.scanFailedManual") + " " + (err instanceof Error ? err.message : String(err)),
         "warning",
       );
     }
@@ -335,9 +335,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   };
 
   const addReceipt = async (jobId: string) => {
-    if (!rn.trim()) { useStore.getState().showToast("Enter a receipt note", "warning"); return; }
+    if (!rn.trim()) { useStore.getState().showToast(t("jobs.enterReceiptNote"), "warning"); return; }
     const amt = parseFloat(ra);
-    if (!amt || amt <= 0) { useStore.getState().showToast("Enter a valid amount", "warning"); return; }
+    if (!amt || amt <= 0) { useStore.getState().showToast(t("jobs.enterValidAmount"), "warning"); return; }
     setUploading(true);
     try {
       // Photo was uploaded the moment the user attached it. Fall back to
@@ -390,11 +390,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
       resetReceiptForm();
       await loadAll();
-      useStore.getState().showToast("Receipt added", "success");
+      useStore.getState().showToast(t("jobs.receiptAdded"), "success");
     } catch (err) {
       console.error(err);
       useStore.getState().showToast(
-        "Error saving receipt: " + (err instanceof Error ? err.message : String(err)),
+        t("jobs.errorSavingReceipt") + " " + (err instanceof Error ? err.message : String(err)),
         "error",
       );
     }
@@ -411,7 +411,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           const workOrder = jobData?.workOrder || [];
           const unchecked = workOrder.filter((w: { done: boolean }) => !w.done).length;
           if (unchecked > 0) {
-            if (!await useStore.getState().showConfirm("Incomplete Items", `${unchecked} work order item${unchecked !== 1 ? "s" : ""} still unchecked. Mark complete anyway?`)) return;
+            if (!await useStore.getState().showConfirm(t("jobs.incompleteItems"), `${unchecked} ${unchecked !== 1 ? t("jobs.workOrderItemsPlural") : t("jobs.workOrderItemSingular")} ${t("jobs.stillUncheckedMarkComplete")}`)) return;
           }
         } catch { /* no work order, proceed */ }
       }
@@ -455,7 +455,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
       if (msg) {
         navigator.clipboard.writeText(msg);
-        useStore.getState().showToast("Client message copied — paste & send to " + job.client, "success");
+        useStore.getState().showToast(t("jobs.clientMsgCopiedSendTo") + " " + job.client, "success");
       }
     }
 
@@ -469,7 +469,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   };
 
   const deleteJob = async (id: string) => {
-    if (await useStore.getState().showConfirm("Delete Job", "Delete this job?")) {
+    if (await useStore.getState().showConfirm(t("jobs.deleteJobTitle"), t("jobs.deleteJobBody"))) {
       await db.del("jobs", id);
       loadAll();
     }
@@ -566,7 +566,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       body,
     );
     if (!openPrint(html)) {
-      useStore.getState().showToast("Allow popups to generate invoice", "error");
+      useStore.getState().showToast(t("jobs.allowPopupsInvoice"), "error");
     }
   };
 
@@ -575,14 +575,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // wired to the handlers that already exist on this screen.
   const primaryCTA = (dj: typeof jobs[0]): { label: string; icon: string; onClick: () => void } | null => {
     switch (dj.status) {
-      case "lead":      return { label: "Build Quote", icon: "quote", onClick: () => onEditJob?.(dj.id) };
-      case "quoted":    return { label: "Edit / Send Quote", icon: "edit", onClick: () => onEditJob?.(dj.id) };
-      case "accepted":  return { label: "Schedule", icon: "schedule", onClick: () => (onScheduleJob ? onScheduleJob(dj.property) : setPage("sched")) };
-      case "scheduled": return { label: "Mark Active", icon: "play", onClick: () => setStatus(dj.id, "active") };
-      case "active":    return { label: "Mark Complete", icon: "check", onClick: () => setStatus(dj.id, "complete") };
-      case "complete":  return { label: "Generate Invoice", icon: "receipt", onClick: () => { generateInvoice(dj); setStatus(dj.id, "invoiced"); } };
-      case "invoiced":  return { label: "Mark Paid", icon: "checkCircle", onClick: () => setStatus(dj.id, "paid") };
-      case "paid":      return { label: "Request Review", icon: "star", onClick: () => setReviewJob(dj) };
+      case "lead":      return { label: t("jobs.buildQuote"), icon: "quote", onClick: () => onEditJob?.(dj.id) };
+      case "quoted":    return { label: t("jobs.editSendQuote"), icon: "edit", onClick: () => onEditJob?.(dj.id) };
+      case "accepted":  return { label: t("jobs.schedule"), icon: "schedule", onClick: () => (onScheduleJob ? onScheduleJob(dj.property) : setPage("sched")) };
+      case "scheduled": return { label: t("jobs.markActive"), icon: "play", onClick: () => setStatus(dj.id, "active") };
+      case "active":    return { label: t("jobs.markComplete"), icon: "check", onClick: () => setStatus(dj.id, "complete") };
+      case "complete":  return { label: t("jobs.generateInvoice"), icon: "receipt", onClick: () => { generateInvoice(dj); setStatus(dj.id, "invoiced"); } };
+      case "invoiced":  return { label: t("jobs.markPaid"), icon: "checkCircle", onClick: () => setStatus(dj.id, "paid") };
+      case "paid":      return { label: t("jobs.requestReview"), icon: "star", onClick: () => setReviewJob(dj) };
       default:          return null;
     }
   };
@@ -616,10 +616,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           {/* Topbar — back · JOB · print */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
             <button className="bo" onClick={() => setDetailJobId(null)} style={{ fontSize: 14, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Icon name="back" size={15} /> Jobs
+              <Icon name="back" size={15} /> {t("nav.jobs")}
             </button>
-            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px" }}>JOB</div>
-            <button className="bo" onClick={() => generateInvoice(dj)} title="Print / invoice" style={{ padding: "6px 9px", display: "inline-flex", alignItems: "center" }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px" }}>{t("jobs.jobUpper")}</div>
+            <button className="bo" onClick={() => generateInvoice(dj)} title={t("jobs.printInvoice")} style={{ padding: "6px 9px", display: "inline-flex", alignItems: "center" }}>
               <Icon name="print" size={15} />
             </button>
           </div>
@@ -627,7 +627,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           {/* Detail header */}
           <div className="dhead">
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".1em", textTransform: "uppercase", color: "#9db4d6", flexShrink: 0 }}>Job #</span>
+              <span style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".1em", textTransform: "uppercase", color: "#9db4d6", flexShrink: 0 }}>{t("jobs.jobNumberLabel")}</span>
               <input
                 key={dj.id}
                 defaultValue={djJobNumber}
@@ -648,14 +648,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               />
             </div>
             <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".4px" }}>
-              {dj.property || "(no address)"}
+              {dj.property || t("jobs.noAddress")}
             </div>
             {dj.client && <div style={{ fontSize: 13.5, color: "#9db4d6", marginTop: 2 }}>{dj.client}</div>}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 8 }}>
               <select
                 value={dj.status || "quoted"}
                 onChange={(e) => setStatus(dj.id, e.target.value)}
-                aria-label="Job status"
+                aria-label={t("jobs.jobStatus")}
                 style={{
                   WebkitAppearance: "none", MozAppearance: "none", appearance: "none",
                   fontFamily: "Oswald", fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em",
@@ -666,7 +666,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
                 }}
               >
-                <option value="lead"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>Lead</option>
+                <option value="lead"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("jobs.lead")}</option>
                 <option value="quoted"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.quoted")}</option>
                 <option value="accepted"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.accepted")}</option>
                 <option value="scheduled" style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.scheduled")}</option>
@@ -683,7 +683,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: 13, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 9, textDecoration: "none" }}
               >
-                <Icon name="mapPin" size={13} /> Show on map
+                <Icon name="mapPin" size={13} /> {t("jobs.showOnMap")}
               </a>
             )}
           </div>
@@ -699,7 +699,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           {djLead && (djLead.description || djLead.photos.length > 0) && (
             <div className="section" style={{ borderLeft: "3px solid #ff3d6e" }}>
               <div className="seclabel" style={{ color: "#ff3d6e", borderBottom: "none", marginBottom: 0 }}>
-                <Icon name="star" size={13} /> Request from prospect
+                <Icon name="star" size={13} /> {t("jobs.requestFromProspect")}
               </div>
               {djLead.description && (
                 <div style={{ fontSize: 15, whiteSpace: "pre-wrap", padding: djLead.photos.length ? "0 0 8px" : "0 0 4px" }}>
@@ -720,19 +720,19 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
           {/* Properties */}
           <div className="section">
-            <div className="seclabel"><Icon name="settings" size={13} /> Properties</div>
+            <div className="seclabel"><Icon name="settings" size={13} /> {t("jobs.properties")}</div>
             <div className="drow">
-              <span className="l">Trade</span>
+              <span className="l">{t("jobs.trade")}</span>
               <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: pillBg, border: `1px solid ${pillBorder}` }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{dj.trade || "None"}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{dj.trade || t("jobs.none")}</span>
                 <Icon name="expand" size={12} color="var(--color-dim)" />
                 <select
                   value={dj.trade || ""}
                   onChange={async (e) => { await db.patch("jobs", dj.id, { trade: e.target.value }); loadAll(); }}
-                  aria-label="Trade"
+                  aria-label={t("jobs.trade")}
                   style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", WebkitAppearance: "none", appearance: "none" }}
                 >
-                  <option value="">None</option>
+                  <option value="">{t("jobs.none")}</option>
                   <option value="Plumbing">Plumbing</option>
                   <option value="Electrical">Electrical</option>
                   <option value="Carpentry">Carpentry</option>
@@ -744,13 +744,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               </div>
             </div>
             <div className="drow">
-              <span className="l">Requested tech</span>
+              <span className="l">{t("jobs.requestedTech")}</span>
               <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: pillBg, border: `1px solid ${pillBorder}` }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{dj.requested_tech || "Anyone"}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{dj.requested_tech || t("jobs.anyone")}</span>
                 <Icon name="expand" size={12} color="var(--color-dim)" />
                 <select
                   value={dj.requested_tech || ""}
-                  aria-label="Requested tech"
+                  aria-label={t("jobs.requestedTech")}
                   onChange={async (e) => {
                     const techName = e.target.value;
                     const prev = dj.requested_tech || "";
@@ -773,20 +773,20 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   }}
                   style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", WebkitAppearance: "none", appearance: "none" }}
                 >
-                  <option value="">Anyone</option>
+                  <option value="">{t("jobs.anyone")}</option>
                   {profiles.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </div>
             </div>
             <div className="drow">
-              <span className="l">Created</span>
+              <span className="l">{t("jobs.created")}</span>
               <span className="v">{dj.job_date || (dj.created_at ? dj.created_at.slice(0, 10) : "—")}</span>
             </div>
           </div>
 
           {/* Notes */}
           <div className="section">
-            <div className="seclabel"><Icon name="edit" size={13} /> Notes</div>
+            <div className="seclabel"><Icon name="edit" size={13} /> {t("common.notes")}</div>
             <div style={{ paddingTop: 6 }}>
               <JobNotesInput job={dj} />
             </div>
@@ -794,13 +794,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
           {/* Money */}
           <div className="section">
-            <div className="seclabel"><Icon name="money" size={13} /> Money</div>
+            <div className="seclabel"><Icon name="money" size={13} /> {t("jobs.money")}</div>
             <div className="drow">
-              <span className="l">Quote total</span>
+              <span className="l">{t("jobs.quoteTotal")}</span>
               <span className="v" style={{ fontFamily: "Oswald", fontSize: 16, color: "var(--color-money)" }}>
                 ${(dj.total || 0).toFixed(0)}
                 {onEditJob && (
-                  <button onClick={() => onEditJob(dj.id)} title="Edit quote" style={{ background: "transparent", border: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0, marginLeft: 6, display: "inline-flex", alignItems: "center" }}>
+                  <button onClick={() => onEditJob(dj.id)} title={t("jobs.editQuote")} style={{ background: "transparent", border: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0, marginLeft: 6, display: "inline-flex", alignItems: "center" }}>
                     <Icon name="edit" size={13} />
                   </button>
                 )}
@@ -815,22 +815,22 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               return (
                 <div style={{ display: "flex", gap: 6, paddingTop: 8 }}>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                    <div className="sl">Labor</div>
+                    <div className="sl">{t("qf.labor")}</div>
                     <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 16 }}>${(dj.total_labor || 0).toFixed(0)}</div>
                   </div>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                    <div className="sl">Materials</div>
+                    <div className="sl">{t("qf.materials")}</div>
                     <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 16 }}>${(dj.total_mat || 0).toFixed(0)}</div>
                   </div>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
-                    <div className="sl">Hours</div>
+                    <div className="sl">{t("common.hours")}</div>
                     <div style={{ fontFamily: "Oswald", color: "var(--color-highlight)", fontSize: 16 }}>{quoted.toFixed(1)}</div>
                     {labor.totalHrs > 0 && (
                       <div
                         style={{ fontSize: 11, marginTop: 2, color: overBudget ? "var(--color-accent-red)" : underBudget ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}
-                        title="Actual hours logged via Timer"
+                        title={t("jobs.actualHoursLogged")}
                       >
-                        {labor.totalHrs.toFixed(1)}h actual{quoted > 0 && ` (${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%)`}
+                        {labor.totalHrs.toFixed(1)}h {t("jobs.actual")}{quoted > 0 && ` (${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%)`}
                       </div>
                     )}
                   </div>
@@ -844,7 +844,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   onClick={() => { generateInvoice(dj); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }}
                   style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 >
-                  <Icon name="receipt" size={14} /> {dj.status === "complete" ? "Invoice" : "View invoice"}
+                  <Icon name="receipt" size={14} /> {dj.status === "complete" ? t("jobs.invoice") : t("jobs.viewInvoice")}
                 </button>
                 {(dj.status === "invoiced" || dj.status === "complete") && dj.total > 0 && org?.stripe_connected && (
                   <>
@@ -854,13 +854,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                         try {
                           const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: dj.total, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
                           const data = await res.json();
-                          if (data.url) { navigator.clipboard.writeText(data.url); useStore.getState().showToast("Payment link copied! Send it to the client.", "success"); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
-                          else useStore.getState().showToast("Error: " + (data.error || "Could not create payment link"), "error");
-                        } catch { useStore.getState().showToast("Failed to create payment link", "error"); }
+                          if (data.url) { navigator.clipboard.writeText(data.url); useStore.getState().showToast(t("jobs.paymentLinkCopied"), "success"); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
+                          else useStore.getState().showToast(t("jobs.errorPrefix") + " " + (data.error || t("jobs.couldNotCreateLink")), "error");
+                        } catch { useStore.getState().showToast(t("jobs.failedCreateLink"), "error"); }
                       }}
                       style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                     >
-                      <Icon name="link" size={14} /> Send link
+                      <Icon name="link" size={14} /> {t("jobs.sendLink")}
                     </button>
                     <button
                       className="bo"
@@ -869,12 +869,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                           const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: dj.total, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
                           const data = await res.json();
                           if (data.url) { setPayQR({ url: data.url, jobId: dj.id, amount: dj.total }); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
-                          else useStore.getState().showToast("Error: " + (data.error || "Could not create payment"), "error");
-                        } catch { useStore.getState().showToast("Failed to create payment", "error"); }
+                          else useStore.getState().showToast(t("jobs.errorPrefix") + " " + (data.error || t("jobs.couldNotCreatePayment")), "error");
+                        } catch { useStore.getState().showToast(t("jobs.failedCreatePayment"), "error"); }
                       }}
                       style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                     >
-                      <Icon name="qr" size={14} /> Collect now
+                      <Icon name="qr" size={14} /> {t("jobs.collectNow")}
                     </button>
                   </>
                 )}
@@ -884,7 +884,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     onClick={() => setStatus(dj.id, "paid")}
                     style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                   >
-                    <Icon name="check" size={14} /> Mark paid
+                    <Icon name="check" size={14} /> {t("jobs.markPaid")}
                   </button>
                 )}
               </div>
@@ -893,28 +893,28 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
           {/* Work */}
           <div className="section">
-            <div className="seclabel"><Icon name="list" size={13} /> Work</div>
+            <div className="seclabel"><Icon name="list" size={13} /> {t("nav.work")}</div>
             {onEditJob && (
               <div className="linkrow" onClick={() => onEditJob(dj.id)}>
-                <span className="lf"><span className="ic"><Icon name="edit" size={15} /></span> Edit quote</span>
+                <span className="lf"><span className="ic"><Icon name="edit" size={15} /></span> {t("jobs.editQuote")}</span>
                 <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
               </div>
             )}
             <div className="linkrow" onClick={() => setSubScreen({ id: dj.id, kind: "workorder" })}>
-              <span className="lf"><span className="ic"><Icon name="list" size={15} /></span> Work order</span>
+              <span className="lf"><span className="ic"><Icon name="list" size={15} /></span> {t("jobs.workOrder")}</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
             </div>
             <div className="linkrow" onClick={() => setSubScreen({ id: dj.id, kind: "receipts" })}>
-              <span className="lf"><span className="ic" style={{ color: "var(--color-warning)" }}><Icon name="receipt" size={15} /></span> Receipts &amp; photos</span>
+              <span className="lf"><span className="ic" style={{ color: "var(--color-warning)" }}><Icon name="receipt" size={15} /></span> {t("jobs.receiptsAndPhotos")}</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
             </div>
           </div>
 
           {/* Manage */}
           <div className="section">
-            <div className="seclabel"><Icon name="settings" size={13} /> Manage</div>
+            <div className="seclabel"><Icon name="settings" size={13} /> {t("jobs.manage")}</div>
             <div className="linkrow" onClick={() => setRecurringFrom(dj)}>
-              <span className="lf"><span className="ic"><Icon name="refresh" size={15} /></span> Make recurring</span>
+              <span className="lf"><span className="ic"><Icon name="refresh" size={15} /></span> {t("jobs.makeRecurring")}</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
@@ -926,11 +926,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     ? `Hi! Here's your quote from ${org?.name || "us"} for ${dj.property}:\n\nTotal: $${(dj.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
                     : `Hi! Here's the status update for your job at ${dj.property}:\n\nView progress: ${url}`;
                   navigator.clipboard.writeText(msg);
-                  useStore.getState().showToast("Message copied! Paste & send to client.", "success");
+                  useStore.getState().showToast(t("jobs.messageCopiedSend"), "success");
                 }}
                 style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
-                <Icon name="send" size={13} /> Send to client
+                <Icon name="send" size={13} /> {t("jobs.sendToClient")}
               </button>
               {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
                 <button
@@ -938,7 +938,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   onClick={() => setReviewJob(dj)}
                   style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: dj.review_requested_at ? "#888" : "var(--color-highlight)" }}
                 >
-                  <Icon name={dj.review_requested_at ? "mail" : "star"} size={13} /> {dj.review_requested_at ? "Review sent" : "Request review"}
+                  <Icon name={dj.review_requested_at ? "mail" : "star"} size={13} /> {dj.review_requested_at ? t("jobs.reviewSent") : t("jobs.requestReview")}
                 </button>
               )}
             </div>
@@ -958,18 +958,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               let icon: "star" | "mail" | "info" = "star";
               if (rr?.status === "scheduled") {
                 const hoursOut = Math.max(0, Math.round((new Date(rr.scheduled_for).getTime() - Date.now()) / 3600 / 1000));
-                label = hoursOut <= 0 ? "Review request queued — sending shortly" : `Review request scheduled in ${hoursOut}h`;
+                label = hoursOut <= 0 ? t("jobs.reviewQueued") : `${t("jobs.reviewScheduledIn")} ${hoursOut}h`;
                 color = "var(--color-highlight)"; icon = "star";
               } else if (rr?.status === "sent") {
-                label = `Review request sent on ${rr.sent_at ? new Date(rr.sent_at).toLocaleDateString() : "—"}`;
+                label = `${t("jobs.reviewSentOn")} ${rr.sent_at ? new Date(rr.sent_at).toLocaleDateString() : "—"}`;
                 color = "var(--color-success)"; icon = "mail";
               } else if (rr?.status === "failed") {
-                label = `Review request failed${rr.error ? `: ${rr.error}` : ""}`;
+                label = `${t("jobs.reviewFailed")}${rr.error ? `: ${rr.error}` : ""}`;
                 color = "var(--color-accent-red)"; icon = "info";
               } else if (rr?.status === "cancelled") {
-                label = "Review request cancelled (manual send)"; color = "#888"; icon = "mail";
+                label = t("jobs.reviewCancelled"); color = "#888"; icon = "mail";
               } else if (!automationOn) {
-                label = "Review request off (disabled in Settings)"; color = "#888"; icon = "info";
+                label = t("jobs.reviewOff"); color = "#888"; icon = "info";
               } else { return null; }
               return (
                 <div
@@ -988,7 +988,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   onClick={async () => { await db.patch("jobs", dj.id, { archived: true, archived_at: new Date().toISOString() }); loadAll(); }}
                   style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 >
-                  <Icon name="package" size={14} /> Archive
+                  <Icon name="package" size={14} /> {t("jobs.archive")}
                 </button>
               ) : (
                 <button
@@ -996,7 +996,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   onClick={async () => { await db.patch("jobs", dj.id, { archived: false, archived_at: null }); loadAll(); }}
                   style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 >
-                  <Icon name="refresh" size={14} /> Restore
+                  <Icon name="refresh" size={14} /> {t("jobs.restore")}
                 </button>
               )}
               <button
@@ -1004,7 +1004,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 onClick={() => deleteJob(dj.id)}
                 style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
-                <Icon name="delete" size={14} /> Delete
+                <Icon name="delete" size={14} /> {t("common.delete")}
               </button>
             </div>
           </div>
@@ -1025,10 +1025,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       <>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <button className="bo" onClick={() => setSubScreen(null)} style={{ fontSize: 14, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Icon name="back" size={15} /> Job
+            <Icon name="back" size={15} /> {t("jobs.jobBack")}
           </button>
           <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px" }}>
-            {subScreen.kind === "workorder" ? "WORK ORDER" : "RECEIPTS"}
+            {subScreen.kind === "workorder" ? t("jobs.workOrderUpper") : t("jobs.receiptsUpper")}
           </div>
           <span style={{ width: 56 }} />
         </div>
@@ -1042,7 +1042,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             return (
               <div className="section">
                 <div style={{ fontSize: 14, color: "var(--color-dim)", padding: "12px 0", textAlign: "center" }}>
-                  No work-order items on this job yet.
+                  {t("jobs.noWorkOrderItems")}
                 </div>
               </div>
             );
@@ -1055,7 +1055,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <div style={{ height: 7, background: "var(--color-success)", borderRadius: 5, width: `${(done / total) * 100}%`, transition: "width 0.3s" }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--color-dim)", marginBottom: 11 }}>
-                <span>Progress</span><span>{done} / {total} done</span>
+                <span>{t("jobs.progress")}</span><span>{done} / {total} {t("jobs.doneLower")}</span>
               </div>
               {workOrder.map((w, wi) => (
                 <div
@@ -1101,25 +1101,25 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             {/* Add receipt — attach a photo to auto-scan (vendor/amount/items
                 via AI -> price_corrections), or type the note + amount. */}
             <div className="section">
-              <div className="seclabel"><Icon name="camera" size={13} /> Add receipt</div>
+              <div className="seclabel"><Icon name="camera" size={13} /> {t("jobs.addReceipt")}</div>
               <div
                 onClick={() => { if (!scanning) setReceiptCam(true); }}
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 12, border: "1.5px dashed var(--color-border-dark-2)", color: scanning ? "var(--color-warning)" : "var(--color-primary)", cursor: scanning ? "wait" : "pointer", fontFamily: "Oswald", fontSize: 15, marginTop: 8 }}
               >
                 <Icon name="camera" size={15} />
-                {scanning ? "Scanning receipt…" : rPhoto ? rPhoto.name : "Attach photo · auto-scan"}
+                {scanning ? t("jobs.scanningReceipt") : rPhoto ? rPhoto.name : t("jobs.attachPhotoAutoScan")}
               </div>
               <CameraModal
                 open={receiptCam}
                 onClose={() => setReceiptCam(false)}
                 onCapture={(fs) => { const f = fs[0]; if (f) handlePhotoAttach(f, sj.id); }}
-                title="Receipt"
+                title={t("jobs.receiptTitle")}
               />
               <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
-                <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={scanning ? "Scanning…" : "Note / vendor"} style={{ flex: 1 }} disabled={scanning} />
+                <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={scanning ? t("jobs.scanningShort") : t("jobs.noteVendor")} style={{ flex: 1 }} disabled={scanning} />
                 <input type="number" value={ra} onChange={(e) => setRa(e.target.value)} placeholder="$" style={{ width: 72 }} disabled={scanning} />
                 <button className="bg" onClick={() => addReceipt(sj.id)} style={{ fontSize: 14, padding: "6px 12px" }} disabled={uploading || scanning}>
-                  {uploading ? "…" : "Add"}
+                  {uploading ? "…" : t("common.add")}
                 </button>
               </div>
               {rPhoto && !scanning && (
@@ -1127,16 +1127,16 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   onClick={() => { setRPhoto(null); setScannedPhotoUrl(""); setScannedItems([]); setScannedVendor(""); if (photoRef.current) photoRef.current.value = ""; }}
                   style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, padding: "8px 0 0", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                 >
-                  <Icon name="close" size={12} /> Remove photo
+                  <Icon name="close" size={12} /> {t("jobs.removePhoto")}
                 </button>
               )}
             </div>
 
             {/* Receipt list */}
             <div className="section">
-              <div className="seclabel"><Icon name="receipt" size={13} /> Receipts</div>
+              <div className="seclabel"><Icon name="receipt" size={13} /> {t("jobs.receipts")}</div>
               {receipts.filter((r) => r.job_id === sj.id).length === 0 ? (
-                <div style={{ fontSize: 14, color: "var(--color-dim)", padding: "10px 0", textAlign: "center" }}>No receipts on this job yet.</div>
+                <div style={{ fontSize: 14, color: "var(--color-dim)", padding: "10px 0", textAlign: "center" }}>{t("jobs.noReceipts")}</div>
               ) : (
                 receipts.filter((r) => r.job_id === sj.id).map((r) => (
                   <div key={r.id} className="drow">
@@ -1145,14 +1145,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                         <img src={r.photo_url} alt="" onClick={() => setViewPhoto(r.photo_url)} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", cursor: "pointer", flexShrink: 0, border: "1px solid var(--color-border-dark)" }} />
                       )}
                       <span style={{ minWidth: 0 }}>
-                        <span style={{ fontSize: 14.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.note || "Receipt"}</span>
+                        <span style={{ fontSize: 14.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.note || t("jobs.receiptSingular")}</span>
                         <span className="dim" style={{ fontSize: 12 }}>{r.receipt_date}</span>
                       </span>
                     </span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                       <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 15 }}>${(r.amount || 0).toFixed(2)}</span>
                       <button
-                        onClick={async () => { if (await useStore.getState().showConfirm("Delete Receipt", "Delete receipt?")) { await db.del("receipts", r.id); loadAll(); } }}
+                        onClick={async () => { if (await useStore.getState().showConfirm(t("jobs.deleteReceiptTitle"), t("jobs.deleteReceiptBody"))) { await db.del("receipts", r.id); loadAll(); } }}
                         style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 15, cursor: "pointer", padding: 0 }}
                       >
                         ✕
@@ -1174,7 +1174,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         <>
       <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
         <Icon name="jobs" size={22} color="var(--color-primary)" />
-        Jobs
+        {t("nav.jobs")}
       </h2>
 
       {/* Job tabs */}
@@ -1191,7 +1191,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           { id: "billing" as const, icon: "receipt", label: t("jobs.billing"), count: billingJobs.length, c: "var(--color-warning)" },
           { id: "paid" as const, icon: "checkCircle", label: t("jobs.paid"), count: paidJobs.length, c: "var(--color-success)" },
           ...(archivedJobs.length > 0
-            ? [{ id: "archive" as const, icon: "package", label: "Archive", count: archivedJobs.length, c: "#888" }]
+            ? [{ id: "archive" as const, icon: "package", label: t("jobs.archive"), count: archivedJobs.length, c: "#888" }]
             : []),
         ];
         return (
@@ -1237,7 +1237,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           render={(j) => (
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                <b>{j.property || "(no address)"}</b>
+                <b>{j.property || t("jobs.noAddress")}</b>
                 {j.client && <span className="dim"> · {j.client}</span>}
               </span>
               <span style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 13, flexShrink: 0 }}>
@@ -1247,7 +1247,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           )}
           onSelect={(j) => setDetailJobId(j.id)}
           onQueryChange={setSearchQuery}
-          placeholder="Search jobs by property, client, or trade…"
+          placeholder={t("jobs.searchJobs")}
         />
       </div>
 
@@ -1256,7 +1256,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)", padding: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div className="sl">Ready to Invoice</div>
+              <div className="sl">{t("jobs.readyToInvoice")}</div>
               <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-warning)" }}>
                 ${jobs.filter((j) => j.status === "complete" || j.status === "invoiced").reduce((s, j) => s + (j.total || 0), 0).toLocaleString()}
               </div>
@@ -1280,7 +1280,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     });
                     if (!res.ok) {
                       const text = await res.text();
-                      useStore.getState().showToast("Stripe error (" + res.status + "): " + text, "error");
+                      useStore.getState().showToast(t("jobs.stripeError") + " (" + res.status + "): " + text, "error");
                       setConnectingStripe(false);
                       return;
                     }
@@ -1291,12 +1291,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       });
                       window.location.href = data.url;
                     } else {
-                      useStore.getState().showToast("Error: " + (data.error || "Could not start Stripe setup"), "error");
+                      useStore.getState().showToast(t("jobs.errorPrefix") + " " + (data.error || t("jobs.couldNotStartStripe")), "error");
                       setConnectingStripe(false);
                     }
                   } catch (e) {
                     useStore.getState().showToast(
-                      "Failed to start Stripe setup: " + (e instanceof Error ? e.message : "Network error"),
+                      t("jobs.failedStartStripe") + " " + (e instanceof Error ? e.message : t("jobs.networkError")),
                       "error",
                     );
                     setConnectingStripe(false);
@@ -1304,7 +1304,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 }}
                 style={{ fontSize: 14, padding: "5px 10px" }}
               >
-                {connectingStripe ? "Connecting…" : `${t("jobs.connectStripe")} →`}
+                {connectingStripe ? t("jobs.connecting") : `${t("jobs.connectStripe")} →`}
               </button>
             )}
           </div>
@@ -1347,11 +1347,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   ? t("jobs.noBilling")
                   : jobTab === "paid"
                   ? t("jobs.noPaid")
-                  : "No archived jobs."}
+                  : t("jobs.noArchived")}
               </p>
               {jobTab === "active" && (
                 <button className="bb mt" onClick={() => setPage("qf")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <Icon name="quote" size={14} />Start Quote
+                  <Icon name="quote" size={14} />{t("jobs.startQuote")}
                 </button>
               )}
             </div>
@@ -1366,14 +1366,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           // from Icon.tsx; an unknown name renders nothing rather than crash.
           const hint: { icon: string; text: string } = (() => {
             switch (j.status) {
-              case "lead":      return { icon: "quote", text: "New lead" };
-              case "quoted":    return { icon: "send", text: j.job_date ? `Quoted · ${j.job_date}` : "Quoted" };
-              case "accepted":  return { icon: "schedule", text: "Schedule it" };
-              case "scheduled": return { icon: "schedule", text: j.job_date || "Scheduled" };
-              case "active":    return { icon: "worker", text: w.length ? `On site · ${w[0].name}` : "In progress" };
-              case "complete":  return { icon: "receipt", text: "Ready to invoice" };
-              case "invoiced":  return { icon: "receipt", text: "Invoice sent" };
-              case "paid":      return { icon: "checkCircle", text: "Paid" };
+              case "lead":      return { icon: "quote", text: t("jobs.hintNewLead") };
+              case "quoted":    return { icon: "send", text: j.job_date ? `${t("status.quoted")} · ${j.job_date}` : t("status.quoted") };
+              case "accepted":  return { icon: "schedule", text: t("jobs.hintScheduleIt") };
+              case "scheduled": return { icon: "schedule", text: j.job_date || t("status.scheduled") };
+              case "active":    return { icon: "worker", text: w.length ? `${t("jobs.hintOnSite")} · ${w[0].name}` : t("jobs.hintInProgress") };
+              case "complete":  return { icon: "receipt", text: t("jobs.hintReadyToInvoice") };
+              case "invoiced":  return { icon: "receipt", text: t("jobs.hintInvoiceSent") };
+              case "paid":      return { icon: "checkCircle", text: t("status.paid") };
               default:          return { icon: "dot", text: j.status || "" };
             }
           })();
@@ -1391,11 +1391,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17, letterSpacing: ".3px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       {j.status === "lead" && (
                         <span style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".08em", padding: "2px 6px", borderRadius: 4, background: "#ff3d6e", color: "#fff" }}>
-                          NEW LEAD
+                          {t("jobs.newLead")}
                         </span>
                       )}
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-                        {j.property || "(no address)"}
+                        {j.property || t("jobs.noAddress")}
                       </span>
                       {j.property && (
                         <a
@@ -1403,7 +1403,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          title="Map"
+                          title={t("jobs.map")}
                           style={{ color: "var(--color-primary)", display: "inline-flex", flexShrink: 0 }}
                         >
                           <Icon name="mapPin" size={13} color="var(--color-primary)" />
@@ -1434,7 +1434,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       border: `1px solid ${statusColor(j.status)}66`,
                     }}
                   >
-                    {j.status === "lead" ? "Lead" : (t(`status.${j.status}`) || j.status)}
+                    {j.status === "lead" ? t("jobs.lead") : (t(`status.${j.status}`) || j.status)}
                   </span>
                   <span className="dim" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0 }}>
                     <Icon name={hint.icon} size={12} />
@@ -1452,7 +1452,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         <p className="dim" style={{ fontSize: 14 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
             <Icon name="tip" size={14} color="var(--color-highlight)" />
-            {jobTab === "active" ? "Next step: Schedule a job → then start the Timer" : jobTab === "billing" ? "Send payment links to collect from clients" : "All paid — great work!"}
+            {jobTab === "active" ? t("jobs.tipActive") : jobTab === "billing" ? t("jobs.tipBilling") : t("jobs.tipPaid")}
           </span>
         </p>
       </div>
@@ -1475,7 +1475,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             style={{ textAlign: "center", cursor: "default" }}
           >
             <div style={{ fontSize: 16, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>
-              Scan to Pay
+              {t("jobs.scanToPay")}
             </div>
             <div style={{ background: "#fff", display: "inline-block", padding: 16, borderRadius: 12, marginBottom: 12 }}>
               <QRCodeSVG value={payQR.url} size={200} level="M" />
@@ -1484,14 +1484,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               ${payQR.amount.toLocaleString()}
             </div>
             <div style={{ fontSize: 14, color: "#888", marginBottom: 16 }}>
-              Customer scans with phone camera → pays with Apple Pay, Google Pay, or card
+              {t("jobs.qrInstructions")}
             </div>
             <button
               className="bo"
               onClick={() => setPayQR(null)}
               style={{ fontSize: 15, padding: "6px 16px", color: "#888" }}
             >
-              Close
+              {t("common.close")}
             </button>
           </div>
         </div>
@@ -1517,7 +1517,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         >
           <button
             onClick={(e) => { e.stopPropagation(); setViewPhoto(null); }}
-            aria-label="Close"
+            aria-label={t("common.close")}
             style={{
               position: "fixed",
               top: 12,
@@ -1553,11 +1553,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               zIndex: 10000,
             }}
           >
-            Open original
+            {t("jobs.openOriginal")}
           </a>
           <img
             src={viewPhoto}
-            alt="Receipt"
+            alt={t("jobs.receiptSingular")}
             onClick={(e) => e.stopPropagation()}
             style={{
               maxWidth: "100vw",
@@ -1646,7 +1646,7 @@ function MakeRecurringModal({
       next_fire_at: nextFire.toISOString(),
     });
     setSaving(false);
-    useStore.getState().showToast("Recurring template created — manage in Ops → Recurring", "success");
+    useStore.getState().showToast(t("jobs.recurringCreated"), "success");
     onCreated();
   };
 
@@ -1664,29 +1664,29 @@ function MakeRecurringModal({
         style={{ width: "100%", maxWidth: 480 }}
       >
         <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ fontSize: 17 }}>Make recurring</h3>
+          <h3 style={{ fontSize: 17 }}>{t("jobs.makeRecurring")}</h3>
           <button className="bo" onClick={onClose} style={{ padding: "2px 8px" }}>
             <Icon name="close" size={14} />
           </button>
         </div>
 
         <div style={{ fontSize: 14, color: "#888", marginBottom: 10 }}>
-          From <strong>{job.property}</strong>{job.client ? ` · ${job.client}` : ""}.
-          A new scheduled job will be created on every fire, with the same line items + work order.
+          {t("jobs.recurringFrom")} <strong>{job.property}</strong>{job.client ? ` · ${job.client}` : ""}.
+          {" "}{t("jobs.recurringDesc")}
         </div>
 
         <div className="g2 mb" style={{ gap: 8 }}>
           <div>
-            <label className="sl">Title</label>
+            <label className="sl">{t("jobs.title")}</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Lawn maintenance"
+              placeholder={t("jobs.titlePlaceholder")}
               style={{ marginTop: 4 }}
             />
           </div>
           <div>
-            <label className="sl">Cadence</label>
+            <label className="sl">{t("jobs.cadence")}</label>
             <select
               value={cadence}
               onChange={(e) => setCadence(e.target.value as Cadence)}
@@ -1699,7 +1699,7 @@ function MakeRecurringModal({
           </div>
           {isWeekly ? (
             <div>
-              <label className="sl">Day of week</label>
+              <label className="sl">{t("jobs.dayOfWeek")}</label>
               <select
                 value={dayOfWeek}
                 onChange={(e) => setDayOfWeek(parseInt(e.target.value, 10))}
@@ -1712,7 +1712,7 @@ function MakeRecurringModal({
             </div>
           ) : (
             <div>
-              <label className="sl">Day of month (1-28)</label>
+              <label className="sl">{t("jobs.dayOfMonth")}</label>
               <input
                 type="number"
                 min={1}
@@ -1724,7 +1724,7 @@ function MakeRecurringModal({
             </div>
           )}
           <div>
-            <label className="sl">Hour (0-23)</label>
+            <label className="sl">{t("jobs.hourLabel")}</label>
             <input
               type="number"
               min={0}
@@ -1737,14 +1737,14 @@ function MakeRecurringModal({
         </div>
 
         <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
-          First fire: <strong>{formatNextFire(computeNextFire(new Date(), cadence, { dayOfWeek: isWeekly ? dayOfWeek : undefined, dayOfMonth: !isWeekly ? dayOfMonth : undefined, hour }).toISOString())}</strong>
+          {t("jobs.firstFire")} <strong>{formatNextFire(computeNextFire(new Date(), cadence, { dayOfWeek: isWeekly ? dayOfWeek : undefined, dayOfMonth: !isWeekly ? dayOfMonth : undefined, hour }).toISOString())}</strong>
         </div>
 
         <div className="row" style={{ marginTop: 12, gap: 6 }}>
           <button className="bb" onClick={save} disabled={saving} style={{ fontSize: 14 }}>
-            {saving ? "Saving…" : "Create"}
+            {saving ? t("jobs.saving") : t("jobs.create")}
           </button>
-          <button className="bo" onClick={onClose} style={{ fontSize: 14 }}>Cancel</button>
+          <button className="bo" onClick={onClose} style={{ fontSize: 14 }}>{t("common.cancel")}</button>
         </div>
       </div>
     </div>
