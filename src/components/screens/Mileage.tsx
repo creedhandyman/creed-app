@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { haversineMiles, getFix, ROAD_FACTOR } from "@/lib/geo";
@@ -13,6 +13,18 @@ interface MileageEntry {
   end_miles: number;
   total_miles: number;
   user_name: string;
+}
+
+// localStorage key for an in-progress GPS snapshot trip — persisted so the trip
+// survives locking the phone / switching to Maps / closing the app.
+const TRIP_KEY = "c_mileage_trip";
+
+interface GpsTrip {
+  startLat: number;
+  startLng: number;
+  startOdo: string; // optional starting odometer, as typed
+  job: string;
+  startedAt: string; // ISO
 }
 
 interface Props {
@@ -38,29 +50,26 @@ export default function Mileage({ setPage }: Props) {
   const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
   const [mMiles, setMMiles] = useState("");
 
-  // GPS auto-trip: watches location while driving and computes miles itself.
+  // GPS snapshot trip: capture a start fix (+ optional starting odometer), then
+  // an end fix when you arrive — no continuous tracking, so the screen can lock
+  // and you can use Maps. Distance = start→end straight-line × road factor.
   const [trackMode, setTrackMode] = useState<"gps" | "manual">("gps");
-  const [gpsActive, setGpsActive] = useState(false);
-  const [gpsStarting, setGpsStarting] = useState(false);
-  const [gpsMiles, setGpsMiles] = useState(0);
   const [gpsJob, setGpsJob] = useState("");
+  const [gpsStartOdo, setGpsStartOdo] = useState("");
   const [gpsErr, setGpsErr] = useState("");
-  const [gpsAcc, setGpsAcc] = useState<number | null>(null);
+  const [gpsBusy, setGpsBusy] = useState(false);
+  // In-progress trip — persisted to localStorage so it survives closing the app.
+  const [gpsTrip, setGpsTrip] = useState<GpsTrip | null>(null);
+  // After End: review/adjust the ending odometer before saving.
+  const [gpsReview, setGpsReview] = useState<{ miles: number; endOdo: string } | null>(null);
+  const gpsInProgress = !!gpsTrip || !!gpsReview;
 
-  // Refs hold the live tracking state — watchPosition's callback is a closure,
-  // so accumulating into refs avoids stale-state bugs; gpsMiles mirrors it for UI.
-  const watchId = useRef<number | null>(null);
-  const startFix = useRef<{ lat: number; lng: number } | null>(null);
-  const lastFix = useRef<{ lat: number; lng: number } | null>(null);
-  const milesRef = useRef(0);
-  const wakeLock = useRef<{ release: () => void } | null>(null);
-
-  // Stop watching + release the screen wake lock if we leave the screen mid-trip.
+  // Restore an in-progress trip on mount — the whole point: start, leave, return.
   useEffect(() => {
-    return () => {
-      if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
-      try { wakeLock.current?.release?.(); } catch { /* best effort */ }
-    };
+    try {
+      const raw = localStorage.getItem(TRIP_KEY);
+      if (raw) setGpsTrip(JSON.parse(raw) as GpsTrip);
+    } catch { /* ignore a corrupt entry */ }
   }, []);
 
   // Load entries
@@ -113,101 +122,94 @@ export default function Mileage({ setPage }: Props) {
     setLoaded(false);
   };
 
-  // ── GPS auto-tracking ──
-  // Keep the screen awake so the OS doesn't suspend GPS while driving.
-  const acquireWakeLock = async () => {
-    try {
-      const nav = navigator as unknown as { wakeLock?: { request: (t: string) => Promise<{ release: () => void }> } };
-      if (nav.wakeLock?.request) wakeLock.current = await nav.wakeLock.request("screen");
-    } catch { /* best effort — not supported on all browsers */ }
-  };
-  const releaseWakeLock = () => {
-    try { wakeLock.current?.release?.(); } catch { /* */ }
-    wakeLock.current = null;
-  };
-
-  // Each position update extends the path by the segment since the last fix.
-  const onFix = (pos: GeolocationPosition) => {
-    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-    setGpsAcc(accuracy ?? null);
-    if (accuracy != null && accuracy > 100) return; // too noisy to trust
-    if (!startFix.current) startFix.current = { lat, lng };
-    const prev = lastFix.current;
-    if (prev) {
-      const seg = haversineMiles(prev.lat, prev.lng, lat, lng);
-      // Drop sub-~15m jitter (parked GPS drift) and >3mi single-fix jumps (errors).
-      if (seg >= 0.01 && seg < 3) {
-        milesRef.current += seg;
-        setGpsMiles(milesRef.current);
-      }
-    }
-    lastFix.current = { lat, lng };
-  };
-
+  // ── GPS snapshot trip ──
+  // Start: stamp the current location + optional starting odometer, persist it,
+  // and let the user drive freely (phone locked, Maps open, app closed).
   const startGpsTrip = async () => {
-    if (gpsStarting || gpsActive) return;
+    if (gpsBusy || gpsTrip) return;
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       setGpsErr("This device can't share location."); return;
     }
     setGpsErr("");
-    setGpsStarting(true);
-    milesRef.current = 0;
-    setGpsMiles(0);
-    startFix.current = null;
-    lastFix.current = null;
+    setGpsBusy(true);
     const fix = await getFix();
+    setGpsBusy(false);
     if (!fix) {
-      setGpsStarting(false);
       setGpsErr("Couldn't get your location. Allow location access, or log miles manually below.");
       return;
     }
-    startFix.current = { lat: fix.lat, lng: fix.lng };
-    lastFix.current = { lat: fix.lat, lng: fix.lng };
-    setGpsAcc(fix.accuracy ?? null);
-    watchId.current = navigator.geolocation.watchPosition(
-      onFix,
-      (err) => setGpsErr(err.message || "Lost GPS signal"),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
-    );
-    await acquireWakeLock();
-    setGpsStarting(false);
-    setGpsActive(true);
+    const trip: GpsTrip = {
+      startLat: fix.lat,
+      startLng: fix.lng,
+      startOdo: gpsStartOdo.trim(),
+      job: gpsJob,
+      startedAt: new Date().toISOString(),
+    };
+    try { localStorage.setItem(TRIP_KEY, JSON.stringify(trip)); } catch { /* */ }
+    setGpsTrip(trip);
   };
 
+  // End: stamp the arrival location, estimate miles (start→end × road factor),
+  // and auto-fill the ending odometer = start + miles for the user to confirm.
   const endGpsTrip = async () => {
-    if (watchId.current != null) { navigator.geolocation.clearWatch(watchId.current); watchId.current = null; }
-    releaseWakeLock();
-    let miles = milesRef.current;
-    // Grab a fresh end point. If continuous tracking under-counted (screen
-    // slept, sparse fixes), fall back to start→end straight line × road factor.
-    const end = await getFix(8000);
-    if (end) lastFix.current = { lat: end.lat, lng: end.lng };
-    if (miles < 0.1 && startFix.current && lastFix.current) {
-      miles = haversineMiles(
-        startFix.current.lat, startFix.current.lng,
-        lastFix.current.lat, lastFix.current.lng
-      ) * ROAD_FACTOR;
+    if (!gpsTrip || gpsBusy) return;
+    setGpsErr("");
+    setGpsBusy(true);
+    const fix = await getFix(12000);
+    setGpsBusy(false);
+    if (!fix) {
+      setGpsErr("Couldn't get your location to finish the trip. Try again, or cancel and use Odometer mode.");
+      return;
     }
-    setGpsActive(false);
-    setGpsMiles(0);
-    setGpsAcc(null);
-    if (miles < 0.1) {
+    const miles = Math.round(
+      haversineMiles(gpsTrip.startLat, gpsTrip.startLng, fix.lat, fix.lng) * ROAD_FACTOR * 10
+    ) / 10;
+    const startNum = parseFloat(gpsTrip.startOdo);
+    const endOdo = !isNaN(startNum) ? String(Math.round(startNum + miles)) : "";
+    setGpsReview({ miles, endOdo });
+  };
+
+  // Save: prefer the (possibly corrected) odometer delta; fall back to the GPS
+  // estimate when no starting odometer was entered.
+  const saveGpsTrip = async () => {
+    if (!gpsTrip || !gpsReview) return;
+    const startNum = parseFloat(gpsTrip.startOdo);
+    const endNum = parseFloat(gpsReview.endOdo);
+    let start_miles = 0, end_miles = 0, total_miles = gpsReview.miles;
+    if (!isNaN(startNum) && !isNaN(endNum) && endNum > startNum) {
+      start_miles = startNum;
+      end_miles = endNum;
+      total_miles = Math.round((endNum - startNum) * 10) / 10;
+    } else if (!isNaN(startNum)) {
+      start_miles = startNum; // ending odo cleared — keep start, log GPS miles
+    }
+    if (total_miles < 0.1) {
       useStore.getState().showToast("No movement detected — nothing logged", "warning");
       return;
     }
-    miles = Math.round(miles * 10) / 10;
     await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
-      job: gpsJob || "General",
+      job: gpsTrip.job || "General",
       trip_date: new Date().toISOString().split("T")[0],
-      start_miles: 0,
-      end_miles: 0,
-      total_miles: miles,
+      start_miles,
+      end_miles,
+      total_miles,
     });
-    useStore.getState().showToast(`Logged ${miles.toFixed(1)} mi`, "success");
+    try { localStorage.removeItem(TRIP_KEY); } catch { /* */ }
+    setGpsTrip(null);
+    setGpsReview(null);
+    setGpsStartOdo("");
     setGpsJob("");
+    useStore.getState().showToast(`Logged ${total_miles.toFixed(1)} mi`, "success");
     setLoaded(false);
+  };
+
+  // Cancel an in-progress / to-be-reviewed trip without logging anything.
+  const discardGpsTrip = () => {
+    try { localStorage.removeItem(TRIP_KEY); } catch { /* */ }
+    setGpsTrip(null);
+    setGpsReview(null);
   };
 
   const addManual = async () => {
@@ -356,26 +358,26 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
         {/* Mode toggle — GPS auto-tracking vs manual odometer */}
         <div className="row" style={{ gap: 6, marginBottom: 10 }}>
           <button
-            onClick={() => { if (!gpsActive) setTrackMode("gps"); }}
-            disabled={gpsActive}
+            onClick={() => { if (!gpsInProgress) setTrackMode("gps"); }}
+            disabled={gpsInProgress}
             className={trackMode === "gps" ? "bb" : "bo"}
             style={{ flex: 1, fontSize: 13, padding: "7px 0", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }}
           >
-            <Icon name="navigation" size={14} /> GPS Auto
+            <Icon name="navigation" size={14} /> GPS Trip
           </button>
           <button
-            onClick={() => { if (!gpsActive) setTrackMode("manual"); }}
-            disabled={gpsActive}
+            onClick={() => { if (!gpsInProgress) setTrackMode("manual"); }}
+            disabled={gpsInProgress}
             className={trackMode === "manual" ? "bb" : "bo"}
-            style={{ flex: 1, fontSize: 13, padding: "7px 0", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, opacity: gpsActive ? 0.5 : 1 }}
+            style={{ flex: 1, fontSize: 13, padding: "7px 0", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, opacity: gpsInProgress ? 0.5 : 1 }}
           >
             <Icon name="mileage" size={14} /> Odometer
           </button>
         </div>
 
         {trackMode === "gps" ? (
-          /* GPS auto-tracking: tap Start → drive → tap End. Miles computed from location. */
-          !gpsActive ? (
+          /* GPS snapshot trip: tap Start → drive freely → tap End → confirm. */
+          !gpsTrip && !gpsReview ? (
             <>
               <div className="row" style={{ marginBottom: 8 }}>
                 <select value={gpsJob} onChange={(e) => setGpsJob(e.target.value)} style={{ flex: 1 }}>
@@ -385,39 +387,92 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                   ))}
                 </select>
               </div>
-              <div className="cta glow-green" onClick={startGpsTrip} style={{ opacity: gpsStarting ? 0.7 : 1 }}>
-                <div className="ic"><Icon name={gpsStarting ? "refresh" : "start"} size={24} color="#fff" strokeWidth={2} /></div>
+              <div className="row" style={{ marginBottom: 8 }}>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={gpsStartOdo}
+                  onChange={(e) => setGpsStartOdo(e.target.value)}
+                  placeholder="Starting odometer (optional)"
+                  style={{ flex: 1 }}
+                />
+              </div>
+              <div className="cta glow-green" onClick={startGpsTrip} style={{ opacity: gpsBusy ? 0.7 : 1 }}>
+                <div className="ic"><Icon name={gpsBusy ? "refresh" : "start"} size={24} color="#fff" strokeWidth={2} /></div>
                 <div className="tx">
-                  <b>{gpsStarting ? "Getting location…" : "Start GPS Trip"}</b>
-                  <small>Auto-tracks your miles while you drive</small>
+                  <b>{gpsBusy ? "Getting location…" : "Start Trip"}</b>
+                  <small>Marks your start — then drive freely</small>
                 </div>
-                {!gpsStarting && <Icon name="next" size={19} color="#fff" />}
+                {!gpsBusy && <Icon name="next" size={19} color="#fff" />}
               </div>
               {gpsErr && (
                 <p style={{ fontSize: 12.5, marginTop: 8, color: "var(--color-accent-red)" }}>{gpsErr}</p>
               )}
               <p className="dim" style={{ fontSize: 12, marginTop: 8, display: "flex", alignItems: "center", gap: 4 }}>
-                <Icon name="info" size={12} /> Keep this screen open while driving so GPS keeps tracking.
+                <Icon name="info" size={12} /> No need to keep this open — lock your phone or open Maps, then tap End when you arrive.
               </p>
             </>
-          ) : (
+          ) : gpsTrip && !gpsReview ? (
             <div style={{ textAlign: "center", padding: "6px 0 4px" }}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-                <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 10px var(--color-success)", animation: "pulse 1.6s ease-in-out infinite" }} />
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 10px var(--color-success)" }} />
                 <span style={{ fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".5px", fontSize: 14 }}>
-                  Tracking{gpsJob ? ` · ${gpsJob}` : ""}
+                  Trip started{gpsTrip.job ? ` · ${gpsTrip.job}` : ""}
                 </span>
               </div>
-              <div style={{ fontFamily: "Oswald", fontSize: 52, lineHeight: 1, fontWeight: 700, color: "var(--color-success)" }}>
-                {gpsMiles.toFixed(1)}
-              </div>
               <div className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
-                miles{gpsAcc != null ? ` · ±${Math.round(gpsAcc)}m` : ""}
+                {gpsTrip.startOdo ? `Started at ${gpsTrip.startOdo} mi · ` : ""}phone can stay locked
               </div>
-              <button className="br" onClick={endGpsTrip} style={{ fontSize: 15, padding: "10px 28px", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Icon name="stop" size={15} /> End Trip
+              <button className="br" onClick={endGpsTrip} disabled={gpsBusy} style={{ fontSize: 15, padding: "10px 28px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Icon name={gpsBusy ? "refresh" : "stop"} size={15} /> {gpsBusy ? "Getting location…" : "End Trip"}
               </button>
-              {gpsErr && <p className="dim" style={{ fontSize: 12, marginTop: 8 }}>{gpsErr}</p>}
+              <div style={{ marginTop: 10 }}>
+                <span onClick={discardGpsTrip} className="dim" style={{ fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>Cancel trip</span>
+              </div>
+              {gpsErr && <p style={{ fontSize: 12.5, marginTop: 8, color: "var(--color-accent-red)" }}>{gpsErr}</p>}
+            </div>
+          ) : (
+            <div style={{ padding: "4px 0" }}>
+              <div style={{ textAlign: "center", marginBottom: 12 }}>
+                <div className="dim" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".5px" }}>GPS estimate</div>
+                <div style={{ fontFamily: "Oswald", fontSize: 40, fontWeight: 700, color: "var(--color-success)", lineHeight: 1.1 }}>
+                  {gpsReview!.miles.toFixed(1)} <span style={{ fontSize: 16 }}>mi</span>
+                </div>
+              </div>
+              {gpsTrip!.startOdo ? (
+                <>
+                  <div className="dim" style={{ fontSize: 13, marginBottom: 6 }}>
+                    Started at {gpsTrip!.startOdo} mi. Confirm the ending odometer (auto-filled from the estimate — adjust to your real reading):
+                  </div>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={gpsReview!.endOdo}
+                    onChange={(e) => setGpsReview((r) => (r ? { ...r, endOdo: e.target.value } : r))}
+                    placeholder="Ending odometer"
+                    style={{ width: "100%", marginBottom: 8 }}
+                  />
+                  {(() => {
+                    const s = parseFloat(gpsTrip!.startOdo);
+                    const en = parseFloat(gpsReview!.endOdo);
+                    const tot = !isNaN(s) && !isNaN(en) && en > s ? en - s : gpsReview!.miles;
+                    return (
+                      <div style={{ textAlign: "center", marginBottom: 10 }}>
+                        <span style={{ fontFamily: "Oswald", fontSize: 22, color: "var(--color-success)" }}>{tot.toFixed(1)} miles</span>
+                      </div>
+                    );
+                  })()}
+                </>
+              ) : (
+                <div className="dim" style={{ fontSize: 13, marginBottom: 10, textAlign: "center" }}>
+                  No starting odometer entered — we&apos;ll log the GPS estimate.
+                </div>
+              )}
+              <div className="row" style={{ gap: 6 }}>
+                <button className="bo" onClick={discardGpsTrip} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Discard</button>
+                <button className="bb" onClick={saveGpsTrip} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Save trip</button>
+              </div>
+              {gpsErr && <p style={{ fontSize: 12.5, marginTop: 8, color: "var(--color-accent-red)" }}>{gpsErr}</p>}
             </div>
           )
         ) : (
