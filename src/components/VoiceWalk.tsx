@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { ROOM_PRESETS } from "./screens/Inspector";
 import { Icon } from "./Icon";
@@ -227,6 +228,12 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   // be folded). The Done / Next-Room buttons await this so we don't try
   // to transcribe before MediaRecorder finalizes the audio.
   const recorderStopWaitersRef = useRef<Array<() => void>>([]);
+  // Live auto-tick: points at the CURRENT recorder's in-progress chunk array
+  // (the same `myChunks` MediaRecorder is filling) so the interval below can
+  // transcribe the audio captured so far WITHOUT opening a second mic. The
+  // in-flight flag keeps the ~15s passes from overlapping if one is slow.
+  const liveChunksRef = useRef<Blob[]>([]);
+  const liveXcribeInFlight = useRef(false);
 
   // Speech support detection
   const [supported] = useState<boolean>(() => !!getSpeechRecognition());
@@ -346,6 +353,10 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
      independently using the system mic. */
   const startCameraAndRecorder = useCallback(async () => {
     setCameraError(null);
+    // Drop any stale pointer until THIS recorder's chunk array exists, so the
+    // live-transcribe interval can't pick up a previous room's audio while we
+    // await getUserMedia.
+    liveChunksRef.current = [];
     try {
       let stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
@@ -406,6 +417,10 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
           // a prior recorder could fold the *current* recorder's
           // in-progress chunks (and then wipe them).
           const myChunks: Blob[] = [];
+          // Expose this recorder's growing chunks to the live-transcribe
+          // interval (read-only there; onstop still folds them into
+          // roomAudioChunksRef as the canonical audio).
+          liveChunksRef.current = myChunks;
           // Capture the room name at recording-start so onstop folds
           // into the right bucket even if currentRoomRef somehow drifts.
           const myRoom = currentRoomRef.current;
@@ -539,11 +554,11 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   }, []);
 
   /* ── Unified inspecting toggle ──────────────────────────────────────
-     When on: open camera + recorder (single getUserMedia) + Web Speech
-     preview. Web Speech feeds the live transcript that drives the
-     auto-tick checklist matcher; MediaRecorder owns the canonical
-     audio for Whisper at end-of-room. When off: tear all three down,
-     fold this segment's audio into the room's accumulated chunks.
+     When on: open camera + recorder (single getUserMedia). MediaRecorder
+     holds one audio stream open; the live-transcribe effect below reads its
+     in-progress chunks to tick the checklist as the user talks, AND the same
+     audio is the canonical source for Whisper at end-of-room. When off: tear
+     down and fold this segment's audio into the room's accumulated chunks.
   ────────────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (inspecting) {
@@ -559,6 +574,58 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspecting]);
 
+  /* ── Live auto-tick (premier feature) ───────────────────────────────
+     The checklist ticks off as the user talks — with NO second mic and NO
+     Web-Speech restart chime. MediaRecorder already holds ONE audio stream
+     open; every ~13s we transcribe the audio captured so far via Whisper
+     (/api/transcribe) and feed it to the keyword matcher above. Cumulative
+     passes are supersets and `mentioned` is a Set, so re-runs only ever ADD
+     ticks (never un-tick). Best-effort: failures stay silent, and the
+     end-of-room canonical transcription is unaffected. */
+  useEffect(() => {
+    if (!inspecting) return;
+    let cancelled = false;
+    const run = async () => {
+      if (liveXcribeInFlight.current) return;
+      const room = currentRoomRef.current;
+      if (!room) return;
+      const chunks = liveChunksRef.current;
+      if (!chunks.length) return;
+      const size = chunks.reduce((s, b) => s + b.size, 0);
+      if (size < 8000) return; // not enough audio yet for a useful pass
+      liveXcribeInFlight.current = true;
+      try {
+        const mime = recorderRef.current?.mimeType || chunks[0]?.type || "audio/webm";
+        const blob = new Blob(chunks.slice(), { type: mime });
+        const fd = new FormData();
+        fd.append("audio", blob, `voicewalk-live-${room.replace(/\W+/g, "-")}.webm`);
+        const res = await apiFetch("/api/transcribe", { method: "POST", body: fd });
+        if (cancelled || !res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        const text = ((data.text as string) || "").trim();
+        if (cancelled || !text) return;
+        // Feed the transcript the auto-tick effect already watches. Always
+        // write the latest pass — items already ticked stay ticked (Set),
+        // and new mentions get picked up.
+        setRoomRecordings((prev) => {
+          const cur = prev[room] || emptyRecording();
+          if (cur.transcript === text) return prev;
+          return { ...prev, [room]: { ...cur, transcript: text } };
+        });
+        setTranscriptTick((t) => t + 1);
+      } catch {
+        /* best-effort live tick — Done still captures everything */
+      } finally {
+        liveXcribeInFlight.current = false;
+      }
+    };
+    // First pass a bit sooner so early mentions tick quickly, then steady.
+    const first = setTimeout(run, 7000);
+    const iv = setInterval(run, 13000);
+    return () => { cancelled = true; clearTimeout(first); clearInterval(iv); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inspecting]);
+
   // Force-pause when changing rooms; the new room starts cold.
   useEffect(() => {
     setInspecting(false);
@@ -570,9 +637,9 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   useEffect(() => {
     if (!currentRoom) return;
     const rec = roomRecordings[currentRoom];
-    // Tick items off the room transcript (the typed-narration fallback, or
-    // whatever the parent writes back) — the live mic preview was removed,
-    // so there are no interim words to match.
+    // Tick items off the room transcript — fed live by the periodic Whisper
+    // pass above as the user talks (and/or the typed-narration fallback).
+    // Cumulative and additive: re-runs only ever add ticks.
     const speechText = (rec?.transcript || "").toLowerCase();
     const fallbackText = pendingTyped.toLowerCase();
     const text = `${speechText} ${fallbackText}`.trim();
