@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { verifyJobToken } from "@/lib/job-token";
+import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
 
 export const dynamic = "force-dynamic";
 
@@ -54,29 +55,41 @@ export async function POST(req: NextRequest) {
     if (signatureType !== "typed" && signatureType !== "canvas") {
       return NextResponse.json({ error: "Invalid signatureType" }, { status: 400 });
     }
-    // The approval link carries a server-signed token bound to this job — proof
-    // the caller was actually sent the quote. Without it, anyone who learns a
-    // job id could forge an approval/signature.
-    if (!verifyJobToken(jobId, token)) {
-      return NextResponse.json(
-        { error: "This approval link is invalid or expired — please ask for a new link." },
-        { status: 403 },
-      );
-    }
-
     const supabase = serviceClient();
 
     // Pull the current job to decide whether to promote status. Only
     // "quoted" rolls forward — re-signing a paid invoice or an
-    // already-accepted job shouldn't reset the workflow.
+    // already-accepted job shouldn't reset the workflow. org_id/customer_id
+    // also feed the portal-session authorization below.
     const { data: jobs, error: getErr } = await supabase
       .from("jobs")
-      .select("id, status, client_signature")
+      .select("id, status, client_signature, org_id, customer_id")
       .eq("id", jobId)
       .limit(1);
     if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 });
     if (!jobs?.length) return NextResponse.json({ error: "Job not found" }, { status: 404 });
     const job = jobs[0];
+
+    // Authorize the approval — EITHER proof is sufficient:
+    //   (1) the server-signed token from the /status link (proves the quote
+    //       was actually sent to this customer), OR
+    //   (2) a valid portal session that OWNS this job — the same
+    //       (customer_id, org_id) rule /api/portal/me uses to decide which
+    //       jobs a customer can see. Portal job links are token-less, so this
+    //       lets a logged-in portal customer approve their own quote.
+    // Without either, someone who merely learns a job id can't forge approval.
+    const portalSession = verifySession(req.cookies.get(PORTAL_COOKIE_NAME)?.value);
+    const portalOwnsJob =
+      !!portalSession &&
+      !!job.customer_id &&
+      portalSession.customer_id === job.customer_id &&
+      portalSession.org_id === job.org_id;
+    if (!verifyJobToken(jobId, token) && !portalOwnsJob) {
+      return NextResponse.json(
+        { error: "This approval link is invalid or expired — please ask for a new link." },
+        { status: 403 },
+      );
+    }
 
     // Never overwrite an existing approval — once signed, it's locked.
     if (job.client_signature) {
