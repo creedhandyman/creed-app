@@ -36,6 +36,16 @@ import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 
+/** A saved, reusable quote-as-template: a name + the line-item rooms blob
+ *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
+interface ServiceTemplate {
+  id: string;
+  org_id: string;
+  name: string;
+  template_rooms: string;
+  created_at?: string;
+}
+
 // Compress image for AI processing — aggressive for mobile (S23 Ultra = 200MP)
 async function compressImage(file: File, maxSize = 800): Promise<string> {
   return new Promise((resolve) => {
@@ -254,8 +264,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const cGold = ctaHue("245,180,0", "#f5b400", "#f5b400", true);
   const cGreen = ctaHue("0,204,102", "#00b85c", "#3ee08f");
   const cBlue = ctaHue("46,139,255", "var(--color-primary)", "#8cc0ff");
+  const cViolet = ctaHue("157,78,221", "#9d4edd", "#d8b6ff");
 
-  const [mode, setMode] = useState<null | "paste" | "manual" | "edit" | "inspect" | "inspect-edit" | "quick">(null);
+  const [mode, setMode] = useState<null | "paste" | "manual" | "edit" | "inspect" | "inspect-edit" | "quick" | "template">(null);
   // Set when the user taps ✏️ Edit on a saved inspection in
   // SavedInspections. Hydrates the Inspector's `editing` prop so it
   // opens with the saved record's rooms/items/photos already in place
@@ -436,6 +447,53 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
   const fileRef = useRef<HTMLInputElement>(null);
   const org = useStore((s) => s.org);
+
+  // ── Service templates: save a finished quote and reuse its line items as a
+  //    one-tap starter (the "From Template" hub CTA). Org-scoped; template_rooms
+  //    is a stringified Room[] — the same shape as jobs.rooms. ──
+  const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const reloadTemplates = async () => {
+    const orgId = org?.id;
+    if (!orgId) return;
+    // Raw query (not db.get) so a missing table pre-migration degrades SILENTLY
+    // — no error toast on every QuoteForge open until the migration is run. An
+    // actual Save (db.post below) still toasts so the user knows to run it.
+    try {
+      const { data } = await supabase
+        .from("service_templates").select("*").eq("org_id", orgId)
+        .order("created_at", { ascending: false });
+      setTemplates((data as ServiceTemplate[]) || []);
+    } catch { /* table may not exist yet — stay quiet */ }
+  };
+  useEffect(() => {
+    reloadTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org?.id]);
+  const saveAsTemplate = async () => {
+    const name = templateName.trim();
+    if (!name) { useStore.getState().showToast("Name the template", "warning"); return; }
+    if (!rooms.length) { useStore.getState().showToast("Add line items first", "warning"); return; }
+    await db.post("service_templates", { org_id: org?.id, name, template_rooms: JSON.stringify(rooms) });
+    setSavingTemplate(false);
+    setTemplateName("");
+    await reloadTemplates();
+    useStore.getState().showToast(`Saved "${name}" as a template`, "success");
+  };
+  // Seed a fresh quote from a template's line items (clear any prior edit state).
+  const seedFromTemplate = (tpl: ServiceTemplate) => {
+    let parsed: Room[] = [];
+    try { parsed = JSON.parse(tpl.template_rooms) as Room[]; } catch { /* */ }
+    setEditingId(null);
+    setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined);
+    setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null);
+    setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
+    setJobPhotos([]); setWorkers([]);
+    setRooms(validateQuote(parsed));
+    setTab("quote");
+    setMode("edit");
+  };
   // Org's published labor rate is the authoritative default for quotes.
   // Previously this read `user.rate` (the logged-in tech's payroll rate),
   // which meant changing the rate in Ops → Settings never reached the
@@ -1472,10 +1530,67 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           />
         </div>
 
+        {/* From Template — violet glow */}
+        <div
+          onClick={() => setMode("template")}
+          style={{ display: "flex", alignItems: "center", gap: 13, padding: 17, borderRadius: 20, marginBottom: 12, cursor: "pointer", ...cViolet.card }}
+        >
+          <div style={{ width: 50, height: 50, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="briefcase" size={26} color={cViolet.icon} strokeWidth={2} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: cViolet.text }}>FROM TEMPLATE</div>
+            <div style={{ fontSize: 13, color: cViolet.sub }}>Reuse a saved service{templates.length ? ` · ${templates.length}` : ""}</div>
+          </div>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", ...cViolet.tag }}>FAST</span>
+        </div>
+
       <SavedInspections jobs={jobs} onQuote={handleInspectionComplete} onEdit={openInspectionEdit} onPrint={printInspection} onDelete={async (id) => { await db.del("jobs", id); loadAll(); }} />
     </div>
     );
   }
+
+  /* ══════════════════════════════════════════
+     FROM TEMPLATE — pick a saved service to seed a quote
+     ══════════════════════════════════════════ */
+  if (mode === "template")
+    return (
+      <div className="fi">
+        <div className="row mb" style={{ alignItems: "center", gap: 8 }}>
+          <button className="bo" onClick={() => setMode(null)} style={{ padding: "4px 11px" }}>←</button>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px", textTransform: "uppercase" }}>From Template</span>
+        </div>
+        {templates.length === 0 ? (
+          <div className="cd" style={{ textAlign: "center", padding: 22 }}>
+            <Icon name="briefcase" size={28} color="var(--color-dim)" />
+            <p className="dim" style={{ fontSize: 14, marginTop: 8 }}>No templates yet. Build a quote, then tap <b>Save as template</b> to reuse it here.</p>
+          </div>
+        ) : (
+          templates.map((tpl) => {
+            let count = 0;
+            try { (JSON.parse(tpl.template_rooms) as Room[]).forEach((r) => { count += r.items?.length || 0; }); } catch { /* */ }
+            return (
+              <div key={tpl.id} onClick={() => seedFromTemplate(tpl)} className="cd mb" style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: "12px 13px" }}>
+                <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(157,78,221,.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon name="briefcase" size={18} color="var(--color-violet)" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{tpl.name}</div>
+                  <div className="dim" style={{ fontSize: 12.5, marginTop: 1 }}>{count} item{count === 1 ? "" : "s"}</div>
+                </div>
+                <button
+                  onClick={async (e) => { e.stopPropagation(); if (!await useStore.getState().showConfirm("Delete Template", `Delete "${tpl.name}"?`)) return; await db.del("service_templates", tpl.id); reloadTemplates(); }}
+                  aria-label="Delete template"
+                  style={{ background: "none", border: "none", color: "var(--color-accent-red)", cursor: "pointer", display: "inline-flex", padding: 4, flexShrink: 0 }}
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
 
   /* ══════════════════════════════════════════
      INSPECT MODE
@@ -2529,6 +2644,26 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? "Update" : "Save job"}
         </button>
       </div>
+
+      {/* Save the current quote as a reusable service template */}
+      <button
+        onClick={() => { if (!rooms.length) { useStore.getState().showToast("Add line items first", "warning"); return; } setTemplateName(prop || ""); setSavingTemplate(true); }}
+        style={{ width: "100%", marginBottom: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5, fontWeight: 600, padding: 9, borderRadius: 11, color: "#c9a6ff", background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.4)", cursor: "pointer" }}
+      >
+        <Icon name="briefcase" size={13} color="#c9a6ff" /> Save as template
+      </button>
+      {savingTemplate && (
+        <div onClick={() => setSavingTemplate(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
+          <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380 }}>
+            <h4 style={{ fontSize: 16, marginBottom: 8 }}>Save as template</h4>
+            <input autoFocus value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Template name (e.g. Water heater swap)" style={{ width: "100%", marginBottom: 10 }} />
+            <div className="row" style={{ gap: 6 }}>
+              <button className="bo" onClick={() => setSavingTemplate(false)} style={{ flex: 1 }}>Cancel</button>
+              <button className="bb" onClick={saveAsTemplate} style={{ flex: 1 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <RenderModal
         open={showRender}
