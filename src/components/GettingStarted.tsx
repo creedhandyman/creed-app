@@ -50,10 +50,14 @@ export default function GettingStarted({
   const doneCount = tasks.filter((t) => t.done).length;
   const allDone = doneCount === tasks.length;
 
-  // All four done → persist dismissal so it won't return, but stay visible this
-  // mount to show the celebration.
+  // First time all four are done: persist dismissal so it never returns, show
+  // the celebration, then auto-collapse it after a beat (with a manual × too)
+  // so it doesn't sit on the dashboard forever for an already-set-up account.
   useEffect(() => {
-    if (allDone && !gsDismissed(uid) && tipsEnabled(uid)) dismissGs(uid);
+    if (!allDone || !tipsEnabled(uid) || gsDismissed(uid)) return;
+    dismissGs(uid);
+    const id = setTimeout(() => setDismissed(true), 4000);
+    return () => clearTimeout(id);
   }, [allDone, uid]);
 
   if (dismissed) return null;
@@ -77,6 +81,7 @@ export default function GettingStarted({
 
       {allDone ? (
         <div style={{ position: "relative", textAlign: "center", padding: "8px 4px" }}>
+          <button onClick={() => { dismissGs(uid); setDismissed(true); }} aria-label="Hide" style={{ position: "absolute", top: -2, right: -2, background: "none", border: "none", color: "var(--color-dim)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4, zIndex: 1 }}>×</button>
           {CONFETTI.map((c, i) => (
             <span key={i} className="gs-conf" style={{ ["--cx"]: c.cx, ["--cy"]: c.cy, background: c.c, left: `${44 + i}%` } as React.CSSProperties} />
           ))}
