@@ -45,6 +45,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const timeEntries = useStore((s) => s.timeEntries);
   const payHistory = useStore((s) => s.payHistory);
   const reviewRequests = useStore((s) => s.reviewRequests);
+  const customers = useStore((s) => s.customers);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
   // Inline dark tokens are fixed values — the Properties value-pills sit on a
@@ -209,6 +210,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Phase 3: sub-screen opened from the detail's Work section (work order /
   // receipts). null = show the detail (or the list). Back clears it.
   const [subScreen, setSubScreen] = useState<{ id: string; kind: "workorder" | "receipts" } | null>(null);
+  // "Send to client" SMS strip — once the (tokenized) status link is minted we
+  // open an editable strip that fires a native sms: deep link, matching the
+  // notify buttons. Scoped by jobId so switching jobs hides a stale draft.
+  const [sendStrip, setSendStrip] = useState<{ jobId: string; phone: string; msg: string } | null>(null);
   // Property typeahead query — drives both the dropdown suggestions
   // (in <PropertySearch>) and the inline filter on the visible list,
   // so the list and the typeahead stay in sync.
@@ -814,6 +819,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               const overBudget = labor.totalHrs > quoted && quoted > 0;
               const underBudget = quoted > 0 && labor.totalHrs > 0 && labor.totalHrs <= quoted;
               return (
+                <>
                 <div style={{ display: "flex", gap: 6, paddingTop: 8 }}>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
                     <div className="sl">{t("qf.labor")}</div>
@@ -836,6 +842,21 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     )}
                   </div>
                 </div>
+                {labor.byPerson.length > 0 && (
+                  <div style={{ paddingTop: 10 }}>
+                    <div className="sl" style={{ marginBottom: 5 }}>{t("jobs.timeLogged")}</div>
+                    {labor.byPerson.map((p, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13.5, padding: "3px 0" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                          <Icon name="worker" size={13} color="var(--color-dim)" />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+                        </span>
+                        <span style={{ fontFamily: "Oswald", flexShrink: 0, marginLeft: 8, color: "var(--color-highlight)" }}>{p.hrs.toFixed(1)}h</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                </>
               );
             })()}
             {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
@@ -922,12 +943,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <button
                 className="bo"
                 onClick={async () => {
+                  const cust = dj.customer_id ? customers.find((c) => c.id === dj.customer_id) : undefined;
                   const url = await getStatusLink(dj.id);
                   const msg = dj.status === "quoted" || dj.status === "accepted"
                     ? `Hi! Here's your quote from ${org?.name || "us"} for ${dj.property}:\n\nTotal: $${(dj.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
                     : `Hi! Here's the status update for your job at ${dj.property}:\n\nView progress: ${url}`;
-                  navigator.clipboard.writeText(msg);
-                  useStore.getState().showToast(t("jobs.messageCopiedSend"), "success");
+                  setSendStrip({ jobId: dj.id, phone: cust?.phone || "", msg });
                 }}
                 style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
@@ -943,6 +964,31 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 </button>
               )}
             </div>
+            {sendStrip && sendStrip.jobId === dj.id && (
+              <div style={{ marginTop: 8, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
+                <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
+                  {sendStrip.phone ? `To ${sendStrip.phone} · edit if needed` : "No phone on file — Open Messages and pick a contact, or use Copy."}
+                </div>
+                <textarea
+                  value={sendStrip.msg}
+                  onChange={(e) => setSendStrip({ ...sendStrip, msg: e.target.value })}
+                  rows={5}
+                  style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, border: "1px solid var(--color-border-dark-2)", background: "var(--color-dark-bg)", color: "inherit", resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
+                />
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <a
+                    href={`sms:${sendStrip.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(sendStrip.msg)}`}
+                    onClick={() => setSendStrip(null)}
+                    className="bb"
+                    style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
+                  >
+                    <Icon name="send" size={15} color="#fff" /> Open Messages
+                  </a>
+                  <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast("Couldn't copy on this device", "error"); } }} style={{ fontSize: 14 }}>Copy</button>
+                  <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label="Cancel" style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
+                </div>
+              </div>
+            )}
             {(dj.status === "scheduled" || dj.status === "active" || dj.status === "complete") && (
               <div style={{ paddingTop: 8 }}>
                 <SmsNotifyButtons jobId={dj.id} variant="grid" />
