@@ -10,6 +10,7 @@
  * paid) so a new user can read top-to-bottom.
  */
 import { useState } from "react";
+import Grizz from "./Grizz";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "./Icon";
 
@@ -226,8 +227,8 @@ export default function UserGuideModal({ onClose }: Props) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Icon name="help" size={20} color="var(--color-primary)" />
-            User Guide
+            <Grizz pose="point" size={28} />
+            Ask Grizz
           </h3>
           <button
             onClick={onClose}

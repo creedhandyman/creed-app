@@ -16,6 +16,7 @@ import Financials from "./screens/Financials";
 import Operations from "./screens/Operations";
 import WorkVision from "./screens/WorkVision";
 import MoreHub from "./screens/MoreHub";
+import Coachmark from "./Coachmark";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -77,7 +78,7 @@ export default function AppShell() {
   const renderPage = () => {
     switch (page) {
       case "dash":
-        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} />;
+        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} openOps={goToOps} />;
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
@@ -87,7 +88,7 @@ export default function AppShell() {
       case "time":
         return <TimerScreen setPage={goToPage} />;
       case "payroll":
-        return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} />;
+        return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} openOps={goToOps} />;
       case "ops":
         // Open to everyone — Operations.tsx filters its sub-tabs by role
         // so non-admins only see HR (the consolidated time-off home).
@@ -101,11 +102,11 @@ export default function AppShell() {
       case "troubleshoot":
         return <Troubleshoot setPage={goToPage} />;
       case "financials":
-        return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} />;
+        return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} openOps={goToOps} />;
       case "more":
         return <MoreHub setPage={goToPage} openSettings={() => setShowSettings(true)} openOps={goToOps} />;
       default:
-        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} />;
+        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} openOps={goToOps} />;
     }
   };
 
@@ -113,6 +114,9 @@ export default function AppShell() {
     <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
       <VerticalNav page={page} setPage={goToPage} isAdmin={isAdmin} />
       <div className="mc">{renderPage()}</div>
+      {page === "qf" && <Coachmark id="quote" text={<>Start here — tap <b>Quick Quote</b>, snap a couple photos, and I&apos;ll price the job for you.</>} />}
+      {page === "sched" && <Coachmark id="schedule" text={<>Tap a day to <b>drop a job on the calendar</b> and assign your crew.</>} />}
+      {page === "time" && <Coachmark id="workmode" text={<>Tap <b>Clock In</b> to start your shift — your hours roll straight to payroll.</>} />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "@/components/Icon";
 import UserGuideModal from "@/components/UserGuideModal";
+import Grizz from "@/components/Grizz";
 
 interface Props {
   setPage: (p: string) => void;
@@ -70,12 +71,12 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
 
       {/* Help & user guide */}
       <div className="cd" onClick={() => setShowGuide(true)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: 13 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(138,138,153,.16)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icon name="help" size={19} color="#aab" />
+        <div style={{ width: 40, height: 40, borderRadius: 11, background: "rgba(245,180,0,.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+          <Grizz pose="point" size={30} />
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15.5, fontWeight: 600 }}>Help &amp; user guide</div>
-          <div style={{ fontSize: 13.5, color: "var(--color-dim)" }}>How Creed works</div>
+          <div style={{ fontSize: 15.5, fontWeight: 600 }}>Ask Grizz</div>
+          <div style={{ fontSize: 13.5, color: "var(--color-dim)" }}>Tips &amp; how Creed works</div>
         </div>
         <Icon name="next" size={17} color="var(--color-dim)" />
       </div>

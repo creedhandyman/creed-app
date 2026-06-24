@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
 import { Icon } from "./Icon";
+import { tipsEnabled, setTipsEnabled } from "@/lib/grizz";
 
 interface Props {
   onClose: () => void;
@@ -25,6 +26,8 @@ export default function Settings({ onClose }: Props) {
   const [tab, setTab] = useState("account");
   const [newPassword, setNewPassword] = useState("");
   const [phone, setPhone] = useState(user.phone || "");
+  const [grizzTips, setGrizzTips] = useState(true);
+  useEffect(() => { setGrizzTips(tipsEnabled(user.id)); }, [user.id]);
 
   const isOwner = user.role === "owner" || user.role === "manager";
 
@@ -221,6 +224,12 @@ export default function Settings({ onClose }: Props) {
                 const isActive = (typeof window !== "undefined" ? localStorage.getItem("c_lang") : "en") === opt.key || (!localStorage.getItem("c_lang") && opt.key === "en");
                 return (<button key={opt.key} onClick={() => { localStorage.setItem("c_lang", opt.key); window.location.reload(); }} style={{ padding: "4px 12px", fontSize: 14, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
               })}
+            </div>
+          </div>
+          <div className="sep row" style={{ justifyContent: "space-between" }}>
+            <span>Show Grizz tips</span>
+            <div onClick={() => { const next = !grizzTips; setTipsEnabled(next, user.id); setGrizzTips(next); }} style={{ width: 44, height: 24, borderRadius: 12, background: grizzTips ? "var(--color-primary)" : "#ccc", position: "relative", cursor: "pointer" }}>
+              <div style={{ width: 18, height: 18, borderRadius: 9, background: "#fff", position: "absolute", top: 3, left: grizzTips ? 23 : 3, transition: "0.3s" }} />
             </div>
           </div>
         </div>

@@ -7,6 +7,7 @@ import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
 import UserGuideModal from "../UserGuideModal";
 import NotificationsPanel from "../NotificationsPanel";
+import GettingStarted from "../GettingStarted";
 import CountUp from "@/components/CountUp";
 
 interface Props {
@@ -14,9 +15,11 @@ interface Props {
   openSettings: () => void;
   /** Deep-link to a job's detail screen — used when a notification is tapped. */
   openJob?: (jobId: string) => void;
+  /** Open Operations on a specific sub-tab — used by the getting-started card. */
+  openOps?: (tab?: string) => void;
 }
 
-export default function Dashboard({ setPage, openSettings, openJob }: Props) {
+export default function Dashboard({ setPage, openSettings, openJob, openOps }: Props) {
   const user = useStore((s) => s.user)!;
   const isAdmin = user.role === "owner" || user.role === "manager";
   const jobs = useStore((s) => s.jobs);
@@ -100,10 +103,6 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
   const isClocked = (() => { try { return JSON.parse(localStorage.getItem("c_t_on") || "false"); } catch { return false; } })();
   const clockedJob = (() => { try { return localStorage.getItem("c_t_sj") ? JSON.parse(localStorage.getItem("c_t_sj")!) : ""; } catch { return ""; } })();
 
-  const [guideDismissed, setGuideDismissed] = useState(() => {
-    if (typeof window === "undefined") return true;
-    try { return !!localStorage.getItem("c_guide_dismissed"); } catch { return true; }
-  });
   const [showUserGuide, setShowUserGuide] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
 
@@ -175,7 +174,7 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
               </span>
             )}
           </button>
-          <button onClick={() => setShowUserGuide(true)} aria-label={t("dash.userGuide")} title={t("dash.userGuide")} className="iconbtn"><Icon name="help" size={18} /></button>
+          <button onClick={() => setShowUserGuide(true)} aria-label="Ask Grizz" title="Ask Grizz" className="iconbtn"><Icon name="help" size={18} /></button>
           <button onClick={openSettings} aria-label={t("settings.title")} title={t("settings.title")} className="iconbtn"><Icon name="settings" size={18} /></button>
         </div>
       </div>
@@ -183,20 +182,7 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
       {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} onOpenJob={openJob} />}
       {showUserGuide && <UserGuideModal onClose={() => setShowUserGuide(false)} />}
 
-      {!guideDismissed && (
-        <div className="cd mb statusstrip" style={{ ["--c" as any]: "var(--color-primary)", padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Icon name="rocket" size={18} color="var(--color-primary)" />
-              <h4 style={{ fontSize: 16, color: "var(--color-primary)" }}>{t("dash.gettingStarted")}</h4>
-            </div>
-            <button onClick={() => { localStorage.setItem("c_guide_dismissed", "1"); setGuideDismissed(true); }} aria-label={t("dash.dismiss")} style={{ background: "none", padding: 4, color: "#555", display: "inline-flex", alignItems: "center" }}>
-              <Icon name="close" size={16} />
-            </button>
-          </div>
-          <div className="dim" style={{ fontSize: 14, marginTop: 6 }}>{t("dash.funnelCreate")} → {t("dash.funnelSchedule")} → {t("dash.funnelClockIn")} → {t("dash.funnelComplete")} → {t("dash.funnelGetPaid")}</div>
-        </div>
-      )}
+      {isAdmin && openOps && <GettingStarted setPage={setPage} openOps={openOps} />}
 
       {/* Variant body — flex-grows to fill the screen; blocks distribute evenly */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 14 }}>
