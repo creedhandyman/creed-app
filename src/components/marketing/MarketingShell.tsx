@@ -33,6 +33,31 @@ export default function MarketingShell({ children }: { children: React.ReactNode
   useEffect(() => {
     if (user) router.replace("/");
   }, [user, router]);
+
+  // Scroll-reveal for marketing cards. We add `.reveal-init` (hidden) only when
+  // JS runs AND motion is allowed, then reveal each on scroll — so no-JS and
+  // reduced-motion visitors always see the content with no hidden state.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const targets = Array.from(
+      document.querySelectorAll<HTMLElement>(".mkt .fcard, .mkt .frow, .mkt .stat"),
+    );
+    if (!targets.length) return;
+    targets.forEach((el) => el.classList.add("reveal-init"));
+    const io = new IntersectionObserver(
+      (entries) =>
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        }),
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+    );
+    targets.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [path]);
   return (
     <div className="mkt">
       <nav>

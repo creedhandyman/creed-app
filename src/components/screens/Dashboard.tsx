@@ -7,6 +7,7 @@ import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
 import UserGuideModal from "../UserGuideModal";
 import NotificationsPanel from "../NotificationsPanel";
+import CountUp from "@/components/CountUp";
 
 interface Props {
   setPage: (p: string) => void;
@@ -239,7 +240,7 @@ export default function Dashboard({ setPage, openSettings, openJob }: Props) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontSize: 12, letterSpacing: ".15em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}>${checkPay.toFixed(0)}</div>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}><CountUp value={checkPay} prefix="$" /></div>
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
                   <Icon name="trending" size={12} color="#3ee08f" /> {lastWeekPay > 0 ? (toBeat > 0 ? t("dash.keepGoing") : t("dash.aheadOfLastWeek")) : `${checkHrs.toFixed(1)} ${t("dash.hrs")}`}

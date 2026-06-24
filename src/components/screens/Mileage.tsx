@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { haversineMiles, getFix, ROAD_FACTOR } from "@/lib/geo";
 import { Icon } from "../Icon";
+import CountUp from "@/components/CountUp";
 
 interface MileageEntry {
   id: string;
@@ -343,12 +344,12 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
       <div className="g2 mb">
         <div className="cd statusstrip" style={{ textAlign: "center", ["--c" as any]: "var(--color-primary)" }}>
           <div className="sl">This Week</div>
-          <div className="sv" style={{ color: "var(--color-primary)" }}>{thisWeek.toFixed(1)}</div>
+          <div className="sv" style={{ color: "var(--color-primary)" }}><CountUp value={thisWeek} decimals={1} /></div>
           <div className="dim" style={{ fontSize: 12 }}>miles</div>
         </div>
         <div className="cd statusstrip" style={{ textAlign: "center", ["--c" as any]: "var(--color-success)" }}>
           <div className="sl">All Time</div>
-          <div className="sv" style={{ color: "var(--color-success)" }}>{totalMiles.toFixed(1)}</div>
+          <div className="sv" style={{ color: "var(--color-success)" }}><CountUp value={totalMiles} decimals={1} /></div>
           <div className="dim" style={{ fontSize: 12 }}>miles</div>
         </div>
       </div>
