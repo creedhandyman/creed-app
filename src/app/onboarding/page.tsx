@@ -360,7 +360,7 @@ function LogoStep({ org, onUploaded }: { org: Organization; onUploaded: () => Pr
     setUploading(true);
     try {
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
-      const path = `logos/${org.id}_${Date.now()}.${ext}`;
+      const path = `logos/${org.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const { error } = await supabase.storage.from("receipts").upload(path, file, { upsert: false, contentType: file.type || undefined });
       if (error) {
         useStore.getState().showToast("Upload failed: " + error.message, "error");

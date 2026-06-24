@@ -255,7 +255,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
   const uploadPhoto = async (file: File, jobId: string): Promise<string> => {
     const ext = file.name.split(".").pop() || "jpg";
-    const path = `${jobId}/${Date.now()}.${ext}`;
+    const path = `${jobId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const { error } = await supabase.storage.from("receipts").upload(path, file);
     if (error) throw error;
     const { data } = supabase.storage.from("receipts").getPublicUrl(path);

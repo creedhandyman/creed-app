@@ -167,7 +167,7 @@ export default function TeamStats() {
               const file = e.target.files?.[0];
               if (!file) return;
               const ext = file.name.split(".").pop() || "jpg";
-              const path = `avatars/${u.id}_${Date.now()}.${ext}`;
+              const path = `avatars/${u.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
               const { error } = await supabase.storage.from("receipts").upload(path, file);
               if (error) { useStore.getState().showToast(t("team.photoUploadFailed") + error.message, "error"); return; }
               const { data } = supabase.storage.from("receipts").getPublicUrl(path);

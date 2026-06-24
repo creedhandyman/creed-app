@@ -113,7 +113,7 @@ export default function BrandingSettings() {
       // Timestamp the filename so every upload is a unique URL — avoids the
       // browser-cache "I uploaded a new logo but I still see the old one"
       // problem that comes with overwriting the same path.
-      const path = `logos/${org.id}_${Date.now()}.${ext}`;
+      const path = `logos/${org.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const { error } = await supabase.storage
         .from("receipts")
         .upload(path, file, { upsert: false, contentType: file.type || undefined });

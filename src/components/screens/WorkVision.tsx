@@ -397,7 +397,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setUploadingReceipt(true);
     try {
       const ext = file.name.split(".").pop() || "jpg";
-      const path = `${activeJob.id}/${Date.now()}.${ext}`;
+      const path = `${activeJob.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const { error } = await supabase.storage.from("receipts").upload(path, file);
       if (error) {
         useStore.getState().showToast("Receipt upload failed: " + error.message, "error");
