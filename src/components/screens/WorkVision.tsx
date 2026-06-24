@@ -14,6 +14,7 @@ import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
+import { pickReceiptPhoto } from "@/lib/image";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -1440,10 +1441,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   {/* Receipt scan — AI extracts vendor, items, total; enriches
                       the note + feeds price_corrections for the quoter. */}
                   <button
-                    onClick={() => setWvCam({ title: "Receipt", multiple: false, onFiles: (fs) => { const f = fs[0]; if (f) uploadReceipt(f); } })}
+                    onClick={async () => { const f = await pickReceiptPhoto(false); if (f) uploadReceipt(f); }}
                     disabled={uploadingReceipt}
                     style={{ ...pactTile, opacity: uploadingReceipt ? 0.5 : 1 }}
-                    title="Snap a receipt photo — AI extracts vendor, items, and total"
+                    title="Snap or upload a receipt — AI extracts vendor, items, and total"
                   >
                     <Icon name="receipt" size={15} color="#7fb6ff" /> {uploadingReceipt ? "…" : "Scan receipt"}
                   </button>

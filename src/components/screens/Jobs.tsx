@@ -11,7 +11,7 @@ import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { recordJobOutcome } from "@/lib/learning";
 import { Icon } from "../Icon";
-import CameraModal from "../CameraModal";
+import { pickReceiptPhoto } from "@/lib/image";
 import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import SmsNotifyButtons from "../SmsNotifyButtons";
@@ -223,8 +223,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Receipt scan state — once a photo is attached we upload + AI-scan
   // immediately so the form can auto-fill before the user hits Add.
   const [scanning, setScanning] = useState(false);
-  // Receipt camera (shared in-app camera) open state.
-  const [receiptCam, setReceiptCam] = useState(false);
+  // Receipts use the device's NATIVE camera/photo picker (HD) via
+  // pickReceiptPhoto — reliable on iOS where the in-app camera can't open,
+  // and high-res enough for the AI scan to read line items.
   const [scannedPhotoUrl, setScannedPhotoUrl] = useState("");
   const [scannedItems, setScannedItems] = useState<{ name?: string; qty?: number; price?: number }[]>([]);
   const [scannedVendor, setScannedVendor] = useState("");
@@ -1102,19 +1103,30 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 via AI -> price_corrections), or type the note + amount. */}
             <div className="section">
               <div className="seclabel"><Icon name="camera" size={13} /> {t("jobs.addReceipt")}</div>
-              <div
-                onClick={() => { if (!scanning) setReceiptCam(true); }}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "11px", borderRadius: 12, border: "1.5px dashed var(--color-border-dark-2)", color: scanning ? "var(--color-warning)" : "var(--color-primary)", cursor: scanning ? "wait" : "pointer", fontFamily: "Oswald", fontSize: 15, marginTop: 8 }}
-              >
-                <Icon name="camera" size={15} />
+              <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="bo"
+                  disabled={scanning}
+                  onClick={async () => { const f = await pickReceiptPhoto(true); if (f) handlePhotoAttach(f, sj.id); }}
+                  style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, opacity: scanning ? 0.5 : 1 }}
+                >
+                  <Icon name="camera" size={15} /> {t("common.takePhoto")}
+                </button>
+                <button
+                  type="button"
+                  className="bo"
+                  disabled={scanning}
+                  onClick={async () => { const f = await pickReceiptPhoto(false); if (f) handlePhotoAttach(f, sj.id); }}
+                  style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, opacity: scanning ? 0.5 : 1 }}
+                >
+                  <Icon name="upload" size={15} /> {t("common.upload")}
+                </button>
+              </div>
+              <div className="dim" style={{ fontSize: 12.5, marginTop: 7, display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon name={scanning ? "time" : "sparkle"} size={13} color={scanning ? "var(--color-warning)" : "var(--color-primary)"} />
                 {scanning ? t("jobs.scanningReceipt") : rPhoto ? rPhoto.name : t("jobs.attachPhotoAutoScan")}
               </div>
-              <CameraModal
-                open={receiptCam}
-                onClose={() => setReceiptCam(false)}
-                onCapture={(fs) => { const f = fs[0]; if (f) handlePhotoAttach(f, sj.id); }}
-                title={t("jobs.receiptTitle")}
-              />
               <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
                 <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={scanning ? t("jobs.scanningShort") : t("jobs.noteVendor")} style={{ flex: 1 }} disabled={scanning} />
                 <input type="number" value={ra} onChange={(e) => setRa(e.target.value)} placeholder="$" style={{ width: 72 }} disabled={scanning} />

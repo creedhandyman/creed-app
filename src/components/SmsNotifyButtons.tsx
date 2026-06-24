@@ -1,34 +1,43 @@
 "use client";
-import { apiFetch } from "@/lib/api";
 /**
- * SmsNotifyButtons — three one-tap SMS templates the contractor fires
- * to a customer's phone for a specific job: "On the way", "Running
- * X minutes late", and "Job complete — invoice link". Each tap opens
- * a tiny preview/confirm strip so the message can be tweaked or
- * cancelled before send. Sends via /api/sms (Twilio).
+ * SmsNotifyButtons — three one-tap text templates the contractor fires to a
+ * customer for a specific job: "On the way", "Running late", and "Job done"
+ * (with a view/pay link). Each tap opens a small confirm strip where the
+ * message can be tweaked, then sends via the phone's NATIVE Messages app
+ * (an `sms:` deep link prefilled with the number + body).
  *
- * The component looks up the customer's phone from the linked Customer
- * entity (job.customer_id). If no phone is on file, the buttons go
- * disabled with an explanatory tooltip — no silent failures.
+ * Why native instead of server Twilio: a solo handyman rarely has Twilio +
+ * A2P 10DLC carrier registration set up, so the old /api/sms path mostly
+ * errored out ("SMS not configured" / carrier-filtered). A native sms: link
+ * always works on a phone, costs nothing, and — crucially — sends from the
+ * contractor's own number, so the customer's reply comes straight back to
+ * them. A "Copy" button is the desktop fallback (no SMS handler there).
+ *
+ * The customer's phone comes from the linked Customer (job.customer_id). With
+ * no phone on file the buttons disable with an explanatory tooltip.
  */
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
+import { Icon } from "./Icon";
 
 interface Props {
   jobId: string;
-  /** Render in a tighter layout (Schedule's day-detail row, where
-   *  vertical space is cramped). */
+  /** Tighter sizing for cramped rows (Schedule's day-detail). */
   compact?: boolean;
-  /** Layout mode. "row" (default) renders 3 buttons in a flex-wrap row.
-   *  "grid" collapses "On the way" + "Running late" into a single
-   *  "Notify ▾" dropdown and renders both items + a full-width popup as
-   *  fragment children so they slot into the parent CSS grid. */
+  /** "grid" adds a "Notify customer" section label above the buttons (used in
+   *  the Jobs detail view); "row" (default) is the bare button row. */
   variant?: "row" | "grid";
 }
 
 type TemplateKey = "enroute" | "late" | "complete";
 
 const LATE_OPTIONS = [10, 15, 30, 45] as const;
+
+const ACTIONS = [
+  { key: "enroute", label: "On the way", icon: "navigation", hue: "var(--color-primary)" },
+  { key: "late", label: "Running late", icon: "time", hue: "var(--color-warning)" },
+  { key: "complete", label: "Job done", icon: "checkCircle", hue: "var(--color-success)" },
+] as const;
 
 export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Props) {
   const job = useStore((s) => s.jobs.find((j) => j.id === jobId));
@@ -43,8 +52,6 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
   const [open, setOpen] = useState<TemplateKey | null>(null);
   const [lateMinutes, setLateMinutes] = useState<number>(15);
   const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const statusUrl = useMemo(() => {
     if (typeof window === "undefined" || !job) return "";
@@ -80,74 +87,123 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
       return;
     }
     setDraft(buildTemplate(k, lateMinutes));
-    setOpen(k);
+    setOpen((cur) => (cur === k ? null : k));
   };
 
-  const send = async () => {
-    if (!phone || !draft.trim() || !job) return;
-    setSending(true);
+  // sms: deep link. "?&body=" is the form that prefills the body on BOTH iOS
+  // and Android. Number is stripped to digits/+ so punctuation can't break it.
+  const smsHref = (text: string) => `sms:${phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(text)}`;
+
+  const copyMsg = async () => {
     try {
-      const res = await apiFetch("/api/sms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: phone, body: draft.trim(), jobId: job.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        showToast(data?.error || "Couldn't send text", "error");
-      } else {
-        showToast(`Texted ${greet || "customer"} ✓`, "success");
-        setOpen(null);
-      }
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Network error", "error");
+      await navigator.clipboard.writeText(draft);
+      showToast("Message copied — paste it into your texts", "success");
+    } catch {
+      showToast("Couldn't copy on this device", "error");
     }
-    setSending(false);
   };
 
   if (!job) return null;
 
-  const btnSize = compact ? { fontSize: 13, padding: "4px 8px" } : { fontSize: 14, padding: "5px 10px" };
-  const noPhoneTitle = phone ? undefined : "No phone on file — link a customer with a phone number to enable.";
+  const noPhoneTitle = phone
+    ? undefined
+    : "No phone on file — link a customer with a phone number to enable.";
+
+  const renderTrigger = (a: (typeof ACTIONS)[number]) => {
+    const active = open === a.key;
+    return (
+      <button
+        key={a.key}
+        type="button"
+        disabled={!phone}
+        title={noPhoneTitle}
+        onClick={(e) => {
+          e.stopPropagation();
+          openTemplate(a.key);
+        }}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 4,
+          padding: compact ? "7px 4px" : "9px 5px",
+          borderRadius: 11,
+          background: active ? a.hue + "22" : "var(--color-card-dark-2)",
+          border: `1px solid ${active ? a.hue : "var(--color-border-dark-2)"}`,
+          color: "inherit",
+          opacity: phone ? 1 : 0.45,
+          cursor: phone ? "pointer" : "not-allowed",
+        }}
+      >
+        <span
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 8,
+            background: a.hue + "22",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon name={a.icon} size={15} color={a.hue} />
+        </span>
+        <span
+          style={{
+            fontFamily: "Oswald",
+            fontSize: compact ? 10.5 : 11.5,
+            fontWeight: 600,
+            letterSpacing: ".02em",
+            textAlign: "center",
+            lineHeight: 1.15,
+          }}
+        >
+          {a.label}
+        </span>
+      </button>
+    );
+  };
 
   const popup = open ? (
     <div
       onClick={(e) => e.stopPropagation()}
       style={{
-        background: "var(--color-card-dark, #12121a)",
-        border: "1px solid var(--color-primary)",
-        borderRadius: 8,
-        padding: 10,
-        fontSize: 14,
-        gridColumn: variant === "grid" ? "1 / -1" : undefined,
+        background: "var(--color-card-dark)",
+        border: "1px solid var(--color-border-dark-2)",
+        borderRadius: 12,
+        padding: 11,
       }}
     >
       {open === "late" && (
-        <div style={{ display: "flex", gap: 4, marginBottom: 8, alignItems: "center" }}>
-          <span className="dim" style={{ fontSize: 13, marginRight: 4 }}>How late?</span>
+        <div style={{ display: "flex", gap: 5, marginBottom: 9, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="dim" style={{ fontSize: 12.5, marginRight: 2 }}>How late?</span>
           {LATE_OPTIONS.map((m) => (
             <button
               key={m}
+              type="button"
               onClick={() => {
                 setLateMinutes(m);
                 setDraft(buildTemplate("late", m));
               }}
               style={{
-                padding: "3px 8px",
-                borderRadius: 4,
-                fontSize: 13,
-                background: lateMinutes === m ? "var(--color-primary)" : "transparent",
-                color: lateMinutes === m ? "#fff" : "#888",
-                border: `1px solid ${lateMinutes === m ? "var(--color-primary)" : "#444"}`,
+                padding: "3px 10px",
+                borderRadius: 99,
+                fontSize: 12.5,
+                fontFamily: "Oswald",
+                background: lateMinutes === m ? "var(--color-warning)" : "transparent",
+                color: lateMinutes === m ? "#1a1a1a" : "var(--color-dim)",
+                border: `1px solid ${lateMinutes === m ? "var(--color-warning)" : "var(--color-border-dark-2)"}`,
                 cursor: "pointer",
               }}
             >
-              {m} min
+              {m}m
             </button>
           ))}
         </div>
       )}
-      <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>
+      <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
         To {phone} · edit before sending if needed
       </div>
       <textarea
@@ -157,131 +213,60 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         style={{
           width: "100%",
           fontSize: 14,
-          padding: 8,
-          borderRadius: 6,
-          border: "1px solid #1e1e2e",
-          background: "var(--color-dark-bg, #0a0a0f)",
+          padding: 9,
+          borderRadius: 9,
+          border: "1px solid var(--color-border-dark-2)",
+          background: "var(--color-dark-bg)",
           color: "inherit",
           resize: "vertical",
           fontFamily: "Source Sans 3, sans-serif",
         }}
       />
-      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-        <button
-          className="bg"
-          onClick={send}
-          disabled={sending || !draft.trim()}
-          style={{ fontSize: 14, padding: "5px 12px" }}
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        <a
+          href={smsHref(draft)}
+          onClick={() => setOpen(null)}
+          className="bb"
+          style={{
+            flex: 1,
+            textAlign: "center",
+            textDecoration: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            fontSize: 14,
+          }}
         >
-          {sending ? "Sending…" : "📱 Send"}
+          <Icon name="send" size={15} color="#fff" /> Open Messages
+        </a>
+        <button type="button" className="bo" onClick={copyMsg} style={{ fontSize: 14 }}>
+          Copy
         </button>
         <button
+          type="button"
           className="bo"
           onClick={() => setOpen(null)}
-          disabled={sending}
-          style={{ fontSize: 14, padding: "5px 12px" }}
+          aria-label="Cancel"
+          style={{ fontSize: 14, padding: "0 11px" }}
         >
-          Cancel
+          <Icon name="close" size={14} />
         </button>
+      </div>
+      <div className="dim" style={{ fontSize: 11.5, marginTop: 7, lineHeight: 1.4 }}>
+        Opens your phone&apos;s Messages with the text ready — it sends from your number, so replies come to you.
       </div>
     </div>
   ) : null;
 
-  if (variant === "grid") {
-    // Renders as fragment children so the parent CSS grid lays out the
-    // two buttons in its own cells. The "Notify ▾" button collapses
-    // on-the-way + late into one dropdown to reduce action-row clutter
-    // in the Jobs expanded view.
-    return (
-      <>
-        <div style={{ position: "relative" }}>
-          <button
-            className="bo"
-            disabled={!phone}
-            title={noPhoneTitle}
-            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-            style={{ ...btnSize, opacity: phone ? 1 : 0.4, width: "100%" }}
-          >
-            🔔 Notify ▾
-          </button>
-          {menuOpen && (
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: "absolute",
-                top: "calc(100% + 2px)",
-                left: 0,
-                right: 0,
-                zIndex: 20,
-                background: "var(--color-card-dark, #12121a)",
-                border: "1px solid var(--color-primary)",
-                borderRadius: 6,
-                padding: 4,
-                display: "flex",
-                flexDirection: "column",
-                gap: 2,
-              }}
-            >
-              <button
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); openTemplate("enroute"); }}
-                style={{ fontSize: 14, padding: "5px 8px", textAlign: "left", background: "transparent", color: "inherit", border: "none", cursor: "pointer", borderRadius: 4 }}
-              >
-                🚗 On the way
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); openTemplate("late"); }}
-                style={{ fontSize: 14, padding: "5px 8px", textAlign: "left", background: "transparent", color: "inherit", border: "none", cursor: "pointer", borderRadius: 4 }}
-              >
-                ⏱ Running late
-              </button>
-            </div>
-          )}
-        </div>
-        <button
-          className="bo"
-          disabled={!phone}
-          title={noPhoneTitle}
-          onClick={(e) => { e.stopPropagation(); openTemplate("complete"); }}
-          style={{ ...btnSize, opacity: phone ? 1 : 0.4, width: "100%" }}
-        >
-          ✅ Job complete
-        </button>
-        {popup}
-      </>
-    );
-  }
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        <button
-          className="bo"
-          disabled={!phone}
-          title={noPhoneTitle}
-          onClick={(e) => { e.stopPropagation(); openTemplate("enroute"); }}
-          style={{ ...btnSize, opacity: phone ? 1 : 0.4 }}
-        >
-          🚗 On the way
-        </button>
-        <button
-          className="bo"
-          disabled={!phone}
-          title={noPhoneTitle}
-          onClick={(e) => { e.stopPropagation(); openTemplate("late"); }}
-          style={{ ...btnSize, opacity: phone ? 1 : 0.4 }}
-        >
-          ⏱ Running late
-        </button>
-        <button
-          className="bo"
-          disabled={!phone}
-          title={noPhoneTitle}
-          onClick={(e) => { e.stopPropagation(); openTemplate("complete"); }}
-          style={{ ...btnSize, opacity: phone ? 1 : 0.4 }}
-        >
-          ✅ Job complete
-        </button>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+      {variant === "grid" && (
+        <div className="seclabel" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <Icon name="bell" size={13} /> Notify customer
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6 }}>{ACTIONS.map(renderTrigger)}</div>
       {popup}
     </div>
   );
