@@ -68,9 +68,12 @@ export async function GET(req: NextRequest) {
 
     const jobs = jobsRes.data || [];
     const jobIds = jobs.map((j) => j.id);
-    const receipts = jobIds.length
+    const receiptsRaw = jobIds.length
       ? (await supabase.from("receipts").select("*").in("job_id", jobIds)).data || []
       : [];
+    // The portal only shows a receipt COUNT, never the image. Strip photo_url
+    // so the contractor's private receipt paths aren't exposed to customers.
+    const receipts = receiptsRaw.map((r) => ({ ...r, photo_url: "" }));
 
     return NextResponse.json({
       customer: customerRes.data[0],

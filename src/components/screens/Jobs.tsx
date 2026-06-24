@@ -2,7 +2,8 @@
 import { apiFetch, getStatusLink } from "@/lib/api";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
-import { db, supabase } from "@/lib/supabase";
+import { db } from "@/lib/supabase";
+import { uploadReceiptPrivate, signReceiptPaths, isPrivatePath } from "@/lib/receipt-storage";
 import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
@@ -232,9 +233,29 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // pickReceiptPhoto — reliable on iOS where the in-app camera can't open,
   // and high-res enough for the AI scan to read line items.
   const [scannedPhotoUrl, setScannedPhotoUrl] = useState("");
+  const [scannedPhotoPath, setScannedPhotoPath] = useState("");
+  const [signedReceipts, setSignedReceipts] = useState<Record<string, string>>({});
   const [scannedItems, setScannedItems] = useState<{ name?: string; qty?: number; price?: number }[]>([]);
   const [scannedVendor, setScannedVendor] = useState("");
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
+
+  // Sign private-bucket receipt photos for display (legacy public URLs pass
+  // through unchanged). Only signs paths not already cached, so the 15s store
+  // refresh doesn't re-hit the endpoint.
+  useEffect(() => {
+    const need = receipts
+      .filter((r) => isPrivatePath(r.photo_url) && !signedReceipts[r.photo_url])
+      .map((r) => r.photo_url);
+    if (need.length === 0) return;
+    let cancelled = false;
+    signReceiptPaths(need).then((map) => {
+      if (!cancelled) setSignedReceipts((prev) => ({ ...prev, ...map }));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receipts]);
   const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number } | null>(null);
   const [connectingStripe, setConnectingStripe] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -253,13 +274,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     }
   };
 
-  const uploadPhoto = async (file: File, jobId: string): Promise<string> => {
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `${jobId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await supabase.storage.from("receipts").upload(path, file);
-    if (error) throw error;
-    const { data } = supabase.storage.from("receipts").getPublicUrl(path);
-    return data.publicUrl;
+  const uploadPhoto = async (file: File, jobId: string): Promise<{ path: string; url: string }> => {
+    // Receipts go to the PRIVATE bucket. We persist the object path and
+    // display via short-lived signed URLs (see lib/receipt-storage).
+    return uploadReceiptPrivate(file, jobId);
   };
 
   const resetReceiptForm = () => {
@@ -267,6 +285,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     setRa("");
     setRPhoto(null);
     setScannedPhotoUrl("");
+    setScannedPhotoPath("");
     setScannedItems([]);
     setScannedVendor("");
     if (photoRef.current) photoRef.current.value = "";
@@ -283,13 +302,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     setScannedPhotoUrl("");
     setScanning(true);
     try {
-      const photoUrl = await uploadPhoto(file, jobId);
-      setScannedPhotoUrl(photoUrl);
+      const { path, url } = await uploadPhoto(file, jobId);
+      setScannedPhotoPath(path);
+      setScannedPhotoUrl(url);
 
       const res = await apiFetch("/api/ai/receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: photoUrl }),
+        body: JSON.stringify({ imageUrl: url }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -348,9 +368,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     try {
       // Photo was uploaded the moment the user attached it. Fall back to
       // a fresh upload if scanning was skipped or failed mid-upload.
-      let photo_url = scannedPhotoUrl;
+      let photo_url = scannedPhotoPath;
       if (rPhoto && !photo_url) {
-        photo_url = await uploadPhoto(rPhoto, jobId);
+        photo_url = (await uploadPhoto(rPhoto, jobId)).path;
       }
       // Pass org_id explicitly rather than relying on db.post's localStorage
       // auto-inject — if org_id is missing the receipt is there but hidden by
@@ -1196,11 +1216,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               {receipts.filter((r) => r.job_id === sj.id).length === 0 ? (
                 <div style={{ fontSize: 14, color: "var(--color-dim)", padding: "10px 0", textAlign: "center" }}>{t("jobs.noReceipts")}</div>
               ) : (
-                receipts.filter((r) => r.job_id === sj.id).map((r) => (
+                receipts.filter((r) => r.job_id === sj.id).map((r) => {
+                  const src = isPrivatePath(r.photo_url) ? signedReceipts[r.photo_url] : r.photo_url;
+                  return (
                   <div key={r.id} className="drow">
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                      {r.photo_url && (
-                        <img src={r.photo_url} alt="" onClick={() => setViewPhoto(r.photo_url)} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", cursor: "pointer", flexShrink: 0, border: "1px solid var(--color-border-dark)" }} />
+                      {src && (
+                        <img src={src} alt="" onClick={() => setViewPhoto(src)} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", cursor: "pointer", flexShrink: 0, border: "1px solid var(--color-border-dark)" }} />
                       )}
                       <span style={{ minWidth: 0 }}>
                         <span style={{ fontSize: 14.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.note || t("jobs.receiptSingular")}</span>
@@ -1217,7 +1239,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       </button>
                     </span>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </>

@@ -3,6 +3,7 @@ import { apiFetch } from "@/lib/api";
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
+import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip } from "@/lib/parser";
 import { recordJobOutcome, jobActualHours } from "@/lib/learning";
@@ -396,15 +397,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     }
     setUploadingReceipt(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${activeJob.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage.from("receipts").upload(path, file);
-      if (error) {
-        useStore.getState().showToast("Receipt upload failed: " + error.message, "error");
+      let photo_url = "";
+      let scanUrl = "";
+      try {
+        const up = await uploadReceiptPrivate(file, activeJob.id);
+        photo_url = up.path; // persist the private object path
+        scanUrl = up.url; // short-lived signed URL for the AI scan
+      } catch (e) {
+        useStore.getState().showToast("Receipt upload failed: " + (e instanceof Error ? e.message : String(e)), "error");
         return;
       }
-      const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
-      const photo_url = urlData?.publicUrl || "";
 
       // Pass org_id explicitly — same belt-and-suspenders pattern Jobs.tsx
       // uses so the row isn't filtered out by org-scoped reads on refresh.
@@ -422,8 +424,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       useStore.getState().showToast("Receipt added — scanning…", "success");
 
       // Background scan; failures don't block the receipt save.
-      if (photo_url && newReceiptId) {
-        scanReceiptAndLearn(newReceiptId, photo_url, activeJob.id).catch((err) => {
+      if (scanUrl && newReceiptId) {
+        scanReceiptAndLearn(newReceiptId, scanUrl, activeJob.id).catch((err) => {
           console.error("receipt scan failed:", err);
         });
       }
