@@ -921,12 +921,15 @@ button:focus-visible {
    Ambient "this is alive" energy. Everything here is auto-neutralized by the
    prefers-reduced-motion guard just below, so opt-out users get a calm app. */
 
-/* Glow CTAs: a slow shine sweeps across + a gentle breathe ("tap me"). */
-.cta { position: relative; overflow: hidden; animation: ctaBreathe 2.8s ease-in-out infinite; }
+/* Glow CTAs: a slow shine sweeps across ("tap me"). NOTE: animating `filter`
+   on .cta itself flickered the ::after sheen on iOS Safari, so the CTA breathe
+   was removed — the .statusstrip breathe still carries the ambient motion. */
+.cta { position: relative; overflow: hidden; }
 .cta::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.20), transparent);
   transform: translateX(-160%); opacity: 0; pointer-events: none;
+  will-change: opacity, transform; backface-visibility: hidden;
   animation: ctaSheen 14.4s ease-in-out infinite;
 }
 /* Opacity-gated: the sheen is only ever visible mid-sweep — it fades in, crosses,
@@ -939,7 +942,6 @@ button:focus-visible {
   14%  { transform: translateX(320%); opacity: 0; }
   100% { transform: translateX(320%); opacity: 0; }
 }
-@keyframes ctaBreathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.09); } }
 
 /* Status-strip glow gently breathes in dark mode. Light mode keeps the clean
    static bar (see `.light .statusstrip::before` above). */
