@@ -308,6 +308,19 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Security hardening (`SECURITY-AUDIT.md` — local, untracked)**: a multi-pass
+  audit + remediation. API routes now require a Supabase JWT (`lib/api-auth.ts`
+  `requireAuth`/`requireOwner`/`serviceClient`); service-role routes fail closed
+  (no `||anon`); billing/payment/promo enforced server-side; IP rate-limit
+  middleware (`src/middleware.ts`, Upstash). **Receipts are PRIVATE**: they live
+  in a non-public `receipts-private` Storage bucket, uploaded via one-time signed
+  upload URLs (`/api/storage/upload-url`) and read via short-lived signed URLs
+  (`/api/storage/sign`); `receipts.photo_url` stores the object PATH, and
+  `lib/receipt-storage.ts` `isPrivatePath()` splits new paths from legacy public
+  URLs so both render. Don't revert receipt uploads to the public `receipts`
+  bucket. Logos/renders/job-photos stay public (customer-facing). Owner-confirmed
+  live: RLS on; `ADMIN_PASSWORD`/`PROMO_CODES`/Upstash set.
+
 - **AI Render from the quote (`Creed_AI_Render_Enhancement`)**: the "after"
   render now reads the quote's own line items instead of a fixed prompt.
   `src/lib/render-prompt.ts` `buildRenderPrompt(rooms, onlyRoom?)` keyword-maps
