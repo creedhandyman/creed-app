@@ -46,6 +46,8 @@ function StatusContent() {
   // category aggregation the quote PDF uses (export-pdf.ts).
   const [quoteRooms, setQuoteRooms] = useState<Room[]>([]);
   const [laborRate, setLaborRate] = useState<number | null>(null);
+  // Drives the status-timeline reveal (steps light up + bar fills on load).
+  const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return; }
@@ -76,6 +78,12 @@ function StatusContent() {
       setLoading(false);
     });
   }, [jobId]);
+
+  // Kick off the timeline reveal shortly after mount.
+  useEffect(() => {
+    const id = setTimeout(() => setRevealed(true), 160);
+    return () => clearTimeout(id);
+  }, []);
 
   const currentIdx = job ? STATUS_STEPS.findIndex((s) => s.key === job.status) : -1;
   const completedCount = workOrder.filter((w) => w.done).length;
@@ -324,17 +332,21 @@ function StatusContent() {
                 <div className="step" key={step.key}>
                   <div className="dotcol">
                     <div className="dot" style={{
-                      background: isCurrent ? "#2E75B6" : isDone ? "#00cc66" : "#1e1e2e",
-                      boxShadow: isCurrent ? "0 0 10px rgba(46,117,182,.6)" : "none",
+                      background: revealed && isCurrent ? "#2E75B6" : revealed && isDone ? "#00cc66" : "#1e1e2e",
+                      boxShadow: revealed && isCurrent ? "0 0 10px rgba(46,117,182,.6)" : "none",
+                      transition: "background .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease",
+                      transitionDelay: `${0.15 + i * 0.28}s`,
                     }}>
-                      {isDone ? (isCurrent ? step.icon : "✓") : ""}
+                      {revealed && isDone ? (isCurrent ? step.icon : "✓") : ""}
                     </div>
-                    {!last && <div className="ln" style={{ background: i < currentIdx ? "#00cc66" : "#1e1e2e" }} />}
+                    {!last && <div className="ln" style={{ background: revealed && i < currentIdx ? "#00cc66" : "#1e1e2e", transition: "background .5s ease", transitionDelay: `${0.3 + i * 0.28}s` }} />}
                   </div>
                   <div className="tlab" style={{
-                    color: isCurrent ? "#7fb6ff" : isDone ? "#00cc66" : "#555",
+                    color: revealed && isCurrent ? "#7fb6ff" : revealed && isDone ? "#00cc66" : "#555",
                     fontFamily: isCurrent ? "Oswald, sans-serif" : undefined,
                     fontWeight: isCurrent ? 700 : 400,
+                    transition: "color .45s ease",
+                    transitionDelay: `${0.2 + i * 0.28}s`,
                   }}>
                     {step.label}
                   </div>
@@ -351,7 +363,7 @@ function StatusContent() {
               <div className="lbl" style={{ margin: 0 }}>Work progress</div>
               <span style={{ fontFamily: "Oswald, sans-serif", color: pct === 100 ? "#3ee08f" : "#7fb6ff", fontSize: 13 }}>{pct}%</span>
             </div>
-            <div className="bar"><i style={{ width: `${pct}%`, background: pct === 100 ? "#00cc66" : "#2E75B6" }} /></div>
+            <div className="bar"><i style={{ width: revealed ? `${pct}%` : "0%", background: pct === 100 ? "#00cc66" : "#2E75B6", transition: "width 1.1s cubic-bezier(.2,.8,.2,1) .5s" }} /></div>
             <div style={{ marginTop: 11 }}>
               {workOrder.map((w, i) => (
                 <div className="wo" key={i}>

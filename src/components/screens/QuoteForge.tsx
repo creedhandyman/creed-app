@@ -1,5 +1,6 @@
 "use client";
 import { apiFetch, getStatusLink } from "@/lib/api";
+import CountUp from "@/components/CountUp";
 import { useState, useRef, useEffect, useMemo } from "react";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
@@ -1825,7 +1826,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         ))}
         <div style={{ flex: 1.1, textAlign: "center", borderLeft: "1px solid rgba(245,180,0,.35)" }}>
           <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 700 }}>Total</div>
-          <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.05, marginTop: 1 }}>${gt.toFixed(2)}</div>
+          <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.05, marginTop: 1 }}><CountUp value={gt} prefix="$" decimals={2} /></div>
         </div>
       </div>
 
