@@ -926,10 +926,19 @@ button:focus-visible {
 .cta::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.20), transparent);
-  transform: translateX(-160%); pointer-events: none;
+  transform: translateX(-160%); opacity: 0; pointer-events: none;
   animation: ctaSheen 14.4s ease-in-out infinite;
 }
-@keyframes ctaSheen  { 0% { transform: translateX(-160%); } 14%, 100% { transform: translateX(320%); } }
+/* Opacity-gated: the sheen is only ever visible mid-sweep — it fades in, crosses,
+   fades out, and is fully transparent during the long rest AND at the loop reset,
+   so the animation can't flash when it restarts. */
+@keyframes ctaSheen {
+  0%   { transform: translateX(-160%); opacity: 0; }
+  3%   { opacity: 0.9; }
+  11%  { opacity: 0.9; }
+  14%  { transform: translateX(320%); opacity: 0; }
+  100% { transform: translateX(320%); opacity: 0; }
+}
 @keyframes ctaBreathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.09); } }
 
 /* Status-strip glow gently breathes in dark mode. Light mode keeps the clean
