@@ -9,6 +9,7 @@ import { recordJobOutcome, jobActualHours } from "@/lib/learning";
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
+import MileageQuickTrack from "../MileageQuickTrack";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
 import ReviewRequestModal from "../ReviewRequestModal";
@@ -769,6 +770,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             <Icon name="mapPin" size={12} color="#7fb6ff" /> Map
           </a>
         )}
+      </div>
+
+      {/* Drive mileage — simple GPS start/stop, logs to the Mileage screen */}
+      <div style={{ marginBottom: 12 }}>
+        <MileageQuickTrack job={sj || activeJob?.property} />
       </div>
 
       {/* Section tabs — text segmented control (matches the mockup) */}
