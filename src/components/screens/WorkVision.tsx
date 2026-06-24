@@ -216,7 +216,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Today's schedule
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const todaySchedule = schedule.filter((s) => s.sched_date === todayStr);
+  // Multi-day jobs span sched_date..end_date — match any day in that range, not
+  // just the start day, so a job scheduled across several days still shows in
+  // Work Mode on its middle/end days. (Mirrors Schedule.tsx spansDay.)
+  const todaySchedule = schedule.filter((s) => todayStr >= s.sched_date && todayStr <= (s.end_date || s.sched_date));
 
   // Clock in: create an in-progress time_entries row so admins can see who's
   // clocked in right now (same pattern Timer.tsx uses). When the caller knows

@@ -308,7 +308,10 @@ export default function Timer({ setPage }: Props) {
 
   // Today's scheduled jobs
   const today = new Date().toISOString().split("T")[0];
-  const todayJobs = schedule.filter((s) => s.sched_date === today);
+  // Multi-day jobs span sched_date..end_date — match any day in that range so a
+  // multi-day job is still clock-into-able on its middle/end days, not only the
+  // start day. (Mirrors Schedule.tsx spansDay.)
+  const todayJobs = schedule.filter((s) => today >= s.sched_date && today <= (s.end_date || s.sched_date));
 
   // My time entries — exclude the still-open active row (zero hours, no end_time)
   // from the completed log so a user mid-clock doesn't see a ghost entry.
