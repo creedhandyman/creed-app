@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { db } from "@/lib/supabase";
 import type { Job, Organization, Room } from "@/lib/types";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
@@ -51,32 +50,34 @@ function StatusContent() {
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return; }
-    db.get<Job>("jobs", { id: jobId }).then((jobs) => {
-      if (jobs.length) {
-        const j = jobs[0];
-        setJob(j);
-        // Parse work order + discount off the rooms JSON blob
-        try {
-          const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-          setWorkOrder((data?.workOrder || []).map((w: { room: string; detail: string; done: boolean }) => ({
-            room: w.room, detail: w.detail, done: w.done,
-          })));
-          const d = data?.discount;
-          if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
-            setDiscount({ type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined });
-          }
-          if (Array.isArray(data?.rooms)) setQuoteRooms(data.rooms as Room[]);
-          if (typeof data?.laborRate === "number" && data.laborRate > 0) setLaborRate(data.laborRate);
-        } catch { /* */ }
-        // Load org
-        if (j.org_id) {
-          db.get<Organization>("organizations", { id: j.org_id }).then((orgs) => {
-            if (orgs.length) setOrg(orgs[0]);
-          });
+    // Public, non-authenticated read — the visitor is the customer with no app
+    // session (the link is texted to them, often opened in an in-app browser),
+    // so we go through the service-role API route, not the anon client which
+    // RLS/anon-context can't read. See /api/public/job.
+    fetch(`/api/public/job?id=${encodeURIComponent(jobId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const j = data?.job as Job | undefined;
+        if (j) {
+          setJob(j);
+          // Parse work order + discount off the rooms JSON blob
+          try {
+            const blob = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+            setWorkOrder((blob?.workOrder || []).map((w: { room: string; detail: string; done: boolean }) => ({
+              room: w.room, detail: w.detail, done: w.done,
+            })));
+            const d = blob?.discount;
+            if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
+              setDiscount({ type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined });
+            }
+            if (Array.isArray(blob?.rooms)) setQuoteRooms(blob.rooms as Room[]);
+            if (typeof blob?.laborRate === "number" && blob.laborRate > 0) setLaborRate(blob.laborRate);
+          } catch { /* */ }
+          if (data.org) setOrg(data.org as Organization);
         }
-      }
-      setLoading(false);
-    });
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [jobId]);
 
   // Kick off the timeline reveal shortly after mount.
