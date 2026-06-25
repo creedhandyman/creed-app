@@ -123,6 +123,27 @@ src/
 
 ## Schema migrations the user should run in Supabase
 
+- AI usage logging (Phase 0 cost measurement — `/api/ai` writes one row per call):
+  ```sql
+  CREATE TABLE IF NOT EXISTS ai_usage (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID,
+    user_id UUID,
+    call_type TEXT,                 -- parse | ping | voicewalk | assist | other
+    model TEXT,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    cache_creation_tokens INTEGER DEFAULT 0,
+    cache_read_tokens INTEGER DEFAULT 0,
+    est_cost NUMERIC DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_usage_org_time ON ai_usage(org_id, created_at DESC);
+  ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY;  -- service-role writes/reads only
+  ```
+  Until this runs the logging insert fails silently (best-effort try/catch) and
+  AI calls work normally. `cache_read_tokens > 0` on a repeat parse confirms the
+  prompt-cache (Phase 1) is hitting.
 - `ALTER TABLE price_corrections ADD COLUMN zip TEXT;`
 - Self-learning v2 — richer outcome capture + recency/dedup weighting:
   ```sql

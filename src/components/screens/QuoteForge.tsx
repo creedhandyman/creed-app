@@ -2285,7 +2285,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   `Return the structured add/update/remove/setLaborRate/setDiscount JSON described in the AI ASSIST EDIT MODE section.`;
                 const res = await apiFetch("/api/ai", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: { "Content-Type": "application/json", "x-creed-call-type": "assist" },
                   body: JSON.stringify({
                     model: "claude-sonnet-4-6",
                     max_tokens: 4000,

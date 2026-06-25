@@ -19,6 +19,15 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
+  // Best-effort org tag for server-side usage logging (ignored by other routes).
+  if (!headers.has("x-creed-org")) {
+    try {
+      const orgId = JSON.parse(localStorage.getItem("c_user") || "{}")?.org_id;
+      if (orgId) headers.set("x-creed-org", String(orgId));
+    } catch {
+      /* no localStorage / not logged in — skip */
+    }
+  }
   return fetch(input, { ...init, headers });
 }
 

@@ -1359,7 +1359,7 @@ async function aiParsePdfSingle(
 
     const res = await apiFetch("/api/ai", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-creed-call-type": "parse" },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 16000,
@@ -1370,12 +1370,25 @@ async function aiParsePdfSingle(
         // PDF (e.g. "cove base" landing in Carpentry one run, Flooring
         // the next).
         temperature: 0,
-        system: `Labor rate: $${laborRate || 55}.00/hour.\n\n` +
-          (licensedTrades?.length
-            ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors. Include labor, materials, and hours for all ${licensedTrades.join("/")} work.\n\n`
-            : "") +
-          correctionsPrompt +
-          AI_SYSTEM_PROMPT_BASE,
+        // Prompt caching: static rules FIRST (cache-hot on every call), then the
+        // per-org learned-pricing block (cache-hot within a same-ZIP session),
+        // then the volatile per-job header LAST so it never busts the cached
+        // prefix. Reordered from the old volatile-first string — re-validate a
+        // fixture if quote output ever drifts.
+        system: [
+          { type: "text", text: AI_SYSTEM_PROMPT_BASE, cache_control: { type: "ephemeral" } },
+          ...(correctionsPrompt
+            ? [{ type: "text", text: correctionsPrompt, cache_control: { type: "ephemeral" } }]
+            : []),
+          {
+            type: "text",
+            text:
+              `Labor rate: $${laborRate || 55}.00/hour.\n\n` +
+              (licensedTrades?.length
+                ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors. Include labor, materials, and hours for all ${licensedTrades.join("/")} work.\n\n`
+                : ""),
+          },
+        ],
         messages: [{ role: "user", content }],
       }),
     });
@@ -1447,7 +1460,7 @@ export async function checkAiAvailable(): Promise<boolean> {
   try {
     const res = await apiFetch("/api/ai", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-creed-call-type": "ping" },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 10,
@@ -2182,7 +2195,7 @@ Output ONLY valid JSON of this shape:
 
   const res = await apiFetch("/api/ai", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-creed-call-type": "voicewalk" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
       max_tokens: 4000,
