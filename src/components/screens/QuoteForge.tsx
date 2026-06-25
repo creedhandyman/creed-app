@@ -486,12 +486,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     if (!orgId) return;
     // Raw query (not db.get) so a missing table pre-migration degrades SILENTLY
     // — no error toast on every QuoteForge open until the migration is run. An
-    // actual Save (db.post below) still toasts so the user knows to run it.
+    // actual Save (db.post below) surfaces the real error so the user knows.
+    // NB: deliberately NO `.order("created_at")` — if that column is absent the
+    // ordered query errors and silently yields zero templates; sort client-side.
     try {
-      const { data } = await supabase
-        .from("service_templates").select("*").eq("org_id", orgId)
-        .order("created_at", { ascending: false });
-      setTemplates((data as ServiceTemplate[]) || []);
+      const { data, error } = await supabase
+        .from("service_templates").select("*").eq("org_id", orgId);
+      if (error) return;
+      const list = (data as (ServiceTemplate & { created_at?: string })[]) || [];
+      list.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+      setTemplates(list);
     } catch { /* table may not exist yet — stay quiet */ }
   };
   useEffect(() => {
@@ -502,7 +506,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const name = templateName.trim();
     if (!name) { useStore.getState().showToast("Name the template", "warning"); return; }
     if (!rooms.length) { useStore.getState().showToast("Add line items first", "warning"); return; }
-    await db.post("service_templates", { org_id: org?.id, name, template_rooms: JSON.stringify(rooms) });
+    const res = await db.post("service_templates", { org_id: org?.id, name, template_rooms: JSON.stringify(rooms) });
+    if (!res) {
+      // db.post already toasted the real Supabase error (missing table / RLS /
+      // column). Don't claim success or close the form so the user can retry.
+      return;
+    }
     setSavingTemplate(false);
     setTemplateName("");
     await reloadTemplates();
