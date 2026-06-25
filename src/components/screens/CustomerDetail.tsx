@@ -74,10 +74,10 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
     }
     setPortalBusy(true);
     try {
-      const res = await fetch("/api/portal/send-link", {
+      const res = await apiFetch("/api/portal/send-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerId: customer.id, orgId: org.id }),
+        body: JSON.stringify({ customerId: customer.id }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { generatePortalToken } from "@/lib/portal-session";
+import { requireOwner } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Server-side: generate a one-time portal magic-link for a customer.
- * Called from the contractor's CustomerDetail screen. We don't strictly
- * authenticate the caller here (matches the rest of the in-app API
- * routes — Bernard's app is single-tenant per logged-in user) but we
- * verify the customer exists and belongs to the claimed org so a
- * mistyped customerId can't generate a token for someone else's data.
+ * Called from the contractor's CustomerDetail screen. Owner/manager session
+ * REQUIRED (requireOwner); the org is taken from that session, never from a
+ * client-supplied orgId. Without this, anyone could mint a working magic-link
+ * for any (customerId, orgId) pair and take over a customer's portal by
+ * enumeration (audit M1). The customer must exist within the caller's org.
  *
  * Magic links live for 14 days; once redeemed (used_at is set) they
  * can't be reused. The cookie session that redemption establishes
@@ -20,18 +21,19 @@ export const dynamic = "force-dynamic";
 
 interface Body {
   customerId: string;
-  orgId: string;
 }
 
 const TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
+  const prof = await requireOwner(req);
+  if (prof instanceof NextResponse) return prof;
+  const orgId = prof.orgId!;
   try {
     const body = (await req.json()) as Body;
     const customerId = (body.customerId || "").trim();
-    const orgId = (body.orgId || "").trim();
-    if (!customerId || !orgId) {
-      return NextResponse.json({ error: "Missing customerId or orgId" }, { status: 400 });
+    if (!customerId) {
+      return NextResponse.json({ error: "Missing customerId" }, { status: 400 });
     }
 
     const supabase = createClient(

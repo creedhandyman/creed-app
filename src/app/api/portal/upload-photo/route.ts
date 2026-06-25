@@ -24,6 +24,29 @@ export const dynamic = "force-dynamic";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
+// Magic-byte image sniff. Returns the verified mime + ext, or null if the
+// bytes aren't an allowed raster image. This bucket is public and served by
+// URL, so trusting the client content-type would let an SVG/HTML upload become
+// a stored-XSS vector (audit M6).
+function sniffImage(b: Uint8Array): { mime: string; ext: string } | null {
+  if (b.length < 12) return null;
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { mime: "image/jpeg", ext: "jpg" };
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return { mime: "image/png", ext: "png" };
+  if (
+    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+  ) {
+    return { mime: "image/webp", ext: "webp" };
+  }
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+    const brand = String.fromCharCode(b[8], b[9], b[10], b[11]);
+    if (["heic", "heix", "hevc", "heim", "heis", "hevm", "hevs", "mif1", "msf1", "heif"].includes(brand)) {
+      return { mime: "image/heic", ext: "heic" };
+    }
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   const cookie = req.cookies.get(PORTAL_COOKIE_NAME)?.value;
   const session = verifySession(cookie);
@@ -41,17 +64,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "File too large (max 8 MB)" }, { status: 413 });
     }
 
+    // Verify it's a real image by its magic bytes, not the client's
+    // content-type/filename, before storing it in the public bucket.
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const kind = sniffImage(bytes);
+    if (!kind) {
+      return NextResponse.json({ error: "Only JPEG, PNG, WebP, or HEIC images are allowed" }, { status: 415 });
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    const path = `portal-leads/${session.org_id}/${session.customer_id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const path = `portal-leads/${session.org_id}/${session.customer_id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${kind.ext}`;
 
     const { error: upErr } = await supabase.storage
       .from("receipts")
-      .upload(path, file, { contentType: file.type || "image/jpeg" });
+      .upload(path, bytes, { contentType: kind.mime });
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 500 });
     }
