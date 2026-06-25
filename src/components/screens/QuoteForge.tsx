@@ -2315,7 +2315,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   method: "POST",
                   headers: { "Content-Type": "application/json", "x-creed-call-type": "assist" },
                   body: JSON.stringify({
-                    model: "claude-sonnet-4-6",
+                    // Haiku: assist edits are user-reviewed before applying, ~4x cheaper.
+                    model: "claude-haiku-4-5-20251001",
                     max_tokens: 4000,
                     messages: [{ role: "user", content: [{ type: "text", text: userMsg }] }],
                     // Cache the big static blocks (engine rules + edit-mode

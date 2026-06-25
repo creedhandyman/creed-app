@@ -2235,7 +2235,9 @@ Output ONLY valid JSON of this shape:
     method: "POST",
     headers: { "Content-Type": "application/json", "x-creed-call-type": "voicewalk" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      // Haiku: per-room structured extraction (reviewed output), ~4x cheaper
+      // than Sonnet. The core PDF parse stays on Sonnet.
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 4000,
       // Deterministic per-room voice-walk extraction — same reasoning as
       // the inspection PDF parser. Inspection→item structured mapping is

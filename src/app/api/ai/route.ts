@@ -60,7 +60,10 @@ export async function POST(req: NextRequest) {
         cache_creation_input_tokens?: number; cache_read_input_tokens?: number;
       };
       const model = body.model as string;
-      const rate = PRICING[model] || PRICING["claude-sonnet-4-6"];
+      // Prefix match so dated snapshots (e.g. claude-haiku-4-5-20251001) map to
+      // their rate row.
+      const rateKey = Object.keys(PRICING).find((k) => model.startsWith(k)) || "claude-sonnet-4-6";
+      const rate = PRICING[rateKey];
       const inTok = usage.input_tokens || 0;
       const outTok = usage.output_tokens || 0;
       const cacheWrite = usage.cache_creation_input_tokens || 0;
