@@ -5,6 +5,9 @@ import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 import type { Organization } from "@/lib/types";
+import { DEFAULT_BRAND, isHex, normHex, shade, brandGrad, brandInk, isExtremeLuminance } from "@/lib/brand";
+
+const BRAND_PRESETS = ["#2E75B6", "#0E9F6E", "#C0392B", "#7C3AED", "#E8772E", "#0891B2", "#D6336C", "#475569", "#B45309", "#1E40AF", "#15803D", "#9D174D"];
 
 /**
  * Branding & Business Info — logo upload + the org's name/phone/email/
@@ -25,6 +28,16 @@ export default function BrandingSettings() {
   // can't conflict with one picked there.
   const [slugDraft, setSlugDraft] = useState(org?.site_slug || "");
   const [savingSlug, setSavingSlug] = useState(false);
+
+  // Brand color picker — mirrors the org's saved color(s).
+  const [brand, setBrand] = useState(org?.brand_color || DEFAULT_BRAND);
+  const [brand2, setBrand2] = useState(org?.brand_color_2 || "");
+  const [gradOn, setGradOn] = useState(!!org?.brand_color_2);
+  useEffect(() => {
+    setBrand(org?.brand_color || DEFAULT_BRAND);
+    setBrand2(org?.brand_color_2 || "");
+    setGradOn(!!org?.brand_color_2);
+  }, [org?.brand_color, org?.brand_color_2]);
 
   // Keep the slug draft in sync if the org reloads from elsewhere (e.g.
   // after an onboarding edit, refresh, or another tab).
@@ -49,6 +62,12 @@ export default function BrandingSettings() {
   const refreshOrg = async () => {
     const orgs = await db.get<Organization>("organizations", { id: org.id });
     if (orgs.length) setOrg(orgs[0]);
+  };
+
+  const saveBrand = async (c1: string, c2: string | null) => {
+    await db.patch("organizations", org.id, { brand_color: c1, brand_color_2: c2 });
+    await refreshOrg();
+    useStore.getState().showToast("Brand color updated", "success");
   };
 
   // Merge a patch into the org's site_content JSON without clobbering the
@@ -230,6 +249,101 @@ export default function BrandingSettings() {
         )}
         <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
           PNG, JPG, WEBP, or SVG · square or wide images work best
+        </div>
+      </div>
+
+      {/* Brand color — threads through app accents, the card, and PDFs */}
+      <div className="cd mb">
+        <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="paint" size={16} color="var(--color-primary)" /> Brand color
+        </h4>
+        <div className="dim" style={{ fontSize: 12.5, marginBottom: 12 }}>
+          Sets your app accents, business card, and PDF highlights.
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 12 }}>
+          {BRAND_PRESETS.map((c) => {
+            const on = brand.toLowerCase() === c.toLowerCase();
+            return (
+              <button
+                key={c}
+                type="button"
+                aria-label={c}
+                onClick={() => { setBrand(c); saveBrand(c, gradOn ? brand2 : null); }}
+                style={{
+                  aspectRatio: "1", borderRadius: 10, background: c, cursor: "pointer",
+                  border: on ? "2px solid #fff" : "2px solid transparent",
+                  boxShadow: on ? `0 0 0 2px var(--color-dark-bg), 0 0 0 4px ${c}` : "none",
+                }}
+              />
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <input
+            type="color"
+            value={isHex(brand) ? brand : DEFAULT_BRAND}
+            onChange={(e) => setBrand(e.target.value.toUpperCase())}
+            onBlur={() => { if (isHex(brand)) saveBrand(brand, gradOn ? brand2 : null); }}
+            style={{ width: 46, height: 38, border: "none", borderRadius: 10, background: "none", cursor: "pointer", padding: 0 }}
+          />
+          <input
+            value={brand}
+            maxLength={7}
+            onChange={(e) => setBrand(normHex(e.target.value))}
+            onBlur={() => { if (isHex(brand)) saveBrand(brand, gradOn ? brand2 : null); else setBrand(org.brand_color || DEFAULT_BRAND); }}
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            style={{ flex: 1, fontFamily: "monospace", textTransform: "uppercase", fontSize: 14 }}
+          />
+        </div>
+
+        <div className="sep row" style={{ justifyContent: "space-between" }}>
+          <span style={{ fontSize: 14 }}>Gradient (two-tone)</span>
+          <div
+            onClick={() => {
+              const next = !gradOn;
+              setGradOn(next);
+              const c2 = next ? (isHex(brand2) ? brand2 : shade(isHex(brand) ? brand : DEFAULT_BRAND, 40)) : null;
+              if (next && c2) setBrand2(c2);
+              saveBrand(brand, c2);
+            }}
+            style={{ width: 44, height: 24, borderRadius: 12, background: gradOn ? "var(--color-primary)" : "#ccc", position: "relative", cursor: "pointer" }}
+          >
+            <div style={{ width: 18, height: 18, borderRadius: 9, background: "#fff", position: "absolute", top: 3, left: gradOn ? 23 : 3, transition: "0.3s" }} />
+          </div>
+        </div>
+        {gradOn && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+            <input
+              type="color"
+              value={isHex(brand2) ? brand2 : DEFAULT_BRAND}
+              onChange={(e) => setBrand2(e.target.value.toUpperCase())}
+              onBlur={() => { if (isHex(brand2)) saveBrand(brand, brand2); }}
+              style={{ width: 46, height: 38, border: "none", borderRadius: 10, background: "none", cursor: "pointer", padding: 0 }}
+            />
+            <input
+              value={brand2}
+              maxLength={7}
+              onChange={(e) => setBrand2(normHex(e.target.value))}
+              onBlur={() => { if (isHex(brand2)) saveBrand(brand, brand2); }}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              style={{ flex: 1, fontFamily: "monospace", textTransform: "uppercase", fontSize: 14 }}
+            />
+          </div>
+        )}
+
+        <div style={{ height: 46, borderRadius: 11, marginTop: 12, background: brandGrad(isHex(brand) ? brand : DEFAULT_BRAND, gradOn ? brand2 : null), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".06em", textTransform: "uppercase", color: brandInk(isHex(brand) ? brand : DEFAULT_BRAND) }}>
+          Your brand
+        </div>
+
+        {isHex(brand) && isExtremeLuminance(brand) && (
+          <div style={{ fontSize: 12, color: "var(--color-warning)", marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="warn" size={13} color="var(--color-warning)" /> Very light or dark colors are hard to read — text auto-adjusts, but a mid-tone looks best.
+          </div>
+        )}
+        <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.5 }}>
+          Text auto-flips for readability. Job-status colors (quoted / active / paid…) stay fixed — they carry meaning.
         </div>
       </div>
 

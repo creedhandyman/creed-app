@@ -157,6 +157,23 @@ src/
   fields fall through). `lib/learning.ts` `recordJobOutcome` writes the rows.
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
+- Per-org brand color (threads through app accents, the digital business card,
+  and every PDF):
+  ```sql
+  ALTER TABLE organizations ADD COLUMN brand_color TEXT DEFAULT '#2E75B6';
+  ALTER TABLE organizations ADD COLUMN brand_color_2 TEXT;
+  ```
+  Picked in Ops → Settings → Brand color (`BrandingSettings`). `ThemeProvider`
+  sets `--color-primary`/`--color-primary-soft`/`--brand-ink`/`--brand-grad`
+  from `brand_color` at load (inline on `<html>`, so it survives the dark/light
+  toggle); ROYGBIV statuses + success/danger use their own tokens and are NOT
+  retinted. `print-template.ts` `printStyles({accent, accent2})` takes it per-PDF
+  (passed at every `wrapPrint` call site + threaded through export-pdf /
+  export-job-report / payroll-runner / quote-pdf, and the public /api/public/job
+  + /api/portal/me selects). Color helpers (luminance → ink, shade/lighten/
+  gradient) live in `src/lib/brand.ts`. Until the migration runs, saving a color
+  toasts a "column does not exist" error (best-effort) but nothing breaks;
+  existing orgs default to #2E75B6.
 - Multi-day scheduling: `ALTER TABLE schedule ADD COLUMN IF NOT EXISTS end_date TEXT;`
   (YYYY-MM-DD; absent/equal to sched_date = single day). Schedule.tsx treats
   an entry as covering `sched_date..end_date` (`spansDay()` helper). Single-day

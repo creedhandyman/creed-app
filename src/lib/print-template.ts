@@ -4,6 +4,7 @@
  * inspections) renders through these helpers so the logo, brand
  * colors, header layout, and footer are identical across outputs.
  */
+import { shade, brandInk } from "./brand";
 
 export interface PrintBrand {
   orgName: string;
@@ -14,6 +15,8 @@ export interface PrintBrand {
   orgLogo?: string;
   /** Optional accent color override; defaults to brand blue */
   accent?: string;
+  /** Optional second gradient stop for the brand sidebar / accent stripe. */
+  accent2?: string;
   /** Document title shown in the header right column (e.g. "INVOICE") */
   docTitle: string;
   /** Document number / id (e.g. "INV-A1B2C3") */
@@ -25,14 +28,16 @@ export interface PrintBrand {
 }
 
 const ACCENT = "#2E75B6";
-const ACCENT_DARK = "#1f5d94";
 
 /**
  * Returns the shared <style> CSS as a string. Caller sticks it inside
  * the document <head>.
  */
-export function printStyles(brand?: { accent?: string }): string {
+export function printStyles(brand?: { accent?: string; accent2?: string }): string {
   const accent = brand?.accent || ACCENT;
+  const accent2 = brand?.accent2 || shade(accent, -38);
+  const grad = `linear-gradient(135deg, ${accent}, ${accent2})`;
+  const ink = brandInk(accent);
   return `
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -44,8 +49,10 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   background: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
-.page { max-width: 800px; margin: 0 auto; padding: 36px 44px; }
+.page { max-width: 800px; margin: 0 auto; padding: 36px 44px 36px 50px; border-left: 6px solid ${accent}; }
 
 /* Headings */
 h1 {
@@ -164,7 +171,7 @@ th {
   text-transform: uppercase;
   font-size: 10.5px;
   letter-spacing: .08em;
-  color: #fff;
+  color: ${ink};
   background: ${accent};
   padding: 8px 10px;
   text-align: left;
@@ -205,9 +212,34 @@ tr:nth-child(even) td { background: #fafbfd; }
 /* Status / accent strips */
 .accent-stripe {
   height: 4px;
-  background: linear-gradient(90deg, ${accent}, ${ACCENT_DARK});
+  background: ${grad};
   border-radius: 2px;
   margin-bottom: 14px;
+}
+/* Premium total band — brand-tinted fill, brand border, near-black number */
+.total-band {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: color-mix(in srgb, ${accent} 12%, #fff);
+  border: 1px solid color-mix(in srgb, ${accent} 35%, #fff);
+  border-radius: 9px;
+  padding: 12px 16px;
+  margin: 16px 0;
+}
+.total-band .tb-label {
+  font-family: Oswald, sans-serif;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: ${accent};
+  font-weight: 600;
+}
+.total-band .tb-amount {
+  font-family: Oswald, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a2a;
 }
 .tape {
   height: 4px;
@@ -344,7 +376,7 @@ export function wrapPrint(brand: PrintBrand, bodyHtml: string): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escape(title)}</title>
-  <style>${printStyles({ accent: brand.accent })}</style>
+  <style>${printStyles({ accent: brand.accent, accent2: brand.accent2 })}</style>
 </head>
 <body>
   <div class="page">

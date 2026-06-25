@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
         // Include the rate / markup / tax / trip_fee fields too — the
         // portal Documents section regenerates the contractor's quote
         // PDF client-side and needs the same numbers QuoteForge uses.
-        .select("id, name, phone, email, logo_url, address, license_num, default_rate, markup_pct, tax_pct, tax_mode, trip_fee")
+        .select("id, name, phone, email, logo_url, address, license_num, default_rate, markup_pct, tax_pct, tax_mode, trip_fee, brand_color, brand_color_2")
         .eq("id", session.org_id)
         .limit(1),
     ]);

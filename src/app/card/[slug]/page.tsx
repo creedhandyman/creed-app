@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/supabase";
 import type { Organization, Review } from "@/lib/types";
+import { isHex, shade, lighten, brandInk, rgba } from "@/lib/brand";
 
 const BLUE = "#2E75B6";
 const BLUE_SOFT = "#7fb6ff";
@@ -176,6 +177,14 @@ function CardPageInner() {
     );
   }
 
+  // Brand color (falls back to the default blue for orgs that haven't picked).
+  const brand = isHex(org.brand_color) ? org.brand_color : BLUE;
+  const brand2 = isHex(org.brand_color_2) ? org.brand_color_2 : shade(brand, 40);
+  const bInk = brandInk(brand);
+  const bGrad = `linear-gradient(135deg, ${brand}, ${brand2})`;
+  const bName = `linear-gradient(90deg, ${lighten(brand, 80)}, ${lighten(brand, 24)})`;
+  const bSoft = lighten(brand, 60);
+
   const tagline = content?.headline || (cityFromAddress ? `Serving ${cityFromAddress}` : "");
   const monogram = (org.name || "?").slice(0, 2).toUpperCase();
 
@@ -204,22 +213,24 @@ function CardPageInner() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(1000px 520px at 50% -8%, #0d1530 0%, #0a0a0f 60%)", color: "#f1f2f6", padding: "8px 16px 60px" }}>
-      <div style={{ maxWidth: 440, margin: "0 auto" }}>
+    <div style={{ position: "relative", minHeight: "100vh", background: "radial-gradient(1000px 520px at 50% -8%, #0d1530 0%, #0a0a0f 60%)", color: "#f1f2f6", padding: "8px 16px 60px", overflow: "hidden" }}>
+      {/* Brand glow strip down the left edge */}
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 5, background: bGrad, boxShadow: `0 0 16px 0 ${rgba(brand, 0.6)}, 0 0 30px -2px ${rgba(brand, 0.5)}` }} />
+      <div style={{ position: "relative", maxWidth: 440, margin: "0 auto" }}>
 
         {/* ── Identity hero ── */}
         <div style={{ position: "relative", textAlign: "center", padding: "30px 18px 18px" }}>
           {/* radial glow behind the logo */}
-          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(420px 200px at 50% -10%, rgba(46,117,182,.35), transparent 70%)", pointerEvents: "none" }} />
+          <div style={{ position: "absolute", inset: 0, background: `radial-gradient(420px 200px at 50% -10%, ${rgba(brand, 0.35)}, transparent 70%)`, pointerEvents: "none" }} />
           <div style={{ position: "relative" }}>
             <div
               style={{
                 width: 84, height: 84, borderRadius: 22, margin: "0 auto 12px",
-                background: org.logo_url ? "#0a0a0f" : "linear-gradient(135deg,#2E75B6,#16365a)",
+                background: org.logo_url ? "#0a0a0f" : bGrad,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 34, color: "#fff",
-                boxShadow: "0 0 30px -6px rgba(46,117,182,.7), inset 0 1px 0 rgba(255,255,255,.18)",
-                border: "1px solid rgba(127,182,255,.3)", overflow: "hidden",
+                fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 34, color: org.logo_url ? "#fff" : bInk,
+                boxShadow: `0 0 30px -6px ${rgba(brand, 0.7)}, inset 0 1px 0 rgba(255,255,255,.18)`,
+                border: `1px solid ${rgba(brand, 0.35)}`, overflow: "hidden",
               }}
             >
               {org.logo_url ? (
@@ -237,7 +248,7 @@ function CardPageInner() {
               style={{
                 fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 27,
                 letterSpacing: ".04em", textTransform: "uppercase", lineHeight: 1.05,
-                background: "linear-gradient(90deg,#cfe3ff,#7fb6ff)",
+                background: bName,
                 WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
               }}
             >
@@ -276,10 +287,10 @@ function CardPageInner() {
                 href={`tel:${org.phone}`}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  padding: 14, borderRadius: 13, background: BLUE, color: "#fff",
+                  padding: 14, borderRadius: 13, background: brand, color: bInk,
                   fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 15,
                   letterSpacing: ".04em", textTransform: "uppercase", textDecoration: "none",
-                  boxShadow: "0 8px 20px -8px rgba(46,117,182,.8)",
+                  boxShadow: `0 8px 20px -8px ${rgba(brand, 0.8)}`,
                 }}
               >
                 <Phone size={17} strokeWidth={2} /> Call
@@ -291,7 +302,7 @@ function CardPageInner() {
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                   padding: 14, borderRadius: 13, background: "transparent",
-                  border: `1.5px solid ${BLUE}`, color: BLUE_SOFT,
+                  border: `1.5px solid ${brand}`, color: bSoft,
                   fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 15,
                   letterSpacing: ".04em", textTransform: "uppercase", textDecoration: "none",
                 }}
@@ -308,8 +319,8 @@ function CardPageInner() {
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
             width: "100%", marginTop: 11, padding: 15, borderRadius: 14,
-            background: "rgba(0,204,102,.16)", border: "1.5px solid rgba(0,204,102,.85)",
-            color: "#7dffb8", boxShadow: "0 0 26px -4px rgba(0,204,102,.55), inset 0 0 22px -10px rgba(0,204,102,.5)",
+            background: brand, border: `1.5px solid ${brand}`,
+            color: bInk, boxShadow: `0 0 26px -4px ${rgba(brand, 0.6)}, inset 0 1px 0 rgba(255,255,255,.18)`,
             fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 16,
             letterSpacing: ".4px", textTransform: "uppercase", textDecoration: "none",
           }}
@@ -343,7 +354,7 @@ function CardPageInner() {
             <div style={{ ...lbl, justifyContent: "center" }}>
               <ScanLine size={14} strokeWidth={2} color={BLUE_SOFT} /> Scan to save my card
             </div>
-            <div style={{ display: "inline-block", padding: 14, borderRadius: 16, background: "#fff", boxShadow: "0 0 30px -8px rgba(127,182,255,.5)" }}>
+            <div style={{ display: "inline-block", padding: 14, borderRadius: 16, background: "#fff", boxShadow: `0 0 30px -8px ${rgba(brand, 0.5)}` }}>
               <QRCodeSVG value={cardUrl} size={160} level="M" includeMargin={false} />
             </div>
             <div style={{ fontSize: 12, color: "#666", marginTop: 11, wordBreak: "break-all" }}>{cardUrl}</div>

@@ -1464,6 +1464,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         orgAddress: org?.address,
         orgLicense: org?.license_num,
         orgLogo: org?.logo_url,
+        accent: org?.brand_color,
+        accent2: org?.brand_color_2,
         docTitle: "Inspection Report",
         docNumber: reportNum,
         docDate: today,
@@ -2290,13 +2292,20 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     model: "claude-sonnet-4-6",
                     max_tokens: 4000,
                     messages: [{ role: "user", content: [{ type: "text", text: userMsg }] }],
-                    system:
-                      `Labor rate: $${rate || 55}.00/hour.\n\n` +
-                      (licensedTrades.length
-                        ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors.\n\n`
-                        : "") +
-                      AI_SYSTEM_PROMPT_BASE +
-                      editModeAddendum,
+                    // Cache the big static blocks (engine rules + edit-mode
+                    // spec) first; volatile per-quote header last so it can't
+                    // bust the cached prefix. Reordered from volatile-first.
+                    system: [
+                      { type: "text", text: AI_SYSTEM_PROMPT_BASE + editModeAddendum, cache_control: { type: "ephemeral" } },
+                      {
+                        type: "text",
+                        text:
+                          `Labor rate: $${rate || 55}.00/hour.\n\n` +
+                          (licensedTrades.length
+                            ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors.\n\n`
+                            : ""),
+                      },
+                    ],
                   }),
                 });
                 const data = await res.json();
@@ -2603,6 +2612,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 totalMat: tm,
                 totalHrs: th,
                 orgName: o?.name,
+                accent: o?.brand_color,
+                accent2: o?.brand_color_2,
                 orgPhone: o?.phone,
                 orgEmail: o?.email,
                 orgLicense: o?.license_num,

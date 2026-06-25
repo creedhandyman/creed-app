@@ -29,6 +29,7 @@ type PortalOrg = Pick<
   Organization,
   | "id" | "name" | "phone" | "email" | "logo_url" | "address" | "license_num"
   | "default_rate" | "markup_pct" | "tax_pct" | "tax_mode" | "trip_fee" | "min_labor_hours"
+  | "brand_color" | "brand_color_2"
 >;
 
 interface PortalData {
@@ -574,6 +575,8 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
       orgLicense: org?.license_num || "",
       orgAddress: org?.address || "",
       orgLogo: org?.logo_url,
+      accent: org?.brand_color,
+      accent2: org?.brand_color_2,
       workerNames,
     });
     clearBusy();

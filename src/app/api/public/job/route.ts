@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     if (job.org_id) {
       const { data: orgs } = await supabase
         .from("organizations")
-        .select("id, name, logo_url, phone, default_rate, stripe_account_id, stripe_connected")
+        .select("id, name, logo_url, phone, default_rate, stripe_account_id, stripe_connected, brand_color, brand_color_2")
         .eq("id", job.org_id)
         .limit(1);
       org = orgs?.[0] || null;

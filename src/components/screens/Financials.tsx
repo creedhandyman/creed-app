@@ -295,6 +295,8 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
           orgAddress: org?.address,
           orgLicense: org?.license_num,
           orgLogo: org?.logo_url,
+          accent: org?.brand_color,
+          accent2: org?.brand_color_2,
           docTitle: "Profit & Loss",
           docNumber: `P&L-${range.toUpperCase()}`,
           docDate: today,

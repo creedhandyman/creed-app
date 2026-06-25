@@ -26,6 +26,9 @@ interface ExportOptions {
   orgLicense?: string;
   orgAddress?: string;
   orgLogo?: string;
+  /** Brand accent + optional gradient stop, threaded to the PDF template. */
+  accent?: string;
+  accent2?: string;
   statusUrl?: string;
   photos?: { url: string; label: string; type: string }[];
   /** AI "proposed finish" before/after pairs (rendered photos flagged
@@ -67,6 +70,8 @@ export function exportQuotePdf(opts: ExportOptions) {
   const orgLicense = opts.orgLicense || "";
   const orgAddress = opts.orgAddress || "";
   const orgLogo = opts.orgLogo || "";
+  const accent = opts.accent || "#2E75B6";
+  const accent2 = opts.accent2 || "#1f5d94";
   const clientPhone = opts.clientPhone || "";
   const clientEmail = opts.clientEmail || "";
   const statusUrl = opts.statusUrl || "";
@@ -257,7 +262,7 @@ export function exportQuotePdf(opts: ExportOptions) {
         <thead><tr><th>Material</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:80px">Unit Price</th><th class="r" style="width:80px">Total</th><th>Notes</th></tr></thead>
         <tbody>${matRows || '<tr><td colspan="5" class="dim">Labor only</td></tr>'}</tbody>
       </table>
-      <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:#2E75B6;font-weight:600">
+      <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:${accent};font-weight:600">
         Labor (${clockHrs}h × ${crewSize} crew = ${sectionHrs.toFixed(1)} man-hrs @ $${rate}/hr): $${sectionLabor.toFixed(2)}
         &nbsp;·&nbsp; Material: $${sectionMat.toFixed(2)}
         &nbsp;·&nbsp; <b>Section Total: $${(sectionLabor + sectionMat).toFixed(2)}</b>
@@ -330,7 +335,7 @@ ${(client || clientEmail || clientPhone) ? `
       )
       .join("")}
     ${minRow ? `<tr style="color:#666;font-style:italic"><td>Minimum service charge</td><td class="r">${minRow.hrs.toFixed(1)}</td><td class="r">$${minRow.labor.toFixed(2)}</td><td class="r">—</td><td class="r">$${minRow.labor.toFixed(2)}</td></tr>` : ""}
-    <tr style="font-weight:700;background:#f0f4f8;border-top:2px solid #2E75B6;color:#2E75B6">
+    <tr style="font-weight:700;background:#f0f4f8;border-top:2px solid ${accent};color:${accent}">
       <td>SUBTOTAL</td>
       <td class="r">${totalHrs.toFixed(1)}</td>
       <td class="r">$${totalLabor.toFixed(2)}</td>
@@ -346,7 +351,7 @@ ${(markupPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
   ${tripFee > 0 ? `<tr><td class="dim">Trip Fee</td><td class="r" style="padding-left:24px">$${tripFee.toFixed(2)}</td></tr>` : ""}
   ${discount ? `<tr style="color:#C00000"><td>${esc(discountLabel)}</td><td class="r" style="padding-left:24px">-$${discountAmount.toFixed(2)}</td></tr>` : ""}
   ${taxPct > 0 && taxMode !== "none" ? `<tr><td class="dim">${esc(taxLabel)}</td><td class="r" style="padding-left:24px">$${taxAmount.toFixed(2)}</td></tr>` : ""}
-  <tr style="font-weight:700;font-size:16px;color:#2E75B6;font-family:Oswald,sans-serif">
+  <tr style="font-weight:700;font-size:16px;color:${accent};font-family:Oswald,sans-serif">
     <td>GRAND TOTAL</td>
     <td class="r" style="padding-left:24px">$${grandTotal.toFixed(2)}</td>
   </tr>
@@ -376,7 +381,7 @@ ${renders
     (r) => `
 <div style="display:grid;grid-template-columns:${r.sourceUrl ? "1fr 1fr" : "1fr"};gap:8px;margin-bottom:12px;page-break-inside:avoid">
   ${r.sourceUrl ? `<div style="text-align:center"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:3px">Now</div><img src="${esc(r.sourceUrl)}" alt="" style="width:100%;height:170px;object-fit:cover;border-radius:6px;border:1px solid #ddd" /></div>` : ""}
-  <div style="text-align:center"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#2E75B6;margin-bottom:3px">Done</div><img src="${esc(r.url)}" alt="" style="width:100%;height:170px;object-fit:cover;border-radius:6px;border:1px solid #2E75B6" /></div>
+  <div style="text-align:center"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:${accent};margin-bottom:3px">Done</div><img src="${esc(r.url)}" alt="" style="width:100%;height:170px;object-fit:cover;border-radius:6px;border:1px solid ${accent}" /></div>
 </div>`,
   )
   .join("")}
@@ -394,11 +399,11 @@ ${renders
   </ul>
 </div>
 
-<section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border:2px solid #2E75B6;border-radius:12px;padding:20px 24px;margin-top:22px;text-align:center;page-break-inside:avoid">
-  <h3 style="font-family:Oswald,sans-serif;font-size:16px;color:#2E75B6;text-transform:uppercase;margin:0 0 8px;letter-spacing:.08em">Accept This Estimate</h3>
-  <div style="font-family:Oswald,sans-serif;font-size:32px;font-weight:700;color:#2E75B6;margin:8px 0">$${grandTotal.toFixed(2)}</div>
+<section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border:2px solid ${accent};border-radius:12px;padding:20px 24px;margin-top:22px;text-align:center;page-break-inside:avoid">
+  <h3 style="font-family:Oswald,sans-serif;font-size:16px;color:${accent};text-transform:uppercase;margin:0 0 8px;letter-spacing:.08em">Accept This Estimate</h3>
+  <div style="font-family:Oswald,sans-serif;font-size:32px;font-weight:700;color:${accent};margin:8px 0">$${grandTotal.toFixed(2)}</div>
   <div style="font-size:12px;color:#444;line-height:1.9">
-    ${statusUrl ? `<div>🔗 <b>View &amp; approve online:</b> <a href="${esc(statusUrl)}" style="color:#2E75B6">${esc(statusUrl)}</a></div>` : ""}
+    ${statusUrl ? `<div>🔗 <b>View &amp; approve online:</b> <a href="${esc(statusUrl)}" style="color:${accent}">${esc(statusUrl)}</a></div>` : ""}
     ${orgPhone ? `<div>☎ <b>Call:</b> ${esc(orgPhone)}</div>` : ""}
     ${orgEmail ? `<div>✉ <b>Email:</b> ${esc(orgEmail)}</div>` : ""}
   </div>
@@ -419,6 +424,8 @@ ${renders
       orgAddress,
       orgLicense,
       orgLogo,
+      accent,
+      accent2,
       docTitle: "Estimate",
       docNumber: quoteNum,
       docDate: today,

@@ -9,6 +9,8 @@ interface ReportOptions {
   orgLicense: string;
   orgAddress: string;
   orgLogo?: string;
+  accent?: string;
+  accent2?: string;
   workerNames: string[];
 }
 
@@ -24,6 +26,8 @@ export function exportJobReport(opts: ReportOptions) {
     orgLicense,
     orgAddress,
     orgLogo,
+    accent,
+    accent2,
     workerNames,
   } = opts;
   const today = new Date().toLocaleDateString("en-US", {
@@ -182,6 +186,8 @@ ${photoHtml}
       orgAddress,
       orgLicense,
       orgLogo,
+      accent,
+      accent2,
       docTitle: "Job Report",
       docNumber: reportNum,
       docDate: today,

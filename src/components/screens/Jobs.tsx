@@ -590,6 +590,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         orgAddress: org?.address,
         orgLicense: org?.license_num,
         orgLogo: org?.logo_url,
+        accent: org?.brand_color,
+        accent2: org?.brand_color_2,
         docTitle: "Invoice",
         docNumber: invoiceNum,
         docDate: today,

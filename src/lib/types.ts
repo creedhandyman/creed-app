@@ -6,6 +6,11 @@ export interface Organization {
   license_num: string;
   address: string;
   logo_url: string;
+  /** Per-org brand color (hex). Threads through app accents (--color-primary),
+   *  the digital business card, and PDF accents. Defaults to #2E75B6. */
+  brand_color?: string;
+  /** Optional second stop for a two-tone brand gradient. Null/absent = solid. */
+  brand_color_2?: string;
   default_rate: number;
   markup_pct: number;
   tax_pct: number;

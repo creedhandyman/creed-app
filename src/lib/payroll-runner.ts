@@ -18,6 +18,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { wrapPrint } from "./print-template";
+import { isHex } from "./brand";
 
 export type StubJob = { job: string; hrs: number; amount: number };
 export type StubBonus = { name: string; amount: number };
@@ -37,6 +38,7 @@ export interface StubInput {
   org: {
     name?: string; phone?: string; email?: string;
     address?: string; license_num?: string; logo_url?: string;
+    brand_color?: string; brand_color_2?: string;
   };
 }
 
@@ -44,6 +46,7 @@ export interface StubInput {
  *  time (frozen into pay_history.details.stubHtml) AND when rebuilding
  *  legacy pay_history rows whose details predate the snapshot field. */
 export function buildStubHtml(s: StubInput): string {
+  const accent = isHex(s.org.brand_color) ? s.org.brand_color : "#2E75B6";
   const esc = (x: string) =>
     String(x ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const jobRows = s.jobs
@@ -88,7 +91,7 @@ export function buildStubHtml(s: StubInput): string {
   </tbody>
 </table>
 
-<section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;padding:18px 22px;margin:18px 0;border-left:4px solid #2E75B6">
+<section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;padding:18px 22px;margin:18px 0;border-left:4px solid ${accent}">
   <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
     <span class="muted">Total Hours</span><span style="font-family:Oswald,sans-serif">${s.totalHrs.toFixed(2)}</span>
   </div>
@@ -96,9 +99,9 @@ export function buildStubHtml(s: StubInput): string {
     <span class="muted">Labor (${s.totalHrs.toFixed(2)} × $${s.rate}/hr)</span><span style="font-family:Oswald,sans-serif">$${s.laborPay.toFixed(2)}</span>
   </div>
   ${s.totalBonus > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#9d4edd"><span>★ Quest Bonuses (${s.bonuses.length})</span><span style="font-family:Oswald,sans-serif">$${s.totalBonus.toFixed(2)}</span></div>` : ""}
-  <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid #2E75B6;margin-top:10px;padding-top:12px">
-    <span style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#2E75B6">Net Pay</span>
-    <span style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:#2E75B6">$${s.totalPay.toFixed(2)}</span>
+  <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid ${accent};margin-top:10px;padding-top:12px">
+    <span style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:${accent}">Net Pay</span>
+    <span style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:${accent}">$${s.totalPay.toFixed(2)}</span>
   </div>
 </section>
 
@@ -115,6 +118,8 @@ export function buildStubHtml(s: StubInput): string {
       orgAddress: s.org.address,
       orgLicense: s.org.license_num,
       orgLogo: s.org.logo_url,
+      accent,
+      accent2: s.org.brand_color_2 || undefined,
       docTitle: "Pay Stub",
       docNumber: s.stubNum,
       docDate: s.payDate,

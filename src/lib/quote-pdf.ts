@@ -20,6 +20,8 @@ export interface QuotePdfOrg {
   tax_mode?: string;
   trip_fee?: number;
   min_labor_hours?: number;
+  brand_color?: string;
+  brand_color_2?: string;
 }
 
 /**
@@ -96,6 +98,8 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     trade: job.trade,
     jobId: job.id,
     orgName: org?.name,
+    accent: org?.brand_color,
+    accent2: org?.brand_color_2,
     orgPhone: org?.phone,
     orgEmail: org?.email,
     orgLicense: org?.license_num,
