@@ -92,3 +92,12 @@ export async function pickReceiptPhoto(camera: boolean): Promise<File | null> {
   if (!files.length) return null;
   return compressImage(files[0], 2400, 0.9);
 }
+
+/**
+ * Multi-page receipt capture: native multi-select picker → HD JPEGs. Returns []
+ * if nothing was picked. For receipts that span several photos/pages.
+ */
+export async function pickReceiptPhotos(camera = false): Promise<File[]> {
+  const files = await pickImage({ camera, multiple: true });
+  return Promise.all(files.map((f) => compressImage(f, 2400, 0.9)));
+}

@@ -313,6 +313,9 @@ export interface Receipt {
   amount: number;
   receipt_date: string;
   photo_url: string;
+  /** Multi-page receipt: object-paths for ALL pages (page 1 === photo_url).
+   *  Optional/migration-safe — needs `ALTER TABLE receipts ADD COLUMN pages JSONB`. */
+  pages?: string[];
 }
 
 export interface QuestPayout {

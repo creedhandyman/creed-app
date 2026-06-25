@@ -12,7 +12,7 @@ import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { recordJobOutcome } from "@/lib/learning";
 import { Icon } from "../Icon";
-import { pickReceiptPhoto } from "@/lib/image";
+import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
 import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import SmsNotifyButtons from "../SmsNotifyButtons";
@@ -224,7 +224,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const [reviewJob, setReviewJob] = useState<Job | null>(null);
   const [rn, setRn] = useState("");
   const [ra, setRa] = useState("");
-  const [rPhoto, setRPhoto] = useState<File | null>(null);
+  // Pending receipt pages — uploaded as attached, saved as ONE receipt.
+  const [pendingPages, setPendingPages] = useState<{ path: string; url: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   // Receipt scan state — once a photo is attached we upload + AI-scan
   // immediately so the form can auto-fill before the user hits Add.
@@ -232,8 +233,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Receipts use the device's NATIVE camera/photo picker (HD) via
   // pickReceiptPhoto — reliable on iOS where the in-app camera can't open,
   // and high-res enough for the AI scan to read line items.
-  const [scannedPhotoUrl, setScannedPhotoUrl] = useState("");
-  const [scannedPhotoPath, setScannedPhotoPath] = useState("");
   const [signedReceipts, setSignedReceipts] = useState<Record<string, string>>({});
   const [scannedItems, setScannedItems] = useState<{ name?: string; qty?: number; price?: number }[]>([]);
   const [scannedVendor, setScannedVendor] = useState("");
@@ -283,65 +282,44 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const resetReceiptForm = () => {
     setRn("");
     setRa("");
-    setRPhoto(null);
-    setScannedPhotoUrl("");
-    setScannedPhotoPath("");
+    setPendingPages([]);
     setScannedItems([]);
     setScannedVendor("");
     if (photoRef.current) photoRef.current.value = "";
   };
 
-  // Fired the moment a photo is attached. Uploads to storage, then hits
-  // /api/ai/receipt to extract vendor / total / items. Auto-fills the
-  // note and $ inputs so the user can review and tap Add. Items are kept
-  // in state to feed price_corrections on save.
-  const handlePhotoAttach = async (file: File, jobId: string) => {
-    setRPhoto(file);
-    setScannedItems([]);
-    setScannedVendor("");
-    setScannedPhotoUrl("");
+  // Scan one or more receipt photos as a SINGLE receipt. Multi-page receipts (a
+  // long receipt shot across several photos) are sent together so the AI returns
+  // ONE combined result — all line items + the one final grand total — instead
+  // of being misread as separate receipts. Items feed price_corrections on save.
+  const scanReceiptPages = async (urls: string[]) => {
+    if (!urls.length) return;
     setScanning(true);
     try {
-      const { path, url } = await uploadPhoto(file, jobId);
-      setScannedPhotoPath(path);
-      setScannedPhotoUrl(url);
-
       const res = await apiFetch("/api/ai/receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: url }),
+        body: JSON.stringify({ imageUrls: urls }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        useStore.getState().showToast(
-          t("jobs.scanFailedManual") + " " + (err?.error || res.statusText),
-          "warning",
-        );
+        useStore.getState().showToast(t("jobs.scanFailedManual") + " " + (err?.error || res.statusText), "warning");
         return;
       }
       const { data } = await res.json();
       if (!data) return;
 
       const vendor = (data.vendor as string | undefined)?.trim() || "";
-      const items = (Array.isArray(data.items) ? data.items : []) as {
-        name?: string; qty?: number; price?: number;
-      }[];
+      const items = (Array.isArray(data.items) ? data.items : []) as { name?: string; qty?: number; price?: number }[];
       const total = typeof data.total === "number" ? data.total : 0;
 
       setScannedVendor(vendor);
       setScannedItems(items);
-
       if (total > 0) setRa(total.toFixed(2));
 
-      const itemSummary = items
-        .filter((it) => it?.name)
-        .slice(0, 4)
-        .map((it) => it.name)
-        .join(", ");
+      const itemSummary = items.filter((it) => it?.name).slice(0, 4).map((it) => it.name).join(", ");
       const more = items.length > 4 ? ` (+${items.length - 4} more)` : "";
-      const note = vendor
-        ? `${vendor}${itemSummary ? ` — ${itemSummary}${more}` : ""}`
-        : `${itemSummary}${more}`;
+      const note = vendor ? `${vendor}${itemSummary ? ` — ${itemSummary}${more}` : ""}` : `${itemSummary}${more}`;
       if (note.trim()) setRn(note);
 
       useStore.getState().showToast(
@@ -352,12 +330,32 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       );
     } catch (err) {
       console.error("receipt scan error:", err);
-      useStore.getState().showToast(
-        t("jobs.scanFailedManual") + " " + (err instanceof Error ? err.message : String(err)),
-        "warning",
-      );
+      useStore.getState().showToast(t("jobs.scanFailedManual") + " " + (err instanceof Error ? err.message : String(err)), "warning");
     }
     setScanning(false);
+  };
+
+  // Attach one or more pages: upload each, then re-scan the whole set as one.
+  const addReceiptPages = async (files: File[], jobId: string) => {
+    if (!files.length) return;
+    setScanning(true);
+    const uploaded: { path: string; url: string }[] = [];
+    try {
+      for (const f of files) uploaded.push(await uploadPhoto(f, jobId));
+    } catch (err) {
+      useStore.getState().showToast(t("jobs.scanFailedManual") + " " + (err instanceof Error ? err.message : String(err)), "warning");
+    }
+    if (!uploaded.length) { setScanning(false); return; }
+    const next = [...pendingPages, ...uploaded];
+    setPendingPages(next);
+    await scanReceiptPages(next.map((p) => p.url));
+  };
+
+  const removePendingPage = (i: number) => {
+    const next = pendingPages.filter((_, idx) => idx !== i);
+    setPendingPages(next);
+    if (next.length) scanReceiptPages(next.map((p) => p.url));
+    else { setScannedItems([]); setScannedVendor(""); }
   };
 
   const addReceipt = async (jobId: string) => {
@@ -366,23 +364,31 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     if (!amt || amt <= 0) { useStore.getState().showToast(t("jobs.enterValidAmount"), "warning"); return; }
     setUploading(true);
     try {
-      // Photo was uploaded the moment the user attached it. Fall back to
-      // a fresh upload if scanning was skipped or failed mid-upload.
-      let photo_url = scannedPhotoPath;
-      if (rPhoto && !photo_url) {
-        photo_url = (await uploadPhoto(rPhoto, jobId)).path;
-      }
+      // Pages were uploaded as they were attached. photo_url = page 1; the rest
+      // ride in `pages` for multi-page receipts.
+      const pagePaths = pendingPages.map((p) => p.path);
+      const photo_url = pagePaths[0] || "";
       // Pass org_id explicitly rather than relying on db.post's localStorage
       // auto-inject — if org_id is missing the receipt is there but hidden by
       // the org-scoped filter on the next refresh.
-      const result = await db.post<{ id: string }>("receipts", {
+      const base = {
         job_id: jobId,
         org_id: user.org_id,
         note: rn,
         amount: amt,
         receipt_date: new Date().toLocaleDateString(),
         photo_url,
-      });
+      };
+      // Persist every page when there's more than one. The `pages` column may
+      // not be migrated yet — if that insert fails, retry without it so the
+      // receipt (page 1 + the already-combined scan total) still saves.
+      let result = await db.post<{ id: string }>(
+        "receipts",
+        pagePaths.length > 1 ? { ...base, pages: pagePaths } : base,
+      );
+      if (!result && pagePaths.length > 1) {
+        result = await db.post<{ id: string }>("receipts", base);
+      }
       if (!result) {
         // db.post already toasted the underlying Supabase error; bail before
         // clearing the form so the user can retry.
@@ -1174,24 +1180,49 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   type="button"
                   className="bo"
                   disabled={scanning}
-                  onClick={async () => { const f = await pickReceiptPhoto(true); if (f) handlePhotoAttach(f, sj.id); }}
+                  onClick={async () => { const f = await pickReceiptPhoto(true); if (f) addReceiptPages([f], sj.id); }}
                   style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, opacity: scanning ? 0.5 : 1 }}
                 >
-                  <Icon name="camera" size={15} /> {t("common.takePhoto")}
+                  <Icon name="camera" size={15} /> {pendingPages.length ? "Add page" : t("common.takePhoto")}
                 </button>
                 <button
                   type="button"
                   className="bo"
                   disabled={scanning}
-                  onClick={async () => { const f = await pickReceiptPhoto(false); if (f) handlePhotoAttach(f, sj.id); }}
+                  onClick={async () => { const fs = await pickReceiptPhotos(false); if (fs.length) addReceiptPages(fs, sj.id); }}
                   style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, opacity: scanning ? 0.5 : 1 }}
                 >
                   <Icon name="upload" size={15} /> {t("common.upload")}
                 </button>
               </div>
+              {/* Pending pages of the receipt being built — scanned together as one. */}
+              {pendingPages.length > 0 && (
+                <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                  {pendingPages.map((p, i) => (
+                    <div key={i} style={{ position: "relative" }}>
+                      <img src={p.url} alt="" onClick={() => setViewPhoto(p.url)} style={{ width: 46, height: 46, borderRadius: 7, objectFit: "cover", border: "1px solid var(--color-border-dark)", cursor: "pointer" }} />
+                      <button
+                        onClick={() => removePendingPage(i)}
+                        aria-label="Remove page"
+                        disabled={scanning}
+                        style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "var(--color-accent-red)", color: "#fff", border: "none", fontSize: 11, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+                      >
+                        ✕
+                      </button>
+                      <span style={{ position: "absolute", bottom: -3, left: -3, fontSize: 8, background: "rgba(0,0,0,.65)", color: "#fff", padding: "0 3px", borderRadius: 3 }}>{i + 1}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="dim" style={{ fontSize: 12.5, marginTop: 7, display: "flex", alignItems: "center", gap: 6 }}>
                 <Icon name={scanning ? "time" : "sparkle"} size={13} color={scanning ? "var(--color-warning)" : "var(--color-primary)"} />
-                {scanning ? t("jobs.scanningReceipt") : rPhoto ? rPhoto.name : t("jobs.attachPhotoAutoScan")}
+                {scanning
+                  ? t("jobs.scanningReceipt")
+                  : pendingPages.length > 1
+                    ? `${pendingPages.length} pages — scanned as one receipt`
+                    : pendingPages.length === 1
+                      ? "1 page · add more for a multi-page receipt"
+                      : t("jobs.attachPhotoAutoScan")}
               </div>
               <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
                 <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={scanning ? t("jobs.scanningShort") : t("jobs.noteVendor")} style={{ flex: 1 }} disabled={scanning} />
@@ -1200,14 +1231,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   {uploading ? "…" : t("common.add")}
                 </button>
               </div>
-              {rPhoto && !scanning && (
-                <button
-                  onClick={() => { setRPhoto(null); setScannedPhotoUrl(""); setScannedItems([]); setScannedVendor(""); if (photoRef.current) photoRef.current.value = ""; }}
-                  style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, padding: "8px 0 0", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
-                >
-                  <Icon name="close" size={12} /> {t("jobs.removePhoto")}
-                </button>
-              )}
             </div>
 
             {/* Receipt list */}
@@ -1233,7 +1256,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       )}
                       <span style={{ minWidth: 0 }}>
                         <span style={{ fontSize: 14.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.note || t("jobs.receiptSingular")}</span>
-                        <span className="dim" style={{ fontSize: 12 }}>{r.receipt_date}</span>
+                        <span className="dim" style={{ fontSize: 12 }}>{r.receipt_date}{r.pages && r.pages.length > 1 ? ` · ${r.pages.length} pages` : ""}</span>
                       </span>
                     </span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexShrink: 0 }}>

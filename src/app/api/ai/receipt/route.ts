@@ -18,15 +18,26 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { imageUrl } = await req.json();
-    if (!imageUrl) {
-      return NextResponse.json({ error: "Missing imageUrl" }, { status: 400 });
+    const body = await req.json();
+    // Accept a single imageUrl (legacy / WorkVision) OR imageUrls[] (a multi-page
+    // receipt shot across several photos). Multi-page is sent together so the
+    // model returns ONE combined result instead of being read as separate receipts.
+    const urls: string[] = (
+      Array.isArray(body.imageUrls) && body.imageUrls.length
+        ? body.imageUrls
+        : body.imageUrl
+          ? [body.imageUrl]
+          : []
+    ).slice(0, 8);
+    if (!urls.length) {
+      return NextResponse.json({ error: "Missing imageUrl(s)" }, { status: 400 });
     }
-    if (!isSupabaseStorageUrl(imageUrl)) {
-      return NextResponse.json({ error: "imageUrl must be a Supabase Storage URL" }, { status: 400 });
+    if (!urls.every((u: unknown) => isSupabaseStorageUrl(u))) {
+      return NextResponse.json({ error: "image URLs must be Supabase Storage URLs" }, { status: 400 });
     }
+    const multi = urls.length > 1;
 
-    const prompt = `Extract this receipt into JSON. Return ONLY valid JSON matching this exact shape:
+    const prompt = `${multi ? `The ${urls.length} images below are pages of ONE single receipt — combine them: list EVERY line item across all pages, and report the ONE final grand total (usually on the last page). Do NOT add the pages' subtotals together.\n\n` : ""}Extract this receipt into JSON. Return ONLY valid JSON matching this exact shape:
 {
   "vendor": "store name",
   "date": "YYYY-MM-DD or empty string",
@@ -54,14 +65,14 @@ Rules:
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 2000,
+        max_tokens: multi ? 3500 : 2000,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "user",
             content: [
               { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: imageUrl } },
+              ...urls.map((u) => ({ type: "image_url", image_url: { url: u } })),
             ],
           },
         ],
