@@ -6,6 +6,12 @@ export const dynamic = "force-dynamic";
 // Image generation can take 20–50s end to end; give it room.
 export const maxDuration = 60;
 
+// Clamp client-supplied gpt-image-1 params so a caller can't force an
+// expensive tier. Default quality is "low" (~$0.01); the client opts into a
+// higher tier explicitly (RenderModal's High-quality toggle).
+const ALLOWED_SIZE = new Set(["1024x1024", "1024x1536", "1536x1024", "auto"]);
+const ALLOWED_QUALITY = new Set(["low", "medium", "high", "auto"]);
+
 /**
  * Generate a "finished work" rendering of a property photo.
  *
@@ -25,7 +31,7 @@ export const maxDuration = 60;
  *   - prompt:   text describing the desired finished state
  *   - jobId:    used to namespace the storage path
  *   - size:     "1024x1024" | "1024x1536" | "1536x1024" | "auto" (default 1024x1024)
- *   - quality:  "low" | "medium" | "high" | "auto" (default "medium" — ~$0.04/image)
+ *   - quality:  "low" | "medium" | "high" | "auto" (clamped; default "low" — ~$0.01/image)
  *
  * Response: { url: string } | { error: string }
  */
@@ -84,8 +90,8 @@ export async function POST(req: NextRequest) {
     );
     fwd.append("model", "gpt-image-1");
     fwd.append("prompt", prompt);
-    fwd.append("size", size || "1024x1024");
-    fwd.append("quality", quality || "medium");
+    fwd.append("size", typeof size === "string" && ALLOWED_SIZE.has(size) ? size : "1024x1024");
+    fwd.append("quality", typeof quality === "string" && ALLOWED_QUALITY.has(quality) ? quality : "low");
     fwd.append("n", "1");
 
     const aiRes = await fetch("https://api.openai.com/v1/images/edits", {

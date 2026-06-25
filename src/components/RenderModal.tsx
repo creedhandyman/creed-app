@@ -42,6 +42,9 @@ export default function RenderModal({
   const [result, setResult] = useState<string | null>(null);
   const [includeInQuote, setIncludeInQuote] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Render quality tier — default "low" (~$0.01) for cheap iteration; the user
+  // bumps to "high" for the customer-facing keeper.
+  const [quality, setQuality] = useState<"low" | "high">("low");
 
   // Reset state each time the modal opens.
   useEffect(() => {
@@ -51,6 +54,7 @@ export default function RenderModal({
     setResult(null);
     setRendering(false);
     setIncludeInQuote(true);
+    setQuality("low");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -64,7 +68,7 @@ export default function RenderModal({
       const res = await apiFetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrl: source, prompt: prompt.trim(), jobId }),
+        body: JSON.stringify({ photoUrl: source, prompt: prompt.trim(), jobId, quality }),
       });
       const data = await res.json();
       if (!res.ok || !data.url) {
@@ -165,6 +169,25 @@ export default function RenderModal({
           />
         </div>
 
+        {/* Quality tier — cheap draft by default, high only for the keeper */}
+        {!result && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 9 }}>
+            {([["low", "Draft", "~$0.01"], ["high", "High quality", "~$0.17"]] as const).map(([q, label, price]) => {
+              const on = quality === q;
+              return (
+                <button
+                  key={q}
+                  onClick={() => { setQuality(q); setResult(null); }}
+                  disabled={rendering}
+                  style={{ flex: 1, padding: "8px 6px", borderRadius: 10, cursor: rendering ? "not-allowed" : "pointer", fontSize: 11.5, fontWeight: 600, border: `1px solid ${on ? VIOLET : "var(--color-border-dark-2)"}`, background: on ? "rgba(157,78,221,.16)" : "var(--color-card-dark-3)", color: on ? "#d8b6ff" : "var(--color-dim)" }}
+                >
+                  {label} <span style={{ opacity: 0.65, fontWeight: 400 }}>{price}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Generate / Save */}
         {!result ? (
           <button
@@ -172,7 +195,7 @@ export default function RenderModal({
             disabled={genDisabled}
             style={{ width: "100%", border: "none", fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".4px", padding: 13, borderRadius: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: "linear-gradient(135deg,#9d4edd,#f5b400)", color: "#1a1305", boxShadow: "0 0 28px -6px rgba(157,78,221,.7)", cursor: genDisabled ? "not-allowed" : "pointer", opacity: genDisabled ? 0.6 : 1 }}
           >
-            <Icon name="sparkle" size={16} color="#1a1305" /> {rendering ? t("wv.renderGenerating") : "Generate · ~$0.04"}
+            <Icon name="sparkle" size={16} color="#1a1305" /> {rendering ? t("wv.renderGenerating") : `Generate · ${quality === "high" ? "~$0.17" : "~$0.01"}`}
           </button>
         ) : (
           <button
