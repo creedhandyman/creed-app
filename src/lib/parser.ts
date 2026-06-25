@@ -2203,7 +2203,10 @@ Output ONLY valid JSON of this shape:
       // the inspection PDF parser. Inspection→item structured mapping is
       // not a creative task.
       temperature: 0,
-      system,
+      // Cache the (fully static) voicewalk system prompt — every room in an
+      // inspection re-sends it, so rooms 2..N read it instead of re-billing.
+      // No reorder needed: all per-room content lives in `content`, not here.
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content }],
     }),
   });
