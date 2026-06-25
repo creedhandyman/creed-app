@@ -39,29 +39,6 @@
       "purpose": "maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshots/dashboard.png",
-      "sizes": "1080x1920",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Dashboard — next check, quick quote, clock in"
-    },
-    {
-      "src": "/screenshots/quote.png",
-      "sizes": "1080x1920",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "AI quotes itemized by trade with instant pricing"
-    },
-    {
-      "src": "/screenshots/schedule.png",
-      "sizes": "1080x1920",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Schedule and dispatch crew in real time"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Quick Quote",
