@@ -293,6 +293,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [quickPhotos, setQuickPhotos] = useState<string[]>([]);
   const [quickDesc, setQuickDesc] = useState("");
+  // Set when "Build Quote" on a lead seeds quickDesc/quickPhotos — the effect
+  // below fires the AI build once those have committed to state.
+  const [leadBuildPending, setLeadBuildPending] = useState(false);
   const [quickUploading, setQuickUploading] = useState(false);
   const quickPhotoRef = useRef<HTMLInputElement>(null);
   const [quickCam, setQuickCam] = useState(false);
@@ -373,6 +376,21 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
     try {
       const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+      // A new lead (public intake form) stores work-order details as
+      // { leadDescription, leadPhotos } with no quote rooms yet. "Build Quote"
+      // lands here — instead of a blank editor, seed the Quick Quote flow with
+      // those details and auto-run the AI build (deferred to the effect below so
+      // quickPhotos commits before doAiParse reads it). editingId stays this
+      // job, so saving promotes the same lead row to a quote.
+      const leadPhotos = Array.isArray(data?.leadPhotos) ? data.leadPhotos : [];
+      if (!data?.rooms?.length && (data?.leadDescription || leadPhotos.length)) {
+        setQuickDesc(data.leadDescription || "");
+        setQuickPhotos(leadPhotos);
+        setMode("quick");
+        setLeadBuildPending(true);
+        clearEditJob?.();
+        return;
+      }
       if (data?.rooms?.length) {
         // skipCaps on reload: the user has already reviewed and saved
         // these items. The material/labor caps in validateQuote are an
@@ -423,6 +441,15 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setMode("edit");
     clearEditJob?.();
   }, [editJobId, jobs, clearEditJob]);
+
+  // Auto-run the AI build for a "Build Quote" off a lead, once the seeded
+  // quickDesc/quickPhotos have committed (so doAiParse reads the right photos).
+  useEffect(() => {
+    if (!leadBuildPending) return;
+    setLeadBuildPending(false);
+    doAiParse(quickDesc || "Analyze these photos and quote all repairs needed.", null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadBuildPending]);
 
   // Add-item form state
   // nr  = trade bucket (Painting, Carpentry, Plumbing…) — picks the parent
@@ -1297,9 +1324,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     };
     // On a new save, status starts at "quoted". On an edit, keep whatever the
     // job's current status is — mid-job edits (active/complete/paid) shouldn't
-    // silently demote the job back to "quoted" and reset its lifecycle.
+    // silently demote the job back to "quoted" and reset its lifecycle. The one
+    // promotion we DO make: a "lead" being quoted for the first time becomes
+    // "quoted" — that's exactly what Build Quote on a lead is for.
     const prevJob = editingId ? useStore.getState().jobs.find((j) => j.id === editingId) : null;
-    const nextStatus = prevJob?.status ?? "quoted";
+    const nextStatus = prevJob ? (prevJob.status === "lead" ? "quoted" : prevJob.status) : "quoted";
     const jobData = {
       property: prop,
       client: client || "",
