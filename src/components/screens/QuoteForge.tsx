@@ -434,6 +434,23 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // / "none". Anything else means "inherit org default".
       const tm = data?.taxMode;
       setTaxMode(tm === "total" || tm === "materials" || tm === "none" ? tm : null);
+      // Restore the photo gallery so the Photos tab + AI Render get the quote's
+      // photos back — including the inspection photos collected when the quote
+      // was first built. Without this, re-opening a saved quote dropped them and
+      // Render reported "add an inspection photo to preview the finish".
+      if (Array.isArray(data?.photos)) {
+        setJobPhotos(
+          (data.photos as { url?: string; label?: string; type?: string }[])
+            .filter((p) => p && typeof p.url === "string")
+            .map((p) => ({
+              url: p.url as string,
+              label: typeof p.label === "string" ? p.label : "",
+              type: p.type === "after" || p.type === "work" ? p.type : "before",
+            })),
+        );
+      } else {
+        setJobPhotos([]);
+      }
     } catch {
       // rooms parse failed, start empty
     }
