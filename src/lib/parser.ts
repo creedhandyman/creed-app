@@ -10,6 +10,7 @@ declare global {
     pdfjsLib: {
       GlobalWorkerOptions: { workerSrc: string };
       getDocument: (opts: { data: ArrayBuffer }) => { promise: Promise<PDFDoc> };
+      OPS: Record<string, number>;
     };
   }
 }
@@ -23,6 +24,7 @@ interface PDFPage {
   getTextContent: () => Promise<{
     items: { transform: number[]; str: string }[];
   }>;
+  getOperatorList: () => Promise<{ fnArray: number[] }>;
   getViewport: (opts: { scale: number }) => { width: number; height: number };
   render: (opts: {
     canvasContext: CanvasRenderingContext2D;
@@ -111,7 +113,14 @@ export async function renderPdfPages(
   file: File,
   maxPages = 15,
   scale = 1.0,
-  onProgress?: (rendered: number, total: number) => void
+  onProgress?: (rendered: number, total: number) => void,
+  // PDF text-first: skip rendering pages whose content is already covered by
+  // the text layer (which is sent to the AI separately), to avoid paying
+  // vision tokens on text-only pages. A page is skipped ONLY when it paints no
+  // raster image AND has real text — so photo pages and scanned pages (which
+  // are themselves images) are always kept. Detection failures fall through to
+  // rendering, so this can never silently drop a page's content.
+  skipTextOnly = true
 ): Promise<string[]> {
   const lib = await loadPdf();
   const buf = await file.arrayBuffer();
@@ -120,8 +129,34 @@ export async function renderPdfPages(
   const count = Math.min(pdf.numPages, maxPages);
   const MAX_DIM = 1200; // cap page dimensions for API size limits
 
+  // pdf.js operator ids for the image-painting ops. Resolved from the lib so a
+  // version mismatch just disables the optimization (empty set → render all).
+  const OPS = lib.OPS || ({} as Record<string, number>);
+  const IMAGE_OPS = new Set<number>(
+    [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject, OPS.paintJpegXObject].filter(
+      (v): v is number => typeof v === "number",
+    ),
+  );
+  let skipped = 0;
+
   for (let i = 1; i <= count; i++) {
     const page = await pdf.getPage(i);
+
+    if (skipTextOnly && IMAGE_OPS.size) {
+      try {
+        const [ops, tc] = await Promise.all([page.getOperatorList(), page.getTextContent()]);
+        const hasImage = ops.fnArray.some((fn) => IMAGE_OPS.has(fn));
+        const textLen = tc.items.reduce((n, it) => n + (it.str?.length || 0), 0);
+        if (!hasImage && textLen > 100) {
+          skipped++;
+          onProgress?.(i, count);
+          continue;
+        }
+      } catch {
+        /* detection failed — fall through and render the page (safe default) */
+      }
+    }
+
     let viewport = page.getViewport({ scale });
 
     // Downscale if page is too large
@@ -138,6 +173,9 @@ export async function renderPdfPages(
     images.push(canvas.toDataURL("image/jpeg", 0.4));
     canvas.remove();
     onProgress?.(i, count);
+  }
+  if (skipped > 0) {
+    console.log(`renderPdfPages: text-first skipped ${skipped} text-only page(s); sending ${images.length} image(s).`);
   }
   return images;
 }
