@@ -1212,7 +1212,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
             {/* Receipt list */}
             <div className="section">
-              <div className="seclabel"><Icon name="receipt" size={13} /> {t("jobs.receipts")}</div>
+              <div className="seclabel" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="receipt" size={13} /> {t("jobs.receipts")}</span>
+                {receipts.filter((r) => r.job_id === sj.id).length > 0 && (
+                  <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 14 }}>
+                    ${receipts.filter((r) => r.job_id === sj.id).reduce((s, r) => s + (r.amount || 0), 0).toFixed(2)} total
+                  </span>
+                )}
+              </div>
               {receipts.filter((r) => r.job_id === sj.id).length === 0 ? (
                 <div style={{ fontSize: 14, color: "var(--color-dim)", padding: "10px 0", textAlign: "center" }}>{t("jobs.noReceipts")}</div>
               ) : (
@@ -1243,6 +1250,37 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 })
               )}
             </div>
+
+            {/* Job photos (before / work / after / rendered) — these live on the
+                rooms.photos blob in the PUBLIC bucket, so they render directly.
+                Previously this screen showed receipts only. */}
+            {(() => {
+              let photos: { url: string; label?: string; type?: string }[] = [];
+              try {
+                const d = typeof sj.rooms === "string" ? JSON.parse(sj.rooms) : sj.rooms;
+                photos = Array.isArray(d?.photos) ? d.photos : [];
+              } catch { /* */ }
+              if (!photos.length) return null;
+              return (
+                <div className="section">
+                  <div className="seclabel"><Icon name="camera" size={13} /> Job Photos ({photos.length})</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 8 }}>
+                    {photos.map((p, i) => (
+                      <div
+                        key={i}
+                        onClick={() => p.url && setViewPhoto(p.url)}
+                        style={{ position: "relative", aspectRatio: "1", borderRadius: 8, overflow: "hidden", border: "1px solid var(--color-border-dark)", cursor: "pointer" }}
+                      >
+                        <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        {p.type && (
+                          <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, fontSize: 9, textAlign: "center", background: "rgba(0,0,0,.55)", color: "#fff", padding: "1px 0", textTransform: "capitalize" }}>{p.type}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </>
         )}
       </>
