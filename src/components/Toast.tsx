@@ -2,10 +2,17 @@
 import { useStore } from "@/lib/store";
 
 const COLORS = {
-  success: { border: "#00cc66", icon: "✅" },
-  error:   { border: "#C00000", icon: "❌" },
-  info:    { border: "#2E75B6", icon: "ℹ️" },
-  warning: { border: "#ff8800", icon: "⚠️" },
+  success: { border: "#00cc66", glow: "rgba(0, 204, 102, 0.5)" },
+  error:   { border: "#C00000", glow: "rgba(255, 91, 91, 0.5)" },
+  info:    { border: "#2E75B6", glow: "rgba(46, 139, 255, 0.5)" },
+  warning: { border: "#ff8800", glow: "rgba(255, 136, 0, 0.5)" },
+} as const;
+
+const ICONS = {
+  success: "✅",
+  error: "❌",
+  info: "ℹ️",
+  warning: "⚠️",
 } as const;
 
 export default function Toast() {
@@ -28,8 +35,7 @@ export default function Toast() {
         background: "rgba(18, 18, 26, 0.92)",
         backdropFilter: "blur(14px) saturate(140%)",
         WebkitBackdropFilter: "blur(14px) saturate(140%)",
-        border: `1px solid ${c.border}55`,
-        borderLeft: `3px solid ${c.border}`,
+        border: `1.5px solid ${c.border}`,
         borderRadius: 12,
         padding: "12px 18px 12px 16px",
         minWidth: 260,
@@ -38,11 +44,11 @@ export default function Toast() {
         alignItems: "center",
         gap: 12,
         cursor: "pointer",
-        boxShadow: `0 12px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px ${c.border}22, 0 0 24px ${c.border}33`,
-        animation: "toastIn 0.32s cubic-bezier(0.22, 1, 0.36, 1)",
+        boxShadow: `0 0 24px -2px ${c.glow}, inset 0 0 22px -8px ${c.glow}, 0 12px 36px rgba(0, 0, 0, 0.55)`,
+        animation: "toastIn 0.36s cubic-bezier(0.22, 1, 0.36, 1)",
       }}
     >
-      <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1 }}>{c.icon}</span>
+      <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1 }}>{ICONS[type]}</span>
       <span
         style={{
           fontSize: 15.5,
@@ -56,7 +62,8 @@ export default function Toast() {
       </span>
       <style>{`
         @keyframes toastIn {
-          from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.96); }
+          from { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(0.92); }
+          50%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.02); }
           to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
         }
       `}</style>

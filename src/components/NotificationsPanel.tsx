@@ -110,7 +110,20 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
                     padding: "12px 14px",
                     cursor: n.job_id ? "pointer" : "default",
                     borderBottom: "1px solid var(--color-border-dark)",
-                    background: isUnread ? "rgba(46,139,255,.07)" : "transparent",
+                    background: isUnread ? `linear-gradient(90deg, ${m.color}11, transparent)` : "transparent",
+                    borderLeft: isUnread ? `2px solid ${m.color}` : "none",
+                    paddingLeft: isUnread ? "12px" : "14px",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (n.job_id) {
+                      e.currentTarget.style.background = `linear-gradient(90deg, ${m.color}22, transparent)`;
+                      e.currentTarget.style.boxShadow = `0 0 16px -3px ${m.color}44`;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isUnread ? `linear-gradient(90deg, ${m.color}11, transparent)` : "transparent";
+                    e.currentTarget.style.boxShadow = "none";
                   }}
                 >
                   <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: `${m.color}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>
