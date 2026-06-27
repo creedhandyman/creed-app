@@ -857,10 +857,12 @@ button:focus-visible {
 }
 .nav-bottom .mc {
   margin-right: 0;
-  /* Nav height + safe-area + buffer (see :root vars). Reads the same
-     numbers .sb does so a sticky-bottom pin and the page's natural
-     last-element clearance line up. */
-  margin-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--nav-buffer));
+  /* Reserve space for the fixed bottom nav as PADDING (part of the scroll
+     box), NOT margin — a trailing margin-bottom on the last child isn't
+     reliably scrollable, so the last inline button (Inspector "Review
+     Inspection" / Voice Walk "Done") tucked under the nav. Padding clears it
+     dependably. Nav height + safe-area + buffer (see :root vars). */
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--nav-buffer));
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
