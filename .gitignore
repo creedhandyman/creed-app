@@ -27,3 +27,13 @@ scripts/migrate-auth.mjs
 *.sw?
 
 .vercel
+
+# TypeScript incremental build cache (was tracked; now ignored)
+*.tsbuildinfo
+
+# Claude local working dir (plans, throwaway type-check worktrees)
+.claude/
+
+# Local-only business + security artifacts (keep out of the repo)
+SECURITY-AUDIT.md
+CreedApp_Pitch.pdf
