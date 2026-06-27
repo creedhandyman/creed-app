@@ -598,9 +598,11 @@ src/
   `detailJobId` from `initialDetailJobId`, then clears the parent.
   **Prefs** (Settings → Account → Notifications): `phone` + `notify_sms`
   (master) + `notify_assigned` + `notify_leads`, all on `profiles`,
-  default-TRUE opt-out. Not done: web push (PWA/VAPID — no service worker
-  yet), a bell outside the dashboard, realtime (feed refreshes via the 15s
-  `loadAll`).
+  default-TRUE opt-out. Web push (PWA/VAPID) is now SHIPPED (`2d56e34`):
+  `public/sw.js` + `lib/push.ts` + `/api/push/*` + a VAPID-gated send in
+  `notify-server`; activate with the VAPID env vars + the push_subscriptions
+  migration. Still not done: a bell outside the dashboard, realtime (feed
+  refreshes via the 15s `loadAll`).
 - **Jobs tab redesign (list → detail → sub-screens)**: `Jobs.tsx` is no
   longer one screen with inline-expanding cards. It renders three levels
   gated by state — the **list** (two-row triage cards; status is a
@@ -676,8 +678,9 @@ src/
 - **Notifications follow-ups**: the in-app feed shipped (see "Big systems"
   above). Remaining: (a) flip `NOTIFY_SMS_ENABLED=1` on Vercel + verify a
   real text lands once a tech has a phone on file; (b) web push (PWA +
-  VAPID) for in-app pop alerts — needs a service worker + manifest, none
-  exists yet; (c) bell only lives on the dashboard — add to MoreHub /
+  VAPID) — **SHIPPED** (`2d56e34`); activate via the VAPID env vars + the
+  push_subscriptions migration (iOS needs the PWA installed to home screen);
+  (c) bell only lives on the dashboard — add to MoreHub /
   other topbars if wanted; (d) feed is poll-based (15s `loadAll`) — could
   move to Supabase realtime; (e) more event types (status changes, review
   landed, payment received).
