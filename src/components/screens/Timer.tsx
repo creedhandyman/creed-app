@@ -660,7 +660,7 @@ export default function Timer({ setPage }: Props) {
           const todayUS = new Date().toLocaleDateString("en-US");
           const todayISO = new Date().toISOString().split("T")[0];
           const todayPad = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
-          const isOn = (p: { id: string; name: string }) => activeSessions.some((e) => e.user_id === p.id || (!e.user_id && e.user_name === p.name));
+          const isOn = (p: { id: string; name: string }) => activeSessions.some((e) => e.user_id === p.id || e.user_name === p.name);
           // On-the-clock crew float to the top, then alphabetical.
           const sorted = [...profiles].sort((a, b) => (isOn(a) === isOn(b) ? a.name.localeCompare(b.name) : isOn(a) ? -1 : 1));
           return sorted.map((p) => {
@@ -668,7 +668,7 @@ export default function Timer({ setPage }: Props) {
             const todayEntries = allEntries.filter((e) => e.entry_date === todayUS || e.entry_date === todayISO || e.entry_date === todayPad || e.entry_date === todayPad.replace(/^0/, ""));
             const todayHrs = todayEntries.reduce((s, e) => s + (e.hours || 0), 0);
             const rRate = p.rate || 55;
-            const activeEntry = activeSessions.find((e) => e.user_id === p.id || (!e.user_id && e.user_name === p.name));
+            const activeEntry = activeSessions.find((e) => e.user_id === p.id || e.user_name === p.name);
             const isActive = !!activeEntry;
             const activeElapsed = activeEntry?.start_time ? elapsedFrom(activeEntry.start_time, activeEntry.entry_date) : "";
             const isExpanded = expandedCrew === p.id;
