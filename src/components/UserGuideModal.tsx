@@ -34,19 +34,19 @@ const SECTIONS: Section[] = [
       {
         heading: "Set up your business once",
         lines: [
-          "Operations → Settings: upload your logo, business name, license #, address, phone, email. These appear on every quote, invoice, and printout.",
-          "Set your default labor rate, materials markup %, tax %, and any per-trade hourly rates you charge differently.",
-          "Operations → Team: add employees with their pay rate so payroll knows what to log when they clock in.",
+          "More → Settings → Brand: upload your logo, business name, license #, address, phone, email. These appear on every quote, invoice, and PDF.",
+          "Set your default labor rate, materials markup %, and tax % there too. Per-trade hourly overrides live under each trade.",
+          "More → Operations → Team: add employees with their pay rate so payroll knows what to log when they clock in.",
         ],
       },
       {
-        heading: "The five tabs you'll live in",
+        heading: "The nav bar",
         lines: [
-          "Quote — start a new estimate (camera, voice walk, PDF inspection, or quick form).",
-          "Jobs — every quote and active job in one list, sortable by status.",
-          "Sched — calendar view of upcoming work.",
-          "Time — clock in/out (replaced by Work Vision once a job is active).",
-          "Ops — the admin tabs: Payroll, Financials, Customers, Team, Billing, Settings.",
+          "Quote — start a new estimate from three options: Quick Quote, Full Inspection, or Upload Report.",
+          "Jobs — every quote and active job in one list. Tap a card to open the full detail screen.",
+          "Home — your dashboard: next job, money snapshot, and quick actions.",
+          "Time — clock in/out. Once clocked in, this becomes WorkVision — your in-field cockpit.",
+          "More — Schedule, Quests, Operations, Customers, Mileage, Settings, and Help all live here.",
         ],
       },
     ],
@@ -59,25 +59,25 @@ const SECTIONS: Section[] = [
       {
         heading: "Three ways to start",
         lines: [
-          "Voice Walk — narrate as you walk the property, photos auto-attach. AI builds a structured inspection then a quote from it. Best for property-manager turnovers.",
-          "Inspector — tap-through checklist by room. Conditions S/F/P/D plus photos. Best when you want to be deliberate.",
-          "Quote PDF — upload a customer's existing scope-of-work PDF. AI extracts the line items.",
-          "Quick Form — type the items yourself. Best for callbacks where you already know the scope.",
+          "Quick Quote — type in what needs doing (or snap a photo) and the AI prices it instantly. Best for callbacks where you already know the scope.",
+          "Full Inspection — tap through each room, mark conditions, attach photos. Inside, hit Voice Walk to narrate damage out loud — AI listens and fills in every item automatically. Best for walk-throughs and property-manager turnovers.",
+          "Upload Report — paste in a customer's existing scope-of-work PDF and the AI pulls the line items straight out.",
         ],
       },
       {
         heading: "Edit before sending",
         lines: [
-          "Add, remove, or tweak any item, hour, or material price. The AI learns from your corrections — same-ZIP corrections weight heaviest.",
-          "Tap MAT to open the materials editor for an item. The breakdown of qty × unit price shows on the quote PDF.",
-          "Save the job — it lands in Jobs as Quoted.",
+          "Adjust any item, hour count, or material price. The AI learns from every edit — same-ZIP corrections weight heaviest so it gets sharper on your market.",
+          "Tap MAT on an item to open the materials editor. The qty × unit breakdown prints on the quote PDF.",
+          "Hit the Render button in the action bar to generate an AI before/after visual from your quote's scope — attach it to impress clients.",
+          "Save → job lands in Jobs as Quoted.",
         ],
       },
       {
         heading: "Send it",
         lines: [
-          "From Jobs, tap the quote → Print PDF or copy the share link. Customers can sign electronically on the link.",
-          "When they sign, the job auto-promotes to Accepted and you get the signed PDF saved in their portal.",
+          "From the action bar tap PDF to print, or Send to copy the customer status link.",
+          "Customers open the link, review the scope, and tap Approve & Sign. The job auto-promotes to Accepted and the signed PDF saves to their portal.",
         ],
       },
     ],
@@ -88,25 +88,32 @@ const SECTIONS: Section[] = [
     title: "Working a Job",
     body: [
       {
-        heading: "Clock in",
+        heading: "Schedule it first",
         lines: [
-          "Tap Clock In on the dashboard or pick a job from the schedule. Time logs against that specific job (callbacks at the same address won't blend).",
-          "Work Vision opens automatically — your in-the-field cockpit.",
+          "Open Schedule (More → Schedule) and tap Dispatch. Every accepted and quoted job that hasn't been put on the calendar shows here.",
+          "Tap Assign on any job to pick a date and crew — it drops onto the calendar and notifies the assigned tech.",
         ],
       },
       {
-        heading: "Work Vision tabs",
+        heading: "Clock in",
         lines: [
-          "Tasks — priority-sorted checklist. Tap a task to expand for materials, notes, before-photos.",
-          "Guide — step-by-step instructions grouped by trade with workflow ordering.",
-          "Notes — freeform notes that survive into the job report.",
-          "Photos — capture before/during/after. They auto-tag and feed the completion report.",
+          "Tap Clock In on the dashboard or pick a job from Today's schedule chip. Time logs against that specific job — callbacks at the same address won't mix up hours.",
+          "WorkVision opens automatically once you're on the clock.",
+        ],
+      },
+      {
+        heading: "WorkVision tabs",
+        lines: [
+          "Tasks — checklist grouped by trade. Tap a task to snap a photo of your progress.",
+          "Guide — step-by-step instructions with a live shopping list you can check off and edit as you go.",
+          "Notes — freeform field notes that print on the completion report.",
+          "Photos — before/work/after. Tap the sparkle button on any photo to generate an AI after-render.",
         ],
       },
       {
         heading: "Receipts as you go",
         lines: [
-          "Snap a photo of every supply-store receipt. The AI scans line items and feeds them into the quote-learning system, plus your real material cost replaces the charged proxy in your profit math.",
+          "Snap every supply-store receipt in WorkVision → Photos → Scan receipt. The AI reads the line items, feeds them into the quote-learning system, and replaces the estimated material cost with your real cost in the profit math.",
         ],
       },
     ],
@@ -119,21 +126,22 @@ const SECTIONS: Section[] = [
       {
         heading: "Mark complete",
         lines: [
-          "From Jobs or Work Vision, mark the job Complete when work is done. The job report PDF is generated from your work-order checklist + photos.",
-          "Mark Invoiced when you've sent the invoice. Or skip straight to Paid if it was a same-day cash/Zelle job.",
+          "Tap Complete Job at the bottom of the WorkVision Tasks tab, or flip the status in Jobs. A completion report PDF is generated from your checklist and photos.",
+          "Mark Invoiced when you send the bill, or skip straight to Paid for same-day cash or Zelle jobs.",
         ],
       },
       {
         heading: "Stripe payments",
         lines: [
-          "Connect your Stripe account once under Operations → Billing. After that, the customer's status page (the link you sent earlier) has a Pay button.",
-          "When they pay, the job auto-flips to Paid via the Stripe webhook. You don't have to remember.",
+          "Connect Stripe once under More → Operations → Billing. The customer's status-link page then shows a Pay button.",
+          "When they pay, the job auto-flips to Paid via the Stripe webhook — you don't have to touch it.",
         ],
       },
       {
-        heading: "Quick review request",
+        heading: "Automatic review request",
         lines: [
-          "After a job goes Complete, the app prompts you to send a review-request SMS. Tap it; their reply links them straight to your Google review page.",
+          "Once a job hits Paid, the app auto-schedules a review-request text for 24 hours later (configurable in Ops → Settings → Review Automation).",
+          "The text links straight to your Google review page. You can also trigger one manually from the job's Manage section.",
         ],
       },
     ],
@@ -144,25 +152,34 @@ const SECTIONS: Section[] = [
     title: "Running the Business",
     body: [
       {
-        heading: "Operations tabs",
+        heading: "Operations hub",
         lines: [
-          "Payroll — close out a pay period. Time entries marked paid_at instead of deleted, so Team Stats keeps lifetime history.",
+          "More → Operations opens a tile grid. Tap any tile to go deep: Payroll, Financials, Customers, Recurring, HR, Team, Billing, Settings.",
+          "Payroll — run pay for your crew. Time entries are marked paid (not deleted) so Team Stats keeps lifetime history.",
           "Financials — revenue, profit, A/R aging, by-trade breakdown, top clients. Print a P&L for any period.",
-          "Customers — full CRM with addresses, history, and one-click portal link generation.",
-          "Team — per-tech stats: lifetime hours, jobs, top trades.",
-          "Billing — Stripe Connect status and your subscription.",
+          "HR — approve time-off requests, adjust PTO and sick balances per employee.",
+          "Recurring — set up automated service schedules (weekly, monthly, etc.) that fire new jobs on their own.",
         ],
       },
       {
-        heading: "Customer portal",
+        heading: "Quests & bonuses",
         lines: [
-          "Generate a magic-link from CustomerDetail → Portal Link. Text/email/copy. They land at /portal — read-only view of their quotes, scheduled work, completed jobs, and downloadable documents.",
+          "More → Quests shows your active missions: review targets, referral goals, completion streaks. Finishing quests unlocks cash bonuses that pay out through payroll.",
+          "The Team leaderboard ranks everyone by quest earnings for the cycle — healthy competition.",
         ],
       },
       {
-        heading: "Sharing your business card",
+        heading: "Notifications",
         lines: [
-          "Dashboard has a card preview. Tap it for the QR + share link. Pulls from your branding settings; share via SMS, native share sheet, or copy.",
+          "The bell on the dashboard shows new job assignments and incoming leads. Tap a notification to jump straight to that job.",
+          "Turn on push alerts in the notification panel so you get pinged even when the app is closed (requires installing Creed to your home screen on iOS).",
+        ],
+      },
+      {
+        heading: "Customer portal & business card",
+        lines: [
+          "Generate a portal magic-link from Customers → any client → Portal Link. They see their quotes, scheduled work, completed jobs, and can download documents.",
+          "Your digital business card lives on the dashboard — tap it for the QR code and share link.",
         ],
       },
     ],
@@ -175,20 +192,32 @@ const SECTIONS: Section[] = [
       {
         heading: "AI quotes feel off",
         lines: [
-          "Edit the price/hours on items the AI got wrong, save the job. Future quotes in the same ZIP will weight your corrections.",
-          "Set per-trade rates under Settings if your plumbing rate is different from carpentry — the AI uses these for labor.",
+          "Edit the price or hours on items the AI got wrong, then save. Future quotes in the same ZIP code will weight your corrections — it learns fast.",
+          "Set per-trade rates under Ops → Settings if your plumbing rate differs from your carpentry rate; the AI uses these for labor.",
+        ],
+      },
+      {
+        heading: "Scheduling unassigned jobs",
+        lines: [
+          "If a job isn't showing on the calendar, go to Schedule → Dispatch. All accepted/quoted jobs without a date pool here — tap Assign to place them.",
         ],
       },
       {
         heading: "Two jobs at the same property",
         lines: [
-          "Hours track per job_id, so a callback at an address that already had a prior job won't blend its hours into the original.",
+          "Hours track per job, not per address, so a callback at a property that already had a prior job won't mix up the history.",
+        ],
+      },
+      {
+        heading: "Crew activity looks wrong",
+        lines: [
+          "If someone shows as clocked in but they're not, check for an open time entry from a previous day. You can close it manually from Time → Crew → their card → Force clock out.",
         ],
       },
       {
         heading: "Quotes you're never going to win",
         lines: [
-          "From Jobs, archive them. They keep their status (so a restore brings them back unchanged) but disappear from the live funnel.",
+          "From Jobs, archive them. They keep their status so a restore brings them back unchanged, but they disappear from the live funnel.",
         ],
       },
     ],
