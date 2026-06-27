@@ -58,7 +58,7 @@ export default function VoiceWalkTip({ show }: Props) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <Grizz pose="smile" size={88} style={{ position: "absolute", right: -44, top: -12 }} />
+        <Grizz pose="wave" size={88} style={{ position: "absolute", right: -44, top: -12 }} />
         <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffd76b", marginBottom: 6 }}>Voice Walk Tip</div>
         <div style={{ fontSize: 14.5, lineHeight: 1.5, marginBottom: 12 }}>
           <strong>📸 Take photos of all damage and problem areas.</strong>
