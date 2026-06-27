@@ -144,9 +144,9 @@ export default function BillingSettings() {
             );
             const plan = org?.subscription_plan || org?.plan || "solo";
             const planLabel =
-              plan === "pro"  ? "Pro $99/mo"
-            : plan === "crew" ? "Crew $49/mo"
-            : plan === "solo" ? "Solo $19/mo"
+              plan === "pro"  ? "Pro $149.99/mo"
+            : plan === "crew" ? "Crew $59.99/mo"
+            : plan === "solo" ? "Solo $24.99/mo"
             // legacy values still surfaced from older orgs
             : plan === "business" ? "Business $149/mo"
             : plan === "team" ? "Team $99/mo"
@@ -259,17 +259,16 @@ export default function BillingSettings() {
                       }}
                       style={{ width: "auto", fontSize: 14, padding: "3px 6px" }}
                     >
-                      <option value="solo">Solo — $19/mo (1 user)</option>
-                      <option value="crew">Crew — $49/mo (up to 8)</option>
-                      <option value="pro">Pro — $99/mo (unlimited)</option>
+                      <option value="solo">Solo — $24.99/mo (1 user)</option>
+                      <option value="crew">Crew — $59.99/mo (up to 8)</option>
+                      <option value="pro">Pro — $149.99/mo (unlimited)</option>
                     </select>
                   )}
                 </div>
 
                 {/* Monthly inspection usage — shown for every tier
-                    (Solo 50, Crew 200, Pro 500). Over-cap usage rolls
-                    to $0.50/inspection overage rather than being
-                    blocked. */}
+                    (Solo 75, Crew 175, Pro 450). Over-cap nudges an
+                    upgrade rather than blocking. */}
                 {org && getCap(plan) > 0 && (
                   <InspectionUsageRow orgId={org.id} plan={plan} />
                 )}
@@ -323,7 +322,7 @@ function InspectionUsageRow({ orgId, plan }: { orgId: string; plan: string }) {
       </div>
       {usage.blocked && (
         <div style={{ fontSize: 13, color: "var(--color-accent-red)", marginTop: 6 }}>
-          Included quota used. Additional inspections this month bill at $0.50 each — upgrade for a larger included pool.
+          Included quota used for this month — upgrade for a larger included pool to keep generating.
         </div>
       )}
     </div>

@@ -14,41 +14,41 @@ const ROWS: Row[] = [
   {
     ic: "sparkle", icBg: "rgba(245,180,0,.16)", icC: "#ffd76b",
     h: "AI quoting that learns your prices",
-    p: "Snap photos or upload an inspection and Creed writes the full itemized quote — split by trade, with labor, materials, and hours. Every edit and completed job sharpens its pricing.",
-    bullets: [{ c: "#f5b400", t: "Photo / PDF → quote" }, { c: "#f5b400", t: "Self-learning pricing" }],
+    p: "Snap a few photos or upload an inspection report and Creed writes the full itemized quote — split by trade, with labor, materials, and hours. Every edit and completed job teaches the AI, so your pricing gets sharper over time.",
+    bullets: [{ c: "#f5b400", t: "Photo / PDF → quote" }, { c: "#f5b400", t: "Self-learning pricing" }, { c: "#f5b400", t: "PDF export" }],
   },
   {
     rev: true,
     ic: "photo", icBg: "rgba(157,78,221,.16)", icC: "#d8b6ff",
     h: "Show the “after” before you start",
-    p: "Generate a photorealistic preview of the finished space — built from the exact work in your quote — and drop it straight into the proposal. Customers buy what they can picture.",
+    p: "Generate a photorealistic render of the finished space — built from the exact work in your quote — and drop it straight into the proposal. Customers buy what they can picture.",
     bullets: [{ c: "#9d4edd", t: "Auto-built from line items" }, { c: "#9d4edd", t: "Before / after in the PDF" }],
   },
   {
     ic: "mic", icBg: "rgba(46,117,182,.16)", icC: "#7fb6ff",
     h: "Inspections, hands-free",
     p: "Walk the property and talk. Creed transcribes, ticks the checklist live, and tags your photos room by room — then turns the whole walk into a quote.",
-    bullets: [{ c: "#2E75B6", t: "Voice → checklist" }, { c: "#2E75B6", t: "Auto photo tagging" }],
+    bullets: [{ c: "#2E75B6", t: "Voice Walk AI" }, { c: "#2E75B6", t: "Live checklist" }, { c: "#2E75B6", t: "Auto photo tagging" }],
   },
   {
     rev: true,
     ic: "schedule", icBg: "rgba(255,204,0,.16)", icC: "#ffe07a",
     h: "Schedule & dispatch the crew",
-    p: "Day, week, month, and dispatch views. Filter by worker, see who's on what, and move jobs in seconds — and the time they clock on site flows straight into payroll.",
-    bullets: [{ c: "#ffcc00", t: "Day / week / month" }, { c: "#00cc66", t: "Crew assignments" }],
+    p: "Day, week, and month views. Assign by worker, see who's where, move jobs in seconds — and the time they clock on site flows straight into payroll.",
+    bullets: [{ c: "#ffcc00", t: "Day / week / month" }, { c: "#00cc66", t: "Time clock → payroll" }, { c: "#2E75B6", t: "Work orders" }],
   },
   {
     ic: "money", icBg: "rgba(0,204,102,.16)", icC: "#3ee08f",
     h: "Get paid faster",
     p: "Customers approve and e-sign the quote, pay a deposit, and follow a live status tracker — all through Stripe, straight to your account. No chasing paper invoices.",
-    bullets: [{ c: "#00cc66", t: "E-sign + deposits" }, { c: "#00cc66", t: "Live status pages" }],
+    bullets: [{ c: "#00cc66", t: "E-sign + deposits" }, { c: "#00cc66", t: "Stripe Connect" }, { c: "#00cc66", t: "Live status pages" }],
   },
   {
     rev: true,
     ic: "trophy", icBg: "rgba(157,78,221,.16)", icC: "#d8b6ff",
-    h: "Grow & motivate the crew",
-    p: "A digital business card, automatic reviews, and a branded customer portal turn every job into the next one. Quests reward techs for five-star work with real bonuses that flow to payroll.",
-    bullets: [{ c: "#f5b400", t: "Auto reviews" }, { c: "#9d4edd", t: "Quests & bonuses" }, { c: "#2E75B6", t: "Digital card" }],
+    h: "Grow & motivate",
+    p: "A digital business card, automatic review requests, and a branded customer portal turn every job into the next one. Quests reward your crew for five-star work with real bonuses.",
+    bullets: [{ c: "#2E75B6", t: "Digital card" }, { c: "#f5b400", t: "Auto reviews" }, { c: "#9d4edd", t: "Quests & bonuses" }, { c: "#ff8800", t: "Customer portal" }],
   },
 ];
 
@@ -160,7 +160,7 @@ export default function Features() {
       <div className="phead"><div className="wrap">
         <div className="kick">Features</div>
         <div className="h1">One app, the <span className="g">whole job</span></div>
-        <div className="lead">Everything a handyman business needs to quote, schedule, work, get paid, and grow — shown straight from the app.</div>
+        <div className="lead">Everything a handyman business needs to quote, schedule, work, get paid, and grow — with AI doing the heavy lifting.</div>
       </div></div>
 
       <div className="wrap">

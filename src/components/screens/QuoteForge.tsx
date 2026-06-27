@@ -1542,7 +1542,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             const usage = await getUsage(org.id, plan);
             if (usage.blocked) {
               useStore.getState().showToast(
-                `You've used all ${usage.cap} included inspections this month — extras bill at $0.50 each. Manage in Ops → Billing.`,
+                `You've used all ${usage.cap} included inspections this month — upgrade in Ops → Billing for a larger pool.`,
                 "warning",
               );
             } else if (usage.warning) {

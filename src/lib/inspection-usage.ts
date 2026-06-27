@@ -2,7 +2,7 @@
  * Inspection cap tracking + plan-gate helpers.
  *
  * Voice Walk / Inspector inspections are billable units across all
- * paid tiers (Solo 50, Crew 200, Pro 500 per month). Solo is NOT
+ * paid tiers (Solo 75, Crew 175, Pro 450 per month). Solo is NOT
  * locked out — it's the wedge feature of the product. This module
  * owns the "what's my org's current month usage" query, the "should
  * I let this inspection start" decision, and the "increment counter
@@ -35,14 +35,14 @@ export interface UsageInfo {
 }
 
 /** Monthly included inspection quota by plan. All tiers get a quota; over-cap
- *  usage rolls to $0.50/inspection overage rather than being blocked. */
+ *  nudges an upgrade rather than blocking or charging per-inspection. */
 export function getCap(plan: string | null | undefined): number {
-  if (plan === "pro") return 500;
-  if (plan === "crew") return 200;
-  if (plan === "solo") return 50;
+  if (plan === "pro") return 450;
+  if (plan === "crew") return 175;
+  if (plan === "solo") return 75;
   // undefined / legacy names ("team"/"business") fall back to the Solo
   // quota so they don't get accidentally blocked.
-  return 50;
+  return 75;
 }
 
 /** YYYY-MM bucket (UTC-local doesn't matter — month boundaries land in

@@ -11,9 +11,9 @@ import { applyPromoCode } from "@/lib/promo-codes";
 const trialDismissKey = (daysLeft: number) => `c_trial_banner_dismissed_${daysLeft}`;
 
 const PLANS = [
-  { key: "solo", name: "Solo", price: "$19", desc: "1 user", amount: 1900 },
-  { key: "crew", name: "Crew", price: "$49", desc: "Up to 8 users", amount: 4900 },
-  { key: "pro",  name: "Pro",  price: "$99", desc: "Unlimited users", amount: 9900 },
+  { key: "solo", name: "Solo", price: "$24.99", desc: "1 user", amount: 2499 },
+  { key: "crew", name: "Crew", price: "$59.99", desc: "Up to 8 users", amount: 5999 },
+  { key: "pro",  name: "Pro",  price: "$149.99", desc: "Unlimited users", amount: 14999 },
 ];
 
 export default function BillingGate({ children }: { children: React.ReactNode }) {

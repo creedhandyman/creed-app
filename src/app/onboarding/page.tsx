@@ -45,9 +45,9 @@ const STEPS: { id: Step; label: string }[] = [
 
 type Plan = "solo" | "crew" | "pro";
 const PLAN_CARDS: { id: Plan; name: string; price: number; tagline: string; cap: string; featured?: boolean }[] = [
-  { id: "solo", name: "Solo", price: 19, tagline: "Independent operators", cap: "1 user · pay-as-you-go inspections" },
-  { id: "crew", name: "Crew", price: 49, tagline: "Growing crews",        cap: "Up to 8 users · 200 inspections/mo", featured: true },
-  { id: "pro",  name: "Pro",  price: 99, tagline: "Full operations",      cap: "Unlimited users · 500 inspections/mo" },
+  { id: "solo", name: "Solo", price: 24.99, tagline: "Independent operators", cap: "1 user · 75 inspections/mo" },
+  { id: "crew", name: "Crew", price: 59.99, tagline: "Growing crews",        cap: "Up to 8 users · 175 inspections/mo", featured: true },
+  { id: "pro",  name: "Pro",  price: 149.99, tagline: "Full operations",      cap: "Unlimited users · 450 inspections/mo" },
 ];
 
 export default function OnboardingPage() {

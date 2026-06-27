@@ -17,7 +17,7 @@ import MarketingShell from "@/components/marketing/MarketingShell";
 export const metadata: Metadata = {
   title: "Pricing · Creed Handy Manager",
   description:
-    "Simple plans that grow with you — Solo $19, Crew $49, Pro $99. First month free, every plan includes the full toolkit. Pay through your own Stripe.",
+    "Simple plans that grow with you — Solo $24.99, Crew $59.99, Pro $149.99. First month free, every plan includes the full toolkit. Pay through your own Stripe.",
 };
 
 type Plan = "solo" | "crew" | "pro";
@@ -38,55 +38,44 @@ const TIERS: Tier[] = [
   {
     id: "solo",
     name: "Solo",
-    price: 19,
+    price: 24.99,
     tagline: "For independent operators",
-    cap: "1 user · 50 inspections/mo",
+    cap: "1 user · 75 inspections/mo",
     badge: "First month free",
     ctaLabel: "Start Free Trial",
     bullets: [
+      "75 AI inspections / renders per month",
+      "Everything in the toolkit (below)",
       "1 user account",
-      "50 AI inspections / renderings per month",
-      "Full feature set — nothing locked",
-      "Voice Walk AI inspections",
-      "AI quote generation + PDFs",
-      "Customer portal & status pages",
-      "Digital business card",
-      "Stripe Connect payments",
-      "SMS notifications",
     ],
   },
   {
     id: "crew",
     name: "Crew",
-    price: 49,
+    price: 59.99,
     tagline: "For growing crews",
-    cap: "Up to 8 users · 200 inspections/mo",
+    cap: "Up to 8 users · 175 inspections/mo",
     featured: true,
     ctaLabel: "Start Free Trial",
     bullets: [
-      "Up to 8 user accounts",
-      "200 AI inspections / renderings per month",
-      "Everything in Solo",
-      "Team leaderboards & quests",
-      "Larger included AI pool",
-      "Priority email support",
+      "175 AI inspections / renders per month",
+      "Up to 8 crew members",
+      "Auto payroll, HR & mileage",
+      "Everything in the toolkit (below)",
     ],
   },
   {
     id: "pro",
     name: "Pro",
-    price: 99,
+    price: 149.99,
     tagline: "For full operations",
-    cap: "Unlimited users · 500 inspections/mo",
+    cap: "Unlimited users · 450 inspections/mo",
     ctaLabel: "Start Free Trial",
     bullets: [
-      "Unlimited user accounts",
-      "500 AI inspections / renderings per month",
-      "Everything in Crew",
-      "Tenant intake workflows",
-      "Owner sub-accounts",
+      "450 AI inspections / renders per month",
+      "Unlimited crew members",
       "Priority support",
-      "Early access to new features",
+      "Everything in the toolkit (below)",
     ],
   },
 ];
@@ -113,8 +102,7 @@ const FEATURES: FeatureRow[] = [
   { label: "Auto-payroll", solo: true, crew: true, pro: true },
   { label: "Gamification & quests", solo: true, crew: true, pro: true },
   { label: "User accounts", solo: "1", crew: "Up to 8", pro: "Unlimited" },
-  { label: "Included inspections / mo", solo: "50", crew: "200", pro: "500" },
-  { label: "Overage rate", solo: "$0.50 ea", crew: "$0.50 ea", pro: "$0.50 ea" },
+  { label: "Included inspections / mo", solo: "75", crew: "175", pro: "450" },
   { label: "Tenant intake workflows", solo: false, crew: false, pro: true },
   { label: "Owner sub-accounts", solo: false, crew: false, pro: true },
   { label: "Priority support", solo: false, crew: true, pro: true },
@@ -131,7 +119,7 @@ interface FAQ {
 // Keep all three in sync if the rate ever changes.
 const FAQS: FAQ[] = [
   { q: "Is there really a free month?", a: "Yes — every plan's first month is free. No charge until it ends, and you can cancel anytime before then." },
-  { q: "What counts as an “inspection”?", a: "Each AI quote or photo render you generate. Most solo operators stay well under 50 a month; upgrade anytime if you grow." },
+  { q: "What counts as an “inspection”?", a: "Each AI quote or photo render you generate. Most solo operators stay well under 75 a month; upgrade anytime if you grow." },
   { q: "Do you take a cut of my payments?", a: "A small one. Customer payments run through your own Stripe account and land in your bank — Creed adds a 2% platform fee on payments processed through the app, plus the standard Stripe processing fees. Your monthly subscription is separate." },
   { q: "Can I change plans later?", a: "Anytime, up or down. Add crew seats as you hire — your plan grows with the business." },
 ];
