@@ -3,6 +3,7 @@ import { apiFetch, getStatusLink } from "@/lib/api";
 import CountUp from "@/components/CountUp";
 import { useState, useRef, useEffect, useMemo } from "react";
 import RenderModal from "../RenderModal";
+import Coachmark from "../Coachmark";
 import { buildRenderPrompt } from "@/lib/render-prompt";
 import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
@@ -1510,6 +1511,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
   if (!mode) {
     return (
       <div className="fi">
+        {/* One-time Grizz tip — scoped to the hub only so it never floats over
+            the editor / inspection / Voice Walk sub-screens (it's fixed-position). */}
+        <Coachmark id="quote" text={<>Start here — tap <b>Quick Quote</b>, snap a couple photos, and I&apos;ll price the job for you.</>} />
         {/* Topbar — title + eyebrow */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>QuoteForge</span>

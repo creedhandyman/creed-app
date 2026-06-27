@@ -114,7 +114,8 @@ export default function AppShell() {
     <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
       <VerticalNav page={page} setPage={goToPage} isAdmin={isAdmin} />
       <div className="mc">{renderPage()}</div>
-      {page === "qf" && <Coachmark id="quote" text={<>Start here — tap <b>Quick Quote</b>, snap a couple photos, and I&apos;ll price the job for you.</>} />}
+      {/* The "quote" tip is mounted inside QuoteForge's hub (not here) so it
+          doesn't float over the editor / inspection / Voice Walk sub-screens. */}
       {page === "sched" && <Coachmark id="schedule" text={<>Tap a day to <b>drop a job on the calendar</b> and assign your crew.</>} />}
       {page === "time" && <Coachmark id="workmode" text={<>Tap <b>Clock In</b> to start your shift — your hours roll straight to payroll.</>} />}
     </div>
