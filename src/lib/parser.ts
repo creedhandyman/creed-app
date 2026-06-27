@@ -3349,11 +3349,13 @@ export function makeGuide(rooms: Room[]): Guide {
         }
       });
 
-      // Severity → work-order priority. Default to MED ("needed") so general
-      // scope + fair findings don't all collapse to "minor" — only damaged is
-      // urgent, only satisfactory is minor.
+      // Severity → work-order priority, matching the inspection rating
+      // semantics: Damaged = urgent; Fair / Satisfactory = minor; Poor and
+      // general project scope ("-") = needed.
       const pri: "HIGH" | "MED" | "LOW" =
-        it.condition === "D" ? "HIGH" : it.condition === "S" ? "LOW" : "MED";
+        it.condition === "D" ? "HIGH"
+        : it.condition === "F" || it.condition === "S" ? "LOW"
+        : "MED";
       steps.push({
         room: r.name,
         detail: it.detail,

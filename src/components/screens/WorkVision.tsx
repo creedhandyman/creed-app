@@ -628,20 +628,29 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // reflects real importance instead of the stale stored value — older jobs
   // defaulted nearly everything to LOW/"minor". Damaged → urgent, satisfactory
   // → minor, everything else (poor/fair/general scope) → needed.
+  // Read the task's condition from its matching quote line item — the same
+  // source makeGuide used to set priority, and a reliable match (the work-order
+  // step's room + detail come straight from the quote item; the old version
+  // matched the work-order TRADE against the inspection's physical ROOM name,
+  // which never hit, so everything fell back to MED). Values: D=damaged,
+  // P=poor, F=fair, S=satisfactory, "-"=general project scope.
   const woCondition = (w: { room?: string; detail?: string }): string | undefined => {
-    const inspRooms: { name?: string; items?: { name?: string; condition?: string }[] }[] = jobData?.inspection?.rooms || [];
+    const rooms: { name?: string; items?: { detail?: string; condition?: string }[] }[] = jobData?.rooms || [];
     const d = (w.detail || "").toLowerCase();
-    for (const r of inspRooms) {
-      if ((r.name || "") !== (w.room || "")) continue;
-      const it = r.items?.find((i) => { const n = (i.name || "").toLowerCase(); return !!n && (n === d || d.includes(n)); });
-      if (it?.condition) return it.condition;
-    }
-    return undefined;
+    const room = rooms.find((r) => (r.name || "") === (w.room || ""));
+    const it = room?.items?.find((i) => {
+      const id = (i.detail || "").toLowerCase();
+      return !!id && (id === d || d.includes(id) || id.includes(d));
+    });
+    return it?.condition;
   };
   const priOf = (w: { pri?: string; room?: string; detail?: string }): string => {
     const c = woCondition(w);
-    if (c) return c === "D" ? "HIGH" : c === "S" ? "LOW" : "MED";
-    return w.pri === "HIGH" || w.pri === "MED" ? w.pri : "MED";
+    if (c === "D") return "HIGH";              // damaged → urgent
+    if (c === "F" || c === "S") return "LOW";  // fair / satisfactory → minor
+    if (c === "P" || c === "-") return "MED";  // poor / general scope → needed
+    // No condition on the matched item — keep the stored priority.
+    return w.pri === "HIGH" || w.pri === "LOW" ? w.pri : "MED";
   };
 
   // Sort: priority (HIGH→MED→LOW), completed sink to the bottom. `?? 1` (not
@@ -678,7 +687,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // inspection photos that captured the area before work started. Crews on
   // site need this context — the Tasks tab was previously just a checklist.
   type Material = { n: string; c: number };
-  type QuoteItem = { detail: string; comment?: string; materials?: Material[]; laborHrs?: number };
+  type QuoteItem = { detail: string; comment?: string; materials?: Material[]; laborHrs?: number; condition?: string };
   type Room = { name: string; items: QuoteItem[] };
   type InspectionItem = { name: string; condition?: string; comment?: string; photos?: string[] };
   type InspectionRoom = { name: string; items: InspectionItem[] };
@@ -699,7 +708,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       comment: item?.comment || inspItem?.comment || "",
       photos: inspItem?.photos || [],
       laborHrs: item?.laborHrs,
-      condition: inspItem?.condition,
+      condition: item?.condition || inspItem?.condition,
     };
   };
 
