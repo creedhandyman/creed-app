@@ -930,17 +930,17 @@ button:focus-visible {
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.20), transparent);
   transform: translateX(-160%); opacity: 0; pointer-events: none;
   backface-visibility: hidden;
-  animation: ctaSheen 14.4s ease-in-out infinite;
+  animation: ctaSheen 12s ease-in-out infinite;
 }
-/* The element moves back to its start position at 96-100% while opacity is 0,
-   so at the loop boundary the transform doesn't jump — eliminating the glitch. */
+/* step-start at 14% teleports the element instantly back to start while
+   opacity is 0 — no travel through the visible area, no flash ever. */
 @keyframes ctaSheen {
-  0%   { transform: translateX(-160%); opacity: 0; }
-  3%   { opacity: 0.9; }
-  11%  { opacity: 0.9; }
-  14%  { transform: translateX(320%); opacity: 0; }
-  96%  { transform: translateX(320%); opacity: 0; }
-  100% { transform: translateX(-160%); opacity: 0; }
+  0%    { transform: translateX(-160%); opacity: 0; }
+  3%    { opacity: 0.9; }
+  11%   { opacity: 0.9; }
+  14%   { transform: translateX(320%); opacity: 0; animation-timing-function: step-start; }
+  14.1% { transform: translateX(-160%); opacity: 0; }
+  100%  { transform: translateX(-160%); opacity: 0; }
 }
 
 /* Status-strip glow gently breathes in dark mode. Light mode keeps the clean
