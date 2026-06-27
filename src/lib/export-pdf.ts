@@ -51,6 +51,12 @@ interface ExportOptions {
    *  as authoritative. Defaults to "total" (legacy behavior) when
    *  undefined. */
   taxMode?: TaxMode;
+  /** Quote terms shown in the PDF's "Notes & Exclusions" — org settings so the
+   *  bottom of the quote reflects this business, not a fixed template.
+   *  depositPct 0 = no deposit line. quoteTerms = extra bullets (one per line). */
+  depositPct?: number;
+  quoteValidDays?: number;
+  quoteTerms?: string;
 }
 
 const esc = (s: string) =>
@@ -72,6 +78,9 @@ export function exportQuotePdf(opts: ExportOptions) {
   const orgLogo = opts.orgLogo || "";
   const accent = opts.accent || "#2E75B6";
   const accent2 = opts.accent2 || "#1f5d94";
+  const depositPct = typeof opts.depositPct === "number" ? opts.depositPct : 50;
+  const validDays = typeof opts.quoteValidDays === "number" && opts.quoteValidDays > 0 ? opts.quoteValidDays : 30;
+  const quoteTerms = (opts.quoteTerms || "").trim();
   const clientPhone = opts.clientPhone || "";
   const clientEmail = opts.clientEmail || "";
   const statusUrl = opts.statusUrl || "";
@@ -393,9 +402,10 @@ ${renders
     <li>Labor rate: <b>$${rate}.00/man-hour</b>. Man-hours = clock hours × crew size (2-man crew tasks billed at 2× clock time).</li>
     ${minRow ? `<li><b>Minimum service charge applied — ${minLaborHours} hr min.</b> Actual labor on this scope is ${rawTotalHrs.toFixed(2)} hr; quotes never bill less than ${minLaborHours} hr to cover trip time and overhead.</li>` : ""}
     <li>Materials priced at current Home Depot/Lowe's retail. All material quantities and unit prices listed per line item above.</li>
-    <li>Quote valid <b>30 days</b> from issue date. <b>50% deposit</b> to begin; balance due on completion.</li>
+    <li>Quote valid <b>${validDays} days</b> from issue date.${depositPct > 0 ? ` <b>${depositPct}% deposit</b> to begin; balance due on completion.` : " Payment due on completion."}</li>
     <li>Any unforeseen conditions (mold, hidden water damage, structural issues) will be documented and quoted as a separate change order before proceeding.</li>
     ${licensedDisclaimer}
+    ${quoteTerms ? quoteTerms.split(/\r?\n+/).map((l) => l.trim()).filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join("") : ""}
   </ul>
 </div>
 

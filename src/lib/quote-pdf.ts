@@ -22,6 +22,9 @@ export interface QuotePdfOrg {
   min_labor_hours?: number;
   brand_color?: string;
   brand_color_2?: string;
+  deposit_pct?: number;
+  quote_valid_days?: number;
+  quote_terms?: string;
 }
 
 /**
@@ -100,6 +103,9 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     orgName: org?.name,
     accent: org?.brand_color,
     accent2: org?.brand_color_2,
+    depositPct: org?.deposit_pct,
+    quoteValidDays: org?.quote_valid_days,
+    quoteTerms: org?.quote_terms,
     orgPhone: org?.phone,
     orgEmail: org?.email,
     orgLicense: org?.license_num,

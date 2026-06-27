@@ -187,6 +187,68 @@ function OpsSettings() {
         </div>
       </div>
 
+      {/* Quote terms — drive the bottom "Notes & Exclusions" of every quote
+          PDF so it reflects this business, not a fixed template. */}
+      <div className="cd mb">
+        <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="doc" size={16} color="var(--color-primary)" />
+          Quote terms
+        </h4>
+        <div className="g2">
+          <div>
+            <label className="sl">Deposit %</label>
+            <input
+              type="number"
+              key={`dep-${org.deposit_pct ?? 50}`}
+              defaultValue={org.deposit_pct ?? 50}
+              min="0"
+              max="100"
+              step="5"
+              placeholder="50"
+              style={{ marginTop: 4 }}
+              onBlur={async (e) => {
+                const v = parseFloat(e.target.value);
+                await db.patch("organizations", org.id, { deposit_pct: Number.isFinite(v) && v >= 0 ? Math.min(100, v) : 0 });
+                refreshOrg();
+              }}
+            />
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>Shown on the quote PDF. 0 = no deposit line.</div>
+          </div>
+          <div>
+            <label className="sl">Quote valid (days)</label>
+            <input
+              type="number"
+              key={`vd-${org.quote_valid_days ?? 30}`}
+              defaultValue={org.quote_valid_days ?? 30}
+              min="1"
+              step="1"
+              placeholder="30"
+              style={{ marginTop: 4 }}
+              onBlur={async (e) => {
+                const v = parseFloat(e.target.value);
+                await db.patch("organizations", org.id, { quote_valid_days: Number.isFinite(v) && v > 0 ? Math.round(v) : 30 });
+                refreshOrg();
+              }}
+            />
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>How long the estimate stays valid.</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <label className="sl">Custom terms <span className="dim">· optional, one per line</span></label>
+          <textarea
+            key={`qt-${org.quote_terms || ""}`}
+            defaultValue={org.quote_terms || ""}
+            placeholder={"e.g. Warranty: 1 year on workmanship.\nPrices subject to change after the validity window."}
+            style={{ marginTop: 4, minHeight: 70, width: "100%" }}
+            onBlur={async (e) => {
+              await db.patch("organizations", org.id, { quote_terms: e.target.value.trim() });
+              refreshOrg();
+            }}
+          />
+          <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>Added as extra lines at the bottom of every quote PDF.</div>
+        </div>
+      </div>
+
       {/* Trade Rates */}
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>

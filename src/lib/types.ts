@@ -11,6 +11,12 @@ export interface Organization {
   brand_color?: string;
   /** Optional second stop for a two-tone brand gradient. Null/absent = solid. */
   brand_color_2?: string;
+  /** Quote-PDF terms (Ops → Settings → Quote terms) so the footer isn't
+   *  one-size-fits-all. Deposit % (default 50; 0 = no deposit line), validity
+   *  window in days (default 30), and free-text custom terms (one per line). */
+  deposit_pct?: number;
+  quote_valid_days?: number;
+  quote_terms?: string;
   default_rate: number;
   markup_pct: number;
   tax_pct: number;

@@ -29,7 +29,7 @@ type PortalOrg = Pick<
   Organization,
   | "id" | "name" | "phone" | "email" | "logo_url" | "address" | "license_num"
   | "default_rate" | "markup_pct" | "tax_pct" | "tax_mode" | "trip_fee" | "min_labor_hours"
-  | "brand_color" | "brand_color_2"
+  | "brand_color" | "brand_color_2" | "deposit_pct" | "quote_valid_days" | "quote_terms"
 >;
 
 interface PortalData {

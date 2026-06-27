@@ -199,6 +199,19 @@ src/
   gradient) live in `src/lib/brand.ts`. Until the migration runs, saving a color
   toasts a "column does not exist" error (best-effort) but nothing breaks;
   existing orgs default to #2E75B6.
+- Per-org quote-PDF terms (the "Notes & Exclusions" footer reacts to these
+  instead of hardcoded 30-day / 50%-deposit text):
+  ```sql
+  ALTER TABLE organizations ADD COLUMN deposit_pct NUMERIC DEFAULT 50;
+  ALTER TABLE organizations ADD COLUMN quote_valid_days NUMERIC DEFAULT 30;
+  ALTER TABLE organizations ADD COLUMN quote_terms TEXT;
+  ```
+  Set in Ops → Settings → Quote terms (deposit %, validity days, free-text
+  custom terms one-per-line). `export-pdf.ts` reads them (defaults 50 / 30 /
+  none) and threads via `quote-pdf.ts` + the public `/api/public/job` +
+  `/api/portal/me` selects so the customer's downloaded copy matches. Until the
+  migration runs, saving toasts "column does not exist" (best-effort) but the
+  PDF falls back to 50% / 30 days.
 - Multi-day scheduling: `ALTER TABLE schedule ADD COLUMN IF NOT EXISTS end_date TEXT;`
   (YYYY-MM-DD; absent/equal to sched_date = single day). Schedule.tsx treats
   an entry as covering `sched_date..end_date` (`spansDay()` helper). Single-day
