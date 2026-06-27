@@ -801,41 +801,18 @@ button:focus-visible {
 }
 .nav-left .mc { margin-right: 0; margin-left: 56px; }
 
-/* ─── STICKY-BOTTOM UTILITY ────────────────────────────
-   Pin a button or button-row just above the bottom nav so it can't
-   get clipped when the user scrolls to the end of a long form. The
-   element behaves as `position: relative` until it would otherwise
-   scroll out of view, then sticks at the configured bottom offset.
-   Used by Inspector's room-nav + Generate Quote, VoiceWalk's Done.
-   The faint top fade keeps content visible-but-de-emphasized as it
-   scrolls underneath. */
+/* ─── END-OF-SCREEN ACTION ROW ──────────────────────────
+   A button (or button-row) at the end of a screen — Inspector's
+   room-nav + Generate Quote, VoiceWalk's "Done — Apply to Room",
+   Quests. INLINE, not floating. This used to be a sticky-bottom pin
+   (always visible above the bottom nav), but on the Inspector / Voice
+   Walk screens it overlapped the content above it and got in the way.
+   The .mc margin-bottom already keeps content clear of the bottom nav,
+   so a normal in-flow button sits above the nav and stays reachable —
+   you just scroll to it. */
 .sb {
-  position: sticky;
-  /* Same math as .nav-bottom .mc margin-bottom so the sticky pin and
-     the page's natural bottom edge land at the same level. Read from
-     CSS vars so the two can't drift apart. */
-  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--nav-buffer));
-  z-index: 5;
-  padding: 10px 4px 6px;
-  margin: 0 -4px;
-}
-.dark .sb {
-  background: linear-gradient(to top, var(--color-dark-bg) 75%, transparent);
-}
-.light .sb {
-  background: linear-gradient(to top, var(--color-light-bg) 75%, transparent);
-}
-/* When the right/desktop nav is active there's no fixed bottom nav,
-   so the sticky offset goes to 0 and the gradient is unneeded. The
-   `nav-bottom` / `nav-left` classes live on <html> (set by
-   ThemeProvider on documentElement), not on <body>, so we have to
-   match against html — `body:not(.nav-bottom)` was always true and
-   silently disabled the sticky behavior. */
-.nav-left .sb, html:not(.nav-bottom) .sb {
   position: static;
-  background: transparent;
-  padding: 0;
-  margin: 0;
+  margin-top: 14px;
 }
 
 /* ─── BOTTOM NAV (mobile-thumb-friendly) ───────────── */
