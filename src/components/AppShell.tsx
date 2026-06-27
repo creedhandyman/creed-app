@@ -116,7 +116,7 @@ export default function AppShell() {
       <div className="mc">{renderPage()}</div>
       {/* The "quote" tip is mounted inside QuoteForge's hub (not here) so it
           doesn't float over the editor / inspection / Voice Walk sub-screens. */}
-      {page === "sched" && <Coachmark id="schedule" text={<>Tap a day to <b>drop a job on the calendar</b> and assign your crew.</>} />}
+      {page === "sched" && <Coachmark id="schedule_v2" text={<>Tap <b>Dispatch</b> to see all your unscheduled jobs and hit <b>Assign</b> to drop them onto any date.</>} />}
       {page === "time" && <Coachmark id="workmode" text={<>Tap <b>Clock In</b> to start your shift — your hours roll straight to payroll.</>} />}
     </div>
   );
