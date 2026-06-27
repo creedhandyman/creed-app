@@ -119,6 +119,13 @@ src/
   value across all environments or previously-sent links/sessions stop
   validating. (The token is a stable HMAC of the job id — no expiry — so
   "expired" in that error really means "no/!matching token".)
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` — Web Push
+  (notifications). Generate with `npx web-push generate-vapid-keys`;
+  `VAPID_SUBJECT` is a `mailto:` (defaults to creedhandyman@gmail.com). Also set
+  `NEXT_PUBLIC_VAPID_PUBLIC_KEY` to the **same** public key (the browser needs it
+  to subscribe). Push send (`lib/notify-server.ts`) is a no-op until these are
+  set; the in-app feed + SMS are unaffected. iOS only delivers web push to an
+  **installed** PWA (Add to Home Screen, 16.4+), not a Safari tab.
 - (Stripe / Supabase keys per existing setup.)
 
 ## Schema migrations the user should run in Supabase
@@ -144,6 +151,24 @@ src/
   Until this runs the logging insert fails silently (best-effort try/catch) and
   AI calls work normally. `cache_read_tokens > 0` on a repeat parse confirms the
   prompt-cache (Phase 1) is hitting.
+- Web Push subscriptions (notifications push channel — `/api/push/subscribe`
+  writes, `notify-server` sends; needs the VAPID env vars above):
+  ```sql
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    org_id UUID,
+    endpoint TEXT NOT NULL UNIQUE,   -- upsert target (one row per device)
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+  ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;  -- service-role only
+  ```
+  Until this runs, enabling push toasts a "table does not exist" error (the
+  subscribe write fails); the rest of the app is unaffected.
 - `ALTER TABLE price_corrections ADD COLUMN zip TEXT;`
 - Self-learning v2 — richer outcome capture + recency/dedup weighting:
   ```sql

@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
 import { Icon } from "./Icon";
 import { tipsEnabled, setTipsEnabled } from "@/lib/grizz";
+import { isPushSupported, isSubscribed, enablePush, disablePush } from "@/lib/push";
 
 interface Props {
   onClose: () => void;
@@ -28,6 +29,26 @@ export default function Settings({ onClose }: Props) {
   const [phone, setPhone] = useState(user.phone || "");
   const [grizzTips, setGrizzTips] = useState(true);
   useEffect(() => { setGrizzTips(tipsEnabled(user.id)); }, [user.id]);
+
+  // Web push (per-device). pushOn reflects THIS browser's subscription state.
+  const pushSupported = isPushSupported();
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => { if (pushSupported) isSubscribed().then(setPushOn); }, [pushSupported]);
+  const togglePush = async () => {
+    setPushBusy(true);
+    try {
+      if (pushOn) {
+        await disablePush();
+        setPushOn(false);
+        useStore.getState().showToast("Push turned off on this device", "success");
+      } else {
+        const r = await enablePush();
+        if (r.ok) { setPushOn(true); useStore.getState().showToast("Push notifications on", "success"); }
+        else useStore.getState().showToast(r.error || "Couldn't enable push", "error");
+      }
+    } finally { setPushBusy(false); }
+  };
 
   const isOwner = user.role === "owner" || user.role === "manager";
 
@@ -127,6 +148,23 @@ export default function Settings({ onClose }: Props) {
                 {t("settings.save")}
               </button>
             </div>
+
+            {/* Web push — per-device subscription (not a stored pref) */}
+            {pushSupported ? (
+              <div className="sep row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 15 }}>
+                  Push notifications
+                  <span className="dim" style={{ display: "block", fontSize: 12 }}>Alerts on this device, even when the app is closed</span>
+                </span>
+                <button className={pushOn ? "bo" : "bb"} disabled={pushBusy} onClick={togglePush} style={{ flexShrink: 0 }}>
+                  {pushBusy ? "…" : pushOn ? "On" : "Enable"}
+                </button>
+              </div>
+            ) : (
+              <div className="sep dim" style={{ fontSize: 12.5, paddingTop: 10 }}>
+                To get push alerts on this device, add Creed to your home screen, then reopen and check here.
+              </div>
+            )}
             {([
               { key: "notify_assigned", label: t("settings.notifyAssigned") },
               { key: "notify_leads", label: t("settings.notifyLeads") },

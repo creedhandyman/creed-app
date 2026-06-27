@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import webpush from "web-push";
 
 /**
  * Server-only notification helpers. Shared by /api/notify (job assigned)
@@ -17,6 +18,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Master switch for the SMS channel. The in-app feed always writes; this
 // only gates whether we also send texts. Off until the fast-follow.
 const SMS_ENABLED = process.env.NOTIFY_SMS_ENABLED === "1";
+
+// Web push runs whenever VAPID keys are configured — independent of the SMS
+// flag. The in-app feed always writes; push + SMS are additive channels.
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:creedhandyman@gmail.com";
+const PUSH_ENABLED = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 
 export type NotificationType = "job_assigned" | "new_lead";
 
@@ -70,6 +78,49 @@ async function sendSms(to: string, body: string): Promise<{ ok: boolean; error?:
 }
 
 /**
+ * Best-effort Web Push to a set of user ids. Only runs when VAPID is
+ * configured. Prunes subscriptions the push service reports as gone (404/410).
+ * Never throws — a push failure must not block the in-app feed or the caller.
+ */
+async function sendPush(
+  supabase: SupabaseClient,
+  userIds: string[],
+  payload: { title: string; body: string; url: string },
+): Promise<number> {
+  if (!PUSH_ENABLED || !userIds.length) return 0;
+  try {
+    const { data: subs } = await supabase
+      .from("push_subscriptions")
+      .select("id, endpoint, p256dh, auth")
+      .in("user_id", userIds);
+    if (!subs?.length) return 0;
+
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC as string, VAPID_PRIVATE as string);
+    const data = JSON.stringify(payload);
+    let sent = 0;
+    const stale: string[] = [];
+    await Promise.all(
+      subs.map(async (s) => {
+        try {
+          await webpush.sendNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            data,
+          );
+          sent++;
+        } catch (e: unknown) {
+          const code = (e as { statusCode?: number })?.statusCode;
+          if (code === 404 || code === 410) stale.push(s.id as string);
+        }
+      }),
+    );
+    if (stale.length) await supabase.from("push_subscriptions").delete().in("id", stale);
+    return sent;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Write one in-app notification per recipient (respecting the per-event
  * opt-in), then — if SMS is enabled — text those who also have the master
  * SMS switch on and a phone on file. Returns counts for logging/response.
@@ -86,7 +137,7 @@ export async function dispatchNotifications(
     smsBody?: string;
     recipients: NotifyRecipient[];
   },
-): Promise<{ created: number; texted: number; failures: number }> {
+): Promise<{ created: number; texted: number; pushed: number; failures: number }> {
   const { orgId, type, title, body, jobId, smsBody, recipients } = params;
 
   // De-dup recipients by id, drop anyone opted out of this event.
@@ -96,7 +147,7 @@ export async function dispatchNotifications(
     seen.add(r.id);
     return r.eventOptIn !== false; // null/undefined/true = opted in
   });
-  if (!targets.length) return { created: 0, texted: 0, failures: 0 };
+  if (!targets.length) return { created: 0, texted: 0, pushed: 0, failures: 0 };
 
   // In-app rows — one batch insert.
   const rows = targets.map((r) => ({
@@ -111,15 +162,22 @@ export async function dispatchNotifications(
   if (error) {
     // eslint-disable-next-line no-console
     console.error("[notify] notifications insert failed:", error.message);
-    return { created: 0, texted: 0, failures: targets.length };
+    return { created: 0, texted: 0, pushed: 0, failures: targets.length };
   }
 
-  if (!SMS_ENABLED) return { created: targets.length, texted: 0, failures: 0 };
+  // Web push — best-effort, independent of the SMS channel.
+  const pushed = await sendPush(
+    supabase,
+    targets.map((t) => t.id),
+    { title, body, url: "/" },
+  );
+
+  if (!SMS_ENABLED) return { created: targets.length, texted: 0, pushed, failures: 0 };
 
   // SMS — best-effort, in parallel.
   const text = (smsBody || `${title} — ${body}`).slice(0, 600);
   const sendable = targets.filter((r) => r.notify_sms !== false && normalizePhone(r.phone));
   const results = await Promise.all(sendable.map((r) => sendSms(r.phone as string, text)));
   const texted = results.filter((x) => x.ok).length;
-  return { created: targets.length, texted, failures: results.length - texted };
+  return { created: targets.length, texted, pushed, failures: results.length - texted };
 }
