@@ -704,7 +704,22 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 16 }}>{s.job}</div>
-                  <div className="dim" style={{ fontSize: 13.5, marginTop: 2 }}>{(s.note || "Scheduled today").replace(/👷\s*[^·]+·?\s*/g, "").trim() || "Scheduled today"}</div>
+                  {(() => {
+                    const crewMatch = s.note?.match(/👷\s*([^·\n]+)/);
+                    const crew = crewMatch?.[1]?.trim();
+                    const cleanNote = (s.note || "").replace(/👷\s*[^·\n]+·?\s*/g, "").replace(/🕐\s*[\d:]+\s*·?\s*/g, "").trim();
+                    return (
+                      <>
+                        {crew && (
+                          <div className="dim" style={{ fontSize: 12.5, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                            <Icon name="worker" size={11} color="var(--color-dim)" />
+                            {crew}
+                          </div>
+                        )}
+                        <div className="dim" style={{ fontSize: 13, marginTop: crew ? 1 : 2 }}>{cleanNote || "Scheduled today"}</div>
+                      </>
+                    );
+                  })()}
                 </div>
                 <Icon name="next" size={16} color="var(--color-success)" />
               </div>

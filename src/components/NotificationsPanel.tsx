@@ -78,7 +78,7 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="cd fi"
+        className="fi"
         style={{
           position: "absolute",
           top: 58,
@@ -91,6 +91,10 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
           flexDirection: "column",
           padding: 0,
           overflow: "hidden",
+          borderRadius: "var(--r-xl)",
+          background: "var(--color-card-dark)",
+          border: "1.5px solid rgba(46,139,255,0.6)",
+          boxShadow: "0 0 24px -2px rgba(46,139,255,0.4), inset 0 0 22px -8px rgba(46,139,255,0.2), 0 20px 50px rgba(0,0,0,0.6)",
         }}
       >
         {/* Header */}
@@ -151,20 +155,8 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
                     padding: "12px 14px",
                     cursor: n.job_id ? "pointer" : "default",
                     borderBottom: "1px solid var(--color-border-dark)",
-                    background: isUnread ? `linear-gradient(90deg, ${m.color}11, transparent)` : "transparent",
-                    borderLeft: isUnread ? `2px solid ${m.color}` : "none",
-                    paddingLeft: isUnread ? "12px" : "14px",
-                    transition: "all 0.2s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (n.job_id) {
-                      e.currentTarget.style.background = `linear-gradient(90deg, ${m.color}22, transparent)`;
-                      e.currentTarget.style.boxShadow = `0 0 16px -3px ${m.color}44`;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isUnread ? `linear-gradient(90deg, ${m.color}11, transparent)` : "transparent";
-                    e.currentTarget.style.boxShadow = "none";
+                    background: isUnread ? `linear-gradient(90deg, ${m.color}18, transparent 70%)` : "transparent",
+                    borderLeft: isUnread ? `2px solid ${m.color}` : "2px solid transparent",
                   }}
                 >
                   <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: `${m.color}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>

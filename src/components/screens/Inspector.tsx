@@ -1068,9 +1068,10 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               onClick={() => setVoiceRoomIdx(currentRoomIdx)}
               title="Voice walk this room"
               style={{
-                background: "var(--color-success)",
+                background: "rgba(0,204,102,0.14)",
+                border: "1.5px solid rgba(0,204,102,0.85)",
+                boxShadow: "0 0 24px -2px rgba(0,204,102,0.5), inset 0 0 22px -8px rgba(0,204,102,0.45)",
                 color: "#fff",
-                border: "none",
                 borderRadius: 16,
                 padding: "5px 12px",
                 fontSize: 15,
@@ -1079,9 +1080,10 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 5,
+                cursor: "pointer",
               }}
             >
-              <Icon name="mic" size={14} color="#fff" strokeWidth={2.25} />
+              <Icon name="mic" size={14} color="#3ee08f" strokeWidth={2.25} />
               Voice
             </button>
             <span className="dim" style={{ fontSize: 15, fontFamily: "Oswald" }}>

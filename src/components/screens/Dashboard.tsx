@@ -35,7 +35,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const upcoming = schedule
-    .filter((s) => s.sched_date >= today || (s.end_date && s.end_date >= today))
+    .filter((s) => (s.end_date || s.sched_date) >= today)
     .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
   const nextJob = upcoming[0];
 
@@ -137,11 +137,13 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
               <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16.5, letterSpacing: ".3px" }}>{nextJob.job}</div>
               <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>
                 {(() => {
-                  const d = new Date(nextJob.sched_date + "T12:00:00");
-                  const dayStr = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                  const inProgress = nextJob.sched_date < today && nextJob.end_date && nextJob.end_date >= today;
+                  const displayDate = inProgress ? today : nextJob.sched_date;
+                  const d = new Date(displayDate + "T12:00:00");
+                  const dayStr = displayDate === today ? "Today" : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
                   const tm = nextJob.note?.match(/🕐\s*(\d{1,2}:\d{2})/);
                   const timeStr = tm ? (() => { const [h, m] = tm[1].split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; return `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, "0")} ${ap}`; })() : "";
-                  return `${dayStr}${timeStr ? ` · ${timeStr}` : ""}`;
+                  return `${dayStr}${inProgress ? " · ongoing" : timeStr ? ` · ${timeStr}` : ""}`;
                 })()}
               </div>
             </>
