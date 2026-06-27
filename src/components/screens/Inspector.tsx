@@ -8,6 +8,7 @@ import { Icon } from "../Icon";
 import CameraModal from "../CameraModal";
 import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../VoiceWalk";
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
+import VoiceWalkTip from "../VoiceWalkTip";
 
 /* ── Preset rooms and items ── */
 export const ROOM_PRESETS: Record<string, string[]> = {
@@ -978,7 +979,9 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         setVoiceRoomIdx(null);
       } else {
         return (
-          <VoiceWalk
+          <>
+            <VoiceWalkTip show={true} />
+            <VoiceWalk
             // Remount on auto-advance so VoiceWalk's internal state
             // (currentIdx, recordings, mentioned, audio chunks) starts
             // fresh for the new room instead of carrying state from
@@ -1027,6 +1030,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             onCancel={() => setVoiceRoomIdx(null)}
             darkMode={darkMode}
           />
+          </>
         );
       }
     }
