@@ -359,6 +359,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [customShop, setCustomShop] = useState<{ n: string; c: number; room?: string; trade?: string }[]>([]);
   const [checkedTools, setCheckedTools] = useState<string[]>([]);
   const [checkedShop, setCheckedShop] = useState<string[]>([]);
+  const [removedGuideShop, setRemovedGuideShop] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -414,6 +415,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCustomShop(Array.isArray(data?.customShop) ? data.customShop : []);
       setCheckedTools(Array.isArray(data?.checkedTools) ? data.checkedTools : []);
       setCheckedShop(Array.isArray(data?.checkedShop) ? data.checkedShop : []);
+      setRemovedGuideShop(Array.isArray(data?.removedGuideShop) ? data.removedGuideShop : []);
       // Per-quote discount (lives on the rooms JSON blob; absent = none).
       const d = data?.discount as Partial<JobDiscount> | null | undefined;
       if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
@@ -1327,6 +1329,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       customShop,
       checkedTools,
       checkedShop,
+      removedGuideShop,
       // Per-quote discount + labor-rate override + min-labor-hours
       // override + tax-mode override. Persist explicitly (not via spread)
       // so clearing them actually clears the saved value instead of
@@ -2793,6 +2796,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setCheckedTools={setCheckedTools}
           checkedShop={checkedShop}
           setCheckedShop={setCheckedShop}
+          removedGuideShop={removedGuideShop}
+          setRemovedGuideShop={setRemovedGuideShop}
         />
       )}
 
@@ -3238,6 +3243,8 @@ function GuideTab({
   setCheckedTools,
   checkedShop,
   setCheckedShop,
+  removedGuideShop,
+  setRemovedGuideShop,
 }: {
   guide: ReturnType<typeof makeGuide>;
   workOrder: GuideStep[];
@@ -3258,6 +3265,8 @@ function GuideTab({
   setCheckedTools: React.Dispatch<React.SetStateAction<string[]>>;
   checkedShop: string[];
   setCheckedShop: React.Dispatch<React.SetStateAction<string[]>>;
+  removedGuideShop: string[];
+  setRemovedGuideShop: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
   const border = darkMode ? "#1e1e2e" : "#eee";
   const [newTool, setNewTool] = useState("");
@@ -3276,7 +3285,9 @@ function GuideTab({
   const [newShopCost, setNewShopCost] = useState("");
 
   const allTools = [...guide.tools, ...customTools];
-  const allShop = [...guide.shop, ...customShop];
+  // Hide auto items the user removed/edited (adopted into customShop), matching
+  // WorkVision so the two views show the same editable list.
+  const allShop = [...guide.shop.filter((gs) => !removedGuideShop.includes(shopKey(gs))), ...customShop];
 
   const toggleTool = (t: string) =>
     setCheckedTools((prev) =>
@@ -3288,6 +3299,46 @@ function GuideTab({
     setCheckedShop((prev) =>
       prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key],
     );
+  };
+
+  // Inline edit/delete — same behavior as WorkVision's Guide tab. Custom items
+  // edit in place; quote-derived (auto) items are "adopted" into customShop and
+  // the original hidden via removedGuideShop. Checked state migrates on rename.
+  type ShopItem = { n: string; c: number; room?: string; trade?: string };
+  const [editShopKey, setEditShopKey] = useState<string | null>(null);
+  const [editShopName, setEditShopName] = useState("");
+  const [editShopCost, setEditShopCost] = useState("");
+  const isCustomShop = (item: ShopItem) => customShop.some((x) => shopKey(x) === shopKey(item));
+  const startEditShop = (item: ShopItem) => {
+    setEditShopKey(shopKey(item));
+    setEditShopName(item.n);
+    setEditShopCost(item.c != null ? String(item.c) : "");
+  };
+  const cancelEditShop = () => { setEditShopKey(null); setEditShopName(""); setEditShopCost(""); };
+  const saveEditShop = (item: ShopItem) => {
+    const key = shopKey(item);
+    const updated: ShopItem = { n: editShopName.trim() || item.n, c: parseFloat(editShopCost) || 0, room: item.room, trade: item.trade };
+    const newKey = shopKey(updated);
+    if (checkedShop.includes(key) && newKey !== key) {
+      setCheckedShop((prev) => [...prev.filter((k) => k !== key), newKey]);
+    }
+    if (isCustomShop(item)) {
+      setCustomShop((prev) => prev.map((x) => (shopKey(x) === key ? updated : x)));
+    } else {
+      setRemovedGuideShop((prev) => [...prev, key]);
+      setCustomShop((prev) => [...prev, updated]);
+    }
+    cancelEditShop();
+  };
+  const deleteShop = (item: ShopItem) => {
+    const key = shopKey(item);
+    setCheckedShop((prev) => prev.filter((k) => k !== key));
+    if (isCustomShop(item)) {
+      setCustomShop((prev) => prev.filter((x) => shopKey(x) !== key));
+    } else {
+      setRemovedGuideShop((prev) => [...prev, key]);
+    }
+    cancelEditShop();
   };
 
   return (
@@ -3362,7 +3413,9 @@ function GuideTab({
           </h4>
           <div>
             {allShop.map((s, i) => {
-              const done = checkedShop.includes(shopKey(s));
+              const key = shopKey(s);
+              const done = checkedShop.includes(key);
+              const editing = editShopKey === key;
               // Show trade header when trade changes
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const prevTrade = i > 0 ? (allShop[i - 1] as any).trade : null;
@@ -3374,34 +3427,43 @@ function GuideTab({
                   {showHeader && (
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-primary)", marginTop: i > 0 ? 10 : 0, marginBottom: 4 }}>{curTrade}</div>
                   )}
-                  <div
-                    onClick={() => toggleShop(s)}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      fontSize: 15,
-                      padding: "3px 0 3px 12px",
-                      borderBottom: `1px solid ${border}`,
-                      cursor: "pointer",
-                      textDecoration: done ? "line-through" : "none",
-                      opacity: done ? 0.5 : 1,
-                    }}
-                  >
-                    <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{
-                        width: 14, height: 14, borderRadius: 3,
-                        border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
-                        background: done ? "var(--color-success)" : "transparent",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 15, color: "#fff", flexShrink: 0,
-                      }}>
-                        {done && "✓"}
+                  {editing ? (
+                    <div className="row" style={{ padding: "4px 0 4px 12px", gap: 6, borderBottom: `1px solid ${border}` }}>
+                      <input value={editShopName} onChange={(e) => setEditShopName(e.target.value)} placeholder="Item name..." style={{ flex: 1, fontSize: 15, padding: "4px 8px", minWidth: 0 }} />
+                      <input type="number" value={editShopCost} onChange={(e) => setEditShopCost(e.target.value)} placeholder="$" style={{ width: 56, fontSize: 15, padding: "4px 6px" }} />
+                      <button onClick={() => saveEditShop(s)} title="Save" style={{ background: "none", color: "var(--color-success)", fontSize: 16, padding: "0 4px" }}>✓</button>
+                      <button onClick={() => deleteShop(s)} title="Delete" style={{ background: "none", color: "var(--color-accent-red)", fontSize: 15, padding: "0 4px" }}>🗑</button>
+                      <button onClick={cancelEditShop} title="Cancel" style={{ background: "none", color: "var(--color-dim)", fontSize: 15, padding: "0 4px" }}>✕</button>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        fontSize: 15,
+                        padding: "3px 0 3px 12px",
+                        borderBottom: `1px solid ${border}`,
+                      }}
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                        <span
+                          onClick={() => toggleShop(s)}
+                          style={{
+                            width: 14, height: 14, borderRadius: 3,
+                            border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
+                            background: done ? "var(--color-success)" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 15, color: "#fff", flexShrink: 0, cursor: "pointer",
+                          }}
+                        >
+                          {done && "✓"}
+                        </span>
+                        <span onClick={() => startEditShop(s)} style={{ cursor: "pointer", textDecoration: done ? "line-through" : "none", opacity: done ? 0.5 : 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.n}</span>
                       </span>
-                      {s.n}
-                    </span>
-                    <span style={{ color: done ? "#555" : "var(--color-success)" }}>${s.c}</span>
-                  </div>
+                      <span onClick={() => startEditShop(s)} style={{ cursor: "pointer", color: done ? "#555" : "var(--color-success)", flexShrink: 0, paddingLeft: 8 }}>${s.c}</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
