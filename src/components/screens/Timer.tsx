@@ -257,17 +257,20 @@ export default function Timer({ setPage }: Props) {
           job: sj || "General",
         });
       } else {
-        await db.post("time_entries", {
-          job: sj || "General",
-          job_id: resolveActiveJobId(jobs, sj),
-          entry_date: new Date().toLocaleDateString(),
-          hours: hrs,
-          amount: Math.round(hrs * rate * 100) / 100,
-          user_id: user.id,
-          user_name: user.name,
-          start_time: st ? fmtTime(st) : "",
-          end_time: fmtTime(Date.now()),
-        });
+        // activeId lost (refresh, app switch) — find the most recent open row
+        // for this user and close it. Never post a second entry — that leaves
+        // the original open row showing as "still active" on the crew tab.
+        const open = useStore.getState().timeEntries
+          .filter((e) => e.user_id === user.id && e.start_time && !e.end_time)
+          .sort((a, b) => (b.start_time || "").localeCompare(a.start_time || ""));
+        if (open[0]) {
+          await db.patch("time_entries", open[0].id, {
+            hours: hrs,
+            amount: Math.round(hrs * rate * 100) / 100,
+            end_time: fmtTime(Date.now()),
+            job: sj || "General",
+          });
+        }
       }
       await loadAll();
     } else if (activeId) {
@@ -323,12 +326,16 @@ export default function Timer({ setPage }: Props) {
     .sort(byRecentDesc);
 
   // Active sessions across the whole crew (end_time unset == still clocked in).
-  // Used by Crew Activity tab. Ignore rows older than 24h as stale.
+  // Only today's rows — stale open rows from prior days (forgot to clock out)
+  // must not bleed into the crew activity view.
+  const _todayUS  = new Date().toLocaleDateString("en-US");
+  const _todayISO = new Date().toISOString().split("T")[0];
+  const _todayPad = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
   const activeSessions = timeEntries.filter((e) => {
     if (e.end_time) return false;
-    // Only rows that were created as active (have a start_time)
     if (!e.start_time) return false;
-    return true;
+    const d = e.entry_date || "";
+    return d === _todayUS || d === _todayISO || d === _todayPad || d === _todayPad.replace(/^0/, "");
   });
 
   // Human-readable elapsed time: "2h 14m" / "45m" / "30s"
