@@ -146,11 +146,7 @@ export default function BillingSettings() {
             const planLabel =
               plan === "pro"  ? "Pro $149.99/mo"
             : plan === "crew" ? "Crew $59.99/mo"
-            : plan === "solo" ? "Solo $24.99/mo"
-            // legacy values still surfaced from older orgs
-            : plan === "business" ? "Business $149/mo"
-            : plan === "team" ? "Team $99/mo"
-            : `${plan}`;
+            : "Solo $24.99/mo"; // solo + any legacy/unknown value
 
             return (
               <div>

@@ -40,8 +40,8 @@ export function getCap(plan: string | null | undefined): number {
   if (plan === "pro") return 450;
   if (plan === "crew") return 175;
   if (plan === "solo") return 75;
-  // undefined / legacy names ("team"/"business") fall back to the Solo
-  // quota so they don't get accidentally blocked.
+  // Unrecognized / unset plan names fall back to the Solo quota so they
+  // don't get accidentally blocked.
   return 75;
 }
 

@@ -624,15 +624,34 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return false;
   };
 
-  // Sort work orders: HIGH first, then MED, then LOW, completed at bottom.
-  // `?? 2` (not `|| 2`) — priOrder.HIGH is 0, which `||` treats as falsy, so
-  // HIGH items were silently demoted to the same rank as LOW.
+  // Work-order priority, recomputed from the task's inspection severity so it
+  // reflects real importance instead of the stale stored value — older jobs
+  // defaulted nearly everything to LOW/"minor". Damaged → urgent, satisfactory
+  // → minor, everything else (poor/fair/general scope) → needed.
+  const woCondition = (w: { room?: string; detail?: string }): string | undefined => {
+    const inspRooms: { name?: string; items?: { name?: string; condition?: string }[] }[] = jobData?.inspection?.rooms || [];
+    const d = (w.detail || "").toLowerCase();
+    for (const r of inspRooms) {
+      if ((r.name || "") !== (w.room || "")) continue;
+      const it = r.items?.find((i) => { const n = (i.name || "").toLowerCase(); return !!n && (n === d || d.includes(n)); });
+      if (it?.condition) return it.condition;
+    }
+    return undefined;
+  };
+  const priOf = (w: { pri?: string; room?: string; detail?: string }): string => {
+    const c = woCondition(w);
+    if (c) return c === "D" ? "HIGH" : c === "S" ? "LOW" : "MED";
+    return w.pri === "HIGH" || w.pri === "MED" ? w.pri : "MED";
+  };
+
+  // Sort: priority (HIGH→MED→LOW), completed sink to the bottom. `?? 1` (not
+  // `||`) — priOrder.HIGH is 0, which `||` would treat as falsy.
   const priOrder: Record<string, number> = { HIGH: 0, MED: 1, LOW: 2 };
   const sortedWO = [...workOrder]
-    .map((w, i) => ({ ...w, _idx: i }))
+    .map((w, i) => ({ ...w, _idx: i, _pri: priOf(w) }))
     .sort((a, b) => {
       if (a.done !== b.done) return a.done ? 1 : -1;
-      return (priOrder[a.pri] ?? 2) - (priOrder[b.pri] ?? 2);
+      return (priOrder[a._pri] ?? 1) - (priOrder[b._pri] ?? 1);
     });
 
   const priColor = (pri: string) => pri === "HIGH" ? "var(--color-accent-red)" : pri === "MED" ? "var(--color-warning)" : "var(--color-success)";
@@ -642,7 +661,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // QuoteForge's "Trade / Area"), so the list reads like the mockup: a colored
   // trade header with its items beneath. Stable sort by room preserves the
   // done-last / priority-first order from sortedWO within each group.
-  const groupedWO = [...sortedWO].sort((a, b) => (a.room || "").localeCompare(b.room || ""));
+  // Pending tasks grouped by trade; ALL completed tasks collected at the very
+  // bottom (a "Completed" pile), not interleaved within their trade group.
+  const pendingWO = sortedWO.filter((w) => !w.done).sort((a, b) => (a.room || "").localeCompare(b.room || ""));
+  const doneWO = sortedWO.filter((w) => w.done).sort((a, b) => (a.room || "").localeCompare(b.room || ""));
+  const groupedWO = [...pendingWO, ...doneWO];
+  const firstDoneIdx = groupedWO.findIndex((w) => w.done);
   const TRADE_DOT: Record<string, string> = {
     plumbing: "#3aa0ff", electrical: "#ffcc00", carpentry: "#ff8800", hvac: "#9d4edd",
     painting: "#00cc66", flooring: "#ff5b5b", general: "#8a8a99", drywall: "#06b6d4",
@@ -877,9 +901,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   enriched.condition === "D" ? t("wv.damaged") :
                   enriched.condition === "P" ? t("wv.poor") :
                   enriched.condition === "F" ? t("wv.fair") : "";
-                const showHeader = gi === 0 || groupedWO[gi - 1].room !== w.room;
+                const isFirstDone = w.done && gi === firstDoneIdx;
+                const showHeader = !w.done && (gi === 0 || groupedWO[gi - 1].room !== w.room);
                 return (
                   <Fragment key={w._idx}>
+                  {isFirstDone && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "16px 2px 6px", fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, letterSpacing: ".1em", color: "var(--color-dim)", textTransform: "uppercase" }}>
+                      <Icon name="check" size={13} color="var(--color-success)" strokeWidth={3} />
+                      Completed
+                    </div>
+                  )}
                   {showHeader && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "10px 2px 6px", fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, letterSpacing: ".1em", color: "var(--color-dim)", textTransform: "uppercase" }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: tradeDot(w.room), flexShrink: 0 }} />
@@ -904,14 +935,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                         onClick={(e) => { e.stopPropagation(); toggleWO(w._idx); }}
                         aria-label={w.done ? "Mark not done" : "Mark done"}
                         style={{
-                          width: 22, height: 22, borderRadius: "50%", flexShrink: 0, marginTop: 1,
+                          width: 24, height: 24, borderRadius: 6, flexShrink: 0, marginTop: 1,
                           border: `2px solid ${w.done ? "var(--color-success)" : "var(--color-dim)"}`,
                           background: w.done ? "var(--color-success)" : "transparent",
                           display: "flex", alignItems: "center", justifyContent: "center",
                           color: "#fff", padding: 0, cursor: "pointer",
                         }}
                       >
-                        {w.done && <Icon name="check" size={13} color="#fff" strokeWidth={3} />}
+                        {w.done && <Icon name="check" size={15} color="#fff" strokeWidth={3} />}
                       </button>
                       {/* Task body — tap to expand */}
                       <div
@@ -922,8 +953,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                           <div style={{ fontSize: 16, fontWeight: 600, textDecoration: w.done ? "line-through" : "none" }}>{w.detail}</div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                             {!w.done && (
-                              <span style={{ fontSize: 12, padding: "1px 6px", borderRadius: 4, background: priColor(w.pri) + "22", color: priColor(w.pri), fontFamily: "Oswald", letterSpacing: ".06em" }}>
-                                {priLabel(w.pri)}
+                              <span style={{ fontSize: 12, padding: "1px 6px", borderRadius: 4, background: priColor(w._pri) + "22", color: priColor(w._pri), fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                                {priLabel(w._pri)}
                               </span>
                             )}
                             <button onClick={(e) => { e.stopPropagation(); setWvCam({ title: "Work photo", multiple: true, onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f, "work")) }); }} title="Add photo" style={{ width: 26, height: 26, borderRadius: 7, background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, border: "none" }}>
