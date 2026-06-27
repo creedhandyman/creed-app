@@ -1,5 +1,7 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
+import { isPushSupported, isSubscribed, enablePush } from "@/lib/push";
 import { t } from "@/lib/i18n";
 import { Icon, type IconName } from "./Icon";
 import type { AppNotification, NotificationType } from "@/lib/types";
@@ -35,6 +37,26 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
   const notifications = useStore((s) => s.notifications);
   const markRead = useStore((s) => s.markNotificationRead);
   const markAll = useStore((s) => s.markAllNotificationsRead);
+
+  // Push-enable nudge at the top — checked after mount (avoids SSR/hydration
+  // mismatch), auto-hides once this device is subscribed.
+  const [pushChecked, setPushChecked] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => {
+    const sup = isPushSupported();
+    setPushSupported(sup);
+    if (sup) isSubscribed().then((v) => { setPushOn(v); setPushChecked(true); });
+    else setPushChecked(true);
+  }, []);
+  const enablePushHere = async () => {
+    setPushBusy(true);
+    const r = await enablePush();
+    setPushBusy(false);
+    if (r.ok) { setPushOn(true); useStore.getState().showToast("Push notifications on", "success"); }
+    else useStore.getState().showToast(r.error || "Couldn't enable push", "error");
+  };
 
   const sorted = [...notifications].sort((a, b) =>
     (b.created_at || "").localeCompare(a.created_at || ""),
@@ -88,6 +110,25 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
             </button>
           </div>
         </div>
+
+        {/* Push enable nudge — auto-hides once this device is subscribed */}
+        {pushChecked && pushSupported && !pushOn && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: "1px solid var(--color-border-dark)", background: "rgba(46,139,255,.08)" }}>
+            <Icon name="bell" size={16} color="var(--color-primary)" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600 }}>Turn on push alerts</div>
+              <div className="dim" style={{ fontSize: 12 }}>Notify this device even when the app is closed</div>
+            </div>
+            <button className="bb" onClick={enablePushHere} disabled={pushBusy} style={{ flexShrink: 0, padding: "6px 12px", fontSize: 13 }}>
+              {pushBusy ? "…" : "Enable"}
+            </button>
+          </div>
+        )}
+        {pushChecked && !pushSupported && (
+          <div className="dim" style={{ fontSize: 12, padding: "10px 14px", borderBottom: "1px solid var(--color-border-dark)" }}>
+            Add Creed to your home screen to get push alerts on this device.
+          </div>
+        )}
 
         {/* List */}
         <div style={{ overflowY: "auto", flex: 1 }}>
