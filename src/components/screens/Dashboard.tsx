@@ -35,7 +35,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const upcoming = schedule
-    .filter((s) => s.sched_date >= today)
+    .filter((s) => s.sched_date >= today || (s.end_date && s.end_date >= today))
     .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
   const nextJob = upcoming[0];
 

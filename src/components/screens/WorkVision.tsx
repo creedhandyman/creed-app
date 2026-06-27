@@ -704,7 +704,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 16 }}>{s.job}</div>
-                  <div className="dim" style={{ fontSize: 13.5, marginTop: 2 }}>{s.note || "Scheduled today"}</div>
+                  <div className="dim" style={{ fontSize: 13.5, marginTop: 2 }}>{(s.note || "Scheduled today").replace(/👷\s*[^·]+·?\s*/g, "").trim() || "Scheduled today"}</div>
                 </div>
                 <Icon name="next" size={16} color="var(--color-success)" />
               </div>
