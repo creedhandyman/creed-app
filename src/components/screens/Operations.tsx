@@ -378,6 +378,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   const timeEntries = useStore((s) => s.timeEntries);
   const darkMode = useStore((s) => s.darkMode);
   const jobs = useStore((s) => s.jobs);
+  const receipts = useStore((s) => s.receipts) ?? [];
   const customers = useStore((s) => s.customers) ?? [];
   const recurringJobs = useStore((s) => s.recurringJobs) ?? [];
   const org = useStore((s) => s.org);
@@ -422,9 +423,23 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   // out of the month and skewed Net profit.
   const inMonth = (d?: string) => { const dt = parseEntryDate(d); return dt ? dt >= monthStart : false; };
   const payrollDue = timeEntries.filter((e) => !e.paid_at).reduce((s, e) => s + (e.hours || 0) * rateOf(e.user_id), 0);
-  const revenueMonth = jobs.filter((j) => j.status === "paid" && inMonth(j.created_at)).reduce((s, j) => s + (j.total || 0), 0);
-  const laborMonth = timeEntries.filter((e) => inMonth(e.entry_date)).reduce((s, e) => s + (e.hours || 0) * rateOf(e.user_id), 0);
-  const netProfit = revenueMonth - laborMonth;
+  // Revenue = work EARNED this month (complete/invoiced/paid), keyed off
+  // job_date||created_at — the same basis as the dashboard's "Revenue·mo".
+  // (Was paid-only by created_at, which under-counted and didn't line up with
+  // the labor population below, skewing Net profit.)
+  const earnedJobs = jobs.filter((j) => ["complete", "invoiced", "paid"].includes(j.status) && inMonth(j.job_date || j.created_at));
+  const revenueMonth = earnedJobs.reduce((s, j) => s + (j.total || 0), 0);
+  // Labor COST this month — crew pay actually logged (recorded amount, falling
+  // back to hours × current rate for older rows that predate the amount field).
+  const laborMonth = timeEntries.filter((e) => inMonth(e.entry_date)).reduce((s, e) => s + (e.amount || (e.hours || 0) * rateOf(e.user_id)), 0);
+  // Material COST this month — actual receipts when we have them, else the
+  // materials charged on this month's earned jobs (markup-inclusive proxy).
+  // Net profit previously omitted materials entirely, overstating it.
+  const receiptsMonth = receipts.filter((r) => inMonth(r.receipt_date)).reduce((s, r) => s + (r.amount || 0), 0);
+  const materialsMonth = receiptsMonth > 0 ? receiptsMonth : earnedJobs.reduce((s, j) => s + (j.total_mat || 0), 0);
+  // Net profit = revenue earned − labor cost − material cost (a month
+  // approximation; Financials has the exact per-job P&L).
+  const netProfit = revenueMonth - laborMonth - materialsMonth;
   const monthLabel = now.toLocaleDateString("en-US", { month: "short" });
   const fmtMoney = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Math.round(n)}`);
   const roleLabel = user?.role === "owner" ? t("team.roleOwner") : user?.role === "manager" ? t("team.roleManager") : (user?.role || t("ops.roleTeam"));
