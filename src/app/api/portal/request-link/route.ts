@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { generatePortalToken } from "@/lib/portal-session";
+import { portalRedeemUrl } from "@/lib/site-url";
 import { sendSms } from "@/lib/sms";
 
 export const dynamic = "force-dynamic";
@@ -61,8 +62,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true }); // don't leak DB issues either
     }
 
-    const origin = req.headers.get("origin") || `https://${req.headers.get("host") || "creed-app.vercel.app"}`;
-
     for (const c of customers || []) {
       const token = generatePortalToken();
       const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
@@ -79,7 +78,7 @@ export async function POST(req: NextRequest) {
         console.error("portal/request-link insert error:", insErr);
         continue;
       }
-      const link = `${origin}/portal/redeem/${token}`;
+      const link = portalRedeemUrl(token);
       const orgRow = (await supabase.from("organizations").select("name").eq("id", c.org_id).limit(1)).data?.[0];
       const orgName = orgRow?.name || "us";
       const message = `Your customer portal link from ${orgName}: ${link} (expires in 14 days)`;

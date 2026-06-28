@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { generatePortalToken } from "@/lib/portal-session";
+import { portalRedeemUrl } from "@/lib/site-url";
 import { requireOwner } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
@@ -66,14 +67,12 @@ export async function POST(req: NextRequest) {
       });
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
-    // Build the redeem URL using the request origin so previews and
-    // production both work without a hardcoded NEXT_PUBLIC_APP_URL.
-    const origin = req.headers.get("origin") || `https://${req.headers.get("host") || "creed-app.vercel.app"}`;
-    // Point at the /portal/redeem PAGE (not the API) so SMS/email link
-    // previewers that GET the URL can't consume the one-time token — the page
-    // only redeems via JS, which preview bots don't run. The page then hits
-    // /api/portal/redeem/<token> (sets the cookie + redirects to /portal).
-    const link = `${origin}/portal/redeem/${token}`;
+    // Build the redeem URL from the TRUSTED site origin (NEXT_PUBLIC_SITE_URL),
+    // never the request Host header — a spoofed Host must not be able to point a
+    // customer's magic link at another domain. Targets the /portal/redeem PAGE
+    // (not the API) so link-preview bots that GET the URL can't consume the
+    // one-time token — the page only redeems via JS, which bots don't run.
+    const link = portalRedeemUrl(token);
 
     return NextResponse.json({
       ok: true,

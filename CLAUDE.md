@@ -119,6 +119,15 @@ src/
   value across all environments or previously-sent links/sessions stop
   validating. (The token is a stable HMAC of the job id — no expiry — so
   "expired" in that error really means "no/!matching token".)
+- `NEXT_PUBLIC_SITE_URL` — canonical app origin (defaults to
+  `https://creedhm.com`; also used by `app/layout.tsx` for OG/metadata).
+  **Portal magic-link emails/texts derive their origin from this**, via
+  `src/lib/site-url.ts` `portalRedeemUrl()` — NOT the request `Host`/`Origin`
+  header. This is a security fix: a spoofed Host on the PUBLIC
+  `/api/portal/request-link[-email]` endpoints must not be able to point a
+  customer's one-time link at an attacker domain (open-redirect → token theft).
+  All three minting routes (`request-link`, `request-link-email`, `send-link`)
+  use it. If this is set wrong, magic links point at the wrong domain.
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` — Web Push
   (notifications). Generate with `npx web-push generate-vapid-keys`;
   `VAPID_SUBJECT` is a `mailto:` (defaults to creedhandyman@gmail.com). Also set

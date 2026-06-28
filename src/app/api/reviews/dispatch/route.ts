@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { sendEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -128,34 +129,7 @@ async function sendSms(to: string, body: string): Promise<{ ok: true } | { ok: f
   return { ok: true };
 }
 
-async function sendEmail(to: string, subject: string, body: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    return { ok: false, error: "Resend not configured (set RESEND_API_KEY to enable email)" };
-  }
-  if (!to || !to.includes("@")) {
-    return { ok: false, error: "No valid email on customer record" };
-  }
-  const from = process.env.RESEND_FROM_EMAIL || "reviews@creedhandyman.com";
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      text: body,
-    }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({} as { message?: string }));
-    return { ok: false, error: (data as { message?: string }).message || `Resend ${res.status}` };
-  }
-  return { ok: true };
-}
+// sendEmail now lives in src/lib/email.ts (shared with the portal link flow).
 
 interface DispatchResult {
   id: string;

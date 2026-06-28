@@ -30,6 +30,7 @@ export const config = {
     "/api/status-link",
     "/api/stripe/:path*",
     "/api/portal/request-link",
+    "/api/portal/request-link-email",
     "/api/portal/send-link",
   ],
 };
@@ -49,6 +50,7 @@ const LIMITS: Record<string, number> = {
   "/api/promo/apply": 5,
   "/api/status-link": 20,
   "/api/portal/request-link": 2,
+  "/api/portal/request-link-email": 2,
   "/api/portal/send-link": 5,
 };
 const DEFAULT_LIMIT = 12; // e.g. /api/stripe/* (connect, portal, …)
