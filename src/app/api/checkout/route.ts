@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
+import { computePlatformFee, currentPeriodStart } from "@/lib/platform-fee";
 
 export const dynamic = "force-dynamic";
-
-const PLATFORM_FEE_PERCENT = 2; // 2% platform fee
 
 /**
  * Customer invoice / deposit payment. PUBLIC by design — the customer paying
@@ -13,6 +12,8 @@ const PLATFORM_FEE_PERCENT = 2; // 2% platform fee
  *     a tampered body can't redirect funds to an attacker's account;
  *   - the amount is clamped to the job total (partial deposits ≤ total are
  *     allowed), so it can't exceed the invoice.
+ *   - the platform fee is computed here from the org's subscription plan and
+ *     their running monthly total — neither value is accepted from the caller.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -42,14 +43,40 @@ export async function POST(req: NextRequest) {
     }
     const amountCents = Math.round(payAmount * 100);
 
-    // Payout destination + display fields come from the job's org, not the body.
+    // Payout destination + subscription plan come from the job's org, not the body.
     const { data: org } = await supabase
       .from("organizations")
-      .select("name, stripe_account_id")
+      .select("name, stripe_account_id, subscription_plan")
       .eq("id", job.org_id)
       .single();
     const orgName = org?.name || "Service Provider";
     const stripeAccountId = org?.stripe_account_id || "";
+    const plan = org?.subscription_plan ?? null;
+
+    // ── Platform fee (capped monthly sum, computed stateless) ────────────────
+    // Sum platform fees already confirmed this calendar month. If the
+    // platform_fee_cents / paid_at columns don't exist yet (migration pending),
+    // we fall back to 0 — fee still applies, just without cap enforcement.
+    let feesCollectedCents = 0;
+    try {
+      const periodStart = currentPeriodStart();
+      const { data: capRows } = await supabase
+        .from("jobs")
+        .select("platform_fee_cents")
+        .eq("org_id", job.org_id)
+        .eq("status", "paid")
+        .gte("paid_at", periodStart.toISOString())
+        .not("platform_fee_cents", "is", null);
+      feesCollectedCents = (capRows ?? []).reduce(
+        (sum, r) => sum + (Number(r.platform_fee_cents) || 0),
+        0,
+      );
+    } catch {
+      // Migration hasn't run yet — proceed without cap enforcement.
+    }
+
+    const platformFeeCents = computePlatformFee(amountCents, plan, feesCollectedCents);
+    // ────────────────────────────────────────────────────────────────────────
 
     const origin = req.headers.get("origin") || "https://www.creedhm.com";
 
@@ -78,16 +105,21 @@ export async function POST(req: NextRequest) {
         org_id: job.org_id,
         property: job.property || "",
         client: job.client || "",
+        // Stored so verify-payment can record the fee without recomputing.
+        platform_fee_cents: String(platformFeeCents),
       },
     };
 
-    // Route the payment to the org's connected account with the platform fee.
+    // Route payment to the org's connected account. application_fee_amount is
+    // the capped Creed platform fee — omitted entirely when 0 (Pro or at-cap)
+    // because Stripe rejects application_fee_amount: 0 on destination charges.
     if (stripeAccountId) {
-      const feeAmount = Math.round(amountCents * (PLATFORM_FEE_PERCENT / 100));
       sessionParams.payment_intent_data = {
-        application_fee_amount: feeAmount,
         transfer_data: { destination: stripeAccountId },
       };
+      if (platformFeeCents > 0) {
+        sessionParams.payment_intent_data.application_fee_amount = platformFeeCents;
+      }
     }
 
     const Stripe = (await import("stripe")).default;

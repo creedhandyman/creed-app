@@ -189,6 +189,41 @@ export async function POST(req: NextRequest) {
         }
         break;
       }
+
+      case "charge.refunded": {
+        // When a customer payment is refunded, reverse the platform fee
+        // proportionally so the cap headroom is restored correctly.
+        // Full refund → platform_fee_cents = 0.
+        // Partial refund → prorate: keep fee × (1 − refundedFraction).
+        const charge = event.data.object as Stripe.Charge;
+        const piId =
+          typeof charge.payment_intent === "string"
+            ? charge.payment_intent
+            : charge.payment_intent?.id;
+        if (piId) {
+          const { data: job } = await supabase
+            .from("jobs")
+            .select("id, platform_fee_cents")
+            .eq("stripe_payment_intent_id", piId)
+            .maybeSingle();
+          if (job) {
+            const isFullRefund = charge.refunded && charge.amount_refunded >= charge.amount;
+            let newFeeCents: number;
+            if (isFullRefund) {
+              newFeeCents = 0;
+            } else {
+              // Prorate: preserve fee proportional to the amount NOT yet refunded.
+              const keptFraction = (charge.amount - charge.amount_refunded) / charge.amount;
+              newFeeCents = Math.round((Number(job.platform_fee_cents) || 0) * keptFraction);
+            }
+            await supabase
+              .from("jobs")
+              .update({ platform_fee_cents: newFeeCents })
+              .eq("id", job.id);
+          }
+        }
+        break;
+      }
     }
 
     return NextResponse.json({ received: true });

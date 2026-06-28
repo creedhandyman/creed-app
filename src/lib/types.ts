@@ -230,6 +230,19 @@ export interface Job {
    *  ?tech=<id>. Powers Network Scout / referral credit so a tech who
    *  shares the business card and wins a job gets attribution. */
   referrer_tech_id?: string;
+  /** Timestamp when the Stripe payment was server-confirmed by
+   *  /api/verify-payment. Used to scope the platform-fee cap query to
+   *  the current calendar month. Null until the job reaches "paid". */
+  paid_at?: string;
+  /** Creed platform fee collected on this job's payment (integer cents).
+   *  0 for Pro-tier orgs or when the monthly $100 cap was already hit.
+   *  Set by /api/verify-payment; adjusted down by the charge.refunded
+   *  webhook if the customer later refunds (restores cap headroom). */
+  platform_fee_cents?: number;
+  /** Stripe PaymentIntent id for the customer payment on this job.
+   *  Stored by /api/verify-payment so the charge.refunded webhook can
+   *  look up the job and adjust platform_fee_cents on refund. */
+  stripe_payment_intent_id?: string;
 }
 
 export interface TimeEntry {

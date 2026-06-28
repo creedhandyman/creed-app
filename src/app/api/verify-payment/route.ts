@@ -74,7 +74,11 @@ export async function POST(req: NextRequest) {
 
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    // Expand payment_intent so we can record its id for refund tracking.
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["payment_intent"],
+    });
 
     if (session.payment_status !== "paid") {
       return NextResponse.json(
@@ -110,9 +114,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Session/job org mismatch" }, { status: 400 });
     }
 
+    // Read the platform fee we computed at checkout creation time (stored in
+    // session metadata so we don't have to recompute or re-query the cap).
+    const platformFeeCents = Math.max(0, Number(session.metadata?.platform_fee_cents) || 0);
+
+    // Payment intent id — stored on the job so the charge.refunded webhook
+    // can find and adjust platform_fee_cents if the customer refunds later.
+    const pi = session.payment_intent;
+    const stripePaymentIntentId = typeof pi === "string" ? pi : pi?.id ?? null;
+
     const { error } = await supabase
       .from("jobs")
-      .update({ status: "paid" })
+      .update({
+        status: "paid",
+        paid_at: new Date().toISOString(),
+        platform_fee_cents: platformFeeCents,
+        stripe_payment_intent_id: stripePaymentIntentId,
+      })
       .eq("id", jobId)
       .eq("org_id", job.org_id);
     if (error) {
