@@ -119,8 +119,11 @@ src/
   value across all environments or previously-sent links/sessions stop
   validating. (The token is a stable HMAC of the job id — no expiry — so
   "expired" in that error really means "no/!matching token".)
-- `NEXT_PUBLIC_SITE_URL` — canonical app origin (defaults to
-  `https://creedhm.com`; also used by `app/layout.tsx` for OG/metadata).
+- `NEXT_PUBLIC_SITE_URL` — canonical app origin. `src/lib/site-url.ts`
+  defaults to `https://www.creedhm.com` (the **apex `creedhm.com` has no TLS
+  cert** — `www` is the served origin, matching the Stripe routes' hardcoded
+  fallback). `app/layout.tsx` separately defaults to the apex for OG/metadata
+  only (never navigated, so the cert is moot there).
   **Portal magic-link emails/texts derive their origin from this**, via
   `src/lib/site-url.ts` `portalRedeemUrl()` — NOT the request `Host`/`Origin`
   header. This is a security fix: a spoofed Host on the PUBLIC

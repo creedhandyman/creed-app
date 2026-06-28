@@ -8,9 +8,11 @@
 // one-time portal token when the victim clicks it (open redirect → token
 // theft). Pinning to a configured origin closes that.
 
-/** Trusted absolute origin, no trailing slash. Override with NEXT_PUBLIC_SITE_URL. */
+/** Trusted absolute origin, no trailing slash. Override with NEXT_PUBLIC_SITE_URL.
+ *  Default is www.creedhm.com — the apex (creedhm.com) has no TLS cert; www is
+ *  the served origin (matches the Stripe routes' hardcoded fallback). */
 export function siteOrigin(): string {
-  return (process.env.NEXT_PUBLIC_SITE_URL || "https://creedhm.com").replace(/\/+$/, "");
+  return (process.env.NEXT_PUBLIC_SITE_URL || "https://www.creedhm.com").replace(/\/+$/, "");
 }
 
 /**
