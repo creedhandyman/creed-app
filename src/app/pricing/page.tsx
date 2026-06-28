@@ -17,7 +17,7 @@ import MarketingShell from "@/components/marketing/MarketingShell";
 export const metadata: Metadata = {
   title: "Pricing · Creed Handy Manager",
   description:
-    "Simple plans that grow with you — Solo $24.99, Crew $59.99, Pro $149.99. First month free, every plan includes the full toolkit. Pay through your own Stripe.",
+    "Simple plans that grow with you — Solo $24.99, Crew $59.99, Pro $149.99. First month free, every plan includes the full toolkit. Solo/Crew add a 0.5% platform fee on payments, capped at $100/month. Pro pays zero.",
 };
 
 type Plan = "solo" | "crew" | "pro";
@@ -74,6 +74,7 @@ const TIERS: Tier[] = [
     bullets: [
       "450 AI inspections / renders per month",
       "Unlimited crew members",
+      "Zero platform fee on payments",
       "Priority support",
       "Everything in the toolkit (below)",
     ],
@@ -103,6 +104,7 @@ const FEATURES: FeatureRow[] = [
   { label: "Gamification & quests", solo: true, crew: true, pro: true },
   { label: "User accounts", solo: "1", crew: "Up to 8", pro: "Unlimited" },
   { label: "Included inspections / mo", solo: "75", crew: "175", pro: "450" },
+  { label: "Platform fee on payments", solo: "0.5% · $100/mo cap", crew: "0.5% · $100/mo cap", pro: "None" },
   { label: "Tenant intake workflows", solo: false, crew: false, pro: true },
   { label: "Owner sub-accounts", solo: false, crew: false, pro: true },
   { label: "Priority support", solo: false, crew: true, pro: true },
@@ -113,15 +115,14 @@ interface FAQ {
   a: string;
 }
 
-// Marketing FAQ copy (from the mockup). Payments answer reflects the LIVE 2%
-// platform fee — the source of truth is PLATFORM_FEE_PERCENT in
-// src/app/api/checkout/route.ts (and the billing copy in src/lib/i18n.ts).
-// Keep all three in sync if the rate ever changes.
+// Marketing FAQ copy. Payments answer reflects the live fee model:
+// 0.5% capped at $100/mo for Solo/Crew, $0 for Pro.
+// Source of truth: src/lib/platform-fee.ts (PLATFORM_FEE_RATE + PLATFORM_FEE_CAP_CENTS).
 const FAQS: FAQ[] = [
-  { q: "Is there really a free month?", a: "Yes — every plan's first month is free. No charge until it ends, and you can cancel anytime before then." },
-  { q: "What counts as an “inspection”?", a: "Each AI quote or photo render you generate. Most solo operators stay well under 75 a month; upgrade anytime if you grow." },
-  { q: "Do you take a cut of my payments?", a: "A small one. Customer payments run through your own Stripe account and land in your bank — Creed adds a 2% platform fee on payments processed through the app, plus the standard Stripe processing fees. Your monthly subscription is separate." },
-  { q: "Can I change plans later?", a: "Anytime, up or down. Add crew seats as you hire — your plan grows with the business." },
+  { q: 'Is there really a free month?', a: 'Yes — every plan’s first month is free. No charge until it ends, and you can cancel anytime before then.' },
+  { q: 'What counts as an “inspection”?', a: 'Each AI quote or photo render you generate. Most solo operators stay well under 75 a month; upgrade anytime if you grow.' },
+  { q: 'Do you take a cut of my payments?', a: 'A small one — and it’s capped. Customer payments run through your own Stripe account and land in your bank. On Solo and Crew plans, Creed adds a 0.5% platform fee, never more than $100/month total. Standard Stripe processing fees are separate. Pro plans pay zero platform fee. Your monthly subscription is billed separately.' },
+  { q: 'Can I change plans later?', a: 'Anytime, up or down. Add crew seats as you hire — your plan grows with the business.' },
 ];
 
 export default function PricingPage() {

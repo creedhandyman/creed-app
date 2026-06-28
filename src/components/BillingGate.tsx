@@ -11,9 +11,9 @@ import { applyPromoCode } from "@/lib/promo-codes";
 const trialDismissKey = (daysLeft: number) => `c_trial_banner_dismissed_${daysLeft}`;
 
 const PLANS = [
-  { key: "solo", name: "Solo", price: "$24.99", desc: "1 user", amount: 2499 },
-  { key: "crew", name: "Crew", price: "$59.99", desc: "Up to 8 users", amount: 5999 },
-  { key: "pro",  name: "Pro",  price: "$149.99", desc: "Unlimited users", amount: 14999 },
+  { key: "solo", name: "Solo", price: "$24.99", desc: "1 user", fee: "0.5% fee · $100/mo cap", amount: 2499 },
+  { key: "crew", name: "Crew", price: "$59.99", desc: "Up to 8 users", fee: "0.5% fee · $100/mo cap", amount: 5999 },
+  { key: "pro",  name: "Pro",  price: "$149.99", desc: "Unlimited users", fee: "No payment fee", amount: 14999 },
 ];
 
 export default function BillingGate({ children }: { children: React.ReactNode }) {
@@ -135,6 +135,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
                   </div>
                   <div style={{ fontSize: 15, color: "#888" }}>/month</div>
                   <div style={{ fontSize: 14, color: "#666", marginTop: 4 }}>{p.desc}</div>
+                  <div style={{ fontSize: 11, color: "#444", marginTop: 6, lineHeight: 1.3 }}>{p.fee}</div>
                 </div>
               ))}
             </div>
