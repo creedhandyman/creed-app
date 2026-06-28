@@ -350,6 +350,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // (organizations.tax_mode, falling back to "total" for legacy rows).
   // Persisted on the rooms JSON blob as `data.taxMode`.
   const [taxMode, setTaxMode] = useState<TaxMode | null>(null);
+  // Good-Better-Best tiered quote (per-quote, on the rooms JSON blob). When
+  // on, each line item can be tagged base/better/best (cumulative) and the
+  // customer picks an option on the approval page. `data.tieredQuote` +
+  // `data.tierNames`; the per-item tier rides on each RoomItem (data.rooms).
+  const [tieredQuote, setTieredQuote] = useState(false);
+  const [tierNames, setTierNames] = useState<{ better: string; best: string }>({ better: "Better", best: "Best" });
   // Guide-tab persistent state — lifted out of GuideTab so adds survive
   // save+reload. Bernard hit the bug where new shopping-list items
   // disappeared on save: GuideTab held them in local component state that
@@ -438,6 +444,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // / "none". Anything else means "inherit org default".
       const tm = data?.taxMode;
       setTaxMode(tm === "total" || tm === "materials" || tm === "none" ? tm : null);
+      // Good-Better-Best (per-quote, rooms blob). Absent = off; legacy quotes
+      // load as non-tiered so nothing changes for them.
+      setTieredQuote(data?.tieredQuote === true);
+      const tn = data?.tierNames as { better?: unknown; best?: unknown } | undefined;
+      setTierNames({
+        better: typeof tn?.better === "string" && tn.better.trim() ? tn.better : "Better",
+        best: typeof tn?.best === "string" && tn.best.trim() ? tn.best : "Best",
+      });
       // Restore the photo gallery so the Photos tab + AI Render get the quote's
       // photos back — including the inspection photos collected when the quote
       // was first built. Without this, re-opening a saved quote dropped them and
@@ -545,6 +559,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined);
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null);
+    setTieredQuote(false); setTierNames({ better: "Better", best: "Best" });
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
@@ -1111,7 +1126,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     }
   };
 
-  const upItem = (rn: string, id: string, field: string, value: number | Material[]) => {
+  const upItem = (rn: string, id: string, field: string, value: number | string | Material[]) => {
     // Defensive: refuse to operate on a falsy id. Without this guard,
     // `i.id === id` would match every other item whose id is also undefined
     // and the patch would update them all at once.
@@ -1216,6 +1231,42 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   });
   const taxAmount = taxCalc.taxAmount;
   const gt = Math.round((baseAfterDiscount + taxAmount) * 100) / 100;
+
+  // ── Good-Better-Best cumulative tier totals (only meaningful when
+  // tieredQuote is on). Each option re-runs the SAME pricing cascade
+  // (min-labor floor, discount, tax) over its cumulative item set, so each
+  // headline price is a standalone, correct quote total.
+  const itemsForTier = (t: "base" | "better" | "best") => {
+    if (t === "base") return all.filter((i) => !i.tier || i.tier === "base");
+    if (t === "better") return all.filter((i) => i.tier !== "best"); // base + better
+    return all; // best = base + better + best
+  };
+  const tierGrandTotal = (items: typeof all): number => {
+    const tlR = items.reduce((s, i) => s + i.lc, 0);
+    const mTot = items.reduce((s, i) => s + i.mc, 0);
+    const thR = items.reduce((s, i) => s + i.laborHrs, 0);
+    const subR = items.reduce((s, i) => s + i.tot, 0);
+    const mApplies = effectiveMinHrs > 0 && thR > 0 && thR < effectiveMinHrs;
+    const tlT = mApplies ? Math.round(effectiveMinHrs * rate * 100) / 100 : tlR;
+    const subT = mApplies ? Math.round((subR + (tlT - tlR)) * 100) / 100 : subR;
+    const preDisc = subT + tripFee;
+    const dAmt = discount && discount.value > 0
+      ? (discount.type === "percent"
+          ? Math.round(preDisc * (discount.value / 100) * 100) / 100
+          : Math.min(preDisc, discount.value))
+      : 0;
+    const baseAfter = Math.max(0, Math.round((preDisc - dAmt) * 100) / 100);
+    const tax = computeTax({ labor: tlT, materials: mTot, tripFee, discountAmount: dAmt, taxPct, taxMode: effectiveTaxMode }).taxAmount;
+    return Math.round((baseAfter + tax) * 100) / 100;
+  };
+  const tierTotals = {
+    base: tierGrandTotal(itemsForTier("base")),
+    better: tierGrandTotal(itemsForTier("better")),
+    best: tierGrandTotal(itemsForTier("best")),
+  };
+  const hasBetter = all.some((i) => i.tier === "better");
+  const hasBest = all.some((i) => i.tier === "best");
+
   const issues = classify(rooms);
   const guide = makeGuide(rooms);
 
@@ -1340,6 +1391,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       laborRate: laborRate,
       minLaborHours: minLaborHours,
       taxMode: taxMode,
+      // Good-Better-Best tiered quote. Persisted explicitly so toggling off
+      // clears it instead of inheriting prevData's stale entry. tierTotals is
+      // computed by the authoritative editor cascade and stored so the
+      // approval page + approve API can read each option's price without
+      // re-deriving the pricing math server-side.
+      tieredQuote: tieredQuote,
+      tierNames: tierNames,
+      tierTotals: tieredQuote ? tierTotals : null,
       // Only overwrite `inspection` if the user just ran the inspector in
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
@@ -1407,6 +1466,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setDiscount(null);
     setLaborRate(null);
     setMinLaborHours(null);
+    setTieredQuote(false);
+    setTierNames({ better: "Better", best: "Best" });
     setPage("jobs");
   };
 
@@ -1959,6 +2020,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setDiscount(null);
           setLaborRate(null);
           setMinLaborHours(null);
+          setTieredQuote(false);
+          setTierNames({ better: "Better", best: "Best" });
         }}>←</button>
         <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚡ Quote</h2>
         <span style={{ fontSize: 12 }} className="dim">
@@ -2008,6 +2071,50 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 700 }}>Total</div>
           <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.05, marginTop: 1 }}><CountUp value={gt} prefix="$" decimals={2} /></div>
         </div>
+      </div>
+
+      {/* Good-Better-Best options (per-quote, on the rooms JSON blob). When
+          on, each line item gets a Base/Better/Best tag below; the three
+          cumulative totals preview here and the customer picks one on the
+          approval page. */}
+      <div style={{ marginTop: 8 }}>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <span style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            Options · Good-Better-Best
+          </span>
+          <button
+            onClick={() => setTieredQuote((v) => !v)}
+            className={tieredQuote ? "bb" : "bo"}
+            style={{ fontSize: 12, padding: "3px 12px" }}
+          >
+            {tieredQuote ? "On" : "Off"}
+          </button>
+        </div>
+        {tieredQuote && (
+          <>
+            <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12 }} className="dim">Tier names:</span>
+              <input value={tierNames.better} onChange={(e) => setTierNames((n) => ({ ...n, better: e.target.value }))} onBlur={(e) => { if (!e.target.value.trim()) setTierNames((n) => ({ ...n, better: "Better" })); }} placeholder="Better" style={{ flex: "1 1 90px", minWidth: 80, padding: "4px 8px", fontSize: 14 }} />
+              <input value={tierNames.best} onChange={(e) => setTierNames((n) => ({ ...n, best: e.target.value }))} onBlur={(e) => { if (!e.target.value.trim()) setTierNames((n) => ({ ...n, best: "Best" })); }} placeholder="Best" style={{ flex: "1 1 90px", minWidth: 80, padding: "4px 8px", fontSize: 14 }} />
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              {([
+                { key: "base", name: "Base", total: tierTotals.base, hue: "#888" },
+                { key: "better", name: tierNames.better, total: tierTotals.better, hue: "#2E75B6" },
+                { key: "best", name: tierNames.best, total: tierTotals.best, hue: "#9d4edd" },
+              ] as const).map((t) => (
+                <div key={t.key} style={{ flex: 1, textAlign: "center", border: `1px solid ${t.hue}55`, borderRadius: 8, padding: "6px 4px", background: `${t.hue}14` }}>
+                  <div style={{ fontSize: 9, letterSpacing: ".06em", textTransform: "uppercase", color: t.hue, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
+                  <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "#fff", marginTop: 1 }}>${t.total.toFixed(0)}</div>
+                </div>
+              ))}
+            </div>
+            <div className="dim" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4 }}>
+              Tag each line item below. Tiers are cumulative — {tierNames.best} includes everything.
+              {!hasBetter && !hasBest && " Tip: tag some items as " + tierNames.better + "/" + tierNames.best + " so the options differ."}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Pricing adjustments — per-quote labor-rate override + discount.
@@ -2666,6 +2773,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 discount,
                 minLaborHours: effectiveMinHrs,
                 taxMode: effectiveTaxMode,
+                tieredQuote,
+                tierNames,
               });
             })()
           }
@@ -2768,7 +2877,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       />
 
       {/* QUOTE TAB */}
-      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} />}
+      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} />}
 
       {/* GUIDE TAB */}
       {tab === "guide" && (
@@ -2970,15 +3079,19 @@ function QuoteTab({
   getRateForRoom,
   snapItemEdit,
   logItemEdit,
+  tieredQuote,
+  tierNames,
 }: {
   rooms: Room[];
   rate: number;
   darkMode: boolean;
-  upItem: (rn: string, id: string, field: string, value: number | Material[]) => void;
+  upItem: (rn: string, id: string, field: string, value: number | string | Material[]) => void;
   rmItem: (rn: string, id: string) => void;
   getRateForRoom?: (roomName: string) => number;
   snapItemEdit: (rn: string, id: string) => void;
   logItemEdit: (rn: string, id: string) => void;
+  tieredQuote?: boolean;
+  tierNames?: { better: string; best: string };
 }) {
   const [expandedMat, setExpandedMat] = useState<string | null>(null);
   // Colored trade dot for each room/area header (matches the mock's tradehdr).
@@ -3013,6 +3126,26 @@ function QuoteTab({
                     <div style={{ fontSize: 13 }} className="dim">
                       {it.comment}
                     </div>
+                    {tieredQuote && (
+                      <div style={{ display: "inline-flex", marginTop: 6, borderRadius: 6, overflow: "hidden", border: "1px solid var(--color-border-dark)" }}>
+                        {([
+                          { key: "base", label: "Base", hue: "#888" },
+                          { key: "better", label: tierNames?.better || "Better", hue: "#2E75B6" },
+                          { key: "best", label: tierNames?.best || "Best", hue: "#9d4edd" },
+                        ] as const).map((opt) => {
+                          const active = (it.tier || "base") === opt.key;
+                          return (
+                            <button
+                              key={opt.key}
+                              onClick={() => upItem(rm.name, it.id, "tier", opt.key)}
+                              style={{ padding: "3px 9px", fontSize: 11, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".03em", border: "none", cursor: "pointer", background: active ? opt.hue : "transparent", color: active ? "#fff" : "#888" }}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     <div style={{ textAlign: "center" }}>

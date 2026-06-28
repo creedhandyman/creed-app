@@ -408,6 +408,26 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **Good-Better-Best tiered quotes**: present 3 cumulative options on a quote so
+  techs upsell and the customer picks one. **No schema change — all on the rooms
+  JSON blob.** Per-item `RoomItem.tier` (`base`/`better`/`best`, absent = base);
+  quote-level `data.tieredQuote` + `data.tierNames` ({better,best}, renameable) +
+  `data.tierTotals` ({base,better,best}, computed by QuoteForge's authoritative
+  pricing cascade and stored so the approval page + approve API read prices
+  without re-deriving the math). Tiers are CUMULATIVE: Better = base+better,
+  Best = base+better+best. **QuoteForge**: an "Options" toggle (next to the
+  total card) → per-line Base/Better/Best selector in QuoteTab + 3 live totals.
+  **PDF** (`export-pdf.ts`, threaded via `quote-pdf.ts`): a "Choose Your Option"
+  3-column block (only when items are tagged). **Status page** (`/status`): 3
+  selectable option cards; the pick drives the headline total + the authorize
+  amount + the Stripe deposit; on approval `/api/jobs/approve` takes a `tier`,
+  sets `total` from the stored `tierTotals`, and stamps `data.acceptedTier`.
+  Default selection = Best (= stored `job.total` = all items). Fully opt-in:
+  non-tiered quotes are byte-identical (every path guards on `tieredQuote`).
+  NOT done: per-tier pruning of the saved work order (it keeps all items; only
+  `acceptedTier` + total are recorded); the marketing `s/[slug]` page is the
+  business card, not an approval page, so it's untouched.
+
 - **Security hardening (`SECURITY-AUDIT.md` — local, untracked)**: a multi-pass
   audit + remediation. API routes now require a Supabase JWT (`lib/api-auth.ts`
   `requireAuth`/`requireOwner`/`serviceClient`); service-role routes fail closed

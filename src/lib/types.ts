@@ -498,6 +498,12 @@ export interface RoomItem {
    *  inspect-first vs fixed-bid. The fee DOES roll into base subtotal
    *  (the visit itself is billable). */
   tnm?: boolean;
+  /** Good-Better-Best tier (cumulative). Absent/"base" = always included in
+   *  every option; "better" is added at the Better tier; "best" only at the
+   *  Best tier. Only meaningful when the quote's rooms blob carries
+   *  `data.tieredQuote = true`; otherwise every item is part of the single
+   *  quote regardless of this field, so legacy/non-tiered quotes are unchanged. */
+  tier?: "base" | "better" | "best";
 }
 
 export interface Room {

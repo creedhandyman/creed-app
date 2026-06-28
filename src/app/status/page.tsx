@@ -47,6 +47,13 @@ function StatusContent() {
   const [laborRate, setLaborRate] = useState<number | null>(null);
   // Drives the status-timeline reveal (steps light up + bar fills on load).
   const [revealed, setRevealed] = useState(false);
+  // Good-Better-Best: option prices off the blob + the customer's pick. The
+  // pick drives the displayed total, the authorize amount, and the deposit.
+  const [tiered, setTiered] = useState(false);
+  const [tierNames, setTierNames] = useState<{ better: string; best: string }>({ better: "Better", best: "Best" });
+  const [tierTotals, setTierTotals] = useState<{ base: number; better: number; best: number } | null>(null);
+  const [acceptedTier, setAcceptedTier] = useState<"base" | "better" | "best" | null>(null);
+  const [selectedTier, setSelectedTier] = useState<"base" | "better" | "best">("best");
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return; }
@@ -72,6 +79,23 @@ function StatusContent() {
             }
             if (Array.isArray(blob?.rooms)) setQuoteRooms(blob.rooms as Room[]);
             if (typeof blob?.laborRate === "number" && blob.laborRate > 0) setLaborRate(blob.laborRate);
+            // Good-Better-Best options (computed totals live on the blob).
+            const tt = blob?.tierTotals;
+            if (blob?.tieredQuote === true && tt && typeof tt.base === "number") {
+              setTiered(true);
+              setTierTotals({
+                base: tt.base || 0,
+                better: typeof tt.better === "number" ? tt.better : tt.base,
+                best: typeof tt.best === "number" ? tt.best : tt.base,
+              });
+              const tn = blob?.tierNames;
+              setTierNames({
+                better: typeof tn?.better === "string" && tn.better.trim() ? tn.better : "Better",
+                best: typeof tn?.best === "string" && tn.best.trim() ? tn.best : "Best",
+              });
+              const at = blob?.acceptedTier;
+              if (at === "base" || at === "better" || at === "best") { setAcceptedTier(at); setSelectedTier(at); }
+            }
           } catch { /* */ }
           if (data.org) setOrg(data.org as Organization);
         }
@@ -170,7 +194,7 @@ function StatusContent() {
       const res = await fetch("/api/jobs/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId, token, signatureType, signatureValue }),
+        body: JSON.stringify({ jobId, token, signatureType, signatureValue, tier: tiered ? selectedTier : undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -179,13 +203,18 @@ function StatusContent() {
         return;
       }
       const stampedDate = new Date().toLocaleDateString();
+      // For a tiered quote, lock the accepted total to the picked option so the
+      // post-approval display + deposit use it (the server did the same).
+      const acceptedTotal = tiered && tierTotals ? tierTotals[selectedTier] : job.total;
       setJob({
         ...job,
+        total: acceptedTotal,
         client_signature: signatureValue,
         signature_date: stampedDate,
         approved_at: new Date().toISOString(),
         status: data.status || (job.status === "quoted" ? "accepted" : job.status),
       });
+      if (tiered) setAcceptedTier(selectedTier);
     } catch (e) {
       setSignError(e instanceof Error ? e.message : "Network error — please try again.");
     }
@@ -214,7 +243,11 @@ function StatusContent() {
     if (!job || !jobId || !org) return;
     setDepositLoading(true);
     try {
-      const amount = Math.round(job.total * (depositPct / 100) * 100) / 100;
+      // Tier-aware: deposit on the customer's picked option, not the stored
+      // (Best-scope) job.total. Post-approval job.total already equals this,
+      // but compute it explicitly so the deposit can never bill the wrong tier.
+      const baseTotal = tiered && tierTotals ? tierTotals[selectedTier] : job.total;
+      const amount = Math.round(baseTotal * (depositPct / 100) * 100) / 100;
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,6 +295,13 @@ function StatusContent() {
 
   const hero = STATUS_HERO[job.status] || STATUS_HERO.quoted;
   const pct = workOrder.length ? Math.round((completedCount / workOrder.length) * 100) : 0;
+  // The customer's selected option drives the headline total + authorize
+  // amount before approval; after approval job.total is already the locked
+  // accepted total, so the two agree.
+  const effectiveTotal = tiered && tierTotals ? tierTotals[selectedTier] : (job.total || 0);
+  // Only surface the picker when the options actually differ in price — a
+  // tiered quote with nothing tagged better/best has three identical totals.
+  const showTierPicker = tiered && !!tierTotals && (tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
 
   // Per-category quote breakdown (same aggregation as the PDF estimate
   // summary): collapse rooms by name, section total = hrs × rate + raw
@@ -392,12 +432,52 @@ function StatusContent() {
           </div>
         )}
 
+        {/* Good-Better-Best: customer picks an option (cumulative). */}
+        {showTierPicker && tierTotals && (
+          <div className="card">
+            <div className="lbl">Choose your option</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              {([
+                { key: "base", name: "Base", total: tierTotals.base, hue: "#8a8a99" },
+                { key: "better", name: tierNames.better, total: tierTotals.better, hue: "#2E75B6" },
+                { key: "best", name: tierNames.best, total: tierTotals.best, hue: "#9d4edd" },
+              ] as const).map((opt) => {
+                const locked = !!job.client_signature;
+                const isSel = (locked ? acceptedTier : selectedTier) === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    disabled={locked}
+                    onClick={() => !locked && setSelectedTier(opt.key)}
+                    style={{
+                      textAlign: "center", padding: "12px 6px", borderRadius: 12,
+                      cursor: locked ? "default" : "pointer",
+                      border: isSel ? `2px solid ${opt.hue}` : "1px solid #1e1e2e",
+                      background: isSel ? `${opt.hue}22` : "#0d0d15",
+                      opacity: locked && !isSel ? 0.45 : 1,
+                    }}
+                  >
+                    <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 13, textTransform: "uppercase", letterSpacing: ".04em", color: opt.hue, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{opt.name}</div>
+                    <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, fontWeight: 700, color: "#fff", marginTop: 4 }}>${Math.round(opt.total).toLocaleString()}</div>
+                    {isSel && <div style={{ fontSize: 11, color: opt.hue, marginTop: 3 }}>{locked ? "✓ Accepted" : "✓ Selected"}</div>}
+                  </button>
+                );
+              })}
+            </div>
+            {!job.client_signature && (
+              <div style={{ fontSize: 12, color: "#8a8a99", marginTop: 8, textAlign: "center" }}>
+                Each option includes everything in the one before it. Pick one, then approve below.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Total */}
         {job.total > 0 && (
           <div className="total">
             <div style={{ minWidth: 0 }}>
-              <div className="lbl" style={{ margin: 0, color: "#3ee08f" }}>{job.status === "paid" ? "Amount Paid" : "Quote Total"}</div>
-              <div className="n">${job.total.toLocaleString()}</div>
+              <div className="lbl" style={{ margin: 0, color: "#3ee08f" }}>{job.status === "paid" ? "Amount Paid" : showTierPicker ? "Your Option" : "Quote Total"}</div>
+              <div className="n">${effectiveTotal.toLocaleString()}</div>
               {discount && (
                 <div style={{ fontSize: 13, color: "#3ee08f", marginTop: 3 }}>
                   ✓ {discount.label && discount.label.trim()
@@ -471,7 +551,7 @@ function StatusContent() {
                   />
                   <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 14, color: "#8a8a99", marginBottom: 11 }}>
                     <input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} style={{ marginTop: 2, cursor: "pointer" }} />
-                    <span>I authorize {org?.name || "this contractor"} to perform the work described above for ${job.total?.toFixed(2) || "0.00"}.</span>
+                    <span>I authorize {org?.name || "this contractor"} to perform the {showTierPicker ? "selected option" : "work"} described above for ${effectiveTotal.toFixed(2)}.</span>
                   </label>
                   <button className="btn glow-green" onClick={submitTypedSignature} disabled={!typedName.trim() || !authorized || submittingSig}>
                     <Icon name="check" size={17} /> {submittingSig ? "Saving…" : "Approve & Sign"}

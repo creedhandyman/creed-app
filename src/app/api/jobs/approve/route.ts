@@ -26,6 +26,10 @@ interface Body {
   /** For typed: the customer's typed full name. For canvas: a
    *  base64 data URL of the inked PNG. */
   signatureValue: string;
+  /** Good-Better-Best: the option the customer picked. When the job's blob
+   *  is tiered, this sets the accepted total (from the blob's tierTotals) and
+   *  records which tier was chosen. Ignored for non-tiered quotes. */
+  tier?: "base" | "better" | "best";
 }
 
 const trim = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
@@ -63,7 +67,7 @@ export async function POST(req: NextRequest) {
     // also feed the portal-session authorization below.
     const { data: jobs, error: getErr } = await supabase
       .from("jobs")
-      .select("id, status, client_signature, org_id, customer_id")
+      .select("id, status, client_signature, org_id, customer_id, rooms, total")
       .eq("id", jobId)
       .limit(1);
     if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 });
@@ -106,6 +110,25 @@ export async function POST(req: NextRequest) {
       approved_ip: ip || null,
     };
     if (job.status === "quoted") patch.status = "accepted";
+
+    // Tiered (Good-Better-Best) quote: the customer's picked option sets the
+    // accepted total + records which tier they chose. Option prices come from
+    // the blob's tierTotals (computed by the editor's authoritative pricing
+    // cascade) so there's no server-side re-derivation of the math.
+    const tier = body.tier;
+    if (tier === "base" || tier === "better" || tier === "best") {
+      try {
+        const blob = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+        const tt = blob?.tierTotals as Record<string, number> | undefined;
+        if (blob?.tieredQuote === true && tt && typeof tt[tier] === "number" && tt[tier] >= 0) {
+          patch.total = tt[tier];
+          blob.acceptedTier = tier;
+          patch.rooms = JSON.stringify(blob);
+        }
+      } catch {
+        /* malformed blob — fall back to the stored total */
+      }
+    }
 
     const { error: updErr } = await supabase
       .from("jobs")

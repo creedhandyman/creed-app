@@ -57,6 +57,12 @@ interface ExportOptions {
   depositPct?: number;
   quoteValidDays?: number;
   quoteTerms?: string;
+  /** Good-Better-Best tiered quote. When true (and some items are tagged
+   *  better/best), the PDF renders a compact 3-column "Choose your option"
+   *  block with each cumulative option's total + what it adds. tierNames
+   *  relabels the Better/Best columns. */
+  tieredQuote?: boolean;
+  tierNames?: { better: string; best: string };
 }
 
 const esc = (s: string) =>
@@ -148,6 +154,71 @@ export function exportQuotePdf(opts: ExportOptions) {
   const taxAmount = taxCalc.taxAmount;
   const taxLabel = taxCalc.taxLabel;
   const grandTotal = Math.round((baseAfterDiscount + taxAmount) * 100) / 100;
+
+  // Good-Better-Best cumulative options. Each option re-runs the SAME
+  // labor/markup/min-floor/discount/tax cascade over its cumulative item set.
+  const tieredQuote = opts.tieredQuote === true;
+  const tierNames = {
+    better: (opts.tierNames?.better || "").trim() || "Better",
+    best: (opts.tierNames?.best || "").trim() || "Best",
+  };
+  const tierItemsOf = (t: "base" | "better" | "best"): RoomItem[] =>
+    t === "base"
+      ? allItems.filter((i) => !i.tier || i.tier === "base")
+      : t === "better"
+        ? allItems.filter((i) => i.tier !== "best")
+        : allItems;
+  const tierTotalOf = (items: RoomItem[]): number => {
+    const rawHrs = items.reduce((s, it) => s + it.laborHrs, 0);
+    const mApplies = minLaborHours > 0 && rawHrs > 0 && rawHrs < minLaborHours;
+    const hrs = mApplies ? minLaborHours : rawHrs;
+    const labor = Math.round(hrs * rate * 100) / 100;
+    const mat = items.reduce((s, it) => {
+      const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
+      return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+    }, 0);
+    const preDisc = labor + mat + tripFee;
+    const dAmt = discount
+      ? (discount.type === "percent"
+          ? Math.round(preDisc * (discount.value / 100) * 100) / 100
+          : Math.min(preDisc, discount.value))
+      : 0;
+    const baseAfter = Math.max(0, Math.round((preDisc - dAmt) * 100) / 100);
+    const tax = computeTax({ labor, materials: mat, tripFee, discountAmount: dAmt, taxPct, taxMode }).taxAmount;
+    return Math.round((baseAfter + tax) * 100) / 100;
+  };
+  const betterAdds = allItems.filter((i) => i.tier === "better");
+  const bestAdds = allItems.filter((i) => i.tier === "best");
+  const showTiers = tieredQuote && (betterAdds.length > 0 || bestAdds.length > 0);
+  const tierCols = showTiers
+    ? [
+        { name: "Base", total: tierTotalOf(tierItemsOf("base")), adds: [] as RoomItem[], note: "Core scope" },
+        { name: tierNames.better, total: tierTotalOf(tierItemsOf("better")), adds: betterAdds, note: "Everything in Base, plus:" },
+        { name: tierNames.best, total: tierTotalOf(tierItemsOf("best")), adds: bestAdds, note: `Everything in ${tierNames.better}, plus:` },
+      ]
+    : [];
+  const tiersHtml = showTiers
+    ? `
+<h2>Choose Your Option</h2>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px;page-break-inside:avoid">
+  ${tierCols
+    .map((col, idx) => {
+      const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
+      const addsList = col.adds.length
+        ? `<ul style="padding-left:16px;margin:6px 0 0;font-size:11px;color:#444;line-height:1.5">${col.adds.slice(0, 5).map((a) => `<li>${esc(a.detail)}</li>`).join("")}${col.adds.length > 5 ? `<li>+${col.adds.length - 5} more</li>` : ""}</ul>`
+        : `<div style="font-size:11px;color:#888;margin-top:6px">Core scope included</div>`;
+      return `<div style="border:2px solid ${hue};border-radius:10px;padding:12px;page-break-inside:avoid">
+      <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}</div>
+      <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:${hue};margin:4px 0 2px">$${col.total.toFixed(0)}</div>
+      <div style="font-size:11px;color:#666">${esc(col.note)}</div>
+      ${addsList}
+    </div>`;
+    })
+    .join("")}
+</div>
+<div style="font-size:11px;color:#888;margin-bottom:18px">Each option is cumulative — it includes everything in the option before it. The detailed breakdown below covers the full (${esc(tierNames.best)}) scope; pick the option that fits.</div>
+`
+    : "";
 
   const quoteNum = jobId
     ? "QT-" + jobId.slice(0, 6).toUpperCase()
@@ -324,6 +395,8 @@ ${(client || clientEmail || clientPhone) ? `
   <div class="box"><div class="label">License No</div><div class="value">${esc(orgLicense || "—")}</div></div>
   <div class="box"><div class="label">Valid For</div><div class="value">30 Days</div></div>
 </section>
+
+${tiersHtml}
 
 <h2>Estimate Summary</h2>
 <table>

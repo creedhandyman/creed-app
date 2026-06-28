@@ -44,6 +44,8 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   let laborRateOverride: number | null = null;
   let minLaborHoursOverride: number | null = null;
   let taxModeOverride: "total" | "materials" | "none" | null = null;
+  let tieredQuote = false;
+  let tierNames: { better: string; best: string } | undefined;
   try {
     const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
     rooms = (data?.rooms || []) as Room[];
@@ -69,6 +71,14 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     const tm = data?.taxMode;
     if (tm === "total" || tm === "materials" || tm === "none") {
       taxModeOverride = tm;
+    }
+    tieredQuote = data?.tieredQuote === true;
+    const tn = data?.tierNames;
+    if (tn && (typeof tn.better === "string" || typeof tn.best === "string")) {
+      tierNames = {
+        better: typeof tn.better === "string" && tn.better.trim() ? tn.better : "Better",
+        best: typeof tn.best === "string" && tn.best.trim() ? tn.best : "Best",
+      };
     }
   } catch {
     /* malformed rooms — render with defaults */
@@ -106,6 +116,8 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     depositPct: org?.deposit_pct,
     quoteValidDays: org?.quote_valid_days,
     quoteTerms: org?.quote_terms,
+    tieredQuote,
+    tierNames,
     orgPhone: org?.phone,
     orgEmail: org?.email,
     orgLicense: org?.license_num,
