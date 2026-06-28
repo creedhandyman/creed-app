@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 import type { Organization } from "@/lib/types";
 import { DEFAULT_BRAND, isHex, normHex, shade, brandGrad, brandInk, isExtremeLuminance } from "@/lib/brand";
+import { TRADE_IDS, tradeConfig, tradePatch, resolvePrimaryTrade } from "@/lib/trades";
 
 const BRAND_PRESETS = ["#2E75B6", "#0E9F6E", "#C0392B", "#7C3AED", "#E8772E", "#0891B2", "#D6336C", "#475569", "#B45309", "#1E40AF", "#15803D", "#9D174D"];
 
@@ -68,6 +69,16 @@ export default function BrandingSettings() {
     await db.patch("organizations", org.id, { brand_color: c1, brand_color_2: c2 });
     await refreshOrg();
     useStore.getState().showToast("Brand color updated", "success");
+  };
+
+  // Changing the primary trade re-tailors the default labor rate + seeds the
+  // matching per-trade rate (without clobbering rates set by hand) and shifts
+  // the materials/checklist/units defaults. Resolved everywhere via
+  // resolvePrimaryTrade(org.primary_trade), so legacy orgs read as handyman.
+  const savePrimaryTrade = async (id: string) => {
+    await db.patch("organizations", org.id, tradePatch(id, org.trade_rates));
+    await refreshOrg();
+    useStore.getState().showToast(`Primary trade set to ${tradeConfig(id).name}`, "success");
   };
 
   // Merge a patch into the org's site_content JSON without clobbering the
@@ -344,6 +355,30 @@ export default function BrandingSettings() {
         )}
         <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.5 }}>
           Text auto-flips for readability. Job-status colors (quoted / active / paid…) stay fixed — they carry meaning.
+        </div>
+      </div>
+
+      {/* Primary trade — tailors rate, materials, checklist, units, Grizz copy, starters */}
+      <div className="cd mb">
+        <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name={tradeConfig(org.primary_trade).icon} size={16} color="var(--color-primary)" />
+          {t("ops.primaryTrade")}
+        </h4>
+        <div className="dim" style={{ fontSize: 12.5, marginBottom: 12 }}>
+          {t("ops.primaryTradeHelp")}
+        </div>
+        <select
+          value={resolvePrimaryTrade(org.primary_trade)}
+          onChange={(e) => savePrimaryTrade(e.target.value)}
+          style={{ width: "100%", fontSize: 15 }}
+        >
+          {TRADE_IDS.map((id) => (
+            <option key={id} value={id}>{tradeConfig(id).name}</option>
+          ))}
+        </select>
+        <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.5 }}>
+          Re-tailors the default labor rate (${tradeConfig(resolvePrimaryTrade(org.primary_trade)).defaultRate}/hr),
+          materials, inspection checklist, and quote units. Per-trade rates you set by hand stay put.
         </div>
       </div>
 

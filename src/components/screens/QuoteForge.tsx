@@ -25,6 +25,7 @@ import {
   AI_SYSTEM_PROMPT_BASE,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
+import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/lib/trades";
 import { exportQuotePdf } from "@/lib/export-pdf";
 import { computeTax, resolveTaxMode, type TaxMode } from "@/lib/tax";
 import Inspector from "./Inspector";
@@ -2947,6 +2948,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           nc={nc} setNc={setNc} nh={nh} setNh={setNh} nm={nm} setNm={setNm}
           nsq={nsq} setNsq={setNsq} ncn={ncn} setNcn={setNcn}
           addItem={addItem} rooms={rooms}
+          starterItems={tradeConfig(resolvePrimaryTrade(org?.primary_trade)).starterItems}
+          unitsHint={tradeConfig(resolvePrimaryTrade(org?.primary_trade)).units}
+          primaryBucket={primaryTradeToRateCategory(org?.primary_trade) || "General"}
         />
       )}
     </div>
@@ -3745,6 +3749,7 @@ function IssuesTab({
 function AddItemForm({
   nr, setNr, na, setNa, nd, setNd, nc, setNc, nh, setNh, nm, setNm,
   nsq, setNsq, ncn, setNcn, addItem, rooms,
+  starterItems, unitsHint, primaryBucket,
 }: {
   nr: string; setNr: (v: string) => void;
   na: string; setNa: (v: string) => void;
@@ -3756,6 +3761,10 @@ function AddItemForm({
   ncn: "D" | "P" | "F" | "-"; setNcn: (v: "D" | "P" | "F" | "-") => void;
   addItem: () => void;
   rooms: Room[];
+  // Trade-tailored quick-adds + unit hint (from the org's primary_trade).
+  starterItems?: string[];
+  unitsHint?: string;
+  primaryBucket?: string;
 }) {
   // Suggest area names from the current quote: pull any "Bedroom 1 — …" or
   // "Kitchen — …" prefixes from existing detail strings so the user can
@@ -3769,6 +3778,31 @@ function AddItemForm({
   )).sort();
   return (
     <div className="cd">
+      {/* Trade-tailored starter items — only on a fresh quote (no rooms yet).
+          Tapping prefills the item + its trade bucket; the user sets hrs/mat. */}
+      {rooms.length === 0 && starterItems && starterItems.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12 }} className="dim">
+            Starter items{unitsHint ? ` · measured in ${unitsHint}` : ""}
+          </label>
+          <div className="row" style={{ flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+            {starterItems.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="bo"
+                style={{ fontSize: 12.5, padding: "5px 10px", width: "auto" }}
+                onClick={() => { setNd(s); if (primaryBucket && !nr) setNr(primaryBucket); }}
+              >
+                + {s}
+              </button>
+            ))}
+          </div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 5 }}>
+            Tap to prefill, then set hours &amp; materials.
+          </div>
+        </div>
+      )}
       <div className="g2 mb">
         <div>
           <label style={{ fontSize: 12 }} className="dim">Trade *</label>

@@ -182,6 +182,18 @@ src/
   fields fall through). `lib/learning.ts` `recordJobOutcome` writes the rows.
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
+- Primary trade (per-trade tailoring — picked in onboarding + Ops → Settings):
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS primary_trade TEXT DEFAULT 'handyman';`
+  Drives defaults via `src/lib/trades.ts` `TRADE_CONFIG` (rate, materials,
+  inspection checklist, quote units, Grizz copy, starter quote items). Reads
+  coalesce through `resolvePrimaryTrade(org.primary_trade)` → `'handyman'`, so
+  existing orgs are unchanged until they pick. Until this runs, saving a trade
+  toasts a "column does not exist" error (best-effort) but nothing breaks.
+  NOTE three trade namespaces stay separate: primary_trade ids (trades.ts keys)
+  vs. the parser's `TRADE_CATEGORY_LIST` (quote buckets + `trade_rates` keys)
+  vs. materials-db categories. `primaryTradeToRateCategory()` bridges ids→rate
+  keys; only clean-match trades (plumber/electrician/hvac/painter/flooring) seed
+  `trade_rates`, so the "General" catch-all is never polluted.
 - Per-org brand color (threads through app accents, the digital business card,
   and every PDF):
   ```sql

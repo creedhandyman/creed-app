@@ -8,9 +8,24 @@ import { Icon } from "../Icon";
 import CameraModal from "../CameraModal";
 import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../VoiceWalk";
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
+import { tradeConfig, resolvePrimaryTrade } from "@/lib/trades";
 import VoiceWalkTip from "../VoiceWalkTip";
 
 /* ── Preset rooms and items ── */
+
+/**
+ * Gap-fill an empty / generic ("General") checklist with the org's
+ * primary-trade checklist. Specialized trades (plumber, electrician, …) get
+ * a relevant default checklist on rooms the inspection type has no preset for,
+ * without ever overriding the real room presets (Kitchen, Bath, …). Handyman
+ * has an empty template, so its behavior is unchanged.
+ */
+function applyTradeChecklist(base: string[], primaryTrade?: string | null): string[] {
+  const generic = base.length === 0 || (base.length === 1 && base[0] === "General");
+  if (!generic) return base;
+  const tradeList = tradeConfig(resolvePrimaryTrade(primaryTrade)).checklistTemplate;
+  return tradeList.length ? tradeList : base;
+}
 export const ROOM_PRESETS: Record<string, string[]> = {
   Kitchen: ["Sink/Faucet", "Counters", "Cabinets", "Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Appliances", "Electrical/Lights", "Caulking"],
   "Living Room": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Electrical/Lights", "Baseboards"],
@@ -495,11 +510,13 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         return;
       }
 
-      // AI categorization
-      const checklist = ROOM_PRESETS[roomName] || (() => {
+      // AI categorization. For rooms with no preset, gap-fill with the org's
+      // primary-trade checklist so the AI gets trade-relevant item names.
+      const baseChecklist = ROOM_PRESETS[roomName] || (() => {
         const baseKey = Object.keys(ROOM_PRESETS).find((k) => roomName.startsWith(k.replace(/ \d+$/, "")));
         return baseKey ? ROOM_PRESETS[baseKey] : [];
       })();
+      const checklist = applyTradeChecklist(baseChecklist, useStore.getState().org?.primary_trade);
       console.log(`[Inspector] AI for "${roomName}": ${transcript.length} chars, ${result.photos.length} photos, ${checklist.length} checklist items`);
       const items = await aiParseVoiceWalkRoom(
         roomName,
@@ -562,7 +579,10 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     // Type-aware item picker. Falls back to the standard ROOM_PRESETS
     // for any area the active type doesn't have an override for.
     const itemsFor = (room: string): string[] => {
-      const fromType = activeTypeConfig.itemsForRoom(room);
+      const fromType = applyTradeChecklist(
+        activeTypeConfig.itemsForRoom(room),
+        useStore.getState().org?.primary_trade,
+      );
       return fromType.length > 0 ? fromType : ["General"];
     };
 

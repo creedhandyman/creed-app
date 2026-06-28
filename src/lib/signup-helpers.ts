@@ -29,6 +29,7 @@ export async function bootstrapOrgAndProfile(
     license_num: "",
     address: "",
     default_rate: 55,
+    primary_trade: "handyman",
     trial_start: new Date().toISOString(),
     subscription_status: "trial",
   });

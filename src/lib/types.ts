@@ -28,6 +28,11 @@ export interface Organization {
   tax_mode?: "total" | "materials" | "none";
   trade_rates?: string; // JSON: { "Plumbing": 65, "Electrical": 70, ... }
   licensed_trades?: string; // JSON array: ["Electrical","Plumbing","HVAC","Roofing"]
+  /** Primary trade id (handyman | plumber | electrician | hvac | painter |
+   *  flooring | roofer | gc | landscaper). Tailors default rate, materials,
+   *  inspection checklist, quote units, Grizz copy, and starter items. See
+   *  src/lib/trades.ts. Absent/legacy rows resolve to 'handyman'. */
+  primary_trade?: string;
   quest_config?: string;
   stripe_account_id?: string;
   stripe_connected?: boolean;

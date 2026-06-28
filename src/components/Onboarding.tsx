@@ -5,9 +5,10 @@ import { db } from "@/lib/supabase";
 import type { Organization, Profile } from "@/lib/types";
 import { Icon } from "./Icon";
 import Grizz from "./Grizz";
+import { TRADE_IDS, tradeConfig, tradePatch } from "@/lib/trades";
 
 /**
- * Guided onboarding led by Grizz, the handyman-bear mascot. Seven steps walk a
+ * Guided onboarding led by Grizz, the handyman-bear mascot. Eight steps walk a
  * new owner from setup through the whole job flow (quote → schedule → work →
  * paid) so they understand the app before landing in it.
  *
@@ -17,11 +18,13 @@ import Grizz from "./Grizz";
  * (setOrg/setUser, which unmounts onboarding into the app) at the final step,
  * so the tour can keep showing after the business is created.
  *
- * Steps: 0 welcome · 1 setup (the real form) · 2 quote · 3 schedule ·
- * 4 work mode · 5 get paid · 6 done. Steps 2–5 are purely educational.
+ * Steps: 0 welcome · 1 setup (the real form) · 2 trade picker · 3 quote ·
+ * 4 schedule · 5 work mode · 6 get paid · 7 done. Steps 3–6 are purely
+ * educational; the trade picker (2) only shows when CREATING a business —
+ * joiners skip it and inherit the org's existing trade.
  */
 
-const TOTAL = 7;
+const TOTAL = 8;
 
 export default function Onboarding() {
   const user = useStore((s) => s.user)!;
@@ -37,6 +40,9 @@ export default function Onboarding() {
   const [inviteCode, setInviteCode] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
+  // Primary trade chosen on step 2 (create flow only). Defaults to handyman
+  // so the multi-trade behavior is unchanged if the user skips the pick.
+  const [selectedTrade, setSelectedTrade] = useState("handyman");
 
   // ── Tour state. createdBiz holds the freshly inserted rows so the tour keeps
   // rendering; finish() applies them to the store to enter the app.
@@ -44,10 +50,10 @@ export default function Onboarding() {
   const [createdBiz, setCreatedBiz] = useState<{ org: Organization; profile: Profile } | null>(null);
   const created = createdBiz !== null;
 
-  // ── Quote-total count-up for the Step 2 demo.
+  // ── Quote-total count-up for the quote demo (stepIdx 3, "Step 1 of 4").
   const [quoteVal, setQuoteVal] = useState(0);
   useEffect(() => {
-    if (stepIdx !== 2) { setQuoteVal(0); return; }
+    if (stepIdx !== 3) { setQuoteVal(0); return; }
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (reduce) { setQuoteVal(8450); return; }
     let raf = 0;
@@ -76,6 +82,7 @@ export default function Onboarding() {
         license_num: "",
         address: city,
         default_rate: 55,
+        primary_trade: "handyman",
         trial_start: new Date().toISOString(),
         subscription_status: "trial",
       });
@@ -127,7 +134,7 @@ export default function Onboarding() {
 
       setCreatedBiz({ org, profile: profileResult[0] });
       setSaving(false);
-      setStepIdx(2);
+      setStepIdx(3); // skip the trade picker — joiners inherit the org's trade
     } catch (e) {
       setErr("Something went wrong");
       console.error(e);
@@ -135,32 +142,56 @@ export default function Onboarding() {
     }
   };
 
+  // Persist the chosen trade to the created org (create flow, step 2).
+  // Best-effort: db.patch toasts its own errors. Also updates the stashed
+  // org so finish()/the back button reflect the pick. tradePatch seeds
+  // default_rate + (for clean-match trades) trade_rates without clobbering.
+  const saveTrade = async () => {
+    if (!createdBiz || mode !== "create") return;
+    const patch = tradePatch(selectedTrade, createdBiz.org.trade_rates);
+    await db.patch("organizations", createdBiz.org.id, patch);
+    setCreatedBiz((prev) => (prev ? { ...prev, org: { ...prev.org, ...patch } } : prev));
+  };
+
   // Apply the created rows to the store → the no-org gate now sees an org and
-  // renders the app. Never enter the app without having created/joined.
+  // renders the app. Never enter the app without having created/joined. For a
+  // create flow we merge the trade patch in so the app boots with the right
+  // rate/trade even if the DB write hasn't round-tripped yet.
   const finish = () => {
     if (!createdBiz) { setStepIdx(1); return; }
-    setOrg(createdBiz.org);
+    const org = mode === "create"
+      ? { ...createdBiz.org, ...tradePatch(selectedTrade, createdBiz.org.trade_rates) }
+      : createdBiz.org;
+    setOrg(org);
     setUser(createdBiz.profile);
   };
 
-  const minStep = created ? 2 : 0; // can't walk back into setup once created (avoids a double-insert)
+  // Once created, can't walk back into setup (avoids a double-insert). Joiners
+  // also can't reach the trade picker (step 2) they skipped past.
+  const minStep = created ? (mode === "join" ? 3 : 2) : 0;
   const back = () => setStepIdx((i) => Math.max(minStep, i - 1));
-  const skip = () => (created ? finish() : setStepIdx(1));
+  const skip = () => {
+    if (created && mode === "create" && stepIdx === 2) void saveTrade();
+    return created ? finish() : setStepIdx(1);
+  };
   const onPrimary = () => {
     if (saving) return;
     if (stepIdx === 0) return setStepIdx(1);
     if (stepIdx === 1) return mode === "create" ? createBusiness() : joinBusiness();
-    if (stepIdx === 6) return finish();
+    if (stepIdx === 2) { void saveTrade(); return setStepIdx(3); }
+    if (stepIdx === 7) return finish();
     setStepIdx((i) => Math.min(TOTAL - 1, i + 1));
   };
 
   const primaryLabel =
     stepIdx === 0 ? "Get started"
     : stepIdx === 1 ? (saving ? (mode === "create" ? "Creating…" : "Joining…") : mode === "create" ? "Create my business" : "Join team")
-    : stepIdx === 6 ? "Start my first quote"
+    : stepIdx === 2 ? "Continue"
+    : stepIdx === 7 ? "Start my first quote"
     : "Next";
 
-  const showSkip = stepIdx !== 1 && stepIdx !== 6;
+  const showSkip = stepIdx !== 1 && stepIdx !== 7;
+  const trade = tradeConfig(selectedTrade); // live preview on the step-2 picker
 
   return (
     <div style={{ minHeight: "100dvh", background: "radial-gradient(900px 520px at 50% -6%,#13284c 0%,#0a0a0f 60%)", display: "flex", justifyContent: "center", color: "#f1f2f6" }}>
@@ -239,8 +270,57 @@ export default function Onboarding() {
               </>
             )}
 
-            {/* 2 — QUOTE */}
+            {/* 2 — TRADE PICKER (create flow only; joiners skip to step 3) */}
             {stepIdx === 2 && (
+              <>
+                <Grizz pose="point" size={92} style={{ margin: "2px auto 0", display: "block" }} />
+                <div className="ob-speech">
+                  <div className="ob-who">Grizz</div>
+                  <p>{trade.grizzLine}</p>
+                </div>
+
+                <h2 className="ob-h2" style={{ fontSize: 19, textAlign: "left", marginTop: 14 }}>What&apos;s your trade?</h2>
+                <div style={{ fontSize: 12.5, color: "#9a9aa8", marginTop: 2, marginBottom: 10 }}>
+                  Tunes your rate, materials, checklist, and units. You can change it anytime in Settings.
+                </div>
+
+                <div className="ob-trades">
+                  {TRADE_IDS.map((id) => {
+                    const tc = tradeConfig(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        className={"ob-tile" + (selectedTrade === id ? " on" : "")}
+                        onClick={() => setSelectedTrade(id)}
+                      >
+                        <span className="ic"><Icon name={tc.icon} size={18} color="#7fb6ff" /></span>
+                        <span className="nm">{tc.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="ob-tpreview">
+                  <div className="ob-who" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Icon name="sparkle" size={13} color="#7fb6ff" /> I&apos;ll set up for you
+                  </div>
+                  <div className="ob-chips">
+                    <span className="ob-chip">Default rate <b>${trade.defaultRate}/hr</b></span>
+                    <span className="ob-chip">Units <b>{trade.units}</b></span>
+                    <span className="ob-chip">{trade.name} checklist <b>✓</b></span>
+                  </div>
+                  <div className="ob-starter">
+                    {trade.starterItems.map((it) => (
+                      <div className="it" key={it}><span className="d" />{it}</div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* 3 — QUOTE */}
+            {stepIdx === 3 && (
               <>
                 <div className="ob-speech" style={{ marginTop: 4 }}>
                   <div className="ob-who">Step 1 of 4 · Grizz</div>
@@ -256,8 +336,8 @@ export default function Onboarding() {
               </>
             )}
 
-            {/* 3 — SCHEDULE */}
-            {stepIdx === 3 && (
+            {/* 4 — SCHEDULE */}
+            {stepIdx === 4 && (
               <>
                 <div className="ob-speech" style={{ marginTop: 4 }}>
                   <div className="ob-who">Step 2 of 4 · Grizz</div>
@@ -277,8 +357,8 @@ export default function Onboarding() {
               </>
             )}
 
-            {/* 4 — WORK MODE */}
-            {stepIdx === 4 && (
+            {/* 5 — WORK MODE */}
+            {stepIdx === 5 && (
               <>
                 <div className="ob-speech" style={{ marginTop: 4 }}>
                   <div className="ob-who">Step 3 of 4 · Grizz</div>
@@ -300,8 +380,8 @@ export default function Onboarding() {
               </>
             )}
 
-            {/* 5 — GET PAID */}
-            {stepIdx === 5 && (
+            {/* 6 — GET PAID */}
+            {stepIdx === 6 && (
               <>
                 <div className="ob-speech" style={{ marginTop: 4 }}>
                   <div className="ob-who">Step 4 of 4 · Grizz</div>
@@ -321,8 +401,8 @@ export default function Onboarding() {
               </>
             )}
 
-            {/* 6 — DONE */}
-            {stepIdx === 6 && (
+            {/* 7 — DONE */}
+            {stepIdx === 7 && (
               <>
                 <Grizz pose="cheer" bob style={{ margin: "2px auto 0", display: "block" }} />
                 {[
@@ -354,7 +434,7 @@ export default function Onboarding() {
           )}
           <button className="ob-btn ob-next" onClick={onPrimary} disabled={saving}>
             {primaryLabel}
-            <Icon name={stepIdx === 6 ? "party" : "next"} size={16} color="#7dffb8" />
+            <Icon name={stepIdx === 7 ? "party" : "next"} size={16} color="#7dffb8" />
           </button>
         </div>
       </div>
@@ -382,6 +462,19 @@ const OB_CSS = `
 .ob-toggle{display:flex;margin-top:12px;border-radius:10px;overflow:hidden;border:1px solid #2a2a3a}
 .ob-toggle button{flex:1;padding:9px;font-family:Oswald,sans-serif;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em;background:#0d0d15;color:#9a9aa8;border:none;cursor:pointer}
 .ob-toggle button.on{background:#2E75B6;color:#fff}
+.ob-trades{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px}
+.ob-tile{display:flex;flex-direction:column;align-items:center;gap:6px;background:#12121a;border:1px solid #2a2a3a;border-radius:13px;padding:11px 6px;cursor:pointer;transition:.15s}
+.ob-tile:hover{border-color:#3a3a4a}
+.ob-tile.on{border-color:#2E75B6;background:rgba(46,117,182,.14);box-shadow:0 0 16px -5px rgba(46,117,182,.8)}
+.ob-tile .ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#1c1c28}
+.ob-tile.on .ic{background:rgba(46,117,182,.22)}
+.ob-tile .nm{font-family:Oswald,sans-serif;font-weight:600;font-size:11px;letter-spacing:.2px;text-transform:uppercase;color:#e6e8ee;text-align:center;line-height:1.1}
+.ob-tpreview{background:linear-gradient(135deg,rgba(46,117,182,.1),rgba(46,117,182,.02));border:1px solid rgba(46,117,182,.35);border-radius:14px;padding:13px;margin-top:13px}
+.ob-chips{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 10px}
+.ob-chip{font-size:11px;font-weight:600;padding:5px 10px;border-radius:9px;background:#12121a;border:1px solid #2a2a3a;color:#cfd2da}
+.ob-chip b{color:#7fb6ff}
+.ob-starter .it{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#cfd2da;padding:3px 0}
+.ob-starter .d{width:6px;height:6px;border-radius:50%;background:#7fb6ff;flex-shrink:0}
 .ob-demo{background:#12121a;border:1px solid #1e1e2e;border-radius:16px;padding:16px;margin-top:6px}
 .ob-stepnum{display:inline-flex;align-items:center;gap:8px;font-family:Oswald,sans-serif;font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#7fb6ff;margin-bottom:10px}
 .ob-stepnum .b{width:24px;height:24px;border-radius:7px;background:rgba(46,117,182,.18);display:flex;align-items:center;justify-content:center}

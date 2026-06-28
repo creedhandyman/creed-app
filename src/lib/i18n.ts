@@ -254,6 +254,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "ops.customRatesHelp": "Set hourly rates per trade for quotes.",
     "ops.businessInfo": "Business Info",
     "ops.changeLogo": "Change Logo",
+    "ops.primaryTrade": "Primary Trade",
+    "ops.primaryTradeHelp": "Sets defaults for rate, materials, checklist, units, Grizz copy, and starter quotes.",
 
     // Billing
     "billing.processing": "Payment Processing",
@@ -893,6 +895,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "ops.customRatesHelp": "Establece tarifas por hora por oficio para cotizaciones.",
     "ops.businessInfo": "Info del Negocio",
     "ops.changeLogo": "Cambiar Logo",
+    "ops.primaryTrade": "Oficio Principal",
+    "ops.primaryTradeHelp": "Define los valores predeterminados de tarifa, materiales, lista de verificación, unidades, mensajes de Grizz y cotizaciones iniciales.",
 
     // Billing
     "billing.processing": "Procesamiento de Pagos",
