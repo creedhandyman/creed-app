@@ -356,6 +356,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // `data.tierNames`; the per-item tier rides on each RoomItem (data.rooms).
   const [tieredQuote, setTieredQuote] = useState(false);
   const [tierNames, setTierNames] = useState<{ better: string; best: string }>({ better: "Better", best: "Best" });
+  // Which tier you're currently organizing in the editor (UI-only, not saved).
+  // The 3 total tiles double as this switch; each line item then shows ONE
+  // include checkbox for the active tier, so tagging an item never overwrites
+  // another tier's selection. Tiers stack (cumulative), so lower tiers show as
+  // inherited + locked when you're editing a higher one.
+  const [editTier, setEditTier] = useState<"base" | "better" | "best">("base");
   // Guide-tab persistent state — lifted out of GuideTab so adds survive
   // save+reload. Bernard hit the bug where new shopping-list items
   // disappeared on save: GuideTab held them in local component state that
@@ -2097,21 +2103,41 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               <input value={tierNames.better} onChange={(e) => setTierNames((n) => ({ ...n, better: e.target.value }))} onBlur={(e) => { if (!e.target.value.trim()) setTierNames((n) => ({ ...n, better: "Better" })); }} placeholder="Better" style={{ flex: "1 1 90px", minWidth: 80, padding: "4px 8px", fontSize: 14 }} />
               <input value={tierNames.best} onChange={(e) => setTierNames((n) => ({ ...n, best: e.target.value }))} onBlur={(e) => { if (!e.target.value.trim()) setTierNames((n) => ({ ...n, best: "Best" })); }} placeholder="Best" style={{ flex: "1 1 90px", minWidth: 80, padding: "4px 8px", fontSize: 14 }} />
             </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: "#888", marginTop: 10, marginBottom: 4, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}>
+              Tap a tier to organize it
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
               {([
-                { key: "base", name: "Base", total: tierTotals.base, hue: "#888" },
+                { key: "base", name: "Base", total: tierTotals.base, hue: "#8a8a99" },
                 { key: "better", name: tierNames.better, total: tierTotals.better, hue: "#2E75B6" },
                 { key: "best", name: tierNames.best, total: tierTotals.best, hue: "#9d4edd" },
-              ] as const).map((t) => (
-                <div key={t.key} style={{ flex: 1, textAlign: "center", border: `1px solid ${t.hue}55`, borderRadius: 8, padding: "6px 4px", background: `${t.hue}14` }}>
-                  <div style={{ fontSize: 9, letterSpacing: ".06em", textTransform: "uppercase", color: t.hue, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
-                  <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "#fff", marginTop: 1 }}>${t.total.toFixed(0)}</div>
-                </div>
-              ))}
+              ] as const).map((t) => {
+                const on = editTier === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setEditTier(t.key)}
+                    style={{
+                      flex: 1, textAlign: "center", borderRadius: 8, padding: "7px 4px", cursor: "pointer",
+                      border: on ? `2px solid ${t.hue}` : `1px solid ${t.hue}55`,
+                      background: on ? `${t.hue}2e` : `${t.hue}12`,
+                      boxShadow: on ? `0 0 12px -3px ${t.hue}` : "none",
+                    }}
+                  >
+                    <div style={{ fontSize: 9, letterSpacing: ".06em", textTransform: "uppercase", color: t.hue, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
+                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "#fff", marginTop: 1 }}>${t.total.toFixed(0)}</div>
+                  </button>
+                );
+              })}
             </div>
-            <div className="dim" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4 }}>
-              Tag each line item below. Tiers are cumulative — {tierNames.best} includes everything.
-              {!hasBetter && !hasBest && " Tip: tag some items as " + tierNames.better + "/" + tierNames.best + " so the options differ."}
+            <div className="dim" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.45 }}>
+              {editTier === "base"
+                ? <>Organizing <b style={{ color: "#bbb" }}>Base</b> — the core scope in every option. Uncheck a line below to make it an upgrade.</>
+                : editTier === "better"
+                ? <>Organizing <b style={{ color: "#7fb6ff" }}>{tierNames.better}</b>. Check the upgrades included here; uncheck one to push it to {tierNames.best}-only.</>
+                : <><b style={{ color: "#c79bff" }}>{tierNames.best}</b> includes everything. Items marked {tierNames.best}-only were left out of {tierNames.better}.</>}
+              {!hasBetter && !hasBest && <> Nothing tagged yet — all three options are identical until you split the work.</>}
             </div>
           </>
         )}
@@ -2877,7 +2903,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
       />
 
       {/* QUOTE TAB */}
-      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} />}
+      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} />}
 
       {/* GUIDE TAB */}
       {tab === "guide" && (
@@ -3081,6 +3107,7 @@ function QuoteTab({
   logItemEdit,
   tieredQuote,
   tierNames,
+  editTier,
 }: {
   rooms: Room[];
   rate: number;
@@ -3092,6 +3119,7 @@ function QuoteTab({
   logItemEdit: (rn: string, id: string) => void;
   tieredQuote?: boolean;
   tierNames?: { better: string; best: string };
+  editTier?: "base" | "better" | "best";
 }) {
   const [expandedMat, setExpandedMat] = useState<string | null>(null);
   // Colored trade dot for each room/area header (matches the mock's tradehdr).
@@ -3126,26 +3154,42 @@ function QuoteTab({
                     <div style={{ fontSize: 13 }} className="dim">
                       {it.comment}
                     </div>
-                    {tieredQuote && (
-                      <div style={{ display: "inline-flex", marginTop: 6, borderRadius: 6, overflow: "hidden", border: "1px solid var(--color-border-dark)" }}>
-                        {([
-                          { key: "base", label: "Base", hue: "#888" },
-                          { key: "better", label: tierNames?.better || "Better", hue: "#2E75B6" },
-                          { key: "best", label: tierNames?.best || "Best", hue: "#9d4edd" },
-                        ] as const).map((opt) => {
-                          const active = (it.tier || "base") === opt.key;
-                          return (
-                            <button
-                              key={opt.key}
-                              onClick={() => upItem(rm.name, it.id, "tier", opt.key)}
-                              style={{ padding: "3px 9px", fontSize: 11, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".03em", border: "none", cursor: "pointer", background: active ? opt.hue : "transparent", color: active ? "#fff" : "#888" }}
-                            >
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                    {tieredQuote && (() => {
+                      const RANK = { base: 0, better: 1, best: 2 } as const;
+                      const et = (editTier || "base") as "base" | "better" | "best";
+                      const t = ((it.tier as "base" | "better" | "best") || "base");
+                      const included = RANK[t] <= RANK[et];   // in the active option
+                      const inherited = RANK[t] < RANK[et];   // included via a lower tier — locked here
+                      const hue = et === "base" ? "#8a8a99" : et === "better" ? "#2E75B6" : "#9d4edd";
+                      const tierLabel = (k: "base" | "better" | "best") => k === "base" ? "Base" : k === "better" ? (tierNames?.better || "Better") : (tierNames?.best || "Best");
+                      const note = inherited
+                        ? `core · ${tierLabel(t)}`
+                        : RANK[t] === RANK[et]
+                          ? (et === "best" ? `${tierLabel("best")} only` : "in this option")
+                          : (t === "best" ? `${tierLabel("best")} only` : `from ${tierLabel(t)}`);
+                      return (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (inherited) return; // change inherited items in their own tier
+                            if (RANK[t] === RANK[et]) {
+                              // remove from the active option → push up a tier (best demotes to better)
+                              const up = et === "base" ? "better" : et === "better" ? "best" : "better";
+                              upItem(rm.name, it.id, "tier", up);
+                            } else {
+                              // currently above the active tier → pull it down into this option
+                              upItem(rm.name, it.id, "tier", et);
+                            }
+                          }}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 7, cursor: inherited ? "default" : "pointer", opacity: inherited ? 0.65 : 1 }}
+                        >
+                          <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", border: `1.5px solid ${included ? hue : "#555"}`, background: included ? hue : "transparent" }}>
+                            {included ? "✓" : ""}
+                          </span>
+                          <span style={{ fontSize: 11, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".03em", color: included ? "#cfd2da" : "#888" }}>{note}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     <div style={{ textAlign: "center" }}>
