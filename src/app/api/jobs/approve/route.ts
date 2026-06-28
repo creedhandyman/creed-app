@@ -123,6 +123,27 @@ export async function POST(req: NextRequest) {
         if (blob?.tieredQuote === true && tt && typeof tt[tier] === "number" && tt[tier] >= 0) {
           patch.total = tt[tier];
           blob.acceptedTier = tier;
+          // Lock the rest of the job to the accepted option so the crew + the
+          // paperwork match what was bought: snap the labor/material/hour totals
+          // to the tier's stored breakdown, and prune the crew work order to
+          // that tier's tasks. The full line-items stay on the blob (customer
+          // reference + any later upsell); only the operational artifacts move.
+          const RANK: Record<string, number> = { base: 0, better: 1, best: 2 };
+          const cap = RANK[tier] ?? 2;
+          const bk = blob?.tierBreakdown?.[tier] as { labor?: number; mat?: number; hrs?: number } | undefined;
+          if (bk) {
+            if (typeof bk.labor === "number") patch.total_labor = bk.labor;
+            if (typeof bk.mat === "number") patch.total_mat = bk.mat;
+            if (typeof bk.hrs === "number") patch.total_hrs = bk.hrs;
+          }
+          // Work-order tasks are tagged with their line-item tier at save time;
+          // legacy/untagged tasks default to "base" (rank 0) so they're never
+          // hidden from the crew.
+          if (Array.isArray(blob?.workOrder)) {
+            blob.workOrder = blob.workOrder.filter(
+              (w: { tier?: string }) => (RANK[w?.tier || "base"] ?? 0) <= cap,
+            );
+          }
           patch.rooms = JSON.stringify(blob);
         }
       } catch {

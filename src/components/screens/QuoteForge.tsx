@@ -1247,13 +1247,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     if (t === "better") return all.filter((i) => i.tier !== "best"); // base + better
     return all; // best = base + better + best
   };
-  const tierGrandTotal = (items: typeof all): number => {
+  const tierBreakdownOf = (items: typeof all): { total: number; labor: number; mat: number; hrs: number } => {
     const tlR = items.reduce((s, i) => s + i.lc, 0);
     const mTot = items.reduce((s, i) => s + i.mc, 0);
     const thR = items.reduce((s, i) => s + i.laborHrs, 0);
     const subR = items.reduce((s, i) => s + i.tot, 0);
     const mApplies = effectiveMinHrs > 0 && thR > 0 && thR < effectiveMinHrs;
     const tlT = mApplies ? Math.round(effectiveMinHrs * rate * 100) / 100 : tlR;
+    const hrsT = mApplies ? effectiveMinHrs : thR;
     const subT = mApplies ? Math.round((subR + (tlT - tlR)) * 100) / 100 : subR;
     const preDisc = subT + tripFee;
     const dAmt = discount && discount.value > 0
@@ -1263,12 +1264,21 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       : 0;
     const baseAfter = Math.max(0, Math.round((preDisc - dAmt) * 100) / 100);
     const tax = computeTax({ labor: tlT, materials: mTot, tripFee, discountAmount: dAmt, taxPct, taxMode: effectiveTaxMode }).taxAmount;
-    return Math.round((baseAfter + tax) * 100) / 100;
+    return { total: Math.round((baseAfter + tax) * 100) / 100, labor: tlT, mat: Math.round(mTot * 100) / 100, hrs: hrsT };
   };
-  const tierTotals = {
-    base: tierGrandTotal(itemsForTier("base")),
-    better: tierGrandTotal(itemsForTier("better")),
-    best: tierGrandTotal(itemsForTier("best")),
+  const tierBk = {
+    base: tierBreakdownOf(itemsForTier("base")),
+    better: tierBreakdownOf(itemsForTier("better")),
+    best: tierBreakdownOf(itemsForTier("best")),
+  };
+  const tierTotals = { base: tierBk.base.total, better: tierBk.better.total, best: tierBk.best.total };
+  // Per-tier labor/materials/hours — stored so /api/jobs/approve can lock the
+  // job's total_labor/total_mat/total_hrs to the accepted option (matches the
+  // gt/tl/tm/th the non-tiered save writes).
+  const tierBreakdown = {
+    base: { labor: tierBk.base.labor, mat: tierBk.base.mat, hrs: tierBk.base.hrs },
+    better: { labor: tierBk.better.labor, mat: tierBk.better.mat, hrs: tierBk.better.hrs },
+    best: { labor: tierBk.best.labor, mat: tierBk.best.mat, hrs: tierBk.best.hrs },
   };
   const hasBetter = all.some((i) => i.tier === "better");
   const hasBest = all.some((i) => i.tier === "best");
@@ -1292,7 +1302,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // Pull the prior saved blob so an edit-save merges into it instead of
     // overwriting field-collected state (work-order `done` checkmarks,
     // after/work photos, jobNotes from WorkVision, etc.).
-    type WO = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean };
+    type WO = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; tier?: string };
     type JobPhoto = { url: string; label: string; type: "before" | "after" | "work" };
     let prevData: Record<string, unknown> = {};
     if (editingId) {
@@ -1307,6 +1317,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const prevWO: WO[] = Array.isArray(prevData.workOrder) ? prevData.workOrder as WO[] : [];
     const prevWOByKey = new Map(prevWO.map((w) => [woKeyOf(w), w]));
     const seenKeys = new Set<string>();
+    // Tag each work-order task with its line-item tier (for Good-Better-Best
+    // pruning on approval). Keyed identically to woKeyOf so the lookup aligns;
+    // an unmatched step defaults to "base" — a safe fallback (base = in every
+    // option, so a mis-tag never hides a task from the crew).
+    const tierByKey = new Map<string, string>();
+    for (const r of rooms) {
+      for (const it of r.items) {
+        tierByKey.set(woKeyOf({ room: r.name, detail: it.detail }), (it as { tier?: string }).tier || "base");
+      }
+    }
     // Merge prior work-order items by (room, detail). Take EVERY editable
     // field — room, detail, action, pri, hrs — from the new/incoming step
     // `s` so user edits in this session actually persist on save. Inherit
@@ -1325,6 +1345,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         action: s.action,
         pri: s.pri,
         hrs: s.hrs,
+        tier: tierByKey.get(key) || "base",
         // completion-state — inherit from prior, default to "not done" for
         // freshly-keyed items
         done: prior?.done === true,
@@ -1405,6 +1426,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       tieredQuote: tieredQuote,
       tierNames: tierNames,
       tierTotals: tieredQuote ? tierTotals : null,
+      tierBreakdown: tieredQuote ? tierBreakdown : null,
       // Only overwrite `inspection` if the user just ran the inspector in
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
@@ -1425,6 +1447,22 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // "quoted" — that's exactly what Build Quote on a lead is for.
     const prevJob = editingId ? useStore.getState().jobs.find((j) => j.id === editingId) : null;
     const nextStatus = prevJob ? (prevJob.status === "lead" ? "quoted" : prevJob.status) : "quoted";
+    // Preserve a customer's accepted tier across re-saves. If this quote was
+    // already approved at a Good-Better-Best option, keep the job LOCKED to it
+    // — recompute that tier's totals from the (possibly edited) items and prune
+    // the work order to it — instead of silently reverting billing + crew scope
+    // to the full (Best) scope the customer didn't buy.
+    let lockTotal = gt, lockLabor = tl, lockMat = tm, lockHrs = th;
+    const acceptedTier = prevData.acceptedTier as string | undefined;
+    if (tieredQuote && (acceptedTier === "base" || acceptedTier === "better" || acceptedTier === "best")) {
+      const RANK: Record<string, number> = { base: 0, better: 1, best: 2 };
+      const cap = RANK[acceptedTier];
+      lockTotal = tierTotals[acceptedTier];
+      lockLabor = tierBreakdown[acceptedTier].labor;
+      lockMat = tierBreakdown[acceptedTier].mat;
+      lockHrs = tierBreakdown[acceptedTier].hrs;
+      data.workOrder = workOrder.filter((w) => (RANK[w.tier || "base"] ?? 0) <= cap);
+    }
     const jobData = {
       property: prop,
       client: client || "",
@@ -1432,10 +1470,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       ...(addressId ? { address_id: addressId } : {}),
       job_date: new Date().toISOString().split("T")[0],
       rooms: JSON.stringify(data),
-      total: gt,
-      total_labor: tl,
-      total_mat: tm,
-      total_hrs: th,
+      total: lockTotal,
+      total_labor: lockLabor,
+      total_mat: lockMat,
+      total_hrs: lockHrs,
       status: nextStatus,
       created_by: user.name,
     };
