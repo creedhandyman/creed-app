@@ -45,6 +45,7 @@ const TIERS: Tier[] = [
     ctaLabel: "Start Free Trial",
     bullets: [
       "75 AI inspections / renders per month",
+      "0.5% platform fee, capped at $100/mo",
       "Everything in the toolkit (below)",
       "1 user account",
     ],
@@ -60,6 +61,7 @@ const TIERS: Tier[] = [
     bullets: [
       "175 AI inspections / renders per month",
       "Up to 8 crew members",
+      "0.5% platform fee, capped at $100/mo",
       "Auto payroll, HR & mileage",
       "Everything in the toolkit (below)",
     ],
@@ -121,7 +123,9 @@ interface FAQ {
 const FAQS: FAQ[] = [
   { q: 'Is there really a free month?', a: 'Yes — every plan’s first month is free. No charge until it ends, and you can cancel anytime before then.' },
   { q: 'What counts as an “inspection”?', a: 'Each AI quote or photo render you generate. Most solo operators stay well under 75 a month; upgrade anytime if you grow.' },
-  { q: 'Do you take a cut of my payments?', a: 'A small one — and it’s capped. Customer payments run through your own Stripe account and land in your bank. On Solo and Crew plans, Creed adds a 0.5% platform fee, never more than $100/month total. Standard Stripe processing fees are separate. Pro plans pay zero platform fee. Your monthly subscription is billed separately.' },
+  { q: 'Do you take a cut of my payments?', a: 'A small one — and it’s capped. Customer payments run through your own Stripe account and land in your bank. On Solo and Crew plans, Creed adds a 0.5% platform fee on payments processed through the app — never more than $100 in a month — plus the standard Stripe processing fees. Pro plans pay no platform fee at all. Your monthly subscription is billed separately.' },
+  { q: 'What’s the most I’ll pay in platform fees?', a: 'On Solo and Crew, $100 a month — that’s the cap, no matter how much you process. Once you hit it, every other payment that month is platform-fee-free. On Pro, there’s no platform fee at all.' },
+  { q: 'What are “standard Stripe fees”?', a: 'Stripe’s own processing rate for handling the card — roughly 2.9% + 30¢ per transaction. Stripe charges that directly to your account; it’s the same whether you use Creed or not. The 0.5% platform fee is the only thing Creed adds, and only on Solo and Crew.' },
   { q: 'Can I change plans later?', a: 'Anytime, up or down. Add crew seats as you hire — your plan grows with the business.' },
 ];
 
