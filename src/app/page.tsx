@@ -7,6 +7,7 @@ import AppShell from "@/components/AppShell";
 import BillingGate from "@/components/BillingGate";
 import Toast from "@/components/Toast";
 import ConfirmModal from "@/components/ConfirmModal";
+import InstallPrompt from "@/components/InstallPrompt";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -22,6 +23,14 @@ export default function Home() {
   useEffect(() => {
     initAuth();
   }, [initAuth]);
+
+  // Register the service worker on load — needed for installability (the
+  // install prompt), push, and offline caching. No-op where unsupported.
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
 
   // Handle Stripe redirect — refresh org data when returning from Stripe
   useEffect(() => {
@@ -103,5 +112,5 @@ export default function Home() {
     );
   }
 
-  return <><Toast /><ConfirmModal /><BillingGate><AppShell /></BillingGate></>;
+  return <><Toast /><ConfirmModal /><InstallPrompt /><BillingGate><AppShell /></BillingGate></>;
 }
