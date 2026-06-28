@@ -76,20 +76,21 @@ interface FiredOrg {
   stamped: boolean;
 }
 
-function isAuthorized(req: NextRequest): boolean {
-  // Vercel cron requests carry an `Authorization: Bearer <CRON_SECRET>`
-  // header when CRON_SECRET is set. Allow both that and a manual
-  // x-admin-token (matches the ADMIN_PASSWORD pattern from /api/admin)
-  // for ad-hoc manual triggers during testing.
+type AuthVia = "cron_secret" | "x-vercel-cron" | "admin_token";
+
+// Returns WHICH path authorized the request (for cron_log.auth_via), or null
+// if rejected. Vercel cron carries `Authorization: Bearer <CRON_SECRET>` when
+// CRON_SECRET is set; x-admin-token matches the ADMIN_PASSWORD pattern for
+// ad-hoc manual triggers; x-vercel-cron=1 is Vercel's (less reliable) marker.
+function isAuthorized(req: NextRequest): AuthVia | null {
   const auth = req.headers.get("authorization") || "";
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && auth === `Bearer ${cronSecret}`) return true;
-  // Vercel always sets x-vercel-cron=1 on legitimate cron invocations.
-  if (req.headers.get("x-vercel-cron") === "1") return true;
+  if (cronSecret && auth === `Bearer ${cronSecret}`) return "cron_secret";
+  if (req.headers.get("x-vercel-cron") === "1") return "x-vercel-cron";
   const adminToken = req.headers.get("x-admin-token");
   const adminPw = process.env.ADMIN_PASSWORD;
-  if (adminPw && adminToken && adminToken === adminPw) return true;
-  return false;
+  if (adminPw && adminToken && adminToken === adminPw) return "admin_token";
+  return null;
 }
 
 /**
@@ -125,9 +126,31 @@ export async function GET(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  if (!isAuthorized(req) && !(await isOwnerSession(req, supabase))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // `force=1` bypasses the day-of-week + cadence-debounce skips (owner test).
+  // Computed before the auth check so the rejection log can record it.
+  const force = new URL(req.url).searchParams.get("force") === "1";
+
+  // Diagnostic context, logged on EVERY invocation (cron_log) so a rejected or
+  // failed scheduled run leaves a trace. The core unknown is whether Vercel's
+  // cron even reaches this endpoint — a "rejected" row vs. no row answers it.
+  const ua = req.headers.get("user-agent") || "";
+  const isVercelCron = req.headers.get("x-vercel-cron") === "1";
+  const hasAuthHeader = !!req.headers.get("authorization");
+  const cronSecretSet = !!process.env.CRON_SECRET;
+
+  const authVia = isAuthorized(req);
+  const ownerSession = authVia ? true : await isOwnerSession(req, supabase);
+  if (!authVia && !ownerSession) {
+    try {
+      await supabase.from("cron_log").insert({
+        endpoint: "auto-run", authorized: false, auth_via: "rejected",
+        is_vercel_cron: isVercelCron, user_agent: ua, force,
+      });
+    } catch { /* logging is best-effort — never block on it */ }
+    console.warn("[auto-run] REJECTED", { isVercelCron, hasAuthHeader, cronSecretSet, ua });
+    return NextResponse.json({ error: "Unauthorized", isVercelCron, cronSecretSet }, { status: 401 });
   }
+  const authViaResolved: string = authVia ?? "owner_session";
 
   const { data, error } = await supabase
     .from("organizations")
@@ -139,6 +162,14 @@ export async function GET(req: NextRequest) {
     // added in Supabase, so this SELECT errors. Surface a concrete hint
     // instead of a raw Postgres message.
     const missingCols = /does not exist|auto_payroll/i.test(error.message);
+    try {
+      await supabase.from("cron_log").insert({
+        endpoint: "auto-run", authorized: true, auth_via: authViaResolved,
+        is_vercel_cron: isVercelCron, user_agent: ua, force,
+        enabled_orgs: 0, total_paid: 0, total_skipped: 0,
+        result: { error: error.message },
+      });
+    } catch { /* logging is best-effort */ }
     return NextResponse.json(
       {
         error: error.message,
@@ -154,12 +185,8 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const today = now.getDay();
   const nowHour = now.getHours();
-  // `force=1` bypasses the day-of-week and cadence-debounce skips so an
-  // owner can validate auto-payroll on demand without waiting for the
-  // scheduled day. Same pattern /api/recurring/fire uses. Requires the
-  // same auth as the cron itself (Vercel cron header, CRON_SECRET, or
-  // x-admin-token), gated by isAuthorized() above.
-  const force = new URL(req.url).searchParams.get("force") === "1";
+  // (force is computed at the top of GET, before the auth check, so the
+  // rejection log can record it.)
   const fired: FiredOrg[] = [];
   // Skip payload now carries the org's actual config + last_run so a
   // ?force=0 hit lets the owner see "is my config what I think it is?"
@@ -319,6 +346,20 @@ export async function GET(req: NextRequest) {
       stamped,
     });
   }
+
+  // Best-effort: record this successful invocation so the scheduled run is
+  // visible in cron_log (auth_via, counts, full fired/skipped summary).
+  const totalPaid = fired.reduce((s, o) => s + o.paid.length, 0);
+  const totalSkipped =
+    skipped.length + fired.reduce((s, o) => s + o.skipped.length, 0);
+  try {
+    await supabase.from("cron_log").insert({
+      endpoint: "auto-run", authorized: true, auth_via: authViaResolved,
+      is_vercel_cron: isVercelCron, user_agent: ua, force,
+      enabled_orgs: orgs.length, total_paid: totalPaid, total_skipped: totalSkipped,
+      result: { fired, skipped },
+    });
+  } catch { /* logging is best-effort */ }
 
   return NextResponse.json({
     ok: true,

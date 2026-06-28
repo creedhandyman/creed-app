@@ -266,6 +266,34 @@ src/
   UTC — same calendar day as US daytime, so day-matching is fine for US;
   `auto_payroll_hour` is advisory on the single daily cron (runs ~midday
   Central regardless of the hour picked).
+- Cron observability — `cron_log` (every cron invocation, incl. rejected ones,
+  writes a row, so a scheduled run that never reaches the endpoint is visible):
+  ```sql
+  CREATE TABLE IF NOT EXISTS cron_log (
+    id uuid primary key default gen_random_uuid(),
+    endpoint text,                 -- 'auto-run'
+    invoked_at timestamptz default now(),
+    authorized boolean,
+    auth_via text,                 -- cron_secret | x-vercel-cron | admin_token | owner_session | rejected
+    is_vercel_cron boolean,
+    user_agent text,
+    force boolean,
+    enabled_orgs int,
+    total_paid int,
+    total_skipped int,
+    result jsonb
+  );
+  ALTER TABLE cron_log ENABLE ROW LEVEL SECURITY;  -- service-role only
+  ```
+  `/api/payroll/auto-run` writes a row on reject (`auth_via='rejected'`), on
+  success, and on error — all best-effort (a missing table never blocks payroll).
+  **Also set `CRON_SECRET`** (any long random string) in Vercel + redeploy:
+  Vercel then sends `Authorization: Bearer <CRON_SECRET>` on cron calls, which
+  `isAuthorized()` validates — the reliable auth path (vs. the flaky
+  `x-vercel-cron` header). Diagnose: `select invoked_at, authorized, auth_via,
+  is_vercel_cron, total_paid from cron_log where endpoint='auto-run' order by
+  invoked_at desc limit 20;` — a `cron_secret` row with `total_paid>0` = working;
+  a `rejected` row (or no row at all) = the cron isn't reaching/authing.
 - `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
 - `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
 - `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;`
