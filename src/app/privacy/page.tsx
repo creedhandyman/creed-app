@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import MarketingShell from "@/components/marketing/MarketingShell";
 
 export const metadata: Metadata = {
@@ -31,6 +32,11 @@ export default function PrivacyPage() {
             <p style={{ color: "var(--mmuted)", fontSize: 15.5, lineHeight: 1.6 }}>{s.p}</p>
           </div>
         ))}
+        <div style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid var(--mline, #1e1e2e)", fontSize: 13, color: "var(--mmuted)" }}>
+          <Link href="/terms" style={{ color: "var(--mlink, #7fb6ff)" }}>Terms of Use</Link>
+          {" · "}
+          <a href="mailto:creedhandyman@gmail.com" style={{ color: "var(--mlink, #7fb6ff)" }}>Contact</a>
+        </div>
       </div>
     </MarketingShell>
   );
