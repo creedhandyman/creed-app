@@ -18,6 +18,7 @@ import { useStore } from "@/lib/store";
 import { Icon } from "../Icon";
 import type { CustomerType, Address, Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
+import { INTERVAL_LABEL } from "@/lib/memberships";
 
 interface Props {
   customerId: string;
@@ -59,6 +60,55 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
   const showConfirm = useStore((s) => s.showConfirm);
   const showToast = useStore((s) => s.showToast);
   const darkMode = useStore((s) => s.darkMode);
+  const membershipPlans = useStore((s) => s.membershipPlans) ?? [];
+  const customerMemberships = useStore((s) => s.customerMemberships) ?? [];
+  const loadAll = useStore((s) => s.loadAll);
+
+  // Memberships — this customer's active/past_due/paused plans + enroll flow.
+  const myMemberships = customerMemberships.filter((m) => m.customer_id === customerId && m.status !== "cancelled");
+  const activePlans = membershipPlans.filter((p) => p.is_active);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [membershipBusy, setMembershipBusy] = useState(false);
+
+  const enroll = async (planId: string) => {
+    setMembershipBusy(true);
+    try {
+      const res = await apiFetch("/api/memberships/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId, planId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.url) {
+        setEnrollOpen(false);
+        window.open(data.url, "_blank");
+        showToast("Checkout opened — the membership activates once the customer pays.", "info");
+      } else {
+        showToast(data?.error || "Couldn't start enrollment", "error");
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
+    }
+    setMembershipBusy(false);
+  };
+
+  const manageMembership = async (membershipId: string, action: "pause" | "resume" | "cancel") => {
+    if (action === "cancel" && !(await showConfirm("Cancel membership", "Cancel this membership? Billing stops and no more visits are scheduled."))) return;
+    setMembershipBusy(true);
+    try {
+      const res = await apiFetch("/api/memberships/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ membershipId, action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { await loadAll(); showToast("Membership updated", "success"); }
+      else showToast(data?.error || "Couldn't update membership", "error");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Network error", "error");
+    }
+    setMembershipBusy(false);
+  };
 
   // Portal magic-link generation. We hold the most recent link in
   // local state so the user can text/email/copy it without a fresh
@@ -613,6 +663,63 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
                 {editingAddrId ? "Update" : "Add"}
               </button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Memberships */}
+      <div className="cd mb">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+          <h4 style={{ fontSize: 15, margin: 0 }}>⭐ Memberships{myMemberships.length ? ` (${myMemberships.length})` : ""}</h4>
+          {activePlans.length > 0 && !enrollOpen && (
+            <button className="bo" style={{ fontSize: 12.5, padding: "4px 10px", width: "auto", flexShrink: 0 }} onClick={() => setEnrollOpen(true)} disabled={membershipBusy}>
+              <Icon name="add" size={13} /> Enroll
+            </button>
+          )}
+        </div>
+
+        {myMemberships.length === 0 && !enrollOpen && (
+          <div className="dim" style={{ fontSize: 13 }}>
+            {activePlans.length === 0 ? "No plans yet — create one in Operations → Memberships." : "Not enrolled."}
+          </div>
+        )}
+
+        {myMemberships.map((m) => {
+          const plan = membershipPlans.find((p) => p.id === m.plan_id);
+          const sColor = m.status === "active" ? "var(--color-money)" : m.status === "past_due" ? "var(--color-accent-red)" : "var(--color-warning)";
+          return (
+            <div key={m.id} style={{ borderTop: "1px solid var(--color-border-dark)", paddingTop: 9, marginTop: 9 }}>
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{plan?.name || "Service plan"}</div>
+                  <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{plan ? `$${Number(plan.price).toFixed(2)} · ${INTERVAL_LABEL[plan.interval]}` : ""}</div>
+                  <div style={{ fontSize: 11.5, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap", color: "var(--color-dim)" }}>
+                    {m.next_bill_at && <span>Next bill {fmtDate(m.next_bill_at)}</span>}
+                    {m.next_visit_at && <span>Next visit {fmtDate(m.next_visit_at)}</span>}
+                  </div>
+                </div>
+                <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: sColor, border: `1px solid ${sColor}`, borderRadius: 99, padding: "2px 8px", flexShrink: 0 }}>{m.status === "past_due" ? "Past due" : m.status}</span>
+              </div>
+              <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                {m.status === "paused"
+                  ? <button className="bo" style={{ fontSize: 12, padding: "3px 10px", width: "auto" }} disabled={membershipBusy} onClick={() => manageMembership(m.id, "resume")}>Resume</button>
+                  : <button className="bo" style={{ fontSize: 12, padding: "3px 10px", width: "auto" }} disabled={membershipBusy} onClick={() => manageMembership(m.id, "pause")}>Pause</button>}
+                <button className="br" style={{ fontSize: 12, padding: "3px 10px", width: "auto" }} disabled={membershipBusy} onClick={() => manageMembership(m.id, "cancel")}>Cancel</button>
+              </div>
+            </div>
+          );
+        })}
+
+        {enrollOpen && (
+          <div style={{ borderTop: "1px solid var(--color-border-dark)", paddingTop: 9, marginTop: 9 }}>
+            <div className="dim" style={{ fontSize: 12.5, marginBottom: 8 }}>Pick a plan — the customer enters their card on Stripe&apos;s secure page.</div>
+            {activePlans.map((p) => (
+              <button key={p.id} className="bo" style={{ width: "100%", display: "flex", justifyContent: "space-between", marginBottom: 6, padding: "9px 12px" }} disabled={membershipBusy} onClick={() => enroll(p.id)}>
+                <span>{p.name}</span>
+                <span style={{ fontFamily: "Oswald" }}>${Number(p.price).toFixed(2)}</span>
+              </button>
+            ))}
+            <button className="bo" style={{ fontSize: 12.5, padding: "4px 10px", width: "auto" }} onClick={() => setEnrollOpen(false)}>Close</button>
           </div>
         )}
       </div>

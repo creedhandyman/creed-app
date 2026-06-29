@@ -358,6 +358,54 @@ export interface QuestPayout {
 }
 
 /**
+ * Memberships / service plans. A `membership_plans` row is a plan the org
+ * sells (e.g. "$19/mo HVAC tune-up"); a `customer_memberships` row is a
+ * customer enrolled in one. Billing runs through a Stripe SUBSCRIPTION on
+ * the org's connected account (destination charge + the Creed application
+ * fee, same model as one-time job payments). Service visits auto-spawn via
+ * the recurring-jobs cron (/api/recurring/fire) from the plan's `included`
+ * template. See src/lib/memberships.ts + /api/memberships/*.
+ */
+export type MembershipInterval = "monthly" | "quarterly" | "annual";
+
+export interface MembershipPlan {
+  id: string;
+  org_id: string;
+  name: string;
+  /** Recurring price in DOLLARS, billed every `interval`. */
+  price: number;
+  interval: MembershipInterval;
+  /** Visit template — the rooms/data blob copied into each spawned service
+   *  job (same shape as recurring_jobs.template_rooms / a saved quote). */
+  included?: unknown;
+  /** Service visits per year — drives the auto-visit cadence. */
+  visits_per_year: number;
+  is_active: boolean;
+  /** Stripe Price id, created lazily on first enroll (on the platform
+   *  account; funds route to the org via transfer_data). Cached + reused. */
+  stripe_price_id?: string | null;
+  created_at?: string;
+}
+
+export type MembershipStatus = "active" | "past_due" | "paused" | "cancelled";
+
+export interface CustomerMembership {
+  id: string;
+  org_id: string;
+  customer_id: string;
+  plan_id: string;
+  status: MembershipStatus;
+  /** Stripe Subscription id (destination-charge sub routed to the org). */
+  stripe_subscription_id?: string | null;
+  started_at?: string;
+  /** Next billing date — synced from Stripe current_period_end by the webhook. */
+  next_bill_at?: string | null;
+  /** Next auto-created service visit — advanced by the recurring cron. */
+  next_visit_at?: string | null;
+  created_at?: string;
+}
+
+/**
  * Recurring job template. One row = one cadence-driven schedule that
  * spawns a new `jobs` row each time the cron fires. The `template_rooms`
  * blob is copied verbatim into the new job's `rooms` field, so any

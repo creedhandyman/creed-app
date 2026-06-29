@@ -53,3 +53,15 @@ export function computePlatformFee(
   const remainingUnderCap = Math.max(0, PLATFORM_FEE_CAP_CENTS - Math.max(0, feesCollectedCents));
   return Math.min(rawFee, remainingUnderCap);
 }
+
+/**
+ * Stripe `application_fee_percent` for a recurring membership subscription —
+ * same rate as one-time payments (0.5%), 0 for Pro orgs. Returned as a PERCENT
+ * (0.5, not 0.005) because Stripe's `subscription_data.application_fee_percent`
+ * expects a percent. The monthly $100 cap doesn't apply to recurring billing
+ * (memberships are small — 0.5% of $19 is pennies, never near the cap).
+ */
+export function membershipFeePercent(plan: string | null | undefined): number {
+  if (plan === "pro") return 0;
+  return PLATFORM_FEE_RATE * 100;
+}

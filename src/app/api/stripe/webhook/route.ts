@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
+import { computeNextFire } from "@/lib/recurring";
+import { visitCadence } from "@/lib/memberships";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +118,94 @@ async function syncSubscriptionToOrg(sub: Stripe.Subscription): Promise<void> {
   await supabase.from("organizations").update(update).eq("id", orgId);
 }
 
+// ── Memberships (customer service plans) ────────────────────────────────────
+// Membership subscriptions are DESTINATION charges on the platform account, so
+// they fire the SAME events as the org's own billing subscription. We tag them
+// with metadata.membership === "1" so the two never cross wires.
+
+function isMembershipSub(sub: Stripe.Subscription): boolean {
+  return (sub.metadata as Record<string, string> | undefined)?.membership === "1";
+}
+
+function membershipStatusFromSub(sub: Stripe.Subscription): "active" | "past_due" | "paused" | "cancelled" {
+  if (sub.pause_collection) return "paused";
+  switch (sub.status) {
+    case "active":
+    case "trialing":
+      return "active";
+    case "canceled":
+      return "cancelled";
+    default:
+      return "past_due";
+  }
+}
+
+/** Tolerant accessor — current_period_end moved from the subscription to its
+ *  items across Stripe API versions. */
+function subPeriodEnd(sub: Stripe.Subscription): string | null {
+  const top = (sub as unknown as { current_period_end?: number }).current_period_end;
+  const item = (sub.items?.data?.[0] as unknown as { current_period_end?: number } | undefined)?.current_period_end;
+  const ts = typeof top === "number" ? top : item;
+  return typeof ts === "number" ? new Date(ts * 1000).toISOString() : null;
+}
+
+function invoiceSubId(invoice: Stripe.Invoice): string | null {
+  const sub = (invoice as unknown as { subscription?: string | { id: string } | null }).subscription;
+  if (!sub) return null;
+  return typeof sub === "string" ? sub : sub.id;
+}
+
+/** Idempotent (by subscription id) upsert of the customer_memberships row from a
+ *  membership subscription — used on checkout.session.completed + subscription.updated. */
+async function syncMembership(sub: Stripe.Subscription): Promise<void> {
+  const meta = (sub.metadata as Record<string, string> | undefined) || {};
+  const { org_id: orgId, plan_id: planId, customer_id: customerId } = meta;
+  if (!orgId || !planId || !customerId) {
+    console.warn("[stripe webhook] membership sub missing metadata", sub.id);
+    return;
+  }
+  const status = membershipStatusFromSub(sub);
+  const nextBill = subPeriodEnd(sub);
+
+  const { data: existing } = await supabase
+    .from("customer_memberships")
+    .select("id")
+    .eq("stripe_subscription_id", sub.id)
+    .maybeSingle();
+
+  if (existing) {
+    const upd: Record<string, unknown> = { status };
+    if (nextBill) upd.next_bill_at = nextBill;
+    await supabase.from("customer_memberships").update(upd).eq("id", (existing as { id: string }).id);
+    return;
+  }
+
+  // First activation — schedule the first auto-visit one cadence out.
+  let nextVisit: string | null = null;
+  try {
+    const { data: plan } = await supabase
+      .from("membership_plans")
+      .select("visits_per_year")
+      .eq("id", planId)
+      .maybeSingle();
+    const vpy = (plan as { visits_per_year?: number } | null)?.visits_per_year ?? 12;
+    nextVisit = computeNextFire(new Date(), visitCadence(vpy)).toISOString();
+  } catch {
+    /* best-effort — the cron treats a null next_visit_at as due */
+  }
+
+  await supabase.from("customer_memberships").insert({
+    org_id: orgId,
+    customer_id: customerId,
+    plan_id: planId,
+    status,
+    stripe_subscription_id: sub.id,
+    started_at: new Date().toISOString(),
+    next_bill_at: nextBill,
+    next_visit_at: nextVisit,
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const Stripe = (await import("stripe")).default;
@@ -142,25 +232,37 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const orgId = (session.metadata as Record<string, string> | null)?.org_id;
-        if (orgId && session.subscription) {
+        const meta = (session.metadata as Record<string, string> | null) || {};
+        if (session.subscription) {
           const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
-          // Pull the full subscription so we can sync plan + trial_ends_at
-          // in one place instead of duplicating that logic per event.
+          // Pull the full subscription so we can sync plan/period in one place.
           const sub = await stripe.subscriptions.retrieve(subId);
-          await syncSubscriptionToOrg(sub);
+          if (meta.membership === "1" || isMembershipSub(sub)) {
+            await syncMembership(sub);
+          } else if (meta.org_id) {
+            await syncSubscriptionToOrg(sub);
+          }
         }
         break;
       }
 
       case "customer.subscription.created":
       case "customer.subscription.updated": {
-        await syncSubscriptionToOrg(event.data.object as Stripe.Subscription);
+        const sub = event.data.object as Stripe.Subscription;
+        if (isMembershipSub(sub)) await syncMembership(sub);
+        else await syncSubscriptionToOrg(sub);
         break;
       }
 
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
+        if (isMembershipSub(sub)) {
+          await supabase
+            .from("customer_memberships")
+            .update({ status: "cancelled" })
+            .eq("stripe_subscription_id", sub.id);
+          break;
+        }
         const orgId = await findOrgIdForSub(sub);
         if (orgId) {
           await supabase
@@ -171,8 +273,40 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "invoice.paid":
+      case "invoice.payment_succeeded": {
+        // A membership renewal cleared — ensure it's marked active (recovers a
+        // prior past_due). next_bill_at is refreshed by subscription.updated.
+        const invoice = event.data.object as Stripe.Invoice;
+        const subId = invoiceSubId(invoice);
+        if (subId) {
+          await supabase
+            .from("customer_memberships")
+            .update({ status: "active" })
+            .eq("stripe_subscription_id", subId)
+            .neq("status", "cancelled");
+        }
+        break;
+      }
+
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
+        const subId = invoiceSubId(invoice);
+        if (subId) {
+          const { data: m } = await supabase
+            .from("customer_memberships")
+            .select("id")
+            .eq("stripe_subscription_id", subId)
+            .maybeSingle();
+          if (m) {
+            await supabase
+              .from("customer_memberships")
+              .update({ status: "past_due" })
+              .eq("id", (m as { id: string }).id);
+            break;
+          }
+        }
+        // Org-billing fallback (existing behavior).
         const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
         if (customerId) {
           const { data: org } = await supabase

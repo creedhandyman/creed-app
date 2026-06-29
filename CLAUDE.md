@@ -339,6 +339,56 @@ src/
   fresh `jobs` row (status "scheduled"), then recomputes `next_fire_at`
   using `computeNextFire()` in `src/lib/recurring.ts`. Manual test:
   `curl -H "x-admin-token: $ADMIN_PASSWORD" 'https://<host>/api/recurring/fire?force=1&id=<row_id>'`.
+- Memberships / service plans (recurring revenue + auto-visits):
+  ```sql
+  CREATE TABLE IF NOT EXISTS membership_plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    price NUMERIC NOT NULL,
+    interval TEXT NOT NULL CHECK (interval IN ('monthly','quarterly','annual')),
+    included JSONB,                 -- { description } (+ optional rooms template)
+    visits_per_year INTEGER NOT NULL DEFAULT 12,
+    is_active BOOLEAN DEFAULT TRUE,
+    stripe_price_id TEXT,           -- created lazily on first enroll; cleared on price/interval edit
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_membership_plans_org ON membership_plans(org_id);
+  CREATE TABLE IF NOT EXISTS customer_memberships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    customer_id UUID NOT NULL,
+    plan_id UUID NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','past_due','paused','cancelled')),
+    stripe_subscription_id TEXT,
+    started_at TIMESTAMPTZ DEFAULT now(),
+    next_bill_at TIMESTAMPTZ,       -- synced from Stripe by the webhook
+    next_visit_at TIMESTAMPTZ,      -- advanced by the recurring cron
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_customer_memberships_org ON customer_memberships(org_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_memberships_sub ON customer_memberships(stripe_subscription_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_memberships_visit ON customer_memberships(next_visit_at) WHERE status = 'active';
+  ALTER TABLE membership_plans ENABLE ROW LEVEL SECURITY;       -- service-role only
+  ALTER TABLE customer_memberships ENABLE ROW LEVEL SECURITY;   -- service-role only
+  ```
+  Billing reuses Stripe Connect: enroll (owner-initiated, `/api/memberships/checkout`)
+  opens a HOSTED Checkout (`mode:'subscription'`) — never card data in-app. The
+  sub is a DESTINATION charge (lives on the platform, `subscription_data.transfer_data`
+  → the org's connected account, `application_fee_percent` = 0.5% / 0% Pro via
+  `membershipFeePercent()`). The webhook (`/api/stripe/webhook`) distinguishes
+  membership subs from the ORG's own plan-billing sub by `metadata.membership==='1'`
+  (else `syncMembership` would corrupt org status) and handles checkout.session.completed
+  / subscription.* / invoice.paid / invoice.payment_failed. Visits auto-spawn from
+  the SAME daily `/api/recurring/fire` cron (a second loop over `customer_memberships`
+  where `next_visit_at <= now`), creating a `jobs` row from the plan's `included`
+  and advancing `next_visit_at` via `computeNextFire()` (cadence from
+  `visitCadence(visits_per_year)` in `src/lib/memberships.ts`). Manage (pause/resume/
+  cancel) via `/api/memberships/manage`. UI: Ops → Memberships (`MembershipsPanel`,
+  plan CRUD) + CustomerDetail (enroll + active-plan card). Requires the org's Stripe
+  to be connected. Until the migration runs, saving a plan / loadAll toast a "table
+  does not exist" error; nothing else breaks. No new env (reuses STRIPE_SECRET_KEY,
+  STRIPE_WEBHOOK_SECRET, CRON_SECRET).
 - Review-Request automation (v1):
   ```
   CREATE TABLE IF NOT EXISTS review_requests (

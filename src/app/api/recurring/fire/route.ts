@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeNextFire, type Cadence } from "@/lib/recurring";
+import { visitCadence } from "@/lib/memberships";
 
 export const dynamic = "force-dynamic";
 
@@ -196,11 +197,77 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // ── Membership service visits ──────────────────────────────────────────
+  // Active customer_memberships whose next_visit_at is due (or unset) spawn a
+  // service job from their plan's `included` template, then advance next_visit_at
+  // by the plan's visit cadence. Skipped when forcing a single recurring row.
+  const membershipsFired: { id: string; jobId: string; nextVisitAt: string }[] = [];
+  if (!forceId) {
+    let mq = supabase.from("customer_memberships").select("*").eq("status", "active");
+    if (!force) mq = mq.or(`next_visit_at.lte.${nowIso},next_visit_at.is.null`);
+    const { data: memData, error: memErr } = await mq;
+    if (memErr) {
+      errors.push({ id: "memberships", error: memErr.message });
+    } else {
+      const mems = (memData || []) as Array<{ id: string; org_id: string; customer_id: string; plan_id: string }>;
+      const planIds = Array.from(new Set(mems.map((m) => m.plan_id)));
+      const custIds = Array.from(new Set(mems.map((m) => m.customer_id)));
+      const planMap = new Map<string, { name?: string; included?: unknown; visits_per_year?: number; is_active?: boolean }>();
+      const custMap = new Map<string, { name?: string }>();
+      if (planIds.length) {
+        const { data: plans } = await supabase.from("membership_plans").select("id, name, included, visits_per_year, is_active").in("id", planIds);
+        for (const p of (plans || []) as Array<{ id: string; name?: string; included?: unknown; visits_per_year?: number; is_active?: boolean }>) planMap.set(p.id, p);
+      }
+      if (custIds.length) {
+        const { data: custs } = await supabase.from("customers").select("id, name").in("id", custIds);
+        for (const c of (custs || []) as Array<{ id: string; name?: string }>) custMap.set(c.id, c);
+      }
+      for (const m of mems) {
+        const plan = planMap.get(m.plan_id);
+        if (!plan || plan.is_active === false) {
+          skipped.push({ id: m.id, reason: "membership plan missing/inactive" });
+          continue;
+        }
+        const { text: roomsText, parsed } = parseTemplateBlob(plan.included);
+        const totals = parsed.totals ?? parsed.data ?? {};
+        const cust = custMap.get(m.customer_id);
+        const insertRow = {
+          org_id: m.org_id,
+          property: "",
+          client: cust?.name || "",
+          job_date: now.toISOString().split("T")[0],
+          rooms: roomsText,
+          total: Number(totals.total ?? 0),
+          total_labor: Number(totals.total_labor ?? 0),
+          total_mat: Number(totals.total_mat ?? 0),
+          total_hrs: Number(totals.total_hrs ?? 0),
+          status: "scheduled",
+          created_by: `Membership: ${plan.name || "Service plan"}`,
+          trade: parsed.trade || "General",
+          callback: false,
+          is_upsell: false,
+          requested_tech: "",
+          customer_id: m.customer_id,
+          address_id: null,
+        };
+        const { data: jobIns, error: jobErr } = await supabase.from("jobs").insert(insertRow).select("id").single();
+        if (jobErr || !jobIns) {
+          errors.push({ id: m.id, error: `membership job insert failed: ${jobErr?.message || "no row returned"}` });
+          continue;
+        }
+        const nextVisit = computeNextFire(now, visitCadence(plan.visits_per_year ?? 12), { hour: 9 });
+        await supabase.from("customer_memberships").update({ next_visit_at: nextVisit.toISOString() }).eq("id", m.id);
+        membershipsFired.push({ id: m.id, jobId: (jobIns as { id: string }).id, nextVisitAt: nextVisit.toISOString() });
+      }
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     timestamp: nowIso,
     matched: rows.length,
     fired,
+    membershipsFired,
     skipped,
     errors,
   });

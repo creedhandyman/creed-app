@@ -9,6 +9,7 @@ import Customers from "./Customers";
 import CustomerDetail from "./CustomerDetail";
 import HR from "./HR";
 import Recurring from "./Recurring";
+import MembershipsPanel from "./MembershipsPanel";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
@@ -413,10 +414,11 @@ function ReviewAutomationCard({
   );
 }
 
-type OpsTab = "payroll" | "financials" | "customers" | "recurring" | "hr" | "team" | "billing" | "settings";
+type OpsTab = "payroll" | "financials" | "customers" | "recurring" | "memberships" | "hr" | "team" | "billing" | "settings";
 
 const AREA_LABEL_KEY: Record<OpsTab, string> = {
   payroll: "ops.payroll", financials: "ops.financials", customers: "ops.customers", recurring: "ops.recurring",
+  memberships: "ops.memberships",
   hr: "ops.hr", team: "ops.team", billing: "ops.billing", settings: "ops.settings",
 };
 const areaLabel = (tab: OpsTab): string => t(AREA_LABEL_KEY[tab]);
@@ -427,6 +429,7 @@ const TILE_STYLE: Record<OpsTab, { icon: IconName; color: string; bg: string }> 
   financials: { icon: "trending", color: "#8cc0ff", bg: "rgba(46,139,255,.14)" },
   customers:  { icon: "clients",  color: "#3ee08f", bg: "rgba(0,204,102,.14)" },
   recurring:  { icon: "refresh",  color: "#3aa0ff", bg: "rgba(58,160,255,.14)" },
+  memberships:{ icon: "award",    color: "#5ad1c5", bg: "rgba(90,209,197,.16)" },
   hr:         { icon: "card",     color: "#ffb15e", bg: "rgba(255,136,0,.16)" },
   team:       { icon: "worker",   color: "#c9a6ff", bg: "rgba(157,78,221,.16)" },
   billing:    { icon: "receipt",  color: "#f5b400", bg: "rgba(245,180,0,.16)" },
@@ -443,6 +446,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   const receipts = useStore((s) => s.receipts) ?? [];
   const customers = useStore((s) => s.customers) ?? [];
   const recurringJobs = useStore((s) => s.recurringJobs) ?? [];
+  const membershipPlans = useStore((s) => s.membershipPlans) ?? [];
   const org = useStore((s) => s.org);
   const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   // Pending badge is only meaningful to admins — non-admins can't act on
@@ -453,8 +457,8 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
 
   // tab = null → the launcher hub (admins). A non-null tab opens that
   // area's detail. Non-admins skip the hub entirely (HR is their root).
-  const validTabs: OpsTab[] = ["payroll", "financials", "customers", "recurring", "hr", "team", "billing", "settings"];
-  const adminOnly: OpsTab[] = ["payroll", "financials", "customers", "recurring", "team", "billing", "settings"];
+  const validTabs: OpsTab[] = ["payroll", "financials", "customers", "recurring", "memberships", "hr", "team", "billing", "settings"];
+  const adminOnly: OpsTab[] = ["payroll", "financials", "customers", "recurring", "memberships", "team", "billing", "settings"];
   const [tab, setTab] = useState<OpsTab | null>(() => {
     // Deep-link (e.g. More hub → Customers) opens a specific area, but a
     // non-admin can't reach an admin-only area — bounce them to HR.
@@ -512,6 +516,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
     financials: `${fmtMoney(revenueMonth)} · ${monthLabel}`,
     customers: `${customers.length} ${customers.length === 1 ? t("ops.clientSingular") : t("ops.clientPlural")}`,
     recurring: `${recurringJobs.filter((r) => r.is_active).length} ${t("ops.active")}`,
+    memberships: `${membershipPlans.filter((p) => p.is_active).length} ${membershipPlans.filter((p) => p.is_active).length === 1 ? "plan" : "plans"}`,
     hr: pendingTimeOffCount ? `${pendingTimeOffCount} ${t("ops.timeOffPending")}` : t("ops.timeOffPto"),
     team: `${profiles.length} ${profiles.length === 1 ? t("ops.memberSingular") : t("ops.memberPlural")}`,
     billing: planLabel,
@@ -601,6 +606,9 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
       )}
       {tab === "recurring" && (
         <SubTabErrorBoundary label="Recurring"><Recurring /></SubTabErrorBoundary>
+      )}
+      {tab === "memberships" && (
+        <SubTabErrorBoundary label="Memberships"><MembershipsPanel /></SubTabErrorBoundary>
       )}
       {tab === "hr" && (
         <SubTabErrorBoundary label="HR"><HR /></SubTabErrorBoundary>

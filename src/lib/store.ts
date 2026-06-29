@@ -16,6 +16,8 @@ import type {
   QuestPayout,
   TimeOffRequest,
   RecurringJob,
+  MembershipPlan,
+  CustomerMembership,
   ReviewRequest,
   AppNotification,
 } from "./types";
@@ -86,6 +88,8 @@ interface AppState {
   timeOffRequests: TimeOffRequest[];
   recurringJobs: RecurringJob[];
   reviewRequests: ReviewRequest[];
+  membershipPlans: MembershipPlan[];
+  customerMemberships: CustomerMembership[];
   notifications: AppNotification[];
   loading: boolean;
   loadAll: () => Promise<void>;
@@ -268,6 +272,8 @@ export const useStore = create<AppState>((set, get) => ({
   timeOffRequests: [],
   recurringJobs: [],
   reviewRequests: [],
+  membershipPlans: [],
+  customerMemberships: [],
   notifications: [],
   loading: true,
 
@@ -315,6 +321,8 @@ export const useStore = create<AppState>((set, get) => ({
       settle(db.get<TimeOffRequest>("time_off_requests", orgFilter)),
       settle(db.get<RecurringJob>("recurring_jobs", orgFilter)),
       settle(db.get<ReviewRequest>("review_requests", orgFilter)),
+      settle(db.get<MembershipPlan>("membership_plans", orgFilter)),
+      settle(db.get<CustomerMembership>("customer_memberships", orgFilter)),
       // Notifications are per-user, not per-org — scope to the current
       // user and cap so the feed query stays light on every 15s refresh.
       settle(userId ? db.get<AppNotification>("notifications", { user_id: userId }, { limit: 50 }) : Promise.resolve([])),
@@ -322,15 +330,18 @@ export const useStore = create<AppState>((set, get) => ({
     const [
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
+      membershipPlans, customerMemberships,
       notifications,
     ] = results as [
       Customer[], Address[], Profile[], Job[], TimeEntry[],
       Review[], Referral[], ScheduleEntry[], PayHistory[], Receipt[], QuestPayout[], TimeOffRequest[], RecurringJob[], ReviewRequest[],
+      MembershipPlan[], CustomerMembership[],
       AppNotification[],
     ];
     set({
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
+      membershipPlans, customerMemberships,
       notifications,
       loading: false,
     });
