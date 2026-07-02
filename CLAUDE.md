@@ -387,11 +387,21 @@ src/
   cancel) via `/api/memberships/manage` (owner). UI: Ops → **Recurring & Plans**
   → "Memberships" toggle (`MembershipsPanel`, plan CRUD, sharing the tab with
   Recurring via `RecurringMemberships`) + CustomerDetail (enroll + active-plan card).
-  Customers SELF-CANCEL from the portal (`/portal` → "Your Membership" → Cancel,
-  hitting `/api/portal/membership-cancel`, authed by the portal-session cookie +
-  scoped to the session's customer) — click-to-cancel compliant. `/api/portal/me`
-  returns the customer's memberships (+ plan name/price) for that card. Requires
-  the org's Stripe to be connected. Until the migration runs, saving a plan / loadAll toast a "table
+  Customers SELF-MANAGE from the portal (`/portal` → "Your membership" card):
+  Cancel (`/api/portal/membership-cancel`, one-tap link + confirm —
+  click-to-cancel compliant), Pause/Resume (`/api/portal/membership-pause`,
+  Stripe `pause_collection: void` + status flip; paused already stops the
+  visit cron), Update card (`/api/portal/membership-card` → Stripe Billing
+  Portal session on the platform account; auto-creates a minimal portal
+  configuration if none is saved). No plan → a "Join" upsell card enrolls
+  self-serve via `/api/portal/membership-checkout` (same destination-charge
+  sub + metadata as the owner flow so the existing webhook creates the row;
+  `customer_id` from the portal session, never the body). All four are
+  portal-cookie authed + scoped to the session's customer_id/org_id.
+  `/api/portal/me` returns memberships (+ plan name/price/included/
+  visits_per_year), the org's active `plans` when the customer has none
+  (upsell data), and `stripe_connected` (boolean only — the account id is
+  stripped server-side). Requires the org's Stripe to be connected. Until the migration runs, saving a plan / loadAll toast a "table
   does not exist" error; nothing else breaks. No new env (reuses STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET, CRON_SECRET).
 - Equipment / asset history (per-customer serviced units — no Stripe, one table):
