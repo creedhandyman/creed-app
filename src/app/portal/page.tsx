@@ -1,17 +1,20 @@
 "use client";
 /**
  * Customer portal landing page. Reads /api/portal/me on mount; if no
- * session, redirects to /portal/login. Otherwise renders a dark-themed
- * dashboard that mirrors /status, /review, /lead/<slug> styling:
- *  - greeting + branded header
- *  - per-property tile when the customer is a property manager (or has
- *    multiple addresses); flat sections otherwise
- *  - open quotes (with Approve link to /status?job=...)
- *  - scheduled jobs
- *  - in-progress jobs
- *  - completed jobs (with photo grid)
- *  - documents (signed quotes, invoices, paid receipts)
- *  - "Request work" CTA at top of every property/section
+ * session, redirects to /portal/login. Action-first layout (mock:
+ * Creed_Portal_Full.html), priority-ordered:
+ *  1. branded header
+ *  2. greeting + summary line ("1 quote to review · 1 invoice due · member")
+ *  3. ONE global "Request Work" button (per-property duplicates removed —
+ *     each property card keeps a small "Request work here" link)
+ *  4. Needs your attention — quotes to Approve & Sign (green glow) and
+ *     invoices to Pay (gold glow); hidden when empty
+ *  5. Your membership — plan card w/ next visit / next bill / perks +
+ *     self-serve Update card / Pause / Cancel (click-to-cancel). No plan →
+ *     a "Join" upsell card (hosted checkout via /api/portal/membership-checkout)
+ *  6. Your properties — deduped by normalized address, jobs nested with
+ *     status chips + glow dots
+ *  7. Documents / renderings, then the contact footer
  *
  * No app-shell chrome — this is a public, mobile-first page.
  */
@@ -24,6 +27,7 @@ import { statusColor } from "@/lib/status";
 import { Icon } from "@/components/Icon";
 
 const PRIMARY = "#2E75B6";
+const GOLD = "#f5b400";
 
 type PortalOrg = Pick<
   Organization,
@@ -32,12 +36,22 @@ type PortalOrg = Pick<
   | "brand_color" | "brand_color_2" | "deposit_pct" | "quote_valid_days" | "quote_terms"
 >;
 
+type PortalPlan = {
+  id: string;
+  name?: string;
+  price?: number;
+  interval?: string;
+  /** { description } free text from the plan editor — split into perk rows. */
+  included?: unknown;
+  visits_per_year?: number;
+};
+
 type PortalMembership = {
   id: string;
   status: string;
   next_bill_at?: string | null;
   next_visit_at?: string | null;
-  plan?: { name?: string; price?: number; interval?: string } | null;
+  plan?: PortalPlan | null;
 };
 
 interface PortalData {
@@ -46,6 +60,10 @@ interface PortalData {
   jobs: Job[];
   receipts: Receipt[];
   memberships?: PortalMembership[];
+  /** Active plans for the join-upsell — only sent when the customer has no
+   *  live membership AND the org's Stripe is connected. */
+  plans?: PortalPlan[];
+  stripe_connected?: boolean;
   org: PortalOrg | null;
 }
 
@@ -104,11 +122,111 @@ function extractPhotos(j: Job): { url: string; type: string; label?: string }[] 
   return out;
 }
 
+/* ─── Property grouping ─────────────────────────────────────────────
+ *
+ * One card per REAL address. The old page rendered a card per addresses
+ * row (duplicate rows in the table = duplicate cards) plus an "Other"
+ * bucket for jobs with no address_id whose property string was the same
+ * street. Group by a normalized address key instead: every addresses row
+ * AND every free-text job.property that normalizes to the same string
+ * lands in one group.
+ */
+const norm = (s: string) =>
+  s.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+
+type PropGroup = { key: string; display: string; addressId?: string; jobs: Job[] };
+
+function groupProperties(addresses: Address[], jobs: Job[]): PropGroup[] {
+  const groups: PropGroup[] = [];
+  const byKey = new Map<string, PropGroup>();
+  const addrById = new Map<string, PropGroup>();
+
+  const claim = (key: string, display: string, addressId?: string): PropGroup => {
+    const existing = byKey.get(key);
+    if (existing) {
+      if (!existing.addressId && addressId) existing.addressId = addressId;
+      return existing;
+    }
+    const g: PropGroup = { key, display, addressId, jobs: [] };
+    byKey.set(key, g);
+    groups.push(g);
+    return g;
+  };
+
+  for (const a of addresses) {
+    const display = formatAddress(a);
+    const g = claim(norm(display), display, a.id);
+    addrById.set(a.id, g);
+    // Register alternate keys (label vs street line) → the same group, so a
+    // job whose property string is the raw street folds into a labeled card.
+    const streetLine = [a.street, a.city, a.state, a.zip].filter(Boolean).join(", ");
+    if (streetLine && !byKey.has(norm(streetLine))) byKey.set(norm(streetLine), g);
+    if (a.label && !byKey.has(norm(a.label))) byKey.set(norm(a.label), g);
+  }
+
+  for (const j of jobs) {
+    let g = j.address_id ? addrById.get(j.address_id) : undefined;
+    if (!g) {
+      const pk = norm(j.property || "");
+      if (pk) {
+        g = byKey.get(pk);
+        if (!g) {
+          // Prefix match — "151 n gow st" folds into "151 n gow st wichita ks".
+          for (const [k, grp] of byKey) {
+            if (k.startsWith(pk) || pk.startsWith(k)) { g = grp; break; }
+          }
+        }
+        if (!g) g = claim(pk, j.property);
+      } else {
+        g = claim("__none", "Other");
+      }
+    }
+    g.jobs.push(j);
+  }
+
+  // Actionable work floats to the top of each card; terminal states sink.
+  const RANK: Record<string, number> = {
+    active: 0, scheduled: 1, accepted: 2, quoted: 3, lead: 4,
+    invoiced: 5, complete: 6, paid: 7, inspection: 8,
+  };
+  for (const g of groups) {
+    g.jobs.sort(
+      (x, y) =>
+        (RANK[x.status] ?? 9) - (RANK[y.status] ?? 9) ||
+        (y.created_at || "").localeCompare(x.created_at || ""),
+    );
+  }
+  return groups;
+}
+
+/* ─── Membership helpers ─── */
+const intervalWord = (i?: string) => (i === "annual" ? "yr" : i === "quarterly" ? "qtr" : "mo");
+
+function perkList(plan?: PortalPlan | null): string[] {
+  const out: string[] = [];
+  const v = Number(plan?.visits_per_year) || 0;
+  if (v > 0) {
+    out.push(v === 1 ? "1 service visit a year" : v === 2 ? "2 seasonal visits a year" : `${v} service visits a year`);
+  }
+  const desc = (plan?.included as { description?: string } | null | undefined)?.description || "";
+  for (const part of desc.split(/\n|·|;|,/)) {
+    const t = part.trim();
+    if (t) out.push(t);
+  }
+  return out.slice(0, 5);
+}
+
 export default function PortalPage() {
   const router = useRouter();
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState(false);
+  // ?joined=1 = back from the membership checkout success URL. The webhook
+  // creates the row, which can lag the redirect by a few seconds — show a
+  // "it's activating" note instead of the upsell flashing back.
+  const [joined] = useState(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("joined"),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -137,30 +255,16 @@ export default function PortalPage() {
     return () => { cancelled = true; };
   }, [router]);
 
-  const groups = useMemo(() => {
-    if (!data) return null;
-    const isPM = data.customer.type === "property_manager" || data.addresses.length > 1;
-    if (!isPM) {
-      return { byProperty: false as const, all: data.jobs };
-    }
-    // Bucket jobs by address_id (preferred) then by property string.
-    const buckets = new Map<string, Job[]>();
-    for (const a of data.addresses) buckets.set(a.id, []);
-    const noAddr: Job[] = [];
-    for (const j of data.jobs) {
-      if (j.address_id && buckets.has(j.address_id)) {
-        buckets.get(j.address_id)!.push(j);
-      } else {
-        noAddr.push(j);
-      }
-    }
-    return {
-      byProperty: true as const,
-      addresses: data.addresses,
-      buckets,
-      noAddr,
-    };
-  }, [data]);
+  // Archived jobs (dead quotes) and internal inspection records stay out of
+  // the customer-facing lists.
+  const visibleJobs = useMemo(
+    () => (data?.jobs || []).filter((j) => !j.archived && j.status !== "inspection"),
+    [data],
+  );
+  const groups = useMemo(
+    () => (data ? groupProperties(data.addresses, visibleJobs) : []),
+    [data, visibleJobs],
+  );
 
   if (loading) {
     return (
@@ -184,9 +288,21 @@ export default function PortalPage() {
   }
 
   const { customer, org } = data;
+  const accent = org?.brand_color || PRIMARY;
   const greetName = (customer.primary_contact || customer.name || "").split(/\s+/)[0] || "there";
 
-  const activeCount = data.jobs.filter((j) => !["paid", "complete"].includes(j.status)).length;
+  const memberships = (data.memberships || []).filter((m) => m.status !== "cancelled");
+  const quotesToReview = visibleJobs.filter((j) => j.status === "quoted" && !j.client_signature);
+  const invoicesDue = visibleJobs.filter((j) => j.status === "invoiced");
+  const isMember = memberships.some((m) => m.status === "active" || m.status === "past_due");
+  const activeCount = visibleJobs.filter((j) => !["paid", "complete"].includes(j.status)).length;
+
+  const summaryParts: string[] = [];
+  if (quotesToReview.length) summaryParts.push(`${quotesToReview.length} quote${quotesToReview.length === 1 ? "" : "s"} to review`);
+  if (invoicesDue.length) summaryParts.push(`${invoicesDue.length} invoice${invoicesDue.length === 1 ? "" : "s"} due`);
+  if (isMember) summaryParts.push("member");
+  const summary = summaryParts.join(" · ")
+    || (activeCount > 0 ? `${activeCount} active job${activeCount === 1 ? "" : "s"}` : "You're all caught up");
 
   return (
     <div className="pub">
@@ -204,43 +320,47 @@ export default function PortalPage() {
           )}
         </div>
 
-        {/* Greeting */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        {/* Greeting + summary */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
           <span style={{ fontSize: 24 }}>👋</span>
           <div>
             <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 19 }}>Hi, {greetName}</div>
-            <div className="muted" style={{ fontSize: 13 }}>
-              {activeCount > 0 ? `${activeCount} active job${activeCount === 1 ? "" : "s"}` : "Track quotes, work, and completed jobs below"}
-            </div>
+            <div className="muted" style={{ fontSize: 13 }}>{summary}</div>
           </div>
         </div>
 
-        {/* Top-level Request work CTA */}
-        <RequestWorkButton />
+        {/* THE one global Request Work button */}
+        <a href="/portal/request" className="btn glow-blue" style={{ textDecoration: "none", marginBottom: 4 }}>
+          <Icon name="add" size={17} /> Request Work
+        </a>
 
-        {/* Membership(s) — with self-serve cancel (click-to-cancel). */}
-        <MembershipSection memberships={data.memberships || []} />
+        {joined && !isMember && (
+          <div style={{ background: "rgba(0,204,102,.1)", border: "1px solid rgba(0,204,102,.5)", borderRadius: 12, padding: "10px 12px", fontSize: 13, color: "#7dffb8", margin: "10px 0 2px" }}>
+            Thanks for joining! Your membership is activating — refresh in a minute if it doesn&apos;t appear below.
+          </div>
+        )}
 
-        {groups?.byProperty ? (
+        {/* Needs your attention */}
+        {(quotesToReview.length > 0 || invoicesDue.length > 0) && (
           <>
-            {groups.addresses.map((a) => (
-              <PropertySection
-                key={a.id}
-                address={a}
-                jobs={groups.buckets.get(a.id) || []}
-                receipts={data.receipts}
-              />
-            ))}
-            {groups.noAddr.length > 0 && (
-              <PropertySection
-                address={null}
-                jobs={groups.noAddr}
-                receipts={data.receipts}
-              />
-            )}
+            <SectionLabel icon="alert" tint="#ffce54">Needs your attention</SectionLabel>
+            {quotesToReview.map((j) => <AttentionCard key={j.id} job={j} kind="quote" />)}
+            {invoicesDue.map((j) => <AttentionCard key={j.id} job={j} kind="invoice" />)}
           </>
-        ) : (
-          <FlatSections jobs={data.jobs} receipts={data.receipts} />
+        )}
+
+        {/* Your membership — active card(s) OR the join upsell; nothing if
+            the org has no plans / no Stripe. */}
+        <MembershipArea memberships={memberships} plans={data.plans || []} accent={accent} />
+
+        {/* Your properties — one card per deduped address */}
+        {groups.length > 0 && (
+          <>
+            <SectionLabel icon="home" tint={accent} count={groups.length}>Your properties</SectionLabel>
+            {groups.map((g) => (
+              <PropertyCard key={g.key} group={g} receipts={data.receipts} accent={accent} />
+            ))}
+          </>
         )}
 
         {/* Documents — global, across every property. Each row is a
@@ -252,8 +372,14 @@ export default function PortalPage() {
             attached to the customer's jobs over time. */}
         <RenderingsSection jobs={data.jobs} />
 
-        {/* Footer */}
-        <div style={{ textAlign: "center", color: "#555", fontSize: 13, marginTop: 24 }}>
+        {/* Contact footer */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13, color: "#9a9aa8", marginTop: 18, paddingTop: 14, borderTop: "1px solid #1e1e2e" }}>
+          <Icon name="phone" size={14} color="#7fb6ff" />
+          {org?.phone
+            ? <span>Questions? <a href={`tel:${org.phone}`} style={{ color: "#7fb6ff", textDecoration: "none" }}>Call {org.phone}</a></span>
+            : <span>Questions? Reach out any time.</span>}
+        </div>
+        <div style={{ textAlign: "center", color: "#555", fontSize: 13, marginTop: 10 }}>
           {org?.license_num && <div>License #{org.license_num}</div>}
           <div style={{ marginTop: 4 }}>Powered by Creed App</div>
         </div>
@@ -262,277 +388,307 @@ export default function PortalPage() {
   );
 }
 
-function RequestWorkButton({ addressId }: { addressId?: string }) {
-  const href = addressId ? `/portal/request?address=${addressId}` : "/portal/request";
-  return (
-    <a href={href} className="btn glow-blue" style={{ textDecoration: "none", marginBottom: 16 }}>
-      <Icon name="add" size={17} /> Request Work
-    </a>
-  );
-}
-
-const intervalWord = (i?: string) => (i === "annual" ? "yr" : i === "quarterly" ? "qtr" : "mo");
-
-function MembershipSection({ memberships }: { memberships: PortalMembership[] }) {
-  const [list, setList] = useState(memberships.filter((m) => m.status !== "cancelled"));
-  const [busyId, setBusyId] = useState<string | null>(null);
-  if (list.length === 0) return null;
-
-  const cancel = async (m: PortalMembership) => {
-    if (!window.confirm(`Cancel your ${m.plan?.name || "membership"}? Billing will stop and no more visits will be scheduled.`)) return;
-    setBusyId(m.id);
-    try {
-      const res = await fetch("/api/portal/membership-cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ membershipId: m.id }),
-      });
-      if (res.ok) {
-        setList((l) => l.filter((x) => x.id !== m.id));
-      } else {
-        const d = await res.json().catch(() => ({}));
-        window.alert(d?.error || "Couldn't cancel — please try again or contact your provider.");
-      }
-    } catch {
-      window.alert("Network error — please try again.");
-    }
-    setBusyId(null);
-  };
-
-  return (
-    <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-      <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 14, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 10px" }}>
-        ⭐ Your Membership{list.length > 1 ? "s" : ""}
-      </h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {list.map((m) => (
-          <div key={m.id} style={{ background: "#0d0d15", border: "1px solid #1e1e2e", borderRadius: 10, padding: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "#e2e2e8" }}>{m.plan?.name || "Service plan"}</div>
-            <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
-              {m.plan?.price != null ? `$${Number(m.plan.price).toFixed(2)}/${intervalWord(m.plan?.interval)}` : ""}
-              {m.status === "past_due" ? " · Payment past due" : m.status === "paused" ? " · Paused" : ""}
-            </div>
-            {m.next_bill_at && <div style={{ fontSize: 12.5, color: "#666", marginTop: 3 }}>Next bill {fmtDate(m.next_bill_at)}</div>}
-            <button
-              onClick={() => cancel(m)}
-              disabled={busyId === m.id}
-              style={{ marginTop: 10, padding: "7px 14px", borderRadius: 8, border: "1px solid #C0000088", background: "transparent", color: "#ff8888", fontSize: 13, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".05em", cursor: busyId === m.id ? "wait" : "pointer", opacity: busyId === m.id ? 0.6 : 1 }}
-            >
-              {busyId === m.id ? "Cancelling…" : "Cancel membership"}
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PropertySection({
-  address,
-  jobs,
-  receipts,
-}: {
-  address: Address | null;
-  jobs: Job[];
-  receipts: Receipt[];
+/* ─── Section label (mock .sl) ─── */
+function SectionLabel({ icon, tint, count, children }: {
+  icon: string;
+  tint?: string;
+  count?: number;
+  children: React.ReactNode;
 }) {
+  const c = tint || "#9a9aa8";
   return (
-    <div
-      style={{
-        background: "#12121a",
-        border: "1px solid #1e1e2e",
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 17, color: PRIMARY, margin: 0, textTransform: "uppercase", letterSpacing: ".04em" }}>
-          📍 {address ? formatAddress(address) : "Other"}
-        </h3>
-        <span style={{ fontSize: 13, color: "#666" }}>
-          {jobs.length} {jobs.length === 1 ? "job" : "jobs"}
+    <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", color: c, margin: "18px 2px 9px" }}>
+      <Icon name={icon} size={14} color={c} />
+      {children}
+      {count != null && (
+        <span style={{ marginLeft: "auto", fontSize: 11, background: "#1c1c28", border: "1px solid #2a2a3a", padding: "1px 8px", borderRadius: 99, color: "#cfd2da" }}>
+          {count}
         </span>
-      </div>
-
-      {address && <RequestWorkButton addressId={address.id} />}
-      <FlatSections jobs={jobs} receipts={receipts} compact />
-    </div>
-  );
-}
-
-function FlatSections({ jobs, receipts, compact }: { jobs: Job[]; receipts: Receipt[]; compact?: boolean }) {
-  const open = jobs.filter((j) => j.status === "quoted" || j.status === "lead");
-  const upcoming = jobs.filter((j) => j.status === "accepted" || j.status === "scheduled");
-  const inProgress = jobs.filter((j) => j.status === "active");
-  const done = jobs.filter((j) => j.status === "complete");
-  const invoiced = jobs.filter((j) => j.status === "invoiced" || j.status === "paid");
-
-  if (jobs.length === 0) {
-    return (
-      <p style={{ color: "#666", fontSize: 14, fontStyle: "italic", margin: compact ? "0" : "10px 0" }}>
-        Nothing here yet.
-      </p>
-    );
-  }
-
-  return (
-    <div>
-      {open.length > 0 && (
-        <Section title="Open quotes" tint="#C00000">
-          {open.map((j) => <QuoteCard key={j.id} job={j} />)}
-        </Section>
-      )}
-      {upcoming.length > 0 && (
-        <Section title="Scheduled" tint="#ffcc00">
-          {upcoming.map((j) => <ScheduledCard key={j.id} job={j} />)}
-        </Section>
-      )}
-      {inProgress.length > 0 && (
-        <Section title="In progress" tint="#00cc66">
-          {inProgress.map((j) => <ScheduledCard key={j.id} job={j} />)}
-        </Section>
-      )}
-      {done.length > 0 && (
-        <Section title="Recently completed" tint={PRIMARY}>
-          {done.map((j) => <CompletedCard key={j.id} job={j} />)}
-        </Section>
-      )}
-      {invoiced.length > 0 && (
-        <Section title="Invoices & receipts" tint="#9b59b6">
-          {invoiced.map((j) => <InvoiceCard key={j.id} job={j} receipts={receipts.filter((r) => r.job_id === j.id)} />)}
-        </Section>
       )}
     </div>
   );
 }
 
-function Section({ title, tint, children }: { title: string; tint: string; children: React.ReactNode }) {
+/* ─── Needs-attention cards ─── */
+function AttentionCard({ job, kind }: { job: Job; kind: "quote" | "invoice" }) {
+  const strip = kind === "quote" ? statusColor("quoted") : GOLD;
+  const date = fmtDate(job.job_date) || fmtDate(job.created_at);
   return (
-    <div style={{ marginBottom: 14 }}>
-      <h4
-        style={{
-          fontFamily: "Oswald, sans-serif", fontSize: 13,
-          color: tint, textTransform: "uppercase", letterSpacing: ".08em",
-          margin: "0 0 6px",
-        }}
-      >
-        {title}
-      </h4>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{children}</div>
-    </div>
-  );
-}
-
-function statusBadge(status: string) {
-  const color = statusColor(status);
-  return (
-    <span className="chip" style={{ background: `${color}22`, color, flexShrink: 0 }}>
-      {STATUS_LABEL[status] || status}
-    </span>
-  );
-}
-
-function QuoteCard({ job }: { job: Job }) {
-  return (
-    <a href={`/status?job=${job.id}`} className="jobrow" style={{ textDecoration: "none", color: "inherit" }}>
-      <div className="bar-left" style={{ background: statusColor(job.status) }} />
-      <div className="pl" style={{ flex: 1 }}>
+    <div style={{ position: "relative", background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 14, padding: "12px 13px 12px 17px", marginBottom: 9, overflow: "hidden" }}>
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: strip, boxShadow: `0 0 10px 0 ${strip}` }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div style={{ minWidth: 0 }}>
-          <div className="prop" style={{ fontSize: 15 }}>{job.property || "(address pending)"}</div>
-          <div className="sub">
-            {fmtDate(job.job_date) || fmtDate(job.created_at)}
-            {job.total > 0 ? ` · ${fmtMoney(job.total)}` : ""}
+          <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 15 }}>
+            {kind === "invoice" ? "Invoice" : "Your quote"}{job.property ? ` · ${job.property}` : ""}
           </div>
-          <div style={{ fontSize: 12.5, color: "#7fb6ff", marginTop: 4 }}>
-            {job.client_signature ? "View status →" : "Approve & sign →"}
+          <div style={{ fontSize: 12.5, color: "#9a9aa8", marginTop: 2 }}>
+            {kind === "quote" ? `Quoted ${date}` : `Due · issued ${date}`}
           </div>
         </div>
-      </div>
-      {statusBadge(job.status)}
-    </a>
-  );
-}
-
-function ScheduledCard({ job }: { job: Job }) {
-  let note = "";
-  try {
-    const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-    note = data?.scheduleNote || data?.notes || "";
-  } catch { /* no note */ }
-  return (
-    <a href={`/status?job=${job.id}`} className="jobrow" style={{ textDecoration: "none", color: "inherit" }}>
-      <div className="bar-left" style={{ background: statusColor(job.status) }} />
-      <div className="pl" style={{ flex: 1 }}>
-        <div style={{ minWidth: 0 }}>
-          <div className="prop" style={{ fontSize: 15 }}>{job.property || "(address pending)"}</div>
-          <div className="sub">
-            {fmtDate(job.job_date) || fmtDate(job.created_at)}
-            {job.requested_tech && <> · {job.requested_tech}</>}
+        {job.total > 0 && (
+          <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap", color: kind === "quote" ? "#ff8a8a" : "#ffd76b" }}>
+            {fmtMoney(job.total)}
           </div>
-          {note && <div style={{ fontSize: 13, color: "#bbb", marginTop: 4, fontStyle: "italic" }}>{note}</div>}
-          <div style={{ fontSize: 12.5, color: "#7fb6ff", marginTop: 4 }}>View status →</div>
-        </div>
+        )}
       </div>
-      {statusBadge(job.status)}
-    </a>
-  );
-}
-
-function CompletedCard({ job }: { job: Job }) {
-  const photos = extractPhotos(job);
-  const beforePhotos = photos.filter((p) => p.type === "before");
-  const afterPhotos = photos.filter((p) => p.type === "after");
-  const otherPhotos = photos.filter((p) => p.type !== "before" && p.type !== "after");
-  return (
-    <div
-      style={{
-        background: "#0d0d15", border: "1px solid #1e1e2e",
-        borderRadius: 12, padding: 12,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <b className="prop" style={{ fontSize: 15 }}>{job.property || "(address pending)"}</b>
-        {statusBadge(job.status)}
-      </div>
-      <div style={{ fontSize: 14, color: "#888", marginBottom: 8 }}>
-        {fmtDate(job.job_date) || fmtDate(job.created_at)}
-        {job.trade && <> · {job.trade}</>}
-      </div>
-      {beforePhotos.length > 0 && <PhotoStrip label="Before" photos={beforePhotos} />}
-      {afterPhotos.length > 0 && <PhotoStrip label="After" photos={afterPhotos} />}
-      {beforePhotos.length === 0 && afterPhotos.length === 0 && otherPhotos.length > 0 && (
-        <PhotoStrip label="Photos" photos={otherPhotos} />
-      )}
       <a
         href={`/status?job=${job.id}`}
-        style={{ fontSize: 13, color: "#7fb6ff", textDecoration: "none", display: "inline-block", marginTop: 6 }}
+        className={`btn ${kind === "quote" ? "glow-green" : "glow-gold"}`}
+        style={{ textDecoration: "none", marginTop: 10, padding: 10, fontSize: 13, borderRadius: 10 }}
       >
-        View details →
+        <Icon name={kind === "quote" ? "edit" : "pay"} size={14} /> {kind === "quote" ? "Approve & Sign" : "Pay Invoice"}
       </a>
     </div>
   );
 }
 
-function PhotoStrip({ label, photos }: { label: string; photos: { url: string; label?: string }[] }) {
+/* ─── Membership area ─── */
+function MembershipArea({ memberships, plans, accent }: {
+  memberships: PortalMembership[];
+  plans: PortalPlan[];
+  accent: string;
+}) {
+  const [list, setList] = useState(memberships);
+  const onStatus = (id: string, status: string) =>
+    setList((l) => status === "cancelled" ? l.filter((x) => x.id !== id) : l.map((x) => (x.id === id ? { ...x, status } : x)));
+
+  if (list.length === 0) {
+    if (plans.length === 0) return null;
+    return (
+      <>
+        <SectionLabel icon="award" tint={accent}>Your membership</SectionLabel>
+        {plans.map((p) => <JoinPlanCard key={p.id} plan={p} />)}
+      </>
+    );
+  }
   return (
-    <div style={{ marginBottom: 6 }}>
-      <div style={{ fontSize: 12, color: "#666", fontFamily: "Oswald, sans-serif", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>
-        {label}
+    <>
+      <SectionLabel icon="award" tint={accent}>Your membership{list.length > 1 ? "s" : ""}</SectionLabel>
+      {list.map((m) => <MembershipCard key={m.id} m={m} onStatus={onStatus} />)}
+    </>
+  );
+}
+
+const postJson = (path: string, body: object) =>
+  fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+function MembershipCard({ m, onStatus }: { m: PortalMembership; onStatus: (id: string, status: string) => void }) {
+  const [busy, setBusy] = useState<"" | "card" | "pause" | "cancel">("");
+  const paused = m.status === "paused";
+  const chip =
+    m.status === "active" ? { bg: "rgba(0,204,102,.18)", c: "#3ee08f", label: "Active" }
+    : m.status === "past_due" ? { bg: "rgba(245,180,0,.18)", c: "#ffd76b", label: "Past due" }
+    : { bg: "#1c1c28", c: "#cfd2da", label: "Paused" };
+  const perks = perkList(m.plan);
+  const price = m.plan?.price != null ? `$${Number(m.plan.price).toFixed(0)}` : "";
+  const priceLine = paused
+    ? "Billing paused"
+    : m.status === "past_due"
+      ? "Payment past due — update your card"
+      : price ? `${price} / ${intervalWord(m.plan?.interval)} · renews automatically` : "";
+
+  const updateCard = async () => {
+    setBusy("card");
+    try {
+      const res = await postJson("/api/portal/membership-card", { membershipId: m.id });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.url) { window.location.href = d.url; return; }
+      window.alert(d?.error || "Couldn't open the card update page — please try again.");
+    } catch { window.alert("Network error — please try again."); }
+    setBusy("");
+  };
+
+  const pauseResume = async () => {
+    const action = paused ? "resume" : "pause";
+    if (!paused && !window.confirm("Pause your plan? Billing and service visits stop until you resume.")) return;
+    setBusy("pause");
+    try {
+      const res = await postJson("/api/portal/membership-pause", { membershipId: m.id, action });
+      if (res.ok) {
+        onStatus(m.id, action === "pause" ? "paused" : "active");
+      } else {
+        const d = await res.json().catch(() => ({}));
+        window.alert(d?.error || "Couldn't update the plan — please try again.");
+      }
+    } catch { window.alert("Network error — please try again."); }
+    setBusy("");
+  };
+
+  const cancel = async () => {
+    if (!window.confirm(`Cancel your ${m.plan?.name || "membership"}? Billing will stop and no more visits will be scheduled.`)) return;
+    setBusy("cancel");
+    try {
+      const res = await postJson("/api/portal/membership-cancel", { membershipId: m.id });
+      if (res.ok) { onStatus(m.id, "cancelled"); return; }
+      const d = await res.json().catch(() => ({}));
+      window.alert(d?.error || "Couldn't cancel — please try again or contact your provider.");
+    } catch { window.alert("Network error — please try again."); }
+    setBusy("");
+  };
+
+  const cellStyle: React.CSSProperties = { background: "rgba(0,0,0,.25)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 10, padding: "8px 10px" };
+  const cellLabel: React.CSSProperties = { fontSize: 9.5, letterSpacing: ".06em", textTransform: "uppercase", color: "#b9a6d6" };
+  const cellValue: React.CSSProperties = { fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 14, marginTop: 2 };
+  const btnStyle: React.CSSProperties = { flex: 1, textAlign: "center", fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 11.5, letterSpacing: ".03em", textTransform: "uppercase", padding: "9px 6px", borderRadius: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 };
+
+  return (
+    <div style={{ borderRadius: 16, padding: 14, marginBottom: 10, position: "relative", overflow: "hidden", background: "linear-gradient(150deg, rgba(157,78,221,.2), rgba(46,117,182,.08))", border: "1px solid rgba(157,78,221,.4)", boxShadow: "0 0 24px -10px rgba(157,78,221,.6)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <div>
+          <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 16 }}>{m.plan?.name || "Service plan"}</div>
+          {priceLine && <div style={{ fontSize: 12, color: "#cdb6f0", marginTop: 1 }}>{priceLine}</div>}
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: "Oswald, sans-serif", letterSpacing: ".05em", textTransform: "uppercase", padding: "3px 9px", borderRadius: 99, background: chip.bg, color: chip.c, flexShrink: 0 }}>
+          {chip.label}
+        </span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 4 }}>
-        {photos.slice(0, 6).map((p, i) => (
-          <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" style={{ display: "block" }}>
-            <img
-              src={p.url}
-              alt={p.label || ""}
-              style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 6, border: "1px solid #1e1e2e", display: "block" }}
-              onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
-            />
-          </a>
-        ))}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "12px 0" }}>
+        <div style={cellStyle}>
+          <div style={cellLabel}>Next visit</div>
+          <div style={cellValue}>{paused ? "Paused" : fmtDate(m.next_visit_at) || "—"}</div>
+        </div>
+        <div style={cellStyle}>
+          <div style={cellLabel}>Next bill</div>
+          <div style={cellValue}>
+            {paused ? "Paused" : fmtDate(m.next_bill_at) || "—"}
+            {!paused && price && fmtDate(m.next_bill_at) && (
+              <small style={{ fontFamily: "'Source Sans 3', sans-serif", fontWeight: 400, fontSize: 10.5, color: "#9a9aa8" }}> · {price}</small>
+            )}
+          </div>
+        </div>
       </div>
+
+      {perks.length > 0 && (
+        <div style={{ margin: "8px 0 11px" }}>
+          {perks.map((p, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#e6dcf5", padding: "2px 0" }}>
+              <Icon name="check" size={12} color="#d8b6ff" /> {p}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={updateCard}
+          disabled={busy !== ""}
+          style={{ ...btnStyle, background: "rgba(46,117,182,.18)", border: "1px solid rgba(46,117,182,.7)", color: "#acd2ff", opacity: busy === "card" ? 0.6 : 1 }}
+        >
+          <Icon name="pay" size={12} color="#acd2ff" /> {busy === "card" ? "Opening…" : "Update card"}
+        </button>
+        <button
+          onClick={pauseResume}
+          disabled={busy !== ""}
+          style={{ ...btnStyle, background: "#1c1c28", border: "1px solid #2a2a3a", color: "#cfd2da", opacity: busy === "pause" ? 0.6 : 1 }}
+        >
+          <Icon name={paused ? "start" : "pause"} size={12} color="#cfd2da" /> {busy === "pause" ? "Working…" : paused ? "Resume plan" : "Pause plan"}
+        </button>
+      </div>
+      <button
+        onClick={cancel}
+        disabled={busy !== ""}
+        style={{ display: "block", width: "100%", textAlign: "center", fontSize: 11.5, color: "#666", marginTop: 10, textDecoration: "underline", cursor: busy === "cancel" ? "wait" : "pointer", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}
+      >
+        {busy === "cancel" ? "Cancelling…" : "Cancel membership"}
+      </button>
     </div>
+  );
+}
+
+function JoinPlanCard({ plan }: { plan: PortalPlan }) {
+  const [busy, setBusy] = useState(false);
+  const perks = perkList(plan);
+  const join = async () => {
+    setBusy(true);
+    try {
+      const res = await postJson("/api/portal/membership-checkout", { planId: plan.id });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.url) { window.location.href = d.url; return; }
+      window.alert(d?.error || "Couldn't start checkout — please try again.");
+    } catch { window.alert("Network error — please try again."); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ borderRadius: 16, padding: 14, marginBottom: 10, border: "1.5px dashed rgba(157,78,221,.55)", background: "rgba(157,78,221,.07)" }}>
+      <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 16 }}>Join the {plan.name || "Home Care Plan"}</div>
+      <div style={{ fontSize: 12.5, color: "#cdb6f0", marginTop: 2 }}>
+        {plan.price != null ? `$${Number(plan.price).toFixed(0)} / ${intervalWord(plan.interval)}` : ""} · cancel anytime
+      </div>
+      {perks.length > 0 && (
+        <div style={{ margin: "9px 0 2px" }}>
+          {perks.map((p, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#e6dcf5", padding: "2px 0" }}>
+              <Icon name="check" size={12} color="#d8b6ff" /> {p}
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        onClick={join}
+        disabled={busy}
+        className="btn"
+        style={{ marginTop: 10, padding: 10, fontSize: 13, borderRadius: 10, background: "rgba(157,78,221,.16)", border: "1.5px solid rgba(157,78,221,.85)", color: "#d8b6ff", boxShadow: "0 0 18px -6px rgba(157,78,221,.6)" }}
+      >
+        <Icon name="sparkle" size={14} color="#d8b6ff" /> {busy ? "Opening…" : "Join now"}
+      </button>
+    </div>
+  );
+}
+
+/* ─── Property cards ─── */
+function PropertyCard({ group, receipts, accent }: { group: PropGroup; receipts: Receipt[]; accent: string }) {
+  return (
+    <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 14, padding: "12px 13px", marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <Icon name="pin" size={14} color={accent} />
+        <span style={{ fontFamily: "Oswald, sans-serif", fontWeight: 600, fontSize: 14, letterSpacing: ".02em", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {group.display}
+        </span>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "#9a9aa8", flexShrink: 0 }}>
+          {group.jobs.length} job{group.jobs.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div style={{ marginTop: 5 }}>
+        {group.jobs.map((j, i) => (
+          <JobRow key={j.id} job={j} first={i === 0} receiptCount={receipts.filter((r) => r.job_id === j.id).length} />
+        ))}
+        {group.jobs.length === 0 && (
+          <div style={{ fontSize: 12.5, color: "#666", fontStyle: "italic", padding: "8px 0 2px" }}>No jobs here yet.</div>
+        )}
+      </div>
+      <a
+        href={group.addressId ? `/portal/request?address=${group.addressId}` : "/portal/request"}
+        style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "#7fb6ff", marginTop: 9, fontWeight: 600, textDecoration: "none" }}
+      >
+        <Icon name="add" size={12} color="#7fb6ff" /> Request work here
+      </a>
+    </div>
+  );
+}
+
+function JobRow({ job, first, receiptCount }: { job: Job; first: boolean; receiptCount: number }) {
+  const c = statusColor(job.status);
+  const title = job.trade || (job.status === "lead" ? "Work request" : "Job");
+  const sub = [
+    fmtDate(job.job_date) || fmtDate(job.created_at),
+    job.total > 0 ? fmtMoney(job.total) : "",
+    receiptCount > 0 ? `${receiptCount} receipt${receiptCount === 1 ? "" : "s"}` : "",
+  ].filter(Boolean).join(" · ");
+  return (
+    <a
+      href={`/status?job=${job.id}`}
+      style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 0", borderTop: first ? "none" : "1px solid #1e1e2e", textDecoration: "none", color: "inherit" }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: "50%", background: c, boxShadow: `0 0 7px 0 ${c}`, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+        <div style={{ fontSize: 11.5, color: "#9a9aa8" }}>{sub}</div>
+      </div>
+      <span className="chip" style={{ background: `${c}22`, color: c, flexShrink: 0 }}>
+        {STATUS_LABEL[job.status] || job.status}
+      </span>
+    </a>
   );
 }
 
@@ -651,7 +807,7 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
   };
 
   return (
-    <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+    <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, margin: "18px 0 16px" }}>
       <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 14, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 4px" }}>
         📄 Documents
       </h3>
@@ -804,31 +960,5 @@ function RenderingsSection({ jobs }: { jobs: Job[] }) {
         </div>
       ))}
     </div>
-  );
-}
-
-function InvoiceCard({ job, receipts }: { job: Job; receipts: Receipt[] }) {
-  return (
-    <a href={`/status?job=${job.id}`} className="jobrow" style={{ textDecoration: "none", color: "inherit" }}>
-      <div className="bar-left" style={{ background: statusColor(job.status) }} />
-      <div className="pl" style={{ flex: 1 }}>
-        <div style={{ minWidth: 0 }}>
-          <div className="prop" style={{ fontSize: 15 }}>{job.property || "(address pending)"}</div>
-          <div className="sub">
-            {fmtDate(job.job_date) || fmtDate(job.created_at)}
-            {job.total > 0 && <> · <b style={{ color: job.status === "paid" ? "#d8b6ff" : "#3ee08f" }}>{fmtMoney(job.total)}</b></>}
-          </div>
-          {receipts.length > 0 && (
-            <div style={{ fontSize: 12.5, color: "#666", marginTop: 3 }}>
-              {receipts.length} receipt{receipts.length === 1 ? "" : "s"} on file
-            </div>
-          )}
-          <div style={{ fontSize: 12.5, color: "#7fb6ff", marginTop: 4 }}>
-            {job.status === "paid" ? "View paid invoice →" : "Pay invoice →"}
-          </div>
-        </div>
-      </div>
-      {statusBadge(job.status)}
-    </a>
   );
 }
