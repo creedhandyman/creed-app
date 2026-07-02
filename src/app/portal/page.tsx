@@ -32,11 +32,20 @@ type PortalOrg = Pick<
   | "brand_color" | "brand_color_2" | "deposit_pct" | "quote_valid_days" | "quote_terms"
 >;
 
+type PortalMembership = {
+  id: string;
+  status: string;
+  next_bill_at?: string | null;
+  next_visit_at?: string | null;
+  plan?: { name?: string; price?: number; interval?: string } | null;
+};
+
 interface PortalData {
   customer: Customer;
   addresses: Address[];
   jobs: Job[];
   receipts: Receipt[];
+  memberships?: PortalMembership[];
   org: PortalOrg | null;
 }
 
@@ -209,6 +218,9 @@ export default function PortalPage() {
         {/* Top-level Request work CTA */}
         <RequestWorkButton />
 
+        {/* Membership(s) — with self-serve cancel (click-to-cancel). */}
+        <MembershipSection memberships={data.memberships || []} />
+
         {groups?.byProperty ? (
           <>
             {groups.addresses.map((a) => (
@@ -256,6 +268,62 @@ function RequestWorkButton({ addressId }: { addressId?: string }) {
     <a href={href} className="btn glow-blue" style={{ textDecoration: "none", marginBottom: 16 }}>
       <Icon name="add" size={17} /> Request Work
     </a>
+  );
+}
+
+const intervalWord = (i?: string) => (i === "annual" ? "yr" : i === "quarterly" ? "qtr" : "mo");
+
+function MembershipSection({ memberships }: { memberships: PortalMembership[] }) {
+  const [list, setList] = useState(memberships.filter((m) => m.status !== "cancelled"));
+  const [busyId, setBusyId] = useState<string | null>(null);
+  if (list.length === 0) return null;
+
+  const cancel = async (m: PortalMembership) => {
+    if (!window.confirm(`Cancel your ${m.plan?.name || "membership"}? Billing will stop and no more visits will be scheduled.`)) return;
+    setBusyId(m.id);
+    try {
+      const res = await fetch("/api/portal/membership-cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ membershipId: m.id }),
+      });
+      if (res.ok) {
+        setList((l) => l.filter((x) => x.id !== m.id));
+      } else {
+        const d = await res.json().catch(() => ({}));
+        window.alert(d?.error || "Couldn't cancel — please try again or contact your provider.");
+      }
+    } catch {
+      window.alert("Network error — please try again.");
+    }
+    setBusyId(null);
+  };
+
+  return (
+    <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 14, color: PRIMARY, textTransform: "uppercase", letterSpacing: ".08em", margin: "0 0 10px" }}>
+        ⭐ Your Membership{list.length > 1 ? "s" : ""}
+      </h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {list.map((m) => (
+          <div key={m.id} style={{ background: "#0d0d15", border: "1px solid #1e1e2e", borderRadius: 10, padding: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#e2e2e8" }}>{m.plan?.name || "Service plan"}</div>
+            <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
+              {m.plan?.price != null ? `$${Number(m.plan.price).toFixed(2)}/${intervalWord(m.plan?.interval)}` : ""}
+              {m.status === "past_due" ? " · Payment past due" : m.status === "paused" ? " · Paused" : ""}
+            </div>
+            {m.next_bill_at && <div style={{ fontSize: 12.5, color: "#666", marginTop: 3 }}>Next bill {fmtDate(m.next_bill_at)}</div>}
+            <button
+              onClick={() => cancel(m)}
+              disabled={busyId === m.id}
+              style={{ marginTop: 10, padding: "7px 14px", borderRadius: 8, border: "1px solid #C0000088", background: "transparent", color: "#ff8888", fontSize: 13, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".05em", cursor: busyId === m.id ? "wait" : "pointer", opacity: busyId === m.id ? 0.6 : 1 }}
+            >
+              {busyId === m.id ? "Cancelling…" : "Cancel membership"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

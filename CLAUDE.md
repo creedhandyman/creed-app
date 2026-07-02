@@ -384,9 +384,13 @@ src/
   where `next_visit_at <= now`), creating a `jobs` row from the plan's `included`
   and advancing `next_visit_at` via `computeNextFire()` (cadence from
   `visitCadence(visits_per_year)` in `src/lib/memberships.ts`). Manage (pause/resume/
-  cancel) via `/api/memberships/manage`. UI: Ops → Memberships (`MembershipsPanel`,
-  plan CRUD) + CustomerDetail (enroll + active-plan card). Requires the org's Stripe
-  to be connected. Until the migration runs, saving a plan / loadAll toast a "table
+  cancel) via `/api/memberships/manage` (owner). UI: Ops → Memberships
+  (`MembershipsPanel`, plan CRUD) + CustomerDetail (enroll + active-plan card).
+  Customers SELF-CANCEL from the portal (`/portal` → "Your Membership" → Cancel,
+  hitting `/api/portal/membership-cancel`, authed by the portal-session cookie +
+  scoped to the session's customer) — click-to-cancel compliant. `/api/portal/me`
+  returns the customer's memberships (+ plan name/price) for that card. Requires
+  the org's Stripe to be connected. Until the migration runs, saving a plan / loadAll toast a "table
   does not exist" error; nothing else breaks. No new env (reuses STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET, CRON_SECRET).
 - Review-Request automation (v1):

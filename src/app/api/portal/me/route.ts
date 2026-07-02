@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    const [customerRes, addressesRes, jobsRes, orgRes] = await Promise.all([
+    const [customerRes, addressesRes, jobsRes, orgRes, membershipsRes] = await Promise.all([
       supabase
         .from("customers")
         .select("*")
@@ -59,6 +59,13 @@ export async function GET(req: NextRequest) {
         .select("id, name, phone, email, logo_url, address, license_num, default_rate, markup_pct, tax_pct, tax_mode, trip_fee, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms")
         .eq("id", session.org_id)
         .limit(1),
+      // Active/paused/past-due memberships so the customer can see + cancel them.
+      supabase
+        .from("customer_memberships")
+        .select("*")
+        .eq("customer_id", session.customer_id)
+        .eq("org_id", session.org_id)
+        .neq("status", "cancelled"),
     ]);
 
     if (customerRes.error) return NextResponse.json({ error: customerRes.error.message }, { status: 500 });
@@ -75,11 +82,25 @@ export async function GET(req: NextRequest) {
     // so the contractor's private receipt paths aren't exposed to customers.
     const receipts = receiptsRaw.map((r) => ({ ...r, photo_url: "" }));
 
+    // Enrich memberships with plan name/price/interval for display.
+    const memberships = membershipsRes.data || [];
+    const planIds = Array.from(new Set(memberships.map((m) => m.plan_id).filter(Boolean)));
+    const plansById: Record<string, { id: string; name?: string; price?: number; interval?: string }> = {};
+    if (planIds.length) {
+      const { data: plans } = await supabase
+        .from("membership_plans")
+        .select("id, name, price, interval")
+        .in("id", planIds);
+      for (const p of plans || []) plansById[(p as { id: string }).id] = p;
+    }
+    const enrichedMemberships = memberships.map((m) => ({ ...m, plan: plansById[m.plan_id] || null }));
+
     return NextResponse.json({
       customer: customerRes.data[0],
       addresses: addressesRes.data || [],
       jobs,
       receipts,
+      memberships: enrichedMemberships,
       org: orgRes.data?.[0] || null,
     });
   } catch (error: unknown) {
