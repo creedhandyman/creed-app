@@ -243,6 +243,10 @@ export interface Job {
    *  Stored by /api/verify-payment so the charge.refunded webhook can
    *  look up the job and adjust platform_fee_cents on refund. */
   stripe_payment_intent_id?: string;
+  /** Optional FK into the `equipment` table — the unit this job services.
+   *  Set from the Jobs detail; completing the job stamps that unit's
+   *  `last_service_at`. Absent = no linked equipment. */
+  equipment_id?: string | null;
 }
 
 export interface TimeEntry {
@@ -402,6 +406,33 @@ export interface CustomerMembership {
   next_bill_at?: string | null;
   /** Next auto-created service visit — advanced by the recurring cron. */
   next_visit_at?: string | null;
+  created_at?: string;
+}
+
+/**
+ * Property equipment / asset history. A unit installed at a customer's
+ * property (HVAC, water heater, electrical panel…) tracked across service
+ * visits. `jobs.equipment_id` links a job to the unit it serviced; completing
+ * that job stamps `last_service_at`. See EquipmentSection + CLAUDE.md migration.
+ */
+export type EquipmentKind = "hvac" | "furnace" | "water_heater" | "panel" | "other";
+
+export interface Equipment {
+  id: string;
+  org_id: string;
+  customer_id?: string | null;
+  address_id?: string | null;
+  /** Denormalized property label — used when there's no address_id, or for display. */
+  property?: string | null;
+  kind: string;                    // one of EquipmentKind; tolerant of free text
+  make?: string;
+  model?: string;
+  serial?: string;
+  installed_at?: string | null;    // DATE (YYYY-MM-DD)
+  warranty_until?: string | null;  // DATE
+  notes?: string;
+  photos?: { url: string; label?: string }[];
+  last_service_at?: string | null; // TIMESTAMPTZ — stamped when a linked job completes
   created_at?: string;
 }
 

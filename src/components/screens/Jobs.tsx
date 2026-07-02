@@ -47,6 +47,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const payHistory = useStore((s) => s.payHistory);
   const reviewRequests = useStore((s) => s.reviewRequests);
   const customers = useStore((s) => s.customers);
+  const equipment = useStore((s) => s.equipment);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
   // Inline dark tokens are fixed values — the Properties value-pills sit on a
@@ -460,6 +461,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         try {
           await recordJobOutcome(completedJob, getJobLabor(completedJob).totalHrs);
         } catch { /* learning is best-effort */ }
+        // Stamp the serviced unit's last_service_at (equipment asset history).
+        if (completedJob.equipment_id) {
+          try { await db.patch("equipment", completedJob.equipment_id, { last_service_at: new Date().toISOString() }); } catch { /* best-effort */ }
+        }
       }
     }
 
@@ -817,6 +822,44 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <span className="v">{dj.job_date || (dj.created_at ? dj.created_at.slice(0, 10) : "—")}</span>
             </div>
           </div>
+
+          {/* Equipment — link this job to a serviced unit so completion stamps its history.
+              Only shown when the customer/property already has equipment on file (added in CustomerDetail). */}
+          {(() => {
+            const jobEquip = equipment.filter((e) =>
+              (dj.customer_id && e.customer_id === dj.customer_id) ||
+              (!!dj.property && !!e.property && e.property === dj.property)
+            );
+            if (jobEquip.length === 0) return null;
+            const KL: Record<string, string> = { hvac: "HVAC / AC", furnace: "Furnace", water_heater: "Water heater", panel: "Electrical panel", other: "Equipment" };
+            const kindLabel = (k?: string) => KL[k || ""] || k || "Equipment";
+            const unitLabel = (e: typeof jobEquip[number]) => `${kindLabel(e.kind)}${e.make || e.model ? ` — ${[e.make, e.model].filter(Boolean).join(" ")}` : ""}`;
+            const linked = jobEquip.find((e) => e.id === dj.equipment_id);
+            return (
+              <div className="section">
+                <div className="seclabel"><Icon name="settings" size={13} /> Equipment</div>
+                <div className="drow">
+                  <span className="l">Serviced unit</span>
+                  <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: pillBg, border: `1px solid ${pillBorder}` }}>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>{linked ? unitLabel(linked) : "None"}</span>
+                    <Icon name="expand" size={12} color="var(--color-dim)" />
+                    <select
+                      value={dj.equipment_id || ""}
+                      aria-label="Serviced unit"
+                      onChange={async (e) => { await db.patch("jobs", dj.id, { equipment_id: e.target.value || null }); loadAll(); }}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", WebkitAppearance: "none", appearance: "none" }}
+                    >
+                      <option value="">None</option>
+                      {jobEquip.map((e) => <option key={e.id} value={e.id}>{unitLabel(e)}{e.serial ? ` (S/N ${e.serial})` : ""}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {linked?.last_service_at && (
+                  <div className="drow"><span className="l">Last serviced</span><span className="v">{new Date(linked.last_service_at).toLocaleDateString()}</span></div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Notes */}
           <div className="section">

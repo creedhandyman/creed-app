@@ -19,6 +19,7 @@ import { Icon } from "../Icon";
 import type { CustomerType, Address, Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { INTERVAL_LABEL } from "@/lib/memberships";
+import EquipmentSection from "./EquipmentSection";
 
 interface Props {
   customerId: string;
@@ -666,6 +667,9 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
           </div>
         )}
       </div>
+
+      {/* Equipment / asset history */}
+      <EquipmentSection customerId={customerId} addresses={addresses} />
 
       {/* Memberships */}
       <div className="cd mb">

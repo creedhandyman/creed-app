@@ -570,6 +570,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     try {
       const fresh = useStore.getState().jobs.find((j) => j.id === activeJob.id) || activeJob;
       await recordJobOutcome(fresh, jobActualHours(fresh, useStore.getState().timeEntries));
+      // Stamp the serviced unit's last_service_at (equipment asset history).
+      if (fresh.equipment_id) {
+        try { await db.patch("equipment", fresh.equipment_id, { last_service_at: new Date().toISOString() }); } catch { /* */ }
+      }
     } catch { /* */ }
     useStore.getState().showToast("Job completed! Great work.", "success");
     // Pop the review-request modal before navigating away — last chance to

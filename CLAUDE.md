@@ -394,6 +394,41 @@ src/
   the org's Stripe to be connected. Until the migration runs, saving a plan / loadAll toast a "table
   does not exist" error; nothing else breaks. No new env (reuses STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET, CRON_SECRET).
+- Equipment / asset history (per-customer serviced units — no Stripe, one table):
+  ```sql
+  CREATE TABLE IF NOT EXISTS equipment (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID,
+    customer_id UUID,
+    address_id UUID,
+    property TEXT,
+    kind TEXT NOT NULL,             -- hvac | furnace | water_heater | panel | other (free-text ok)
+    make TEXT,
+    model TEXT,
+    serial TEXT,
+    installed_at DATE,
+    warranty_until DATE,
+    notes TEXT,
+    photos JSONB,                   -- [{ url, label? }]
+    last_service_at TIMESTAMPTZ,    -- auto-stamped when a linked job completes
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_equipment_org ON equipment(org_id);
+  CREATE INDEX IF NOT EXISTS idx_equipment_customer ON equipment(customer_id);
+  ALTER TABLE jobs ADD COLUMN IF NOT EXISTS equipment_id UUID;
+  ```
+  CRUD lives in `EquipmentSection.tsx` (rendered in CustomerDetail, above
+  Memberships); `store.ts` `upsertEquipment`/`deleteEquipment` + `equipment[]`
+  loaded in `loadAll`. Photos go to the PUBLIC `receipts` bucket
+  (`equipment/…`), like logos/renders (not the private receipts path). A job is
+  linked to a unit via the **Serviced unit** picker on the Jobs detail screen
+  (only shown when the job's customer/property already has equipment on file);
+  it sets the top-level `jobs.equipment_id` column directly (no rooms blob).
+  When that job completes — BOTH the Jobs status-flip AND WorkVision's Complete
+  Job — `equipment.last_service_at` is stamped (best-effort). Until the migration
+  runs, saving a unit / linking a job toasts a "table/column does not exist"
+  error (best-effort) but nothing else breaks; existing orgs see no Equipment
+  card until they add one.
 - Review-Request automation (v1):
   ```
   CREATE TABLE IF NOT EXISTS review_requests (

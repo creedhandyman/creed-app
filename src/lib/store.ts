@@ -18,6 +18,7 @@ import type {
   RecurringJob,
   MembershipPlan,
   CustomerMembership,
+  Equipment,
   ReviewRequest,
   AppNotification,
 } from "./types";
@@ -90,6 +91,7 @@ interface AppState {
   reviewRequests: ReviewRequest[];
   membershipPlans: MembershipPlan[];
   customerMemberships: CustomerMembership[];
+  equipment: Equipment[];
   notifications: AppNotification[];
   loading: boolean;
   loadAll: () => Promise<void>;
@@ -113,6 +115,10 @@ interface AppState {
     row: Partial<Address> & { customer_id: string }
   ) => Promise<Address | null>;
   deleteAddress: (id: string) => Promise<boolean>;
+  upsertEquipment: (
+    row: Partial<Equipment> & { kind: string }
+  ) => Promise<Equipment | null>;
+  deleteEquipment: (id: string) => Promise<boolean>;
 
   // auto-refresh
   _interval: ReturnType<typeof setInterval> | null;
@@ -274,6 +280,7 @@ export const useStore = create<AppState>((set, get) => ({
   reviewRequests: [],
   membershipPlans: [],
   customerMemberships: [],
+  equipment: [],
   notifications: [],
   loading: true,
 
@@ -323,6 +330,7 @@ export const useStore = create<AppState>((set, get) => ({
       settle(db.get<ReviewRequest>("review_requests", orgFilter)),
       settle(db.get<MembershipPlan>("membership_plans", orgFilter)),
       settle(db.get<CustomerMembership>("customer_memberships", orgFilter)),
+      settle(db.get<Equipment>("equipment", orgFilter)),
       // Notifications are per-user, not per-org — scope to the current
       // user and cap so the feed query stays light on every 15s refresh.
       settle(userId ? db.get<AppNotification>("notifications", { user_id: userId }, { limit: 50 }) : Promise.resolve([])),
@@ -330,18 +338,18 @@ export const useStore = create<AppState>((set, get) => ({
     const [
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
-      membershipPlans, customerMemberships,
+      membershipPlans, customerMemberships, equipment,
       notifications,
     ] = results as [
       Customer[], Address[], Profile[], Job[], TimeEntry[],
       Review[], Referral[], ScheduleEntry[], PayHistory[], Receipt[], QuestPayout[], TimeOffRequest[], RecurringJob[], ReviewRequest[],
-      MembershipPlan[], CustomerMembership[],
+      MembershipPlan[], CustomerMembership[], Equipment[],
       AppNotification[],
     ];
     set({
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
-      membershipPlans, customerMemberships,
+      membershipPlans, customerMemberships, equipment,
       notifications,
       loading: false,
     });
@@ -438,6 +446,35 @@ export const useStore = create<AppState>((set, get) => ({
   deleteAddress: async (id) => {
     await db.del("addresses", id);
     set({ addresses: get().addresses.filter((a) => a.id !== id) });
+    return true;
+  },
+
+  upsertEquipment: async (row) => {
+    const isUpdate = !!row.id;
+    if (isUpdate) {
+      const updates = { ...row };
+      delete (updates as { id?: string }).id;
+      await db.patch("equipment", row.id!, updates);
+      const updated = { ...get().equipment.find((e) => e.id === row.id), ...updates, id: row.id! } as Equipment;
+      set({ equipment: get().equipment.map((e) => (e.id === row.id ? updated : e)) });
+      return updated;
+    }
+    const orgId = get().user?.org_id;
+    const payload = { ...row, ...(orgId ? { org_id: orgId } : {}) };
+    const inserted = await db.post<Equipment>("equipment", payload as Record<string, unknown>);
+    if (inserted === null) return null;
+    if (inserted.length > 0) {
+      const created = inserted[0];
+      set({ equipment: [created, ...get().equipment] });
+      return created;
+    }
+    await get().loadAll();
+    return null;
+  },
+
+  deleteEquipment: async (id) => {
+    await db.del("equipment", id);
+    set({ equipment: get().equipment.filter((e) => e.id !== id) });
     return true;
   },
 
