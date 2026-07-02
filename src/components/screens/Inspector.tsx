@@ -48,6 +48,79 @@ export const ROOM_PRESETS: Record<string, string[]> = {
 /* Context-specific quick actions per item type */
 function getPresets(itemName: string): string[] {
   const n = itemName.toLowerCase();
+  // ── Structural / MEP items (Initial Walkthrough) ──
+  // Checked BEFORE the generic repair rules so data-capture items
+  // (age, capacity, material…) get fitting chips instead of
+  // "Replace / Broken / Missing".
+  if (/\bage\b|brand/.test(n))
+    return ["0–5 yrs", "5–10 yrs", "10–15 yrs", "15+ yrs", "Unknown age"];
+  if (/capacity/.test(n))
+    return ["Undersized", "Adequate", "Upgrade recommended"];
+  if (/crack/.test(n))
+    return ["Hairline cracks", "Major cracking", "Seal & monitor", "Needs structural eval"];
+  if (/settling|movement/.test(n))
+    return ["Minor settling", "Uneven floors", "Doors sticking", "Monitor over time"];
+  if (/moisture|intrusion/.test(n))
+    return ["Signs of moisture", "Active water intrusion", "Efflorescence", "Seal needed"];
+  if (/pooling|standing water/.test(n))
+    return ["Pooling at foundation", "Add downspout extension", "Regrade needed"];
+  if (/grade|grading|slope/.test(n))
+    return ["Slopes away OK", "Slopes toward house", "Regrade needed"];
+  if (/shingle/.test(n))
+    return ["Missing shingles", "Curling/lifting", "Patch section", "Full replacement soon"];
+  if (/flashing/.test(n))
+    return ["Re-seal flashing", "Replace flashing", "Rusted"];
+  if (/sagging/.test(n))
+    return ["No sag", "Visible sag", "Needs framing eval"];
+  if (/gutter attached/.test(n))
+    return ["Attached OK", "Pulling away", "Re-secure needed"];
+  if (/downspout extension/.test(n))
+    return ["Extensions present", "Add extensions", "Damaged"];
+  if (/double.?tap/.test(n))
+    return ["None found", "Double-tap present", "Pigtail needed"];
+  if (/labeling/.test(n))
+    return ["Fully labeled", "Partially labeled", "Unlabeled — re-label"];
+  if (/refrigerant/.test(n))
+    return ["No leaks seen", "Suspected leak", "Oil residue at fittings", "Service needed"];
+  if (/function/.test(n))
+    return ["Works properly", "Intermittent", "Not working", "Needs service"];
+  if (/^condition$/.test(n))
+    return ["Good for age", "Worn", "Rusty/corroded", "End of life"];
+  if (/filter size/.test(n))
+    return ["16x20x1", "16x25x1", "20x20x1", "20x25x1"];
+  if (/supply line material|pipe material/.test(n))
+    return ["Copper", "PEX", "CPVC", "Galvanized — plan replace", "Polybutylene — replace"];
+  if (/corrosion/.test(n))
+    return ["Minor surface rust", "Heavy corrosion", "Replace fittings"];
+  if (/t&p|relief valve/.test(n))
+    return ["Tested OK", "Drips/leaks", "Replace valve", "No discharge pipe"];
+  if (/^(visible )?leaks?$/.test(n))
+    return ["No leaks seen", "Active leak", "Signs of past leak"];
+  // ── Yard / grounds tasks (Yard Cutting) — service descriptions,
+  // not repair conditions. ──
+  if (/^mow/.test(n))
+    return ["Standard cut", "Overgrown — tall grass", "Bag clippings"];
+  if (/^edge/.test(n))
+    return ["Edge walks + drive", "Edges overgrown"];
+  if (/trim shrubs|plant trim|^trim$/.test(n))
+    return ["Light shaping", "Heavy cutback", "Remove deadwood"];
+  if (/cleanup/.test(n))
+    return ["Leaf cleanup", "Branch/debris pickup", "Full cleanup"];
+  if (/debris haul/.test(n))
+    return ["1 trailer load", "Multiple loads", "Haul to dump"];
+  if (/blow off/.test(n))
+    return ["Blow walks + drive", "Blow and haul debris"];
+  if (/weed control|weed pull|weed\/vine/.test(n))
+    return ["Spray weeds", "Hand pull beds", "Clear vines", "Pre-emergent"];
+  if (/visual check/.test(n))
+    return ["Looks good", "Damage found", "Repair needed"];
+  if (/stain touch/.test(n))
+    return ["Spot stain", "Full re-stain needed"];
+  if (/mulch/.test(n))
+    return ["1–2 yards mulch", "3+ yards mulch", "Re-edge beds"];
+  if (/pest/.test(n))
+    return ["No pests seen", "Ant mounds", "Grub damage", "Treatment needed"];
+  // ── Standard repair-condition rules ──
   if (/sink|faucet|vanity|toilet|tub|shower|connect/.test(n))
     return ["Fix leak", "Replace fixture", "Unclog", "Re-caulk", "Tighten", "Replace supply line"];
   if (/wall|ceiling/.test(n))
@@ -124,13 +197,13 @@ const ROOM_ORDER = [
 ];
 
 /* ── Inspection types ───────────────────────────────────────────────
-   Five entry-flow flavors. The user picks one before selecting areas;
+   Six entry-flow flavors. The user picks one before selecting areas;
    the choice controls which areas appear in the chip grid AND which
    item checklist each area walks through. The choice also gets
    stamped on the resulting InspectionData so the AI parser knows
    what kind of work to scope. */
 
-export type InspectionType = "move-out" | "flooring" | "painting" | "yard" | "initial";
+export type InspectionType = "move-out" | "move-in" | "flooring" | "painting" | "yard" | "initial";
 
 const PAINTING_ITEMS = ["Walls", "Ceiling", "Trim/Baseboards", "Doors", "Window Casings"];
 // Floor-only inspection items. Was a single "Flooring" line per room
@@ -162,6 +235,40 @@ const YARD_PRESETS: Record<string, string[]> = {
   "Walkways":   ["Blow Off", "Edge", "Weed Control"],
   "Fence":      ["Visual Check", "Weed/Vine Clear", "Stain Touch-up"],
   "Landscaping Beds": ["Mulch Refresh", "Weed Pull", "Plant Trim", "Pest Check"],
+};
+
+// Move-in inspection — a LIGHT version of move-out that a resident can
+// walk themselves. Fewer, plain-language items per room; the goal is
+// documenting baseline condition at occupancy, not scoping repairs.
+const MOVE_IN_BEDROOM = ["Overall Condition", "Flooring/Carpet", "Walls/Paint", "Doors/Closet", "Windows/Blinds"];
+const MOVE_IN_BATH = ["Overall Condition", "Toilet", "Sink/Vanity", "Tub/Shower", "Flooring", "Walls/Paint"];
+const MOVE_IN_PRESETS: Record<string, string[]> = {
+  Kitchen: ["Overall Condition", "Appliances", "Sink/Faucet", "Counters/Cabinets", "Flooring", "Walls/Paint"],
+  "Living Room": ["Overall Condition", "Flooring", "Walls/Paint", "Windows/Blinds", "Lights/Outlets"],
+  "Dining Room": ["Overall Condition", "Flooring", "Walls/Paint", "Windows/Blinds", "Lights/Outlets"],
+  Entry: ["Overall Condition", "Door/Locks", "Flooring", "Walls/Paint"],
+  "Hallway/Stairs": ["Overall Condition", "Flooring", "Walls/Paint", "Lights"],
+  "Laundry Room": ["Overall Condition", "Washer/Dryer Hookups", "Flooring", "Walls/Paint"],
+  "Bedroom 1": MOVE_IN_BEDROOM,
+  "Bedroom 2": MOVE_IN_BEDROOM,
+  "Bedroom 3": MOVE_IN_BEDROOM,
+  "Bedroom 4": MOVE_IN_BEDROOM,
+  "Bathroom 1": MOVE_IN_BATH,
+  "Bathroom 2": MOVE_IN_BATH,
+  "Bathroom 3": MOVE_IN_BATH,
+  Garage: ["Overall Condition", "Door/Opener", "Floor", "Walls"],
+  Exterior: ["Overall Condition", "Siding/Paint", "Porch/Deck", "Yard", "Fence"],
+};
+
+const moveInItems = (room: string): string[] => {
+  const exact = MOVE_IN_PRESETS[room];
+  if (exact) return exact;
+  const baseKey = Object.keys(MOVE_IN_PRESETS).find(
+    (k) => room.startsWith(k.replace(/ \d+$/, "")),
+  );
+  return baseKey
+    ? MOVE_IN_PRESETS[baseKey]
+    : ["Overall Condition", "Flooring", "Walls/Paint", "Lights/Outlets"];
 };
 
 // Structural / MEP areas — used by the Initial Walkthrough type to
@@ -217,6 +324,16 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
     description: "Standard move-out walkthrough — condition per item across every area.",
     suggestedRooms: ROOM_ORDER,
     itemsForRoom: moveOutItems,
+  },
+  {
+    id: "move-in",
+    label: "Move In",
+    icon: "home",
+    description: "Light move-in condition check — simple enough for a resident to walk themselves.",
+    // Compliance (breaker panel / GFCI checks) is pro territory; the
+    // resident-friendly walk skips it.
+    suggestedRooms: ROOM_ORDER.filter((r) => r !== "Compliance"),
+    itemsForRoom: moveInItems,
   },
   {
     id: "flooring",
@@ -276,7 +393,7 @@ export interface InspectionData {
   customer_id?: string;
   address_id?: string;
   /** Which inspection flavor the user picked at the start (move-out /
-   *  flooring / painting / yard / initial). Stamped here so QuoteForge
+   *  move-in / flooring / painting / yard / initial). Stamped here so QuoteForge
    *  can pass it to the AI parser and downstream code knows whether
    *  this is a comprehensive inspection, a single-trade survey, or a
    *  recurring yard-cutting log. Optional / defaults to "move-out"
@@ -387,6 +504,12 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   // VoiceWalk's strip is keyed that way). Drives the ⏳/✓ chip badges.
   const [voiceProcessingStatus, setVoiceProcessingStatus] =
     useState<Record<string, VoiceWalkRoomStatus>>({});
+  // Items whose notes field was manually opened while in good (S)
+  // condition, keyed "roomIdx:itemIdx". Notes historically only rendered
+  // for Fair/Poor/DMG items — but inspectors need to jot details on OK
+  // items too (brand, age, "cleaned during visit"). Session-only UI
+  // state; the notes themselves persist on the item.
+  const [openNotes, setOpenNotes] = useState<Record<string, boolean>>({});
 
   // Auto-save to localStorage on every change. Suppressed in edit mode so
   // an in-progress edit can't overwrite the resume slot a fresh inspection
@@ -714,6 +837,11 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     (s, r) => s + r.items.filter((it) => it.condition !== "S").length,
     0
   );
+  // Move-in and Initial Walkthrough are DOCUMENTATION walks — a clean
+  // property with zero findings is a legitimate (great!) outcome, so
+  // they may complete without any Fair/Poor/DMG item. The repair-scoped
+  // types still require at least one finding to generate a quote from.
+  const isDocType = inspectionType === "move-in" || inspectionType === "initial";
   const photosCount = roomData.reduce(
     (s, r) => s + r.items.reduce((ss, it) => ss + it.photos.length, 0),
     0
@@ -845,12 +973,19 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   key={t.id}
                   onClick={() => {
                     if (t.id === inspectionType) return;
+                    const prevType = activeTypeConfig;
                     setInspectionType(t.id);
                     // Filter the current selection down to areas the
                     // new type knows about. Move-Out → Flooring keeps
                     // shared rooms; Move-Out → Yard drops everything.
+                    // User-typed CUSTOM areas (not a preset of the type
+                    // they were added under) survive the switch.
                     setSelectedRooms((prev) =>
-                      prev.filter((r) => t.suggestedRooms.includes(r)),
+                      prev.filter(
+                        (r) =>
+                          t.suggestedRooms.includes(r) ||
+                          !prevType.suggestedRooms.includes(r),
+                      ),
                     );
                   }}
                   title={t.description}
@@ -932,9 +1067,15 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             </button>
           </div>
 
-          {/* Custom rooms added */}
+          {/* Custom rooms added — only TRUE custom areas (typed in above)
+              belong here. Filter against the active type's suggested
+              rooms, not ROOM_PRESETS: the structural/yard preset areas
+              (Foundation, Front Yard, …) aren't ROOM_PRESETS keys, so
+              they used to fall down here as removable "custom" chips
+              while the classic rooms didn't. Preset areas toggle off in
+              the grid; this list is for one-off additions only. */}
           {selectedRooms
-            .filter((r) => !Object.keys(ROOM_PRESETS).includes(r))
+            .filter((r) => !activeTypeConfig.suggestedRooms.includes(r))
             .map((r) => (
               <div
                 key={r}
@@ -1211,7 +1352,19 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         </div>
 
         {/* Items */}
-        {room.items.map((item, itemIdx) => (
+        {room.items.map((item, itemIdx) => {
+          // Notes visibility: always for non-OK conditions and for the
+          // Initial Walkthrough (its structural items are data-capture —
+          // age, capacity, brand — worth recording even in good shape);
+          // otherwise when the item already has notes or the user tapped
+          // "+ Add note".
+          const noteKey = `${currentRoomIdx}:${itemIdx}`;
+          const showNotes =
+            item.condition !== "S" ||
+            inspectionType === "initial" ||
+            !!(item.notes && item.notes.trim()) ||
+            !!openNotes[noteKey];
+          return (
           <div
             key={itemIdx}
             className="cd statusstrip"
@@ -1307,8 +1460,24 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               ))}
             </div>
 
-            {/* Notes + quick presets (show when not S) */}
-            {item.condition !== "S" && (<>
+            {/* Notes + quick presets — see showNotes above. */}
+            {!showNotes && (
+              <button
+                onClick={() => setOpenNotes((p) => ({ ...p, [noteKey]: true }))}
+                style={{
+                  fontSize: 13,
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  background: "transparent",
+                  border: `1px dashed ${border}`,
+                  color: "#888",
+                  cursor: "pointer",
+                }}
+              >
+                + Add note
+              </button>
+            )}
+            {showNotes && (<>
               {/* Quick note presets — tailored to this item type */}
               <div style={{ display: "flex", gap: 3, marginBottom: 4, flexWrap: "wrap" }}>
                 {getPresets(item.name).map((preset) => (
@@ -1353,7 +1522,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               <input
                 value={item.notes}
                 onChange={(e) => updateItem(currentRoomIdx, itemIdx, "notes", e.target.value)}
-                placeholder="Describe the issue..."
+                placeholder={item.condition === "S" ? "Add a note (brand, age, detail…)" : "Describe the issue..."}
                 style={{ fontSize: 14 }}
               />
             </>)}
@@ -1402,7 +1571,8 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {/* Add custom item */}
         <button
@@ -1531,20 +1701,20 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         <button
           className="bb"
           onClick={handleGenerate}
-          disabled={!isEditing && findingsCount === 0}
+          disabled={!isEditing && !isDocType && findingsCount === 0}
           style={{
             width: "100%",
             padding: 14,
             fontSize: 18,
-            background: !isEditing && findingsCount === 0 ? "#333" : "var(--color-primary)",
-            opacity: !isEditing && findingsCount === 0 ? 0.5 : 1,
+            background: !isEditing && !isDocType && findingsCount === 0 ? "#333" : "var(--color-primary)",
+            opacity: !isEditing && !isDocType && findingsCount === 0 ? 0.5 : 1,
           }}
         >
           {isEditing
             ? `💾 Save Changes (${findingsCount} finding${findingsCount === 1 ? "" : "s"})`
             : `🤖 Generate Quote (${findingsCount} findings)`}
         </button>
-        {!isEditing && findingsCount === 0 && (
+        {!isEditing && !isDocType && findingsCount === 0 && (
           <p className="dim" style={{ fontSize: 15, textAlign: "center", marginTop: 6 }}>
             Mark at least one item as Fair, Poor, or Damaged to generate a quote
           </p>

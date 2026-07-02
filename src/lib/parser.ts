@@ -1528,7 +1528,7 @@ export interface InspectionInput {
   property: string;
   client: string;
   /** The inspection flavor the user picked at the start
-   *  ("move-out" | "flooring" | "painting" | "yard" | "initial").
+   *  ("move-out" | "move-in" | "flooring" | "painting" | "yard" | "initial").
    *  Optional — older saved inspections don't carry it; default
    *  behavior is the same as move-out. The AI prompt uses this to
    *  scope which kinds of line items to emit (single-trade survey
@@ -1598,6 +1598,7 @@ function compileInspectionText(
   // four types narrow / shift the scope per the brief below.
   if (inspectionType && inspectionType !== "move-out") {
     const brief: Record<string, string> = {
+      "move-in": "MOVE-IN condition documentation — a light per-room walkthrough recording baseline condition at occupancy. Satisfactory items (even ones with notes) are documentation, NOT work to quote. Quote ONLY items explicitly marked Fair/Poor/Damaged, and keep the scope minimal — this report may legitimately produce very few or zero line items.",
       flooring: "FLOORING-ONLY survey — quote ONLY flooring work (LVP, carpet, tile, sqft-priced baseboards/cove base). Every line item MUST be in the Flooring trade bucket. Skip any non-flooring findings even if mentioned in passing.",
       painting: "PAINTING-ONLY survey — quote ONLY painted-surface work (wall paint, ceiling paint, trim/baseboard paint, door paint, window-casing paint, drywall patch + paint, caulking). Every line item MUST be in the Painting trade bucket.",
       yard: "RECURRING YARD/GROUNDS service — this is NOT a one-time repair quote. Quote a recurring service (per-visit pricing for mow/edge/trim/cleanup tasks). Group line items under the General trade bucket. Do not include carpentry, plumbing, electrical, or HVAC items.",
