@@ -384,8 +384,9 @@ src/
   where `next_visit_at <= now`), creating a `jobs` row from the plan's `included`
   and advancing `next_visit_at` via `computeNextFire()` (cadence from
   `visitCadence(visits_per_year)` in `src/lib/memberships.ts`). Manage (pause/resume/
-  cancel) via `/api/memberships/manage` (owner). UI: Ops → Memberships
-  (`MembershipsPanel`, plan CRUD) + CustomerDetail (enroll + active-plan card).
+  cancel) via `/api/memberships/manage` (owner). UI: Ops → **Recurring & Plans**
+  → "Memberships" toggle (`MembershipsPanel`, plan CRUD, sharing the tab with
+  Recurring via `RecurringMemberships`) + CustomerDetail (enroll + active-plan card).
   Customers SELF-CANCEL from the portal (`/portal` → "Your Membership" → Cancel,
   hitting `/api/portal/membership-cancel`, authed by the portal-session cookie +
   scoped to the session's customer) — click-to-cancel compliant. `/api/portal/me`
