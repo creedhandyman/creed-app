@@ -2,6 +2,7 @@
 import { apiFetch, getStatusLink } from "@/lib/api";
 import CountUp from "@/components/CountUp";
 import { useState, useRef, useEffect, useMemo } from "react";
+import type { CSSProperties } from "react";
 import RenderModal from "../RenderModal";
 import Coachmark from "../Coachmark";
 import { buildRenderPrompt } from "@/lib/render-prompt";
@@ -3134,6 +3135,45 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
    SUB-COMPONENTS
    ═══════════════════════════════════════════ */
 
+/** Auto-growing textarea for the editable quote-line description + note.
+ *  Grows to fit its content so long scopes (e.g. T&M paragraphs) show in full
+ *  while still reading as inline text. Controlled — value flows from `rooms`. */
+function AutoTextarea({
+  value,
+  onChange,
+  className,
+  placeholder,
+  ariaLabel,
+  style,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  placeholder?: string;
+  ariaLabel?: string;
+  style?: CSSProperties;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className={className}
+      value={value}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      rows={1}
+      onChange={(e) => onChange(e.target.value)}
+      style={style}
+    />
+  );
+}
+
 function QuoteTab({
   rooms,
   rate,
@@ -3187,11 +3227,25 @@ function QuoteTab({
                   }}
                 >
                   <div style={{ flex: "1 1 180px" }}>
-                    <b style={{ fontSize: 14 }}>{it.detail}</b>{" "}
-                    <ConditionBadge condition={it.condition} />
-                    <div style={{ fontSize: 13 }} className="dim">
-                      {it.comment}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                      <AutoTextarea
+                        className="qedit qtitle"
+                        value={it.detail || ""}
+                        placeholder="Describe the work…"
+                        ariaLabel="Work description"
+                        onChange={(v) => upItem(rm.name, it.id, "detail", v)}
+                        style={{ flex: 1, minWidth: 0 }}
+                      />
+                      <ConditionBadge condition={it.condition} />
                     </div>
+                    <AutoTextarea
+                      className="qedit"
+                      value={it.comment || ""}
+                      placeholder="Add detail / notes…"
+                      ariaLabel="Work notes"
+                      onChange={(v) => upItem(rm.name, it.id, "comment", v)}
+                      style={{ marginTop: 3, color: "var(--color-dim)" }}
+                    />
                     {tieredQuote && (() => {
                       const RANK = { base: 0, better: 1, best: 2 } as const;
                       const et = (editTier || "base") as "base" | "better" | "best";
