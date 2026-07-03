@@ -849,6 +849,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);
+        // Repeat upload with an address already set (e.g. quoting the other
+        // unit of a duplex right after the first): the existing prop wins so
+        // a deliberate customer/address pick is never stomped — but warn when
+        // the report disagrees so the job doesn't get saved under the wrong
+        // unit silently.
+        else if (
+          result.property && prop &&
+          result.property.trim().toLowerCase() !== prop.trim().toLowerCase()
+        ) {
+          useStore.getState().showToast(
+            `Report reads "${result.property}" but the address is set to "${prop}" — tap the address to change it if this is a different unit.`,
+            "warning"
+          );
+        }
         if (result.client && !client) setClient(result.client);
         // Carry Quick Quote photos into the job's gallery as "before" photos
         // so they save with the job when the user hits Save (previously the
