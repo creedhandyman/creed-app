@@ -1,6 +1,7 @@
 "use client";
 import { create } from "zustand";
 import { supabase, db } from "./supabase";
+import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
 import type {
   Organization,
   Profile,
@@ -28,6 +29,11 @@ import type {
 // fetch. Module-level (not store state) so the in-flight tracking doesn't
 // trigger re-renders. Cleared in the finally() after the batch resolves.
 let loadAllInFlight: Promise<void> | null = null;
+
+// Throttle offline-snapshot writes. loadAll runs every 15s; persisting the
+// full data set that often is wasteful, so we write at most once per 30s.
+// Starts at 0 so the first successful load always snapshots immediately.
+let lastSnapshotAt = 0;
 
 /* ── localStorage helpers ── */
 function ld<T>(key: string, fallback: T): T {
@@ -94,6 +100,13 @@ interface AppState {
   equipment: Equipment[];
   notifications: AppNotification[];
   loading: boolean;
+  /** True when the UI is showing the last cached snapshot because the network
+   *  is unreachable (drives the offline banner). Cleared on the next
+   *  successful online load. */
+  usingOfflineData: boolean;
+  /** Epoch ms of the last successful online load, or the snapshot's own
+   *  timestamp when hydrated offline — powers the "last synced" label. */
+  lastSyncedAt: number | null;
   loadAll: () => Promise<void>;
 
   /** Notifications — the dashboard-bell feed. Rows are written server-side;
@@ -177,9 +190,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   logout: () => {
     supabase.auth.signOut();
-    set({ user: null, org: null });
+    set({ user: null, org: null, usingOfflineData: false, lastSyncedAt: null });
     sv("user", null);
     sv("org", null);
+    // Drop the cached offline snapshot so the next account on this device
+    // starts clean (the owner guard already refuses cross-user reads).
+    void clearSnapshot();
     get().stopAutoRefresh();
   },
 
@@ -283,6 +299,8 @@ export const useStore = create<AppState>((set, get) => ({
   equipment: [],
   notifications: [],
   loading: true,
+  usingOfflineData: false,
+  lastSyncedAt: null,
 
   loadAll: async () => {
     // Concurrency guard. Many event handlers (Jobs, Quests, Branding,
@@ -298,6 +316,39 @@ export const useStore = create<AppState>((set, get) => ({
     loadAllInFlight = (async () => {
     const orgId = get().user?.org_id;
     const userId = get().user?.id;
+
+    // Show the last cached snapshot instead of wiping the store to empty.
+    // Used by the offline fast-path below AND the failed-batch guard further
+    // down. db.get swallows network errors and resolves to [], so without this
+    // a single offline loadAll would set every collection to [] — that was the
+    // "all my data disappeared in airplane mode" bug.
+    const applyOffline = async () => {
+      // Already have data in memory → just raise the banner; don't re-read IDB
+      // on every 15s poll while the network stays down.
+      if (get().profiles.length > 0 || get().jobs.length > 0) {
+        set({ loading: false, usingOfflineData: true });
+        return;
+      }
+      const snap = await loadSnapshot(userId, orgId);
+      if (snap) {
+        set({
+          ...(snap.data as unknown as Partial<AppState>),
+          loading: false,
+          usingOfflineData: true,
+          lastSyncedAt: snap.at,
+        });
+      } else {
+        set({ loading: false }); // nothing cached — stop the spinner, leave as-is
+      }
+    };
+
+    // Fast offline path: skip the 18 doomed fetches (each would resolve to []
+    // and wipe the store) and show the snapshot instead.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      await applyOffline();
+      return;
+    }
+
     const orgFilter = orgId ? { org_id: orgId } : undefined;
     // db.get already catches and resolves to [] on per-table failures,
     // but use allSettled as a belt-and-suspenders so a thrown exception
@@ -346,13 +397,35 @@ export const useStore = create<AppState>((set, get) => ({
       MembershipPlan[], CustomerMembership[], Equipment[],
       AppNotification[],
     ];
+    // Failed-batch guard: a real logged-in org ALWAYS has ≥1 profile (the user
+    // themselves). An empty profiles result means the fetch failed (dropped
+    // connection / server blip while navigator.onLine still read true) — don't
+    // overwrite good data with a wipe; keep the snapshot up instead.
+    if (profiles.length === 0 && orgId) {
+      await applyOffline();
+      return;
+    }
+
     set({
       customers, addresses, profiles, jobs, timeEntries,
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
       membershipPlans, customerMemberships, equipment,
       notifications,
       loading: false,
+      usingOfflineData: false,
+      lastSyncedAt: Date.now(),
     });
+
+    // Persist a fresh snapshot so the next offline load has real data to show.
+    // Throttled (loadAll runs every 15s) to avoid churning IndexedDB.
+    if (Date.now() - lastSnapshotAt > 30000) {
+      lastSnapshotAt = Date.now();
+      void saveSnapshot(userId, orgId, {
+        customers, addresses, profiles, jobs, timeEntries,
+        reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
+        membershipPlans, customerMemberships, equipment, notifications,
+      });
+    }
     // Also refresh org data (picks up Stripe changes, site updates, etc.).
     // Query by the user's org_id (authoritative) — querying by the currently
     // cached org.id meant that if the cached org was null/stale, the refetch
@@ -533,4 +606,15 @@ if (typeof window !== "undefined") {
   // quiet "Syncing data…" info toast instead of a wall of red noise.
   (window as unknown as { __dbToast?: (m: string, t: "error" | "info" | "warning" | "success") => void }).__dbToast =
     (msg: string, type) => useStore.getState().showToast(msg, type);
+
+  // React to connectivity changes immediately instead of waiting up to 15s
+  // for the next poll: "online" refetches live data (clears the offline
+  // banner); "offline" short-circuits loadAll to the snapshot (raises it).
+  // Guarded on a logged-in user so we don't spin on the marketing page.
+  window.addEventListener("online", () => {
+    if (useStore.getState().user) void useStore.getState().loadAll();
+  });
+  window.addEventListener("offline", () => {
+    if (useStore.getState().user) void useStore.getState().loadAll();
+  });
 }

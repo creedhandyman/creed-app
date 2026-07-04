@@ -17,6 +17,7 @@ import Operations from "./screens/Operations";
 import WorkVision from "./screens/WorkVision";
 import MoreHub from "./screens/MoreHub";
 import Coachmark from "./Coachmark";
+import OfflineBanner from "./OfflineBanner";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -112,6 +113,7 @@ export default function AppShell() {
 
   return (
     <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
+      <OfflineBanner />
       <VerticalNav page={page} setPage={goToPage} isAdmin={isAdmin} />
       <div className="mc">{renderPage()}</div>
       {/* The "quote" tip is mounted inside QuoteForge's hub (not here) so it
