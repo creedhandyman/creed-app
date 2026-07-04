@@ -1,7 +1,7 @@
 "use client";
 import { Component, useEffect, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
-import { db } from "@/lib/supabase";
+import { db, supabase } from "@/lib/supabase";
 import { parseEntryDate } from "@/lib/dates";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
@@ -62,6 +62,110 @@ class SubTabErrorBoundary extends Component<
   }
 }
 
+/* ── Beta preflight ─────────────────────────────────────────────────
+   One-tap readiness check against /api/preflight (authed with the
+   owner's Supabase JWT — same pattern as Payroll's "Run now (test)").
+   Renders the endpoint's booleans as a green/red list so nothing has
+   to be verified with curl. */
+type PreflightReport = {
+  ready: boolean;
+  blockers: string[];
+  env: Record<string, boolean>;
+  usingServiceRole: boolean;
+  db: Record<string, boolean>;
+  stripe: { reachable: boolean };
+  checkedAt: string;
+};
+
+function PreflightPanel() {
+  const [report, setReport] = useState<PreflightReport | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      const res = await fetch("/api/preflight", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: "no-store",
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        useStore.getState().showToast(j.error || `Preflight failed (${res.status})`, "error");
+        return;
+      }
+      setReport(j as PreflightReport);
+    } catch {
+      useStore.getState().showToast("Network error — try again", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const Row = ({ ok, label }: { ok: boolean; label: string }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13.5, padding: "2px 0", color: ok ? "inherit" : "var(--color-accent-red)" }}>
+      <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: ok ? "var(--color-success)" : "var(--color-accent-red)", boxShadow: `0 0 6px 0 ${ok ? "var(--color-success)" : "var(--color-accent-red)"}` }} />
+      {label}
+    </div>
+  );
+
+  return (
+    <div className="cd mb">
+      <h4 style={{ fontSize: 16, marginBottom: 6, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Icon name="checkCircle" size={15} color="var(--color-primary)" /> Beta preflight
+      </h4>
+      <div className="dim" style={{ fontSize: 14, marginBottom: 8 }}>
+        Checks env vars, database migrations, and Stripe on the live deployment. All green = ready for beta.
+      </div>
+      <button className="bb" onClick={run} disabled={busy} style={{ fontSize: 14, padding: "7px 14px" }}>
+        {busy ? "Checking…" : report ? "Re-run checks" : "Run checks"}
+      </button>
+
+      {report && (
+        <div style={{ marginTop: 12 }}>
+          {/* Verdict banner */}
+          <div
+            className="statusstrip"
+            style={{
+              ["--c" as never]: report.ready ? "var(--color-success)" : "var(--color-accent-red)",
+              padding: "8px 10px", borderRadius: 8, marginBottom: 10,
+              background: report.ready ? "rgba(0,204,102,.08)" : "rgba(192,0,0,.08)",
+            }}
+          >
+            <b style={{ fontSize: 15, color: report.ready ? "var(--color-success)" : "var(--color-accent-red)" }}>
+              {report.ready ? "READY — all checks passed" : `${report.blockers.length} blocker${report.blockers.length === 1 ? "" : "s"} to clear`}
+            </b>
+          </div>
+
+          {/* Blockers, plain language */}
+          {report.blockers.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              {report.blockers.map((b, i) => (
+                <div key={i} style={{ display: "flex", gap: 6, fontSize: 13.5, color: "var(--color-accent-red)", padding: "2px 0" }}>
+                  <span>✗</span> {b}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="seclabel" style={{ marginTop: 8 }}>Environment</div>
+          {Object.entries(report.env).map(([k, v]) => <Row key={k} ok={v} label={k} />)}
+          <Row ok={report.usingServiceRole} label="Service role (live database read)" />
+          <Row ok={report.stripe?.reachable} label="Stripe API reachable" />
+
+          <div className="seclabel" style={{ marginTop: 10 }}>Database migrations</div>
+          {Object.entries(report.db).map(([k, v]) => <Row key={k} ok={v} label={k} />)}
+
+          <div className="dim" style={{ fontSize: 12, marginTop: 10 }}>
+            Checked {new Date(report.checkedAt).toLocaleString()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OpsSettings() {
   const org = useStore((s) => s.org);
   const loadAll = useStore((s) => s.loadAll);
@@ -84,6 +188,9 @@ function OpsSettings() {
 
   return (
     <div>
+      {/* Beta preflight — one-tap deployment readiness check */}
+      <PreflightPanel />
+
       {/* Branding & Business Info — logo, name, phone, address, license # */}
       <BrandingSettings />
 
