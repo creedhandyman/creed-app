@@ -25,6 +25,7 @@ function ago(ts: number): string {
 export default function OfflineBanner() {
   const offline = useStore((s) => s.usingOfflineData);
   const lastSyncedAt = useStore((s) => s.lastSyncedAt);
+  const pending = useStore((s) => s.pendingWrites);
   const [, tick] = useState(0);
 
   // Keep the relative label fresh while the network stays down. loadAll
@@ -72,6 +73,9 @@ export default function OfflineBanner() {
       <span>
         Offline — showing saved data
         {lastSyncedAt ? ` · last synced ${ago(lastSyncedAt)}` : ""}
+        {pending > 0
+          ? ` · ${pending} change${pending > 1 ? "s" : ""} will sync when you reconnect`
+          : ""}
       </span>
     </div>
   );

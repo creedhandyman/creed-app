@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { supabase, db } from "./supabase";
 import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
+import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue } from "./offline-queue";
 import type {
   Organization,
   Profile,
@@ -107,7 +108,17 @@ interface AppState {
   /** Epoch ms of the last successful online load, or the snapshot's own
    *  timestamp when hydrated offline — powers the "last synced" label. */
   lastSyncedAt: number | null;
+  /** Count of offline writes waiting to sync (the offline-queue). Surfaced in
+   *  the banner so a tech knows their offline clock-out isn't lost. */
+  pendingWrites: number;
   loadAll: () => Promise<void>;
+
+  /** Offline-durable time-entry writes. ALL clock in/out/manual/edit/delete
+   *  goes through these so a write survives no-signal (queued + replayed on
+   *  reconnect) and updates the store optimistically. `mode` is "post" for a
+   *  new row (caller supplies a stable id via newRowId) or "patch" to update. */
+  saveTimeEntry: (rowId: string, patch: Record<string, unknown>, mode: "post" | "patch") => Promise<void>;
+  dropTimeEntry: (rowId: string) => Promise<void>;
 
   /** Notifications — the dashboard-bell feed. Rows are written server-side;
    *  the client only reads (in loadAll, scoped to the current user) and
@@ -193,9 +204,12 @@ export const useStore = create<AppState>((set, get) => ({
     set({ user: null, org: null, usingOfflineData: false, lastSyncedAt: null });
     sv("user", null);
     sv("org", null);
-    // Drop the cached offline snapshot so the next account on this device
-    // starts clean (the owner guard already refuses cross-user reads).
+    // Drop the cached offline snapshot + any queued writes so the next account
+    // on this device starts clean (the owner guard already refuses cross-user
+    // reads; the queue is unconditionally wiped).
     void clearSnapshot();
+    clearQueue();
+    set({ pendingWrites: 0 });
     get().stopAutoRefresh();
   },
 
@@ -301,6 +315,7 @@ export const useStore = create<AppState>((set, get) => ({
   loading: true,
   usingOfflineData: false,
   lastSyncedAt: null,
+  pendingWrites: pendingCount(),
 
   loadAll: async () => {
     // Concurrency guard. Many event handlers (Jobs, Quests, Branding,
@@ -324,18 +339,25 @@ export const useStore = create<AppState>((set, get) => ({
     // "all my data disappeared in airplane mode" bug.
     const applyOffline = async () => {
       // Already have data in memory → just raise the banner; don't re-read IDB
-      // on every 15s poll while the network stays down.
+      // on every 15s poll while the network stays down. (In-memory timeEntries
+      // already reflect optimistic offline writes.)
       if (get().profiles.length > 0 || get().jobs.length > 0) {
-        set({ loading: false, usingOfflineData: true });
+        set({ loading: false, usingOfflineData: true, pendingWrites: pendingCount() });
         return;
       }
       const snap = await loadSnapshot(userId, orgId);
       if (snap) {
+        const data = snap.data as unknown as Partial<AppState>;
         set({
-          ...(snap.data as unknown as Partial<AppState>),
+          ...data,
+          // Materialize queued offline writes on top of the snapshot so a
+          // reload mid-airplane-mode still shows the clock-out that hasn't
+          // synced yet.
+          timeEntries: applyPending("time_entries", (data.timeEntries as TimeEntry[]) || []),
           loading: false,
           usingOfflineData: true,
           lastSyncedAt: snap.at,
+          pendingWrites: pendingCount(),
         });
       } else {
         set({ loading: false }); // nothing cached — stop the spinner, leave as-is
@@ -407,13 +429,18 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     set({
-      customers, addresses, profiles, jobs, timeEntries,
+      customers, addresses, profiles, jobs,
+      // Materialize any not-yet-synced offline writes on top of server truth so
+      // an optimistic clock-out isn't clobbered by a poll that lands before the
+      // queue flushes. Once flushed, the queue is empty and this is a no-op.
+      timeEntries: applyPending("time_entries", timeEntries),
       reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
       membershipPlans, customerMemberships, equipment,
       notifications,
       loading: false,
       usingOfflineData: false,
       lastSyncedAt: Date.now(),
+      pendingWrites: pendingCount(),
     });
 
     // Persist a fresh snapshot so the next offline load has real data to show.
@@ -436,6 +463,44 @@ export const useStore = create<AppState>((set, get) => ({
     }
     })().finally(() => { loadAllInFlight = null; });
     return loadAllInFlight;
+  },
+
+  /* ── Offline-durable time-entry writes ───────────────────────────
+     Route every clock in/out/manual/edit through these so a write
+     survives no-signal: enqueue → optimistic store update → (if
+     online) flush + reconcile. Offline, the queue persists in
+     localStorage and replays on the next reconnect. */
+  saveTimeEntry: async (rowId, patch, mode) => {
+    // Insert needs org_id like db.post would auto-inject (the queue's raw
+    // upsert doesn't run that logic).
+    const orgId = get().user?.org_id;
+    const payload = mode === "post" && orgId ? { org_id: orgId, ...patch } : patch;
+    enqueueWrite({ table: "time_entries", op: mode, rowId, payload });
+    // Optimistic local update so Crew Activity / My Log reflect it immediately.
+    // Use `payload` (not `patch`) so the in-store row matches what gets
+    // persisted — e.g. the injected org_id on an insert.
+    const cur = get().timeEntries;
+    const idx = cur.findIndex((e) => e.id === rowId);
+    const next = idx >= 0
+      ? cur.map((e) => (e.id === rowId ? ({ ...e, ...payload, id: rowId } as unknown as TimeEntry) : e))
+      : [({ id: rowId, ...payload } as unknown as TimeEntry), ...cur];
+    set({ timeEntries: next, pendingWrites: pendingCount() });
+    // Try to sync now when online, then reconcile against server truth.
+    if (typeof navigator === "undefined" || navigator.onLine !== false) {
+      const res = await flushQueue();
+      set({ pendingWrites: res.remaining });
+      if (res.flushed > 0) await get().loadAll();
+    }
+  },
+
+  dropTimeEntry: async (rowId) => {
+    enqueueWrite({ table: "time_entries", op: "del", rowId });
+    set({ timeEntries: get().timeEntries.filter((e) => e.id !== rowId), pendingWrites: pendingCount() });
+    if (typeof navigator === "undefined" || navigator.onLine !== false) {
+      const res = await flushQueue();
+      set({ pendingWrites: res.remaining });
+      if (res.flushed > 0) await get().loadAll();
+    }
   },
 
   /* ── Customer + Address helpers ──────────────────────────────────
@@ -581,6 +646,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   startAutoRefresh: () => {
     get().stopAutoRefresh();
+    // Replay any writes queued in a previous session (e.g. clocked out offline,
+    // then closed the app) before/while the first load runs.
+    flushQueue().then((res) => set({ pendingWrites: res.remaining })).catch(() => {});
     get().loadAll();
     const iv = setInterval(() => get().loadAll(), 15000);
     set({ _interval: iv });
@@ -608,11 +676,17 @@ if (typeof window !== "undefined") {
     (msg: string, type) => useStore.getState().showToast(msg, type);
 
   // React to connectivity changes immediately instead of waiting up to 15s
-  // for the next poll: "online" refetches live data (clears the offline
-  // banner); "offline" short-circuits loadAll to the snapshot (raises it).
-  // Guarded on a logged-in user so we don't spin on the marketing page.
+  // for the next poll: "online" flushes queued offline writes (clock-outs
+  // etc.) THEN refetches live data (clears the offline banner); "offline"
+  // short-circuits loadAll to the snapshot (raises it). Guarded on a
+  // logged-in user so we don't spin on the marketing page.
   window.addEventListener("online", () => {
-    if (useStore.getState().user) void useStore.getState().loadAll();
+    if (!useStore.getState().user) return;
+    void (async () => {
+      const res = await flushQueue();
+      useStore.setState({ pendingWrites: res.remaining });
+      await useStore.getState().loadAll();
+    })();
   });
   window.addEventListener("offline", () => {
     if (useStore.getState().user) void useStore.getState().loadAll();

@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n";
 import type { Job } from "@/lib/types";
 import { Icon } from "../Icon";
 import { parseEntryDate } from "@/lib/dates";
+import { newRowId } from "@/lib/offline-queue";
 
 // Resolve a job_id from a property/address string when stamping a new
 // time_entries row. Disambiguates the case where two jobs share an
@@ -84,7 +85,8 @@ export default function Timer({ setPage }: Props) {
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
   const timeEntries = useStore((s) => s.timeEntries);
-  const loadAll = useStore((s) => s.loadAll);
+  const saveTimeEntry = useStore((s) => s.saveTimeEntry);
+  const dropTimeEntry = useStore((s) => s.dropTimeEntry);
   const darkMode = useStore((s) => s.darkMode);
   // Inline dark tokens are fixed values — they don't flip for light mode.
   // These helpers keep nested fills/avatars/chips readable (no black-on-black)
@@ -153,12 +155,9 @@ export default function Timer({ setPage }: Props) {
         const hrs = 12;
         const amount = Math.round(hrs * rate * 100) / 100;
         if (activeId) {
-          await db.patch("time_entries", activeId, {
-            hours: hrs, amount,
-            end_time: fmtTime(Date.now()),
-          });
+          await saveTimeEntry(activeId, { hours: hrs, amount, end_time: fmtTime(Date.now()) }, "patch");
         } else {
-          await db.post("time_entries", {
+          await saveTimeEntry(newRowId(), {
             job: sj || "General",
             job_id: resolveActiveJobId(jobs, sj),
             entry_date: new Date().toLocaleDateString(),
@@ -166,10 +165,9 @@ export default function Timer({ setPage }: Props) {
             user_id: user.id, user_name: user.name,
             start_time: fmtTime(st),
             end_time: fmtTime(Date.now()),
-          });
+          }, "post");
         }
         setActiveId(null);
-        await loadAll();
       })();
       setOn(false);
       setSt(null);
@@ -207,7 +205,12 @@ export default function Timer({ setPage }: Props) {
     const startedAt = Date.now();
     setSt(startedAt);
     setOn(true);
-    const result = await db.post<{ id: string }>("time_entries", {
+    // Stable client id so an offline clock-in + later clock-out reference the
+    // SAME row (queued + replayed on reconnect) — no server round-trip needed
+    // to learn the id, and clock-out always has a target even with no signal.
+    const id = newRowId();
+    setActiveId(id);
+    await saveTimeEntry(id, {
       job: sj || "General",
       job_id: resolveActiveJobId(jobs, sj),
       entry_date: new Date().toLocaleDateString(),
@@ -216,16 +219,8 @@ export default function Timer({ setPage }: Props) {
       user_id: user.id,
       user_name: user.name,
       start_time: fmtTime(startedAt),
-      // end_time intentionally omitted — present of end_time == finished
-    });
-    if (result && result[0]?.id) {
-      setActiveId(result[0].id);
-      await loadAll();
-    } else {
-      // DB insert failed — fall back to local-only timer. stop() will post
-      // a regular entry when the user clocks out.
-      setActiveId(null);
-    }
+      // end_time intentionally omitted — presence of end_time == finished
+    }, "post");
     // Auto-promote the matching job from "scheduled" to "active" so the
     // workload view reflects what's actually happening on site. Skip if the
     // selected entry is "General" or doesn't match a scheduled job — we
@@ -248,36 +243,28 @@ export default function Timer({ setPage }: Props) {
     try {
     const hrs = Math.round(el / 3600000 * 100) / 100;
     if (hrs >= 0.01) {
+      const closePatch = {
+        hours: hrs,
+        amount: Math.round(hrs * rate * 100) / 100,
+        end_time: fmtTime(Date.now()),
+        job: sj || "General",
+      };
       if (activeId) {
-        // Close out the existing active row
-        await db.patch("time_entries", activeId, {
-          hours: hrs,
-          amount: Math.round(hrs * rate * 100) / 100,
-          end_time: fmtTime(Date.now()),
-          job: sj || "General",
-        });
+        // Close out the existing active row (durable — survives offline).
+        await saveTimeEntry(activeId, closePatch, "patch");
       } else {
-        // activeId lost (refresh, app switch) — find the most recent open row
-        // for this user and close it. Never post a second entry — that leaves
-        // the original open row showing as "still active" on the crew tab.
+        // activeId lost (legacy row from before stable ids) — find the most
+        // recent open row for this user and close it. Never post a second
+        // entry — that leaves the original open row showing "still active".
         const open = useStore.getState().timeEntries
           .filter((e) => e.user_id === user.id && e.start_time && !e.end_time)
           .sort((a, b) => (b.start_time || "").localeCompare(a.start_time || ""));
-        if (open[0]) {
-          await db.patch("time_entries", open[0].id, {
-            hours: hrs,
-            amount: Math.round(hrs * rate * 100) / 100,
-            end_time: fmtTime(Date.now()),
-            job: sj || "General",
-          });
-        }
+        if (open[0]) await saveTimeEntry(open[0].id, closePatch, "patch");
       }
-      await loadAll();
     } else if (activeId) {
       // Timer was only running briefly; delete the in-progress row instead
       // of leaving a zero-hour ghost entry.
-      await db.del("time_entries", activeId);
-      await loadAll();
+      await dropTimeEntry(activeId);
     }
     setOn(false);
     setSt(null);
@@ -295,7 +282,7 @@ export default function Timer({ setPage }: Props) {
     if (!mDate) { useStore.getState().showToast(t("timer.selectDate"), "warning"); return; }
     const targetUser = profiles.find((p) => p.id === mUser) || user;
     const targetRate = targetUser.rate || 55;
-    await db.post("time_entries", {
+    await saveTimeEntry(newRowId(), {
       job: mj || "General",
       job_id: resolveActiveJobId(jobs, mj),
       entry_date: mDate,
@@ -303,10 +290,9 @@ export default function Timer({ setPage }: Props) {
       amount: Math.round(h * targetRate * 100) / 100,
       user_id: targetUser.id,
       user_name: targetUser.name,
-    });
+    }, "post");
     setMh("");
     setMj("");
-    loadAll();
   };
 
   // Today's scheduled jobs
@@ -604,8 +590,7 @@ export default function Timer({ setPage }: Props) {
                   if (newHrs === e.hours) return;
                   const owner = profiles.find((p) => p.id === e.user_id);
                   const ownerRate = owner?.rate || user.rate || 55;
-                  await db.patch("time_entries", e.id, { hours: newHrs, amount: Math.round(newHrs * ownerRate * 100) / 100 });
-                  await loadAll();
+                  await saveTimeEntry(e.id, { hours: newHrs, amount: Math.round(newHrs * ownerRate * 100) / 100 }, "patch");
                 }}
               />
               <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "var(--color-success)", minWidth: 42, textAlign: "right" }}>${(e.amount || 0).toFixed(0)}</span>
@@ -613,8 +598,7 @@ export default function Timer({ setPage }: Props) {
                 onClick={async () => {
                   if (e.user_id && e.user_id !== user.id && !isOwner) return;
                   if (!await useStore.getState().showConfirm("Delete Entry", "Delete this time entry?")) return;
-                  await db.del("time_entries", e.id);
-                  await loadAll();
+                  await dropTimeEntry(e.id);
                 }}
                 style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}
               >✕</button>
@@ -724,8 +708,8 @@ export default function Timer({ setPage }: Props) {
                             <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{running ? `running · since ${en.start_time}` : `${en.entry_date}${en.start_time ? ` · ${en.start_time}–${en.end_time || "now"}` : ""}`}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                            <input type="number" defaultValue={en.hours} step=".25" min="0" style={{ width: 46, textAlign: "center", padding: "2px 4px", fontSize: 14, fontFamily: "Oswald", fontWeight: 600 }} onBlur={async (ev) => { const nh = parseFloat(ev.target.value) || 0; if (nh === en.hours) return; await db.patch("time_entries", en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }); loadAll(); }} />
-                            <button onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await db.del("time_entries", en.id); loadAll(); }} style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}>✕</button>
+                            <input type="number" defaultValue={en.hours} step=".25" min="0" style={{ width: 46, textAlign: "center", padding: "2px 4px", fontSize: 14, fontFamily: "Oswald", fontWeight: 600 }} onBlur={async (ev) => { const nh = parseFloat(ev.target.value) || 0; if (nh === en.hours) return; await saveTimeEntry(en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }, "patch"); }} />
+                            <button onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await dropTimeEntry(en.id); }} style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}>✕</button>
                           </div>
                         </div>
                       );
@@ -735,8 +719,7 @@ export default function Timer({ setPage }: Props) {
                         if (!await useStore.getState().showConfirm("Force Clock-Out", `Clock out ${p.name}? This closes the session without their own clock-out.`)) return;
                         const e = activeEntry!;
                         const hrs = e.start_time ? (() => { const m = e.start_time.match(/(\d+):(\d+)\s*([AP]M)?/i); if (!m) return 0; let h = parseInt(m[1]); const mm = parseInt(m[2]); const ap = m[3]?.toUpperCase(); if (ap === "PM" && h < 12) h += 12; if (ap === "AM" && h === 12) h = 0; const st = new Date(); st.setHours(h, mm, 0, 0); return Math.round((Date.now() - st.getTime()) / 3600000 * 100) / 100; })() : 0;
-                        await db.patch("time_entries", e.id, { hours: hrs, amount: Math.round(hrs * rRate * 100) / 100, end_time: fmtTime(Date.now()) });
-                        await loadAll();
+                        await saveTimeEntry(e.id, { hours: hrs, amount: Math.round(hrs * rRate * 100) / 100, end_time: fmtTime(Date.now()) }, "patch");
                       }} style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 9, padding: "7px", marginBottom: 6, cursor: "pointer" }}>
                         <Icon name="stop" size={12} color="#ff9d9d" /> Force clock out
                       </button>

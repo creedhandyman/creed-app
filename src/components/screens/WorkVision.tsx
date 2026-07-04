@@ -16,6 +16,7 @@ import { buildRenderPrompt } from "@/lib/render-prompt";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
 import { pickReceiptPhoto } from "@/lib/image";
+import { newRowId } from "@/lib/offline-queue";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -79,6 +80,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
   const loadAll = useStore((s) => s.loadAll);
+  const saveTimeEntry = useStore((s) => s.saveTimeEntry);
+  const dropTimeEntry = useStore((s) => s.dropTimeEntry);
   const darkMode = useStore((s) => s.darkMode);
 
   const [on, setOn] = useState(() => ld("t_on", false));
@@ -234,7 +237,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setOn(true);
     setEl(0);
     setActiveJobId(resolvedJobId || null);
-    const result = await db.post<{ id: string }>("time_entries", {
+    // Stable client id so an offline clock-in + later clock-out target the same
+    // row (queued + replayed on reconnect). Shared with Timer via t_active_id.
+    const id = newRowId();
+    setActiveId(id);
+    await saveTimeEntry(id, {
       job: job || "General",
       job_id: resolvedJobId,
       entry_date: new Date().toLocaleDateString("en-US"),
@@ -243,13 +250,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       user_id: user.id,
       user_name: user.name,
       start_time: fmtTime(startedAt),
-    });
-    if (result && result[0]?.id) {
-      setActiveId(result[0].id);
-      await loadAll();
-    } else {
-      setActiveId(null);
-    }
+    }, "post");
     // Auto-promote the matching job from "scheduled" to "active" so the
     // workload view reflects what's actually happening. Don't flip jobs
     // already in "complete"/"paid" backwards.
@@ -271,13 +272,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     const rounded = Math.round(hrs * 100) / 100;
     const amount = Math.round(hrs * rate * 100) / 100;
     if (hrs > 0.01) {
+      const closePatch = { hours: rounded, amount, end_time: fmtTime(Date.now()), job: sj || "General" };
       if (activeId) {
-        await db.patch("time_entries", activeId, {
-          hours: rounded,
-          amount,
-          end_time: fmtTime(Date.now()),
-          job: sj || "General",
-        });
+        // Durable — survives offline and replays on reconnect.
+        await saveTimeEntry(activeId, closePatch, "patch");
       } else {
         // Fallback: find this user's most-recent open active row and close it.
         const open = useStore.getState().timeEntries
@@ -285,15 +283,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
         const target = open[open.length - 1];
         if (target) {
-          await db.patch("time_entries", target.id, {
-            hours: rounded,
-            amount,
-            end_time: fmtTime(Date.now()),
-            job: sj || "General",
-          });
+          await saveTimeEntry(target.id, closePatch, "patch");
         } else {
           // No open row at all — last-resort: post a completed entry.
-          await db.post("time_entries", {
+          await saveTimeEntry(newRowId(), {
             job: sj || "General",
             job_id: resolveActiveJobId(jobs, sj),
             entry_date: new Date().toLocaleDateString("en-US"),
@@ -303,13 +296,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             user_name: user.name,
             start_time: fmtTime(st),
             end_time: fmtTime(Date.now()),
-          });
+          }, "post");
         }
       }
     } else if (activeId) {
       // Brief in-and-out — delete the in-progress row instead of leaving a
       // zero-hour ghost entry.
-      await db.del("time_entries", activeId);
+      await dropTimeEntry(activeId);
     }
     setOn(false);
     setSt(null);
