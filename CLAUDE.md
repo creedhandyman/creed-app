@@ -536,6 +536,33 @@ src/
 
 ## Big systems shipped recently (for context)
 
+- **PWA / offline (installable + offline reads)**: three layers.
+  **P1** — `public/sw.js` (web push + lifecycle) is registered in
+  `app/page.tsx`; `InstallPrompt.tsx` captures `beforeinstallprompt` for an
+  add-to-home-screen banner. **P2 — offline app SHELL** (`public/sw.js` fetch
+  handler, `CACHE_NAME="creed-cache-v2"`): navigations network-first (offline →
+  this route's cached copy, else the `/` shell for a ROOT nav only, else an
+  inline offline card); `/_next/static/*` cache-first; RSC flight fetches +
+  `/_next/data` + `/_next/image` pass STRAIGHT THROUGH (never cached — a deploy
+  must never be masked by a stale copy); stale-while-revalidate limited to an
+  explicit static allowlist (icons/manifest/fonts/images); `/api`, non-GET,
+  cross-origin untouched; FIFO cap 200; every cache path degrades to plain
+  `fetch()` on error. Drafted then adversarially reviewed (5 lenses) for
+  bricking bugs. **P2.5 — offline DATA reads** (`src/lib/offline-cache.ts` +
+  `store.ts`): the SW deliberately never caches Supabase/`/api` data, so offline
+  reads come from an **IndexedDB snapshot** at the app layer. `loadAll` now (a)
+  short-circuits to the snapshot when `navigator.onLine === false` (previously
+  every `db.get` resolved to `[]` and WIPED the store — the "airplane mode = all
+  data gone" bug); (b) guards flaky-online with "profiles came back empty ⇒ the
+  fetch failed, don't overwrite"; (c) writes a throttled snapshot on each
+  success; (d) tracks `usingOfflineData` + `lastSyncedAt`. The snapshot is
+  **owner-stamped** (userId/orgId) and `loadSnapshot` refuses cross-user reads;
+  cleared on logout. `OfflineBanner.tsx` (mounted in AppShell) shows an honest
+  "Offline — showing saved data · last synced Xm ago" strip. `online`/`offline`
+  window listeners refetch/snapshot immediately. **NOT done**: P3 — offline
+  WRITE queue + Background Sync (clock-in / photo-upload retry). SW + offline
+  behaviour can't be tested locally (no dev env) — verify on-device after deploy.
+
 - **Good-Better-Best tiered quotes**: present 3 cumulative options on a quote so
   techs upsell and the customer picks one. **No schema change — all on the rooms
   JSON blob.** Per-item `RoomItem.tier` (`base`/`better`/`best`, absent = base);
