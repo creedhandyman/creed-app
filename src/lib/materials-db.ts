@@ -223,7 +223,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Dishwasher door gasket", price: 18, category: "Appliances", keywords: ["dishwasher gasket", "door gasket", "door seal"] },
   { name: "Refrigerator door gasket", price: 45, category: "Appliances", keywords: ["fridge gasket", "refrigerator gasket", "fridge seal"] },
   { name: "Evaporator fan motor", price: 35, category: "Appliances", keywords: ["evaporator fan", "fridge fan", "fan motor"] },
-  { name: "Range hood 30\" filter", price: 8, category: "Appliances", keywords: ["range hood filter", "hood filter", "grease filter"] },
+  { name: "Range hood 30\" filter", price: 13, category: "Appliances", keywords: ["range hood filter", "hood filter", "grease filter"] },
   { name: "Universal stove knob", price: 6, category: "Appliances", keywords: ["stove knob", "range knob", "burner knob"] },
   { name: "Dishwasher rack adjuster clip kit", price: 12, category: "Appliances", keywords: ["rack adjuster", "dishwasher rack", "rack clip"] },
 
@@ -277,7 +277,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   // ═══════════════════════════════════════════
   // SAFETY
   // ═══════════════════════════════════════════
-  { name: "Fire extinguisher (2.5lb ABC)", price: 20, sku: "1002763584", category: "Safety", keywords: ["fire extinguisher"] },
+  { name: "Fire extinguisher (2.5lb ABC)", price: 24, sku: "1002763584", category: "Safety", keywords: ["fire extinguisher"] },
 
   // ═══════════════════════════════════════════
   // HOME DEPOT PURCHASE-DATA ADDITIONS
@@ -293,6 +293,20 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Thread seal tape (PTFE)", price: 2, sku: "202280370", category: "Plumbing", keywords: ["thread tape", "teflon tape", "plumber tape"] },
   { name: "3-tab roofing shingles (bundle)", price: 36, sku: "311703832", category: "Roofing", keywords: ["roofing shingle", "3-tab shingle", "shingle bundle"] },
   { name: "Roof cement / flashing sealant (10oz)", price: 3, sku: "202091010", category: "Roofing", keywords: ["roof cement", "flashing cement", "roof patch"] },
+  { name: "Roof collar / pipe flashing", price: 8, sku: "331181638", category: "Roofing", keywords: ["roof collar", "pipe flashing", "vent flashing"] },
+  { name: "Fan speed/light switch", price: 10, sku: "306596875", category: "Electrical", keywords: ["fan switch", "fan light switch", "pull chain fan"] },
+  { name: "Interior door knob (6-pack)", price: 50, sku: "302473173", category: "Hardware", keywords: ["door knob 6 pack", "knob multipack", "bulk door knob"] },
+  { name: "Foam backer rod (20ft)", price: 5, sku: "100165680", category: "Hardware", keywords: ["backer rod", "foam backer", "gap filler rod"] },
+  { name: "Bathroom vanity (19in w/ top)", price: 139, sku: "203486514", category: "Plumbing", keywords: ["bath vanity", "sink vanity", "vanity cabinet"] },
+  { name: "Toilet seat (soft-close)", price: 25, sku: "336719906", category: "Plumbing", keywords: ["soft close seat", "soft-close toilet", "slow close seat"] },
+  { name: "Pine shims (12-pack)", price: 3, sku: "300723328", category: "Hardware", keywords: ["shims", "pine shims", "wood shims"] },
+  { name: "OSB sheet 1/2in (4x8)", price: 12, sku: "100012207", category: "Flooring", keywords: ["osb board", "oriented strand", "subfloor sheet"] },
+  { name: "Window screen frame kit", price: 16, sku: "206613125", category: "Hardware", keywords: ["screen frame", "window screen kit", "screen frame kit"] },
+  { name: "Fiberglass screen roll (36inx7ft)", price: 15, sku: "323360928", category: "Hardware", keywords: ["screen roll", "fiberglass screen", "screen mesh"] },
+  { name: "Shoe molding (per ft)", price: 0.55, sku: "100648759", category: "Flooring", keywords: ["shoe molding", "base shoe", "quarter round"] },
+  { name: "Laminate transition molding (4-in-1)", price: 40, sku: "339218035", category: "Flooring", keywords: ["4-in-1 molding", "laminate transition", "laminate molding"] },
+  { name: "Flex Seal rubber sealant spray", price: 15, sku: "203144520", category: "Paint", keywords: ["flex seal", "rubber sealant spray", "leak seal spray"] },
+  { name: "Kitchen side sprayer", price: 8, sku: "318763115", category: "Plumbing", keywords: ["side spray", "kitchen side sprayer", "sink side spray"] },
 ];
 
 // Lookup function — find best matching material from database
