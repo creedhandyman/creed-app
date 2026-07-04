@@ -47,7 +47,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Tub face plate", price: 8, category: "Plumbing", keywords: ["tub face plate", "overflow plate"] },
   { name: "Tub rubber stopper", price: 5, category: "Plumbing", keywords: ["tub stopper", "drain stopper", "rubber stopper"] },
   { name: "Shower arm", price: 8, category: "Plumbing", keywords: ["shower arm"] },
-  { name: "Shower head", price: 10, sku: "1002847992", category: "Plumbing", keywords: ["shower head", "showerhead"] },
+  { name: "Shower head", price: 14, sku: "1002847992", category: "Plumbing", keywords: ["shower head", "showerhead"] },
   { name: "Shower rod", price: 15, category: "Plumbing", keywords: ["shower rod", "curtain rod"] },
   { name: "Tub spout", price: 18, category: "Plumbing", keywords: ["tub spout", "bathtub spout"] },
   { name: "Shower escutcheon 1/2\"", price: 6, category: "Plumbing", keywords: ["shower escutcheon"] },
@@ -128,7 +128,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Bathroom exhaust fan", price: 45, category: "Electrical", keywords: ["exhaust fan", "vent fan", "bath fan"] },
 
   // Safety
-  { name: "Smoke alarm (10yr sealed)", price: 18, category: "Electrical", keywords: ["smoke alarm", "smoke detector"] },
+  { name: "Smoke alarm (10yr sealed)", price: 26, sku: "328119796", category: "Electrical", keywords: ["smoke alarm", "smoke detector"] },
   { name: "Smoke & CO combo alarm", price: 20, sku: "1005173566", category: "Electrical", keywords: ["smoke co", "carbon monoxide", "combo alarm"] },
   { name: "Batteries AA (8-pack)", price: 6, category: "Electrical", keywords: ["aa battery", "batteries"] },
   { name: "Batteries AAA (8-pack)", price: 6, category: "Electrical", keywords: ["aaa battery"] },
@@ -230,8 +230,8 @@ export const MATERIALS_DB: MaterialItem[] = [
   // ═══════════════════════════════════════════
   // PAINT
   // ═══════════════════════════════════════════
-  { name: "Interior paint 5-gal (semi-gloss)", price: 127, sku: "654396", category: "Paint", keywords: ["5 gallon", "5-gal", "interior paint", "semi gloss"] },
-  { name: "Interior paint 1-gal", price: 28, sku: "654973", category: "Paint", keywords: ["1 gallon", "1-gal", "paint gallon"] },
+  { name: "Interior paint 5-gal (semi-gloss)", price: 153, sku: "654396", category: "Paint", keywords: ["5 gallon", "5-gal", "interior paint", "semi gloss"] },
+  { name: "Interior paint 1-gal", price: 41, sku: "654973", category: "Paint", keywords: ["1 gallon", "1-gal", "paint gallon"] },
   { name: "Kilz spray primer", price: 8, category: "Paint", keywords: ["kilz", "spray primer", "primer spray"] },
   { name: "White semi-gloss spray paint", price: 6, category: "Paint", keywords: ["spray paint", "white spray"] },
   { name: "Primer (gallon)", price: 16, category: "Paint", keywords: ["primer", "prime"] },
@@ -242,10 +242,10 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "3\" paint brush (angled)", price: 8, category: "Paint", keywords: ["3 brush", "paint brush", "angled brush"] },
   { name: "2\" cut-in brush", price: 6, category: "Paint", keywords: ["2 brush", "cut in", "cutting brush"] },
   { name: "4\" wall patch (2-pack)", price: 5, category: "Paint", keywords: ["wall patch", "drywall patch"] },
-  { name: "Drywall joint compound (qt)", price: 8, category: "Paint", keywords: ["drywall mud", "joint compound", "mud"] },
-  { name: "Drywall sheet (4x8)", price: 14, category: "Paint", keywords: ["drywall", "sheetrock", "drywall sheet"] },
+  { name: "Drywall joint compound (4.5 gal ready-mix)", price: 22, sku: "258725", category: "Paint", keywords: ["drywall mud", "joint compound", "mud"] },
+  { name: "Drywall sheet (4x8)", price: 12, sku: "893749", category: "Paint", keywords: ["drywall", "sheetrock", "drywall sheet"] },
   { name: "Drywall sanding sponge", price: 5, category: "Paint", keywords: ["sanding sponge", "drywall sponge"] },
-  { name: "Painter's tape (60yd)", price: 6, category: "Paint", keywords: ["painter tape", "blue tape", "masking tape"] },
+  { name: "Painter's tape (60yd)", price: 8, sku: "202391340", category: "Paint", keywords: ["painter tape", "blue tape", "masking tape"] },
   { name: "Drop cloth (9x12)", price: 10, category: "Paint", keywords: ["drop cloth", "plastic sheeting"] },
   { name: "Spackle tub", price: 8, category: "Paint", keywords: ["spackle", "spackling"] },
 
@@ -278,6 +278,21 @@ export const MATERIALS_DB: MaterialItem[] = [
   // SAFETY
   // ═══════════════════════════════════════════
   { name: "Fire extinguisher (2.5lb ABC)", price: 20, sku: "1002763584", category: "Safety", keywords: ["fire extinguisher"] },
+
+  // ═══════════════════════════════════════════
+  // HOME DEPOT PURCHASE-DATA ADDITIONS
+  // Real Wichita costs from Bernard's HD Pro purchase history (2025–2026)
+  // ═══════════════════════════════════════════
+  { name: "FibaTape wall repair fabric (6in x 75ft)", price: 13, sku: "311223236", category: "Paint", keywords: ["fibatape", "wall repair fabric", "mesh drywall tape"] },
+  { name: "Orange peel texture spray (25oz)", price: 28, sku: "203425183", category: "Paint", keywords: ["orange peel", "wall texture", "texture spray"] },
+  { name: "Paint tray + roller kit (6-piece)", price: 12, sku: "319877662", category: "Paint", keywords: ["roller tray", "tray kit", "roller kit"] },
+  { name: "Paintable latex caulk (10oz)", price: 4, sku: "316993414", category: "Paint", keywords: ["latex caulk", "paintable caulk", "acrylic caulk"] },
+  { name: "DYNAFLEX exterior sealant (10oz)", price: 8, sku: "306283633", category: "Paint", keywords: ["dynaflex", "exterior sealant", "siding sealant"] },
+  { name: "Hollow-core interior door slab (30x80)", price: 80, sku: "330336362", category: "Hardware", keywords: ["door slab", "hollow core door", "new door"] },
+  { name: "Keyed entry + deadbolt combo pack", price: 36, sku: "317194063", category: "Hardware", keywords: ["keyed entry", "entry combo", "lock combo", "rekey lock"] },
+  { name: "Thread seal tape (PTFE)", price: 2, sku: "202280370", category: "Plumbing", keywords: ["thread tape", "teflon tape", "plumber tape"] },
+  { name: "3-tab roofing shingles (bundle)", price: 36, sku: "311703832", category: "Roofing", keywords: ["roofing shingle", "3-tab shingle", "shingle bundle"] },
+  { name: "Roof cement / flashing sealant (10oz)", price: 3, sku: "202091010", category: "Roofing", keywords: ["roof cement", "flashing cement", "roof patch"] },
 ];
 
 // Lookup function — find best matching material from database
