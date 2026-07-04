@@ -1098,6 +1098,32 @@ function mergeParseResults(partials: AiParseResult[]): AiParseResult {
   };
 }
 
+/**
+ * Compact, cache-stable price reference built from the curated MATERIALS_DB,
+ * injected into the AI quote-parser's system prompt so the model anchors
+ * material prices to the shop's real costs instead of guessing (fulfils the
+ * "use the materials table" instruction in AI_SYSTEM_PROMPT_BASE rule 5).
+ * Computed once at module load; grouped by category, `Name $cost` per item.
+ */
+export const MATERIALS_PRICE_REFERENCE: string = (() => {
+  const byCat: Record<string, string[]> = {};
+  for (const it of MATERIALS_DB) {
+    (byCat[it.category] || (byCat[it.category] = [])).push(`${it.name} $${it.price}`);
+  }
+  const body = Object.keys(byCat)
+    .sort()
+    .map((c) => `${c}: ${byCat[c].join(", ")}`)
+    .join("\n");
+  return (
+    `## SHOP MATERIAL PRICE LIST (reference table for rule 5 — use for MISSING prices only)\n` +
+    `These are the contractor's real material COSTS, before markup (the pricing layer adds markup). ` +
+    `Do NOT override prices the input states (rule 2). When a task needs a material and no price is given, ` +
+    `use the closest match below instead of guessing; if nothing fits, estimate conservatively. ` +
+    `Each price is per the unit in its name (each / gal / sq ft / box / bundle, etc.).\n\n` +
+    body
+  );
+})();
+
 export async function aiParsePdf(
   text: string,
   images: string[],
@@ -1451,6 +1477,7 @@ ${cleanText.slice(0, 60000)}`
         // fixture if quote output ever drifts.
         system: [
           { type: "text", text: AI_SYSTEM_PROMPT_BASE, cache_control: { type: "ephemeral" } },
+          { type: "text", text: MATERIALS_PRICE_REFERENCE, cache_control: { type: "ephemeral" } },
           ...(correctionsPrompt
             ? [{ type: "text", text: correctionsPrompt, cache_control: { type: "ephemeral" } }]
             : []),
