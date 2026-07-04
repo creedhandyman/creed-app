@@ -336,7 +336,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Rebar #4 (10ft)", price: 8, category: "Concrete", keywords: ["rebar"] },
   { name: "Wire mesh (5x10 sheet)", price: 12, category: "Concrete", keywords: ["wire mesh", "welded wire"] },
   { name: "Anchor bolts (10pk)", price: 10, category: "Concrete", keywords: ["anchor bolt"] },
-  { name: "Sonotube (12in x 4ft)", price: 15, category: "Concrete", keywords: ["form tube", "sonotube", "sono tube"] },
+  { name: "Sonotube (12in x 4ft)", price: 28, category: "Concrete", keywords: ["form tube", "sonotube", "sono tube"] },
   { name: "Fast-set post mix (50lb)", price: 8, category: "Concrete", keywords: ["post hole", "post mix"] },
   // ── Doors ──
   { name: "Interior prehung door", price: 120, category: "Doors", keywords: ["prehung", "prehung door"] },
@@ -394,7 +394,7 @@ export const MATERIALS_DB: MaterialItem[] = [
   { name: "Vinyl siding (sq)", price: 95, category: "Exterior", keywords: ["vinyl siding"] },
   { name: "Fiber cement siding (sq)", price: 140, category: "Exterior", keywords: ["fiber cement", "hardie", "cement siding"] },
   { name: "Wood lap siding (8ft)", price: 12, category: "Exterior", keywords: ["wood siding", "lap siding"] },
-  { name: "T1-11 siding (4x8)", price: 45, category: "Exterior", keywords: ["t1-11", "t-111", "t1-11 siding"] },
+  { name: "T1-11 siding (4x8)", price: 65, category: "Exterior", keywords: ["t1-11", "t-111", "t1-11 siding"] },
   { name: "Downspout (10ft)", price: 22, category: "Exterior", keywords: ["downspout"] },
   { name: "Gutter section (10ft)", price: 18, category: "Exterior", keywords: ["gutter section", "rain gutter", "gutter run"] },
   { name: "Gutter guard (4ft)", price: 8, category: "Exterior", keywords: ["gutter guard", "leaf guard"] },
