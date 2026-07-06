@@ -559,9 +559,24 @@ src/
   **owner-stamped** (userId/orgId) and `loadSnapshot` refuses cross-user reads;
   cleared on logout. `OfflineBanner.tsx` (mounted in AppShell) shows an honest
   "Offline — showing saved data · last synced Xm ago" strip. `online`/`offline`
-  window listeners refetch/snapshot immediately. **NOT done**: P3 — offline
-  WRITE queue + Background Sync (clock-in / photo-upload retry). SW + offline
-  behaviour can't be tested locally (no dev env) — verify on-device after deploy.
+  window listeners refetch/snapshot immediately. **P3 — offline WRITE queue**
+  (`src/lib/offline-queue.ts`, time entries only so far): fixes "offline
+  clock-out doesn't close the entry / still shows active in Crew Activity" —
+  offline, `db.post` returned null and `db.patch/del` swallowed the error, so
+  the write was lost. Every new time-entry row now gets a CLIENT stable UUID
+  (`newRowId`) so a queued insert + later update/delete share one id — no
+  temp→real remapping, and replay is idempotent (post=upsert, patch=update,
+  del=delete by id). `store.saveTimeEntry`/`dropTimeEntry` are the single funnel
+  for ALL clock in/out/auto-stop/force-out/manual/edit/delete in Timer +
+  WorkVision: enqueue → optimistic store update → (online) flush+reconcile /
+  (offline) persist + replay on the `online` event. `loadAll` materializes
+  pending writes over server/snapshot so a poll can't clobber an unsynced
+  clock-out; queue cleared on logout; `pendingWrites` drives the banner's
+  "· N change(s) will sync when you reconnect". A non-network (RLS/constraint)
+  replay error drops just that item so it can't wedge the queue. **NOT done**:
+  offline photo/receipt upload retry (binary — separate P3 piece); Background
+  Sync API (the `online` listener covers reconnect while the app is open). SW +
+  offline behaviour can't be tested locally (no dev env) — verify on-device.
 
 - **Good-Better-Best tiered quotes**: present 3 cumulative options on a quote so
   techs upsell and the customer picks one. **No schema change — all on the rooms
