@@ -379,6 +379,95 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
 
+  /* ── Quick-quote draft autosave ───────────────────────────────────────
+     A quote in progress (description, photos, customer, and any built/edited
+     line items) used to vanish if the app was backgrounded or navigated away
+     before Save. Persist a per-user draft to localStorage while creating a NEW
+     quote (never while editing an existing job — that already lives in the DB
+     — and never for the Inspector flow, which persists itself). Offer to resume
+     it from the hub; cleared on Save or explicit Discard. */
+  const DRAFT_KEY = `c_qf_draft_${user?.id || "anon"}`;
+  const DRAFTABLE_MODES = ["quick", "manual", "paste", "edit", "template"];
+  const [draftAvailable, setDraftAvailable] = useState(false);
+  // True for the duration of a saveJob run. saveJob clears the draft, then
+  // `await loadAll()`, then resets mode — so during that async window mode is
+  // still "editable" and a background/pagehide flush would otherwise re-write
+  // the draft we just cleared. This blocks that resurrection.
+  const savingRef = useRef(false);
+
+  const collectDraft = () => ({
+    v: 1, savedAt: Date.now(),
+    mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos,
+    rooms, workers, jobPhotos, customWorkOrder,
+    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames,
+    customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab,
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const draftHasContent = (d: any) =>
+    !!(d && (d.quickDesc?.trim() || d.quickPhotos?.length || d.rooms?.length || d.prop || d.client || d.customerId || d.text?.trim()));
+  const draftIsSaveable = () =>
+    !savingRef.current && !editJobId && !editingId && !!mode && DRAFTABLE_MODES.includes(mode) && draftHasContent(collectDraft());
+
+  const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { /* */ } setDraftAvailable(false); };
+
+  const restoreDraft = () => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      setProp(d.prop || ""); setClient(d.client || "");
+      setCustomerId(d.customerId || undefined); setAddressId(d.addressId || undefined);
+      setText(d.text || ""); setQuickDesc(d.quickDesc || ""); setQuickPhotos(d.quickPhotos || []);
+      setRooms(d.rooms || []); setWorkers(d.workers || []); setJobPhotos(d.jobPhotos || []);
+      setCustomWorkOrder(d.customWorkOrder ?? null);
+      setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
+      setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
+      setTieredQuote(!!d.tieredQuote); setTierNames(d.tierNames || { better: "Better", best: "Best" });
+      setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
+      setCheckedTools(d.checkedTools || []); setCheckedShop(d.checkedShop || []);
+      setRemovedGuideShop(d.removedGuideShop || []);
+      setTab(d.tab || "quote");
+      setMode(DRAFTABLE_MODES.includes(d.mode) ? d.mode : (d.rooms?.length ? "edit" : "quick"));
+      setDraftAvailable(false);
+      useStore.getState().showToast("Resumed your unsaved quote", "success");
+    } catch { /* */ }
+  };
+
+  // Show the "resume" card whenever we land on the hub with a saved draft.
+  useEffect(() => {
+    if (mode !== null || editJobId) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      setDraftAvailable(!!(raw && draftHasContent(JSON.parse(raw))));
+    } catch { setDraftAvailable(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, editJobId]);
+
+  // Debounced autosave while building a NEW quote.
+  useEffect(() => {
+    if (!draftIsSaveable()) return;
+    const snapshot = JSON.stringify(collectDraft());
+    const t = setTimeout(() => { try { localStorage.setItem(DRAFT_KEY, snapshot); } catch { /* */ } }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab, editJobId, editingId]);
+
+  // Flush immediately when the app is backgrounded/closed — the 600ms debounce
+  // may not fire if the user leaves right after typing. Ref keeps the latest
+  // closure so the once-registered listeners always see current state.
+  const draftFlushRef = useRef<() => void>(() => {});
+  draftFlushRef.current = () => {
+    if (!draftIsSaveable()) return;
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(collectDraft())); } catch { /* */ }
+  };
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === "hidden") draftFlushRef.current(); };
+    const onHide = () => draftFlushRef.current();
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", onHide);
+    return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("pagehide", onHide); };
+  }, []);
+
   // Pre-load job data when editing
   useEffect(() => {
     if (!editJobId) return;
@@ -1502,6 +1591,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       useStore.getState().showToast("Job created: " + prop, "success");
     }
 
+    savingRef.current = true;
+    clearDraft();
     await loadAll();
     setMode(null);
     setRooms([]);
@@ -1528,6 +1619,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setMinLaborHours(null);
     setTieredQuote(false);
     setTierNames({ better: "Better", best: "Best" });
+    savingRef.current = false;
     setPage("jobs");
   };
 
@@ -1641,6 +1733,17 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>QuoteForge</span>
           <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>New quote</span>
         </div>
+        {draftAvailable && (
+          <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--color-primary)" }}>
+            <Icon name="edit" size={18} color="var(--color-primary)" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Unsaved quote in progress</div>
+              <div className="dim" style={{ fontSize: 12.5 }}>Pick up where you left off.</div>
+            </div>
+            <button className="bb" style={{ width: "auto", padding: "7px 14px", fontSize: 13 }} onClick={restoreDraft}>Resume</button>
+            <button className="bo" style={{ width: "auto", padding: "7px 12px", fontSize: 13 }} onClick={clearDraft}>Discard</button>
+          </div>
+        )}
         {parsing && (
           <div className="cd mb">
             <AiLoadingDisplay status={parseStatus} />
