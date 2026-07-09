@@ -523,6 +523,55 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     const invoiceNum = "INV-" + j.id.slice(0, 6).toUpperCase();
     const orgName = org?.name || "Service Provider";
 
+    // Totals breakdown. The invoice used to print only labor + materials + the
+    // grand total, so a per-quote discount was invisible (and labor+materials
+    // didn't reconcile with the discounted total). Rebuild the same cascade the
+    // quote PDF shows: subtotal → trip fee → discount → tax → total. `j.total`
+    // is authoritative — it's what Stripe charges, already post-discount+tax
+    // (QuoteForge stores lockTotal = baseAfterDiscount + tax) — so the tax line
+    // is derived as the reconciling remainder and every line foots to it
+    // exactly, even if an org setting changed since the quote was saved.
+    const subtotal = Math.round(((j.total_labor || 0) + (j.total_mat || 0)) * 100) / 100;
+    let discParsed: { type: string; value: number; label?: string } | null = null;
+    try {
+      const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+      const d = data?.discount;
+      if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
+        discParsed = { type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined };
+      }
+    } catch { /* malformed rooms — no discount line */ }
+    const tripFee = org?.trip_fee || 0;
+    const preBase = subtotal + tripFee;
+    const discountAmount = discParsed
+      ? (discParsed.type === "percent"
+          ? Math.round(preBase * (discParsed.value / 100) * 100) / 100
+          : Math.min(preBase, discParsed.value))
+      : 0;
+    const discountLabel = discParsed
+      ? (discParsed.label && discParsed.label.trim()
+          ? discParsed.label.trim()
+          : (discParsed.type === "percent"
+              ? `Discount (${discParsed.value}%)`
+              : `Discount ($${discParsed.value.toFixed(2)} off)`))
+      : "";
+    const grand = j.total || 0;
+    // Trip fee shows on its own line when set; the remaining gap (tax + any
+    // drift) is the tax line. If trip-fee drift would push tax negative, fold
+    // it into a combined "Tax & fees" line rather than printing a negative.
+    let showTrip = tripFee > 0;
+    let feeLabel = "Tax";
+    let feeAmt = Math.round((grand - subtotal - tripFee + discountAmount) * 100) / 100;
+    if (showTrip && feeAmt < 0) {
+      showTrip = false;
+      feeLabel = "Tax & fees";
+      feeAmt = Math.round((grand - subtotal + discountAmount) * 100) / 100;
+    }
+    const totalsRows =
+      `<tr><td>Subtotal</td><td class="r" style="width:120px">$${subtotal.toFixed(2)}</td></tr>` +
+      (showTrip ? `<tr><td>Trip Fee</td><td class="r">$${tripFee.toFixed(2)}</td></tr>` : "") +
+      (discountAmount > 0 ? `<tr style="color:#C00000"><td>${escapeHtml(discountLabel)}</td><td class="r">-$${discountAmount.toFixed(2)}</td></tr>` : "") +
+      (feeAmt > 0.005 ? `<tr><td>${feeLabel}</td><td class="r">$${feeAmt.toFixed(2)}</td></tr>` : "");
+
     const body = `
 <section class="grid-2" style="margin-bottom:18px">
   <div class="box">
@@ -560,12 +609,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       <td class="r">${(j.total_hrs || 0).toFixed(1)}</td>
       <td class="r">$${(j.total_labor || 0).toFixed(2)}</td>
       <td class="r">$${(j.total_mat || 0).toFixed(2)}</td>
-      <td class="r">$${(j.total || 0).toFixed(2)}</td>
+      <td class="r">$${subtotal.toFixed(2)}</td>
     </tr>
   </tbody>
 </table>
 
-<section style="margin:20px 0;padding:22px 26px;background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;border-left:4px solid #2E75B6;display:flex;justify-content:space-between;align-items:center">
+<table style="margin:16px 0 6px">
+  <tbody>
+    ${totalsRows}
+  </tbody>
+</table>
+
+<section style="margin:12px 0 20px;padding:22px 26px;background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;border-left:4px solid #2E75B6;display:flex;justify-content:space-between;align-items:center">
   <div>
     <div style="font-family:Oswald,sans-serif;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.12em">Total Amount Due</div>
     <div style="font-size:11px;color:#666;margin-top:2px">Reference: ${invoiceNum}</div>
