@@ -162,9 +162,13 @@ export default function Mileage({ setPage }: Props) {
       setGpsErr("Couldn't get your location to finish the trip. Try again, or cancel and use Odometer mode.");
       return;
     }
-    const miles = Math.round(
-      haversineMiles(gpsTrip.startLat, gpsTrip.startLng, fix.lat, fix.lng) * ROAD_FACTOR * 10
-    ) / 10;
+    // Prefer accumulated waypoint miles when the trip was started with live
+    // tracking (MileageQuickTrack or a future updated GPS mode). Falls back to
+    // the start→end straight-line × road-factor estimate.
+    const tracked = (gpsTrip as unknown as { accMiles?: number }).accMiles;
+    const miles = tracked != null && tracked > 0
+      ? Math.round(tracked * 10) / 10
+      : Math.round(haversineMiles(gpsTrip.startLat, gpsTrip.startLng, fix.lat, fix.lng) * ROAD_FACTOR * 10) / 10;
     const startNum = parseFloat(gpsTrip.startOdo);
     const endOdo = !isNaN(startNum) ? String(Math.round(startNum + miles)) : "";
     setGpsReview({ miles, endOdo });
