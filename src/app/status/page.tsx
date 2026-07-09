@@ -5,6 +5,7 @@ import type { Job, Organization, Room } from "@/lib/types";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
+import { itemInTier } from "@/lib/tiers";
 
 const STATUS_STEPS = [
   { key: "quoted", label: "Quoted", icon: "📝" },
@@ -54,6 +55,9 @@ function StatusContent() {
   const [tierTotals, setTierTotals] = useState<{ base: number; better: number; best: number } | null>(null);
   const [acceptedTier, setAcceptedTier] = useState<"base" | "better" | "best" | null>(null);
   const [selectedTier, setSelectedTier] = useState<"base" | "better" | "best">("best");
+  // Options can differ in SCOPE at the same price (membership model), so the
+  // picker must show on the split flag, not only on a price difference.
+  const [tierSplit, setTierSplit] = useState(false);
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return; }
@@ -83,6 +87,7 @@ function StatusContent() {
             const tt = blob?.tierTotals;
             if (blob?.tieredQuote === true && tt && typeof tt.base === "number") {
               setTiered(true);
+              setTierSplit(blob?.tierSplit === true);
               setTierTotals({
                 base: tt.base || 0,
                 better: typeof tt.better === "number" ? tt.better : tt.base,
@@ -301,7 +306,7 @@ function StatusContent() {
   const effectiveTotal = tiered && tierTotals ? tierTotals[selectedTier] : (job.total || 0);
   // Only surface the picker when the options actually differ in price — a
   // tiered quote with nothing tagged better/best has three identical totals.
-  const showTierPicker = tiered && !!tierTotals && (tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
+  const showTierPicker = tiered && !!tierTotals && (tierSplit || tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
 
   // Per-category quote breakdown (same aggregation as the PDF estimate
   // summary): collapse rooms by name, section total = hrs × rate + raw
@@ -315,13 +320,16 @@ function StatusContent() {
       const key = rm.name.trim().toLowerCase();
       if (!byCat[key]) { byCat[key] = { name: rm.name, hrs: 0, mat: 0, count: 0, details: [] }; order.push(key); }
       for (const it of rm.items) {
+        // Tiered quote: show only the selected option's scope so the itemized
+        // breakdown matches the headline total (options can be exclusive).
+        if (tiered && !itemInTier(it, selectedTier)) continue;
         byCat[key].hrs += it.laborHrs || 0;
         byCat[key].mat += (it.materials || []).reduce((s, m) => s + (m.c || 0), 0);
         byCat[key].count += 1;
         if (it.detail) byCat[key].details.push(it.detail);
       }
     }
-    return order.map((k) => {
+    return order.filter((k) => byCat[k].count > 0).map((k) => {
       const c = byCat[k];
       return { name: c.name, total: c.hrs * rate + c.mat, blurb: c.details.slice(0, 3).join(", "), count: c.count };
     });

@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material, JobDiscount } from "@/lib/types";
+import { itemInTier, itemTiers, type TierKey } from "@/lib/tiers";
 import {
   readPdf,
   renderPdfPages,
@@ -1239,7 +1240,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     }
   };
 
-  const upItem = (rn: string, id: string, field: string, value: number | string | Material[]) => {
+  const upItem = (rn: string, id: string, field: string, value: number | string | string[] | Material[]) => {
     // Defensive: refuse to operate on a falsy id. Without this guard,
     // `i.id === id` would match every other item whose id is also undefined
     // and the patch would update them all at once.
@@ -1345,15 +1346,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const taxAmount = taxCalc.taxAmount;
   const gt = Math.round((baseAfterDiscount + taxAmount) * 100) / 100;
 
-  // ── Good-Better-Best cumulative tier totals (only meaningful when
-  // tieredQuote is on). Each option re-runs the SAME pricing cascade
-  // (min-labor floor, discount, tax) over its cumulative item set, so each
-  // headline price is a standalone, correct quote total.
-  const itemsForTier = (t: "base" | "better" | "best") => {
-    if (t === "base") return all.filter((i) => !i.tier || i.tier === "base");
-    if (t === "better") return all.filter((i) => i.tier !== "best"); // base + better
-    return all; // best = base + better + best
-  };
+  // ── Good-Better-Best tier totals (only meaningful when tieredQuote is on).
+  // Each option re-runs the SAME pricing cascade (min-labor floor, discount,
+  // tax) over ITS OWN item set — membership-based, so options can be mutually
+  // exclusive (a line can be in any combination of options). itemInTier falls
+  // back to the legacy cumulative reading for pre-membership quotes.
+  const itemsForTier = (t: TierKey) => all.filter((i) => itemInTier(i, t));
   const tierBreakdownOf = (items: typeof all): { total: number; labor: number; mat: number; hrs: number } => {
     const tlR = items.reduce((s, i) => s + i.lc, 0);
     const mTot = items.reduce((s, i) => s + i.mc, 0);
@@ -1387,8 +1385,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     better: { labor: tierBk.better.labor, mat: tierBk.better.mat, hrs: tierBk.better.hrs },
     best: { labor: tierBk.best.labor, mat: tierBk.best.mat, hrs: tierBk.best.hrs },
   };
-  const hasBetter = all.some((i) => i.tier === "better");
-  const hasBest = all.some((i) => i.tier === "best");
+  // For a tiered quote there's no single "all items" total — summing every
+  // line double-counts mutually-exclusive options. The headline (total card,
+  // saved job.total, send message) uses the most expensive real option.
+  const headlineKey: TierKey = tieredQuote
+    ? (["base", "better", "best"] as TierKey[]).reduce((a, b) => (tierTotals[b] > tierTotals[a] ? b : a), "base" as TierKey)
+    : "best";
+  const headlineTotal = tieredQuote ? tierTotals[headlineKey] : gt;
+  const headlineLabor = tieredQuote ? tierBreakdown[headlineKey].labor : tl;
+  const headlineMat = tieredQuote ? tierBreakdown[headlineKey].mat : tm;
+  const headlineHrs = tieredQuote ? tierBreakdown[headlineKey].hrs : th;
+  // "Has the user differentiated the options yet" — true once any line is not
+  // in all three options (membership set ≠ {base,better,best}).
+  const hasSplit = all.some((i) => itemTiers(i).length !== 3);
 
   const issues = classify(rooms);
   const guide = makeGuide(rooms);
@@ -1409,7 +1418,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // Pull the prior saved blob so an edit-save merges into it instead of
     // overwriting field-collected state (work-order `done` checkmarks,
     // after/work photos, jobNotes from WorkVision, etc.).
-    type WO = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; tier?: string };
+    type WO = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; tier?: string; tiers?: TierKey[] };
     type JobPhoto = { url: string; label: string; type: "before" | "after" | "work" };
     let prevData: Record<string, unknown> = {};
     if (editingId) {
@@ -1424,14 +1433,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const prevWO: WO[] = Array.isArray(prevData.workOrder) ? prevData.workOrder as WO[] : [];
     const prevWOByKey = new Map(prevWO.map((w) => [woKeyOf(w), w]));
     const seenKeys = new Set<string>();
-    // Tag each work-order task with its line-item tier (for Good-Better-Best
-    // pruning on approval). Keyed identically to woKeyOf so the lookup aligns;
-    // an unmatched step defaults to "base" — a safe fallback (base = in every
-    // option, so a mis-tag never hides a task from the crew).
-    const tierByKey = new Map<string, string>();
+    // Tag each work-order task with its line-item option MEMBERSHIP set (for
+    // Good-Better-Best pruning on approval). Keyed identically to woKeyOf so
+    // the lookup aligns; an unmatched step defaults to all three options — a
+    // safe fallback (in every option, so a mis-tag never hides a task).
+    const tierByKey = new Map<string, TierKey[]>();
     for (const r of rooms) {
       for (const it of r.items) {
-        tierByKey.set(woKeyOf({ room: r.name, detail: it.detail }), (it as { tier?: string }).tier || "base");
+        tierByKey.set(woKeyOf({ room: r.name, detail: it.detail }), itemTiers(it));
       }
     }
     // Merge prior work-order items by (room, detail). Take EVERY editable
@@ -1452,7 +1461,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         action: s.action,
         pri: s.pri,
         hrs: s.hrs,
-        tier: tierByKey.get(key) || "base",
+        tiers: tierByKey.get(key) || ["base", "better", "best"],
         // completion-state — inherit from prior, default to "not done" for
         // freshly-keyed items
         done: prior?.done === true,
@@ -1534,6 +1543,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       tierNames: tierNames,
       tierTotals: tieredQuote ? tierTotals : null,
       tierBreakdown: tieredQuote ? tierBreakdown : null,
+      // Whether the options actually differ in SCOPE (not just price) — so the
+      // customer picker still shows for two distinct options at the same price.
+      tierSplit: tieredQuote ? hasSplit : false,
       // Only overwrite `inspection` if the user just ran the inspector in
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
@@ -1561,14 +1573,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // to the full (Best) scope the customer didn't buy.
     let lockTotal = gt, lockLabor = tl, lockMat = tm, lockHrs = th;
     const acceptedTier = prevData.acceptedTier as string | undefined;
-    if (tieredQuote && (acceptedTier === "base" || acceptedTier === "better" || acceptedTier === "best")) {
-      const RANK: Record<string, number> = { base: 0, better: 1, best: 2 };
-      const cap = RANK[acceptedTier];
-      lockTotal = tierTotals[acceptedTier];
-      lockLabor = tierBreakdown[acceptedTier].labor;
-      lockMat = tierBreakdown[acceptedTier].mat;
-      lockHrs = tierBreakdown[acceptedTier].hrs;
-      data.workOrder = workOrder.filter((w) => (RANK[w.tier || "base"] ?? 0) <= cap);
+    if (tieredQuote) {
+      const isAccepted = acceptedTier === "base" || acceptedTier === "better" || acceptedTier === "best";
+      // Lock the job to the accepted option, or (pre-approval) to the headline
+      // option — never `gt`, which double-counts mutually-exclusive scopes.
+      const key: TierKey = isAccepted ? (acceptedTier as TierKey) : headlineKey;
+      lockTotal = tierTotals[key];
+      lockLabor = tierBreakdown[key].labor;
+      lockMat = tierBreakdown[key].mat;
+      lockHrs = tierBreakdown[key].hrs;
+      // Prune the crew work order only once a specific option was accepted;
+      // pre-approval keeps every task (legacy single-tier tasks fall back to
+      // the cumulative reading via itemInTier).
+      if (isAccepted) data.workOrder = workOrder.filter((w) => itemInTier(w, key));
     }
     const jobData = {
       property: prop,
@@ -2234,7 +2251,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         ))}
         <div style={{ flex: 1.1, textAlign: "center", borderLeft: "1px solid rgba(245,180,0,.35)" }}>
           <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 700 }}>Total</div>
-          <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.05, marginTop: 1 }}><CountUp value={gt} prefix="$" decimals={2} /></div>
+          <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.05, marginTop: 1 }}><CountUp value={headlineTotal} prefix="$" decimals={2} /></div>
         </div>
       </div>
 
@@ -2292,11 +2309,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             </div>
             <div className="dim" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.45 }}>
               {editTier === "base"
-                ? <>Organizing <b style={{ color: "#bbb" }}>Base</b> — the core scope in every option. Uncheck a line below to make it an upgrade.</>
+                ? <>Organizing <b style={{ color: "#bbb" }}>Base</b>. Check the lines included in this option.</>
                 : editTier === "better"
-                ? <>Organizing <b style={{ color: "#7fb6ff" }}>{tierNames.better}</b>. Check the upgrades included here; uncheck one to push it to {tierNames.best}-only.</>
-                : <><b style={{ color: "#c79bff" }}>{tierNames.best}</b> includes everything. Items marked {tierNames.best}-only were left out of {tierNames.better}.</>}
-              {!hasBetter && !hasBest && <> Nothing tagged yet — all three options are identical until you split the work.</>}
+                ? <>Organizing <b style={{ color: "#7fb6ff" }}>{tierNames.better}</b>. Check the lines included in this option.</>
+                : <>Organizing <b style={{ color: "#c79bff" }}>{tierNames.best}</b>. Check the lines included in this option.</>}
+              {" "}Each option is independent — a line can be in any combination (or its own scope).
+              {!hasSplit && <> Nothing split yet — all three options are identical until you differentiate them.</>}
             </div>
           </>
         )}
@@ -2996,9 +3014,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
             const body = encodeURIComponent(
               `Hi ${client || "there"},\n\n` +
               `Please find your property repair quote for ${prop}.\n\n` +
-              `Total: $${gt.toFixed(2)}\n` +
-              `Labor: $${tl.toFixed(2)} (${th.toFixed(1)} hours)\n` +
-              `Materials: $${tm.toFixed(2)}\n\n` +
+              `Total: $${headlineTotal.toFixed(2)}\n` +
+              `Labor: $${headlineLabor.toFixed(2)} (${headlineHrs.toFixed(1)} hours)\n` +
+              `Materials: $${headlineMat.toFixed(2)}\n\n` +
               `Review, approve, and download your quote here:\n${statusUrl}\n\n` +
               `This quote is valid for 30 days.\n\n` +
               `Thank you,\n${orgName}\n`
@@ -3310,7 +3328,7 @@ function QuoteTab({
   rooms: Room[];
   rate: number;
   darkMode: boolean;
-  upItem: (rn: string, id: string, field: string, value: number | string | Material[]) => void;
+  upItem: (rn: string, id: string, field: string, value: number | string | string[] | Material[]) => void;
   rmItem: (rn: string, id: string) => void;
   getRateForRoom?: (roomName: string) => number;
   snapItemEdit: (rn: string, id: string) => void;
@@ -3367,38 +3385,33 @@ function QuoteTab({
                       style={{ marginTop: 3, color: "var(--color-dim)" }}
                     />
                     {tieredQuote && (() => {
-                      const RANK = { base: 0, better: 1, best: 2 } as const;
-                      const et = (editTier || "base") as "base" | "better" | "best";
-                      const t = ((it.tier as "base" | "better" | "best") || "base");
-                      const included = RANK[t] <= RANK[et];   // in the active option
-                      const inherited = RANK[t] < RANK[et];   // included via a lower tier — locked here
+                      const et = (editTier || "base") as TierKey;
+                      const cur = itemTiers(it);                 // options this line is in
+                      const inActive = cur.includes(et);
                       const hue = et === "base" ? "#8a8a99" : et === "better" ? "#2E75B6" : "#9d4edd";
-                      const tierLabel = (k: "base" | "better" | "best") => k === "base" ? "Base" : k === "better" ? (tierNames?.better || "Better") : (tierNames?.best || "Best");
-                      const note = inherited
-                        ? `core · ${tierLabel(t)}`
-                        : RANK[t] === RANK[et]
-                          ? (et === "best" ? `${tierLabel("best")} only` : "in this option")
-                          : (t === "best" ? `${tierLabel("best")} only` : `from ${tierLabel(t)}`);
+                      const tierLabel = (k: TierKey) => k === "base" ? "Base" : k === "better" ? (tierNames?.better || "Better") : (tierNames?.best || "Best");
+                      const note = cur.length === 0
+                        ? "in no option"
+                        : cur.length === 3
+                          ? "in all options"
+                          : `in ${cur.map((k) => tierLabel(k)).join(" + ")}`;
                       return (
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (inherited) return; // change inherited items in their own tier
-                            if (RANK[t] === RANK[et]) {
-                              // remove from the active option → push up a tier (best demotes to better)
-                              const up = et === "base" ? "better" : et === "better" ? "best" : "better";
-                              upItem(rm.name, it.id, "tier", up);
-                            } else {
-                              // currently above the active tier → pull it down into this option
-                              upItem(rm.name, it.id, "tier", et);
-                            }
+                            // Toggle THIS line's membership of the active option only —
+                            // independent per tier (no cumulative stacking).
+                            const next = inActive ? cur.filter((k) => k !== et) : [...cur, et];
+                            upItem(rm.name, it.id, "tiers", next);
                           }}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 7, cursor: inherited ? "default" : "pointer", opacity: inherited ? 0.65 : 1 }}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 7, cursor: "pointer" }}
                         >
-                          <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", border: `1.5px solid ${included ? hue : "#555"}`, background: included ? hue : "transparent" }}>
-                            {included ? "✓" : ""}
+                          <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", border: `1.5px solid ${inActive ? hue : "#555"}`, background: inActive ? hue : "transparent" }}>
+                            {inActive ? "✓" : ""}
                           </span>
-                          <span style={{ fontSize: 11, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".03em", color: included ? "#cfd2da" : "#888" }}>{note}</span>
+                          <span style={{ fontSize: 11, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".03em", color: inActive ? "#cfd2da" : "#888" }}>
+                            {inActive ? `in ${tierLabel(et)}` : `add to ${tierLabel(et)}`} · <span style={{ opacity: 0.7 }}>{note}</span>
+                          </span>
                         </div>
                       );
                     })()}

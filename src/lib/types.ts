@@ -577,12 +577,16 @@ export interface RoomItem {
    *  inspect-first vs fixed-bid. The fee DOES roll into base subtotal
    *  (the visit itself is billable). */
   tnm?: boolean;
-  /** Good-Better-Best tier (cumulative). Absent/"base" = always included in
-   *  every option; "better" is added at the Better tier; "best" only at the
-   *  Best tier. Only meaningful when the quote's rooms blob carries
-   *  `data.tieredQuote = true`; otherwise every item is part of the single
-   *  quote regardless of this field, so legacy/non-tiered quotes are unchanged. */
+  /** LEGACY Good-Better-Best tag (single, cumulative). Superseded by `tiers`
+   *  below; kept for back-compat. When `tiers` is absent, this is interpreted
+   *  cumulatively (base ∈ all options, better ∈ better+best, best ∈ best only)
+   *  via `src/lib/tiers.ts` so pre-membership quotes render identically. */
   tier?: "base" | "better" | "best";
+  /** Good-Better-Best MEMBERSHIP — the explicit set of options this line
+   *  appears in. Lets options be mutually exclusive (e.g. gravel pad in
+   *  Good/Better vs. concrete slab in Best only). Absent = fall back to the
+   *  cumulative reading of `tier`. Only meaningful when `data.tieredQuote`. */
+  tiers?: ("base" | "better" | "best")[];
 }
 
 export interface Room {

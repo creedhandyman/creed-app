@@ -1,6 +1,7 @@
 import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 import { computeTax, resolveTaxMode, type TaxMode } from "./tax";
+import { itemInTier, itemTiers, type TierKey } from "./tiers";
 
 interface ExportOptions {
   property: string;
@@ -155,19 +156,16 @@ export function exportQuotePdf(opts: ExportOptions) {
   const taxLabel = taxCalc.taxLabel;
   const grandTotal = Math.round((baseAfterDiscount + taxAmount) * 100) / 100;
 
-  // Good-Better-Best cumulative options. Each option re-runs the SAME
-  // labor/markup/min-floor/discount/tax cascade over its cumulative item set.
+  // Good-Better-Best options. Each option re-runs the SAME labor/markup/
+  // min-floor/discount/tax cascade over ITS OWN item set (membership-based, so
+  // options can be mutually exclusive). itemInTier falls back to the legacy
+  // cumulative reading for pre-membership quotes.
   const tieredQuote = opts.tieredQuote === true;
   const tierNames = {
     better: (opts.tierNames?.better || "").trim() || "Better",
     best: (opts.tierNames?.best || "").trim() || "Best",
   };
-  const tierItemsOf = (t: "base" | "better" | "best"): RoomItem[] =>
-    t === "base"
-      ? allItems.filter((i) => !i.tier || i.tier === "base")
-      : t === "better"
-        ? allItems.filter((i) => i.tier !== "best")
-        : allItems;
+  const tierItemsOf = (t: TierKey): RoomItem[] => allItems.filter((i) => itemInTier(i, t));
   const tierTotalOf = (items: RoomItem[]): number => {
     const rawHrs = items.reduce((s, it) => s + it.laborHrs, 0);
     const mApplies = minLaborHours > 0 && rawHrs > 0 && rawHrs < minLaborHours;
@@ -187,16 +185,23 @@ export function exportQuotePdf(opts: ExportOptions) {
     const tax = computeTax({ labor, materials: mat, tripFee, discountAmount: dAmt, taxPct, taxMode }).taxAmount;
     return Math.round((baseAfter + tax) * 100) / 100;
   };
-  const betterAdds = allItems.filter((i) => i.tier === "better");
-  const bestAdds = allItems.filter((i) => i.tier === "best");
-  const showTiers = tieredQuote && (betterAdds.length > 0 || bestAdds.length > 0);
+  // Options differ once any line isn't in all three (a membership split).
+  const anySplit = allItems.some((i) => itemTiers(i).length !== 3);
+  const showTiers = tieredQuote && anySplit;
   const tierCols = showTiers
     ? [
-        { name: "Base", total: tierTotalOf(tierItemsOf("base")), adds: [] as RoomItem[], note: "Core scope" },
-        { name: tierNames.better, total: tierTotalOf(tierItemsOf("better")), adds: betterAdds, note: "Everything in Base, plus:" },
-        { name: tierNames.best, total: tierTotalOf(tierItemsOf("best")), adds: bestAdds, note: `Everything in ${tierNames.better}, plus:` },
+        { name: "Base", total: tierTotalOf(tierItemsOf("base")), items: tierItemsOf("base") },
+        { name: tierNames.better, total: tierTotalOf(tierItemsOf("better")), items: tierItemsOf("better") },
+        { name: tierNames.best, total: tierTotalOf(tierItemsOf("best")), items: tierItemsOf("best") },
       ]
     : [];
+  // For a tiered quote the options can be mutually exclusive, so the sum of all
+  // line items (grandTotal) is NOT a real price. Present a range instead; the
+  // customer picks a specific option online.
+  const tierColTotals = tierCols.map((c) => c.total);
+  const tierMin = showTiers ? Math.min(...tierColTotals) : grandTotal;
+  const tierMax = showTiers ? Math.max(...tierColTotals) : grandTotal;
+  const tierRange = tierMin === tierMax ? `$${tierMax.toFixed(0)}` : `$${tierMin.toFixed(0)}–$${tierMax.toFixed(0)}`;
   const tiersHtml = showTiers
     ? `
 <h2>Choose Your Option</h2>
@@ -204,19 +209,19 @@ export function exportQuotePdf(opts: ExportOptions) {
   ${tierCols
     .map((col, idx) => {
       const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
-      const addsList = col.adds.length
-        ? `<ul style="padding-left:16px;margin:6px 0 0;font-size:11px;color:#444;line-height:1.5">${col.adds.slice(0, 5).map((a) => `<li>${esc(a.detail)}</li>`).join("")}${col.adds.length > 5 ? `<li>+${col.adds.length - 5} more</li>` : ""}</ul>`
-        : `<div style="font-size:11px;color:#888;margin-top:6px">Core scope included</div>`;
+      const itemsList = col.items.length
+        ? `<ul style="padding-left:16px;margin:6px 0 0;font-size:11px;color:#444;line-height:1.5">${col.items.slice(0, 6).map((a) => `<li>${esc(a.detail)}</li>`).join("")}${col.items.length > 6 ? `<li>+${col.items.length - 6} more</li>` : ""}</ul>`
+        : `<div style="font-size:11px;color:#888;margin-top:6px">No work in this option</div>`;
       return `<div style="border:2px solid ${hue};border-radius:10px;padding:12px;page-break-inside:avoid">
       <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}</div>
       <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:${hue};margin:4px 0 2px">$${col.total.toFixed(0)}</div>
-      <div style="font-size:11px;color:#666">${esc(col.note)}</div>
-      ${addsList}
+      <div style="font-size:11px;color:#666">${col.items.length} line item${col.items.length === 1 ? "" : "s"}</div>
+      ${itemsList}
     </div>`;
     })
     .join("")}
 </div>
-<div style="font-size:11px;color:#888;margin-bottom:18px">Each option is cumulative — it includes everything in the option before it. The detailed breakdown below covers the full (${esc(tierNames.best)}) scope; pick the option that fits.</div>
+<div style="font-size:11px;color:#888;margin-bottom:18px">Each option above is a complete, standalone scope — pick the one you want. The line-item breakdown that follows lists all quoted work across the options for reference.</div>
 `
     : "";
 
@@ -418,7 +423,7 @@ ${tiersHtml}
       .join("")}
     ${minRow ? `<tr style="color:#666;font-style:italic"><td>Minimum service charge</td><td class="r">${minRow.hrs.toFixed(1)}</td><td class="r">$${minRow.labor.toFixed(2)}</td><td class="r">—</td><td class="r">$${minRow.labor.toFixed(2)}</td></tr>` : ""}
     <tr style="font-weight:700;background:#f0f4f8;border-top:2px solid ${accent};color:${accent}">
-      <td>SUBTOTAL</td>
+      <td>${showTiers ? "ALL QUOTED WORK (reference)" : "SUBTOTAL"}</td>
       <td class="r">${totalHrs.toFixed(1)}</td>
       <td class="r">$${totalLabor.toFixed(2)}</td>
       <td class="r">$${totalMat.toFixed(2)}</td>
@@ -434,8 +439,8 @@ ${(markupPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
   ${discount ? `<tr style="color:#C00000"><td>${esc(discountLabel)}</td><td class="r" style="padding-left:24px">-$${discountAmount.toFixed(2)}</td></tr>` : ""}
   ${taxPct > 0 && taxMode !== "none" ? `<tr><td class="dim">${esc(taxLabel)}</td><td class="r" style="padding-left:24px">$${taxAmount.toFixed(2)}</td></tr>` : ""}
   <tr style="font-weight:700;font-size:16px;color:${accent};font-family:Oswald,sans-serif">
-    <td>GRAND TOTAL</td>
-    <td class="r" style="padding-left:24px">$${grandTotal.toFixed(2)}</td>
+    <td>${showTiers ? "OPTIONS" : "GRAND TOTAL"}</td>
+    <td class="r" style="padding-left:24px">${showTiers ? tierRange : `$${grandTotal.toFixed(2)}`}</td>
   </tr>
 </table>
 ` : ""}
@@ -483,8 +488,8 @@ ${renders
 </div>
 
 <section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border:2px solid ${accent};border-radius:12px;padding:20px 24px;margin-top:22px;text-align:center;page-break-inside:avoid">
-  <h3 style="font-family:Oswald,sans-serif;font-size:16px;color:${accent};text-transform:uppercase;margin:0 0 8px;letter-spacing:.08em">Accept This Estimate</h3>
-  <div style="font-family:Oswald,sans-serif;font-size:32px;font-weight:700;color:${accent};margin:8px 0">$${grandTotal.toFixed(2)}</div>
+  <h3 style="font-family:Oswald,sans-serif;font-size:16px;color:${accent};text-transform:uppercase;margin:0 0 8px;letter-spacing:.08em">${showTiers ? "Choose Your Option" : "Accept This Estimate"}</h3>
+  <div style="font-family:Oswald,sans-serif;font-size:32px;font-weight:700;color:${accent};margin:8px 0">${showTiers ? tierRange : `$${grandTotal.toFixed(2)}`}</div>
   <div style="font-size:12px;color:#444;line-height:1.9">
     ${statusUrl ? `<div>🔗 <b>View &amp; approve online:</b> <a href="${esc(statusUrl)}" style="color:${accent}">${esc(statusUrl)}</a></div>` : ""}
     ${orgPhone ? `<div>☎ <b>Call:</b> ${esc(orgPhone)}</div>` : ""}

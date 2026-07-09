@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { verifyJobToken } from "@/lib/job-token";
 import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
+import { itemInTier, type TierKey } from "@/lib/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -128,20 +129,19 @@ export async function POST(req: NextRequest) {
           // to the tier's stored breakdown, and prune the crew work order to
           // that tier's tasks. The full line-items stay on the blob (customer
           // reference + any later upsell); only the operational artifacts move.
-          const RANK: Record<string, number> = { base: 0, better: 1, best: 2 };
-          const cap = RANK[tier] ?? 2;
           const bk = blob?.tierBreakdown?.[tier] as { labor?: number; mat?: number; hrs?: number } | undefined;
           if (bk) {
             if (typeof bk.labor === "number") patch.total_labor = bk.labor;
             if (typeof bk.mat === "number") patch.total_mat = bk.mat;
             if (typeof bk.hrs === "number") patch.total_hrs = bk.hrs;
           }
-          // Work-order tasks are tagged with their line-item tier at save time;
-          // legacy/untagged tasks default to "base" (rank 0) so they're never
-          // hidden from the crew.
+          // Work-order tasks carry their line-item option MEMBERSHIP at save
+          // time; keep only tasks whose set includes the accepted option.
+          // Legacy tasks (single `tier`, no `tiers`) fall back to the cumulative
+          // reading via itemInTier, and untagged tasks stay in (never hidden).
           if (Array.isArray(blob?.workOrder)) {
             blob.workOrder = blob.workOrder.filter(
-              (w: { tier?: string }) => (RANK[w?.tier || "base"] ?? 0) <= cap,
+              (w: { tier?: string; tiers?: TierKey[] }) => itemInTier(w, tier),
             );
           }
           patch.rooms = JSON.stringify(blob);
