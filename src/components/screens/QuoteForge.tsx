@@ -24,7 +24,7 @@ import {
   uploadDataUriToBucket,
   TRADE_CATEGORY_LIST,
   AI_SYSTEM_PROMPT_BASE,
-  MATERIALS_PRICE_REFERENCE,
+  getLastAiError,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/lib/trades";
@@ -990,6 +990,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         return [...prev, ...beforePhotos.filter((p) => !existing.has(p.url))];
       });
     }
+    const aiErr = getLastAiError();
+    if (aiErr) useStore.getState().showToast(`AI error: ${aiErr.slice(0, 200)}`, "error");
     setParseStatus("AI unavailable — using built-in parser...");
     doRegexParse(rawText);
   };
@@ -2622,7 +2624,6 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                     // bust the cached prefix. Reordered from volatile-first.
                     system: [
                       { type: "text", text: AI_SYSTEM_PROMPT_BASE + editModeAddendum, cache_control: { type: "ephemeral" } },
-                      { type: "text", text: MATERIALS_PRICE_REFERENCE, cache_control: { type: "ephemeral" } },
                       {
                         type: "text",
                         text:

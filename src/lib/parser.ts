@@ -1124,6 +1124,13 @@ export const MATERIALS_PRICE_REFERENCE: string = (() => {
   );
 })();
 
+// Last error from an AI parse attempt, surfaced to the UI on fallback so a
+// real failure (bad model id, credit/rate limit, malformed request) is
+// visible instead of silently degrading to the regex parser.
+let _lastAiError = "";
+export const getLastAiError = () => _lastAiError;
+const setAiError = (m: string) => { _lastAiError = m; };
+
 export async function aiParsePdf(
   text: string,
   images: string[],
@@ -1132,6 +1139,7 @@ export async function aiParsePdf(
   propertyZip?: string,
   onProgress?: (msg: string) => void
 ): Promise<AiParseResult | null> {
+  setAiError("");
   // Single API call, with images trimmed to fit one request body. We do NOT
   // batch image-by-image here: the AI sees the full text on every call and
   // would re-quote the entire property each time, producing 2-3× near-
@@ -1477,7 +1485,6 @@ ${cleanText.slice(0, 60000)}`
         // fixture if quote output ever drifts.
         system: [
           { type: "text", text: AI_SYSTEM_PROMPT_BASE, cache_control: { type: "ephemeral" } },
-          { type: "text", text: MATERIALS_PRICE_REFERENCE, cache_control: { type: "ephemeral" } },
           ...(correctionsPrompt
             ? [{ type: "text", text: correctionsPrompt, cache_control: { type: "ephemeral" } }]
             : []),
@@ -1504,11 +1511,13 @@ ${cleanText.slice(0, 60000)}`
         console.log(`Retrying with fewer pages (${images.length} → ${half})...`);
         return aiParsePdfSingle(text, images.slice(0, half), laborRate, licensedTrades, propertyZip);
       }
+      setAiError(`Anthropic API HTTP ${res.status}`);
       return null;
     }
     const data = await res.json();
     if (data.error) {
       console.error("AI response error:", data.error);
+      setAiError(typeof data.error === "string" ? data.error : (data.error?.message || JSON.stringify(data.error)));
       return null;
     }
 
@@ -1517,7 +1526,7 @@ ${cleanText.slice(0, 60000)}`
       data.content?.[0]?.text || "";
     const jsonMatch =
       responseText.match(/\{[\s\S]*\}/) || [];
-    if (!jsonMatch[0]) return null;
+    if (!jsonMatch[0]) { setAiError("AI returned no parseable quote JSON"); return null; }
 
     const parsed = JSON.parse(jsonMatch[0]);
 
@@ -1552,6 +1561,7 @@ ${cleanText.slice(0, 60000)}`
     };
   } catch (e) {
     console.error("AI parse failed:", e);
+    setAiError(e instanceof Error ? e.message : String(e));
     return null;
   }
 }
