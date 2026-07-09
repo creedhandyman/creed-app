@@ -47,6 +47,118 @@ const addressOptionLabel = (a: Address): string => {
 const norm = (s: string | undefined | null): string =>
   (s || "").toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
 
+/** Shared inline panel UI for the customer + address pickers. A text input
+ *  filters the list as the user types; each row is a tappable button that
+ *  selects + closes. A "+ New …" row at the bottom lets the user create a
+ *  new entity if no match is found.
+ *
+ *  MUST stay at module scope. While this lived inside CustomerPicker it was a
+ *  fresh function identity on every render, so React saw a new component type
+ *  each keystroke and unmounted/remounted the whole panel — recreating the
+ *  <input> DOM node. That threw the caret to the end of the text mid-word and
+ *  reset the mobile keyboard back to alphabetic the moment you typed a digit
+ *  (and re-fired autoFocus every keystroke).
+ */
+function PickerPanel({
+  placeholder,
+  q,
+  setQ,
+  items,
+  onPick,
+  onNew,
+  onCancel,
+  emptyLabel,
+  fontSize,
+}: {
+  placeholder: string;
+  q: string;
+  setQ: (v: string) => void;
+  items: { id: string; label: string; sub?: string }[];
+  onPick: (id: string) => void;
+  onNew: () => void;
+  onCancel: () => void;
+  emptyLabel: string;
+  fontSize: number;
+}) {
+  return (
+    <div
+      style={{
+        marginBottom: 6,
+        padding: 8,
+        borderRadius: 6,
+        border: "1px solid var(--color-primary)",
+        background: "var(--color-card-dark, #12121a)",
+      }}
+    >
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={placeholder}
+        autoFocus
+        style={{ fontSize, width: "100%", marginBottom: 6 }}
+      />
+      <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 6 }}>
+        {items.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#888", padding: "6px 4px" }}>
+            {emptyLabel}
+          </div>
+        ) : (
+          items.map((it) => (
+            <button
+              key={it.id}
+              onClick={() => onPick(it.id)}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "6px 8px",
+                marginBottom: 2,
+                fontSize: 14,
+                background: "transparent",
+                color: "inherit",
+                border: "1px solid transparent",
+                borderRadius: 4,
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "var(--color-primary)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "transparent";
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>{it.label}</div>
+              {it.sub && (
+                <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>
+                  {it.sub}
+                </div>
+              )}
+            </button>
+          ))
+        )}
+      </div>
+      <div className="row">
+        <button
+          className="bo"
+          onClick={onNew}
+          style={{ fontSize: 13, padding: "4px 10px", color: "var(--color-primary)" }}
+        >
+          + New
+        </button>
+        <button
+          className="bo"
+          onClick={onCancel}
+          style={{ fontSize: 13, padding: "4px 10px", marginLeft: "auto" }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function CustomerPicker({
   prop,
   setProp,
@@ -246,106 +358,6 @@ export default function CustomerPicker({
 
   const fontSize = compact ? 12 : 13;
 
-  /** Shared inline panel UI for the customer + address pickers. A text
-   *  input filters the list as the user types; each row is a tappable
-   *  button that selects + closes. A "+ New …" row at the bottom lets
-   *  the user create a new entity if no match is found. */
-  const PickerPanel = ({
-    placeholder,
-    q,
-    setQ,
-    items,
-    onPick,
-    onNew,
-    onCancel,
-    emptyLabel,
-  }: {
-    placeholder: string;
-    q: string;
-    setQ: (v: string) => void;
-    items: { id: string; label: string; sub?: string }[];
-    onPick: (id: string) => void;
-    onNew: () => void;
-    onCancel: () => void;
-    emptyLabel: string;
-  }) => (
-    <div
-      style={{
-        marginBottom: 6,
-        padding: 8,
-        borderRadius: 6,
-        border: "1px solid var(--color-primary)",
-        background: "var(--color-card-dark, #12121a)",
-      }}
-    >
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder={placeholder}
-        autoFocus
-        style={{ fontSize, width: "100%", marginBottom: 6 }}
-      />
-      <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 6 }}>
-        {items.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#888", padding: "6px 4px" }}>
-            {emptyLabel}
-          </div>
-        ) : (
-          items.map((it) => (
-            <button
-              key={it.id}
-              onClick={() => onPick(it.id)}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "6px 8px",
-                marginBottom: 2,
-                fontSize: 14,
-                background: "transparent",
-                color: "inherit",
-                border: "1px solid transparent",
-                borderRadius: 4,
-                cursor: "pointer",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "var(--color-primary)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "transparent";
-              }}
-            >
-              <div style={{ fontWeight: 600 }}>{it.label}</div>
-              {it.sub && (
-                <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>
-                  {it.sub}
-                </div>
-              )}
-            </button>
-          ))
-        )}
-      </div>
-      <div className="row">
-        <button
-          className="bo"
-          onClick={onNew}
-          style={{ fontSize: 13, padding: "4px 10px", color: "var(--color-primary)" }}
-        >
-          + New
-        </button>
-        <button
-          className="bo"
-          onClick={onCancel}
-          style={{ fontSize: 13, padding: "4px 10px", marginLeft: "auto" }}
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-
   // ── Linked mode ───────────────────────────────────────────────────
   if (isLinked) {
     return (
@@ -388,6 +400,7 @@ export default function CustomerPicker({
 
         {addressSearchOpen && (
           <PickerPanel
+            fontSize={fontSize}
             placeholder="Search address by street, label, city, zip…"
             q={addressQ}
             setQ={setAddressQ}
@@ -496,6 +509,7 @@ export default function CustomerPicker({
 
       {customerSearchOpen && (
         <PickerPanel
+          fontSize={fontSize}
           placeholder="Search customers by name, phone, email…"
           q={customerQ}
           setQ={setCustomerQ}
