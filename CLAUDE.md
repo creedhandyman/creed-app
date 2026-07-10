@@ -439,6 +439,40 @@ src/
   runs, saving a unit / linking a job toasts a "table/column does not exist"
   error (best-effort) but nothing else breaks; existing orgs see no Equipment
   card until they add one.
+- Payments ledger / partial payments (deposits). Before this, `/api/verify-payment`
+  set `status:'paid'` on ANY completed Stripe session — a 50% deposit marked the
+  whole job paid, and nothing recorded how much was paid, so the balance could
+  never be invoiced.
+  ```sql
+  CREATE TABLE IF NOT EXISTS payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    job_id UUID NOT NULL,
+    amount NUMERIC NOT NULL,              -- dollars; NEGATIVE for refunds
+    kind TEXT NOT NULL DEFAULT 'payment', -- deposit | balance | payment | refund
+    stripe_session_id TEXT UNIQUE,        -- idempotency key (NULL-able; refunds use 'refund_<pi>')
+    stripe_payment_intent_id TEXT,
+    platform_fee_cents INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_payments_job ON payments(job_id);
+  CREATE INDEX IF NOT EXISTS idx_payments_org ON payments(org_id);
+  ALTER TABLE payments ENABLE ROW LEVEL SECURITY;  -- service-role only
+  ALTER TABLE jobs ADD COLUMN IF NOT EXISTS amount_paid NUMERIC DEFAULT 0;
+  ```
+  A job's paid-to-date is `SUM(payments.amount)`, cached on `jobs.amount_paid`.
+  `stripe_session_id UNIQUE` is what makes `/api/verify-payment` idempotent — a
+  refreshed `/payment/success` can't double-count a deposit. `/api/checkout`
+  clamps every charge to the OUTSTANDING BALANCE (`total - amount_paid`), so a
+  deposit followed by a balance payment can never over-collect, and the owner's
+  Send-link / Collect-now buttons bill the balance (not `job.total`).
+  `status` flips to `'paid'` **only** when `amount_paid >= total`; the review
+  request is scheduled only then (never after a deposit). The `charge.refunded`
+  webhook writes a negative row (one per PaymentIntent, carrying the cumulative
+  `amount_refunded`, upserted so retries are idempotent) and reverts a `paid`
+  job to `invoiced` when it no longer covers the total. Until the migration
+  runs, the code degrades to a single-payment check (a lone deposit still won't
+  mark the job paid) instead of erroring on a real customer payment.
 - Review-Request automation (v1):
   ```
   CREATE TABLE IF NOT EXISTS review_requests (

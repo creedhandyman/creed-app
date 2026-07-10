@@ -33,15 +33,28 @@ export async function POST(req: NextRequest) {
     }
 
     const invoiceTotal = Number(job.total) || 0;
-    // Amount is client-supplied so partial deposits work, but clamped to the
-    // invoice total — it can never exceed what's owed, and must be positive.
+    // Paid-to-date. Queried separately + best-effort so a pre-migration org
+    // (no amount_paid column) still checks out instead of 404-ing.
+    const { data: paidRow, error: paidErr } = await supabase
+      .from("jobs")
+      .select("amount_paid")
+      .eq("id", jobId)
+      .maybeSingle();
+    const alreadyPaid = paidErr ? 0 : Number(paidRow?.amount_paid) || 0;
+
+    // Only the OUTSTANDING BALANCE is chargeable. A client-supplied amount
+    // (a deposit) is clamped to it, so deposit + balance can never over-collect.
+    const balance = Math.round(Math.max(0, invoiceTotal - alreadyPaid) * 100) / 100;
     const requested = Number(amount);
     const payAmount =
-      Number.isFinite(requested) && requested > 0 ? Math.min(requested, invoiceTotal) : invoiceTotal;
+      Number.isFinite(requested) && requested > 0 ? Math.min(requested, balance) : balance;
     if (payAmount <= 0) {
-      return NextResponse.json({ error: "Nothing to charge for this job" }, { status: 400 });
+      return NextResponse.json({ error: "Nothing left to charge on this job" }, { status: 400 });
     }
     const amountCents = Math.round(payAmount * 100);
+    // Ledger classification, recorded in metadata and copied onto the payments row.
+    const paymentKind =
+      payAmount < balance ? "deposit" : alreadyPaid > 0 ? "balance" : "payment";
 
     // Payout destination + subscription plan come from the job's org, not the body.
     const { data: org } = await supabase
@@ -107,6 +120,10 @@ export async function POST(req: NextRequest) {
         client: job.client || "",
         // Stored so verify-payment can record the fee without recomputing.
         platform_fee_cents: String(platformFeeCents),
+        // What this charge actually is, for the payments ledger. verify-payment
+        // prefers Stripe's own session.amount_total, but this is the fallback.
+        amount_cents: String(amountCents),
+        kind: paymentKind,
       },
     };
 

@@ -252,7 +252,16 @@ function StatusContent() {
       // (Best-scope) job.total. Post-approval job.total already equals this,
       // but compute it explicitly so the deposit can never bill the wrong tier.
       const baseTotal = tiered && tierTotals ? tierTotals[selectedTier] : job.total;
-      const amount = Math.round(baseTotal * (depositPct / 100) * 100) / 100;
+      // Never collect more than what's still owed — a deposit already taken is
+      // subtracted here (and the server clamps to the balance as well).
+      const paidToDate = Number(job.amount_paid) || 0;
+      const balanceDue = Math.round(Math.max(0, baseTotal - paidToDate) * 100) / 100;
+      const deposit = Math.round(baseTotal * (depositPct / 100) * 100) / 100;
+      const amount = Math.min(deposit, balanceDue);
+      if (amount <= 0) {
+        setDepositLoading(false);
+        return;
+      }
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -304,6 +313,16 @@ function StatusContent() {
   // amount before approval; after approval job.total is already the locked
   // accepted total, so the two agree.
   const effectiveTotal = tiered && tierTotals ? tierTotals[selectedTier] : (job.total || 0);
+  // What the deposit button will ACTUALLY charge — clamped to the outstanding
+  // balance (same math as startDeposit), so the label can never disagree with
+  // the charge for a customer who already paid a deposit.
+  const paidToDate = Math.round((Number(job.amount_paid) || 0) * 100) / 100;
+  const balanceDue = Math.round(Math.max(0, effectiveTotal - paidToDate) * 100) / 100;
+  const depositAmount = Math.min(
+    Math.round(effectiveTotal * (depositPct / 100) * 100) / 100,
+    balanceDue,
+  );
+  const remainingAfterDeposit = Math.round(Math.max(0, balanceDue - depositAmount) * 100) / 100;
   // Only surface the picker when the options actually differ in price — a
   // tiered quote with nothing tagged better/best has three identical totals.
   const showTierPicker = tiered && !!tierTotals && (tierSplit || tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
@@ -624,12 +643,13 @@ function StatusContent() {
                 </button>
               ))}
             </div>
-            <button className="btn glow-gold" onClick={startDeposit} disabled={depositLoading}>
-              <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${(job.total * (depositPct / 100)).toFixed(2)} now`}
+            <button className="btn glow-gold" onClick={startDeposit} disabled={depositLoading || depositAmount <= 0}>
+              <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${depositAmount.toFixed(2)} now`}
             </button>
             <p style={{ fontSize: 12, color: "#666", textAlign: "center", margin: "9px 0 0" }}>
               Secure checkout via Stripe.
-              {depositPct < 100 && ` Remaining $${(job.total * ((100 - depositPct) / 100)).toFixed(2)} due on completion.`}
+              {paidToDate > 0 && ` $${paidToDate.toFixed(2)} already paid.`}
+              {remainingAfterDeposit > 0 && ` Remaining $${remainingAfterDeposit.toFixed(2)} due on completion.`}
             </p>
           </div>
         )}

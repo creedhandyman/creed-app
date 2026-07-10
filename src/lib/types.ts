@@ -243,10 +243,38 @@ export interface Job {
    *  Stored by /api/verify-payment so the charge.refunded webhook can
    *  look up the job and adjust platform_fee_cents on refund. */
   stripe_payment_intent_id?: string;
+  /** Paid-to-date (dollars), recomputed from the `payments` ledger by
+   *  /api/verify-payment and the refund webhook. A deposit records here
+   *  WITHOUT flipping status to "paid" — that only happens once
+   *  amount_paid covers `total`. Balance due = total - amount_paid. */
+  amount_paid?: number;
   /** Optional FK into the `equipment` table — the unit this job services.
    *  Set from the Jobs detail; completing the job stamps that unit's
    *  `last_service_at`. Absent = no linked equipment. */
   equipment_id?: string | null;
+}
+
+/** One row per Stripe charge (or refund) against a job — the payment ledger.
+ *  `stripe_session_id` is UNIQUE, which makes /api/verify-payment idempotent:
+ *  a refreshed /payment/success can't double-count a deposit. `amount` is in
+ *  dollars and is NEGATIVE for refunds. A job's paid-to-date is the sum of
+ *  its rows, cached onto `jobs.amount_paid`. */
+export type PaymentKind = "deposit" | "balance" | "payment" | "refund";
+
+export interface Payment {
+  id: string;
+  org_id: string;
+  job_id: string;
+  /** Dollars. Positive for a charge, negative for a refund. */
+  amount: number;
+  kind: PaymentKind;
+  /** Stripe Checkout session id. UNIQUE — the idempotency key. Null for
+   *  refunds (Postgres allows multiple NULLs under a unique constraint). */
+  stripe_session_id?: string | null;
+  stripe_payment_intent_id?: string | null;
+  /** Creed platform fee attributable to this charge (integer cents). */
+  platform_fee_cents?: number;
+  created_at?: string;
 }
 
 export interface TimeEntry {

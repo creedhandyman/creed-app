@@ -938,6 +938,24 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 )}
               </span>
             </div>
+            {/* Partial payments — a deposit shows here without the job being
+                marked paid. Balance due is what the Pay/Invoice buttons charge. */}
+            {(dj.amount_paid || 0) > 0 && (() => {
+              const paid = Math.round((dj.amount_paid || 0) * 100) / 100;
+              const due = Math.round(Math.max(0, (dj.total || 0) - paid) * 100) / 100;
+              return (
+                <>
+                  <div className="drow">
+                    <span className="l">Paid to date</span>
+                    <span className="v" style={{ fontFamily: "Oswald", fontSize: 15, color: "var(--color-money)" }}>${paid.toFixed(2)}</span>
+                  </div>
+                  <div className="drow">
+                    <span className="l">Balance due</span>
+                    <span className="v" style={{ fontFamily: "Oswald", fontSize: 15, color: due > 0 ? "var(--color-warning)" : "var(--color-money)" }}>${due.toFixed(2)}</span>
+                  </div>
+                </>
+              );
+            })()}
             {(() => {
               const labor = getJobLabor(dj);
               const quoted = dj.total_hrs || 0;
@@ -994,13 +1012,19 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 >
                   <Icon name="receipt" size={14} /> {dj.status === "complete" ? t("jobs.invoice") : t("jobs.viewInvoice")}
                 </button>
-                {(dj.status === "invoiced" || dj.status === "complete") && dj.total > 0 && org?.stripe_connected && (
+                {(dj.status === "invoiced" || dj.status === "complete") && org?.stripe_connected && (() => {
+                  // Charge only what's still owed — a deposit already collected
+                  // must not be billed twice. The server clamps to the balance
+                  // as well; this keeps the button honest and hides it at $0.
+                  const balanceDue = Math.round(Math.max(0, (dj.total || 0) - (dj.amount_paid || 0)) * 100) / 100;
+                  if (balanceDue <= 0) return null;
+                  return (
                   <>
                     <button
                       className="bo"
                       onClick={async () => {
                         try {
-                          const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: dj.total, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
+                          const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: balanceDue, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
                           const data = await res.json();
                           if (data.url) { navigator.clipboard.writeText(data.url); useStore.getState().showToast(t("jobs.paymentLinkCopied"), "success"); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
                           else useStore.getState().showToast(t("jobs.errorPrefix") + " " + (data.error || t("jobs.couldNotCreateLink")), "error");
@@ -1014,9 +1038,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       className="bo"
                       onClick={async () => {
                         try {
-                          const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: dj.total, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
+                          const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: balanceDue, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
                           const data = await res.json();
-                          if (data.url) { setPayQR({ url: data.url, jobId: dj.id, amount: dj.total }); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
+                          if (data.url) { setPayQR({ url: data.url, jobId: dj.id, amount: balanceDue }); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
                           else useStore.getState().showToast(t("jobs.errorPrefix") + " " + (data.error || t("jobs.couldNotCreatePayment")), "error");
                         } catch { useStore.getState().showToast(t("jobs.failedCreatePayment"), "error"); }
                       }}
@@ -1025,7 +1049,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       <Icon name="qr" size={14} /> {t("jobs.collectNow")}
                     </button>
                   </>
-                )}
+                  );
+                })()}
                 {dj.status === "invoiced" && (
                   <button
                     className="bg"

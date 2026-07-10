@@ -335,25 +335,103 @@ export async function POST(req: NextRequest) {
             ? charge.payment_intent
             : charge.payment_intent?.id;
         if (piId) {
-          const { data: job } = await supabase
-            .from("jobs")
-            .select("id, platform_fee_cents")
-            .eq("stripe_payment_intent_id", piId)
-            .maybeSingle();
-          if (job) {
-            const isFullRefund = charge.refunded && charge.amount_refunded >= charge.amount;
-            let newFeeCents: number;
-            if (isFullRefund) {
-              newFeeCents = 0;
-            } else {
-              // Prorate: preserve fee proportional to the amount NOT yet refunded.
-              const keptFraction = (charge.amount - charge.amount_refunded) / charge.amount;
-              newFeeCents = Math.round((Number(job.platform_fee_cents) || 0) * keptFraction);
+          const isFullRefund = charge.refunded && charge.amount_refunded >= charge.amount;
+          const keptFraction =
+            charge.amount > 0 ? (charge.amount - charge.amount_refunded) / charge.amount : 0;
+          const refunded = Math.round(charge.amount_refunded) / 100;
+
+          // Resolve the job from the PAYMENTS LEDGER first: it records every
+          // charge's PaymentIntent, so refunding a DEPOSIT still finds its job.
+          // `jobs.stripe_payment_intent_id` only ever holds the LATEST payment,
+          // so relying on it alone silently drops deposit refunds.
+          let jobId: string | null = null;
+          let orgId: string | null = null;
+          let chargeRow: { id: string; platform_fee_cents: number } | null = null;
+          {
+            const { data: pay } = await supabase
+              .from("payments")
+              .select("id, job_id, org_id, platform_fee_cents")
+              .eq("stripe_payment_intent_id", piId)
+              .neq("kind", "refund")
+              .limit(1)
+              .maybeSingle();
+            if (pay) {
+              jobId = pay.job_id;
+              orgId = pay.org_id;
+              chargeRow = { id: pay.id, platform_fee_cents: Number(pay.platform_fee_cents) || 0 };
             }
-            await supabase
+          }
+          // Legacy fallback: job paid before the ledger existed.
+          let legacyFee: number | null = null;
+          if (!jobId) {
+            const { data: j } = await supabase
               .from("jobs")
-              .update({ platform_fee_cents: newFeeCents })
-              .eq("id", job.id);
+              .select("id, org_id, platform_fee_cents")
+              .eq("stripe_payment_intent_id", piId)
+              .maybeSingle();
+            if (j) {
+              jobId = j.id;
+              orgId = j.org_id;
+              legacyFee = Number(j.platform_fee_cents) || 0;
+            }
+          }
+
+          if (jobId) {
+            // Prorate THIS charge's own fee — never the job's cumulative fee,
+            // which on a multi-payment job also contains other charges' fees.
+            if (chargeRow) {
+              const netFee = isFullRefund ? 0 : Math.round(chargeRow.platform_fee_cents * keptFraction);
+              await supabase.from("payments").update({ platform_fee_cents: netFee }).eq("id", chargeRow.id);
+            } else if (legacyFee !== null) {
+              const netFee = isFullRefund ? 0 : Math.round(legacyFee * keptFraction);
+              await supabase.from("jobs").update({ platform_fee_cents: netFee }).eq("id", jobId);
+            }
+
+            // Payment ledger: ONE refund row per PaymentIntent carrying the
+            // CUMULATIVE amount_refunded (negative). Upserting on the synthetic
+            // key makes webhook retries and partial→full refunds idempotent. A
+            // refund can pull a settled job back to owing, so recompute status.
+            // Best-effort — never fail the webhook (Stripe would just retry).
+            try {
+              await supabase.from("payments").upsert(
+                {
+                  org_id: orgId,
+                  job_id: jobId,
+                  amount: -refunded,
+                  kind: "refund",
+                  stripe_session_id: `refund_${piId}`,
+                  stripe_payment_intent_id: piId,
+                  platform_fee_cents: 0,
+                },
+                { onConflict: "stripe_session_id" },
+              );
+              const { data: rows } = await supabase
+                .from("payments")
+                .select("amount, platform_fee_cents")
+                .eq("job_id", jobId);
+              const { data: j2 } = await supabase
+                .from("jobs")
+                .select("total, status")
+                .eq("id", jobId)
+                .maybeSingle();
+              const amountPaid = rows
+                ? Math.round(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0) * 100) / 100
+                : 0;
+              const total = Math.round((Number(j2?.total) || 0) * 100) / 100;
+              const stillPaid = total > 0 && amountPaid >= total - 0.01;
+              const patch: Record<string, unknown> = { amount_paid: amountPaid };
+              // Job fee = sum of its charges' (post-refund) fees.
+              if (chargeRow && rows) {
+                patch.platform_fee_cents = rows.reduce((s, r) => s + (Number(r.platform_fee_cents) || 0), 0);
+              }
+              if (j2?.status === "paid" && !stillPaid) {
+                patch.status = "invoiced";
+                patch.paid_at = null;
+              }
+              await supabase.from("jobs").update(patch).eq("id", jobId);
+            } catch (e) {
+              console.error("[webhook] refund ledger update failed:", e);
+            }
           }
         }
         break;
