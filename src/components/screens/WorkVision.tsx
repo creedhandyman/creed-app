@@ -17,6 +17,7 @@ import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
 import { pickReceiptPhoto } from "@/lib/image";
 import { newRowId } from "@/lib/offline-queue";
+import { enqueueUpload, isNetworkError } from "@/lib/offline-uploads";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -82,6 +83,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const loadAll = useStore((s) => s.loadAll);
   const saveTimeEntry = useStore((s) => s.saveTimeEntry);
   const dropTimeEntry = useStore((s) => s.dropTimeEntry);
+  const bumpPendingUploads = useStore((s) => s.bumpPendingUploads);
   const darkMode = useStore((s) => s.darkMode);
 
   const [on, setOn] = useState(() => ld("t_on", false));
@@ -355,8 +357,25 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     if (!activeJob) return;
     const ext = file.name.split(".").pop() || "jpg";
     const path = `gallery/${activeJob.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+    const tag0 = typeOverride ?? photoType;
+    // Offline → stash the photo and attach it to the job on reconnect (the
+    // pre-computed `path` makes the replay idempotent). Never lose the shot.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      const ok = await enqueueUpload("job-photo", file, { jobId: activeJob.id, path, tag: tag0, ext });
+      if (ok) { bumpPendingUploads(); useStore.getState().showToast("Photo saved offline — uploads when you reconnect", "info"); }
+      else useStore.getState().showToast("Couldn't save photo offline (storage full)", "error");
+      return;
+    }
     const { error } = await supabase.storage.from("receipts").upload(path, file);
-    if (error) { useStore.getState().showToast("Photo upload failed: " + error.message, "error"); return; }
+    if (error) {
+      // A transport failure while nominally online — queue it rather than lose it.
+      if (isNetworkError(error)) {
+        const ok = await enqueueUpload("job-photo", file, { jobId: activeJob.id, path, tag: tag0, ext });
+        if (ok) { bumpPendingUploads(); useStore.getState().showToast("Photo saved — uploads when you reconnect", "info"); return; }
+      }
+      useStore.getState().showToast("Photo upload failed: " + error.message, "error");
+      return;
+    }
     const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
     if (!urlData?.publicUrl) return;
     const publicUrl = urlData.publicUrl;
@@ -390,6 +409,19 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     }
     setUploadingReceipt(true);
     try {
+      // Offline → the signed-URL upload can't run (it needs the network), so
+      // stash the image + a STABLE receipt id and finish on reconnect (upload +
+      // upsert the row by that id, so a retried replay can't duplicate it).
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        const queued = await enqueueUpload("receipt", file, {
+          jobId: activeJob.id, orgId: user.org_id, receiptId: newRowId(),
+          name: file.name || "receipt.jpg", type: file.type || "image/jpeg",
+          receiptDate: new Date().toLocaleDateString(),
+        });
+        if (queued) { bumpPendingUploads(); useStore.getState().showToast("Receipt saved offline — uploads when you reconnect", "info"); }
+        else useStore.getState().showToast("Couldn't save receipt offline (storage full)", "error");
+        return;
+      }
       let photo_url = "";
       let scanUrl = "";
       try {
@@ -397,6 +429,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         photo_url = up.path; // persist the private object path
         scanUrl = up.url; // short-lived signed URL for the AI scan
       } catch (e) {
+        // A transport failure while nominally online — queue instead of losing it.
+        if (isNetworkError(e)) {
+          const queued = await enqueueUpload("receipt", file, {
+            jobId: activeJob.id, orgId: user.org_id, receiptId: newRowId(),
+            name: file.name || "receipt.jpg", type: file.type || "image/jpeg",
+            receiptDate: new Date().toLocaleDateString(),
+          });
+          if (queued) { bumpPendingUploads(); useStore.getState().showToast("Receipt saved — uploads when you reconnect", "info"); return; }
+        }
         useStore.getState().showToast("Receipt upload failed: " + (e instanceof Error ? e.message : String(e)), "error");
         return;
       }

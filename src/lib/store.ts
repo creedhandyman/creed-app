@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { supabase, db } from "./supabase";
 import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
 import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue } from "./offline-queue";
+import { flushUploads, pendingUploadCount, clearUploads } from "./offline-uploads";
 import type {
   Organization,
   Profile,
@@ -111,6 +112,12 @@ interface AppState {
   /** Count of offline writes waiting to sync (the offline-queue). Surfaced in
    *  the banner so a tech knows their offline clock-out isn't lost. */
   pendingWrites: number;
+  /** Count of offline photo/receipt uploads waiting to sync (offline-uploads,
+   *  IndexedDB). Folded into the banner's "will sync" count. */
+  pendingUploads: number;
+  /** Bump the pending-upload counter after a screen queues an offline image
+   *  (the count lives in IndexedDB; this keeps the banner instant). */
+  bumpPendingUploads: () => void;
   loadAll: () => Promise<void>;
 
   /** Offline-durable time-entry writes. ALL clock in/out/manual/edit/delete
@@ -209,7 +216,8 @@ export const useStore = create<AppState>((set, get) => ({
     // reads; the queue is unconditionally wiped).
     void clearSnapshot();
     clearQueue();
-    set({ pendingWrites: 0 });
+    void clearUploads();
+    set({ pendingWrites: 0, pendingUploads: 0 });
     get().stopAutoRefresh();
   },
 
@@ -316,6 +324,8 @@ export const useStore = create<AppState>((set, get) => ({
   usingOfflineData: false,
   lastSyncedAt: null,
   pendingWrites: pendingCount(),
+  pendingUploads: 0, // hydrated from IndexedDB in startAutoRefresh
+  bumpPendingUploads: () => set({ pendingUploads: get().pendingUploads + 1 }),
 
   loadAll: async () => {
     // Concurrency guard. Many event handlers (Jobs, Quests, Branding,
@@ -646,9 +656,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   startAutoRefresh: () => {
     get().stopAutoRefresh();
-    // Replay any writes queued in a previous session (e.g. clocked out offline,
-    // then closed the app) before/while the first load runs.
+    // Replay any writes/uploads queued in a previous session (e.g. clocked out
+    // or snapped a photo offline, then closed the app) before/while the first
+    // load runs. Also hydrate the pending-upload count from IndexedDB.
     flushQueue().then((res) => set({ pendingWrites: res.remaining })).catch(() => {});
+    flushUploads().then((res) => set({ pendingUploads: res.remaining })).catch(() => {});
+    pendingUploadCount().then((n) => set({ pendingUploads: n })).catch(() => {});
     get().loadAll();
     const iv = setInterval(() => get().loadAll(), 15000);
     set({ _interval: iv });
@@ -685,6 +698,10 @@ if (typeof window !== "undefined") {
     void (async () => {
       const res = await flushQueue();
       useStore.setState({ pendingWrites: res.remaining });
+      // Then replay queued image uploads (rows first so a receipt's row exists
+      // before anything references it), and refresh live data.
+      const up = await flushUploads();
+      useStore.setState({ pendingUploads: up.remaining });
       await useStore.getState().loadAll();
     })();
   });

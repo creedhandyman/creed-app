@@ -25,7 +25,9 @@ function ago(ts: number): string {
 export default function OfflineBanner() {
   const offline = useStore((s) => s.usingOfflineData);
   const lastSyncedAt = useStore((s) => s.lastSyncedAt);
-  const pending = useStore((s) => s.pendingWrites);
+  const pendingWrites = useStore((s) => s.pendingWrites);
+  const pendingUploads = useStore((s) => s.pendingUploads);
+  const pending = pendingWrites + pendingUploads;
   const [, tick] = useState(0);
 
   // Keep the relative label fresh while the network stays down. loadAll
