@@ -20,6 +20,14 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+// Local calendar date as YYYY-MM-DD. toISOString() formats in UTC, so any
+// evening in a US timezone (already the next day in UTC) produced the wrong
+// day — the day-view showed tomorrow's jobs and "today" highlighted the wrong
+// cell. Local getters keep the string on the user's own calendar day, matching
+// the toLocaleDateString labels and the sched_date values a date picker writes.
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 export default function Schedule({ setPage, preSelectJob }: Props) {
   const jobs = useStore((s) => s.jobs);
   const profiles = useStore((s) => s.profiles);
@@ -35,7 +43,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   // job's Assign button (Day-view Unscheduled) or a preSelectJob deep-link
   // (Jobs → "Schedule this job"), which defaults the day to today.
   const [armedJob, setArmedJob] = useState<string | null>(preSelectJob || null);
-  const [dropTarget, setDropTarget] = useState<string | null>(preSelectJob ? new Date().toISOString().split("T")[0] : null);
+  const [dropTarget, setDropTarget] = useState<string | null>(preSelectJob ? ymd(new Date()) : null);
   // Last-used time and workers persist between drops so back-to-back
   // scheduling sessions don't require re-typing the same defaults.
   const loadStr = (k: string, fb: string) => {
@@ -82,7 +90,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     if (!selectedStreet) { setSuggestion(null); return; }
 
     // Find scheduled jobs on streets that match
-    const today = new Date().toISOString().split("T")[0];
+    const today = ymd(new Date());
     const upcoming = schedule.filter((s) => s.sched_date >= today);
 
     for (const entry of upcoming) {
@@ -155,7 +163,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   };
 
   const now = new Date();
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = ymd(now);
 
   // viewDate drives which week/month is on screen. Anchored to today on
   // mount; the prev/next/Today header controls move it. A separate `now`
@@ -202,7 +210,6 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
     : view === "week"
     ? `${MONTH_NAMES[ws.getMonth()].slice(0, 3)} ${ws.getDate()}–${week[6].getDate()}`
     : `${MONTH_NAMES[month]} ${year}`;
-  const ymd = (d: Date) => d.toISOString().split("T")[0];
   // Workers live in the note as "👷 Name, Name"; the linked job's
   // requested_tech is a fallback so entries scheduled without a crew list
   // still filter to that tech.
@@ -740,7 +747,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               const monthEntries = schedule
                 .filter((s) => {
                   const d = s.sched_date;
-                  return d >= viewStart.toISOString().split("T")[0] && d <= viewEnd.toISOString().split("T")[0];
+                  return d >= ymd(viewStart) && d <= ymd(viewEnd);
                 })
                 .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
 

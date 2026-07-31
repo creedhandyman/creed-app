@@ -597,38 +597,70 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
     items: r.items.map((it) => (it.id ? it : { ...it, id: crypto.randomUUID().slice(0, 8) })),
   }));
 
-  // 1. Detect phantom materials — same high-cost item in 3+ rooms = likely a bug.
-  // Skip TYPE B / project-scope items (condition "-") since multi-unit jobs
-  // legitimately list the same material across unit-grouped items.
-  const materialCount: Record<string, { count: number; totalCost: number }> = {};
-  rooms.forEach((r) => r.items.forEach((it) => {
-    if (it.condition === "-") return;
-    it.materials.forEach((m) => {
-      const key = m.n.toLowerCase();
-      if (!materialCount[key]) materialCount[key] = { count: 0, totalCost: 0 };
-      materialCount[key].count++;
-      materialCount[key].totalCost += m.c;
-    });
-  }));
-
-  const phantomMaterials = new Set<string>();
-  Object.entries(materialCount).forEach(([key, v]) => {
-    // Flag if same item appears 3+ times AND costs $50+ each
-    if (v.count >= 3 && v.totalCost / v.count >= 50) {
-      phantomMaterials.add(key);
-      console.warn(`VALIDATION: Phantom material detected — "${key}" appears ${v.count} times ($${v.totalCost} total). Removing.`);
-    }
-  });
-
-  // 2. Remove phantom materials from items
-  if (phantomMaterials.size > 0) {
-    rooms = rooms.map((r) => ({
-      ...r,
-      items: r.items.map((it) => ({
-        ...it,
-        materials: it.materials.filter((m) => !phantomMaterials.has(m.n.toLowerCase())),
-      })),
+  // 1+2. Detect and remove phantom materials — the AI sometimes smears one
+  // expensive material across many unrelated tasks (a $300 water heater
+  // copy-pasted onto every paint/drywall line). Old heuristic: same material
+  // name in 3+ items at $50+ each → strip it everywhere. That produced two
+  // real bugs:
+  //   • It stripped LEGITIMATE repeated fixtures — a toilet in each of 3
+  //     bathrooms, a ceiling fan in each of 4 bedrooms on a make-ready — so
+  //     multi-unit jobs under-quoted the exact big-ticket parts they were
+  //     supposed to charge for.
+  //   • It was NOT gated by skipCaps, so the editJobId reload path re-ran it
+  //     on already-reviewed data and silently deleted materials the user
+  //     deliberately kept, every time they reopened a saved quote.
+  // Fix: (a) gate the whole pass by !skipCaps so reviewed/saved quotes are
+  // never re-stripped; (b) a material the item's OWN task names ("Install
+  // toilet" → toilet) is a real fixture for that task — never count it toward
+  // the repeat total and never strip it. Only a material that rides a task it
+  // has nothing to do with ("Paint walls" → water heater) can be a phantom,
+  // and even then it's removed only from the unrelated items.
+  const relatedToItem = (matName: string, it: RoomItem): boolean => {
+    const hay = `${it.detail} ${it.comment}`.toLowerCase();
+    return matName
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z\s]/g, " ")
+      .split(/\s+/)
+      .some((w) => w.length >= 4 && hay.includes(w));
+  };
+  if (!skipCaps) {
+    // Skip TYPE B / project-scope items (condition "-") since multi-unit jobs
+    // legitimately list the same material across unit-grouped items.
+    const materialCount: Record<string, { count: number; totalCost: number }> = {};
+    rooms.forEach((r) => r.items.forEach((it) => {
+      if (it.condition === "-") return;
+      it.materials.forEach((m) => {
+        if (relatedToItem(m.n, it)) return; // fixture belongs to this task — not a phantom
+        const key = m.n.toLowerCase();
+        if (!materialCount[key]) materialCount[key] = { count: 0, totalCost: 0 };
+        materialCount[key].count++;
+        materialCount[key].totalCost += m.c;
+      });
     }));
+
+    const phantomMaterials = new Set<string>();
+    Object.entries(materialCount).forEach(([key, v]) => {
+      // Flag if the same name rides 3+ UNRELATED tasks at $50+ each
+      if (v.count >= 3 && v.totalCost / v.count >= 50) {
+        phantomMaterials.add(key);
+        console.warn(`VALIDATION: Phantom material detected — "${key}" appears on ${v.count} unrelated tasks ($${v.totalCost} total). Removing from those.`);
+      }
+    });
+
+    if (phantomMaterials.size > 0) {
+      rooms = rooms.map((r) => ({
+        ...r,
+        items: r.items.map((it) => ({
+          ...it,
+          // Strip the phantom only where it's UNRELATED to the task. "Install
+          // toilet" keeps its toilet; "Paint walls" loses the smeared one.
+          materials: it.materials.filter(
+            (m) => !phantomMaterials.has(m.n.toLowerCase()) || relatedToItem(m.n, it),
+          ),
+        })),
+      }));
+    }
   }
 
   // 3. Deduplicate items — check across ALL rooms, not just within one.

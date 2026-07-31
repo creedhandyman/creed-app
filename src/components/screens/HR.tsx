@@ -273,11 +273,35 @@ function RequestRow({
   const decide = async (status: "approved" | "denied") => {
     setBusy(true);
     try {
+      const prev = req.status;
       await db.patch("time_off_requests", req.id, {
         status,
         decided_by: actor,
         decided_at: new Date().toISOString(),
       });
+
+      // Approving deducts the request's hours from the employee's matching
+      // balance (vacation/personal → PTO, sick → sick; unpaid touches neither).
+      // Reversing an approval (approved → denied) restores them. Guarding on the
+      // status TRANSITION keeps it idempotent — re-approving an already-approved
+      // row, or denying an already-denied one, never double-counts.
+      const field: "pto_balance_hrs" | "sick_balance_hrs" | null =
+        req.kind === "sick" ? "sick_balance_hrs"
+        : req.kind === "vacation" || req.kind === "personal" ? "pto_balance_hrs"
+        : null;
+      if (field && req.user_id) {
+        let delta = 0;
+        if (status === "approved" && prev !== "approved") delta = -num(req.hours);
+        else if (status === "denied" && prev === "approved") delta = num(req.hours);
+        if (delta !== 0) {
+          const prof = useStore.getState().profiles.find((p) => p.id === req.user_id);
+          const cur = num(prof?.[field]);
+          await db.patch("profiles", req.user_id, {
+            [field]: Math.round((cur + delta) * 100) / 100,
+          });
+        }
+      }
+
       useStore.getState().showToast(`Request ${status}`, "success");
       await onChange();
     } finally {

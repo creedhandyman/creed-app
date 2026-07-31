@@ -108,10 +108,12 @@ export interface Profile {
   notify_sms?: boolean;
   notify_assigned?: boolean;
   notify_leads?: boolean;
-  /** PTO balance — unused by the app today but kept on the type because
-   *  the underlying DB column still exists for a possible future return. */
+  /** PTO balance (hours). Decremented when a vacation/personal time-off
+   *  request is approved in HR (restored if the approval is reversed). Not yet
+   *  surfaced in the UI or seeded with an allotment — backend value for now. */
   pto_balance_hrs?: number;
-  /** Sick balance — unused by the app today, kept for the same reason. */
+  /** Sick balance (hours). Decremented when a sick request is approved; same
+   *  approve/reverse handling as pto_balance_hrs. */
   sick_balance_hrs?: number;
   created_at?: string;
 }
