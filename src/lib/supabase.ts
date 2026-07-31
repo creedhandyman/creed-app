@@ -132,7 +132,10 @@ export const db = {
   get: async <T = Record<string, unknown>>(
     table: string,
     filters?: Record<string, unknown>,
-    options?: { limit?: number }
+    // `strict` rethrows on error (no toast) so a caller like loadAll can tell a
+    // FAILED fetch apart from a genuinely empty table — the default swallows
+    // and returns [] as before.
+    options?: { limit?: number; strict?: boolean }
   ): Promise<T[]> => {
     try {
       let query = supabase.from(table).select("*");
@@ -149,6 +152,7 @@ export const db = {
       if (error) throw error;
       return (data as T[]) || [];
     } catch (err) {
+      if (options?.strict) throw err;
       reportDbError(table, "load", err);
       return [];
     }

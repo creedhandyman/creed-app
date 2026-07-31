@@ -31,13 +31,27 @@ export async function GET(req: NextRequest) {
     if (!jobs?.length) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
-    const job = jobs[0];
+    // Strip internal fields the customer-facing /status page never needs — this
+    // endpoint is UNauthenticated (anyone with the job UUID can read it), so
+    // don't leak payment-processor ids, the platform fee, or internal attribution.
+    const {
+      stripe_payment_intent_id: _pi,
+      platform_fee_cents: _fee,
+      created_by: _cb,
+      referrer_tech_id: _ref,
+      ...job
+    } = jobs[0] as Record<string, unknown>;
+    void _pi; void _fee; void _cb; void _ref;
 
     let org = null;
     if (job.org_id) {
+      // NOTE: no stripe_account_id here. The status page doesn't need it —
+      // /api/checkout resolves the payout account from the job's org server-side
+      // (it ignores the body's stripeAccountId), so exposing it only leaks the
+      // org's Stripe Connect account id to an unauthenticated caller.
       const { data: orgs } = await supabase
         .from("organizations")
-        .select("id, name, logo_url, phone, default_rate, stripe_account_id, stripe_connected, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms")
+        .select("id, name, logo_url, phone, default_rate, stripe_connected, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms")
         .eq("id", job.org_id)
         .limit(1);
       org = orgs?.[0] || null;

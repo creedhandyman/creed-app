@@ -134,6 +134,13 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const processPay = async () => {
     if (!entries.length) return;
     if (!org?.id) return;
+    // Never fabricate a rate for a rate-0 crew member — paying them at a made-up
+    // $55/hr overpays (the auto-run cron correctly refuses to). Require a real
+    // rate, set in Team, before processing pay.
+    if (!(Number(selUser.rate) > 0)) {
+      useStore.getState().showToast(`Set a pay rate for ${selUser.name} in Team before processing pay.`, "warning");
+      return;
+    }
 
     // Double-submit guard — lock BEFORE the await so rapid double-clicks don't both pass
     if (processGuard.current) return;
@@ -159,7 +166,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
         orgId: org.id,
         userId: sel,
         userName: selUser.name,
-        rate: selUser.rate || 55,
+        rate: selUser.rate,
         empNum: selUser.emp_num,
         approvedBonuses: approvedQuests,
         org: org || {},

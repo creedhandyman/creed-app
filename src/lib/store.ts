@@ -255,6 +255,11 @@ export const useStore = create<AppState>((set, get) => ({
           }
           return;
         }
+        // Valid session but the profile fetch came back empty — almost always a
+        // transient failure (blip while onLine still read true), NOT a deleted
+        // account. Keep the cached user rather than signing a valid session out;
+        // it self-heals on the next init. Only a missing SESSION logs out.
+        return;
       }
       const cached = ld<Profile | null>("user", null);
       if (cached) { set({ user: null }); sv("user", null); }
@@ -402,35 +407,36 @@ export const useStore = create<AppState>((set, get) => ({
     // If a table is missing (e.g. time_off_requests before the migration
     // runs), the per-fetch toast fires inside db.get and this settles to
     // []. The downstream selectors all default-to-empty.
-    const settle = <T,>(p: Promise<T[]>): Promise<T[]> =>
+    // A strict db.get failure (dropped connection / server blip) surfaces here
+    // as null — so a single table's blip KEEPS its prior value instead of
+    // blanking that collection. A genuinely empty table still resolves to [].
+    const settle = <T,>(p: Promise<T[]>): Promise<T[] | null> =>
       p.catch((err) => {
-        // Should never trip — db.get catches internally — but if it
-        // does, log and degrade to empty instead of crashing loadAll.
         // eslint-disable-next-line no-console
-        console.error("[store] unexpected loadAll fetch rejection:", err);
-        return [];
+        console.error("[store] loadAll fetch failed for a table:", err);
+        return null;
       });
     const results = await Promise.all([
-      settle(db.get<Customer>("customers", orgFilter)),
-      settle(db.get<Address>("addresses", orgFilter)),
-      settle(db.get<Profile>("profiles", orgFilter)),
-      settle(db.get<Job>("jobs", orgFilter)),
-      settle(db.get<TimeEntry>("time_entries", orgFilter)),
-      settle(db.get<Review>("reviews", orgFilter)),
-      settle(db.get<Referral>("referrals", orgFilter)),
-      settle(db.get<ScheduleEntry>("schedule", orgFilter)),
-      settle(db.get<PayHistory>("pay_history", orgFilter, { limit: 500 })),
-      settle(db.get<Receipt>("receipts", orgFilter)),
-      settle(db.get<QuestPayout>("quest_payouts", orgFilter)),
-      settle(db.get<TimeOffRequest>("time_off_requests", orgFilter)),
-      settle(db.get<RecurringJob>("recurring_jobs", orgFilter)),
-      settle(db.get<ReviewRequest>("review_requests", orgFilter)),
-      settle(db.get<MembershipPlan>("membership_plans", orgFilter)),
-      settle(db.get<CustomerMembership>("customer_memberships", orgFilter)),
-      settle(db.get<Equipment>("equipment", orgFilter)),
+      settle(db.get<Customer>("customers", orgFilter, { strict: true })),
+      settle(db.get<Address>("addresses", orgFilter, { strict: true })),
+      settle(db.get<Profile>("profiles", orgFilter, { strict: true })),
+      settle(db.get<Job>("jobs", orgFilter, { strict: true })),
+      settle(db.get<TimeEntry>("time_entries", orgFilter, { strict: true })),
+      settle(db.get<Review>("reviews", orgFilter, { strict: true })),
+      settle(db.get<Referral>("referrals", orgFilter, { strict: true })),
+      settle(db.get<ScheduleEntry>("schedule", orgFilter, { strict: true })),
+      settle(db.get<PayHistory>("pay_history", orgFilter, { limit: 500, strict: true })),
+      settle(db.get<Receipt>("receipts", orgFilter, { strict: true })),
+      settle(db.get<QuestPayout>("quest_payouts", orgFilter, { strict: true })),
+      settle(db.get<TimeOffRequest>("time_off_requests", orgFilter, { strict: true })),
+      settle(db.get<RecurringJob>("recurring_jobs", orgFilter, { strict: true })),
+      settle(db.get<ReviewRequest>("review_requests", orgFilter, { strict: true })),
+      settle(db.get<MembershipPlan>("membership_plans", orgFilter, { strict: true })),
+      settle(db.get<CustomerMembership>("customer_memberships", orgFilter, { strict: true })),
+      settle(db.get<Equipment>("equipment", orgFilter, { strict: true })),
       // Notifications are per-user, not per-org — scope to the current
       // user and cap so the feed query stays light on every 15s refresh.
-      settle(userId ? db.get<AppNotification>("notifications", { user_id: userId }, { limit: 50 }) : Promise.resolve([])),
+      settle(userId ? db.get<AppNotification>("notifications", { user_id: userId }, { limit: 50, strict: true }) : Promise.resolve([])),
     ]);
     const [
       customers, addresses, profiles, jobs, timeEntries,
@@ -438,29 +444,50 @@ export const useStore = create<AppState>((set, get) => ({
       membershipPlans, customerMemberships, equipment,
       notifications,
     ] = results as [
-      Customer[], Address[], Profile[], Job[], TimeEntry[],
-      Review[], Referral[], ScheduleEntry[], PayHistory[], Receipt[], QuestPayout[], TimeOffRequest[], RecurringJob[], ReviewRequest[],
-      MembershipPlan[], CustomerMembership[], Equipment[],
-      AppNotification[],
+      Customer[] | null, Address[] | null, Profile[] | null, Job[] | null, TimeEntry[] | null,
+      Review[] | null, Referral[] | null, ScheduleEntry[] | null, PayHistory[] | null, Receipt[] | null, QuestPayout[] | null, TimeOffRequest[] | null, RecurringJob[] | null, ReviewRequest[] | null,
+      MembershipPlan[] | null, CustomerMembership[] | null, Equipment[] | null,
+      AppNotification[] | null,
     ];
     // Failed-batch guard: a real logged-in org ALWAYS has ≥1 profile (the user
-    // themselves). An empty profiles result means the fetch failed (dropped
-    // connection / server blip while navigator.onLine still read true) — don't
-    // overwrite good data with a wipe; keep the snapshot up instead.
-    if (profiles.length === 0 && orgId) {
+    // themselves). A null (fetch failed) or empty profiles means the load
+    // failed — don't wipe good data; keep the snapshot up instead.
+    if ((profiles === null || profiles.length === 0) && orgId) {
       await applyOffline();
       return;
     }
 
+    // Keep the prior in-memory value for any collection whose fetch FAILED
+    // (null), so one table's blip can't blank it; a genuine empty ([]) updates.
+    const cur = get();
+    const customersF = customers ?? cur.customers;
+    const addressesF = addresses ?? cur.addresses;
+    const profilesF = profiles ?? cur.profiles;
+    const jobsF = jobs ?? cur.jobs;
+    const timeEntriesF = timeEntries ?? cur.timeEntries;
+    const reviewsF = reviews ?? cur.reviews;
+    const referralsF = referrals ?? cur.referrals;
+    const scheduleF = schedule ?? cur.schedule;
+    const payHistoryF = payHistory ?? cur.payHistory;
+    const receiptsF = receipts ?? cur.receipts;
+    const questPayoutsF = questPayouts ?? cur.questPayouts;
+    const timeOffRequestsF = timeOffRequests ?? cur.timeOffRequests;
+    const recurringJobsF = recurringJobs ?? cur.recurringJobs;
+    const reviewRequestsF = reviewRequests ?? cur.reviewRequests;
+    const membershipPlansF = membershipPlans ?? cur.membershipPlans;
+    const customerMembershipsF = customerMemberships ?? cur.customerMemberships;
+    const equipmentF = equipment ?? cur.equipment;
+    const notificationsF = notifications ?? cur.notifications;
+
     set({
-      customers, addresses, profiles, jobs,
+      customers: customersF, addresses: addressesF, profiles: profilesF, jobs: jobsF,
       // Materialize any not-yet-synced offline writes on top of server truth so
       // an optimistic clock-out isn't clobbered by a poll that lands before the
       // queue flushes. Once flushed, the queue is empty and this is a no-op.
-      timeEntries: applyPending("time_entries", timeEntries),
-      reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
-      membershipPlans, customerMemberships, equipment,
-      notifications,
+      timeEntries: applyPending("time_entries", timeEntriesF),
+      reviews: reviewsF, referrals: referralsF, schedule: scheduleF, payHistory: payHistoryF, receipts: receiptsF, questPayouts: questPayoutsF, timeOffRequests: timeOffRequestsF, recurringJobs: recurringJobsF, reviewRequests: reviewRequestsF,
+      membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF,
+      notifications: notificationsF,
       loading: false,
       usingOfflineData: false,
       lastSyncedAt: Date.now(),
@@ -472,9 +499,9 @@ export const useStore = create<AppState>((set, get) => ({
     if (Date.now() - lastSnapshotAt > 30000) {
       lastSnapshotAt = Date.now();
       void saveSnapshot(userId, orgId, {
-        customers, addresses, profiles, jobs, timeEntries,
-        reviews, referrals, schedule, payHistory, receipts, questPayouts, timeOffRequests, recurringJobs, reviewRequests,
-        membershipPlans, customerMemberships, equipment, notifications,
+        customers: customersF, addresses: addressesF, profiles: profilesF, jobs: jobsF, timeEntries: timeEntriesF,
+        reviews: reviewsF, referrals: referralsF, schedule: scheduleF, payHistory: payHistoryF, receipts: receiptsF, questPayouts: questPayoutsF, timeOffRequests: timeOffRequestsF, recurringJobs: recurringJobsF, reviewRequests: reviewRequestsF,
+        membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF, notifications: notificationsF,
       });
     }
     // Also refresh org data (picks up Stripe changes, site updates, etc.).

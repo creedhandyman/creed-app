@@ -68,6 +68,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     }
 
+    // Guard against double-enrollment — a customer already on this plan must
+    // not get a SECOND Stripe subscription (double billing). Blocks any live
+    // membership for this customer+plan (active / past_due / paused).
+    const { data: dupMem } = await supabase
+      .from("customer_memberships")
+      .select("id")
+      .eq("customer_id", customerId)
+      .eq("plan_id", planId)
+      .in("status", ["active", "past_due", "paused"])
+      .limit(1);
+    if (dupMem && dupMem.length) {
+      return NextResponse.json(
+        { error: "This customer is already enrolled in this plan." },
+        { status: 409 },
+      );
+    }
+
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 

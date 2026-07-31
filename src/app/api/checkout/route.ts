@@ -73,17 +73,28 @@ export async function POST(req: NextRequest) {
     let feesCollectedCents = 0;
     try {
       const periodStart = currentPeriodStart();
-      const { data: capRows } = await supabase
-        .from("jobs")
+      // Sum fees from the PAYMENTS LEDGER for this period. This captures fees on
+      // DEPOSITS too — a deposit's job isn't status='paid' yet, so the old
+      // jobs.status='paid' query missed those fees and let the monthly cap be
+      // exceeded. Refunds set their charge row's fee to 0/prorated, so the sum
+      // self-corrects. Falls back to the paid-jobs sum pre-migration.
+      const { data: payRows, error: payErr } = await supabase
+        .from("payments")
         .select("platform_fee_cents")
         .eq("org_id", job.org_id)
-        .eq("status", "paid")
-        .gte("paid_at", periodStart.toISOString())
-        .not("platform_fee_cents", "is", null);
-      feesCollectedCents = (capRows ?? []).reduce(
-        (sum, r) => sum + (Number(r.platform_fee_cents) || 0),
-        0,
-      );
+        .gte("created_at", periodStart.toISOString());
+      if (!payErr && payRows) {
+        feesCollectedCents = payRows.reduce((sum, r) => sum + (Number(r.platform_fee_cents) || 0), 0);
+      } else {
+        const { data: capRows } = await supabase
+          .from("jobs")
+          .select("platform_fee_cents")
+          .eq("org_id", job.org_id)
+          .eq("status", "paid")
+          .gte("paid_at", periodStart.toISOString())
+          .not("platform_fee_cents", "is", null);
+        feesCollectedCents = (capRows ?? []).reduce((sum, r) => sum + (Number(r.platform_fee_cents) || 0), 0);
+      }
     } catch {
       // Migration hasn't run yet — proceed without cap enforcement.
     }

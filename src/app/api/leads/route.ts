@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { dispatchNotifications } from "@/lib/notify-server";
+import { siteOrigin } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -191,7 +192,10 @@ export async function POST(req: NextRequest) {
         }
       }
       if (recipients.length) {
-        const origin = req.headers.get("origin") || `https://${req.headers.get("host") || ""}`;
+        // Trusted origin — NOT the request Host/Origin header. /api/leads is
+        // public + unauthenticated, so a spoofed Host must not be able to plant
+        // an attacker URL into a lead-notification SMS sent to the crew.
+        const origin = siteOrigin();
         const summary = description.length > 90 ? `${description.slice(0, 90)}…` : description;
         await dispatchNotifications(supabase, {
           orgId,
