@@ -230,13 +230,38 @@ export async function GET(req: NextRequest) {
         }
         const { text: roomsText, parsed } = parseTemplateBlob(plan.included);
         const totals = parsed.totals ?? parsed.data ?? {};
+        // membership_plans.included is typically just { description } with no
+        // rooms/estimate template, so parseTemplateBlob yields nothing the app
+        // can render (every reader keys off data.rooms, ignoring a bare
+        // top-level `description`). Synthesize a one-item work order from the
+        // description so the tech actually sees what the visit covers.
+        const included = (plan.included ?? {}) as { description?: string; rooms?: unknown[] };
+        const desc = typeof included.description === "string" ? included.description.trim() : "";
+        const parsedRooms = (parsed as { rooms?: unknown[] }).rooms;
+        const hasTemplate = Array.isArray(parsedRooms) && parsedRooms.length > 0;
+        const finalRoomsText = hasTemplate
+          ? roomsText
+          : JSON.stringify({
+              rooms: [{
+                name: plan.name || "Service visit",
+                items: [{
+                  id: Math.random().toString(36).slice(2, 10),
+                  detail: `${plan.name || "Membership"} — scheduled visit`,
+                  condition: "-",
+                  comment: desc || "Scheduled membership service visit.",
+                  laborHrs: 0,
+                  materials: [],
+                }],
+              }],
+              jobNotes: desc,
+            });
         const cust = custMap.get(m.customer_id);
         const insertRow = {
           org_id: m.org_id,
           property: "",
           client: cust?.name || "",
           job_date: now.toISOString().split("T")[0],
-          rooms: roomsText,
+          rooms: finalRoomsText,
           total: Number(totals.total ?? 0),
           total_labor: Number(totals.total_labor ?? 0),
           total_mat: Number(totals.total_mat ?? 0),

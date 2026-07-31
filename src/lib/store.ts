@@ -157,6 +157,17 @@ interface AppState {
   stopAutoRefresh: () => void;
 }
 
+// Every per-account collection, emptied. Spread on logout AND login so a
+// shared device never carries one user's in-memory data into the next
+// account's session (the offline fast-path in loadAll serves whatever is in
+// memory, so stale collections here would leak across users).
+const EMPTY_COLLECTIONS = {
+  customers: [], addresses: [], profiles: [], jobs: [], timeEntries: [],
+  reviews: [], referrals: [], schedule: [], payHistory: [], receipts: [],
+  questPayouts: [], timeOffRequests: [], recurringJobs: [], reviewRequests: [],
+  membershipPlans: [], customerMemberships: [], equipment: [], notifications: [],
+};
+
 export const useStore = create<AppState>((set, get) => ({
   /* ── Auth ── */
   user: ld<Profile | null>("user", null),
@@ -169,7 +180,10 @@ export const useStore = create<AppState>((set, get) => ({
     const profile = profiles[0];
     if (!profile) return "Profile not found";
 
-    set({ user: profile });
+    // Clear any prior account's in-memory data BEFORE this user's loadAll, so a
+    // session switch on a shared device can't surface the previous user's rows
+    // (loadAll's offline fast-path returns whatever is already in memory).
+    set({ user: profile, ...EMPTY_COLLECTIONS });
     sv("user", profile);
 
     // Load org
@@ -208,7 +222,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   logout: () => {
     supabase.auth.signOut();
-    set({ user: null, org: null, usingOfflineData: false, lastSyncedAt: null });
+    set({ user: null, org: null, ...EMPTY_COLLECTIONS, usingOfflineData: false, lastSyncedAt: null });
     sv("user", null);
     sv("org", null);
     // Drop the cached offline snapshot + any queued writes so the next account

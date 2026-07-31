@@ -103,21 +103,25 @@ function isAuthorized(req: NextRequest): AuthVia | null {
 async function isOwnerSession(
   req: NextRequest,
   supabase: SupabaseClient,
-): Promise<boolean> {
+): Promise<string | null> {
+  // Returns the caller's org_id when they're an owner/manager, else null. The
+  // org_id is what scopes a manual run to the caller's OWN tenant — a "Run now"
+  // button must never process another org's payroll.
   const auth = req.headers.get("authorization") || "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
-  if (!m) return false;
+  if (!m) return null;
   const token = m[1].trim();
-  if (!token || token === process.env.CRON_SECRET) return false;
+  if (!token || token === process.env.CRON_SECRET) return null;
   const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return false;
+  if (error || !data.user) return null;
   const { data: prof } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, org_id")
     .eq("id", data.user.id)
     .maybeSingle();
-  const role = (prof as { role?: string } | null)?.role;
-  return role === "owner" || role === "manager";
+  const p = prof as { role?: string; org_id?: string } | null;
+  const isMgr = p?.role === "owner" || p?.role === "manager";
+  return isMgr && p?.org_id ? p.org_id : null;
 }
 
 export async function GET(req: NextRequest) {
@@ -139,7 +143,11 @@ export async function GET(req: NextRequest) {
   const cronSecretSet = !!process.env.CRON_SECRET;
 
   const authVia = isAuthorized(req);
-  const ownerSession = authVia ? true : await isOwnerSession(req, supabase);
+  // Owner-session (the in-app "Run now / Process all" button) is scoped to the
+  // caller's own org; cron-secret / admin-token / x-vercel-cron paths are the
+  // real cron and run all enabled orgs.
+  const ownerOrgId = authVia ? null : await isOwnerSession(req, supabase);
+  const ownerSession = !!ownerOrgId;
   if (!authVia && !ownerSession) {
     try {
       await supabase.from("cron_log").insert({
@@ -152,10 +160,13 @@ export async function GET(req: NextRequest) {
   }
   const authViaResolved: string = authVia ?? "owner_session";
 
-  const { data, error } = await supabase
+  let orgQuery = supabase
     .from("organizations")
     .select("id, name, phone, email, address, license_num, logo_url, auto_payroll_enabled, auto_payroll_day, auto_payroll_hour, auto_payroll_cadence, auto_payroll_last_run")
     .eq("auto_payroll_enabled", true);
+  // Constrain a manual owner-session run to the caller's own tenant.
+  if (ownerOrgId) orgQuery = orgQuery.eq("id", ownerOrgId);
+  const { data, error } = await orgQuery;
 
   if (error) {
     // Most common real-world cause: the auto_payroll_* columns were never

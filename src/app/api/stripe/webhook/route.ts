@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
 import { computeNextFire } from "@/lib/recurring";
 import { visitCadence } from "@/lib/memberships";
+import { recordJobPayment, scheduleReviewRequest } from "@/lib/payment-fulfillment";
 
 export const dynamic = "force-dynamic";
 
@@ -241,6 +242,40 @@ export async function POST(req: NextRequest) {
             await syncMembership(sub);
           } else if (meta.org_id) {
             await syncSubscriptionToOrg(sub);
+          }
+        } else if (meta.job_id && session.payment_status === "paid") {
+          // One-time job payment (deposit / balance / invoice). Fulfill here TOO,
+          // idempotently (via the UNIQUE session id), so a customer who closes
+          // the tab before /payment/success runs still gets their payment
+          // recorded — the redirect is no longer the only fulfillment path.
+          const { data: job } = await supabase
+            .from("jobs")
+            .select("id, org_id, total, platform_fee_cents, paid_at")
+            .eq("id", meta.job_id)
+            .maybeSingle();
+          if (job && (!meta.org_id || meta.org_id === job.org_id)) {
+            const piId =
+              typeof session.payment_intent === "string"
+                ? session.payment_intent
+                : session.payment_intent?.id ?? null;
+            const paidNow = Math.max(0, Number(session.amount_total ?? meta.amount_cents ?? 0)) / 100;
+            try {
+              const result = await recordJobPayment(supabase, {
+                jobId: job.id,
+                orgId: job.org_id,
+                jobTotal: Number(job.total) || 0,
+                jobFeeCents: Number(job.platform_fee_cents) || 0,
+                jobPaidAt: job.paid_at ?? null,
+                sessionId: session.id,
+                paymentIntentId: piId,
+                paidNow,
+                platformFeeCents: Math.max(0, Number(meta.platform_fee_cents) || 0),
+                kind: meta.kind || "payment",
+              });
+              if (result.fullyPaid) await scheduleReviewRequest(supabase, job.id).catch(() => {});
+            } catch (e) {
+              console.error("[webhook] one-time payment fulfillment failed:", e);
+            }
           }
         }
         break;
