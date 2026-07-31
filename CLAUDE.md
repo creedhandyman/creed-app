@@ -607,10 +607,24 @@ src/
   pending writes over server/snapshot so a poll can't clobber an unsynced
   clock-out; queue cleared on logout; `pendingWrites` drives the banner's
   "· N change(s) will sync when you reconnect". A non-network (RLS/constraint)
-  replay error drops just that item so it can't wedge the queue. **NOT done**:
-  offline photo/receipt upload retry (binary — separate P3 piece); Background
-  Sync API (the `online` listener covers reconnect while the app is open). SW +
-  offline behaviour can't be tested locally (no dev env) — verify on-device.
+  replay error drops just that item so it can't wedge the queue. **P3 image
+  uploads** (`src/lib/offline-uploads.ts`): photos/receipts snapped offline are
+  no longer lost. Binary can't live in localStorage, so the pending File is
+  stashed in an **IndexedDB** queue (`creed-uploads` DB) and replayed on
+  reconnect. Two kinds, both from WorkVision: `"job-photo"` (public `receipts`
+  bucket → append to `rooms.photos`) and `"receipt"` (`uploadReceiptPrivate` →
+  upsert the receipt row). Idempotent: a job-photo carries a PRE-COMPUTED
+  storage path (upsert-upload + URL-dedupe) and a receipt a STABLE row id
+  (upsert), so a retried replay can't duplicate. `WorkVision.uploadWorkPhoto`/
+  `uploadReceipt` queue when `navigator.onLine === false` (or on a transport
+  error) with a "saved — uploads when you reconnect" toast; `store.flushUploads`
+  runs on reconnect (after the row queue) + on `startAutoRefresh`;
+  `pendingUploads` folds into the banner count; cleared on logout. **NOT done**:
+  offline PREVIEW (queued images don't show in the grid until they upload); AI
+  receipt scan isn't re-run on replay; other upload sites (QuoteForge, Inspector,
+  equipment, renders) are still online-only. Background Sync API not used (the
+  `online` listener covers reconnect while the app is open). SW + offline
+  behaviour can't be tested locally (no dev env) — verify on-device.
 
 - **Good-Better-Best tiered quotes**: present 3 cumulative options on a quote so
   techs upsell and the customer picks one. **No schema change — all on the rooms
