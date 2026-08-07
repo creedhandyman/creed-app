@@ -1402,6 +1402,25 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const issues = classify(rooms);
   const guide = makeGuide(rooms);
 
+  /* ── Auto trade label ──
+     The quote's rooms ARE trade buckets, so the job can label itself:
+     if one trade carries the MAJORITY (>50%) of labor hours it names the
+     job; genuinely mixed jobs stay "General". Hours-weighted so a 30-hr
+     flooring job with a 1-hr caulk line still reads "Flooring"; buckets
+     with zero-hour items fall back to a small per-item weight so a
+     materials-only bucket isn't invisible. */
+  const dominantTrade = (): string => {
+    const hrsByTrade: Record<string, number> = {};
+    let total = 0;
+    rooms.forEach((r) => {
+      const hrs = r.items.reduce((s, it) => s + (it.laborHrs || 0), 0) || r.items.length * 0.5;
+      hrsByTrade[r.name] = (hrsByTrade[r.name] || 0) + hrs;
+      total += hrs;
+    });
+    const top = Object.entries(hrsByTrade).sort((a, b) => b[1] - a[1])[0];
+    return top && total > 0 && top[1] / total > 0.5 ? top[0] : "General";
+  };
+
   /* ── Save job ── */
   const saveJob = async () => {
     if (!prop.trim()) {
@@ -1599,6 +1618,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       total_mat: lockMat,
       total_hrs: lockHrs,
       status: nextStatus,
+      trade: dominantTrade(),
       created_by: user.name,
     };
 
