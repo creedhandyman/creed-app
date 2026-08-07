@@ -320,7 +320,7 @@ If you process both, every item will be doubled. The final quote should have 20-
 Every line item MUST include:
 - "detail": "Room Name — Brief task description" (e.g. "Kitchen — Replace sprayer and re-caulk sink")
 - "comment": Clear 1-2 sentence work description referencing the inspection finding. The client must understand WHAT will be done.
-- "laborHrs": Conservative clock hours for one worker
+- "laborHrs": REALISTIC clock hours for one worker across the full task lifecycle (see REAL-WORLD LABOR HOURS below — never "ideal conditions" time)
 - "materials": Array of { "n": name, "c": line_total, "qty": optional_quantity, "unitPrice": optional_per_unit_cost }
 
 MATERIAL FIELDS — populate qty + unitPrice whenever you know them:
@@ -328,6 +328,13 @@ MATERIAL FIELDS — populate qty + unitPrice whenever you know them:
 - Multiple identical items ("4 caulk tubes @ $5 ea"): { "n": "Caulk tube", "c": 20, "qty": 4, "unitPrice": 5 }
 - Lump sum (sqft-based, supplies, etc.): qty/unitPrice optional. Just "c": 990 is fine.
 ALWAYS keep c = qty × unitPrice when you set both.
+
+## REAL-WORLD LABOR HOURS
+Quotes from this system historically run LOW on hours — completed jobs take 30-80% longer than quoted, especially bigger ones. When torn between two estimates, take the HIGHER.
+- laborHrs covers the FULL task lifecycle: load-in/setup, surface protection, demo, the work itself, cleanup, debris haul-out, and at least one material/supply run per job — not just tool-on-material time.
+- SCALE OVERHEAD WITH JOB SIZE. Large jobs lose real time to coordination, staging, re-work, and site surprises: add ~15% to total labor when the job exceeds 16 total hours, ~25% when it exceeds 40. Fold the uplift into the line items, or add one "Job setup, staging & cleanup" line under the dominant trade.
+- CREW SIZE: set crewSize to what the work physically needs (2 for sheet goods, appliances, ladder work over 8 ft, heavy demo). Two workers are NOT twice as fast — if you raise crewSize, do NOT cut laborHrs proportionally; coordination overhead eats 10-20% of the theoretical gain.
+- Dry/cure/inspection waits (paint coats, mud, concrete, caulk) add no labor hours but DO add estDays — never compress estDays below what cure times allow.
 
 ## RULES
 
@@ -1223,6 +1230,11 @@ async function aiParsePdfSingle(
     // (everything else) so the AI prefers prices from the same ZIP code over
     // averaged numbers from other markets.
     let correctionsPrompt = "";
+    // Deterministic labor calibration, computed from the same __job__
+    // quoted-vs-actual history that feeds the prompt. Keyed by lowercase
+    // trade name; overall is the cross-trade fallback. 1 = no adjustment.
+    const laborCalByTrade: Record<string, number> = {};
+    let laborCalOverall = 1;
     try {
       const corrections = await db.get<{
         item_name: string; original_hours: number; corrected_hours: number;
@@ -1326,10 +1338,24 @@ async function aiParsePdfSingle(
           jobCalLines.push(`- ${trade}: ${parts.join(", ")}`);
         });
 
+        // Calibration ratios (actual ÷ quoted). Per-trade needs ≥2 completed
+        // jobs in that trade; the overall ratio needs ≥3 across all trades so
+        // one weird job can't swing every quote.
+        let calSumQuoted = 0, calSumActual = 0, calJobCount = 0;
+        Object.entries(jobCalsByTrade).forEach(([trade, cal]) => {
+          const q = cal.quoted.reduce((a, b) => a + b, 0);
+          const act = cal.actual.reduce((a, b) => a + b, 0);
+          calSumQuoted += q;
+          calSumActual += act;
+          calJobCount += cal.quoted.length;
+          if (cal.quoted.length >= 2 && q > 0) laborCalByTrade[trade.toLowerCase()] = act / q;
+        });
+        if (calJobCount >= 3 && calSumQuoted > 0) laborCalOverall = calSumActual / calSumQuoted;
+
         if (localLessons.length || otherLessons.length || jobCalLines.length) {
           correctionsPrompt = "";
           if (jobCalLines.length) {
-            correctionsPrompt += `\nPAST JOB DURATIONS — actual hours from completed work (use as overall sizing context, especially when local data exists):\n${jobCalLines.join("\n")}\n`;
+            correctionsPrompt += `\nPAST JOB DURATIONS — this team's ACTUAL hours from completed work vs what was quoted. Actuals consistently exceed quotes — weight your hours toward the ACTUAL side, especially where local data exists:\n${jobCalLines.join("\n")}\n`;
           }
           if (localLessons.length && propertyZip) {
             correctionsPrompt += `\nLEARNED PRICING — LOCAL TO ZIP ${propertyZip} (prefer these for same-area jobs):\n${localLessons.slice(0, 25).join("\n")}\n`;
@@ -1583,11 +1609,40 @@ ${cleanText.slice(0, 60000)}`
     // ── POST-PARSE VALIDATION ──
     const validatedRooms = validateQuote(rooms);
 
+    // ── LABOR-HOURS CALIBRATION (deterministic) ──
+    // The prompt-side quoted-vs-actual history is advisory; this is the
+    // enforcement. Completed jobs run 30-80% over quoted hours on bigger
+    // work, so scale each trade bucket's laborHrs UP by the measured
+    // actual/quoted ratio — never down (low quotes are the failure mode),
+    // clamped at +50% per parse. Self-correcting over time: calibrated
+    // quotes that then match actuals push future ratios back toward 1.
+    const calAdjustments: string[] = [];
+    const calibratedRooms = validatedRooms.map((room) => {
+      const ratio = laborCalByTrade[room.name.trim().toLowerCase()] ?? laborCalOverall;
+      const factor = Math.min(1.5, Math.max(1, ratio));
+      if (factor < 1.05) return room;
+      calAdjustments.push(`${room.name} +${Math.round((factor - 1) * 100)}%`);
+      return {
+        ...room,
+        items: room.items.map((it) => ({
+          ...it,
+          laborHrs: Math.round((it.laborHrs || 0) * factor * 10) / 10,
+        })),
+      };
+    });
+
+    const notes: string[] = parsed.notes || [];
+    if (calAdjustments.length) {
+      notes.push(
+        `Labor hours adjusted up from your completed-job history (${calAdjustments.join(", ")}) — edit down if this job should run lean.`,
+      );
+    }
+
     return {
       property: parsed.property || "",
       client: parsed.client || "",
-      rooms: validatedRooms.filter((r) => r.items.length > 0),
-      notes: parsed.notes || [],
+      rooms: calibratedRooms.filter((r) => r.items.length > 0),
+      notes,
       crewSize: parsed.crewSize || 2,
       estDays: parsed.estDays || 0,
     };
