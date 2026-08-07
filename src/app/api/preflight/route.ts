@@ -59,6 +59,12 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "equipment", table: "equipment", column: "id" },
   { key: "push_subscriptions", table: "push_subscriptions", column: "id" },
   { key: "price_corrections.zip", table: "price_corrections", column: "zip" },
+  // Self-learning v2 — job-completion outcome capture. Without these the
+  // completion write toasts "column does not exist" and the labor-hours
+  // calibration (quoted-vs-actual ratios) has no data to learn from.
+  { key: "price_corrections.source", table: "price_corrections", column: "source" },
+  { key: "price_corrections.job_id", table: "price_corrections", column: "job_id" },
+  { key: "price_corrections.created_at", table: "price_corrections", column: "created_at" },
   { key: "jobs.archived", table: "jobs", column: "archived" },
   { key: "time_entries.paid_at", table: "time_entries", column: "paid_at" },
   { key: "time_entries.job_id", table: "time_entries", column: "job_id" },
