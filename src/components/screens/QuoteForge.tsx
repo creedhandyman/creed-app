@@ -947,7 +947,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // unit silently.
         else if (
           result.property && prop &&
-          result.property.trim().toLowerCase() !== prop.trim().toLowerCase()
+          // Punctuation/spacing-insensitive compare — "Wichita KS" vs
+          // "Wichita, KS" is the SAME address and must not warn. Only a
+          // real difference (other unit number, other street) should.
+          result.property.toLowerCase().replace(/[^a-z0-9]/g, "") !==
+            prop.toLowerCase().replace(/[^a-z0-9]/g, "")
         ) {
           useStore.getState().showToast(
             `Report reads "${result.property}" but the address is set to "${prop}" — tap the address to change it if this is a different unit.`,
