@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import type { Profile } from "@/lib/types";
 import { t } from "@/lib/i18n";
+import { formatHours } from "@/lib/dates";
 import { Icon } from "./Icon";
 
 /**
@@ -263,7 +264,7 @@ export default function TeamStats() {
         const photoTop = isTop ? 18 : 14;
         const headPad = 16 + photoSize + 12;
         const stat6 = [
-          { v: stats.totalHours.toFixed(0), l: t("team.lifetimeHrs"), c: "#eaf0fb" },
+          { v: formatHours(stats.totalHours), l: t("team.lifetimeHrs"), c: "#eaf0fb" },
           { v: stats.totalEarned >= 1000 ? `$${(stats.totalEarned / 1000).toFixed(1)}k` : `$${Math.round(stats.totalEarned)}`, l: t("team.earned"), c: "var(--color-money)" },
           { v: String(stats.jobsWorked), l: t("team.jobs"), c: "#eaf0fb" },
           { v: stats.avgRating > 0 ? `${stats.avgRating.toFixed(1)}★` : "—", l: t("team.avgRating"), c: "#f5b400" },
@@ -338,7 +339,7 @@ export default function TeamStats() {
                 <div style={{ padding: "11px 16px 0" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--color-dim)", marginBottom: 5 }}>
                     <span>Top trade</span>
-                    <b style={{ fontFamily: "Oswald", fontWeight: 600, color: "#eaf0fb" }}>{stats.topTrades[0].trade} · {stats.topTrades[0].hrs.toFixed(0)}h</b>
+                    <b style={{ fontFamily: "Oswald", fontWeight: 600, color: "#eaf0fb" }}>{stats.topTrades[0].trade} · {formatHours(stats.topTrades[0].hrs)}</b>
                   </div>
                   <div style={{ height: 7, background: "#1c2740", borderRadius: 5, overflow: "hidden" }}>
                     <div style={{ height: "100%", borderRadius: 5, background: "linear-gradient(90deg,#2e8bff,#9d4edd)", width: `${Math.min(100, stats.totalHours > 0 ? (stats.topTrades[0].hrs / stats.totalHours) * 100 : 0)}%`, boxShadow: "0 0 10px -1px rgba(157,78,221,.6)" }} />

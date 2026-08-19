@@ -5,7 +5,7 @@ import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import type { Job } from "@/lib/types";
 import { Icon } from "../Icon";
-import { parseEntryDate } from "@/lib/dates";
+import { parseEntryDate, formatHours } from "@/lib/dates";
 import { newRowId } from "@/lib/offline-queue";
 
 // Resolve a job_id from a property/address string when stamping a new
@@ -419,7 +419,7 @@ export default function Timer({ setPage }: Props) {
       <div className="cd mb" style={{ background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.32)", borderRadius: 13, padding: "10px 12px" }}>
         <div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
         <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, color: "#3ee08f", lineHeight: 1.2 }}>${checkPay.toFixed(0)}</div>
-        <div style={{ fontSize: 12, color: "var(--color-dim)" }}>{checkHrs.toFixed(1)} hrs unpaid · ${rate}/hr</div>
+        <div style={{ fontSize: 12, color: "var(--color-dim)" }}>{formatHours(checkHrs)} unpaid · ${rate}/hr</div>
       </div>
 
       {!on ? (<>
@@ -619,7 +619,7 @@ export default function Timer({ setPage }: Props) {
                 {t("timer.myLog")}
               </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                {myTodayHrs > 0 && <span style={{ fontSize: 12.5, fontFamily: "Oswald", color: "var(--color-success)" }}>{t("timer.todayLabel")} · {myTodayHrs.toFixed(1)} {t("timer.hrsUnit")}</span>}
+                {myTodayHrs > 0 && <span style={{ fontSize: 12.5, fontFamily: "Oswald", color: "var(--color-success)" }}>{t("timer.todayLabel")} · {formatHours(myTodayHrs)}</span>}
                 {myTime.length > 0 && <span className="dim" style={{ fontSize: 11.5, fontFamily: "Oswald" }}>{myTime.length} {myTime.length === 1 ? t("timer.entry") : t("timer.entries")}</span>}
               </span>
             </div>
@@ -630,14 +630,14 @@ export default function Timer({ setPage }: Props) {
                 <div key={g.key}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "10px 2px 5px" }}>
                     <span style={{ fontSize: 12, fontFamily: "Oswald", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--color-dim)" }}>{g.label}</span>
-                    <span style={{ fontSize: 12, fontFamily: "Oswald", color: "var(--color-success)" }}>{g.hrs.toFixed(1)} hrs</span>
+                    <span style={{ fontSize: 12, fontFamily: "Oswald", color: "var(--color-success)" }}>{formatHours(g.hrs)}</span>
                   </div>
                   {g.entries.map(renderEntry)}
                 </div>
               ))
             ) : (
               <div onClick={() => setLogOpen(true)} className="cd" style={{ textAlign: "center", padding: "11px", cursor: "pointer" }}>
-                <span className="dim" style={{ fontSize: 13 }}>Tap to view {myTime.length} {myTime.length === 1 ? "entry" : "entries"} · {totalHrs.toFixed(1)} hrs</span>
+                <span className="dim" style={{ fontSize: 13 }}>Tap to view {myTime.length} {myTime.length === 1 ? "entry" : "entries"} · {formatHours(totalHrs)}</span>
               </div>
             )}
           </>
@@ -676,13 +676,13 @@ export default function Timer({ setPage }: Props) {
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{p.name}</div>
                     <div className="dim" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {isActive ? (<><Icon name="mapPin" size={11} color="var(--color-dim)" /> {activeEntry!.job || t("timer.general")}</>)
-                        : lastOut ? (<><Icon name="time" size={11} color="var(--color-dim)" /> Last out {lastOut} · {todayHrs.toFixed(1)}h today</>)
+                        : lastOut ? (<><Icon name="time" size={11} color="var(--color-dim)" /> Last out {lastOut} · {formatHours(todayHrs)} today</>)
                         : `${p.role} · $${rRate}/hr`}
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, color: isActive ? "var(--color-success)" : todayHrs > 0 ? "inherit" : "var(--color-dim)" }}>
-                      {isActive && activeElapsed ? activeElapsed : todayHrs > 0 ? `${todayHrs.toFixed(1)}h` : "—"}
+                      {isActive && activeElapsed ? activeElapsed : todayHrs > 0 ? formatHours(todayHrs) : "—"}
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 2, background: isActive ? "rgba(0,204,102,.16)" : soft, color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
                       {isActive ? "On the clock" : "Off"}

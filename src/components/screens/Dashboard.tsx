@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
-import { parseEntryDate } from "@/lib/dates";
+import { parseEntryDate, formatHours } from "@/lib/dates";
 import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
 import UserGuideModal from "../UserGuideModal";
@@ -231,10 +231,10 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
                   <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}><CountUp value={checkPay} prefix="$" /></div>
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
-                  <Icon name="trending" size={12} color="#3ee08f" /> {lastWeekPay > 0 ? (toBeat > 0 ? t("dash.keepGoing") : t("dash.aheadOfLastWeek")) : `${checkHrs.toFixed(1)} ${t("dash.hrs")}`}
+                  <Icon name="trending" size={12} color="#3ee08f" /> {lastWeekPay > 0 ? (toBeat > 0 ? t("dash.keepGoing") : t("dash.aheadOfLastWeek")) : formatHours(checkHrs)}
                 </span>
               </div>
-              <div className="dim" style={{ fontSize: 13.5, marginTop: 6 }}>{checkHrs.toFixed(1)} {t("dash.hrsUnpaid")} · ${rate}/hr{lastPayDate ? ` · ${t("dash.since")} ${lastPayDate}` : ""}</div>
+              <div className="dim" style={{ fontSize: 13.5, marginTop: 6 }}>{formatHours(checkHrs)} {t("dash.unpaid")} · ${rate}/hr{lastPayDate ? ` · ${t("dash.since")} ${lastPayDate}` : ""}</div>
               {/* This week vs last week — the come-back-tomorrow incentive */}
               <div style={{ height: 8, background: "rgba(255,255,255,.07)", borderRadius: 5, overflow: "hidden", marginTop: 12 }}>
                 <div style={{ height: "100%", width: `${weekProgress}%`, background: "var(--color-success)", borderRadius: 5, boxShadow: darkMode ? "0 0 12px -1px var(--color-success)" : "none" }} />

@@ -6,6 +6,7 @@ import { db, supabase } from "@/lib/supabase";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip } from "@/lib/parser";
+import { formatHours } from "@/lib/dates";
 import { recordJobOutcome, jobActualHours } from "@/lib/learning";
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
@@ -313,7 +314,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setActiveId(null);
     setActiveJobId(null);
     await loadAll();
-    useStore.getState().showToast(`Clocked out — ${hrs.toFixed(1)} hours logged`, "success");
+    useStore.getState().showToast(`Clocked out — ${formatHours(hrs)} logged`, "success");
   };
 
   // Toggle work order item. Match by `(room, detail)` against the latest

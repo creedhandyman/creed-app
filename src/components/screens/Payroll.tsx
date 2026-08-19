@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
+import { formatHours } from "@/lib/dates";
 import { Icon } from "../Icon";
 import { openPrint } from "@/lib/print-template";
 import { buildStubHtml, runPayrollForUser, type StubInput } from "@/lib/payroll-runner";
@@ -348,7 +349,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
           <div style={{ display: "flex", background: "linear-gradient(135deg,#14233d,#101a2e)", border: "1px solid #243a5e", borderRadius: 15, padding: "13px 8px", marginBottom: 13 }}>
             {[
               { l: "Staff", v: String(profiles.length) },
-              { l: "Unpaid hrs", v: teamUnpaidHours.toFixed(1) },
+              { l: "Unpaid hrs", v: formatHours(teamUnpaidHours) },
               { l: "Cycle total", v: "$" + Math.round(teamCycleTotal).toLocaleString(), c: "var(--color-money)" },
             ].map((s) => (
               <div key={s.l} style={{ flex: 1, textAlign: "center" }}>
@@ -376,7 +377,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   <span style={{ width: 30, height: 30, borderRadius: "50%", background: avatarBg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 11, color: avatarFg, flex: "none" }}>{r.initials}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600 }}>{r.name}</div>
-                    <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{r.hrs.toFixed(1)}h · ${r.rate}/hr</div>
+                    <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{formatHours(r.hrs)} · ${r.rate}/hr</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 14 }}>${Math.round(r.amount).toLocaleString()}</div>
@@ -403,7 +404,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
           approval, by-job breakdown, and per-person Process Pay. */}
       <PayrollSection
         title="Current Pay"
-        subtitle={`${selUser.name} · ${totalHrs.toFixed(1)}h · $${totalPay.toFixed(2)}`}
+        subtitle={`${selUser.name} · ${formatHours(totalHrs)} · $${totalPay.toFixed(2)}`}
         storageKey="payroll.main.collapsed"
         defaultCollapsed={false}
       >
@@ -412,7 +413,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
       <div style={{ display: "grid", gridTemplateColumns: totalBonus > 0 ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
         <div className="cd" style={{ textAlign: "center" }}>
           <div className="sl">Hours</div>
-          <div className="sv" style={{ color: "var(--color-primary)" }}>{totalHrs.toFixed(1)}</div>
+          <div className="sv" style={{ color: "var(--color-primary)" }}>{formatHours(totalHrs)}</div>
         </div>
         <div className="cd" style={{ textAlign: "center" }}>
           <div className="sl">Rate</div>
@@ -528,7 +529,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
             >
               <span>{job}</span>
               <span>
-                {hrs.toFixed(1)}h →{" "}
+                {formatHours(hrs)} →{" "}
                 <span style={{ color: "var(--color-success)" }}>
                   ${(hrs * (selUser.rate || 55)).toFixed(2)}
                 </span>
@@ -645,7 +646,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   }}
                 >
                   <span>{p.pay_date}</span>
-                  <span>{(p.hours || 0).toFixed(1)}h · {p.entries || 0} entries</span>
+                  <span>{formatHours(p.hours || 0)} · {p.entries || 0} entries</span>
                   <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
                     ${(p.amount || 0).toFixed(2)}
                   </span>
@@ -666,7 +667,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                         >
                           <span style={{ color: "var(--color-primary)" }}>{d.job}</span>
                           <span>
-                            {d.hrs.toFixed(1)}h → <span style={{ color: "var(--color-success)" }}>${d.amount.toFixed(2)}</span>
+                            {formatHours(d.hrs)} → <span style={{ color: "var(--color-success)" }}>${d.amount.toFixed(2)}</span>
                           </span>
                         </div>
                       ))

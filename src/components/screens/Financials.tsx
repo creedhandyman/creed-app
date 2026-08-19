@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { wrapPrint, openPrint } from "@/lib/print-template";
-import { parseEntryDate } from "@/lib/dates";
+import { parseEntryDate, formatHours } from "@/lib/dates";
 import { Icon } from "../Icon";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
@@ -614,7 +614,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
               <div key={name} className="sep" style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
                 <span style={{ fontWeight: 600 }}>{name}</span>
                 <span>
-                  <span style={{ fontFamily: "Oswald", color: "var(--color-primary)" }}>{data.hours.toFixed(1)}h</span>
+                  <span style={{ fontFamily: "Oswald", color: "var(--color-primary)" }}>{formatHours(data.hours)}</span>
                   <span className="dim" style={{ marginLeft: 6 }}>${data.pay.toFixed(0)}</span>
                 </span>
               </div>

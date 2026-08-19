@@ -17,6 +17,7 @@ import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
+import { formatHours } from "@/lib/dates";
 import {
   CADENCES,
   CADENCE_LABELS,
@@ -470,39 +471,51 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
     loadAll();
 
-    // Auto-generate client message on key status changes
-    const job = jobs.find((j) => j.id === id);
-    if (job?.client) {
-      const orgName = org?.name || "Service Provider";
-      const statusUrl = `${window.location.origin}/status?job=${id}`;
-      const reviewUrl = `${window.location.origin}/review?org=${user.org_id}`;
-      let msg = "";
+    // Status changes are intentionally SILENT. Previously every flip (a)
+    // auto-built a client SMS, copied it to the clipboard, and fired a
+    // "message copied" toast, and (b) auto-opened the review-request modal on
+    // the first complete/paid. Both were pop-ups triggered just by changing
+    // status. Messaging the customer is now the explicit "Message customer"
+    // button under the detail CTA (messageCustomer), and a review is requested
+    // from the manual "Request Review" button in Manage plus the post-payment
+    // automation — so changing status no longer pops anything up.
+  };
 
-      if (status === "scheduled") {
-        msg = `Hi ${job.client}! Your job at ${job.property} has been scheduled. View details: ${statusUrl}`;
-      } else if (status === "active") {
-        msg = `Hi ${job.client}! We're on our way to ${job.property}. Track progress: ${statusUrl}`;
-      } else if (status === "complete") {
-        msg = `Hi ${job.client}! Work is complete at ${job.property}. View details and sign off: ${statusUrl}`;
-      } else if (status === "invoiced") {
-        msg = `Hi ${job.client}! Invoice for ${job.property}: $${(job.total || 0).toFixed(2)}. View & pay: ${statusUrl}`;
-      } else if (status === "paid") {
-        msg = `Thank you ${job.client}! Payment received for ${job.property}. We'd love a review: ${reviewUrl}\n\n— ${orgName}`;
-      }
-
-      if (msg) {
-        navigator.clipboard.writeText(msg);
-        useStore.getState().showToast(t("jobs.clientMsgCopiedSendTo") + " " + job.client, "success");
-      }
+  // "Message customer" button under the CTA. Builds a status-aware, editable
+  // text and opens the send strip (native SMS / Copy). This is the explicit
+  // opt-in that replaced the old auto-copy-to-clipboard on every status change.
+  const messageCustomer = async (job: Job) => {
+    const cust = job.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
+    const orgName = org?.name || "us";
+    const prop = job.property || "your property";
+    const name = job.client || "there";
+    let url = "";
+    try { url = await getStatusLink(job.id); } catch { url = ""; }
+    let msg: string;
+    switch (job.status) {
+      case "quoted":
+      case "accepted":
+        msg = `Hi ${name}! Here's your quote from ${orgName} for ${prop}:\n\nTotal: $${(job.total || 0).toFixed(2)}\n\nView details & approve: ${url}`;
+        break;
+      case "scheduled":
+        msg = `Hi ${name}! Your job at ${prop} has been scheduled. View details: ${url}`;
+        break;
+      case "active":
+        msg = `Hi ${name}! We're on our way to ${prop}. Track progress: ${url}`;
+        break;
+      case "complete":
+        msg = `Hi ${name}! Work is complete at ${prop}. View details & sign off: ${url}`;
+        break;
+      case "invoiced":
+        msg = `Hi ${name}! Your invoice for ${prop}: $${(job.total || 0).toFixed(2)}. View & pay: ${url}`;
+        break;
+      case "paid":
+        msg = `Thank you ${name}! Payment received for ${prop}. We appreciate your business!\n\n— ${orgName}`;
+        break;
+      default:
+        msg = `Hi ${name}! Here's an update on your job at ${prop}:${url ? ` ${url}` : ""}`;
     }
-
-    // Auto-fire the review-request modal on the first transition into
-    // "complete" or "paid" — only if we haven't already prompted for this
-    // job. The modal lets the user fire off a one-tap text/email asking
-    // for a review while the job is still fresh in the client's mind.
-    if ((status === "complete" || status === "paid") && job && !job.review_requested_at) {
-      setReviewJob(job);
-    }
+    setSendStrip({ jobId: job.id, phone: cust?.phone || "", msg });
   };
 
   const deleteJob = async (id: string) => {
@@ -789,6 +802,42 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             </button>
           )}
 
+          {/* Message the customer — opt-in, status-aware text, editable before send */}
+          {(dj.client || dj.customer_id) && (
+            <button
+              className="bo mb"
+              onClick={() => messageCustomer(dj)}
+              style={{ width: "100%", padding: "10px", fontFamily: "Oswald", fontSize: 15, letterSpacing: ".3px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              <Icon name="send" size={15} /> {t("jobs.messageCustomer")}
+            </button>
+          )}
+          {sendStrip && sendStrip.jobId === dj.id && (
+            <div style={{ marginBottom: 12, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
+              <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
+                {sendStrip.phone ? `To ${sendStrip.phone} · edit if needed` : "No phone on file — Open Messages and pick a contact, or use Copy."}
+              </div>
+              <textarea
+                value={sendStrip.msg}
+                onChange={(e) => setSendStrip({ ...sendStrip, msg: e.target.value })}
+                rows={5}
+                style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, border: "1px solid var(--color-border-dark-2)", background: "var(--color-dark-bg)", color: "inherit", resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
+              />
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <a
+                  href={`sms:${sendStrip.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(sendStrip.msg)}`}
+                  onClick={() => setSendStrip(null)}
+                  className="bb"
+                  style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
+                >
+                  <Icon name="send" size={15} color="#fff" /> Open Messages
+                </a>
+                <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast("Couldn't copy on this device", "error"); } }} style={{ fontSize: 14 }}>Copy</button>
+                <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label="Cancel" style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
+              </div>
+            </div>
+          )}
+
           {/* Lead context — the prospect's request + photos (lead jobs only) */}
           {djLead && (djLead.description || djLead.photos.length > 0) && (
             <div className="section" style={{ borderLeft: "3px solid #ff3d6e" }}>
@@ -981,7 +1030,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                         style={{ fontSize: 11, marginTop: 2, color: overBudget ? "var(--color-accent-red)" : underBudget ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}
                         title={t("jobs.actualHoursLogged")}
                       >
-                        {labor.totalHrs.toFixed(1)}h {t("jobs.actual")}{quoted > 0 && ` (${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%)`}
+                        {formatHours(labor.totalHrs)} {t("jobs.actual")}{quoted > 0 && ` (${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%)`}
                       </div>
                     )}
                   </div>
@@ -995,7 +1044,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                           <Icon name="worker" size={13} color="var(--color-dim)" />
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
                         </span>
-                        <span style={{ fontFamily: "Oswald", flexShrink: 0, marginLeft: 8, color: "var(--color-highlight)" }}>{p.hrs.toFixed(1)}h</span>
+                        <span style={{ fontFamily: "Oswald", flexShrink: 0, marginLeft: 8, color: "var(--color-highlight)" }}>{formatHours(p.hrs)}</span>
                       </div>
                     ))}
                   </div>
@@ -1090,54 +1139,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <span className="lf"><span className="ic"><Icon name="refresh" size={15} /></span> {t("jobs.makeRecurring")}</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
-              <button
-                className="bo"
-                onClick={async () => {
-                  const cust = dj.customer_id ? customers.find((c) => c.id === dj.customer_id) : undefined;
-                  const url = await getStatusLink(dj.id);
-                  const msg = dj.status === "quoted" || dj.status === "accepted"
-                    ? `Hi! Here's your quote from ${org?.name || "us"} for ${dj.property}:\n\nTotal: $${(dj.total || 0).toFixed(2)}\n\nView details & approve: ${url}`
-                    : `Hi! Here's the status update for your job at ${dj.property}:\n\nView progress: ${url}`;
-                  setSendStrip({ jobId: dj.id, phone: cust?.phone || "", msg });
-                }}
-                style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-              >
-                <Icon name="send" size={13} /> {t("jobs.sendToClient")}
-              </button>
-              {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
+            {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
+              <div style={{ paddingTop: 8 }}>
                 <button
                   className="bo"
                   onClick={() => setReviewJob(dj)}
-                  style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: dj.review_requested_at ? "#888" : "var(--color-highlight)" }}
+                  style={{ width: "100%", fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: dj.review_requested_at ? "#888" : "var(--color-highlight)" }}
                 >
                   <Icon name={dj.review_requested_at ? "mail" : "star"} size={13} /> {dj.review_requested_at ? t("jobs.reviewSent") : t("jobs.requestReview")}
                 </button>
-              )}
-            </div>
-            {sendStrip && sendStrip.jobId === dj.id && (
-              <div style={{ marginTop: 8, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
-                <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
-                  {sendStrip.phone ? `To ${sendStrip.phone} · edit if needed` : "No phone on file — Open Messages and pick a contact, or use Copy."}
-                </div>
-                <textarea
-                  value={sendStrip.msg}
-                  onChange={(e) => setSendStrip({ ...sendStrip, msg: e.target.value })}
-                  rows={5}
-                  style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, border: "1px solid var(--color-border-dark-2)", background: "var(--color-dark-bg)", color: "inherit", resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
-                />
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <a
-                    href={`sms:${sendStrip.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(sendStrip.msg)}`}
-                    onClick={() => setSendStrip(null)}
-                    className="bb"
-                    style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
-                  >
-                    <Icon name="send" size={15} color="#fff" /> Open Messages
-                  </a>
-                  <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast("Couldn't copy on this device", "error"); } }} style={{ fontSize: 14 }}>Copy</button>
-                  <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label="Cancel" style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
-                </div>
               </div>
             )}
             {(dj.status === "scheduled" || dj.status === "active" || dj.status === "complete") && (
