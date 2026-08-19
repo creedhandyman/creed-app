@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { recordJobPayment, scheduleReviewRequest } from "@/lib/payment-fulfillment";
+import { notifyJobPaid } from "@/lib/notify-server";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,20 @@ export async function POST(req: NextRequest) {
     if (result.fullyPaid) {
       await scheduleReviewRequest(supabase, jobId).catch((e) => {
         console.error("[verify-payment] review-request schedule failed:", e);
+      });
+    }
+
+    // Alert owners/managers that money landed. Gate on !alreadyRecorded so this
+    // fires once per charge — the webhook fulfills the same session, but only
+    // the path that first inserts the ledger row sees alreadyRecorded === false.
+    if (!result.alreadyRecorded && paidNow > 0) {
+      await notifyJobPaid(supabase, {
+        jobId,
+        orgId: job.org_id,
+        paidNow,
+        amountPaid: result.amountPaid,
+        total: result.total,
+        fullyPaid: result.fullyPaid,
       });
     }
 

@@ -4,6 +4,7 @@ import type Stripe from "stripe";
 import { computeNextFire } from "@/lib/recurring";
 import { visitCadence } from "@/lib/memberships";
 import { recordJobPayment, scheduleReviewRequest } from "@/lib/payment-fulfillment";
+import { notifyJobPaid } from "@/lib/notify-server";
 
 export const dynamic = "force-dynamic";
 
@@ -273,6 +274,18 @@ export async function POST(req: NextRequest) {
                 kind: meta.kind || "payment",
               });
               if (result.fullyPaid) await scheduleReviewRequest(supabase, job.id).catch(() => {});
+              // Alert owners/managers — once per charge (see notifyJobPaid;
+              // !alreadyRecorded dedups against /api/verify-payment).
+              if (!result.alreadyRecorded && paidNow > 0) {
+                await notifyJobPaid(supabase, {
+                  jobId: job.id,
+                  orgId: job.org_id,
+                  paidNow,
+                  amountPaid: result.amountPaid,
+                  total: result.total,
+                  fullyPaid: result.fullyPaid,
+                });
+              }
             } catch (e) {
               console.error("[webhook] one-time payment fulfillment failed:", e);
             }

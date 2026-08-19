@@ -555,6 +555,26 @@ src/
   Defaults are TRUE = opt-out model. Existing logged-in sessions read the
   new pref fields as `undefined` until the user re-logs / initAuth runs;
   the UI + send path treat `undefined` as opted-in so that's harmless.
+- Payment-received notifications — widen the notifications type CHECK so a
+  `payment_received` row (owner/manager money-in alert) can be inserted:
+  ```sql
+  ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+  ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+    CHECK (type IN ('job_assigned','new_lead','payment_received'));
+  ```
+  (`notifications_type_check` is Postgres's default name for the inline column
+  CHECK the table was created with, so the DROP matches.) `notifyJobPaid` in
+  `lib/notify-server.ts` fires from BOTH the Stripe webhook and
+  `/api/verify-payment` after a charge is recorded — gated on
+  `!result.alreadyRecorded` so a charge alerts exactly once across the two
+  fulfillment paths. It notifies the org's owners+managers on ANY recorded
+  customer charge (deposit or balance; copy says "Payment received" with the
+  running balance, or "Paid in full"). In-app feed always writes; SMS/push ride
+  the existing `NOTIFY_SMS_ENABLED` / VAPID gates. Best-effort/try-caught, so a
+  notification failure never affects payment recording. **Until this migration
+  runs the in-app insert fails the CHECK and the alert is a logged no-op — the
+  payment itself still records fine.** There's no per-event opt-out column for
+  payments yet (recipients are hardcoded owner/manager, always opted in).
 - Per-tech referrals (scopes the **Network Scout** quest per-user):
   `ALTER TABLE referrals ADD COLUMN referred_by_user_id UUID;`
   Stamped on creation from Quests → Referrals (the logged-in tech). The

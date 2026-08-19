@@ -26,7 +26,7 @@ const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:creedhandyman@gmail.com";
 const PUSH_ENABLED = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 
-export type NotificationType = "job_assigned" | "new_lead";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received";
 
 export interface NotifyRecipient {
   /** Recipient profile id. */
@@ -180,4 +180,99 @@ export async function dispatchNotifications(
   const results = await Promise.all(sendable.map((r) => sendSms(r.phone as string, text)));
   const texted = results.filter((x) => x.ok).length;
   return { created: targets.length, texted, pushed, failures: results.length - texted };
+}
+
+/**
+ * Notify the org's owners/managers that a customer payment landed on a job.
+ * Called from BOTH the Stripe webhook and /api/verify-payment right after a
+ * charge is recorded. Gate the CALL SITE on `!result.alreadyRecorded` — the
+ * UNIQUE stripe_session_id ledger insert makes that race-proof when the
+ * payments table exists (only the path that inserts first sees
+ * alreadyRecorded === false). A second, in-body backstop below covers the
+ * degraded mode where that gate can't (no payments table → the insert fails
+ * with 42P01 not 23505, so alreadyRecorded stays false on BOTH paths).
+ *
+ * Best-effort: always writes the in-app feed row, plus push/SMS on the same
+ * NOTIFY_SMS_ENABLED / VAPID gates as every other notification. NEVER throws —
+ * a notification failure must not affect payment recording. Fires on any
+ * recorded customer charge (deposit or balance); the copy distinguishes a
+ * partial payment from paid-in-full. Requires the `payment_received` value in
+ * the notifications.type CHECK constraint (see the migration in CLAUDE.md);
+ * until that runs the in-app insert fails and this degrades to a logged no-op.
+ */
+export async function notifyJobPaid(
+  supabase: SupabaseClient,
+  p: {
+    jobId: string;
+    orgId: string;
+    paidNow: number;      // dollars charged in THIS payment
+    amountPaid: number;   // paid-to-date after this charge
+    total: number;        // job total
+    fullyPaid: boolean;
+  },
+): Promise<void> {
+  try {
+    if (!p.orgId || !p.jobId) return;
+
+    const { data: jobRows } = await supabase
+      .from("jobs").select("property, client").eq("id", p.jobId).limit(1);
+    const job = jobRows?.[0] as { property?: string | null; client?: string | null } | undefined;
+    const property = job?.property || "a job";
+    const who = job?.client ? ` from ${job.client}` : "";
+
+    // Owners + managers get the money-in alert (the crew doesn't need it).
+    const { data: admins } = await supabase
+      .from("profiles")
+      .select("id, phone, notify_sms")
+      .eq("org_id", p.orgId)
+      .in("role", ["owner", "manager"]);
+    const recipients: NotifyRecipient[] = (admins || []).map((a) => ({
+      id: a.id as string,
+      phone: (a.phone as string | null) ?? null,
+      notify_sms: (a.notify_sms as boolean | null) ?? null,
+      // No per-event opt-out column for payments yet → everyone opted in.
+      eventOptIn: null,
+    }));
+    if (!recipients.length) return;
+
+    const amt = `$${(Number(p.paidNow) || 0).toFixed(2)}`;
+    const balance = Math.max(0, (Number(p.total) || 0) - (Number(p.amountPaid) || 0));
+    const title = p.fullyPaid ? "Paid in full" : "Payment received";
+    const body = p.fullyPaid
+      ? `${amt} for ${property}${who} — paid in full.`
+      : `${amt} for ${property}${who} · balance $${balance.toFixed(2)}.`;
+
+    // Idempotency backstop for the degraded / transient case the call-site
+    // !alreadyRecorded gate can't cover (see the function doc). Both fulfillment
+    // paths for ONE charge fire within seconds and produce a byte-identical
+    // body, so skip if a matching alert for this job was written in the last 10
+    // minutes. A genuinely separate later payment has a different amount/balance
+    // body, so it still comes through. Best-effort — a failed check just proceeds.
+    try {
+      const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { data: dupe } = await supabase
+        .from("notifications")
+        .select("id")
+        .eq("org_id", p.orgId)
+        .eq("job_id", p.jobId)
+        .eq("type", "payment_received")
+        .eq("body", body)
+        .gte("created_at", since)
+        .limit(1);
+      if (dupe && dupe.length) return;
+    } catch { /* proceed on check failure */ }
+
+    await dispatchNotifications(supabase, {
+      orgId: p.orgId,
+      type: "payment_received",
+      title,
+      body,
+      jobId: p.jobId,
+      smsBody: `${title}: ${amt} for ${property}${who}.`,
+      recipients,
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[notify] job-paid notification failed:", e);
+  }
 }
