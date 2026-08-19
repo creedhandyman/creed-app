@@ -8,6 +8,48 @@ import { Icon } from "../Icon";
 import { parseEntryDate, formatHours } from "@/lib/dates";
 import { newRowId } from "@/lib/offline-queue";
 
+/**
+ * Worked-time cell for a log row. Shows hours as human "Xh Ym" (tap-to-edit),
+ * swapping to a precise decimal input only while editing so the stored value
+ * keeps its precision. `onSave` gets the new decimal hours; `canEdit` gates
+ * whether tapping opens the editor.
+ */
+function HoursCell({ hours, canEdit, onSave }: { hours: number; canEdit: boolean; onSave: (h: number) => void | Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  if (editing) {
+    return (
+      <input
+        type="number"
+        autoFocus
+        defaultValue={hours}
+        step=".25"
+        min="0"
+        style={{ width: 62, textAlign: "center", padding: "2px 4px", fontSize: 14.5, fontFamily: "Oswald", fontWeight: 600 }}
+        onBlur={async (ev) => {
+          const nh = parseFloat(ev.target.value) || 0;
+          setEditing(false);
+          if (nh !== hours) await onSave(nh);
+        }}
+        onKeyDown={(ev) => { if (ev.key === "Enter") ev.currentTarget.blur(); }}
+      />
+    );
+  }
+  return (
+    <span
+      onClick={canEdit ? () => setEditing(true) : undefined}
+      title={canEdit ? "Tap to edit" : undefined}
+      style={{
+        fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap",
+        minWidth: 58, textAlign: "center", padding: "3px 9px", borderRadius: 8,
+        background: "rgba(255,255,255,0.06)", border: "1px solid var(--color-border-dark-2)",
+        cursor: canEdit ? "pointer" : "default",
+      }}
+    >
+      {formatHours(hours)}
+    </span>
+  );
+}
+
 // Resolve a job_id from a property/address string when stamping a new
 // time_entries row. Disambiguates the case where two jobs share an
 // address (e.g. callback work) by preferring active > scheduled >
@@ -577,17 +619,10 @@ export default function Timer({ setPage }: Props) {
               <div className="dim" style={{ fontSize: 11.5 }}>{e.entry_date}{(e.start_time || e.end_time) ? ` · ${e.start_time || "?"}–${e.end_time || "now"}` : ""}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
-              <input
-                type="number"
-                defaultValue={e.hours}
-                step=".25"
-                min="0"
-                style={{ width: 48, textAlign: "center", padding: "2px 4px", fontSize: 14.5, fontFamily: "Oswald", fontWeight: 600 }}
-                onBlur={async (ev) => {
-                  // Only the owner (or an admin) can edit a row.
-                  if (e.user_id && e.user_id !== user.id && !isOwner) return;
-                  const newHrs = parseFloat(ev.target.value) || 0;
-                  if (newHrs === e.hours) return;
+              <HoursCell
+                hours={e.hours || 0}
+                canEdit={!(e.user_id && e.user_id !== user.id && !isOwner)}
+                onSave={async (newHrs) => {
                   const owner = profiles.find((p) => p.id === e.user_id);
                   const ownerRate = owner?.rate || user.rate || 55;
                   await saveTimeEntry(e.id, { hours: newHrs, amount: Math.round(newHrs * ownerRate * 100) / 100 }, "patch");
@@ -708,7 +743,7 @@ export default function Timer({ setPage }: Props) {
                             <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{running ? `running · since ${en.start_time}` : `${en.entry_date}${en.start_time ? ` · ${en.start_time}–${en.end_time || "now"}` : ""}`}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                            <input type="number" defaultValue={en.hours} step=".25" min="0" style={{ width: 46, textAlign: "center", padding: "2px 4px", fontSize: 14, fontFamily: "Oswald", fontWeight: 600 }} onBlur={async (ev) => { const nh = parseFloat(ev.target.value) || 0; if (nh === en.hours) return; await saveTimeEntry(en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }, "patch"); }} />
+                            <HoursCell hours={en.hours || 0} canEdit onSave={async (nh) => { await saveTimeEntry(en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }, "patch"); }} />
                             <button onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await dropTimeEntry(en.id); }} style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}>✕</button>
                           </div>
                         </div>
