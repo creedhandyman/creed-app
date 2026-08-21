@@ -981,24 +981,27 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       }
     } catch (e) {
       console.error("AI parse error:", e);
-      useStore.getState().showToast("AI parsing failed — trying built-in parser", "warning");
+      // Fall through to the unified failure handler below.
     }
 
-    // Fallback to regex parser. Also carry Quick Quote photos onto the job
-    // so they don't get lost when AI is unavailable.
-    if (quickPhotos.length > 0) {
-      const beforePhotos = quickPhotos.map((url) => ({
-        url, label: "Quick Quote", type: "before" as const,
-      }));
-      setJobPhotos((prev) => {
-        const existing = new Set(prev.map((p) => p.url));
-        return [...prev, ...beforePhotos.filter((p) => !existing.has(p.url))];
-      });
-    }
+    // AI parse didn't complete (returned nothing or threw). Do NOT silently
+    // fall back to the crude regex parser — it built wildly inaccurate quotes,
+    // especially for Quick Quote photos, which carry no structured text for it
+    // to parse. The usual trigger is the in-flight AI request being interrupted
+    // by leaving the app or the phone sleeping mid-parse. Keep the user's
+    // inputs, stop the spinner, and prompt a retry instead of a bogus quote.
+    setParsing(false);
+    setParseStatus("");
     const aiErr = getLastAiError();
-    if (aiErr) useStore.getState().showToast(`AI error: ${aiErr.slice(0, 200)}`, "error");
-    setParseStatus("AI unavailable — using built-in parser...");
-    doRegexParse(rawText);
+    const interrupted = /failed to fetch|networkerror|network request failed|aborted|load failed|timeout|timed out/i.test(aiErr);
+    useStore.getState().showToast(
+      interrupted
+        ? "The AI didn't finish — the app was likely backgrounded or the connection dropped mid-quote. Your details are still here; tap Build to try again."
+        : aiErr
+          ? `AI couldn't build the quote (${aiErr.slice(0, 140)}). Your details are still here — tap Build to try again.`
+          : "The AI couldn't build the quote. Your details are still here — tap Build to try again.",
+      "error",
+    );
   };
 
   /* ── Regex fallback parse ── */
