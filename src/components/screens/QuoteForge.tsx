@@ -235,6 +235,13 @@ function AiLoadingDisplay({ status }: { status: string }) {
       <div className="dim" style={{ fontSize: 14, marginTop: 8 }}>
         {status || "This usually takes 15-30 seconds"}
       </div>
+
+      {/* Backgrounding the app / letting the phone sleep aborts the in-flight
+          AI request, so warn the user right where the risk is. */}
+      <div style={{ marginTop: 16, display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: "rgba(245,180,0,.12)", border: "1px solid rgba(245,180,0,.35)", fontSize: 12.5, color: "#f5b400", lineHeight: 1.35, maxWidth: 300, textAlign: "left" }}>
+        <Icon name="phone" size={16} color="#f5b400" />
+        <span>Keep your phone on and this app open — leaving mid-quote can interrupt it.</span>
+      </div>
     </div>
   );
 }
@@ -334,6 +341,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // scope only — paint/floors/fixtures; hidden/plumbing work is skipped).
   const renderSeed = useMemo(() => buildRenderPrompt(rooms), [rooms]);
   const [inspectionData, setInspectionData] = useState<InspectionData | null>(null);
+  // True when an inspection's AI parse failed — drives the in-place Retry card
+  // (no silent skeleton fallback). Cleared on retry, on a new parse, or on back.
+  const [inspParseFailed, setInspParseFailed] = useState(false);
   // Editable work order — null means "use auto-generated from guide.steps"
   const [customWorkOrder, setCustomWorkOrder] = useState<GuideStep[] | null>(null);
   // Per-quote discount. Lives on the rooms JSON blob (no schema change).
@@ -774,7 +784,51 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setMode(null);
   };
 
-  /* ── AI parse (vision + text) with regex fallback ── */
+  // Runs ONLY the AI parse of an inspection into a priced quote — extracted so
+  // it can be retried without re-saving the inspection or re-loading its photos.
+  // On failure it does NOT build a silent skeleton (every item 1h / $0 read as a
+  // real quote but was wildly off). It stops, preserves the inspection, and arms
+  // the Retry card — the usual cause is the AI call being interrupted by the app
+  // being backgrounded or the phone sleeping mid-parse.
+  const runInspectionAiParse = async (data: InspectionData) => {
+    setInspParseFailed(false);
+    setParsing(true);
+    setParseStatus("Identifying repairs from findings...");
+    try {
+      const input: InspectionInput = {
+        rooms: data.rooms,
+        property: data.property,
+        client: data.client,
+        inspectionType: data.inspection_type,
+      };
+      let licensedTradesInsp: string[] = [];
+      try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
+      const result = await aiParseInspection(input, rate, licensedTradesInsp, setParseStatus);
+      if (result && result.rooms.length > 0) {
+        setParseStatus("Building quote...");
+        setRooms(validateQuote(result.rooms));
+        setParsing(false);
+        setParseStatus("");
+        return;
+      }
+    } catch (e) {
+      console.error("AI inspection parse failed:", e);
+    }
+    setParsing(false);
+    setParseStatus("");
+    setInspParseFailed(true);
+    const aiErr = getLastAiError();
+    const interrupted = /failed to fetch|networkerror|network request failed|aborted|load failed|timeout|timed out/i.test(aiErr);
+    useStore.getState().showToast(
+      interrupted
+        ? "The AI didn't finish reading the inspection — the app was likely backgrounded or the connection dropped mid-quote. Tap Retry."
+        : aiErr
+          ? `AI couldn't build the quote (${aiErr.slice(0, 140)}). Tap Retry.`
+          : "The AI couldn't build a quote from this inspection. Tap Retry.",
+      "error",
+    );
+  };
+
   /* ── Inspection complete handler ── */
   // existingInspectionId: when called from "Quote This" on an already-saved
   // inspection, pass the inspection job's id so we DON'T create a duplicate
@@ -846,47 +900,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     });
     setJobPhotos(inspectionPhotos);
 
-    try {
-      const input: InspectionInput = {
-        rooms: data.rooms,
-        property: data.property,
-        client: data.client,
-        inspectionType: data.inspection_type,
-      };
-      let licensedTradesInsp: string[] = [];
-      try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
-      setParseStatus("Identifying repairs from findings...");
-      const result = await aiParseInspection(input, rate, licensedTradesInsp, setParseStatus);
-      if (result && result.rooms.length > 0) {
-        setParseStatus("Building quote...");
-        setRooms(validateQuote(result.rooms));
-        setParsing(false);
-        setParseStatus("");
-        return;
-      }
-    } catch (e) {
-      console.error("AI inspection parse failed:", e);
-    }
-
-    // Fallback: convert inspection directly to rooms without AI
-    setParseStatus("");
-    setParsing(false);
-    const fallbackRooms = data.rooms
-      .map((r) => ({
-        name: r.name,
-        items: r.items
-          .filter((it) => it.condition !== "S")
-          .map((it) => ({
-            id: crypto.randomUUID().slice(0, 8),
-            detail: it.name,
-            condition: it.condition,
-            comment: it.notes || "Needs attention",
-            laborHrs: 1,
-            materials: [{ n: "Materials", c: 0 }] as { n: string; c: number }[],
-          })),
-      }))
-      .filter((r) => r.items.length > 0);
-    setRooms(validateQuote(fallbackRooms));
+    // Turn the findings into a priced quote via AI. On failure this arms the
+    // in-place Retry card instead of silently building an inaccurate skeleton.
+    await runInspectionAiParse(data);
   };
 
   const doAiParse = async (rawText: string, file: File | null) => {
@@ -2198,15 +2214,30 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
   /* ══════════════════════════════════════════
      EDIT MODE
      ══════════════════════════════════════════ */
-  if (parsing && rooms.length === 0) {
+  if ((parsing || inspParseFailed) && rooms.length === 0) {
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => { setMode(null); setParsing(false); setParseStatus(""); }}>←</button>
+          <button className="bo" onClick={() => { setMode(null); setParsing(false); setParseStatus(""); setInspParseFailed(false); }}>←</button>
           <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="sparkle" size={18} color="var(--color-primary)" /> Building Quote</h2>
         </div>
         <div className="cd">
-          <AiLoadingDisplay status={parseStatus || "Processing inspection..."} />
+          {parsing ? (
+            <AiLoadingDisplay status={parseStatus || "Processing inspection..."} />
+          ) : (
+            <div style={{ textAlign: "center", padding: "20px 14px" }}>
+              <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(245,180,0,.14)", border: "1px solid rgba(245,180,0,.4)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                <Icon name="alert" size={26} color="#f5b400" />
+              </div>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18 }}>Quote didn&apos;t finish</div>
+              <p className="dim" style={{ fontSize: 14, margin: "8px auto 16px", maxWidth: 320, lineHeight: 1.45 }}>
+                The AI didn&apos;t finish reading the inspection — usually because the app was backgrounded or the phone slept mid-quote. Your inspection is safe. Keep this app open and try again.
+              </p>
+              <button className="bb" onClick={() => { if (inspectionData) runInspectionAiParse(inspectionData); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <Icon name="refresh" size={16} /> Retry
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
