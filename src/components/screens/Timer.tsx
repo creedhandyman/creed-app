@@ -8,35 +8,77 @@ import { Icon } from "../Icon";
 import { parseEntryDate, formatHours } from "@/lib/dates";
 import { newRowId } from "@/lib/offline-queue";
 
+// Decimal hours (the stored unit) <-> hours+minutes fields, so all time
+// entry/editing happens in "Xh Ym" while the DB keeps decimals.
+const hmToDecimal = (hStr: string, mStr: string): number => {
+  const h = Math.max(0, parseInt(hStr, 10) || 0);
+  const m = Math.max(0, parseInt(mStr, 10) || 0);
+  return Math.round((h + m / 60) * 100) / 100;
+};
+const splitHm = (dec: number): { h: string; m: string } => {
+  const t = Math.max(0, dec || 0);
+  let h = Math.floor(t);
+  let m = Math.round((t - h) * 60);
+  if (m === 60) { h += 1; m = 0; }
+  return { h: String(h), m: String(m) };
+};
+
 /**
  * Worked-time cell for a log row. Shows hours as human "Xh Ym" (tap-to-edit),
- * swapping to a precise decimal input only while editing so the stored value
- * keeps its precision. `onSave` gets the new decimal hours; `canEdit` gates
- * whether tapping opens the editor.
+ * and edits as separate hours + minutes fields — no decimals anywhere. Commits
+ * (decimal, for the DB) when focus leaves the pair or Enter is pressed.
+ * `onSave` gets the new decimal hours; `canEdit` gates whether tapping edits.
  */
 function HoursCell({ hours, canEdit, onSave }: { hours: number; canEdit: boolean; onSave: (h: number) => void | Promise<void> }) {
   const [editing, setEditing] = useState(false);
+  const [hStr, setHStr] = useState("0");
+  const [mStr, setMStr] = useState("0");
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const start = () => { const s = splitHm(hours); setHStr(s.h); setMStr(s.m); setEditing(true); };
+  const commit = async () => {
+    if (commitTimer.current) { clearTimeout(commitTimer.current); commitTimer.current = null; }
+    setEditing(false);
+    const dec = hmToDecimal(hStr, mStr);
+    if (dec !== hours) await onSave(dec);
+  };
+  // Commit only when focus leaves BOTH fields: a blur schedules the commit,
+  // focusing the sibling cancels it. Robust on mobile, where blur's
+  // relatedTarget is unreliable when moving between the two inputs.
+  const scheduleCommit = () => {
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = setTimeout(() => { commitTimer.current = null; commit(); }, 80);
+  };
+  const cancelCommit = () => { if (commitTimer.current) { clearTimeout(commitTimer.current); commitTimer.current = null; } };
   if (editing) {
+    const inputStyle = { width: 42, textAlign: "center" as const, padding: "2px 4px", fontSize: 14.5, fontFamily: "Oswald", fontWeight: 600 };
     return (
-      <input
-        type="number"
-        autoFocus
-        defaultValue={hours}
-        step=".25"
-        min="0"
-        style={{ width: 62, textAlign: "center", padding: "2px 4px", fontSize: 14.5, fontFamily: "Oswald", fontWeight: 600 }}
-        onBlur={async (ev) => {
-          const nh = parseFloat(ev.target.value) || 0;
-          setEditing(false);
-          if (nh !== hours) await onSave(nh);
-        }}
-        onKeyDown={(ev) => { if (ev.key === "Enter") ev.currentTarget.blur(); }}
-      />
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+        <input
+          type="number" inputMode="numeric" autoFocus min="0" value={hStr}
+          aria-label="Hours"
+          onChange={(ev) => setHStr(ev.target.value)}
+          onFocus={cancelCommit}
+          onBlur={scheduleCommit}
+          onKeyDown={(ev) => { if (ev.key === "Enter") ev.currentTarget.blur(); }}
+          style={inputStyle}
+        />
+        <span style={{ fontSize: 12, color: "var(--color-dim)" }}>h</span>
+        <input
+          type="number" inputMode="numeric" min="0" value={mStr}
+          aria-label="Minutes"
+          onChange={(ev) => setMStr(ev.target.value)}
+          onFocus={cancelCommit}
+          onBlur={scheduleCommit}
+          onKeyDown={(ev) => { if (ev.key === "Enter") ev.currentTarget.blur(); }}
+          style={inputStyle}
+        />
+        <span style={{ fontSize: 12, color: "var(--color-dim)" }}>m</span>
+      </div>
     );
   }
   return (
     <span
-      onClick={canEdit ? () => setEditing(true) : undefined}
+      onClick={canEdit ? start : undefined}
       title={canEdit ? "Tap to edit" : undefined}
       style={{
         fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap",
@@ -148,7 +190,8 @@ export default function Timer({ setPage }: Props) {
   const [activeId, setActiveId] = useState<string | null>(() => ld<string | null>("t_active_id", null));
   const [tab, setTab] = useState<"time" | "crew">("time");
 
-  const [mh, setMh] = useState("");
+  const [mHrs, setMHrs] = useState("");
+  const [mMin, setMMin] = useState("");
   const [mj, setMj] = useState("");
   const [mUser, setMUser] = useState(user.id);
   const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
@@ -318,7 +361,7 @@ export default function Timer({ setPage }: Props) {
   };
 
   const addManual = async () => {
-    const h = parseFloat(mh);
+    const h = hmToDecimal(mHrs, mMin);
     if (!h || h <= 0) { useStore.getState().showToast(t("timer.enterValidHours"), "warning"); return; }
     if (h > 24) { useStore.getState().showToast(t("timer.maxHoursPerEntry"), "warning"); return; }
     if (!mDate) { useStore.getState().showToast(t("timer.selectDate"), "warning"); return; }
@@ -333,7 +376,8 @@ export default function Timer({ setPage }: Props) {
       user_id: targetUser.id,
       user_name: targetUser.name,
     }, "post");
-    setMh("");
+    setMHrs("");
+    setMMin("");
     setMj("");
   };
 
@@ -561,14 +605,26 @@ export default function Timer({ setPage }: Props) {
             </select>
           </div>
           <div className="row">
-            <input
-              type="number"
-              value={mh}
-              onChange={(e) => setMh(e.target.value)}
-              placeholder={t("timer.hrsPlaceholder")}
-              step=".25"
-              style={{ width: 70 }}
-            />
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="number" inputMode="numeric" min="0"
+                value={mHrs}
+                onChange={(e) => setMHrs(e.target.value)}
+                placeholder="0"
+                aria-label="Hours"
+                style={{ width: 56, textAlign: "center" }}
+              />
+              <span style={{ fontSize: 13, color: "var(--color-dim)" }}>h</span>
+              <input
+                type="number" inputMode="numeric" min="0"
+                value={mMin}
+                onChange={(e) => setMMin(e.target.value)}
+                placeholder="0"
+                aria-label="Minutes"
+                style={{ width: 56, textAlign: "center" }}
+              />
+              <span style={{ fontSize: 13, color: "var(--color-dim)" }}>m</span>
+            </div>
             <button
               className="bg"
               onClick={async () => { await addManual(); setShowManual(false); }}
