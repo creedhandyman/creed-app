@@ -8,6 +8,7 @@ import DashboardCardPreview from "../DashboardCardPreview";
 import UserGuideModal from "../UserGuideModal";
 import NotificationsPanel from "../NotificationsPanel";
 import GettingStarted from "../GettingStarted";
+import BrandFooter from "../BrandFooter";
 import CountUp from "@/components/CountUp";
 
 interface Props {
@@ -264,6 +265,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
             )}
           </>
         )}
+        <BrandFooter />
       </div>
     </div>
   );

@@ -8,6 +8,28 @@ import BillingGate from "@/components/BillingGate";
 import Toast from "@/components/Toast";
 import ConfirmModal from "@/components/ConfirmModal";
 import InstallPrompt from "@/components/InstallPrompt";
+import BrandFooter from "@/components/BrandFooter";
+
+/** Full-screen app loading state, shared by the pre-mount and data-loading
+ *  gates — centered wordmark + the CREED APP™/© brand footer at the bottom. */
+function LoadingScreen() {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#0a0a0f",
+        position: "relative",
+      }}
+    >
+      <h2 style={{ color: "#2E75B6", fontFamily: "Oswald" }}>Loading Creed...</h2>
+      <BrandFooter style={{ position: "absolute", bottom: 14, left: 0, right: 0 }} />
+    </div>
+  );
+}
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -74,19 +96,7 @@ export default function Home() {
 
   // Don't render until client-side to avoid hydration mismatch
   if (!mounted) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#0a0a0f",
-        }}
-      >
-        <h2 style={{ color: "#2E75B6", fontFamily: "Oswald" }}>Loading Creed...</h2>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   // Logged-out visitors get the marketing landing; signed-in users never
@@ -97,19 +107,7 @@ export default function Home() {
   if (!user.org_id) return <Onboarding />;
 
   if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#0a0a0f",
-        }}
-      >
-        <h2 style={{ color: "#2E75B6", fontFamily: "Oswald" }}>Loading Creed...</h2>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return <><Toast /><ConfirmModal /><InstallPrompt /><BillingGate><AppShell /></BillingGate></>;
