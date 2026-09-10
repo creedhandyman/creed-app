@@ -86,7 +86,7 @@ function SuccessContent() {
           Back to App
         </a>
         <div style={{ marginTop: 20, color: "#555", fontSize: 12 }}>
-          Powered by Creed App
+          Powered by Creed HM
         </div>
       </div>
     </div>

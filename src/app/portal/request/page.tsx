@@ -211,7 +211,7 @@ function RequestInner() {
               ← Back to portal
             </a>
           </div>
-          <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
+          <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed HM</div>
         </div>
       </div>
     );

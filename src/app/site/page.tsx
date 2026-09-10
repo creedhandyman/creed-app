@@ -205,7 +205,7 @@ function SitePageContent() {
         </div>
 
         <div style={{ padding: "16px 0", borderTop: "1px solid #1e1e2e", textAlign: "center", fontSize: 12, color: "#555" }}>
-          Powered by Creed App
+          Powered by Creed HM
         </div>
       </div>
     </div>

@@ -97,7 +97,7 @@ function LoginInner() {
             Didn&apos;t get it? Ask your contractor to send a fresh link from their app.
           </p>
         </div>
-        <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
+        <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed HM</div>
       </div>
     );
   }
@@ -192,7 +192,7 @@ function LoginInner() {
         </button>
       </div>
 
-      <div style={{ textAlign: "center", color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
+      <div style={{ textAlign: "center", color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed HM</div>
     </div>
   );
 }

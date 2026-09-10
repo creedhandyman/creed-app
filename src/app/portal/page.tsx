@@ -381,7 +381,7 @@ export default function PortalPage() {
         </div>
         <div style={{ textAlign: "center", color: "#555", fontSize: 13, marginTop: 10 }}>
           {org?.license_num && <div>License #{org.license_num}</div>}
-          <div style={{ marginTop: 4 }}>Powered by Creed App</div>
+          <div style={{ marginTop: 4 }}>Powered by Creed HM</div>
         </div>
       </div>
     </div>

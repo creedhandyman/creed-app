@@ -655,7 +655,7 @@ function StatusContent() {
         )}
 
         {/* Footer */}
-        <div style={{ textAlign: "center", color: "#666", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
+        <div style={{ textAlign: "center", color: "#666", fontSize: 12, marginTop: 16 }}>Powered by Creed HM</div>
       </div>
     </div>
   );

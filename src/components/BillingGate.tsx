@@ -107,8 +107,8 @@ export default function BillingGate({ children }: { children: React.ReactNode })
         </h1>
         <p style={{ color: "#888", fontSize: 16, marginBottom: 24, fontFamily: "Source Sans 3, sans-serif" }}>
           {org.subscription_status === "past_due"
-            ? "Please update your payment method to continue using Creed App."
-            : "Your 30-day free trial has ended. Subscribe to keep using Creed App."}
+            ? "Please update your payment method to continue using Creed HM."
+            : "Your 30-day free trial has ended. Subscribe to keep using Creed HM."}
         </p>
 
         {isOwner ? (
@@ -183,13 +183,13 @@ export default function BillingGate({ children }: { children: React.ReactNode })
         ) : (
           <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 10, padding: 20 }}>
             <p style={{ color: "#888", fontSize: 15 }}>
-              Ask your business owner to subscribe to continue using Creed App.
+              Ask your business owner to subscribe to continue using Creed HM.
             </p>
           </div>
         )}
 
         <div style={{ marginTop: 20, fontSize: 14, color: "#555" }}>
-          Powered by Creed App
+          Powered by Creed HM
         </div>
       </div>
     </div>

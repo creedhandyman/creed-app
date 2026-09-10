@@ -186,7 +186,7 @@ function LeadIntakeInner() {
               </p>
             )}
           </div>
-          <div style={{ color: "#666", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
+          <div style={{ color: "#666", fontSize: 12, marginTop: 16 }}>Powered by Creed HM</div>
         </div>
       </div>
     );
@@ -283,7 +283,7 @@ function LeadIntakeInner() {
           <Icon name="safety" size={12} /> No spam. We only use this to quote your job.
         </div>
 
-        <div style={{ textAlign: "center", color: "#666", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
+        <div style={{ textAlign: "center", color: "#666", fontSize: 12, marginTop: 16 }}>Powered by Creed HM</div>
       </div>
     </div>
   );

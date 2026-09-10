@@ -118,7 +118,7 @@ function portalLinkHtml(orgName: string, link: string): string {
       </p>
       <p style="margin:16px 0 0;font-size:12px;color:#aaa">If you didn't request this, you can safely ignore this email.</p>
     </div>
-    <div style="text-align:center;color:#aaa;font-size:11px;margin-top:14px">Powered by Creed App</div>
+    <div style="text-align:center;color:#aaa;font-size:11px;margin-top:14px">Powered by Creed HM</div>
   </div>
 </body></html>`;
 }

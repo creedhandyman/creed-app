@@ -200,7 +200,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{ textAlign: "center", color: "#333", fontSize: 13, marginTop: 20 }}>
-        Creed App Admin · Data refreshes on each login
+        Creed HM Admin · Data refreshes on each login
       </div>
     </div>
   );

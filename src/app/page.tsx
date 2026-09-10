@@ -11,7 +11,7 @@ import InstallPrompt from "@/components/InstallPrompt";
 import BrandFooter from "@/components/BrandFooter";
 
 /** Full-screen app loading state, shared by the pre-mount and data-loading
- *  gates — centered wordmark + the CREED APP™/© brand footer at the bottom. */
+ *  gates — centered wordmark + the CREED HM™/© brand footer at the bottom. */
 function LoadingScreen() {
   return (
     <div

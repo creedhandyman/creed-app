@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: { name: `Creed App — ${p.name} Plan (${p.users})` },
+            product_data: { name: `Creed HM — ${p.name} Plan (${p.users})` },
             unit_amount: p.amount,
             recurring: { interval: "month" },
           },

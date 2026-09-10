@@ -23,7 +23,7 @@ function Inner() {
             : `Your${plan ? ` ${plan}` : ""} membership is active. Your provider will reach out about your first visit.`}
         </p>
       </div>
-      <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed App</div>
+      <div style={{ color: "#555", fontSize: 12, marginTop: 16 }}>Powered by Creed HM</div>
     </div>
   );
 }

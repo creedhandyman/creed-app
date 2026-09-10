@@ -168,7 +168,7 @@ function ReviewContent() {
           </>
         )}
 
-        <div style={{ textAlign: "center", marginTop: 16, color: "#666", fontSize: 12 }}>Powered by Creed App</div>
+        <div style={{ textAlign: "center", marginTop: 16, color: "#666", fontSize: 12 }}>Powered by Creed HM</div>
       </div>
     </div>
   );

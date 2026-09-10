@@ -352,7 +352,7 @@ export function printFooter(brand: PrintBrand): string {
   return `
 <footer class="foot">
   ${parts.map(escape).join(" &middot; ")}
-  <div style="margin-top:4px"><span class="brand-mark">Creed App</span> &middot; ${escape(brand.docDate || "")}</div>
+  <div style="margin-top:4px"><span class="brand-mark">Creed HM</span> &middot; ${escape(brand.docDate || "")}</div>
 </footer>
 `;
 }
