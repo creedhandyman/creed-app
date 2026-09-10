@@ -687,6 +687,22 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
       // This prevents the previous duplicate-Flooring problem where AI
       // and scaffold both produced an entry under the same name.
       if (items.length > 0) {
+        // Severity order for condition merging — a re-recorded room can
+        // UPGRADE an item's condition (S→F→P→D) but never downgrade it
+        // (the second pass not mentioning damage doesn't undo it).
+        const SEV: Record<string, number> = { S: 0, F: 1, P: 2, D: 3 };
+        const worse = (a: string, b: string) => ((SEV[b] ?? 0) > (SEV[a] ?? 0) ? b : a);
+        // Append new narration to existing notes unless one already
+        // contains the other (re-recordings often restate the finding).
+        const mergeNotes = (oldN: string, newN: string): string => {
+          const o = (oldN || "").trim();
+          const n = (newN || "").trim();
+          if (!n) return o;
+          if (!o) return n;
+          if (o.toLowerCase().includes(n.toLowerCase())) return o;
+          if (n.toLowerCase().includes(o.toLowerCase())) return n;
+          return `${o}. ${n}`;
+        };
         setRoomData((prev) => prev.map((r, ri) => {
           if (ri !== roomIdx) return r;
           const isUserEdited = (it: InspectionItem) =>
@@ -701,8 +717,25 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           const aiByName = new Map(items.map((it) => [it.name.toLowerCase(), it]));
           const existingNames = new Set(r.items.map((it) => it.name.toLowerCase()));
           const merged = r.items.map((it) => {
-            if (isUserEdited(it)) return it;
-            return aiByName.get(it.name.toLowerCase()) ?? it;
+            const ai = aiByName.get(it.name.toLowerCase());
+            if (!ai) return it;
+            // Untouched scaffold → the AI's assessment replaces it (first
+            // recording of the room, unchanged behavior).
+            if (!isUserEdited(it)) return ai;
+            // Item already carries findings (a prior recording or hand
+            // entry): a re-record ADDS ON instead of being dropped —
+            // worse condition wins, notes append (deduped), photos union.
+            // A second-pass "S with nothing new" (no photos) is skipped
+            // entirely so filler like "no issues" can't pollute real notes.
+            if ((SEV[ai.condition] ?? 0) === 0 && !(ai.photos && ai.photos.length)) return it;
+            const photos = [...(it.photos || [])];
+            for (const p of ai.photos || []) if (!photos.includes(p)) photos.push(p);
+            return {
+              ...it,
+              condition: worse(it.condition, ai.condition),
+              notes: mergeNotes(it.notes, ai.notes),
+              photos,
+            };
           });
           const extra = items.filter((it) => !existingNames.has(it.name.toLowerCase()));
           return { ...r, items: [...merged, ...extra] };
