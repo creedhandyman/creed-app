@@ -658,13 +658,16 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         return;
       }
 
-      // AI categorization. For rooms with no preset, gap-fill with the org's
-      // primary-trade checklist so the AI gets trade-relevant item names.
-      const baseChecklist = ROOM_PRESETS[roomName] || (() => {
-        const baseKey = Object.keys(ROOM_PRESETS).find((k) => roomName.startsWith(k.replace(/ \d+$/, "")));
-        return baseKey ? ROOM_PRESETS[baseKey] : [];
-      })();
-      const checklist = applyTradeChecklist(baseChecklist, useStore.getState().org?.primary_trade);
+      // AI categorization. Use the ACTIVE inspection type's checklist for
+      // this room — the same `type × area` source the form scaffold and
+      // VoiceWalk use — NOT the legacy move-out ROOM_PRESETS map. With the
+      // legacy lookup, a Painting/Yard/Initial/Move-In walk got move-out
+      // item names, so the AI's findings didn't name-match the scaffold and
+      // were appended as near-duplicates instead of filling it (and the
+      // re-record merge, also name-keyed, never engaged). Trade gap-fill
+      // keeps generic areas relevant for specialized orgs.
+      const typeCfg = INSPECTION_TYPES.find((t) => t.id === inspectionType) || INSPECTION_TYPES[0];
+      const checklist = applyTradeChecklist(typeCfg.itemsForRoom(roomName), useStore.getState().org?.primary_trade);
       console.log(`[Inspector] AI for "${roomName}": ${transcript.length} chars, ${result.photos.length} photos, ${checklist.length} checklist items`);
       const items = await aiParseVoiceWalkRoom(
         roomName,
@@ -749,7 +752,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
       setVoiceProcessingStatus((prev) => ({ ...prev, [roomName]: "failed" }));
       useStore.getState().showToast(`Processing failed for ${roomName}`, "error");
     }
-  }, [property, client]);
+  }, [property, client, inspectionType]);
 
   // Type-aware item picker. Falls back to the standard ROOM_PRESETS
   // for any area the active type doesn't have an override for. Used by
@@ -1232,7 +1235,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             // inspection. Threading the active type's items function
             // here keeps the voice "things to mention" list in lockstep
             // with what the user sees on the inspection form.
-            itemsForRoom={activeTypeConfig.itemsForRoom}
+            itemsForRoom={itemsFor}
             roomStatuses={voiceProcessingStatus}
             onComplete={(result) => {
               // Capture the index AND name BEFORE we mutate state —
@@ -1284,14 +1287,14 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         {showVoicePicker && (
           <div
             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
-            onClick={() => setShowVoicePicker(false)}
+            onClick={() => { setShowVoicePicker(false); setEditingRoomIdx(null); }}
           >
             <div className="cd" style={{ width: "100%", maxWidth: 420, maxHeight: "80vh", overflowY: "auto", padding: 14 }} onClick={(e) => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <h3 style={{ fontSize: 17, fontFamily: "Oswald", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <Icon name="mic" size={15} color="var(--color-success)" /> Choose next area
                 </h3>
-                <button className="bo" onClick={() => setShowVoicePicker(false)} style={{ fontSize: 13, padding: "4px 10px" }}>
+                <button className="bo" onClick={() => { setShowVoicePicker(false); setEditingRoomIdx(null); }} style={{ fontSize: 13, padding: "4px 10px" }}>
                   Done for now
                 </button>
               </div>
@@ -1315,7 +1318,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                       />
                     ) : (
                       <button
-                        onClick={() => { setCurrentRoomIdx(ri); setVoiceRoomIdx(ri); setShowVoicePicker(false); }}
+                        onClick={() => { setCurrentRoomIdx(ri); setVoiceRoomIdx(ri); setShowVoicePicker(false); setEditingRoomIdx(null); }}
                         style={{ flex: 1, textAlign: "left", background: "transparent", border: "none", color: "inherit", fontSize: 15, cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
                       >
                         <span style={{ color: badgeColor, width: 18, flexShrink: 0, textAlign: "center" }}>{badge || "·"}</span>
@@ -1454,7 +1457,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                     <button
                       key={r}
                       onClick={() => addAreaMidInspection(r)}
-                      style={{ fontSize: 13, padding: "2px 8px", borderRadius: 12, background: "var(--color-primary)22", color: "var(--color-primary)", border: "none", cursor: "pointer" }}
+                      style={{ fontSize: 13, padding: "2px 8px", borderRadius: 12, background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", cursor: "pointer" }}
                     >
                       + {r}
                     </button>
@@ -1531,7 +1534,10 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           // age, capacity, brand — worth recording even in good shape);
           // otherwise when the item already has notes or the user tapped
           // "+ Add note".
-          const noteKey = `${currentRoomIdx}:${itemIdx}`;
+          // Keyed by room NAME (not index): adding/removing areas
+          // mid-inspection shifts indices, and an index key would open
+          // the notes field on the wrong room's item after that.
+          const noteKey = `${room.name}:${itemIdx}`;
           const showNotes =
             item.condition !== "S" ||
             inspectionType === "initial" ||
