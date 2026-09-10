@@ -510,6 +510,11 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   // items too (brand, age, "cleaned during visit"). Session-only UI
   // state; the notes themselves persist on the item.
   const [openNotes, setOpenNotes] = useState<Record<string, boolean>>({});
+  // Voice-walk room picker — shown after each completed voice walk so the
+  // user chooses which area to record next (any order, statuses visible).
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
+  // Room row currently in rename mode inside the picker (index), or null.
+  const [editingRoomIdx, setEditingRoomIdx] = useState<number | null>(null);
 
   // Auto-save to localStorage on every change. Suppressed in edit mode so
   // an in-progress edit can't overwrite the resume slot a fresh inspection
@@ -569,6 +574,23 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     if (!customRoom.trim() || selectedRooms.includes(customRoom.trim())) return;
     setSelectedRooms((prev) => [...prev, customRoom.trim()]);
     setCustomRoom("");
+  };
+
+  /** Rename a room mid-inspection (custom descriptions like "Bedroom 1 —
+   *  Master, upstairs"). The name is the room's identity everywhere:
+   *  selection list, voice-status badges (keyed by name), and the AI gets
+   *  it as context — so a descriptive rename also improves categorization. */
+  const renameRoom = (idx: number, newName: string) => {
+    const oldName = roomData[idx]?.name;
+    const nn = newName.trim();
+    if (!nn || !oldName || nn === oldName) return;
+    setRoomData((prev) => prev.map((r, i) => (i === idx ? { ...r, name: nn } : r)));
+    setSelectedRooms((prev) => prev.map((r) => (r === oldName ? nn : r)));
+    setVoiceProcessingStatus((prev) => {
+      if (!(oldName in prev)) return prev;
+      const { [oldName]: status, ...rest } = prev;
+      return { ...rest, [nn]: status };
+    });
   };
 
   /** Background processing for a finished VoiceWalk recording. The user
@@ -1176,17 +1198,12 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 // chip in the strip flips ⏳ → ✓ when this finishes.
                 void processRoomVoice(idx, name, result);
               }
-              // Auto-advance to the next area: open Voice Walk for the
-              // next room and move the underlying Inspector cursor too.
-              const nextIdx = (idx ?? 0) + 1;
-              if (nextIdx < roomData.length) {
-                setCurrentRoomIdx(nextIdx);
-                setVoiceRoomIdx(nextIdx);
-                useStore.getState().showToast(`Moving to ${roomData[nextIdx].name}…`, "info");
-              } else {
-                setVoiceRoomIdx(null);
-                useStore.getState().showToast("All rooms recorded — processing in the background.", "success");
-              }
+              // Show the all-rooms picker so the user CHOOSES the next
+              // area (used to force sequential auto-advance — inspectors
+              // don't walk houses in list order). Processing continues in
+              // the background either way.
+              setVoiceRoomIdx(null);
+              setShowVoicePicker(true);
             }}
             onCancel={() => setVoiceRoomIdx(null)}
             darkMode={darkMode}
@@ -1214,6 +1231,64 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           style={{ display: "none" }}
           onChange={handlePhotoSelect}
         />
+
+        {/* Voice-walk room picker — every room at once with its status, so
+            the user picks what to walk next (any order) and can rename a
+            room to a custom description before recording it. */}
+        {showVoicePicker && (
+          <div
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+            onClick={() => setShowVoicePicker(false)}
+          >
+            <div className="cd" style={{ width: "100%", maxWidth: 420, maxHeight: "80vh", overflowY: "auto", padding: 14 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <h3 style={{ fontSize: 17, fontFamily: "Oswald", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Icon name="mic" size={15} color="var(--color-success)" /> Choose next area
+                </h3>
+                <button className="bo" onClick={() => setShowVoicePicker(false)} style={{ fontSize: 13, padding: "4px 10px" }}>
+                  Done for now
+                </button>
+              </div>
+              <p className="dim" style={{ fontSize: 13, margin: "0 0 8px" }}>
+                Walked areas keep processing in the background (⏳ → ✓). Tap an area to voice-walk it, or the pencil to rename it (e.g. &quot;Bedroom 1 — Master, upstairs&quot;).
+              </p>
+              {roomData.map((r, ri) => {
+                const st = voiceProcessingStatus[r.name];
+                const badge = st === "done" ? "✓" : st === "analyzing" ? "⏳" : st === "failed" ? "✕" : "";
+                const badgeColor = st === "done" ? "var(--color-success)" : st === "failed" ? "var(--color-accent-red)" : "#888";
+                const editing = editingRoomIdx === ri;
+                return (
+                  <div key={ri} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 2px", borderTop: ri === 0 ? "none" : `1px solid ${border}` }}>
+                    {editing ? (
+                      <input
+                        autoFocus
+                        defaultValue={r.name}
+                        onBlur={(e) => { renameRoom(ri, e.target.value); setEditingRoomIdx(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                        style={{ flex: 1, fontSize: 14 }}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => { setCurrentRoomIdx(ri); setVoiceRoomIdx(ri); setShowVoicePicker(false); }}
+                        style={{ flex: 1, textAlign: "left", background: "transparent", border: "none", color: "inherit", fontSize: 15, cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+                      >
+                        <span style={{ color: badgeColor, width: 18, flexShrink: 0, textAlign: "center" }}>{badge || "·"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setEditingRoomIdx(editing ? null : ri)}
+                      title="Rename area"
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}
+                    >
+                      <Icon name="edit" size={14} color="#888" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div className="row mb" style={{ justifyContent: "space-between" }}>
