@@ -515,6 +515,9 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   // Room row currently in rename mode inside the picker (index), or null.
   const [editingRoomIdx, setEditingRoomIdx] = useState<number | null>(null);
+  // Mid-inspection "+ Area" input (add a room without leaving the walk).
+  const [addingArea, setAddingArea] = useState(false);
+  const [newAreaName, setNewAreaName] = useState("");
 
   // Auto-save to localStorage on every change. Suppressed in edit mode so
   // an in-progress edit can't overwrite the resume slot a fresh inspection
@@ -715,46 +718,56 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     }
   }, [property, client]);
 
-  const startInspection = () => {
-    // In edit mode: do a DELTA. Preserve every existing room's items /
-    // photos / sqft / dimensions; initialize new rooms (added via the
-    // selection screen) with a fresh checklist; drop rooms the user
-    // un-selected. A bare reset would obliterate hours of inspection
-    // data the user is trying to extend.
-    // Type-aware item picker. Falls back to the standard ROOM_PRESETS
-    // for any area the active type doesn't have an override for.
-    const itemsFor = (room: string): string[] => {
-      const fromType = applyTradeChecklist(
-        activeTypeConfig.itemsForRoom(room),
-        useStore.getState().org?.primary_trade,
-      );
-      return fromType.length > 0 ? fromType : ["General"];
-    };
+  // Type-aware item picker. Falls back to the standard ROOM_PRESETS
+  // for any area the active type doesn't have an override for. Used by
+  // startInspection AND the mid-inspection "+ Area" flow.
+  const itemsFor = (room: string): string[] => {
+    const fromType = applyTradeChecklist(
+      activeTypeConfig.itemsForRoom(room),
+      useStore.getState().org?.primary_trade,
+    );
+    return fromType.length > 0 ? fromType : ["General"];
+  };
 
-    if (isEditing) {
-      const existing = new Map(roomData.map((r) => [r.name, r]));
-      const data = selectedRooms.map((room) => {
-        const prior = existing.get(room);
-        if (prior) return prior;
-        const items = itemsFor(room).map(
-          (name) => ({ name, condition: "S", notes: "", photos: [] }),
-        );
-        return { name: room, sqft: 0, items };
-      });
-      setRoomData(data);
-      setCurrentRoomIdx(0);
-      setStep("inspect");
-      return;
-    }
+  const startInspection = () => {
+    // ALWAYS a delta. Preserve every existing room's items / photos /
+    // sqft / dimensions; initialize new rooms (added via the selection
+    // screen) with a fresh checklist; drop rooms the user un-selected.
+    // This used to be edit-mode only — a FRESH inspection that went Back
+    // to add an area and tapped Start again rebuilt everything from
+    // scratch and wiped every finding. The Resume banner's Discard is
+    // the intentional way to reset.
+    const existing = new Map(roomData.map((r) => [r.name, r]));
     const data = selectedRooms.map((room) => {
+      const prior = existing.get(room);
+      if (prior) return prior;
       const items = itemsFor(room).map(
-        (name) => ({ name, condition: "S", notes: "", photos: [] })
+        (name) => ({ name, condition: "S", notes: "", photos: [] }),
       );
       return { name: room, sqft: 0, items };
     });
     setRoomData(data);
     setCurrentRoomIdx(0);
     setStep("inspect");
+  };
+
+  /** Mid-inspection area add — appends a room with its type-appropriate
+   *  checklist and jumps to it, no trip back through the setup screen. */
+  const addAreaMidInspection = (name: string) => {
+    const nn = name.trim();
+    if (!nn) return;
+    if (roomData.some((r) => r.name.toLowerCase() === nn.toLowerCase())) {
+      useStore.getState().showToast("That area is already in this inspection", "warning");
+      return;
+    }
+    const items = itemsFor(nn).map(
+      (n) => ({ name: n, condition: "S", notes: "", photos: [] }),
+    );
+    setRoomData((prev) => [...prev, { name: nn, sqft: 0, items }]);
+    setSelectedRooms((prev) => (prev.includes(nn) ? prev : [...prev, nn]));
+    setCurrentRoomIdx(roomData.length); // index of the appended room
+    setNewAreaName("");
+    setAddingArea(false);
   };
 
   /* ── Inspection helpers ── */
@@ -1365,7 +1378,59 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               </button>
             );
           })}
+          {/* Mid-inspection add — new areas come up all the time once
+              you're actually walking the property. */}
+          <button
+            onClick={() => setAddingArea((v) => !v)}
+            title="Add another area"
+            style={{
+              padding: "4px 8px", borderRadius: 6, fontSize: 13, whiteSpace: "nowrap",
+              background: "transparent", color: "var(--color-primary)",
+              border: `1px dashed var(--color-primary)`,
+              fontFamily: "Oswald", flexShrink: 0,
+            }}
+          >
+            + Area
+          </button>
         </div>
+
+        {/* Add-area input + quick suggestions (unused preset areas for the
+            active inspection type) */}
+        {addingArea && (
+          <div style={{ marginBottom: 10 }}>
+            <div className="row">
+              <input
+                autoFocus
+                value={newAreaName}
+                onChange={(e) => setNewAreaName(e.target.value)}
+                placeholder='New area name (e.g. "Sunroom", "Shed")'
+                style={{ flex: 1, fontSize: 14 }}
+                onKeyDown={(e) => e.key === "Enter" && addAreaMidInspection(newAreaName)}
+              />
+              <button className="bb" onClick={() => addAreaMidInspection(newAreaName)} style={{ fontSize: 14, padding: "5px 12px" }}>
+                Add
+              </button>
+            </div>
+            {(() => {
+              const unused = activeTypeConfig.suggestedRooms.filter(
+                (r) => !roomData.some((x) => x.name.toLowerCase() === r.toLowerCase()),
+              );
+              return unused.length > 0 ? (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+                  {unused.map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => addAreaMidInspection(r)}
+                      style={{ fontSize: 13, padding: "2px 8px", borderRadius: 12, background: "var(--color-primary)22", color: "var(--color-primary)", border: "none", cursor: "pointer" }}
+                    >
+                      + {r}
+                    </button>
+                  ))}
+                </div>
+              ) : null;
+            })()}
+          </div>
+        )}
 
         {/* Progress bar */}
         <div style={{ height: 3, background: border, borderRadius: 2, marginBottom: 10 }}>
