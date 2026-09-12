@@ -138,6 +138,16 @@ src/
   to subscribe). Push send (`lib/notify-server.ts`) is a no-op until these are
   set; the in-app feed + SMS are unaffected. iOS only delivers web push to an
   **installed** PWA (Add to Home Screen, 16.4+), not a Safari tab.
+- `APPFOLIO_AGENT_SECRET` / `APPFOLIO_AGENT_ORG_ID` — the AppFolio
+  work-order agent's server-to-server endpoint (`/api/appfolio`, GET =
+  upcoming jobs/schedule for slot proposals, POST = import one confirmed
+  WO as a scheduled job + schedule entry, idempotent on the WO#). Bearer
+  `APPFOLIO_AGENT_SECRET` auths it (fails closed when unset — the route
+  just 401s, so leaving these unset disables the feature safely);
+  `APPFOLIO_AGENT_ORG_ID` pins which org imports land in, server-side.
+  Mark the SECRET as Sensitive in Vercel (write-only); the org id is a
+  plain variable so it can be eyeballed later. Not in the preflight
+  required-env list on purpose — it's optional, like Twilio.
 - (Stripe / Supabase keys per existing setup.)
 
 ## Schema migrations the user should run in Supabase
