@@ -4,7 +4,7 @@ export const SITE = {
   legalName: "Creed Handyman LLC",
   phone: "(316) 252-6335",
   phoneHref: "tel:+13162526335",
-  email: "creedhandyman@gmail.com",
+  email: "bernard@creedhm.com",
   domain: "https://creedhandyman.com",
   rate: "$55",
   minimum: "Two-hour minimum",
