@@ -102,6 +102,10 @@ export function CtaBand({
 }) {
   return (
     <section className="band band-red" id="quote">
+      {/* Decorative — the band's copy carries the message. */}
+      <div className="cta-mascot" aria-hidden="true">
+        <img src="/assets/mascot.jpg" alt="" />
+      </div>
       <div className="container cta-close">
         <div className="kicker">
           <span className="bar" />
