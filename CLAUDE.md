@@ -47,6 +47,39 @@ src/
   app/globals.css         Design tokens, button/card/input styles, animations
 ```
 
+## Marketing site (`website/`)
+
+A SEPARATE standalone Next.js app (static export) for Bernard's own
+business site at **creedhandyman.com** — not part of the SaaS app build.
+Excluded from the app's tsconfig; has its own package.json/node_modules.
+
+- **Deploy**: its own Vercel project on the SAME repo with **Root
+  Directory = `website`** (create once in Vercel, point creedhandyman.com
+  DNS at it). No env vars needed. Until that project exists, pushes
+  build only the app.
+- **`website/src/lib/site.ts`** is the single source of truth for all
+  business facts (phone, rate, hours, cities, services + per-service
+  task lists, gallery, hero, lead endpoint). Edit there, updates
+  everywhere.
+- **Quote form** (`/contact`) POSTs cross-origin to the app's public
+  `/api/leads` (slug `creedhandyman`) — leads land in the app's Jobs as
+  status "lead" + notify owners. CORS allowlist lives in
+  `src/app/api/leads/route.ts` (prod site origins + localhost:3005).
+- **Photos** in `website/public/assets` are real job photos pulled from
+  the app's Supabase storage (resized). Swap freely; `Img.tsx` renders a
+  placeholder if a path 404s.
+- **Design**: dark industrial (Oswald + Source Sans 3, red #cd2425 /
+  blue #005fb3), from the Claude-Design mockup. Tokens + all layout
+  classes in `website/src/app/globals.css`. Gotcha: `.section`,
+  `.hero-grid`, `.promo`, `.cta-close` share an element with
+  `.container` — keep their padding top/bottom-only or the 24px side
+  gutters vanish.
+- **Dev**: `npm --prefix website run dev` → port 3005 (launch.json entry
+  "website"). Type-check: `npx tsc --noEmit` inside `website/`.
+- 8 pages: home, services (+6 slugs), gallery, pricing,
+  property-managers, about, churches, contact. Sitemap/robots/JSON-LD
+  (HomeAndConstructionBusiness, service-area, no street address) done.
+
 ## How this user works
 
 - **Commits land on `main`.** No PRs. Every push triggers a Vercel
