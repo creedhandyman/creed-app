@@ -53,10 +53,18 @@ A SEPARATE standalone Next.js app (static export) for Bernard's own
 business site at **creedhandyman.com** — not part of the SaaS app build.
 Excluded from the app's tsconfig; has its own package.json/node_modules.
 
-- **Deploy**: its own Vercel project on the SAME repo with **Root
-  Directory = `website`** (create once in Vercel, point creedhandyman.com
-  DNS at it). No env vars needed. Until that project exists, pushes
-  build only the app.
+- **Deploy: LIVE at https://www.creedhandyman.com** (apex 308s to www).
+  Vercel project **`creed-website`** on the SAME repo, Root Directory =
+  `website`, no env vars — every push to main deploys it alongside the
+  app. DNS: the domain is registered at GoDaddy but its nameservers
+  point at WIX, so records live in Wix's DNS manager (manage.wix.com →
+  Domains): apex A → 216.150.1.1, www CNAME →
+  b6e029a30a4a925d.vercel-dns-016.com. Old Wix records (if rollback is
+  ever needed): apex A 185.230.63.107/.186/.171, www CNAME
+  cdn3.wixdns.net. The `en` CNAME + MX records were left untouched.
+  Gotcha fixed in f9a7cfb: website/ needs its OWN postcss.config.mjs —
+  Next's config lookup walks up and finds the app's Tailwind config
+  otherwise (works locally, breaks the Vercel build).
 - **`website/src/lib/site.ts`** is the single source of truth for all
   business facts (phone, rate, hours, cities, services + per-service
   task lists, gallery, hero, lead endpoint). Edit there, updates
