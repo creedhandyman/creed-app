@@ -41,6 +41,16 @@ export default function AboutPage() {
             </p>
           </div>
           <div>
+            <div style={{ border: "2px solid var(--line)", background: "var(--panel)", marginBottom: 24 }}>
+              <img
+                src="/assets/mascot.jpg"
+                alt="Creed Handyman mascot — Bernard with a paint roller and drill"
+                style={{ width: "100%", display: "block" }}
+              />
+              <div style={{ borderTop: "2px solid var(--line)", padding: "12px 18px", fontFamily: "var(--font-head)", fontSize: 12.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--dim)" }}>
+                The face of the shop
+              </div>
+            </div>
             <div className="card" style={{ marginBottom: 24 }}>
               <h3 className="h3" style={{ fontSize: 18 }}>Where we work</h3>
               <p style={{ fontSize: 15.5, lineHeight: 1.6, color: "var(--muted)", margin: 0 }}>
