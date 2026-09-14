@@ -33,7 +33,7 @@ export default function HomePage() {
             <div className="imgwrap">
               <Img
                 src={HERO.after}
-                alt="Freshly turned-over rental room with new plank flooring on a Wichita job"
+                alt="Finished oak floor after a subfloor water-damage repair on a Wichita job"
                 style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", display: "block", filter: "saturate(.9) contrast(1.04)" }}
               />
               <div className="edge" />
@@ -83,7 +83,7 @@ export default function HomePage() {
             <Link href="/gallery" className="golink">See full gallery →</Link>
           </div>
           <div className="gal-grid">
-            {GALLERY.map((g) => (
+            {GALLERY.slice(0, 2).map((g) => (
               <BeforeAfter key={g.title} {...g} />
             ))}
           </div>

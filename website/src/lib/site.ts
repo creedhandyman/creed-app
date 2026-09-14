@@ -131,22 +131,35 @@ export const SERVICES = [
 // Hero photo. Drop the file in /public/assets. Falls back to a placeholder if missing.
 export const HERO = {
   after: "/assets/hero.jpg",
-  caption: "Rental turnover — fresh paint and new plank flooring · Wichita",
+  caption: "Water-damaged subfloor to finished oak · West Wichita",
 };
 
 // Before/after gallery. Drop images in /public/assets and keep these paths.
+// The homepage shows the first two; /gallery shows them all.
 export const GALLERY = [
   {
-    title: "Water-damage ceiling repair",
-    note: "Stain cut out, patched, retextured, and repainted to match.",
+    title: "Floor tear-out and hardwood",
+    note: "Stained subfloor pulled, oak laid and finished. Two days.",
     before: "/assets/ba1-before.jpg",
     after: "/assets/ba1-after.jpg",
   },
   {
-    title: "Basement window rebuild",
-    note: "Rotted trim out, sealed up, and a new well cover fitted.",
+    title: "Rental make-ready",
+    note: "Carpet out, plank in, walls and trim repainted for turnover.",
     before: "/assets/ba2-before.jpg",
     after: "/assets/ba2-after.jpg",
+  },
+  {
+    title: "Water-damage ceiling repair",
+    note: "Stain cut out, patched, retextured, and repainted to match.",
+    before: "/assets/ba3-before.jpg",
+    after: "/assets/ba3-after.jpg",
+  },
+  {
+    title: "Basement window rebuild",
+    note: "Rotted trim out, sealed up, and a new well cover fitted.",
+    before: "/assets/ba4-before.jpg",
+    after: "/assets/ba4-after.jpg",
   },
 ];
 
