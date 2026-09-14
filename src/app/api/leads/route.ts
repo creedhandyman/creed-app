@@ -36,7 +36,39 @@ interface Body {
 
 const trim = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
+// The marketing site (creedhandyman.com) posts its quote form here
+// cross-origin. Browsers preflight the JSON POST, so we answer OPTIONS
+// and echo the origin back — but only for these origins. Same-origin
+// callers (/lead/[slug]) send no Origin header and are unaffected.
+const CORS_ORIGINS = new Set([
+  "https://creedhandyman.com",
+  "https://www.creedhandyman.com",
+  "http://localhost:3005", // website dev server
+]);
+
+function corsHeaders(req: NextRequest): Record<string, string> {
+  const origin = req.headers.get("origin") || "";
+  if (!CORS_ORIGINS.has(origin)) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    Vary: "Origin",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
+  };
+}
+
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
+}
+
 export async function POST(req: NextRequest) {
+  const res = await handlePost(req);
+  for (const [k, v] of Object.entries(corsHeaders(req))) res.headers.set(k, v);
+  return res;
+}
+
+async function handlePost(req: NextRequest): Promise<NextResponse> {
   try {
     const body = (await req.json()) as Body;
     const slug = trim(body.slug);
