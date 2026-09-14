@@ -128,6 +128,21 @@ export const SERVICES = [
   },
 ];
 
+// The CREED itself — the acronym the company is named for. The homepage
+// hero renders `lines` as a stacked acrostic; About + social titles use
+// `sentence`.
+export const CREED = {
+  lines: [
+    { letter: "C", rest: "ontinuously" },
+    { letter: "R", rest: "aising" },
+    { letter: "E", rest: "xpectations" },
+    { letter: "E", rest: "fficiency &" },
+    { letter: "D", rest: "edication" },
+  ],
+  tail: "for our customers",
+  sentence: "Continuously Raising Expectations, Efficiency & Dedication — for our customers.",
+};
+
 // Hero photo. Drop the file in /public/assets. Falls back to a placeholder if missing.
 export const HERO = {
   after: "/assets/hero.jpg",

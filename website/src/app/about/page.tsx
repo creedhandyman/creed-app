@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SITE } from "@/lib/site";
+import { SITE, CREED } from "@/lib/site";
 import { PageHero, CredStrip, CtaBand } from "@/components/blocks";
 
 export const metadata: Metadata = {
@@ -14,7 +14,12 @@ export default function AboutPage() {
       <PageHero
         kicker="About"
         title="The name is the promise."
-        lead="A creed is something you live by. Ours is short: do the repair right, charge what we said, and leave the place cleaner than we found it."
+        lead={
+          <>
+            A creed is something you live by. Ours is spelled into the name:{" "}
+            <span style={{ color: "var(--blue-lt)" }}>{CREED.sentence}</span>
+          </>
+        }
       />
 
       <CredStrip />

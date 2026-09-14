@@ -43,6 +43,19 @@ a:hover { color: #7fb8ec; }
   margin: 0 0 22px;
   text-wrap: balance;
 }
+
+/* The CREED acrostic hero — five stacked words, first letters accented. */
+.h1-creed { font-size: clamp(30px, 4.6vw, 50px); line-height: 1.04; }
+.h1-creed .line { display: block; }
+.h1-creed .cap { color: var(--blue-lt); }
+.h1-creed .tail {
+  display: block;
+  font-size: 0.52em;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 10px;
+  letter-spacing: 0.04em;
+}
 .h2 {
   font-family: var(--font-head);
   font-weight: 700;

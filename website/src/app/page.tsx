@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS } from "@/lib/site";
+import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED } from "@/lib/site";
 import { Kicker, SecLabel, BeforeAfter, CtaBand, CredStrip } from "@/components/blocks";
 import Img from "@/components/Img";
 
@@ -11,13 +11,19 @@ export default function HomePage() {
         <div className="container hero-grid">
           <div>
             <Kicker>{SITE.city}, Kansas</Kicker>
-            <h1 className="h1">
-              Repairs done right,<br />and no mess<br />
-              <span style={{ color: "var(--blue-lt)" }}>left behind.</span>
+            <h1 className="h1 h1-creed">
+              {CREED.lines.map((l, i) => (
+                <span className="line" key={i}>
+                  <span className="cap">{l.letter}</span>
+                  {l.rest}
+                </span>
+              ))}
+              <span className="tail">{CREED.tail}</span>
             </h1>
             <p className="lead" style={{ maxWidth: "46ch" }}>
-              Certified, insured, and straightforward. {SITE.rate} an hour with a
-              two-hour minimum, quoted before the work starts.
+              Repairs done right — certified, insured, and straightforward.
+              {" "}{SITE.rate} an hour with a two-hour minimum, quoted before
+              the work starts.
             </p>
             <div className="btn-row" style={{ marginTop: 30 }}>
               <Link href="/contact" className="btn btn-red">Request a quote</Link>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Oswald, Source_Sans_3 } from "next/font/google";
-import { SITE } from "@/lib/site";
+import { SITE, CREED } from "@/lib/site";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import "./globals.css";
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: SITE.name,
-    title: `${SITE.name} — Repairs done right, and no mess left behind.`,
+    title: `${SITE.name} — ${CREED.sentence}`,
     description: `Wichita handyman. ${SITE.rate}/hr, two-hour minimum, quoted before work starts.`,
     images: ["/assets/hero.jpg"],
   },
