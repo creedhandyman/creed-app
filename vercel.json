@@ -6,6 +6,10 @@
       "schedule": "0 17 * * *"
     },
     {
+      "path": "/api/payroll/auto-run",
+      "schedule": "0 21 * * *"
+    },
+    {
       "path": "/api/recurring/fire",
       "schedule": "0 9 * * *"
     },
