@@ -26,7 +26,7 @@ const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:creedhandyman@gmail.com";
 const PUSH_ENABLED = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert";
 
 export interface NotifyRecipient {
   /** Recipient profile id. */
@@ -274,5 +274,68 @@ export async function notifyJobPaid(
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("[notify] job-paid notification failed:", e);
+  }
+}
+
+/**
+ * Payday visibility alert — owners/managers get ONE notification whenever a
+ * SCHEDULED auto-payroll run actually attempts their payday: paid summary,
+ * "nothing to pay", or "had problems". Called from /api/payroll/auto-run for
+ * non-force runs only (manual Run-now/Process-all already toasts its summary
+ * to the person tapping it). Exists because a skipped/failed payday used to
+ * be silent — nobody knew until the crew asked (cron_log week of 2026-09-12).
+ *
+ * Same-day dedupe on (org, title, body): the 21:00 retry cron re-fires the
+ * endpoint, and on a "nothing to pay" payday (last_run not stamped) BOTH
+ * invocations reach this — the second identical alert is suppressed. NEVER
+ * throws; requires 'payroll_alert' in the notifications.type CHECK (see
+ * CLAUDE.md migration) — until that runs this degrades to a logged no-op.
+ */
+export async function notifyPayrollAlert(
+  supabase: SupabaseClient,
+  p: { orgId: string; title: string; body: string },
+): Promise<void> {
+  try {
+    if (!p.orgId) return;
+
+    const { data: admins } = await supabase
+      .from("profiles")
+      .select("id, phone, notify_sms")
+      .eq("org_id", p.orgId)
+      .in("role", ["owner", "manager"]);
+    const recipients: NotifyRecipient[] = (admins || []).map((a) => ({
+      id: a.id as string,
+      phone: (a.phone as string | null) ?? null,
+      notify_sms: (a.notify_sms as boolean | null) ?? null,
+      // No per-event opt-out column for payroll alerts → always opted in.
+      eventOptIn: null,
+    }));
+    if (!recipients.length) return;
+
+    // Same-UTC-day dedupe (17:00 + 21:00 invocations of a no-op payday).
+    try {
+      const dayStart = new Date().toISOString().split("T")[0] + "T00:00:00Z";
+      const { data: dupe } = await supabase
+        .from("notifications")
+        .select("id")
+        .eq("org_id", p.orgId)
+        .eq("type", "payroll_alert")
+        .eq("title", p.title)
+        .eq("body", p.body)
+        .gte("created_at", dayStart)
+        .limit(1);
+      if (dupe && dupe.length) return;
+    } catch { /* proceed on check failure */ }
+
+    await dispatchNotifications(supabase, {
+      orgId: p.orgId,
+      type: "payroll_alert",
+      title: p.title,
+      body: p.body,
+      recipients,
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[notify] payroll alert failed:", e);
   }
 }

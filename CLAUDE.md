@@ -626,7 +626,27 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   runs the in-app insert fails the CHECK and the alert is a logged no-op — the
   payment itself still records fine.** There's no per-event opt-out column for
   payments yet (recipients are hardcoded owner/manager, always opted in).
-- Per-tech referrals (scopes the **Network Scout** quest per-user):
+- Payday alert — widen the notifications CHECK again for `payroll_alert`
+  (**ALREADY RUN in prod 2026-09-14** via the Supabase MCP, migration
+  `notifications_payroll_alert_type` — listed here for other environments):
+  ```sql
+  ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+  ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+    CHECK (type IN ('job_assigned','new_lead','payment_received','payroll_alert'));
+  ```
+  Every SCHEDULED (non-force) auto-payroll run that attempts an org's payday
+  now notifies owners+managers with the outcome via `notifyPayrollAlert`
+  (`lib/notify-server.ts`): "Auto payroll ran — paid N · $X", "nothing to
+  pay", or "had problems: <first error>" — so a skipped/failed payday is a
+  same-evening alert instead of silence (the week-of-9/12 failure mode:
+  Vercel never invoked the cron on payday, then the retry died on a
+  Supabase Gateway Timeout; also mitigated by the second daily cron
+  invocation at 21:00 UTC in vercel.json — safe to double-invoke because
+  the day check + cadence debounce + paid_at stamps make the endpoint
+  idempotent). Manual Run-now/Process-all runs don't alert (the tapper
+  already gets the toast). Same-day dedupe on (org,title,body) suppresses
+  the 21:00 duplicate on no-op paydays. In-app always; SMS/push ride the
+  existing gates. No per-event opt-out yet.
   `ALTER TABLE referrals ADD COLUMN referred_by_user_id UUID;`
   Stamped on creation from Quests → Referrals (the logged-in tech). The
   quest engine (`lib/quests.ts`) + the Quests screen now count only

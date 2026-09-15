@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { runPayrollForUser, type RunPayrollResult } from "@/lib/payroll-runner";
+import { notifyPayrollAlert } from "@/lib/notify-server";
 
 export const dynamic = "force-dynamic";
 
@@ -356,6 +357,32 @@ export async function GET(req: NextRequest) {
       errors: userErrors,
       stamped,
     });
+
+    // Payday visibility: a SCHEDULED run that attempted this org's payday
+    // notifies its owners/managers with the outcome — paid, nothing to pay,
+    // or problems — so a bad payday is a same-evening alert, not a surprise
+    // when the crew asks. Manual runs (force) skip this: the person tapping
+    // Run now / Process all already gets the toast summary. Best-effort —
+    // notifyPayrollAlert never throws and dedupes the 21:00 retry.
+    if (!force) {
+      const totalPayOrg = paid.reduce((s, x) => s + (Number(x.totalPay) || 0), 0);
+      let title: string;
+      let body: string;
+      if (paid.length > 0) {
+        title = "Auto payroll ran";
+        body = `Paid ${paid.length} crew · $${totalPayOrg.toFixed(2)}`
+          + (userSkipped.length ? ` · ${userSkipped.length} skipped` : "")
+          + (userErrors.length ? ` · ${userErrors.length} ERRORED — check Payroll` : "")
+          + ".";
+      } else if (userErrors.length > 0) {
+        title = "Auto payroll had problems";
+        body = `Nobody was paid — ${userErrors.length} error${userErrors.length === 1 ? "" : "s"}. First: ${userErrors[0].error}`.slice(0, 300);
+      } else {
+        title = "Auto payroll — nothing to pay";
+        body = `All ${userSkipped.length} crew skipped (${userSkipped[0]?.reason || "no unpaid entries"}). Expected if payroll was already run manually this week.`;
+      }
+      await notifyPayrollAlert(supabase, { orgId: org.id, title, body });
+    }
   }
 
   // Best-effort: record this successful invocation so the scheduled run is
