@@ -39,7 +39,7 @@ const jsonLd = {
   name: SITE.name,
   legalName: SITE.legalName,
   url: SITE.domain,
-  telephone: "+13162526335",
+  telephone: "+13164007414",
   email: SITE.email,
   image: `${SITE.domain}/assets/hero.jpg`,
   logo: `${SITE.domain}/assets/logo.png`,
