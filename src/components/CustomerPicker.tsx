@@ -206,6 +206,16 @@ export default function CustomerPicker({
     ? addresses.filter((a) => a.customer_id === customerId)
     : [];
 
+  // Same defensive posture as linkedCustomer above: addressId can point at a
+  // row the store doesn't have YET (the 15s loadAll poll or an offline
+  // snapshot racing a just-created address) or no longer has (deleted in
+  // another tab). The old non-null assertion here crashed the whole page
+  // ("Application error: a client-side exception…") the moment that
+  // happened — right after picking/creating an address.
+  const linkedAddress = addressId
+    ? addresses.find((a) => a.id === addressId)
+    : undefined;
+
   // Filtered lists driven by the search query. Match on customer name +
   // phone for customers; on label + street for addresses.
   const filteredCustomers = useMemo(() => {
@@ -392,9 +402,11 @@ export default function CustomerPicker({
               cursor: "pointer",
             }}
           >
-            {addressId
-              ? addressOptionLabel(addresses.find((a) => a.id === addressId)!)
-              : `Select address (${customerAddresses.length})…`}
+            {linkedAddress
+              ? addressOptionLabel(linkedAddress)
+              : addressId
+                ? prop || "Loading address…"
+                : `Select address (${customerAddresses.length})…`}
           </button>
         )}
 
