@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
-import { haversineMiles, getFix, ROAD_FACTOR } from "@/lib/geo";
+import { haversineMiles, getFix, ROAD_FACTOR, geocodeAddress, hasGeocodeCache } from "@/lib/geo";
 import { parseEntryDate } from "@/lib/dates";
 import { Icon } from "../Icon";
 import CountUp from "@/components/CountUp";
@@ -38,31 +38,6 @@ interface GpsTrip {
    Addresses are located via OpenStreetMap's Nominatim (free, no key) —
    sequential requests with a polite delay, cached per address in
    localStorage so each address is geocoded ONCE ever per device. */
-
-const geocodeCacheKey = (addr: string) =>
-  "c_geo_" + addr.toLowerCase().replace(/[^\w]/g, "").slice(0, 60);
-
-async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const cached = localStorage.getItem(geocodeCacheKey(addr));
-    if (cached) return JSON.parse(cached);
-  } catch { /* cache miss */ }
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (!res.ok) return null;
-    const rows = (await res.json()) as { lat?: string; lon?: string }[];
-    const hit = rows?.[0];
-    if (!hit?.lat || !hit?.lon) return null;
-    const out = { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon) };
-    try { localStorage.setItem(geocodeCacheKey(addr), JSON.stringify(out)); } catch { /* */ }
-    return out;
-  } catch {
-    return null;
-  }
-}
 
 /** "3:42 PM" → minutes since midnight, for ordering the day's stops. */
 function timeToMinutes(t?: string): number {
@@ -128,7 +103,7 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
       const coords = new Map<string, { lat: number; lng: number } | null>();
       for (const addr of Array.from(new Set(deduped.map(normAddr)))) {
         const original = deduped.find((a) => normAddr(a) === addr)!;
-        const hadCache = !!localStorage.getItem(geocodeCacheKey(original));
+        const hadCache = hasGeocodeCache(original);
         coords.set(addr, await geocodeAddress(original));
         // Nominatim usage policy: max ~1 req/s. Only throttle real requests.
         if (!hadCache) await new Promise((r) => setTimeout(r, 1100));

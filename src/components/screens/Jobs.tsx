@@ -17,7 +17,8 @@ import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
-import { formatHours } from "@/lib/dates";
+import { formatHours, parseEntryDate } from "@/lib/dates";
+import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes } from "@/lib/geo";
 import {
   CADENCES,
   CADENCE_LABELS,
@@ -26,6 +27,77 @@ import {
   formatNextFire,
   type Cadence,
 } from "@/lib/recurring";
+
+/* ── Closest-tech dispatch hint ─────────────────────────────────────
+   Under the Requested-tech picker: ranks the crew by distance from
+   their LAST GPS STAMP TODAY (clock-in/out fixes — no live tracking)
+   to this job's address, with a rough drive ETA. Renders nothing when
+   there's no address, no stamps today, or geocoding fails — a hint,
+   never a blocker. */
+function ClosestTechHint({ job }: { job: Job }) {
+  const profiles = useStore((s) => s.profiles);
+  const timeEntries = useStore((s) => s.timeEntries);
+  const [rows, setRows] = useState<{ name: string; miles: number; asOf: string }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRows(null);
+    if (!job.property) return;
+    (async () => {
+      const dest = await geocodeAddress(job.property);
+      if (!dest || cancelled) return;
+      const toMin = (t?: string) => {
+        const m = (t || "").match(/(\d+):(\d+)\s*([AP]M)?/i);
+        if (!m) return 0;
+        let h = parseInt(m[1]);
+        const ap = m[3]?.toUpperCase();
+        if (ap === "PM" && h < 12) h += 12;
+        if (ap === "AM" && h === 12) h = 0;
+        return h * 60 + parseInt(m[2]);
+      };
+      const todayKey = new Date().toDateString();
+      const out: { name: string; miles: number; asOf: string }[] = [];
+      for (const p of profiles) {
+        // Most recent stamped entry TODAY; the clock-out fix wins over
+        // clock-in when both exist (it's later).
+        const todays = timeEntries
+          .filter((e) => e.user_id === p.id)
+          .filter((e) => (e.start_lat != null || e.end_lat != null))
+          .filter((e) => parseEntryDate(e.entry_date)?.toDateString() === todayKey)
+          .sort((a, b) => toMin(b.end_time || b.start_time) - toMin(a.end_time || a.start_time));
+        const e = todays[0];
+        if (!e) continue;
+        const lat = e.end_lat ?? e.start_lat;
+        const lng = e.end_lng ?? e.start_lng;
+        if (lat == null || lng == null) continue;
+        out.push({
+          name: p.name,
+          miles: Math.round(haversineMiles(lat, lng, dest.lat, dest.lng) * ROAD_FACTOR * 10) / 10,
+          asOf: (e.end_lat != null ? e.end_time : e.start_time) || "",
+        });
+      }
+      out.sort((a, b) => a.miles - b.miles);
+      if (!cancelled && out.length) setRows(out.slice(0, 3));
+    })();
+    return () => { cancelled = true; };
+  }, [job.id, job.property, profiles, timeEntries]);
+
+  if (!rows) return null;
+  return (
+    <div className="dim" style={{ fontSize: 12, padding: "2px 0 6px", lineHeight: 1.5 }}>
+      <Icon name="navigation" size={11} color="#8cc0ff" />{" "}
+      {rows.map((r, i) => (
+        <span key={r.name}>
+          {i > 0 && " · "}
+          <b style={{ color: i === 0 ? "#8cc0ff" : undefined, fontWeight: i === 0 ? 600 : 400 }}>
+            {r.name.split(" ")[0]} ~{r.miles} mi (~{driveMinutes(r.miles)} min)
+          </b>
+          {r.asOf ? ` as of ${r.asOf}` : ""}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 interface Props {
   setPage: (p: string) => void;
@@ -921,6 +993,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 </select>
               </div>
             </div>
+            {/* Closest crew by today's GPS stamps — dispatch the nearest tech. */}
+            <ClosestTechHint job={dj} />
             <div className="drow">
               <span className="l">{t("jobs.created")}</span>
               <span className="v">{dj.job_date || (dj.created_at ? dj.created_at.slice(0, 10) : "—")}</span>

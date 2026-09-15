@@ -8,6 +8,116 @@ import { wrapPrint, openPrint } from "@/lib/print-template";
 import PropertySearch from "../PropertySearch";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { statusColor } from "@/lib/status";
+import { haversineMiles, ROAD_FACTOR, geocodeAddress, hasGeocodeCache } from "@/lib/geo";
+
+/* ── Day-route optimizer ────────────────────────────────────────────
+   Orders the day's stops to minimize drive miles (nearest-neighbor +
+   2-opt over geocoded addresses, straight-line × road factor). Display
+   only — it suggests the order; it never rewrites schedule times.
+   Renders nothing under 3 stops (nothing to optimize). */
+type RoutePt = { addr: string; lat: number; lng: number };
+
+function RouteOptimizer({ addresses }: { addresses: string[] }) {
+  const org = useStore((s) => s.org);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [result, setResult] = useState<{ order: string[]; miles: number; currentMiles: number } | null>(null);
+
+  if (addresses.length < 3) return null;
+
+  const optimize = async () => {
+    setBusy(true);
+    setNote("");
+    setResult(null);
+    try {
+      const base = (org?.address || "").trim();
+      const uniq: string[] = [];
+      for (const a of addresses) {
+        if (a && !uniq.some((u) => u.toLowerCase() === a.toLowerCase())) uniq.push(a);
+      }
+      const pts: RoutePt[] = [];
+      for (const a of (base ? [base, ...uniq] : uniq)) {
+        const had = hasGeocodeCache(a);
+        const c = await geocodeAddress(a);
+        if (c) pts.push({ addr: a, lat: c.lat, lng: c.lng });
+        // Nominatim policy: ~1 req/s for real (uncached) lookups only.
+        if (!had) await new Promise((r) => setTimeout(r, 1100));
+      }
+      const start = base && pts[0]?.addr === base ? pts[0] : null;
+      const stops = start ? pts.slice(1) : pts;
+      if (stops.length < 3) {
+        setNote("Couldn't locate enough of the day's addresses to optimize.");
+        return;
+      }
+      const dist = (a: RoutePt, b: RoutePt) => haversineMiles(a.lat, a.lng, b.lat, b.lng);
+      const pathMiles = (order: RoutePt[]) => {
+        const path = start ? [start, ...order, start] : order;
+        let m = 0;
+        for (let i = 1; i < path.length; i++) m += dist(path[i - 1], path[i]);
+        return m;
+      };
+      // Nearest neighbor from the base (or the first stop)…
+      const remaining = [...stops];
+      const route: RoutePt[] = [];
+      let cur: RoutePt = start || remaining[0];
+      if (!start) route.push(remaining.shift()!);
+      while (remaining.length) {
+        let bi = 0;
+        for (let i = 1; i < remaining.length; i++) {
+          if (dist(cur, remaining[i]) < dist(cur, remaining[bi])) bi = i;
+        }
+        cur = remaining.splice(bi, 1)[0];
+        route.push(cur);
+      }
+      // …then 2-opt passes until no segment swap improves the total.
+      let improved = true;
+      while (improved) {
+        improved = false;
+        for (let i = 0; i < route.length - 1; i++) {
+          for (let k = i + 1; k < route.length; k++) {
+            const cand = [...route.slice(0, i), ...route.slice(i, k + 1).reverse(), ...route.slice(k + 1)];
+            if (pathMiles(cand) < pathMiles(route) - 0.05) {
+              route.splice(0, route.length, ...cand);
+              improved = true;
+            }
+          }
+        }
+      }
+      const rt = (m: number) => Math.round(m * ROAD_FACTOR * 10) / 10;
+      setResult({ order: route.map((p) => p.addr), miles: rt(pathMiles(route)), currentMiles: rt(pathMiles(stops)) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saved = result ? Math.round((result.currentMiles - result.miles) * 10) / 10 : 0;
+  return (
+    <div className="cd" style={{ padding: "10px 12px", marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon name="navigation" size={14} color="var(--color-primary)" />
+        <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1 }}>Route ({addresses.length} stops)</span>
+        <button className="bo" onClick={optimize} disabled={busy} style={{ fontSize: 13, padding: "4px 12px" }}>
+          {busy ? "Optimizing…" : result ? "Re-run" : "Optimize route"}
+        </button>
+      </div>
+      {note && <div className="dim" style={{ fontSize: 12.5, marginTop: 6 }}>{note}</div>}
+      {result && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 12.5, color: saved >= 0.5 ? "var(--color-success)" : "var(--color-dim)", marginBottom: 6 }}>
+            {saved >= 0.5
+              ? `Best order below: ~${result.miles} mi vs ~${result.currentMiles} mi as scheduled — saves ~${saved} mi.`
+              : `Current order is already efficient (~${result.currentMiles} mi).`}
+          </div>
+          {saved >= 0.5 && result.order.map((a, i) => (
+            <div key={i} className="dim" style={{ fontSize: 12.5, padding: "1px 0" }}>
+              {i + 1}. {a}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   setPage: (p: string) => void;
@@ -484,6 +594,8 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             {dayEntries.length === 0 && (
               <div className="cd" style={{ textAlign: "center", padding: 20, marginBottom: 8 }}><p className="dim" style={{ fontSize: 14 }}>{t("sched.noJobsThisDay")}</p></div>
             )}
+            {/* Route optimizer — suggests the least-driving stop order (3+ stops). */}
+            <RouteOptimizer addresses={dayEntries.map((s) => s.job).filter(Boolean)} />
             {dayEntries.map((s) => {
               const j = jobFor(s.job);
               const color = j ? statusColor(j.status) : "var(--color-primary)";

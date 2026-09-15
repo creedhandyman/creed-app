@@ -136,3 +136,42 @@ export function getFix(timeoutMs = 10000): Promise<Fix | null> {
     );
   });
 }
+
+// ── Address geocoding (OpenStreetMap Nominatim, no API key) ────────────────
+// Cached FOREVER per address in localStorage, so each address costs one
+// request per device, ever. Callers looping over multiple UNCACHED addresses
+// must throttle to ~1 req/s (Nominatim usage policy) — see hasGeocodeCache.
+
+const geocodeCacheKey = (addr: string) =>
+  "c_geo_" + addr.toLowerCase().replace(/[^\w]/g, "").slice(0, 60);
+
+export function hasGeocodeCache(addr: string): boolean {
+  try { return !!localStorage.getItem(geocodeCacheKey(addr)); } catch { return false; }
+}
+
+export async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const cached = localStorage.getItem(geocodeCacheKey(addr));
+    if (cached) return JSON.parse(cached);
+  } catch { /* cache miss */ }
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as { lat?: string; lon?: string }[];
+    const hit = rows?.[0];
+    if (!hit?.lat || !hit?.lon) return null;
+    const out = { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon) };
+    try { localStorage.setItem(geocodeCacheKey(addr), JSON.stringify(out)); } catch { /* */ }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** Rough city-driving ETA from an estimated road distance (~28 mph avg). */
+export function driveMinutes(miles: number): number {
+  return Math.max(1, Math.round((miles / 28) * 60));
+}
