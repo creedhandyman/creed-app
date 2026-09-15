@@ -92,7 +92,7 @@ function ClosestTechHint({ job }: { job: Job }) {
           <b style={{ color: i === 0 ? "#8cc0ff" : undefined, fontWeight: i === 0 ? 600 : 400 }}>
             {r.name.split(" ")[0]} ~{r.miles} mi (~{driveMinutes(r.miles)} min)
           </b>
-          {r.asOf ? ` as of ${r.asOf}` : ""}
+          {r.asOf ? ` ${t("loc.asOf")} ${r.asOf}` : ""}
         </span>
       ))}
     </div>

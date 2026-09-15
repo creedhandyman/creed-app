@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "../Icon";
 import { statusColor } from "@/lib/status";
+import { t } from "@/lib/i18n";
 import { geocodeAddress, hasGeocodeCache } from "@/lib/geo";
 import { parseEntryDate } from "@/lib/dates";
 import type { Map as LeafletMap } from "leaflet";
@@ -43,7 +44,7 @@ const esc = (s: string) =>
 export default function CrewMap({ setPage }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<LeafletMap | null>(null);
-  const [note, setNote] = useState("Loading map…");
+  const [note, setNote] = useState(t("loc.loadingMap"));
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -89,8 +90,8 @@ export default function CrewMap({ setPage }: Props) {
           .addTo(map)
           .bindPopup(
             `<b>${esc(p.name)}</b><br/>` +
-            `${isOut ? "Clocked out" : "Clocked in"} ${esc((isOut ? e.end_time : e.start_time) || "")} · ${esc(e.job || "")}<br/>` +
-            `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener">Open in Google Maps</a>`,
+            `${isOut ? t("loc.clockedOut") : t("loc.clockedIn")} ${esc((isOut ? e.end_time : e.start_time) || "")} · ${esc(e.job || "")}<br/>` +
+            `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener">${t("loc.openInMaps")}</a>`,
           );
         bounds.push([lat, lng]);
         crewCount++;
@@ -103,15 +104,15 @@ export default function CrewMap({ setPage }: Props) {
         const spans = s.sched_date <= ymdT && (s.end_date || s.sched_date) >= ymdT;
         if (!spans) continue;
         const j = jobs.find((x) => x.property === s.job);
-        stops.set(s.job, { color: j ? statusColor(j.status) : "#ffcc00", label: "Scheduled today" });
+        stops.set(s.job, { color: j ? statusColor(j.status) : "#ffcc00", label: t("loc.scheduledToday") });
       }
       for (const j of jobs) {
         if (!j.archived && j.status === "active" && j.property && !stops.has(j.property)) {
-          stops.set(j.property, { color: statusColor("active"), label: "Active job" });
+          stops.set(j.property, { color: statusColor("active"), label: t("loc.activeJob") });
         }
       }
       if (cancelled) return;
-      if (stops.size > 0) setNote(`Locating ${stops.size} stop${stops.size === 1 ? "" : "s"}…`);
+      if (stops.size > 0) setNote(`${t("loc.locatingStops")} (${stops.size})…`);
       for (const [addr, meta] of stops) {
         const had = hasGeocodeCache(addr);
         const c = await geocodeAddress(addr);
@@ -127,7 +128,7 @@ export default function CrewMap({ setPage }: Props) {
             .addTo(map)
             .bindPopup(
               `<b>${esc(addr)}</b><br/>${esc(meta.label)}<br/>` +
-              `<a href="https://www.google.com/maps?q=${encodeURIComponent(addr)}" target="_blank" rel="noopener">Open in Google Maps</a>`,
+              `<a href="https://www.google.com/maps?q=${encodeURIComponent(addr)}" target="_blank" rel="noopener">${t("loc.openInMaps")}</a>`,
             );
           bounds.push([c.lat, c.lng]);
         }
@@ -140,10 +141,10 @@ export default function CrewMap({ setPage }: Props) {
         map.fitBounds(bounds, { padding: [45, 45], maxZoom: 14 });
         setNote("");
       } else {
-        setNote("No crew stamps or stops yet today — dots appear as the crew clocks in.");
+        setNote(t("loc.noStampsToday"));
       }
       if (crewCount === 0 && bounds.length > 0) {
-        setNote("No crew stamps yet today — showing today's stops.");
+        setNote(t("loc.noCrewStamps"));
       }
     })();
     return () => {
@@ -157,10 +158,10 @@ export default function CrewMap({ setPage }: Props) {
       <div className="row mb" style={{ alignItems: "center" }}>
         <button className="bo" onClick={() => setPage("more")} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>
         <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 7, flex: 1 }}>
-          <Icon name="map" size={18} color="var(--color-primary)" /> Crew Map
+          <Icon name="map" size={18} color="var(--color-primary)" /> {t("loc.crewMap")}
         </h2>
         <button className="bo" onClick={() => setRefreshKey((k) => k + 1)} style={{ fontSize: 13, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <Icon name="refresh" size={13} /> Refresh
+          <Icon name="refresh" size={13} /> {t("loc.refresh")}
         </button>
       </div>
 
@@ -172,8 +173,8 @@ export default function CrewMap({ setPage }: Props) {
       />
 
       <div className="dim" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
-        <b style={{ color: "#7fb6ff" }}>Blue circles</b> = crew, at their last clock-in/out stamp today (no live tracking — one-shot stamps only).{" "}
-        <b style={{ color: "#ffe07a" }}>Pins</b> = today&apos;s scheduled stops + active jobs, colored by status.
+        <b style={{ color: "#7fb6ff" }}>{t("loc.blueCircles")}</b> {t("loc.legendCrew")}{" "}
+        <b style={{ color: "#ffe07a" }}>{t("loc.pins")}</b> {t("loc.legendPins")}
       </div>
     </div>
   );

@@ -46,7 +46,7 @@ function RouteOptimizer({ addresses }: { addresses: string[] }) {
       const start = base && pts[0]?.addr === base ? pts[0] : null;
       const stops = start ? pts.slice(1) : pts;
       if (stops.length < 3) {
-        setNote("Couldn't locate enough of the day's addresses to optimize.");
+        setNote(t("loc.cantLocate"));
         return;
       }
       const dist = (a: RoutePt, b: RoutePt) => haversineMiles(a.lat, a.lng, b.lat, b.lng);
@@ -95,9 +95,9 @@ function RouteOptimizer({ addresses }: { addresses: string[] }) {
     <div className="cd" style={{ padding: "10px 12px", marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Icon name="navigation" size={14} color="var(--color-primary)" />
-        <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1 }}>Route ({addresses.length} stops)</span>
+        <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1 }}>{t("loc.route")} ({addresses.length} {t("loc.stops")})</span>
         <button className="bo" onClick={optimize} disabled={busy} style={{ fontSize: 13, padding: "4px 12px" }}>
-          {busy ? "Optimizing…" : result ? "Re-run" : "Optimize route"}
+          {busy ? t("loc.optimizing") : result ? t("loc.rerun") : t("loc.optimizeRoute")}
         </button>
       </div>
       {note && <div className="dim" style={{ fontSize: 12.5, marginTop: 6 }}>{note}</div>}
@@ -105,8 +105,8 @@ function RouteOptimizer({ addresses }: { addresses: string[] }) {
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 12.5, color: saved >= 0.5 ? "var(--color-success)" : "var(--color-dim)", marginBottom: 6 }}>
             {saved >= 0.5
-              ? `Best order below: ~${result.miles} mi vs ~${result.currentMiles} mi as scheduled — saves ~${saved} mi.`
-              : `Current order is already efficient (~${result.currentMiles} mi).`}
+              ? `${t("loc.bestOrder")} ~${result.miles} mi ${t("loc.vsScheduled")} ~${result.currentMiles} mi ${t("loc.saves")} ~${saved} mi.`
+              : `${t("loc.alreadyEfficient")} (~${result.currentMiles} mi).`}
           </div>
           {saved >= 0.5 && result.order.map((a, i) => (
             <div key={i} className="dim" style={{ fontSize: 12.5, padding: "1px 0" }}>

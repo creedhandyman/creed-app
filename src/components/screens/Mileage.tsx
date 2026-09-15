@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { haversineMiles, getFix, ROAD_FACTOR, geocodeAddress, hasGeocodeCache } from "@/lib/geo";
 import { parseEntryDate } from "@/lib/dates";
+import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import CountUp from "@/components/CountUp";
 
@@ -93,9 +94,7 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
       const deduped = chain.filter((a, i) => i === 0 || normAddr(a) !== normAddr(chain[i - 1]));
 
       if (deduped.length < 2) {
-        setNote(stops.length === 0
-          ? "No clocked jobs found for this day."
-          : "Only one distinct address that day — set your business address in Ops → Settings to get shop→job legs.");
+        setNote(stops.length === 0 ? t("loc.noClockedJobs") : t("loc.oneAddress"));
         return;
       }
 
@@ -120,8 +119,8 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
         out.push({ from: deduped[i - 1], to: deduped[i], miles, added: false });
       }
       setLegs(out);
-      if (unlocated > 0) setNote(`${unlocated} leg${unlocated === 1 ? "" : "s"} skipped — address couldn't be located.`);
-      if (out.length === 0 && unlocated === 0) setNote("All stops are within a couple blocks — nothing worth logging.");
+      if (unlocated > 0) setNote(`${unlocated} ${t("loc.legsSkipped")}`);
+      if (out.length === 0 && unlocated === 0) setNote(t("loc.allClose"));
     } finally {
       setBusy(false);
     }
@@ -156,15 +155,15 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
   return (
     <div className="cd mb">
       <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <Icon name="navigation" size={15} color="var(--color-primary)" /> Suggested trips
+        <Icon name="navigation" size={15} color="var(--color-primary)" /> {t("loc.suggestedTrips")}
       </h4>
       <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>
-        Built from the jobs you clocked into that day — estimated road miles, one tap to log.
+        {t("loc.suggestedTripsSub")}
       </div>
       <div className="row mb" style={{ alignItems: "center" }}>
         <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setLegs(null); setNote(""); }} style={{ fontSize: 14, flex: 1 }} />
         <button className="bb" onClick={findTrips} disabled={busy} style={{ fontSize: 14, padding: "6px 14px" }}>
-          {busy ? "Locating…" : "Find trips"}
+          {busy ? t("loc.locating") : t("loc.findTrips")}
         </button>
       </div>
       {note && <div className="dim" style={{ fontSize: 13, marginBottom: 6 }}>{note}</div>}
@@ -174,22 +173,22 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
             <div style={{ fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {short(leg.from)} → {short(leg.to)}
             </div>
-            <div className="dim" style={{ fontSize: 12 }}>~{leg.miles.toFixed(1)} mi (estimated)</div>
+            <div className="dim" style={{ fontSize: 12 }}>~{leg.miles.toFixed(1)} mi ({t("loc.estimated")})</div>
           </div>
           {leg.added ? (
-            <span style={{ fontSize: 13, color: "var(--color-success)", flexShrink: 0 }}>✓ Logged</span>
+            <span style={{ fontSize: 13, color: "var(--color-success)", flexShrink: 0 }}>✓ {t("loc.logged")}</span>
           ) : (
-            <button className="bo" onClick={() => addLeg(i)} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0 }}>Add</button>
+            <button className="bo" onClick={() => addLeg(i)} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0 }}>{t("sched.add")}</button>
           )}
         </div>
       ))}
       {legs && pending.length > 1 && (
         <button className="bg" onClick={addAll} style={{ fontSize: 14, padding: "6px 14px", marginTop: 8 }}>
-          Add all {pending.length} ({pending.reduce((s, l) => s + l.miles, 0).toFixed(1)} mi)
+          {t("loc.addAll")} {pending.length} ({pending.reduce((s, l) => s + l.miles, 0).toFixed(1)} mi)
         </button>
       )}
       <div className="dim" style={{ fontSize: 10.5, marginTop: 8 }}>
-        Distances are straight-line × road factor. Address lookup © OpenStreetMap Nominatim.
+        {t("loc.distanceNote")}
       </div>
     </div>
   );

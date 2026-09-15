@@ -10,6 +10,8 @@ import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../Vo
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
 import { tradeConfig, resolvePrimaryTrade } from "@/lib/trades";
 import VoiceWalkTip from "../VoiceWalkTip";
+// Aliased: the inspection-type chip loop already uses `t` as its param name.
+import { t as tr } from "@/lib/i18n";
 
 /* ── Preset rooms and items ── */
 
@@ -793,7 +795,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     const nn = name.trim();
     if (!nn) return;
     if (roomData.some((r) => r.name.toLowerCase() === nn.toLowerCase())) {
-      useStore.getState().showToast("That area is already in this inspection", "warning");
+      useStore.getState().showToast(tr("insp.areaExists"), "warning");
       return;
     }
     const items = itemsFor(nn).map(
@@ -943,7 +945,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         <div className="row mb">
           <button className="bo" onClick={() => { if (!isEditing) clearSaved(); onCancel(); }}>←</button>
           <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Icon name="search" size={18} color="var(--color-primary)" />{isEditing ? "Edit Inspection" : "New Inspection"}
+            <Icon name="search" size={18} color="var(--color-primary)" />{isEditing ? tr("insp.editInspection") : tr("insp.newInspection")}
           </h2>
         </div>
 
@@ -1035,7 +1037,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             etc.; Move-Out → Yard drops them because Yard has its own
             area set). */}
         <div className="cd mb" style={{ padding: 10 }}>
-          <h4 style={{ fontSize: 15, marginBottom: 6 }}>Inspection Type</h4>
+          <h4 style={{ fontSize: 15, marginBottom: 6 }}>{tr("insp.inspectionType")}</h4>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
             {INSPECTION_TYPES.map((t) => {
               const active = t.id === inspectionType;
@@ -1059,7 +1061,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                       ),
                     );
                   }}
-                  title={t.description}
+                  title={tr(`insp.typeDesc.${t.id}`)}
                   style={{
                     flexShrink: 0,
                     padding: "6px 12px",
@@ -1083,19 +1085,19 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                     color={active ? "#fff" : "var(--color-primary)"}
                     strokeWidth={2}
                   />
-                  {t.label}
+                  {tr(`insp.type.${t.id}`)}
                 </button>
               );
             })}
           </div>
           <p className="dim" style={{ fontSize: 13, margin: "6px 0 0" }}>
-            {activeTypeConfig.description}
+            {tr(`insp.typeDesc.${activeTypeConfig.id}`)}
           </p>
         </div>
 
         {/* Room checklist */}
         <div className="cd mb">
-          <h4 style={{ fontSize: 15, marginBottom: 8 }}>Select Areas to Inspect</h4>
+          <h4 style={{ fontSize: 15, marginBottom: 8 }}>{tr("insp.selectAreas")}</h4>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
             {activeTypeConfig.suggestedRooms.map((room) => {
               const checked = selectedRooms.includes(room);
@@ -1129,7 +1131,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             <input
               value={customRoom}
               onChange={(e) => setCustomRoom(e.target.value)}
-              placeholder="Add custom area"
+              placeholder={tr("insp.addCustomArea")}
               style={{ flex: 1, fontSize: 14 }}
               onKeyDown={(e) => e.key === "Enter" && addCustomRoom()}
             />
@@ -1185,7 +1187,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             opacity: !selectedRooms.length || !property ? 0.5 : 1,
           }}
         >
-          {isEditing ? "Continue Editing" : "Start Inspection"} ({selectedRooms.length} areas) →
+          {isEditing ? tr("insp.continueEditing") : tr("insp.startInspection")} ({selectedRooms.length} {tr("insp.areas")}) →
         </button>
         <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 6 }}>
           Each room has a Voice mic — tap it inside the inspection to record continuously and let AI fill the checklist.
@@ -1292,14 +1294,14 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             <div className="cd" style={{ width: "100%", maxWidth: 420, maxHeight: "80vh", overflowY: "auto", padding: 14 }} onClick={(e) => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <h3 style={{ fontSize: 17, fontFamily: "Oswald", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <Icon name="mic" size={15} color="var(--color-success)" /> Choose next area
+                  <Icon name="mic" size={15} color="var(--color-success)" /> {tr("insp.chooseNextArea")}
                 </h3>
                 <button className="bo" onClick={() => { setShowVoicePicker(false); setEditingRoomIdx(null); }} style={{ fontSize: 13, padding: "4px 10px" }}>
-                  Done for now
+                  {tr("insp.doneForNow")}
                 </button>
               </div>
               <p className="dim" style={{ fontSize: 13, margin: "0 0 8px" }}>
-                Walked areas keep processing in the background (⏳ → ✓). Tap an area to voice-walk it, or the pencil to rename it (e.g. &quot;Bedroom 1 — Master, upstairs&quot;).
+                {tr("insp.pickerHelp")}
               </p>
               {roomData.map((r, ri) => {
                 const st = voiceProcessingStatus[r.name];
@@ -1327,7 +1329,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                     )}
                     <button
                       onClick={() => setEditingRoomIdx(editing ? null : ri)}
-                      title="Rename area"
+                      title={tr("insp.renameArea")}
                       style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}
                     >
                       <Icon name="edit" size={14} color="#888" />
@@ -1369,7 +1371,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               }}
             >
               <Icon name="mic" size={14} color="#3ee08f" strokeWidth={2.25} />
-              Voice
+              {tr("insp.voice")}
             </button>
             <span className="dim" style={{ fontSize: 15, fontFamily: "Oswald" }}>
               {currentRoomIdx + 1} / {roomData.length}
@@ -1418,7 +1420,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               you're actually walking the property. */}
           <button
             onClick={() => setAddingArea((v) => !v)}
-            title="Add another area"
+            title={tr("insp.addAreaTitle")}
             style={{
               padding: "4px 8px", borderRadius: 6, fontSize: 13, whiteSpace: "nowrap",
               background: "transparent", color: "var(--color-primary)",
@@ -1426,7 +1428,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               fontFamily: "Oswald", flexShrink: 0,
             }}
           >
-            + Area
+            {tr("insp.addArea")}
           </button>
         </div>
 
@@ -1439,12 +1441,12 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                 autoFocus
                 value={newAreaName}
                 onChange={(e) => setNewAreaName(e.target.value)}
-                placeholder='New area name (e.g. "Sunroom", "Shed")'
+                placeholder={tr("insp.newAreaPh")}
                 style={{ flex: 1, fontSize: 14 }}
                 onKeyDown={(e) => e.key === "Enter" && addAreaMidInspection(newAreaName)}
               />
               <button className="bb" onClick={() => addAreaMidInspection(newAreaName)} style={{ fontSize: 14, padding: "5px 12px" }}>
-                Add
+                {tr("sched.add")}
               </button>
             </div>
             {(() => {
@@ -1634,7 +1636,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                     fontWeight: item.condition === c.code ? 700 : 400,
                   }}
                 >
-                  {c.label}
+                  {tr(`insp.cond${c.code}`)}
                 </button>
               ))}
             </div>
@@ -1653,7 +1655,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                   cursor: "pointer",
                 }}
               >
-                + Add note
+                {tr("insp.addNote")}
               </button>
             )}
             {showNotes && (<>
@@ -1701,7 +1703,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               <input
                 value={item.notes}
                 onChange={(e) => updateItem(currentRoomIdx, itemIdx, "notes", e.target.value)}
-                placeholder={item.condition === "S" ? "Add a note (brand, age, detail…)" : "Describe the issue..."}
+                placeholder={item.condition === "S" ? tr("insp.notePh") : tr("insp.issuePh")}
                 style={{ fontSize: 14 }}
               />
             </>)}
@@ -1759,7 +1761,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           onClick={() => addItemToRoom(currentRoomIdx)}
           style={{ fontSize: 14, padding: "5px 12px", marginBottom: 12 }}
         >
-          + Add Item
+          {tr("insp.addItem")}
         </button>
 
         {/* Navigation — sticky above the bottom nav so the Next button
@@ -1789,7 +1791,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               onClick={() => setStep("review")}
               style={{ flex: 1, padding: 10, fontSize: 15 }}
             >
-              Review Inspection →
+              {tr("insp.reviewInspection")} →
             </button>
           )}
         </div>
