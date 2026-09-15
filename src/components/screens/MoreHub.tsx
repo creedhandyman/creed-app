@@ -37,6 +37,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     { id: "ops", icon: "ops", name: "Operations", sub: "Payroll · Financials · Team", color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() },
     { id: "clients", icon: "clients", name: "Customers", sub: "CRM & history", color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => openOps("customers") },
     { id: "mileage", icon: "mileage", name: "Mileage", sub: "Trip logging", color: "var(--color-warning)", tint: "rgba(255,136,0,.16)", onClick: () => setPage("mileage") },
+    { id: "map", icon: "map", name: "Crew Map", sub: "Stamps · today's stops", color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") },
     { id: "settings", icon: "settings", name: "Settings", sub: "Account · branding", color: "#aab", tint: "rgba(138,138,153,.18)", onClick: openSettings },
   ];
 

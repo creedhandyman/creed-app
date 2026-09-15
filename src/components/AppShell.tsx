@@ -11,6 +11,7 @@ import TimerScreen from "./screens/Timer";
 import Payroll from "./screens/Payroll";
 import Quests from "./screens/Quests";
 import Mileage from "./screens/Mileage";
+import CrewMap from "./screens/CrewMap";
 import Troubleshoot from "./screens/Troubleshoot";
 import Financials from "./screens/Financials";
 import Operations from "./screens/Operations";
@@ -100,6 +101,8 @@ export default function AppShell() {
         return <Quests />;
       case "mileage":
         return <Mileage setPage={goToPage} />;
+      case "map":
+        return <CrewMap setPage={goToPage} />;
       case "troubleshoot":
         return <Troubleshoot setPage={goToPage} />;
       case "financials":
