@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { haversineMiles, getFix, ROAD_FACTOR } from "@/lib/geo";
+import { parseEntryDate } from "@/lib/dates";
 import { Icon } from "../Icon";
 import CountUp from "@/components/CountUp";
 
@@ -26,6 +27,197 @@ interface GpsTrip {
   startOdo: string; // optional starting odometer, as typed
   job: string;
   startedAt: string; // ISO
+}
+
+/* ── Suggested trips from the day's clock-ins ──────────────────────
+   The app already knows where the user went: time entries carry the job
+   address. Build the day's driving chain (shop → job A → job B → shop),
+   estimate each leg (straight-line × ROAD_FACTOR — same estimate the GPS
+   snapshot trip uses), and offer one-tap logging. No background GPS, no
+   battery cost; a consistent date+purpose+miles log is IRS-defensible.
+   Addresses are located via OpenStreetMap's Nominatim (free, no key) —
+   sequential requests with a polite delay, cached per address in
+   localStorage so each address is geocoded ONCE ever per device. */
+
+const geocodeCacheKey = (addr: string) =>
+  "c_geo_" + addr.toLowerCase().replace(/[^\w]/g, "").slice(0, 60);
+
+async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const cached = localStorage.getItem(geocodeCacheKey(addr));
+    if (cached) return JSON.parse(cached);
+  } catch { /* cache miss */ }
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as { lat?: string; lon?: string }[];
+    const hit = rows?.[0];
+    if (!hit?.lat || !hit?.lon) return null;
+    const out = { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon) };
+    try { localStorage.setItem(geocodeCacheKey(addr), JSON.stringify(out)); } catch { /* */ }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** "3:42 PM" → minutes since midnight, for ordering the day's stops. */
+function timeToMinutes(t?: string): number {
+  const m = (t || "").match(/(\d+):(\d+)\s*([AP]M)?/i);
+  if (!m) return 0;
+  let h = parseInt(m[1]);
+  const mm = parseInt(m[2]);
+  const ap = m[3]?.toUpperCase();
+  if (ap === "PM" && h < 12) h += 12;
+  if (ap === "AM" && h === 12) h = 0;
+  return h * 60 + mm;
+}
+
+function localYmd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+type SuggestedLeg = { from: string; to: string; miles: number; added: boolean };
+
+function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
+  const user = useStore((s) => s.user)!;
+  const org = useStore((s) => s.org);
+  const timeEntries = useStore((s) => s.timeEntries);
+  const [date, setDate] = useState(() => localYmd(new Date()));
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [legs, setLegs] = useState<SuggestedLeg[] | null>(null);
+
+  const normAddr = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+
+  const findTrips = async () => {
+    setBusy(true);
+    setNote("");
+    setLegs(null);
+    try {
+      // The day's job stops for THIS user, in clock-in order.
+      const stops = timeEntries
+        .filter((e) => e.user_id === user.id && e.job && e.job !== "General")
+        .filter((e) => {
+          const d = parseEntryDate(e.entry_date);
+          return d ? localYmd(d) === date : false;
+        })
+        .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time))
+        .map((e) => e.job);
+
+      // Chain: home base (org address, when set) → jobs in order → back to base.
+      const chain: string[] = [];
+      const base = (org?.address || "").trim();
+      if (base) chain.push(base);
+      for (const s of stops) chain.push(s);
+      if (base && stops.length > 0) chain.push(base);
+      // Drop consecutive repeats (two entries at the same property ≠ a drive).
+      const deduped = chain.filter((a, i) => i === 0 || normAddr(a) !== normAddr(chain[i - 1]));
+
+      if (deduped.length < 2) {
+        setNote(stops.length === 0
+          ? "No clocked jobs found for this day."
+          : "Only one distinct address that day — set your business address in Ops → Settings to get shop→job legs.");
+        return;
+      }
+
+      // Geocode each unique address (cached after the first time ever).
+      const coords = new Map<string, { lat: number; lng: number } | null>();
+      for (const addr of Array.from(new Set(deduped.map(normAddr)))) {
+        const original = deduped.find((a) => normAddr(a) === addr)!;
+        const hadCache = !!localStorage.getItem(geocodeCacheKey(original));
+        coords.set(addr, await geocodeAddress(original));
+        // Nominatim usage policy: max ~1 req/s. Only throttle real requests.
+        if (!hadCache) await new Promise((r) => setTimeout(r, 1100));
+      }
+
+      const out: SuggestedLeg[] = [];
+      let unlocated = 0;
+      for (let i = 1; i < deduped.length; i++) {
+        const a = coords.get(normAddr(deduped[i - 1]));
+        const b = coords.get(normAddr(deduped[i]));
+        if (!a || !b) { unlocated++; continue; }
+        const miles = Math.round(haversineMiles(a.lat, a.lng, b.lat, b.lng) * ROAD_FACTOR * 10) / 10;
+        if (miles < 0.2) continue; // same block — not a loggable drive
+        out.push({ from: deduped[i - 1], to: deduped[i], miles, added: false });
+      }
+      setLegs(out);
+      if (unlocated > 0) setNote(`${unlocated} leg${unlocated === 1 ? "" : "s"} skipped — address couldn't be located.`);
+      if (out.length === 0 && unlocated === 0) setNote("All stops are within a couple blocks — nothing worth logging.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addLeg = async (idx: number) => {
+    if (!legs || legs[idx].added) return;
+    const leg = legs[idx];
+    await db.post("mileage", {
+      user_id: user.id,
+      user_name: user.name,
+      job: leg.to,
+      trip_date: date,
+      start_miles: 0,
+      end_miles: 0,
+      total_miles: leg.miles,
+    });
+    setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, added: true } : l)) : prev);
+    onAdded();
+  };
+
+  const addAll = async () => {
+    if (!legs) return;
+    for (let i = 0; i < legs.length; i++) {
+      if (!legs[i].added) await addLeg(i);
+    }
+  };
+
+  const pending = (legs || []).filter((l) => !l.added);
+  const short = (s: string) => (s.length > 26 ? s.slice(0, 26) + "…" : s);
+
+  return (
+    <div className="cd mb">
+      <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Icon name="navigation" size={15} color="var(--color-primary)" /> Suggested trips
+      </h4>
+      <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>
+        Built from the jobs you clocked into that day — estimated road miles, one tap to log.
+      </div>
+      <div className="row mb" style={{ alignItems: "center" }}>
+        <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setLegs(null); setNote(""); }} style={{ fontSize: 14, flex: 1 }} />
+        <button className="bb" onClick={findTrips} disabled={busy} style={{ fontSize: 14, padding: "6px 14px" }}>
+          {busy ? "Locating…" : "Find trips"}
+        </button>
+      </div>
+      {note && <div className="dim" style={{ fontSize: 13, marginBottom: 6 }}>{note}</div>}
+      {legs && legs.map((leg, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: i === 0 ? "none" : "1px solid var(--color-border-dark, #1e1e2e)" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {short(leg.from)} → {short(leg.to)}
+            </div>
+            <div className="dim" style={{ fontSize: 12 }}>~{leg.miles.toFixed(1)} mi (estimated)</div>
+          </div>
+          {leg.added ? (
+            <span style={{ fontSize: 13, color: "var(--color-success)", flexShrink: 0 }}>✓ Logged</span>
+          ) : (
+            <button className="bo" onClick={() => addLeg(i)} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0 }}>Add</button>
+          )}
+        </div>
+      ))}
+      {legs && pending.length > 1 && (
+        <button className="bg" onClick={addAll} style={{ fontSize: 14, padding: "6px 14px", marginTop: 8 }}>
+          Add all {pending.length} ({pending.reduce((s, l) => s + l.miles, 0).toFixed(1)} mi)
+        </button>
+      )}
+      <div className="dim" style={{ fontSize: 10.5, marginTop: 8 }}>
+        Distances are straight-line × road factor. Address lookup © OpenStreetMap Nominatim.
+      </div>
+    </div>
+  );
 }
 
 interface Props {
@@ -572,6 +764,9 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
           </button>
         </div>
       </div>
+
+      {/* Suggested trips — auto-built from the day's clocked jobs */}
+      <SuggestedTrips onAdded={() => setLoaded(false)} />
 
       {/* Mileage Log */}
       <div className="cd">

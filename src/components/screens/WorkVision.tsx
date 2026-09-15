@@ -14,6 +14,7 @@ import { Icon } from "../Icon";
 import MileageQuickTrack from "../MileageQuickTrack";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
+import { getFix } from "@/lib/geo";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
 import { pickReceiptPhoto } from "@/lib/image";
@@ -254,6 +255,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       user_name: user.name,
       start_time: fmtTime(startedAt),
     }, "post");
+    // GPS stamp — fire-and-forget one-shot fix; never blocks clock-in.
+    void getFix(8000).then((fix) => {
+      if (fix) void saveTimeEntry(id, { start_lat: fix.lat, start_lng: fix.lng, start_acc: fix.accuracy }, "patch");
+    });
     // Auto-promote the matching job from "scheduled" to "active" so the
     // workload view reflects what's actually happening. Don't flip jobs
     // already in "complete"/"paid" backwards.
@@ -279,6 +284,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       if (activeId) {
         // Durable — survives offline and replays on reconnect.
         await saveTimeEntry(activeId, closePatch, "patch");
+        // GPS stamp at clock-out — fire-and-forget one-shot fix.
+        void getFix(8000).then((fix) => {
+          if (fix) void saveTimeEntry(activeId, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
+        });
       } else {
         // Fallback: find this user's most-recent open active row and close it.
         const open = useStore.getState().timeEntries
@@ -287,6 +296,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         const target = open[open.length - 1];
         if (target) {
           await saveTimeEntry(target.id, closePatch, "patch");
+          void getFix(8000).then((fix) => {
+            if (fix) void saveTimeEntry(target.id, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
+          });
         } else {
           // No open row at all — last-resort: post a completed entry.
           await saveTimeEntry(newRowId(), {

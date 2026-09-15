@@ -291,6 +291,16 @@ export interface TimeEntry {
    *  only attribute legacy entries to the OLDEST job at that address so
    *  they don't double-roll into a newer job. */
   job_id?: string;
+  /** GPS stamps captured at clock-in / clock-out (one-shot fixes, never
+   *  background tracking). Optional — capture is best-effort: denied
+   *  permission or a slow fix just leaves them null, payroll actions are
+   *  never blocked on GPS. `*_acc` = reported accuracy in meters. */
+  start_lat?: number | null;
+  start_lng?: number | null;
+  start_acc?: number | null;
+  end_lat?: number | null;
+  end_lng?: number | null;
+  end_acc?: number | null;
   entry_date: string;
   hours: number;
   amount: number;

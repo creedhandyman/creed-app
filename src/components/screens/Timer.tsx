@@ -7,6 +7,7 @@ import type { Job } from "@/lib/types";
 import { Icon } from "../Icon";
 import { parseEntryDate, formatHours } from "@/lib/dates";
 import { newRowId } from "@/lib/offline-queue";
+import { getFix } from "@/lib/geo";
 
 // Decimal hours (the stored unit) <-> hours+minutes fields, so all time
 // entry/editing happens in "Xh Ym" while the DB keeps decimals.
@@ -306,6 +307,12 @@ export default function Timer({ setPage }: Props) {
       start_time: fmtTime(startedAt),
       // end_time intentionally omitted — presence of end_time == finished
     }, "post");
+    // GPS stamp — fire-and-forget one-shot fix patched onto the row when it
+    // arrives. Never blocks or delays clock-in; denied permission or a slow
+    // fix just leaves the location fields null.
+    void getFix(8000).then((fix) => {
+      if (fix) void saveTimeEntry(id, { start_lat: fix.lat, start_lng: fix.lng, start_acc: fix.accuracy }, "patch");
+    });
     // Auto-promote the matching job from "scheduled" to "active" so the
     // workload view reflects what's actually happening on site. Skip if the
     // selected entry is "General" or doesn't match a scheduled job — we
@@ -334,9 +341,11 @@ export default function Timer({ setPage }: Props) {
         end_time: fmtTime(Date.now()),
         job: sj || "General",
       };
+      let closedId: string | null = null;
       if (activeId) {
         // Close out the existing active row (durable — survives offline).
         await saveTimeEntry(activeId, closePatch, "patch");
+        closedId = activeId;
       } else {
         // activeId lost (legacy row from before stable ids) — find the most
         // recent open row for this user and close it. Never post a second
@@ -344,7 +353,14 @@ export default function Timer({ setPage }: Props) {
         const open = useStore.getState().timeEntries
           .filter((e) => e.user_id === user.id && e.start_time && !e.end_time)
           .sort((a, b) => (b.start_time || "").localeCompare(a.start_time || ""));
-        if (open[0]) await saveTimeEntry(open[0].id, closePatch, "patch");
+        if (open[0]) { await saveTimeEntry(open[0].id, closePatch, "patch"); closedId = open[0].id; }
+      }
+      // GPS stamp at clock-out — same fire-and-forget one-shot as clock-in.
+      if (closedId) {
+        const cid = closedId;
+        void getFix(8000).then((fix) => {
+          if (fix) void saveTimeEntry(cid, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
+        });
       }
     } else if (activeId) {
       // Timer was only running briefly; delete the in-progress row instead
@@ -796,7 +812,16 @@ export default function Timer({ setPage }: Props) {
                         <div key={en.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: soft, borderRadius: 10, padding: "7px 9px", marginBottom: 6 }}>
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{en.job || t("timer.general")}</div>
-                            <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{running ? `running · since ${en.start_time}` : `${en.entry_date}${en.start_time ? ` · ${en.start_time}–${en.end_time || "now"}` : ""}`}</div>
+                            <div style={{ fontSize: 11, color: "var(--color-dim)" }}>
+                              {running ? `running · since ${en.start_time}` : `${en.entry_date}${en.start_time ? ` · ${en.start_time}–${en.end_time || "now"}` : ""}`}
+                              {/* GPS stamps captured at clock-in/out — tap to see where on a map. */}
+                              {en.start_lat != null && en.start_lng != null && (
+                                <a href={`https://www.google.com/maps?q=${en.start_lat},${en.start_lng}`} target="_blank" rel="noopener noreferrer" onClick={(ev) => ev.stopPropagation()} style={{ color: "#8cc0ff", marginLeft: 6, textDecoration: "none" }}>📍in</a>
+                              )}
+                              {en.end_lat != null && en.end_lng != null && (
+                                <a href={`https://www.google.com/maps?q=${en.end_lat},${en.end_lng}`} target="_blank" rel="noopener noreferrer" onClick={(ev) => ev.stopPropagation()} style={{ color: "#8cc0ff", marginLeft: 5, textDecoration: "none" }}>📍out</a>
+                              )}
+                            </div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                             <HoursCell hours={en.hours || 0} canEdit onSave={async (nh) => { await saveTimeEntry(en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }, "patch"); }} />
