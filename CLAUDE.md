@@ -1077,8 +1077,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   tabs probably shouldn't render for techs (role-gate them).
 - Jobs Phase-3 polish: before/after photo grid on the Receipts screen +
   work-order per-item camera / Add item.
-- Inspector trade chips and Marketing screen still have lots of
-  English-only strings. Keys exist for some; just need `t()` swaps.
+- i18n: Inspector UI + the location suite are translated (418ecf1;
+  Inspector imports `t as tr` — its type-chip loop binds `t`). The
+  quick-select preset chips are DELIBERATELY English-only: they write
+  into item notes that feed the AI parser and the customer quote.
+  Marketing.tsx no longer exists (superseded by website/, English by
+  choice). Remaining untranslated: MoreHub tile names/subs, Quests
+  micro-labels, portal (customer-facing, English for now).
 - `customWorkOrder` in QuoteForge — if rooms change after the user
   starts editing the work order, the auto-generated guide.steps
   drifts but the customWorkOrder stays. There's a "Regenerate"
