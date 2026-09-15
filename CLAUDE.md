@@ -354,6 +354,27 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   unpaid, which is the correct state for any pre-migration entries
   the org has already paid out by hand. To retroactively flag those
   as paid: `UPDATE time_entries SET paid_at = NOW();`)
+- GPS clock stamps (**ALREADY RUN in prod 2026-09-14** via the Supabase MCP,
+  migration `time_entries_gps_stamps` — listed for other environments):
+  ```sql
+  ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS start_lat DOUBLE PRECISION;
+  ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS start_lng DOUBLE PRECISION;
+  ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS start_acc NUMERIC;
+  ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS end_lat DOUBLE PRECISION;
+  ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS end_lng DOUBLE PRECISION;
+  ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS end_acc NUMERIC;
+  ```
+  Clock-in/out (Timer + WorkVision) fire-and-forget a one-shot `getFix` and
+  patch the stamp onto the entry — never blocks payroll actions; ONE-SHOT
+  fixes only, on the clock only, no background tracking (impossible in a PWA
+  on iOS anyway). Consumers: Crew Activity 📍in/📍out map links,
+  `ClosestTechHint` (Jobs detail dispatch: crew ranked by distance from their
+  last stamp TODAY to the job, ETA via `driveMinutes`), Schedule day-view
+  `RouteOptimizer` (nearest-neighbor + 2-opt stop order, display-only), and
+  Mileage `SuggestedTrips` (day chain from clocked jobs, one-tap logging).
+  Geocoding: `geocodeAddress`/`hasGeocodeCache` in `src/lib/geo.ts` —
+  OpenStreetMap Nominatim, no API key, cached forever per address in
+  localStorage; throttle uncached lookups ~1/s per their policy.
 - `ALTER TABLE time_entries ADD COLUMN job_id UUID;`
   (Disambiguates time entries when two jobs share an address — e.g.
   a callback at a property that's already had a prior job. New clock-
