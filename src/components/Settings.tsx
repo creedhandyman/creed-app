@@ -299,7 +299,7 @@ export default function Settings({ onClose }: Props) {
               { key: "review_favor", name: "Review Favor", desc: "15 positive reviews", defaultBonus: 75 },
               { key: "five_star", name: "Five Star Tech", desc: "10 five-star reviews", defaultBonus: 100 },
               { key: "super_handy", name: "Super Handy", desc: "10 work orders", defaultBonus: 50 },
-              { key: "network_scout", name: "Network Scout", desc: "Secure new job", defaultBonus: 50 },
+              { key: "network_scout", name: "Network Scout", desc: "Refer a new client who books a job", defaultBonus: 50 },
               { key: "critical_referral", name: "Critical Referral", desc: "1 client → 5 jobs", defaultBonus: 150 },
               { key: "deal_closer", name: "Deal Closer", desc: "Upsell on-site", defaultBonus: 25 },
               { key: "repeat_machine", name: "Repeat Machine", desc: "3 clients request by name", defaultBonus: 100 },

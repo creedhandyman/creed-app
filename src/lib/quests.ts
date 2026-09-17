@@ -110,17 +110,50 @@ export function computeQuests(input: QuestEngineInput): QuestEngineResult {
   const completedJobs = cycleJobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
   const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3 && inCycle(r.created_at) && reviewTagsUser(r)).length;
   const fiveStarReviews = reviews.filter((r) => r.rating === 5 && inCycle(r.created_at) && reviewTagsUser(r)).length;
-  // Network Scout is per-tech: only referrals THIS user brought in (stamped
-  // referred_by_user_id at creation) count. Legacy rows + public website
-  // submissions have no referrer, so they credit no individual tech.
-  const convertedReferrals = referrals.filter((r) => r.status === "converted" && inCycle(r.created_at) && r.referred_by_user_id === userId).length;
-
-  // Repeat clients with 5+ jobs (cycle). Exclude leads.
-  const jobsByClient: Record<string, number> = {};
-  cycleJobs.filter((j) => j.client && j.status !== "lead").forEach((j) => {
-    jobsByClient[j.client] = (jobsByClient[j.client] || 0) + 1;
+  // Network Scout: a referral that turned into a real job from a NEW client.
+  // Per-tech (referred_by_user_id stamped at creation; legacy rows + public
+  // website submissions credit no one). Counts this user's referrals whose
+  // referred name matches a client whose FIRST-EVER job (org-wide, non-lead)
+  // landed this cycle — keyed off actual jobs, not the manually-flipped
+  // "converted" status (that select stays as CRM bookkeeping). A client's
+  // first job happens exactly once, so the quest can't re-trigger for the
+  // same client after a cycle reset.
+  const clientFirstJob: Record<string, string> = {};
+  jobs.forEach((j) => {
+    if (!j.client || j.status === "lead") return;
+    const d = j.created_at || j.job_date || "";
+    if (!d) return;
+    const k = j.client.toLowerCase().trim();
+    if (!clientFirstJob[k] || d < clientFirstJob[k]) clientFirstJob[k] = d;
   });
-  const repeatClients = Object.values(jobsByClient).filter((c) => c >= 5).length;
+  const referredNewClients = new Set<string>();
+  referrals.forEach((r) => {
+    if (r.referred_by_user_id !== userId) return;
+    const k = (r.name || "").toLowerCase().trim();
+    if (!k) return;
+    const firstJob = clientFirstJob[k];
+    if (firstJob && inCycle(firstJob)) referredNewClients.add(k);
+  });
+  const convertedReferrals = referredNewClients.size;
+
+  // Critical Referral: turn 1 client into 5 jobs — credited in the cycle the
+  // client's 5th job LANDS (lifetime count crosses the threshold), not "5+
+  // jobs created inside the cycle". The old rule re-completed every reset
+  // off the same heavy client (a PM sending 5+ work orders a month = a
+  // bonus every month for one relationship) and never credited a client
+  // built up 2 jobs a month across cycles. Exclude leads; user's jobs only.
+  const clientJobDates: Record<string, string[]> = {};
+  jobs.forEach((j) => {
+    if (!j.client || j.status === "lead" || !isUserJob(j)) return;
+    const d = j.created_at || j.job_date || "";
+    if (!d) return;
+    const k = j.client.toLowerCase().trim();
+    (clientJobDates[k] ||= []).push(d);
+  });
+  const repeatClients = Object.values(clientJobDates).filter((dates) => {
+    if (dates.length < 5) return false;
+    return inCycle(dates.sort()[4]); // the 5th job's date
+  }).length;
 
   // Big jobs (24+ hours, cycle).
   const bigJobs = cycleJobs.filter((j) => (j.status === "complete" || j.status === "paid") && (j.total_hrs || 0) >= 24).length;
@@ -214,8 +247,8 @@ export function computeQuests(input: QuestEngineInput): QuestEngineResult {
       name: "TIER 2: GROWTH",
       color: T2,
       quests: [
-        mk("network_scout", "Network Scout", "Secure new jobs from clients", convertedReferrals, 1, "secured", "T2", T2),
-        mk("critical_referral", "Critical Referral", "Turn 1 client into 5 jobs", Math.min(repeatClients, 1), 1, "client", "T2", T2),
+        mk("network_scout", "Network Scout", "Refer a new client who books a job", Math.min(convertedReferrals, 1), 1, "clients", "T2", T2),
+        mk("critical_referral", "Critical Referral", "Turn 1 client into 5 jobs (counts when their 5th lands)", Math.min(repeatClients, 1), 1, "client", "T2", T2),
         mk("deal_closer", "Deal Closer", `Upsell on existing jobs — ${upsellCount} logged`, Math.min(upsellCount, 1), 1, "upsells", "T2", T2),
         mk("repeat_machine", "Repeat Machine", `3 distinct clients request YOU by name (${myRequestClients.size} so far)`, Math.min(myRequestClients.size, 3), 3, "clients", "T2", T2),
       ].filter((q): q is QuestDef => !!q),
