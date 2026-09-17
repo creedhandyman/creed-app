@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
-import { haversineMiles, getFix, ROAD_FACTOR, geocodeAddress, hasGeocodeCache } from "@/lib/geo";
+import { haversineMiles, getFix, ROAD_FACTOR, geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
 import { parseEntryDate } from "@/lib/dates";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
@@ -74,36 +74,50 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
     setNote("");
     setLegs(null);
     try {
-      // The day's job stops for THIS user, in clock-in order.
-      const stops = timeEntries
+      // The day's job stops for THIS user, in clock-in order — carrying the
+      // entry's own GPS stamp when one was captured. The stamp is where the
+      // tech actually parked, so it beats geocoding the address text (which
+      // is usually a bare street address with no city and used to fail or,
+      // worse, resolve to a same-named street in another town — the main
+      // reason suggested trips came back empty or with absurd mileage).
+      type Stop = { addr: string; lat?: number | null; lng?: number | null };
+      const stops: Stop[] = timeEntries
         .filter((e) => e.user_id === user.id && e.job && e.job !== "General")
         .filter((e) => {
           const d = parseEntryDate(e.entry_date);
           return d ? localYmd(d) === date : false;
         })
         .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time))
-        .map((e) => e.job);
+        .map((e) => ({ addr: e.job, lat: e.start_lat ?? e.end_lat, lng: e.start_lng ?? e.end_lng }));
 
       // Chain: home base (org address, when set) → jobs in order → back to base.
-      const chain: string[] = [];
+      const chain: Stop[] = [];
       const base = (org?.address || "").trim();
-      if (base) chain.push(base);
+      if (base) chain.push({ addr: base });
       for (const s of stops) chain.push(s);
-      if (base && stops.length > 0) chain.push(base);
+      if (base && stops.length > 0) chain.push({ addr: base });
       // Drop consecutive repeats (two entries at the same property ≠ a drive).
-      const deduped = chain.filter((a, i) => i === 0 || normAddr(a) !== normAddr(chain[i - 1]));
+      const deduped = chain.filter((a, i) => i === 0 || normAddr(a.addr) !== normAddr(chain[i - 1].addr));
 
       if (deduped.length < 2) {
         setNote(stops.length === 0 ? t("loc.noClockedJobs") : t("loc.oneAddress"));
         return;
       }
 
-      // Geocode each unique address (cached after the first time ever).
+      // Resolve coordinates per unique address: GPS stamp first (free,
+      // exact), geocode as fallback — anchored to the org's city so bare
+      // street addresses stop resolving out of town.
       const coords = new Map<string, { lat: number; lng: number } | null>();
-      for (const addr of Array.from(new Set(deduped.map(normAddr)))) {
-        const original = deduped.find((a) => normAddr(a) === addr)!;
-        const hadCache = hasGeocodeCache(original);
-        coords.set(addr, await geocodeAddress(original));
+      for (const s of deduped) {
+        const k = normAddr(s.addr);
+        if (!coords.get(k) && s.lat != null && s.lng != null) coords.set(k, { lat: s.lat, lng: s.lng });
+      }
+      const ctx = cityContext(org?.address);
+      for (const s of deduped) {
+        const k = normAddr(s.addr);
+        if (coords.get(k)) continue;
+        const hadCache = hasGeocodeCache(s.addr);
+        coords.set(k, await geocodeAddress(s.addr, ctx));
         // Nominatim usage policy: max ~1 req/s. Only throttle real requests.
         if (!hadCache) await new Promise((r) => setTimeout(r, 1100));
       }
@@ -111,12 +125,12 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
       const out: SuggestedLeg[] = [];
       let unlocated = 0;
       for (let i = 1; i < deduped.length; i++) {
-        const a = coords.get(normAddr(deduped[i - 1]));
-        const b = coords.get(normAddr(deduped[i]));
+        const a = coords.get(normAddr(deduped[i - 1].addr));
+        const b = coords.get(normAddr(deduped[i].addr));
         if (!a || !b) { unlocated++; continue; }
         const miles = Math.round(haversineMiles(a.lat, a.lng, b.lat, b.lng) * ROAD_FACTOR * 10) / 10;
         if (miles < 0.2) continue; // same block — not a loggable drive
-        out.push({ from: deduped[i - 1], to: deduped[i], miles, added: false });
+        out.push({ from: deduped[i - 1].addr, to: deduped[i].addr, miles, added: false });
       }
       setLegs(out);
       if (unlocated > 0) setNote(`${unlocated} ${t("loc.legsSkipped")}`);

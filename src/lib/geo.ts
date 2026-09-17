@@ -142,33 +142,54 @@ export function getFix(timeoutMs = 10000): Promise<Fix | null> {
 // request per device, ever. Callers looping over multiple UNCACHED addresses
 // must throttle to ~1 req/s (Nominatim usage policy) — see hasGeocodeCache.
 
+// "c_geo2_": v1 entries were built from BARE street-address queries against
+// global Nominatim ("1912 N Chautauqua Ave" with no city), which can resolve
+// to a same-named street in another state — and the forever-cache then keeps
+// serving the wrong coordinates. The prefix bump orphans those; addresses
+// re-geocode once (throttled) with city context and cache cleanly.
 const geocodeCacheKey = (addr: string) =>
-  "c_geo_" + addr.toLowerCase().replace(/[^\w]/g, "").slice(0, 60);
+  "c_geo2_" + addr.toLowerCase().replace(/[^\w]/g, "").slice(0, 60);
 
 export function hasGeocodeCache(addr: string): boolean {
   try { return !!localStorage.getItem(geocodeCacheKey(addr)); } catch { return false; }
 }
 
-export async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
+/** City/state tail of a full address ("440 N Main St, Wichita, KS 67202" →
+ *  "Wichita, KS 67202"). Callers pass this as geocodeAddress's context so
+ *  bare job addresses search anchored to the org's own city. */
+export function cityContext(fullAddr?: string | null): string {
+  const s = (fullAddr || "").trim();
+  const i = s.indexOf(",");
+  return i > 0 ? s.slice(i + 1).trim() : "";
+}
+
+export async function geocodeAddress(addr: string, context?: string): Promise<{ lat: number; lng: number } | null> {
   try {
     const cached = localStorage.getItem(geocodeCacheKey(addr));
     if (cached) return JSON.parse(cached);
   } catch { /* cache miss */ }
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (!res.ok) return null;
-    const rows = (await res.json()) as { lat?: string; lon?: string }[];
-    const hit = rows?.[0];
-    if (!hit?.lat || !hit?.lon) return null;
-    const out = { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon) };
-    try { localStorage.setItem(geocodeCacheKey(addr), JSON.stringify(out)); } catch { /* */ }
-    return out;
-  } catch {
-    return null;
+  // Bare street addresses search terribly on global Nominatim — either
+  // nothing comes back, or a same-named street in another city does (and a
+  // wrong hit would poison the forever-cache). When the caller supplies a
+  // city/state context and the address doesn't already carry one, query
+  // WITH the context first and fall back to the raw string.
+  const queries = context && !addr.includes(",") ? [`${addr}, ${context}`, addr] : [addr];
+  for (const q of queries) {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!res.ok) continue;
+      const rows = (await res.json()) as { lat?: string; lon?: string }[];
+      const hit = rows?.[0];
+      if (!hit?.lat || !hit?.lon) continue;
+      const out = { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon) };
+      try { localStorage.setItem(geocodeCacheKey(addr), JSON.stringify(out)); } catch { /* */ }
+      return out;
+    } catch { /* try next query form */ }
   }
+  return null;
 }
 
 /** Rough city-driving ETA from an estimated road distance (~28 mph avg). */

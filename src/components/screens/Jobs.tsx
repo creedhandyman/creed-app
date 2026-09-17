@@ -18,7 +18,7 @@ import ReviewRequestModal from "../ReviewRequestModal";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours, parseEntryDate } from "@/lib/dates";
-import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes } from "@/lib/geo";
+import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes, cityContext } from "@/lib/geo";
 import {
   CADENCES,
   CADENCE_LABELS,
@@ -37,6 +37,7 @@ import {
 function ClosestTechHint({ job }: { job: Job }) {
   const profiles = useStore((s) => s.profiles);
   const timeEntries = useStore((s) => s.timeEntries);
+  const org = useStore((s) => s.org);
   const [rows, setRows] = useState<{ name: string; miles: number; asOf: string }[] | null>(null);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ function ClosestTechHint({ job }: { job: Job }) {
     setRows(null);
     if (!job.property) return;
     (async () => {
-      const dest = await geocodeAddress(job.property);
+      const dest = await geocodeAddress(job.property, cityContext(org?.address));
       if (!dest || cancelled) return;
       const toMin = (t?: string) => {
         const m = (t || "").match(/(\d+):(\d+)\s*([AP]M)?/i);
@@ -80,7 +81,7 @@ function ClosestTechHint({ job }: { job: Job }) {
       if (!cancelled && out.length) setRows(out.slice(0, 3));
     })();
     return () => { cancelled = true; };
-  }, [job.id, job.property, profiles, timeEntries]);
+  }, [job.id, job.property, profiles, timeEntries, org?.address]);
 
   if (!rows) return null;
   return (

@@ -805,6 +805,18 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     );
                   })()}
                 </div>
+                {/* Directions without clocking in — tap-through to Maps.
+                    stopPropagation keeps the card's clock-in tap intact. */}
+                <a
+                  href={`https://www.google.com/maps?q=${encodeURIComponent(s.job)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(ev) => ev.stopPropagation()}
+                  title={t("loc.openInMaps")}
+                  style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,204,102,.10)", border: "1px solid rgba(0,204,102,.35)", flexShrink: 0 }}
+                >
+                  <Icon name="map" size={16} color="#3ee08f" />
+                </a>
                 <Icon name="next" size={16} color="var(--color-success)" />
               </div>
             ))}
@@ -838,6 +850,17 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   <span style={{ fontFamily: "Oswald", fontSize: 13 }}>#{j.id.slice(-6).toUpperCase()}</span>
                 </div>
               </div>
+              {/* Directions without clocking in — see the schedule cards above. */}
+              <a
+                href={`https://www.google.com/maps?q=${encodeURIComponent(j.property)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(ev) => ev.stopPropagation()}
+                title={t("loc.openInMaps")}
+                style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,204,102,.10)", border: "1px solid rgba(0,204,102,.35)", flexShrink: 0 }}
+              >
+                <Icon name="map" size={16} color="#3ee08f" />
+              </a>
               <Icon name="next" size={16} color="var(--color-primary)" />
             </div>
           ));

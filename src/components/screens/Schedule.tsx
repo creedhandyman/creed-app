@@ -8,7 +8,7 @@ import { wrapPrint, openPrint } from "@/lib/print-template";
 import PropertySearch from "../PropertySearch";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { statusColor } from "@/lib/status";
-import { haversineMiles, ROAD_FACTOR, geocodeAddress, hasGeocodeCache } from "@/lib/geo";
+import { haversineMiles, ROAD_FACTOR, geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
 
 /* ── Day-route optimizer ────────────────────────────────────────────
    Orders the day's stops to minimize drive miles (nearest-neighbor +
@@ -38,7 +38,7 @@ function RouteOptimizer({ addresses }: { addresses: string[] }) {
       const pts: RoutePt[] = [];
       for (const a of (base ? [base, ...uniq] : uniq)) {
         const had = hasGeocodeCache(a);
-        const c = await geocodeAddress(a);
+        const c = await geocodeAddress(a, cityContext(org?.address));
         if (c) pts.push({ addr: a, lat: c.lat, lng: c.lng });
         // Nominatim policy: ~1 req/s for real (uncached) lookups only.
         if (!had) await new Promise((r) => setTimeout(r, 1100));

@@ -27,7 +27,7 @@ import { useStore } from "@/lib/store";
 import { Icon } from "../Icon";
 import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
-import { geocodeAddress, hasGeocodeCache } from "@/lib/geo";
+import { geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
 import { parseEntryDate } from "@/lib/dates";
 import type { Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -82,11 +82,26 @@ export default function CrewMap({ setPage }: Props) {
       }).addTo(map);
       setNote(t("loc.loadingMap"));
 
-      const { profiles, timeEntries, schedule, jobs } = useStore.getState();
+      const { profiles, timeEntries, schedule, jobs, org } = useStore.getState();
       const bounds: [number, number][] = [];
       const isToday = date === localYmd(new Date());
 
       // ── Crew paths: every stamp for the selected day, per tech, in order ──
+      // Stamps pile up on the same spot (clock-in + clock-out at one job,
+      // or two techs on one site), burying dots under each other. Markers
+      // that land in the same ~11m bucket get pushed a few meters apart in
+      // a small spiral — enough to tell them apart at street zoom without
+      // meaningfully lying about position. Stop pins keep true positions.
+      const seenAt = new Map<string, number>();
+      const spread = (lat: number, lng: number): [number, number] => {
+        const key = lat.toFixed(4) + "," + lng.toFixed(4);
+        const n = seenAt.get(key) || 0;
+        seenAt.set(key, n + 1);
+        if (n === 0) return [lat, lng];
+        const ang = n * 2.1;
+        const r = 0.00012 + 0.00004 * n; // ~13-18 m
+        return [lat + r * Math.sin(ang), lng + r * Math.cos(ang)];
+      };
       let crewCount = 0;
       profiles.forEach((p, pi) => {
         const dayEntries = timeEntries
@@ -112,14 +127,19 @@ export default function CrewMap({ setPage }: Props) {
         const color = TECH_COLORS[pi % TECH_COLORS.length];
         const initials = p.name.split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
 
+        // Spread stacked stamps BEFORE drawing so the dashed path connects
+        // the dots exactly where they render.
+        const placed = pts.map((q) => spread(q.lat, q.lng));
+
         // The day's path — dashed: stamps connected in order, NOT a road trail.
         if (pts.length >= 2) {
-          L.polyline(pts.map((q) => [q.lat, q.lng] as [number, number]), {
+          L.polyline(placed, {
             color, weight: 3, opacity: 0.75, dashArray: "6 8",
           }).addTo(map);
         }
 
         pts.forEach((q, qi) => {
+          const [mLat, mLng] = placed[qi];
           const isLast = qi === pts.length - 1;
           const popup =
             `<b>${esc(p.name)}</b><br/>` +
@@ -133,7 +153,7 @@ export default function CrewMap({ setPage }: Props) {
               iconSize: [34, 34],
               iconAnchor: [17, 17],
             });
-            L.marker([q.lat, q.lng], { icon, zIndexOffset: 1000 }).addTo(map).bindPopup(popup);
+            L.marker([mLat, mLng], { icon, zIndexOffset: 1000 }).addTo(map).bindPopup(popup);
           } else {
             // Numbered waypoint dot for each earlier stamp.
             const icon = L.divIcon({
@@ -142,9 +162,9 @@ export default function CrewMap({ setPage }: Props) {
               iconSize: [20, 20],
               iconAnchor: [10, 10],
             });
-            L.marker([q.lat, q.lng], { icon, zIndexOffset: 500 }).addTo(map).bindPopup(popup);
+            L.marker([mLat, mLng], { icon, zIndexOffset: 500 }).addTo(map).bindPopup(popup);
           }
-          bounds.push([q.lat, q.lng]);
+          bounds.push([mLat, mLng]);
         });
         crewCount++;
       });
@@ -169,14 +189,17 @@ export default function CrewMap({ setPage }: Props) {
       if (stops.size > 0) setNote(`${t("loc.locatingStops")} (${stops.size})…`);
       for (const [addr, meta] of stops) {
         const had = hasGeocodeCache(addr);
-        const c = await geocodeAddress(addr);
+        const c = await geocodeAddress(addr, cityContext(org?.address));
         if (cancelled) return;
         if (c) {
+          // Job pins render BIGGER than the crew dots (20px) so a stop
+          // stays readable underneath the crew stamps clustered on it —
+          // and below them in z-order (crew markers carry +500/+1000).
           const icon = L.divIcon({
             className: "",
-            html: `<div style="width:16px;height:16px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${meta.color};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>`,
-            iconSize: [16, 16],
-            iconAnchor: [8, 14],
+            html: `<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${meta.color};border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center"><div style="width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.9)"></div></div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 27],
           });
           L.marker([c.lat, c.lng], { icon })
             .addTo(map)
