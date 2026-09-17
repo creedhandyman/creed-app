@@ -1346,6 +1346,24 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   onClick={() => {
                     const targetKey = woStableKey(w);
                     const nextDone = !w.done;
+                    // Optimistic: flip the box in the local store in the same
+                    // frame — the old flow waited on the network patch plus a
+                    // full loadAll() before rendering the check (the lag).
+                    // The 15s poll reconciles if the write below ever fails.
+                    const { jobs: allJobs } = useStore.getState();
+                    useStore.setState({
+                      jobs: allJobs.map((x) => {
+                        if (x.id !== sj.id) return x;
+                        try {
+                          const d = (typeof x.rooms === "string" ? JSON.parse(x.rooms) : (x.rooms || {})) as Record<string, unknown>;
+                          const wo: WOItem[] = Array.isArray(d.workOrder) ? [...(d.workOrder as WOItem[])] : [];
+                          const mi = wo.findIndex((y) => woStableKey(y) === targetKey);
+                          if (mi < 0) return x;
+                          wo[mi] = { ...wo[mi], done: nextDone };
+                          return { ...x, rooms: JSON.stringify({ ...d, workOrder: wo }) };
+                        } catch { return x; }
+                      }),
+                    });
                     enqueueRoomsWrite(async () => {
                       const fresh = useStore.getState().jobs.find((x) => x.id === sj.id);
                       if (!fresh) return;
@@ -1357,7 +1375,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       const updatedWO = [...freshWO];
                       updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
                       await db.patch("jobs", sj.id, { rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }) });
-                      await loadAll();
                     });
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark)", borderRadius: 12, padding: "9px 10px", marginBottom: 7, cursor: "pointer", opacity: w.done ? 0.6 : 1 }}

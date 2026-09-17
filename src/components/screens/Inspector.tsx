@@ -547,10 +547,21 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   useEffect(() => save("addressId", addressId), [addressId, save]);
   useEffect(() => save("roomIdx", currentRoomIdx), [currentRoomIdx, save]);
   useEffect(() => save("inspectionType", inspectionType), [inspectionType, save]);
-  // Save roomData but limit photo URLs to prevent localStorage overflow
-  useEffect(() => {
+  // Save roomData but limit photo URLs to prevent localStorage overflow.
+  // DEBOUNCED: serializing the WHOLE inspection (every room × item × notes
+  // × photo URLs) to localStorage on every condition-chip tap and every
+  // notes keystroke made taps visibly lag on phones. Trailing 600ms write
+  // after the last change, plus a flush on unmount so backing out right
+  // after a tap still keeps the draft current.
+  const roomDataRef = useRef(roomData);
+  roomDataRef.current = roomData;
+  // Set once the draft is deliberately cleared (inspection submitted) so
+  // the unmount flush can't resurrect the resume slot afterwards.
+  const draftDead = useRef(false);
+  const writeRoomDraft = useCallback(() => {
+    if (draftDead.current) return;
     try {
-      const compact = roomData.map((r) => ({
+      const compact = roomDataRef.current.map((r) => ({
         ...r,
         items: r.items.map((it) => ({
           ...it,
@@ -559,9 +570,15 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
       }));
       save("roomData", compact);
     } catch { /* */ }
-  }, [roomData, save]);
+  }, [save]);
+  useEffect(() => {
+    const timer = setTimeout(writeRoomDraft, 600);
+    return () => clearTimeout(timer);
+  }, [roomData, writeRoomDraft]);
+  useEffect(() => () => writeRoomDraft(), [writeRoomDraft]);
 
   const clearSaved = () => {
+    draftDead.current = true;
     ["step", "rooms", "property", "client", "customerId", "addressId", "roomIdx", "roomData"].forEach(
       (k) => localStorage.removeItem("c_inspect_" + k)
     );

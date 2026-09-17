@@ -196,6 +196,30 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.id]);
 
+  // Optimistically mutate one job's rooms blob in the LOCAL store so
+  // checkbox taps render instantly. The serialized queue persists the same
+  // change over the network right after; if that write ever fails, the 15s
+  // loadAll poll reconciles the store back to server truth. Before this,
+  // every work-order/guide tap waited on db.patch PLUS a full loadAll()
+  // (the entire org dataset) before the box visually flipped — the lag
+  // Bernard reported.
+  const mutateRoomsLocal = (
+    jobId: string,
+    mutate: (data: Record<string, unknown>) => Record<string, unknown> | null,
+  ) => {
+    const { jobs: allJobs } = useStore.getState();
+    useStore.setState({
+      jobs: allJobs.map((j) => {
+        if (j.id !== jobId) return j;
+        try {
+          const data = (typeof j.rooms === "string" ? JSON.parse(j.rooms) : (j.rooms || {})) as Record<string, unknown>;
+          const next = mutate(data);
+          return next ? { ...j, rooms: JSON.stringify(next) } : j;
+        } catch { return j; }
+      }),
+    });
+  };
+
   // Merge guide-tab updates into the job's rooms blob. Uses the same
   // serialized-write queue as workOrder toggles so a fast tap-add-tap
   // can't race and clobber sibling state.
@@ -208,6 +232,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   }) => {
     if (!activeJob) return;
     const targetId = activeJob.id;
+    // Instant local merge; no post-write loadAll — the store already holds
+    // exactly what the patch writes, and the poll covers everything else.
+    mutateRoomsLocal(targetId, (data) => ({ ...data, ...updates }));
     enqueueRoomsWrite(async () => {
       const fresh = useStore.getState().jobs.find((j) => j.id === targetId);
       if (!fresh) return;
@@ -217,7 +244,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       } catch { return; }
       const merged = { ...freshData, ...updates };
       await db.patch("jobs", targetId, { rooms: JSON.stringify(merged) });
-      await loadAll();
     });
   };
 
@@ -340,6 +366,17 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     if (!clicked) return;
     const targetKey = woStableKey(clicked);
     const nextDone = !clicked.done;
+    // Flip the box locally NOW — the tap renders in the same frame instead
+    // of waiting for the network round-trip that used to gate it.
+    mutateRoomsLocal(activeJob.id, (data) => {
+      const wo = Array.isArray(data.workOrder)
+        ? [...(data.workOrder as { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[])]
+        : [];
+      const mi = wo.findIndex((w) => woStableKey(w) === targetKey);
+      if (mi < 0) return null;
+      wo[mi] = { ...wo[mi], done: nextDone };
+      return { ...data, workOrder: wo };
+    });
     enqueueRoomsWrite(async () => {
       const fresh = useStore.getState().jobs.find((j) => j.id === activeJob.id);
       if (!fresh) return;
@@ -357,7 +394,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       await db.patch("jobs", activeJob.id, {
         rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }),
       });
-      await loadAll();
     });
   };
 
