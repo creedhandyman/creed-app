@@ -170,7 +170,16 @@ function AiLoadingDisplay({ status }: { status: string }) {
   // the screen if something weird happens.
   const startedRef = useRef(now);
   const safetyCrawl = Math.min(90, ((now - startedRef.current) / 240_000) * 90);
-  const displayPct = Math.min(99, Math.max(barPct, safetyCrawl));
+  // Ratchet — the bar must NEVER rewind. barPct can legitimately drop when the
+  // status jumps between phases (an AI-wait % giving way to a fresh "Batch 1 of
+  // N" that resets stepRatio, or a momentarily-empty status snapping to the 20%
+  // step-fallback). That read as the bar sliding backward mid-parse. Clamp to
+  // the max seen this mount; the component remounts fresh per parse (parsing
+  // gates it), so a new quote starts the bar over at 0.
+  const maxPctRef = useRef(0);
+  const rawPct = Math.min(99, Math.max(barPct, safetyCrawl));
+  if (rawPct > maxPctRef.current) maxPctRef.current = rawPct;
+  const displayPct = maxPctRef.current;
 
   return (
     <div style={{ padding: 20, textAlign: "center" }}>
