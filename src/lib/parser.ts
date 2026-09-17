@@ -443,7 +443,7 @@ Count = number of rooms whose Smoke Alarm row has condition D or P — whether t
 
 ### F. Paint math (per house, NOT per room × N)
 For a make-ready job, supplies are SHARED across rooms:
-- Wall paint: BUY BY THE GALLON, not quart. Touch-up only = 1-2 quarts. Full house repaint = 8-12 gallons total.
+- Wall paint: BUY BY THE GALLON — GALLONS ONLY, never quarts. Touch-up only = 1 gal ($28), the minimum paint unit on any quote (a quart can costs almost as much, runs out mid-job, and leaves the client nothing for future touch-ups). Full house repaint = 8-12 gallons total.
 - Ceiling paint: 2-4 gallons total for the whole house, regardless of how many rooms have ceiling work. Ceilings share paint.
 - Spackle: 1-2 tubs per house. NEVER per room.
 - Mesh tape: 1 roll per house.
@@ -539,11 +539,14 @@ Doors: pre-hung door=2-2.5h, bifold=1.25h, entry door=2.5-3h
 
 ## MATERIALS — LOW-END RETAIL PRICES
 Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung interior door=$90, pre-hung exterior/entry door=$275, bifold door=$50, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower head=$22, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, faucet=$55, toilet repair kit=$15, LVP=$2.00/sqft
-PAINT MATERIALS — wall paint averages $28/gal, primer $22/gal, trim semigloss $32/gal, ceiling flat $22/gal. Calculate per room:
-- Small room (bathroom, closet): 1 gal paint ($28) + 1 qt primer ($8) = $36
+PAINT MATERIALS — wall paint averages $28/gal, primer $22/gal, trim semigloss $32/gal, ceiling flat $22/gal.
+GALLONS ONLY: every wall/ceiling/trim/baseboard/exterior paint and primer line is sized in GALLONS — NEVER emit a quart line ("1 qt", "(qt)") for these. One gallon is the minimum unit even for a single-room touch-up or a baseboard-only line; rooms doing the same color SHARE the gallon (list it once with both rooms in the note). Only specialty coatings that genuinely come small (wood stain, polyurethane, cabinet enamel) may stay quart-sized.
+Calculate per room:
+- Small room (bathroom, closet): 1 gal paint ($28) + 1 gal primer ($22) = $50
 - Medium room (bedroom, kitchen): 2 gal paint ($56) + 1 gal primer ($22) = $78
 - Large room (living room, open concept): 3 gal paint ($84) + 1 gal primer ($22) = $106
-- Hallway/stairs: 2 gal paint ($56) + 1 qt primer ($8) = $64
+- Hallway/stairs: 2 gal paint ($56) + 1 gal primer ($22) = $78
+- Trim/baseboard semi-gloss: 1 gal ($32) covers the whole house's trim touch-ups — ONE shared line, not a quart per room.
 - Full unit supplies (tape, spackle, rollers, cloths, drop cloths): $30-50 total — list ONCE under "Paint Supplies"
 For a full 3-bed house paint: ~12-15 gallons paint ($336-420) + primer ($60-90) + supplies ($45) = $440-555 materials total.
 IMPORTANT: Do NOT list just "1 gal" for every room. Calculate based on room size.
