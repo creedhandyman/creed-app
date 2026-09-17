@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import VerticalNav from "./VerticalNav";
 import Settings from "./Settings";
@@ -37,6 +37,40 @@ export default function AppShell() {
 
   const isAdmin = user.role === "owner" || user.role === "manager";
 
+  // ── Hardware/gesture back = in-app back (Android PWA) ──────────────
+  // The app navigates by state, not URLs, so the system back button saw an
+  // empty browser history and CLOSED the app. Every in-app navigation now
+  // pushes a same-URL history entry ({ creedPage } / { creedSettings });
+  // popstate restores that entry's screen instead of exiting. Backing past
+  // the dashboard's seed entry still exits — the expected Android behavior.
+  const fromPop = useRef(false);
+  useEffect(() => {
+    // Seed the first entry so the earliest back has state to land on.
+    window.history.replaceState({ creedPage: "dash" }, "");
+    const onPop = (e: PopStateEvent) => {
+      const st = (e.state || {}) as { creedPage?: string; creedSettings?: boolean };
+      fromPop.current = true;
+      if (st.creedSettings) {
+        setShowSettings(true);
+      } else {
+        setShowSettings(false);
+        setPage(st.creedPage || "dash");
+        window.scrollTo(0, 0);
+      }
+      fromPop.current = false;
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // Settings is an overlay, not a page — it gets its own history entry so
+  // hardware back closes it; the X button walks the same path (history.back)
+  // so the entry is always consumed either way.
+  const openSettingsNav = () => {
+    window.history.pushState({ creedSettings: true }, "");
+    setShowSettings(true);
+  };
+
   const goToEditJob = (jobId: string) => {
     setEditJobId(jobId);
     setPage("qf");
@@ -51,6 +85,9 @@ export default function AppShell() {
       return;
     }
     if (p !== "qf") setEditJobId(null);
+    // Record the navigation in browser history (unless we're HANDLING a
+    // back/forward right now) so the system back button retraces screens.
+    if (!fromPop.current && p !== page) window.history.pushState({ creedPage: p }, "");
     // Scroll to top when switching screens
     window.scrollTo(0, 0);
     if (p !== "sched") setScheduleJobName(null);
@@ -72,7 +109,7 @@ export default function AppShell() {
   if (showSettings) {
     return (
       <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
-        <Settings onClose={() => setShowSettings(false)} />
+        <Settings onClose={() => window.history.back()} />
       </div>
     );
   }
@@ -80,7 +117,7 @@ export default function AppShell() {
   const renderPage = () => {
     switch (page) {
       case "dash":
-        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} openOps={goToOps} />;
+        return <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
@@ -90,7 +127,7 @@ export default function AppShell() {
       case "time":
         return <TimerScreen setPage={goToPage} />;
       case "payroll":
-        return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} openOps={goToOps} />;
+        return isAdmin ? <Payroll /> : <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
       case "ops":
         // Open to everyone — Operations.tsx filters its sub-tabs by role
         // so non-admins only see HR (the consolidated time-off home).
@@ -106,11 +143,11 @@ export default function AppShell() {
       case "troubleshoot":
         return <Troubleshoot setPage={goToPage} />;
       case "financials":
-        return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} openOps={goToOps} />;
+        return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
       case "more":
-        return <MoreHub setPage={goToPage} openSettings={() => setShowSettings(true)} openOps={goToOps} />;
+        return <MoreHub setPage={goToPage} openSettings={openSettingsNav} openOps={goToOps} />;
       default:
-        return <Dashboard setPage={goToPage} openSettings={() => setShowSettings(true)} openJob={goToJob} openOps={goToOps} />;
+        return <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
     }
   };
 
