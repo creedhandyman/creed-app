@@ -38,7 +38,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
   const tiles: {
     id: string; icon: IconName; name: string; sub: string; color: string; tint: string; onClick: () => void;
   }[] = [
-    { id: "sched", icon: "schedule", name: "Schedule", sub: "Calendar · assignments", color: "#7fb6ff", tint: "rgba(46,139,255,.14)", onClick: () => setPage("sched") },
+    { id: "sched", icon: "schedule", name: "Schedule", sub: "Calendar · assignments", color: "#ff8a3d", tint: "rgba(255,138,61,.16)", onClick: () => setPage("sched") },
     { id: "quests", icon: "trophy", name: "Quests", sub: "Crew incentives", color: "var(--color-violet)", tint: "rgba(157,78,221,.16)", onClick: () => setPage("quests") },
     isAdmin
       ? { id: "ops", icon: "ops", name: "Operations", sub: "Payroll · Financials · Team", color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() }
@@ -46,7 +46,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     ...(isAdmin
       ? [{ id: "clients", icon: "clients" as IconName, name: "Customers", sub: "CRM & history", color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => openOps("customers") }]
       : []),
-    { id: "mileage", icon: "mileage", name: "Mileage", sub: "Trip logging", color: "var(--color-warning)", tint: "rgba(255,136,0,.16)", onClick: () => setPage("mileage") },
+    { id: "mileage", icon: "mileage", name: "Mileage", sub: "Trip logging", color: "#14b8a6", tint: "rgba(20,184,166,.16)", onClick: () => setPage("mileage") },
     { id: "map", icon: "map", name: "Crew Map", sub: "Stamps · today's stops", color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") },
     { id: "settings", icon: "settings", name: "Settings", sub: isAdmin ? "Account · branding" : "Account · notifications", color: "#aab", tint: "rgba(138,138,153,.18)", onClick: openSettings },
   ];
