@@ -244,19 +244,19 @@ export const TRADE_CATEGORIES_PROMPT = `THE ONLY 7 VALID TRADE NAMES — use the
 - ELECTRICAL: outlets, switches, switch/outlet plates, GFCI, light fixtures, bulbs, light covers, ceiling fans (electrical), breaker panel inspection, smoke alarms, CO detectors, fire extinguishers, doorbells/chimes.
 - CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, countertops (laminate/butcher block/quartz/granite/solid surface — including demo, template, install, sink/faucet reset, edge profile), interior framing and re-framing (studs, blocking, headers, joists), shower wall framing, drywall blocking for grab bars / cabinets / TVs, structural sistering, window screens, window panes/glass, full window REPLACEMENTS (sash, frame, vinyl replacement windows, weatherstripping, interior/exterior trim + perimeter caulk when bundled), full door REPLACEMENTS (slab, pre-hung, sliding patio, including weatherstripping + perimeter caulk when bundled), closet rods/shelving. Demo of carpentry items (rotted framing, old cabinets, old countertops, old windows/doors being replaced) when it's labor work goes here.
 - HVAC: HVAC condenser unit, furnace, mini-split, range hood vented to exterior, HVAC filter change, thermostat replacement, ductwork. (Water heaters are PLUMBING — see above.)
-- PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch, drywall mud + tape + finish prep, AND all caulking and sealant work (interior trim, baseboard, standalone window/door perimeter re-caulk on EXISTING windows/doors, tub/shower bead, kitchen backsplash bead — every caulk line goes here unless it's (a) a plumbing fixture replacement that explicitly includes the bead, or (b) part of a full window/door REPLACEMENT install, in which case the perimeter caulk travels with the carpentry line). No knobs, no fixtures, no blinds.
+- PAINTING: paint, primer, spackle, mesh tape, painter's tape, drop cloths, brushes, rollers, drywall patch, drywall mud + tape + finish prep, exterior REPAINTING (awning, porch ceiling, railings-only repaint, siding touch-up), AND all caulking and sealant work (interior trim, baseboard, standalone window/door perimeter re-caulk on EXISTING windows/doors, tub/shower bead, kitchen backsplash bead — every caulk line goes here unless it's (a) a plumbing fixture replacement that explicitly includes the bead, or (b) part of a full window/door REPLACEMENT install, in which case the perimeter caulk travels with the carpentry line). No knobs, no fixtures, no blinds.
 - FLOORING: LVP, carpet, tile, grout, cove base, transition strips, baseboards (sqft-priced), stair treads/risers.
-- GENERAL: anything that doesn't clearly fit the six trades above — siding/gutter/fence/landscape/exterior cosmetic, appliance repair (oven/stove/dishwasher/microwave/fridge/washer/dryer parts — but range hoods that vent outside go to HVAC), disposal/dump fees, debris bags, hauling time, final cleaning, interior trash-out, water softener service.
+- GENERAL: anything that doesn't clearly fit the six trades above — siding/gutter/fence/landscape/exterior cosmetic REPAIR (exterior repainting goes to PAINTING), appliance repair (oven/stove/dishwasher/microwave/fridge/washer/dryer parts — but range hoods that vent outside go to HVAC), disposal/dump fees, debris bags, hauling time, final cleaning, interior trash-out, water softener service.
 
 FOLD-DOWN RULES (for items that used to have their own bucket):
 - Water heater / hot-water tank → PLUMBING.
 - HVAC filter, thermostat, condenser unit, furnace, mini-split → HVAC.
 - Smoke/CO detector, fire extinguisher, doorbell, breaker panel → ELECTRICAL.
 - Range hood (vented to exterior) → HVAC. Microwave / oven / dishwasher / fridge / washer / dryer parts → GENERAL.
-- Siding, gutters, downspouts, fence, gates, exterior lights, landscaping, driveway → GENERAL.
+- Siding, gutters, downspouts, fence, gates, exterior lights, landscaping, driveway → GENERAL (repair/replace work only — REPAINTING any of them is PAINTING).
 - Debris removal, dump fees, final cleaning, interior trash-out → GENERAL.
 
-A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater / hot-water tank is PLUMBING, not HVAC or Electrical (HVAC is heating/AC/ventilation, not hot water). A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER General — it's Carpentry. Caulking is NEVER General — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry. If a line truly fits nowhere, choose GENERAL — do NOT invent a new trade name.`;
+A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater / hot-water tank is PLUMBING, not HVAC or Electrical (HVAC is heating/AC/ventilation, not hot water). A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER General — it's Carpentry. Caulking is NEVER General — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry. An HVAC filter is NEVER Electrical — it is HVAC. A stove/oven/appliance PART (burner knob, drip pan, heating element) is NEVER Carpentry — appliance parts are GENERAL. Paint MATERIALS (wall/trim/baseboard paint, primer) NEVER ride on a Carpentry line — a "patch holes and paint" comment is TWO lines per rule 5a (Carpentry patch, Painting paint), and a repaint-only task is PAINTING no matter what room or exterior surface it touches. If a line truly fits nowhere, choose GENERAL — do NOT invent a new trade name.`;
 
 export const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You produce accurate, client-ready service estimates from whatever the user provides.
 
@@ -316,6 +316,8 @@ zInspector reports contain the SAME data TWICE:
 - DETAILED BREAKDOWNS (later pages): Room names as section headers with expanded descriptions. USE ONLY THIS.
 If you process both, every item will be doubled. The final quote should have 20-40 line items, NOT 60-100+.
 
+CROSS-AREA DEDUP — inspections ALSO list the same PHYSICAL OBJECT under multiple areas: a back-door lock under "Laundry Room" AND again under "Keys/Remotes"; a doorbell under "Entry" AND under "Compliance"; a gate under "Exterior" twice. One physical door/device/fixture = ONE line item, priced ONCE, no matter how many areas mention it. Count the physical objects before quoting lock/key work: "replace back door lock to match front" (a room's door row) + "back door and side door have no keys — replace both handle and deadbolt locks on both doors" (Keys/Remotes row) = TWO doors total → 2 handle sets + 2 deadbolts (the hardware the Keys row itself names), NEVER 3 sets. A house has one back door; if two areas describe re-keying it, that is the same job twice.
+
 ## LINE ITEM FORMAT
 Every line item MUST include:
 - "detail": "Room Name — Brief task description" (e.g. "Kitchen — Replace sprayer and re-caulk sink")
@@ -342,7 +344,7 @@ Quotes from this system historically run LOW on hours — completed jobs take 30
 
 2. NO DUPLICATES. Each repair appears exactly ONCE. Do NOT create both granular items and consolidated room summaries.
 
-3. CONSISTENT ROOM NAMES. Use title case. Normalize names from the inspection (e.g. "Bathroom 2 : Master bathroom" → "Bathroom 2 (Master)").
+3. CONSISTENT ROOM NAMES. Use title case. Normalize names from the inspection (e.g. "Bathroom 2 : Master bathroom" → "Bathroom 2 (Master)"). KEEP the inspection's area name for location-specific work — a fence, awning, or backyard task stays "Exterior" (or "Porch"/"Garage"), an appliance task stays "Kitchen" or "Appliances", never a made-up room like "Oven/Stove". Reserve "Whole Property" (exactly that casing, everywhere it appears) for genuinely house-wide items only: shared paint supplies, HVAC filter, whole-house verification walks.
 
 4. GROUP BY TRADE, NOT BY ROOM. The ONLY 7 valid trade names are:
    Plumbing, Electrical, Carpentry, HVAC, Painting, Flooring, General
@@ -359,12 +361,12 @@ Quotes from this system historically run LOW on hours — completed jobs take 30
 - "Evaluate and re-caulk tub surround; repair or replace" → TWO lines: Plumbing "Re-caulk tub surround" + (if a repair/replace scope is described) Carpentry "Tub-surround repair/replace" (tile/cement-board carpentry).
 The test before you emit a multi-clause line: does every clause belong to the same trade? If yes, one line. If no, split.
 
-6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "Whole property — Painting Supplies" item under Painting. CRITICAL: This is a materials-only line — laborHrs MUST be 0. Supplies are consumables, not a labor task. Same rule for any other shared-consumables line you create (drywall mud kit, miscellaneous fasteners, etc.). NEVER duplicate supplies per room.
+6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "Whole Property — Painting Supplies" item under Painting. CRITICAL: This is a materials-only line — laborHrs MUST be 0. Supplies are consumables, not a labor task. Same rule for any other shared-consumables line you create (drywall mud kit, miscellaneous fasteners, etc.). NEVER duplicate supplies per room.
 
 7. ACTIONS-COLUMN POLICY. Each summary-table row carries an "Action" value (Maintenance / None) plus a Comment. Apply this precedence:
 - Action = Maintenance → ALWAYS emit a line.
 - Action = None AND comment has an explicit install/replace/repair verb → emit a line (the inspector mistagged).
-- Action = None AND comment is an absence/recommendation ("Not present", "Could not test but appears operable", "Recommended", "No closet present", "No garbage disposal present", "Optional upgrade") → SKIP. The owner only wants required work in the quote; "nice to have" / "they don't currently have one" rows don't earn a line.
+- Action = None AND comment is an absence/recommendation ("Not present", "Could not test but appears operable", "Recommended", "No closet present", "No garbage disposal present", "Optional upgrade") → SKIP. The owner only wants required work in the quote; "nice to have" / "they don't currently have one" rows don't earn a line. EXCEPTION: rows untestable because a UTILITY was off ("unable to test — water shut off") are never skipped — they roll into the rule 7d verification line, whatever their Action value says.
 - Action = None AND condition = "S" with no actionable comment → SKIP (no line).
 - A row with condition P / F / D is still a maintenance item even if the inspector mistakenly wrote "Action: None" — the CONDITION RATING IS AUTHORITATIVE. Inspectors occasionally tag a damaged item with action None by mistake (e.g. Driveway/Floor — P — None — "Cracked driveway throughout, repairs needed"). Do not let that drop the line — quote it from the comment.
 
@@ -383,13 +385,20 @@ Examples that go tnm=true: "Investigate boards behind tub for underlying damage"
 - Room with no Room Size line at all (sqft unknown to the inspector) → omit the sqft field; note "(sqft TBD on site)" in the comment so the owner knows the hours are an estimate.
 The sqft you put on the item should match the room's stated sqft. Don't divide it across multiple line items in the same room — each flooring/painting line in that room gets the same sqft (the room area), not a fraction.
 
+7d. UTILITIES-OFF VERIFICATION. When the report says water/gas/power was OFF so fixtures could not be tested ("unable to test — water shut off", "no water service"), roll ALL of those rows into ONE explicit line item: detail "Whole Property — Verify plumbing/fixtures once water is restored" (or the matching utility), laborHrs enough to actually walk every untested fixture (MINIMUM 1.5 clock hours for a whole house — shut-offs, faucets, drains, toilet, tub, hose bibs), and a comment that LISTS the untested items and states plainly: verification only — any leak or failure found goes on a separate change order. NEVER leave verification hours as an unlabeled section: a labor charge with no written task reads as an unexplained fee to the client. This line is NOT a 7b T&M line — the walk itself is known scope, so no tnm flag, no "[T&M]" prefix, and it is exempt from 7b's 0.5-1.0h assessment cap (a whole-house verification walk legitimately takes 1.5h+).
+
 8. ENUMERATE EVERY DISTINCT ISSUE inside a comment. Inspection cells routinely chain multiple separate repairs in one cell, separated by periods, semicolons, "and", or commas. Each is a distinct repair you must scope. Walk the comment sentence by sentence — if there are 4 sentences describing 4 issues, you owe 4 line items (or one line with 4 materials, whichever fits the trade). The fact that the inspector wrote them in one cell is shorthand; you must un-shorthand it.
 - Example: "All blinds missing, four 28x64 needed. Broken window pane, needs replacement." → blinds (qty 4) AND a window pane material. Never just the blinds.
 - Example: "Replace entry door, deadbolt, and lock" → THREE materials: 36" pre-hung door, deadbolt set, lock cylinder. Never just the deadbolt.
 - Example: "Cabinet doors falling apart, countertop rough and worn, water damage, leak present, leftover items" → 5 separate scoped items: cabinet door repair, countertop refinish/replace, water-damage assessment, under-sink leak repair, trash-out.
 - Example: "Handle missing. Front glass fallen off. Stove piece missing. Loose detached part requiring reattachment." → 4 materials/labor lines, not 2.
 - Example: "Cracked switch cover, outlet AND doorbell missing, switch possibly blown out." → switch cover + new outlet + new doorbell + replacement switch. Four parts, not one.
+- Example: "Window locks do not latch and require adjustment, blind installation needed" → TWO scopes: window-lock latch adjustment (labor + latch hardware allowance) AND new blinds. Never just the blinds — the lock clause is the one that historically gets dropped.
 The dropped item is almost always sentence #2 or later, or the second clause after "and". Re-read the comment AFTER you draft your line items and confirm every distinct repair is represented.
+
+9. COPY IDENTIFIERS VERBATIM. The "property" and "client" output fields are transcription, not interpretation: copy the property address EXACTLY as the report prints it — never change the street suffix (St stays St, it never becomes Ave), never expand/abbreviate or "correct" it — and copy client/company names character-for-character ("Keyrenter" never becomes "Key renter"). A mismatched address or misspelled client name on a signable estimate is an instant credibility hit with a property-management client.
+
+10. DISCLOSE ASSUMED COUNTS. When a finding needs a quantity the report never states ("replace all blinds with broken slats", "missing light bulbs"), pick a reasonable count AND say so in the comment: "assumes 2 blinds — confirm on site". Counts the report DOES state are binding (section C below). Never present a guessed quantity as if it were documented.
 
 ## COMMON ERRORS — read these every time before generating output
 
@@ -430,7 +439,7 @@ A typical SFH has ONE of these. Don't duplicate them based on related-keyword ma
 - 1 of any item that the inspection mentions exactly once.
 
 ### E. Smoke alarms = count of explicit findings
-Count = number of rooms whose Smoke Alarm row has condition D or P AND comment says "no smoke alarm" / "install" / "missing." Add 1-2 for hallway/CO if mentioned. Typical 3-bed = 3-5 total. Anything ≥ 7 means you're double-counting — recount.
+Count = number of rooms whose Smoke Alarm row has condition D or P — whether the comment says "no smoke alarm" / "install" / "missing" OR "not working" / "dead" / "needs replacement". A present-but-NOT-WORKING alarm needs a line exactly like a missing one (same $18 + swap labor) — "not working" is the wording that historically got dropped. Add 1-2 for hallway/CO if mentioned. Typical 3-bed = 3-5 total. Anything ≥ 7 means you're double-counting — recount. Before finishing, re-walk every room's Smoke Alarm row and confirm each D/P row produced a line: a skipped alarm is a life-safety miss the property manager WILL catch.
 
 ### F. Paint math (per house, NOT per room × N)
 For a make-ready job, supplies are SHARED across rooms:
@@ -779,7 +788,7 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
   // shared supplies lines must have laborHrs 0 (they're consumables
   // burned during the per-room labor lines, not a separate task), but
   // the model occasionally still emits 0.5h. Detect by detail naming a
-  // "supplies" line — "Whole property — Painting Supplies", "General
+  // "supplies" line — "Whole Property — Painting Supplies", "General
   // Supplies", "Drywall Supplies", etc. — and zero the hours out so
   // they don't double-bill.
   rooms = rooms.map((r) => ({
@@ -939,6 +948,15 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       if (/\bpaint\b|repaint|prime|primer|touch.?up.*paint|paint.*touch|wall.*ceiling.*paint|paint.*wall|full.*paint/.test(s)) add("Painting", 10);
       if (/spackle|patch.*wall|wall.*patch|texture.*wall|ceiling.*paint/.test(s)) add("Painting", 6);
       if (/paint|primer|spackle|roller/.test(matNames) && !scores["Plumbing"]) add("Painting", 3);
+      // Repaint-only EXTERIOR work (awning/porch/siding/railing touch-up)
+      // is Painting no matter how many exterior nouns appear — without
+      // this, the General siding/exterior scores below out-vote the paint
+      // verbs and reroute a pure repaint to General against the prompt's
+      // fold-down rule. Repair/replace verbs disable the boost (a fence
+      // REBUILD with incidental paint stays General/Carpentry).
+      if (/\bpaint\b|repaint|touch.?up/.test(s) &&
+          /siding|awning|porch|railing|banister|fence|gate|exterior/.test(s) &&
+          !/replace|repair|re.?secure|rebuild|realign|install/.test(s)) add("Painting", 12);
 
       // Flooring — `\brug\b` covers "remove rug", "area rug", "throw rug"
       // at a slightly elevated score so it wins over a tied Cleaning/Hauling
@@ -1045,15 +1063,20 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
         // property" so shared/no-room items render sensibly.
         //
         // We catch BOTH the canonical 7-trade names AND the legacy
-        // 10-bucket names ("Compliance", "Appliances", "Safety",
-        // "Exterior", "Cleaning/Hauling") because the AI still
-        // occasionally emits them as prefixes from training inertia even
-        // after the 7-trade prompt change. foldLegacyTrade rebuckets the
-        // item itself; this rewrites the rendered prefix to match.
-        // Idempotent: "Whole property — …" doesn't match any of these.
+        // bucket names ("Compliance", "Safety", "Cleaning/Hauling")
+        // because the AI still occasionally emits them as prefixes from
+        // training inertia even after the 7-trade prompt change.
+        // foldLegacyTrade rebuckets the item itself; this rewrites the
+        // rendered prefix to match. "Exterior" and "Appliances" are
+        // deliberately NOT in the list: they're legitimate zInspector
+        // AREA names the prompt tells the AI to keep as locations
+        // ("Exterior — Repaint awning") — scrubbing them here silently
+        // defeated that rule and flattened real locations to
+        // whole-property.
+        // Idempotent: "Whole Property — …" doesn't match any of these.
         const TRADE_LOC_PREFIXES = [
           ...TRADE_CATEGORIES,
-          "Safety", "Appliances", "Exterior", "Compliance", "Cleaning/Hauling",
+          "Safety", "Compliance", "Cleaning/Hauling",
         ];
         const tradeAsLocPrefix = TRADE_LOC_PREFIXES.find((t) => {
           const lc = it.detail.toLowerCase();
@@ -1064,7 +1087,7 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
           // "Painting — Painting — General Supplies" from a stale run).
           it.detail = it.detail.replace(
             new RegExp(`^(?:(?:${TRADE_LOC_PREFIXES.join("|")})\\s*[—\\-]\\s*)+`, "i"),
-            "Whole property — "
+            "Whole Property — "
           );
         }
         if (!tradeMap[trade]) tradeMap[trade] = [];

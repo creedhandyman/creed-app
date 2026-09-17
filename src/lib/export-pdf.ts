@@ -336,9 +336,27 @@ export function exportQuotePdf(opts: ExportOptions) {
     Object.values(matMap).forEach((m) => {
       matRows += `<tr><td>${esc(m.n)}</td><td class="r">${m.qty}</td><td class="r">$${m.unitPrice.toFixed(2)}</td><td class="r">$${m.total.toFixed(2)}</td><td class="dim">${esc(m.notes.join(", "))}</td></tr>`;
     });
+    // Items with no billable materials never reach matMap, so their scope
+    // used to be invisible on the printed quote — a verification-only
+    // Plumbing section printed just "Labor only" with nothing telling the
+    // client what the charge buys. Give every such task its own row with
+    // the same "Room — Task" note the material rows carry.
+    const notedDetails = new Set<string>();
+    Object.values(matMap).forEach((m) => m.notes.forEach((n) => notedDetails.add(n)));
+    cat.items.forEach((it) => {
+      if (it.detail && !notedDetails.has(it.detail)) {
+        notedDetails.add(it.detail);
+        matRows += `<tr><td class="dim">Labor only</td><td class="r dim">—</td><td class="r dim">—</td><td class="r dim">$0.00</td><td class="dim">${esc(it.detail)}</td></tr>`;
+      }
+    });
 
     const crewSize = sectionHrs > 8 ? 2 : 1;
-    const clockHrs = crewSize > 1 ? (sectionHrs / crewSize).toFixed(1) : sectionHrs.toFixed(1);
+    // The printed equation must self-check: show clock hours at whatever
+    // precision makes clockHrs × crew equal the printed man-hrs. The old
+    // toFixed(1) printed "33.6h × 2 crew = 67.3 man-hrs" (33.65 rounded
+    // down), a visible contradiction of the quote's own stated formula.
+    const shownHrs = Math.round(sectionHrs * 10) / 10;
+    const clockHrs = String(Math.round((shownHrs / crewSize) * 100) / 100);
 
     breakdownHtml += `
     <div style="margin-bottom:10px">
@@ -348,7 +366,7 @@ export function exportQuotePdf(opts: ExportOptions) {
         <tbody>${matRows || '<tr><td colspan="5" class="dim">Labor only</td></tr>'}</tbody>
       </table>
       <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:${accent};font-weight:600">
-        Labor (${clockHrs}h × ${crewSize} crew = ${sectionHrs.toFixed(1)} man-hrs @ $${rate}/hr): $${sectionLabor.toFixed(2)}
+        Labor (${clockHrs}h × ${crewSize} crew = ${shownHrs.toFixed(1)} man-hrs @ $${rate}/hr): $${sectionLabor.toFixed(2)}
         &nbsp;·&nbsp; Material: $${sectionMat.toFixed(2)}
         &nbsp;·&nbsp; <b>Section Total: $${(sectionLabor + sectionMat).toFixed(2)}</b>
       </div>

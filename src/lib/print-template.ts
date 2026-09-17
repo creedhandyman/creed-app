@@ -280,8 +280,22 @@ tr:nth-child(even) td { background: #fafbfd; }
 
 /* Print */
 @media print {
+  /* Zero page margin suppresses the browser's own print header/footer
+     (the "9/16/26, 10:41 PM" timestamp, the raw blob: URL, and the page
+     counter) — that chrome can only render inside the page margin, so
+     removing the margin removes it even when the user leaves Chrome's
+     "Headers and footers" box checked. The .page padding below supplies
+     the visual margins instead. Tables dominate our layouts and their
+     repeating <thead> keeps follow-on pages from looking flush-cut.
+     KNOWN TRADEOFF: .page padding applies once, not per printed page, so
+     interior pages of a multi-page doc run closer to the paper edge; on
+     Save-as-PDF (the normal flow — quotes get emailed) nothing clips
+     because tr/box break-inside rules push whole rows to the next page,
+     but DIRECT-to-hardware printing may shave ~4mm at page turns. If that
+     ever matters, print the PDF with "fit to printable area". */
+  @page { margin: 0; }
   body { background: #fff; }
-  .page { padding: 18mm 16mm; max-width: 100%; }
+  .page { padding: 14mm 16mm; max-width: 100%; }
   h2, h3 { break-after: avoid; }
   /* Allow long material tables to break across pages — only the row and the
      small summary boxes / page header should never split. Forcing whole
