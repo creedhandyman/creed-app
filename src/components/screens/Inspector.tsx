@@ -211,10 +211,11 @@ const PAINTING_ITEMS = ["Walls", "Ceiling", "Trim/Baseboards", "Doors", "Window 
 // Floor-only inspection items. Was a single "Flooring" line per room
 // (too thin to capture demo / transition / baseboard scope); expanded
 // to walk the inspector through every sqft-priced sub-task that the
-// quoting AI needs separate signal for.
+// quoting AI needs separate signal for. NO "Sqft" status row — square
+// footage is a MEASUREMENT, captured by the W×L inputs at the top of
+// every room card (room.sqft), not a condition to rate S/F/P/D.
 const FLOORING_ITEMS = [
   "Flooring (condition)",
-  "Sqft",
   "Subfloor",
   "Transitions/Thresholds",
   "Baseboards",
