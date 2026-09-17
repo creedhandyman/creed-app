@@ -136,6 +136,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `start_time` set, `end_time` empty, `hours: 0`. Clock-out patches
   that same row. The active row's id lives in localStorage as
   `c_t_active_id`. Both Timer.tsx and WorkVision.tsx share this state.
+- **Money rollups**: revenue / net-profit math lives in ONE place —
+  `src/lib/financials.ts` `profitSnapshot()` — consumed by the Financials
+  screen AND the Ops hub KPIs (dashboard Revenue·mo mirrors its revenue
+  rule). Rules: parseEntryDate (LOCAL) date filtering, job_date||created_at
+  anchor, archived excluded, revenue = complete/invoiced/paid, labor = only
+  entries on completed jobs at `amount || hrs×current rate`, materials =
+  receipts else charged. Financials' "Month" pill = CALENDAR month-to-date
+  (not rolling 30d) so hub → Financials shows the same number. Never
+  re-implement a profit figure inline — extend the snapshot.
 
 ## Required env vars (Vercel)
 
