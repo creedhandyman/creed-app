@@ -813,9 +813,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   top-trade bar; compact rows; edits in the expand), Ops Settings (de-emoji
   only — branding/quote-defaults/review-automation logic untouched). **Recurring
   / HR / Billing** open their existing components unchanged (mock didn't restyle
-  them). **NOT yet done:** the personal **Settings gear** screen
-  (`Creed_Settings_Full` screen 1 — profile / notifications / appearance /
-  security); that's a separate screen from the Ops tab.
+  them). The personal **Settings gear** screen SHIPPED too (9d8e9a1,
+  `Creed_Settings_Full` screen 1): one scrolling screen, no tabs — profile
+  head w/ avatar upload (receipts/avatars → profiles.photo_url), Profile
+  (inline name edit), Notifications, Appearance, Security (tap-to-reveal
+  password), owner-only Quest Bonuses, Sign out + version. Handlers
+  preserved verbatim; sections use .section/.seclabel/.drow.
 
 - **Quests redesign (from mockup)**: `Creed_Quests_Tabs_Confetti` mockup —
   `Quests.tsx` rebuilt to a battle-pass "QUEST HUB" while ALL the quest
@@ -1073,8 +1076,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   landed, payment received).
 - Dashboard fill-height `min-height: calc(100dvh - 150px)` is an estimate
   — nudge the `150px` if it scrolls or leaves a sliver.
-- More hub shows every tile to everyone; Customers / admin Operations
-  tabs probably shouldn't render for techs (role-gate them).
+- More hub role gate SHIPPED (9d8e9a1): techs don't see Customers, and
+  their Operations tile reads "Time Off" (routes to Ops, which roots
+  non-admins at HR).
 - Jobs Phase-3 polish: before/after photo grid on the Receipts screen +
   work-order per-item camera / Add item.
 - i18n: Inspector UI + the location suite are translated (418ecf1;
