@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { wrapPrint, openPrint } from "@/lib/print-template";
-import { parseEntryDate, formatHours } from "@/lib/dates";
+import { formatHours } from "@/lib/dates";
+import { profitSnapshot, makeInRange, makeEntryPay } from "@/lib/financials";
 import { Icon } from "../Icon";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
@@ -33,23 +34,30 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   const rangeStart = (() => {
     const d = new Date(now);
     if (range === "week") { d.setDate(d.getDate() - 7); return d; }
-    if (range === "month") { d.setMonth(d.getMonth() - 1); return d; }
+    // "Month" = CALENDAR month-to-date, not rolling 30 days — it has to be
+    // the same window as the Ops hub KPIs + the dashboard's Revenue·mo, or
+    // the number teased there never matches what this screen opens on.
+    if (range === "month") return new Date(d.getFullYear(), d.getMonth(), 1);
     if (range === "quarter") { d.setMonth(d.getMonth() - 3); return d; }
     if (range === "year") { d.setFullYear(d.getFullYear() - 1); return d; }
     return new Date(2020, 0, 1); // all
   })();
 
-  const inRange = (dateStr?: string) => {
-    if (!dateStr) return false;
-    try { return new Date(dateStr) >= rangeStart; } catch { return false; }
-  };
-
-  // Filtered data — anchor on job_date (work date) when set, fall back to
-  // created_at for unscheduled rows. This keeps a job's revenue in the
-  // period it was actually performed, not when its row was inserted.
-  // Archived jobs (cold quotes Bernard set aside) are excluded everywhere
-  // so they don't deflate close rate or inflate "quote value".
-  const rangeJobs = jobs.filter((j) => !j.archived && inRange(j.job_date || j.created_at));
+  // All revenue / crew-cost / materials / profit math comes from the shared
+  // profitSnapshot (src/lib/financials.ts) — the Ops hub KPIs read the same
+  // function, so the two screens can't disagree on what "Net profit" means.
+  // (They used to: different window AND formula.) Jobs anchor on job_date
+  // (work date) falling back to created_at; archived jobs are excluded so
+  // they don't deflate close rate or inflate "quote value".
+  const inRange = makeInRange(rangeStart);
+  const entryPay = makeEntryPay(profiles);
+  const {
+    rangeJobs, completed, completedRevenue, rangeEntries,
+    crewCost, crewCostPaid, crewCostOwed, crewCostOnCompleted, crewCostOnActive,
+    periodReceipts, actualMaterialsSpent, materialsCharged, materialsForProfit,
+    netProfit: profit,
+  } = profitSnapshot({ jobs, timeEntries, receipts, profiles, rangeStart });
+  const totalMaterials = materialsCharged;
 
   // Status buckets. "Issued quotes" = anything past the lead/inspection
   // intake stage (i.e. an actual estimate was sent or could be). "Accepted"
@@ -59,18 +67,15 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   const ACCEPTED_STATUSES = ["accepted", "scheduled", "active", "complete", "invoiced", "paid"];
   const issuedQuotes = rangeJobs.filter((j) => j.status !== "lead" && j.status !== "inspection");
   const accepted = rangeJobs.filter((j) => ACCEPTED_STATUSES.includes(j.status));
-  const completed = rangeJobs.filter((j) => ["complete", "invoiced", "paid"].includes(j.status));
   const paid = rangeJobs.filter((j) => j.status === "paid");
   const invoiced = rangeJobs.filter((j) => j.status === "invoiced");
   const leads = rangeJobs.filter((j) => j.status === "lead");
 
   // Revenue
   const totalQuoteValue = issuedQuotes.reduce((s, j) => s + (j.total || 0), 0);
-  const completedRevenue = completed.reduce((s, j) => s + (j.total || 0), 0);
   const paidRevenue = paid.reduce((s, j) => s + (j.total || 0), 0);
   const outstandingInvoices = invoiced.reduce((s, j) => s + (j.total || 0), 0);
   const totalLaborCharged = completed.reduce((s, j) => s + (j.total_labor || 0), 0);
-  const totalMaterials = completed.reduce((s, j) => s + (j.total_mat || 0), 0);
 
   // Conversion funnel — close rate is "of quotes I actually sent, how many
   // were accepted?". Denominator must be issuedQuotes, NOT rangeJobs (which
@@ -89,57 +94,17 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   const tradeEntries = Object.entries(byTrade).sort((a, b) => b[1].revenue - a[1].revenue);
   const maxTradeRevenue = tradeEntries.length ? tradeEntries[0][1].revenue : 1;
 
-  // Revenue per tech
+  // Hours + pay per tech (display) — entryPay is the same basis the shared
+  // snapshot uses for crewCost, so the per-person rows sum to the Crew cost
+  // card (recorded amount, falling back to hrs × current rate for legacy
+  // rows that predate the amount column).
   const byTech: Record<string, { hours: number; pay: number }> = {};
-  const rangeEntries = timeEntries.filter((e) => {
-    const d = parseEntryDate(e.entry_date);
-    return d ? d >= rangeStart : false;
-  });
   rangeEntries.forEach((e) => {
     const name = e.user_name || "Unknown";
     if (!byTech[name]) byTech[name] = { hours: 0, pay: 0 };
     byTech[name].hours += e.hours || 0;
-    byTech[name].pay += e.amount || 0;
+    byTech[name].pay += entryPay(e);
   });
-  const crewCost = rangeEntries.reduce((s, e) => s + (e.amount || 0), 0);
-  // Split crew cost by paid status — Payroll now marks entries with
-  // paid_at instead of deleting them (so Team Stats keeps lifetime
-  // history). Surfacing the split here gives the manager a cash-flow
-  // view: how much labor has already been paid out vs. how much is
-  // still owed in the next pay run.
-  const crewCostPaid = rangeEntries.reduce((s, e) => s + (e.paid_at ? e.amount || 0 : 0), 0);
-  const crewCostOwed = rangeEntries.reduce((s, e) => s + (!e.paid_at ? e.amount || 0 : 0), 0);
-
-  // Split crew cost by whether the underlying job is completed in this
-  // period. Without this split, profit looks bad mid-period because
-  // hours on still-active jobs reduce profit but the matching revenue
-  // hasn't been booked yet (revenue only counts complete/invoiced/paid).
-  // The fallback for entries without job_id (legacy rows) is to match
-  // by the entry's `job` address text against completed-job properties.
-  const completedJobIds = new Set(completed.map((j) => j.id));
-  const completedJobAddrs = new Set(completed.map((j) => (j.property || "").toLowerCase().trim()).filter(Boolean));
-  const isOnCompletedJob = (e: { job_id?: string; job?: string }) => {
-    if (e.job_id) return completedJobIds.has(e.job_id);
-    return completedJobAddrs.has((e.job || "").toLowerCase().trim());
-  };
-  const crewCostOnCompleted = rangeEntries
-    .filter(isOnCompletedJob)
-    .reduce((s, e) => s + (e.amount || 0), 0);
-  const crewCostOnActive = crewCost - crewCostOnCompleted;
-
-  // Actual materials spend from receipts in the same period (real out-of-
-  // pocket cost, vs. totalMaterials which is what was CHARGED to the
-  // client). When receipts exist for the period we use actual; otherwise
-  // fall back to charged so the profit number still works.
-  const periodReceipts = receipts.filter((r) => inRange(r.receipt_date));
-  const actualMaterialsSpent = periodReceipts.reduce((s, r) => s + (r.amount || 0), 0);
-  const materialsForProfit = actualMaterialsSpent > 0 ? actualMaterialsSpent : totalMaterials;
-
-  // Profit on completed work = revenue from completed jobs - materials
-  // tied to the period - crew cost ON completed jobs only. Crew cost on
-  // still-active jobs is shown separately as work-in-progress so the
-  // headline profit reflects work that's actually finished.
-  const profit = completedRevenue - materialsForProfit - crewCostOnCompleted;
   const techEntries = Object.entries(byTech).sort((a, b) => b[1].hours - a[1].hours);
 
   // Top clients — group by customer_id when the job is linked to a real
@@ -193,7 +158,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   /* ── Print Profit & Loss statement ───────────────────────────────── */
   const periodLabel = (() => {
     if (range === "week") return "Last 7 Days";
-    if (range === "month") return "Last 30 Days";
+    if (range === "month") return "Month to Date";
     if (range === "quarter") return "Last 90 Days";
     if (range === "year") return "Last 12 Months";
     return "All Time";

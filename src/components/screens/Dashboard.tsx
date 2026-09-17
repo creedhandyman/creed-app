@@ -86,8 +86,11 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   // stats above). Raw `new Date("YYYY-MM-DD")` parses as UTC midnight, which in
   // any US time zone is the PREVIOUS evening, so jobs dated on the 1st (and the
   // boundary) were dropping out of "this month" and undercounting the figure.
+  // Must stay the same revenue rule as lib/financials profitSnapshot (earned
+  // statuses, non-archived, month-to-date) so this figure = Ops hub = Financials.
   const earnedMonth = jobs
     .filter((j) => {
+      if (j.archived) return false;
       if (!["complete", "invoiced", "paid"].includes(j.status)) return false;
       const d = parseEntryDate(j.job_date || j.created_at);
       return d ? d >= monthStart : false;

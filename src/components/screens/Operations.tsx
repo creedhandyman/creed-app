@@ -2,7 +2,7 @@
 import { Component, useEffect, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
-import { parseEntryDate } from "@/lib/dates";
+import { profitSnapshot } from "@/lib/financials";
 import Payroll from "./Payroll";
 import Financials from "./Financials";
 import Customers from "./Customers";
@@ -580,36 +580,17 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
     if (tab !== "customers") setSelectedCustomerId(null);
   }, [tab]);
 
-  // ── Hub KPIs + tile subs. Glanceable — the detail screens hold the
-  // exact breakdowns. Payroll due is exact (unpaid hours × each person's
-  // rate); revenue / profit are this-month approximations keyed off
-  // created_at (Financials has the precise figures). ──
+  // ── Hub KPIs + tile subs. Payroll due is exact (unpaid hours × each
+  // person's rate). Revenue + Net profit come from the SAME shared math
+  // the Financials screen shows (profitSnapshot, calendar month-to-date),
+  // so the KPI teased here is the number Financials opens on — the hub
+  // used to run its own approximation (all labor logged this month,
+  // archived jobs included) and the two never matched. ──
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const rateOf = (uid?: string | null) => (uid ? profiles.find((p) => p.id === uid)?.rate || 0 : 0);
-  // parseEntryDate parses LOCAL (handles "M/D/YYYY" + "YYYY-MM-DD") — raw
-  // `new Date("YYYY-MM-DD")` is UTC midnight = the previous evening in US zones,
-  // which dropped 1st-of-month jobs (revenue) and manual ISO entries (labor)
-  // out of the month and skewed Net profit.
-  const inMonth = (d?: string) => { const dt = parseEntryDate(d); return dt ? dt >= monthStart : false; };
   const payrollDue = timeEntries.filter((e) => !e.paid_at).reduce((s, e) => s + (e.hours || 0) * rateOf(e.user_id), 0);
-  // Revenue = work EARNED this month (complete/invoiced/paid), keyed off
-  // job_date||created_at — the same basis as the dashboard's "Revenue·mo".
-  // (Was paid-only by created_at, which under-counted and didn't line up with
-  // the labor population below, skewing Net profit.)
-  const earnedJobs = jobs.filter((j) => ["complete", "invoiced", "paid"].includes(j.status) && inMonth(j.job_date || j.created_at));
-  const revenueMonth = earnedJobs.reduce((s, j) => s + (j.total || 0), 0);
-  // Labor COST this month — crew pay actually logged (recorded amount, falling
-  // back to hours × current rate for older rows that predate the amount field).
-  const laborMonth = timeEntries.filter((e) => inMonth(e.entry_date)).reduce((s, e) => s + (e.amount || (e.hours || 0) * rateOf(e.user_id)), 0);
-  // Material COST this month — actual receipts when we have them, else the
-  // materials charged on this month's earned jobs (markup-inclusive proxy).
-  // Net profit previously omitted materials entirely, overstating it.
-  const receiptsMonth = receipts.filter((r) => inMonth(r.receipt_date)).reduce((s, r) => s + (r.amount || 0), 0);
-  const materialsMonth = receiptsMonth > 0 ? receiptsMonth : earnedJobs.reduce((s, j) => s + (j.total_mat || 0), 0);
-  // Net profit = revenue earned − labor cost − material cost (a month
-  // approximation; Financials has the exact per-job P&L).
-  const netProfit = revenueMonth - laborMonth - materialsMonth;
+  const { completedRevenue: revenueMonth, netProfit } = profitSnapshot({ jobs, timeEntries, receipts, profiles, rangeStart: monthStart });
   const monthLabel = now.toLocaleDateString("en-US", { month: "short" });
   const fmtMoney = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Math.round(n)}`);
   const roleLabel = user?.role === "owner" ? t("team.roleOwner") : user?.role === "manager" ? t("team.roleManager") : (user?.role || t("ops.roleTeam"));
