@@ -165,6 +165,12 @@ export const GALLERY = [
     after: "/assets/ba2-after.jpg",
   },
   {
+    title: "Deck rescue and repaint",
+    note: "Peeling paint scraped and sanded off, then the whole deck recoated.",
+    before: "/assets/ba5-before.jpg",
+    after: "/assets/ba5-after.jpg",
+  },
+  {
     title: "Water-damage ceiling repair",
     note: "Stain cut out, patched, retextured, and repainted to match.",
     before: "/assets/ba3-before.jpg",
