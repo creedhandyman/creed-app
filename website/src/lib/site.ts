@@ -171,6 +171,12 @@ export const GALLERY = [
     after: "/assets/ba5-after.jpg",
   },
   {
+    title: "Deck stair rebuild",
+    note: "Tired treads swapped out and the whole staircase recoated.",
+    before: "/assets/ba6-before.jpg",
+    after: "/assets/ba6-after.jpg",
+  },
+  {
     title: "Water-damage ceiling repair",
     note: "Stain cut out, patched, retextured, and repainted to match.",
     before: "/assets/ba3-before.jpg",
