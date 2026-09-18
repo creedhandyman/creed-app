@@ -760,15 +760,54 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       }),
     }));
 
-    // 5. Cap unreasonable hours. Inspection items: 10h trip / 8h reset (no single
-    // repair task takes longer than that). Project-scope items: 200h trip / 100h
-    // reset (a multi-unit job can legitimately be 50-100 clock hours).
+    // 4b. Flooring labor FLOOR. The prompt sets per-sqft MINIMUMS (LVP replacing
+    // old floor 1h/28sqft, install-only 1h/35, carpet 1h/50, tile 1h/18) and
+    // says NEVER quote fewer — but the model still under-scales big rooms (a
+    // 413 sqft living-room floor came back at 8h instead of ~15h). Enforce the
+    // floor deterministically: RAISE laborHrs to the sqft-derived minimum, never
+    // lower it, so a large room can't end up with fewer hours than a small one.
+    const AREA_WORK = /floor|lvp|laminate|vinyl[\s-]?plank|carpet|\btile\b/i;
+    rooms = rooms.map((r) => ({
+      ...r,
+      items: r.items.map((it) => {
+        const sqft = Number(it.sqft) || 0;
+        if (sqft < 40) return it; // tiny rooms: the flat estimate is fine
+        const txt = `${it.detail} ${it.comment}`.toLowerCase();
+        if (!AREA_WORK.test(txt)) return it;
+        const isTile = /\btile\b/.test(txt);
+        const isCarpet = /carpet/.test(txt) && !/lvp|laminate|vinyl|tile/.test(txt);
+        const hasDemo = /remov|haul|tear|rip|existing|replac|demo/.test(txt);
+        const sqftPerHr = isTile ? 18 : isCarpet ? 50 : hasDemo ? 28 : 35;
+        const floorHrs = Math.round((sqft / sqftPerHr) * 10) / 10;
+        if ((it.laborHrs || 0) < floorHrs) {
+          console.warn(`VALIDATION: Flooring floor — "${it.detail}" ${it.laborHrs}h → ${floorHrs}h (${sqft} sqft @ ${sqftPerHr}/h)`);
+          return { ...it, laborHrs: floorHrs };
+        }
+        return it;
+      }),
+    }));
+
+    // 5. Cap unreasonable hours. A single inspection repair tops out at 10h trip
+    // / 8h reset. BUT area-driven work (flooring/painting with a real sqft)
+    // legitimately runs long — a 413 sqft LVP replace is ~15h, a 920 sqft one
+    // ~33h — so its ceiling scales with area (a generous ~4 sqft/h) instead of
+    // the flat 8h reset. Without this, big-room flooring was being slammed to 8h,
+    // ending up with FEWER hours than a small room. Project-scope: 200h/100h.
+    const AREA_DRIVEN = /floor|lvp|laminate|vinyl[\s-]?plank|carpet|\btile\b|paint|ceiling|drywall|texture/i;
     rooms = rooms.map((r) => ({
       ...r,
       items: r.items.map((it) => {
         const isProjectScope = it.condition === "-";
-        const trip = isProjectScope ? 200 : 10;
-        const reset = isProjectScope ? 100 : 8;
+        const sqft = Number(it.sqft) || 0;
+        const areaDriven = sqft >= 40 && AREA_DRIVEN.test(`${it.detail} ${it.comment}`);
+        // Ceiling ~12 sqft/h (a hair slower than the slowest legit rate, tile)
+        // lets real flooring/painting through — including the prompt's 920 sqft
+        // → 33h case — while still catching a true runaway; a caught runaway
+        // resets to ~18 sqft/h (a sane tile-grade estimate), not the flat 8h.
+        const areaTrip = Math.round(Math.max(12, sqft / 12) * 10) / 10;
+        const areaReset = Math.round(Math.max(10, sqft / 18) * 10) / 10;
+        const trip = isProjectScope ? 200 : areaDriven ? areaTrip : 10;
+        const reset = isProjectScope ? 100 : areaDriven ? areaReset : 8;
         if (it.laborHrs > trip) {
           console.warn(`VALIDATION: Capped hours for "${it.detail}" from ${it.laborHrs}h to ${reset}h`);
           return { ...it, laborHrs: reset };
