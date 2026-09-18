@@ -136,6 +136,14 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `start_time` set, `end_time` empty, `hours: 0`. Clock-out patches
   that same row. The active row's id lives in localStorage as
   `c_t_active_id`. Both Timer.tsx and WorkVision.tsx share this state.
+- **Quote pricing**: the min-labor-floor → trip-fee → discount → tax →
+  grand-total cascade lives in ONE place — `src/lib/pricing.ts`
+  `priceCascade()` — consumed by QuoteForge's live preview (headline +
+  each Good/Better/Best tier) AND export-pdf (headline + tier columns).
+  LINE mode (pass `subtotalRaw`) = QuoteForge's per-line-rounded math;
+  AGGREGATE mode (omit it) = export-pdf's cent-rounded labor. Never
+  re-implement the cascade inline — a regression suite covers it (the
+  zzz quote-math audit test in the worktree, AUDIT_RUN=1 gated).
 - **Money rollups**: revenue / net-profit math lives in ONE place —
   `src/lib/financials.ts` `profitSnapshot()` — consumed by the Financials
   screen AND the Ops hub KPIs (dashboard Revenue·mo mirrors its revenue
