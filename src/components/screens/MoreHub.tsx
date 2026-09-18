@@ -49,6 +49,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     { id: "mileage", icon: "mileage", name: "Mileage", sub: "Trip logging", color: "#14b8a6", tint: "rgba(20,184,166,.16)", onClick: () => setPage("mileage") },
     { id: "map", icon: "map", name: "Crew Map", sub: "Stamps · today's stops", color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") },
     { id: "settings", icon: "settings", name: "Settings", sub: isAdmin ? "Account · branding" : "Account · notifications", color: "#aab", tint: "rgba(138,138,153,.18)", onClick: openSettings },
+    { id: "grizz", icon: "info", name: "Ask Grizz", sub: "Tips & how Creed works", color: "#f5b400", tint: "rgba(245,180,0,.14)", onClick: () => setShowGuide(true) },
   ];
 
   return (
@@ -71,25 +72,15 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 11, marginBottom: 11 }}>
         {tiles.map((tile) => (
           <div key={tile.id} className="cd" onClick={tile.onClick} style={{ cursor: "pointer", padding: 14 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: tile.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-              <Icon name={tile.icon} size={20} color={tile.color} />
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: tile.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, overflow: "hidden" }}>
+              {tile.id === "grizz"
+                ? <Grizz pose="point" size={30} />
+                : <Icon name={tile.icon} size={20} color={tile.color} />}
             </div>
             <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px" }}>{tile.name}</div>
             <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{tile.sub}</div>
           </div>
         ))}
-      </div>
-
-      {/* Help & user guide */}
-      <div className="cd" onClick={() => setShowGuide(true)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: 13 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 11, background: "rgba(245,180,0,.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
-          <Grizz pose="point" size={30} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15.5, fontWeight: 600 }}>Ask Grizz</div>
-          <div style={{ fontSize: 13.5, color: "var(--color-dim)" }}>Tips &amp; how Creed works</div>
-        </div>
-        <Icon name="next" size={17} color="var(--color-dim)" />
       </div>
 
       {showGuide && <UserGuideModal onClose={() => setShowGuide(false)} />}
