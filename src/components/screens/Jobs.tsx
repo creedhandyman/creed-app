@@ -19,6 +19,7 @@ import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours, parseEntryDate } from "@/lib/dates";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes, cityContext } from "@/lib/geo";
+import { residentContact } from "@/lib/resident";
 import {
   CADENCES,
   CADENCE_LABELS,
@@ -1000,6 +1001,39 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <span className="l">{t("jobs.created")}</span>
               <span className="v">{dj.job_date || (dj.created_at ? dj.created_at.slice(0, 10) : "—")}</span>
             </div>
+            {/* Resident (tenant) contact — review requests go HERE when set,
+                so a PM client isn't asked to review every work order. Saved
+                on the rooms blob (residentName/residentPhone); AppFolio
+                imports pre-fill via tenantName/tenantPhone (lib/resident). */}
+            {(() => {
+              const res = residentContact(dj.rooms);
+              const saveResident = (field: "residentName" | "residentPhone", val: string) =>
+                enqueueRoomsWrite(async () => {
+                  const fresh = useStore.getState().jobs.find((x) => x.id === dj.id);
+                  if (!fresh) return;
+                  let fd: Record<string, unknown> = {};
+                  try { fd = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {}); } catch { return; }
+                  if (((fd[field] as string) || "") === val) return;
+                  await db.patch("jobs", dj.id, { rooms: JSON.stringify({ ...fd, [field]: val }) });
+                  await loadAll();
+                });
+              const inputStyle = { flex: 1, maxWidth: 180, textAlign: "right" as const, background: "transparent", border: "none", borderBottom: "1px dashed var(--color-border-dark, #2a2a3e)", padding: "2px 4px", fontSize: 14, color: "inherit" };
+              return (
+                <>
+                  <div className="drow">
+                    <span className="l">{t("jobs.resident")}</span>
+                    <input key={`rn-${dj.id}`} defaultValue={res.name} placeholder="—" aria-label={t("jobs.resident")}
+                      onBlur={(e) => saveResident("residentName", e.target.value.trim())} style={inputStyle} />
+                  </div>
+                  <div className="drow">
+                    <span className="l">{t("jobs.residentPhone")}</span>
+                    <input key={`rp-${dj.id}`} type="tel" defaultValue={res.phone} placeholder="—" aria-label={t("jobs.residentPhone")}
+                      onBlur={(e) => saveResident("residentPhone", e.target.value.trim())} style={inputStyle} />
+                  </div>
+                  <div className="dim" style={{ fontSize: 12, padding: "2px 0 4px" }}>{t("jobs.residentHint")}</div>
+                </>
+              );
+            })()}
           </div>
 
           {/* Equipment — link this job to a serviced unit so completion stamps its history.

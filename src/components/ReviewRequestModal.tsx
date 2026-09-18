@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
+import { residentContact } from "@/lib/resident";
 import type { Job, Customer } from "@/lib/types";
 
 interface Props {
@@ -42,7 +43,10 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const reviewUrl = `${origin}/review?org=${org?.id || ""}&job=${job.id}`;
     const orgName = org?.name || "us";
-    const firstName = (job.client || c?.name || "").split(/\s+/)[0] || "";
+    // Greet the RESIDENT when one is on file (PM jobs) — same preference
+    // the automated cron uses (lib/resident.ts).
+    const resident = residentContact(job.rooms);
+    const firstName = (resident.name || job.client || c?.name || "").split(/\s+/)[0] || "";
 
     setMessage(
       `Hi${firstName ? ` ${firstName}` : ""}! Thanks for choosing ${orgName} for the work at ${job.property}. ` +
@@ -52,8 +56,11 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
 
   if (!job) return null;
 
-  const phone = customer?.phone || "";
-  const email = customer?.email || "";
+  // Resident contact beats the paying customer's — a PM's number here
+  // would ask the same manager for a review after every work order.
+  const resident = residentContact(job.rooms);
+  const phone = resident.phone || customer?.phone || "";
+  const email = resident.email || customer?.email || "";
 
   // Persist review_requested_at so we don't re-prompt on the next status
   // change or row re-render. Best-effort patch; we don't block the action.

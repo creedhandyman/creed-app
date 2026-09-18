@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
+import { residentContact } from "@/lib/resident";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,9 @@ interface JobRow {
   id: string;
   property: string | null;
   client: string | null;
+  /** rooms JSON blob — carries residentName/residentPhone (manual) and
+   *  tenantName/tenantPhone (AppFolio import); see lib/resident.ts. */
+  rooms: string | null;
 }
 
 interface CustomerRow {
@@ -160,7 +164,12 @@ async function dispatchOne(
 
   const businessName = org?.name || "us";
   const jobProperty = job.property || "your home";
-  const customerName = firstName(customer?.name || job.client);
+  // The RESIDENT (tenant) on file wins over the paying customer — on a
+  // property-management job the customer is the PM, and pinging the same
+  // PM for a review after every work order is worse than useless. The
+  // resident actually experienced the work.
+  const resident = residentContact(job.rooms);
+  const customerName = firstName(resident.name || customer?.name || job.client);
   const reviewLink = org?.google_review_url || "";
   const template = (org?.review_request_message && org.review_request_message.trim().length)
     ? org.review_request_message
@@ -179,20 +188,22 @@ async function dispatchOne(
   let sentAny = false;
 
   if (row.channel === "sms" || row.channel === "both") {
-    if (!customer?.phone) {
-      errors.push("No phone on customer");
+    const toPhone = resident.phone || customer?.phone || "";
+    if (!toPhone) {
+      errors.push("No phone on resident or customer");
     } else {
-      const r = await sendSms(customer.phone, body);
+      const r = await sendSms(toPhone, body);
       if (r.ok) sentAny = true; else errors.push(`SMS: ${r.error}`);
     }
   }
 
   if (row.channel === "email" || row.channel === "both") {
-    if (!customer?.email) {
-      errors.push("No email on customer");
+    const toEmail = resident.email || customer?.email || "";
+    if (!toEmail) {
+      errors.push("No email on resident or customer");
     } else {
       const subject = `Quick favor from ${businessName}`;
-      const r = await sendEmail(customer.email, subject, body);
+      const r = await sendEmail(toEmail, subject, body);
       if (r.ok) sentAny = true; else errors.push(`Email: ${r.error}`);
     }
   }
@@ -259,7 +270,7 @@ async function handleDispatch(req: NextRequest): Promise<NextResponse> {
       ? supabase.from("organizations").select("id, name, review_request_message, google_review_url").in("id", orgIds)
       : Promise.resolve({ data: [] as OrgRow[], error: null }),
     jobIds.length
-      ? supabase.from("jobs").select("id, property, client").in("id", jobIds)
+      ? supabase.from("jobs").select("id, property, client, rooms").in("id", jobIds)
       : Promise.resolve({ data: [] as JobRow[], error: null }),
     custIds.length
       ? supabase.from("customers").select("id, name, phone, email").in("id", custIds)
