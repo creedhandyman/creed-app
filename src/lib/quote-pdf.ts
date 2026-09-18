@@ -15,6 +15,8 @@ export interface QuotePdfOrg {
   address?: string;
   license_num?: string;
   default_rate?: number;
+  /** JSON string: { "Plumbing": 65, ... } — per-trade labor rates. */
+  trade_rates?: string;
   markup_pct?: number;
   tax_pct?: number;
   tax_mode?: string;
@@ -98,11 +100,19 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
       ? orgTaxMode
       : "total");
 
+  // Per-trade rates (parsed from the org) — only when no per-quote
+  // override, mirroring QuoteForge's getRateForRoom precedence.
+  let tradeRates: Record<string, number> | undefined;
+  if (!laborRateOverride && org?.trade_rates) {
+    try { tradeRates = JSON.parse(org.trade_rates); } catch { /* malformed — flat rate */ }
+  }
+
   exportQuotePdf({
     property: job.property,
     client: job.client,
     rooms,
     rate: laborRateOverride || org?.default_rate || 55,
+    tradeRates,
     workers,
     grandTotal: job.total || 0,
     totalLabor: job.total_labor || 0,

@@ -1,7 +1,7 @@
 import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 import { resolveTaxMode, type TaxMode } from "./tax";
-import { priceCascade } from "./pricing";
+import { priceCascade, rateForRoom } from "./pricing";
 import { itemInTier, itemTiers, type TierKey } from "./tiers";
 
 interface ExportOptions {
@@ -65,6 +65,12 @@ interface ExportOptions {
    *  relabels the Better/Best columns. */
   tieredQuote?: boolean;
   tierNames?: { better: string; best: string };
+  /** Per-trade labor rates (org.trade_rates parsed) — each trade section
+   *  bills at its own rate via the SAME rateForRoom resolver the
+   *  QuoteForge preview uses. Callers must OMIT this when the quote has a
+   *  per-quote laborRate override (the override, passed as `rate`, is the
+   *  rate for every section). Absent = flat `rate` everywhere (legacy). */
+  tradeRates?: Record<string, number> | null;
 }
 
 const esc = (s: string) =>
@@ -112,6 +118,16 @@ export function exportQuotePdf(opts: ExportOptions) {
   // the LATEST rate at generation time.
   const allItems = rooms.flatMap((r) => r.items);
   const rawTotalHrs = allItems.reduce((s, it) => s + it.laborHrs, 0);
+  // Per-room rate (trade rates when supplied, else the flat rate) — the
+  // SAME resolver the QuoteForge preview uses, so section rates and the
+  // labor total match the screen for orgs with per-trade pricing.
+  const tradeRates = opts.tradeRates || null;
+  const roomRate = (name: string) => rateForRoom(name, { defaultRate: rate, tradeRates });
+  // Raw labor $ at per-room rates (unrounded — the cascade rounds once).
+  const rawLabor = rooms.reduce(
+    (s, r) => s + r.items.reduce((si, it) => si + it.laborHrs * roomRate(r.name), 0),
+    0,
+  );
   // Material markup is applied per-item (matching QuoteForge.tm) so the
   // SUBTOTAL value matches the "Material Markup (X%) included in
   // materials" disclaimer below.
@@ -135,7 +151,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   // ones. AGGREGATE mode: labor rounds to cents and subtotal derives as
   // round(labor + materials), keeping every printed figure self-consistent.
   const cascade = priceCascade({
-    laborRaw: rawTotalHrs * rate,
+    laborRaw: rawLabor,
     hoursRaw: rawTotalHrs,
     materials: totalMat,
     rate,
@@ -162,17 +178,22 @@ export function exportQuotePdf(opts: ExportOptions) {
     better: (opts.tierNames?.better || "").trim() || "Better",
     best: (opts.tierNames?.best || "").trim() || "Best",
   };
-  const tierItemsOf = (t: TierKey): RoomItem[] => allItems.filter((i) => itemInTier(i, t));
-  const tierTotalOf = (items: RoomItem[]): number => {
-    const rawHrs = items.reduce((s, it) => s + it.laborHrs, 0);
-    const mat = items.reduce((s, it) => {
-      const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
+  // Tier items keep their ROOM (trade bucket) so tier labor bills at the
+  // same per-trade rates as the headline.
+  type TierPair = { room: string; it: RoomItem };
+  const allPairs: TierPair[] = rooms.flatMap((r) => r.items.map((it) => ({ room: r.name, it })));
+  const tierItemsOf = (t: TierKey): TierPair[] => allPairs.filter((p) => itemInTier(p.it, t));
+  const tierTotalOf = (pairs: TierPair[]): number => {
+    const rawHrs = pairs.reduce((s, p) => s + p.it.laborHrs, 0);
+    const lab = pairs.reduce((s, p) => s + p.it.laborHrs * roomRate(p.room), 0);
+    const mat = pairs.reduce((s, p) => {
+      const raw = p.it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
       return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
     }, 0);
     // Same shared cascade as the headline — a tier column is just the
     // cascade over its own item set.
     return priceCascade({
-      laborRaw: rawHrs * rate,
+      laborRaw: lab,
       hoursRaw: rawHrs,
       materials: mat,
       rate,
@@ -208,7 +229,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     .map((col, idx) => {
       const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
       const itemsList = col.items.length
-        ? `<ul style="padding-left:16px;margin:6px 0 0;font-size:11px;color:#444;line-height:1.5">${col.items.slice(0, 6).map((a) => `<li>${esc(a.detail)}</li>`).join("")}${col.items.length > 6 ? `<li>+${col.items.length - 6} more</li>` : ""}</ul>`
+        ? `<ul style="padding-left:16px;margin:6px 0 0;font-size:11px;color:#444;line-height:1.5">${col.items.slice(0, 6).map((a) => `<li>${esc(a.it.detail)}</li>`).join("")}${col.items.length > 6 ? `<li>+${col.items.length - 6} more</li>` : ""}</ul>`
         : `<div style="font-size:11px;color:#888;margin-top:6px">No work in this option</div>`;
       return `<div style="border:2px solid ${hue};border-radius:10px;padding:12px;page-break-inside:avoid">
       <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}</div>
@@ -256,7 +277,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   // raw Room — so duplicate trade entries fold together).
   const summaryRows = categories.map((cat) => {
     const hrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
-    const labor = hrs * rate;
+    const labor = hrs * roomRate(cat.name);
     const mat = cat.items.reduce(
       (s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0),
       0,
@@ -266,13 +287,13 @@ export function exportQuotePdf(opts: ExportOptions) {
 
   // Virtual "Minimum service charge" row inserted between per-trade rows
   // and the SUBTOTAL. It bridges the gap between the actual sum of
-  // section labors (= rawTotalHrs × rate) and the floored total
-  // (= totalHrs × rate) so the column-sum math is self-consistent on
-  // the printed estimate.
+  // section labors (at per-trade rates = rawLabor) and the floored total
+  // (= minLaborHours × rate) so the column-sum math is self-consistent
+  // on the printed estimate.
   const minRow = minApplies
     ? (() => {
         const deltaHrs = Math.round((minLaborHours - rawTotalHrs) * 100) / 100;
-        const deltaLabor = Math.round(deltaHrs * rate * 100) / 100;
+        const deltaLabor = Math.round((totalLabor - rawLabor) * 100) / 100;
         return { hrs: deltaHrs, labor: deltaLabor };
       })()
     : null;
@@ -286,8 +307,9 @@ export function exportQuotePdf(opts: ExportOptions) {
   // because their unit prices differ.
   let breakdownHtml = "";
   categories.forEach((cat) => {
+    const sectionRate = roomRate(cat.name);
     const sectionHrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
-    const sectionLabor = sectionHrs * rate;
+    const sectionLabor = sectionHrs * sectionRate;
     const sectionMat = cat.items.reduce(
       (s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0),
       0,
@@ -364,7 +386,7 @@ export function exportQuotePdf(opts: ExportOptions) {
         <tbody>${matRows || '<tr><td colspan="5" class="dim">Labor only</td></tr>'}</tbody>
       </table>
       <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:${accent};font-weight:600">
-        Labor (${clockHrs}h × ${crewSize} crew = ${shownHrs.toFixed(1)} man-hrs @ $${rate}/hr): $${sectionLabor.toFixed(2)}
+        Labor (${clockHrs}h × ${crewSize} crew = ${shownHrs.toFixed(1)} man-hrs @ $${sectionRate}/hr): $${sectionLabor.toFixed(2)}
         &nbsp;·&nbsp; Material: $${sectionMat.toFixed(2)}
         &nbsp;·&nbsp; <b>Section Total: $${(sectionLabor + sectionMat).toFixed(2)}</b>
       </div>
@@ -493,7 +515,15 @@ ${renders
 <h2>Notes &amp; Exclusions</h2>
 <div style="font-size:12px;color:#444;line-height:1.8">
   <ul style="padding-left:20px">
-    <li>Labor rate: <b>$${rate}.00/man-hour</b>. Man-hours = clock hours × crew size (2-man crew tasks billed at 2× clock time).</li>
+    <li>${(() => {
+      // With per-trade rates in play, name each section's rate instead of
+      // printing one flat figure that no section line matches.
+      const catRates = categories.map((c) => ({ n: c.name, r: roomRate(c.name) }));
+      const mixed = catRates.some((c) => c.r !== rate);
+      return mixed
+        ? `Labor rates by trade: <b>${catRates.map((c) => `${esc(c.n)} $${c.r}/hr`).join(" · ")}</b>. Man-hours = clock hours × crew size (2-man crew tasks billed at 2× clock time).`
+        : `Labor rate: <b>$${rate}.00/man-hour</b>. Man-hours = clock hours × crew size (2-man crew tasks billed at 2× clock time).`;
+    })()}</li>
     ${minRow ? `<li><b>Minimum service charge applied — ${minLaborHours} hr min.</b> Actual labor on this scope is ${rawTotalHrs.toFixed(2)} hr; quotes never bill less than ${minLaborHours} hr to cover trip time and overhead.</li>` : ""}
     <li>Materials priced at current Home Depot/Lowe's retail. All material quantities and unit prices listed per line item above.</li>
     <li>Quote valid <b>${validDays} days</b> from issue date.${depositPct > 0 ? ` <b>${depositPct}% deposit</b> to begin; balance due on completion.` : " Payment due on completion."}</li>

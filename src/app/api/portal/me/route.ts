@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
         // PDF client-side and needs the same numbers QuoteForge uses.
         // stripe_account_id is fetched to compute stripe_connected below —
         // it's stripped before the response (never exposed to the browser).
-        .select("id, name, phone, email, logo_url, address, license_num, default_rate, markup_pct, tax_pct, tax_mode, trip_fee, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms, stripe_account_id")
+        .select("id, name, phone, email, logo_url, address, license_num, default_rate, trade_rates, markup_pct, tax_pct, tax_mode, trip_fee, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms, stripe_account_id")
         .eq("id", session.org_id)
         .limit(1),
       // Active/paused/past-due memberships so the customer can see + cancel them.

@@ -23,6 +23,31 @@ import { computeTax, type TaxMode } from "./tax";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Per-room (trade-bucket) labor-rate resolution — ONE implementation for
+ * QuoteForge's live preview and export-pdf, so the printed section rates
+ * match the on-screen ones. Order: per-quote override (an explicit "this
+ * job bills at $X/hr" decision) → the org's trade_rates entry whose key
+ * the room name contains → the org default. A zero/negative trade rate is
+ * ignored (never bill labor at $0 because of a bad settings row).
+ */
+export function rateForRoom(
+  roomName: string,
+  o: {
+    defaultRate: number;
+    override?: number | null;
+    tradeRates?: Record<string, number> | null;
+  },
+): number {
+  if (o.override && o.override > 0) return o.override;
+  if (o.tradeRates) {
+    for (const [trade, r] of Object.entries(o.tradeRates)) {
+      if (typeof r === "number" && r > 0 && roomName.toLowerCase().includes(trade.toLowerCase())) return r;
+    }
+  }
+  return o.defaultRate;
+}
+
 export interface CascadeDiscount {
   type: "percent" | "fixed";
   value: number;

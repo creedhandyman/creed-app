@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
       // org's Stripe Connect account id to an unauthenticated caller.
       const { data: orgs } = await supabase
         .from("organizations")
-        .select("id, name, logo_url, phone, default_rate, stripe_connected, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms")
+        .select("id, name, logo_url, phone, default_rate, trade_rates, stripe_connected, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms")
         .eq("id", job.org_id)
         .limit(1);
       org = orgs?.[0] || null;

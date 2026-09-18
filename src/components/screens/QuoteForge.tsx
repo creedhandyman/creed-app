@@ -31,7 +31,7 @@ import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/lib/trades";
 import { exportQuotePdf } from "@/lib/export-pdf";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
-import { priceCascade } from "@/lib/pricing";
+import { priceCascade, rateForRoom } from "@/lib/pricing";
 import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
@@ -695,17 +695,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const tradeRates: Record<string, number> = (() => {
     try { return org?.trade_rates ? JSON.parse(org.trade_rates) : {}; } catch { return {}; }
   })();
-  const getRateForRoom = (roomName: string): number => {
-    // Per-quote labor-rate override (Feature 2) wins over trade-specific
-    // rates AND the user/org default — it's an explicit "this job bills
-    // at $X/hr" decision the user made for this quote.
-    if (laborRate && laborRate > 0) return laborRate;
-    // Check if room name matches a trade
-    for (const [trade, r] of Object.entries(tradeRates)) {
-      if (roomName.toLowerCase().includes(trade.toLowerCase())) return r;
-    }
-    return defaultRate;
-  };
+  // Shared resolver (lib/pricing.ts) — the same function export-pdf uses,
+  // so the printed section rates can't drift from the preview's. Override
+  // wins over trade rates wins over the org default.
+  const getRateForRoom = (roomName: string): number =>
+    rateForRoom(roomName, { defaultRate, override: laborRate, tradeRates });
   // Effective non-trade rate. Used for the PDF labor line + the
   // "Labor rate: $X.00/hour" line in the AI Assist system prompt.
   const rate = laborRate && laborRate > 0 ? laborRate : defaultRate;
@@ -2999,6 +2993,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 clientEmail: customerData?.email,
                 rooms,
                 rate,
+                // Per-trade rates only when no per-quote override — the
+                // override already IS the rate for every section.
+                tradeRates: laborRate && laborRate > 0 ? undefined : tradeRates,
                 workers: workers.map((wid) => {
                   const u = profiles.find((x) => x.id === wid);
                   return { id: wid, name: u?.name || "" };
