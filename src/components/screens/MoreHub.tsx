@@ -70,17 +70,23 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
 
       {/* Relocated tabs + Customers / Mileage / Settings */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 11, marginBottom: 11 }}>
-        {tiles.map((tile) => (
-          <div key={tile.id} className="cd" onClick={tile.onClick} style={{ cursor: "pointer", padding: 14 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: tile.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, overflow: "hidden" }}>
-              {tile.id === "grizz"
-                ? <Grizz pose="point" size={30} />
-                : <Icon name={tile.icon} size={20} color={tile.color} />}
+        {tiles.map((tile, i) => {
+          // An odd tile count leaves the last tile alone with an empty cell
+          // beside it (the tech view has no Customers tile → 7 tiles). Span the
+          // odd last one across both columns so the grid fills evenly.
+          const spanFull = tiles.length % 2 === 1 && i === tiles.length - 1;
+          return (
+            <div key={tile.id} className="cd" onClick={tile.onClick} style={{ cursor: "pointer", padding: 14, ...(spanFull ? { gridColumn: "1 / -1" } : {}) }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: tile.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, overflow: "hidden" }}>
+                {tile.id === "grizz"
+                  ? <Grizz pose="point" size={30} />
+                  : <Icon name={tile.icon} size={20} color={tile.color} />}
+              </div>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px" }}>{tile.name}</div>
+              <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{tile.sub}</div>
             </div>
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px" }}>{tile.name}</div>
-            <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{tile.sub}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {showGuide && <UserGuideModal onClose={() => setShowGuide(false)} />}
