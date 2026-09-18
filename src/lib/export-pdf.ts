@@ -1,6 +1,7 @@
 import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
-import { computeTax, resolveTaxMode, type TaxMode } from "./tax";
+import { resolveTaxMode, type TaxMode } from "./tax";
+import { priceCascade } from "./pricing";
 import { itemInTier, itemTiers, type TierKey } from "./tiers";
 
 interface ExportOptions {
@@ -111,12 +112,6 @@ export function exportQuotePdf(opts: ExportOptions) {
   // the LATEST rate at generation time.
   const allItems = rooms.flatMap((r) => r.items);
   const rawTotalHrs = allItems.reduce((s, it) => s + it.laborHrs, 0);
-  // Minimum-labor-hours floor (matches the QuoteForge live preview).
-  // Only kicks in when the quote already has SOME labor on it — pure
-  // material quotes don't trigger the floor.
-  const minApplies = minLaborHours > 0 && rawTotalHrs > 0 && rawTotalHrs < minLaborHours;
-  const totalHrs = minApplies ? minLaborHours : rawTotalHrs;
-  const totalLabor = Math.round(totalHrs * rate * 100) / 100;
   // Material markup is applied per-item (matching QuoteForge.tm) so the
   // SUBTOTAL value matches the "Material Markup (X%) included in
   // materials" disclaimer below.
@@ -125,15 +120,6 @@ export function exportQuotePdf(opts: ExportOptions) {
     return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
   }, 0);
 
-  // Pre-discount, pre-tax base. Line item material costs already include
-  // markup (applied at quote save / edit time), so subtotal + trip fee is
-  // the correct discount base.
-  const _preDiscountBase = totalLabor + totalMat + tripFee;
-  const discountAmount = discount
-    ? (discount.type === "percent"
-        ? Math.round(_preDiscountBase * (discount.value / 100) * 100) / 100
-        : Math.min(_preDiscountBase, discount.value))
-    : 0;
   const discountLabel = discount
     ? (discount.label && discount.label.trim()
         ? discount.label.trim()
@@ -143,18 +129,29 @@ export function exportQuotePdf(opts: ExportOptions) {
     : "";
 
   const taxMode = resolveTaxMode(opts.taxMode);
-  const baseAfterDiscount = Math.max(0, Math.round((_preDiscountBase - discountAmount) * 100) / 100);
-  const taxCalc = computeTax({
-    labor: totalLabor,
+  // Min-labor floor → trip fee → discount → tax → grand total via the
+  // SHARED cascade (lib/pricing.ts) — the same function QuoteForge's live
+  // preview runs, so the printed totals can't drift from the on-screen
+  // ones. AGGREGATE mode: labor rounds to cents and subtotal derives as
+  // round(labor + materials), keeping every printed figure self-consistent.
+  const cascade = priceCascade({
+    laborRaw: rawTotalHrs * rate,
+    hoursRaw: rawTotalHrs,
     materials: totalMat,
+    rate,
+    minHrs: minLaborHours,
     tripFee,
-    discountAmount,
+    discount,
     taxPct,
     taxMode,
   });
-  const taxAmount = taxCalc.taxAmount;
-  const taxLabel = taxCalc.taxLabel;
-  const grandTotal = Math.round((baseAfterDiscount + taxAmount) * 100) / 100;
+  const minApplies = cascade.minApplies;
+  const totalHrs = cascade.th;
+  const totalLabor = cascade.tl;
+  const discountAmount = cascade.discountAmount;
+  const taxAmount = cascade.taxAmount;
+  const taxLabel = cascade.taxLabel;
+  const grandTotal = cascade.grandTotal;
 
   // Good-Better-Best options. Each option re-runs the SAME labor/markup/
   // min-floor/discount/tax cascade over ITS OWN item set (membership-based, so
@@ -168,22 +165,23 @@ export function exportQuotePdf(opts: ExportOptions) {
   const tierItemsOf = (t: TierKey): RoomItem[] => allItems.filter((i) => itemInTier(i, t));
   const tierTotalOf = (items: RoomItem[]): number => {
     const rawHrs = items.reduce((s, it) => s + it.laborHrs, 0);
-    const mApplies = minLaborHours > 0 && rawHrs > 0 && rawHrs < minLaborHours;
-    const hrs = mApplies ? minLaborHours : rawHrs;
-    const labor = Math.round(hrs * rate * 100) / 100;
     const mat = items.reduce((s, it) => {
       const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
       return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
     }, 0);
-    const preDisc = labor + mat + tripFee;
-    const dAmt = discount
-      ? (discount.type === "percent"
-          ? Math.round(preDisc * (discount.value / 100) * 100) / 100
-          : Math.min(preDisc, discount.value))
-      : 0;
-    const baseAfter = Math.max(0, Math.round((preDisc - dAmt) * 100) / 100);
-    const tax = computeTax({ labor, materials: mat, tripFee, discountAmount: dAmt, taxPct, taxMode }).taxAmount;
-    return Math.round((baseAfter + tax) * 100) / 100;
+    // Same shared cascade as the headline — a tier column is just the
+    // cascade over its own item set.
+    return priceCascade({
+      laborRaw: rawHrs * rate,
+      hoursRaw: rawHrs,
+      materials: mat,
+      rate,
+      minHrs: minLaborHours,
+      tripFee,
+      discount,
+      taxPct,
+      taxMode,
+    }).grandTotal;
   };
   // Options differ once any line isn't in all three (a membership split).
   const anySplit = allItems.some((i) => itemTiers(i).length !== 3);
@@ -374,7 +372,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   });
 
   // Subtotal before markup/tax
-  const subtotal = totalLabor + totalMat;
+  const subtotal = cascade.subtotal;
 
   // Build the licensed-pro exclusion line dynamically. The boilerplate
   // ("electrical panel work, major HVAC, gas lines are NOT included") read

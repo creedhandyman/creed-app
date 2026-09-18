@@ -30,7 +30,8 @@ import {
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/lib/trades";
 import { exportQuotePdf } from "@/lib/export-pdf";
-import { computeTax, resolveTaxMode, type TaxMode } from "@/lib/tax";
+import { resolveTaxMode, type TaxMode } from "@/lib/tax";
+import { priceCascade } from "@/lib/pricing";
 import Inspector from "./Inspector";
 import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
@@ -1342,41 +1343,28 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       : (typeof org?.min_labor_hours === "number" && org.min_labor_hours >= 0
           ? org.min_labor_hours
           : 1);
-  const minApplies = effectiveMinHrs > 0 && thRaw > 0 && thRaw < effectiveMinHrs;
-  // When the minimum applies, the labor total switches to
-  // effectiveMinHrs × rate (the effective non-trade rate). We surface
-  // BOTH numbers downstream — `tl`/`th` are the billed values used in
-  // every subtotal/tax/grand-total cascade; `tlRaw`/`thRaw` stay around
-  // for the "actually X hr of work" debug line.
-  const tl = minApplies ? Math.round(effectiveMinHrs * rate * 100) / 100 : tlRaw;
-  const th = minApplies ? effectiveMinHrs : thRaw;
-  const subtotal = minApplies
-    ? Math.round((subtotalRaw + (tl - tlRaw)) * 100) / 100
-    : subtotalRaw;
-  // Trip fee is a service charge added before tax — tax applies to the
-  // combined work + trip-fee base.
-  const preDiscountBase = subtotal + tripFee;
-  // Per-quote discount (Feature 1). Applied BEFORE tax so the customer
-  // doesn't pay tax on the discounted portion. Capped at the base so a
-  // fixed discount larger than the bill can't drive the total negative.
-  const discountAmount = discount && discount.value > 0
-    ? (discount.type === "percent"
-        ? Math.round(preDiscountBase * (discount.value / 100) * 100) / 100
-        : Math.min(preDiscountBase, discount.value))
-    : 0;
   // Resolve tax-mode: per-quote override → org default → "total" (legacy).
   const effectiveTaxMode: TaxMode = taxMode ?? resolveTaxMode(org?.tax_mode);
-  const baseAfterDiscount = Math.max(0, Math.round((preDiscountBase - discountAmount) * 100) / 100);
-  const taxCalc = computeTax({
-    labor: tl,
+  // Min-labor floor → trip fee → discount → tax → grand total, all via the
+  // SHARED cascade (lib/pricing.ts) — the same function export-pdf prints
+  // with, so the preview and the signed PDF can't drift. LINE mode
+  // (subtotalRaw passed) keeps this byte-identical to the historical
+  // inline math. `tl`/`th` are the billed values; `tlRaw`/`thRaw` stay
+  // around for the "actually X hr of work" debug line.
+  const cascade = priceCascade({
+    laborRaw: tlRaw,
+    hoursRaw: thRaw,
     materials: tm,
+    rate,
+    minHrs: effectiveMinHrs,
     tripFee,
-    discountAmount,
+    discount,
     taxPct,
     taxMode: effectiveTaxMode,
+    subtotalRaw,
   });
-  const taxAmount = taxCalc.taxAmount;
-  const gt = Math.round((baseAfterDiscount + taxAmount) * 100) / 100;
+  const { minApplies, tl, th, subtotal, discountAmount, taxAmount } = cascade;
+  const gt = cascade.grandTotal;
 
   // ── Good-Better-Best tier totals (only meaningful when tieredQuote is on).
   // Each option re-runs the SAME pricing cascade (min-labor floor, discount,
@@ -1385,23 +1373,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // back to the legacy cumulative reading for pre-membership quotes.
   const itemsForTier = (t: TierKey) => all.filter((i) => itemInTier(i, t));
   const tierBreakdownOf = (items: typeof all): { total: number; labor: number; mat: number; hrs: number } => {
-    const tlR = items.reduce((s, i) => s + i.lc, 0);
-    const mTot = items.reduce((s, i) => s + i.mc, 0);
-    const thR = items.reduce((s, i) => s + i.laborHrs, 0);
-    const subR = items.reduce((s, i) => s + i.tot, 0);
-    const mApplies = effectiveMinHrs > 0 && thR > 0 && thR < effectiveMinHrs;
-    const tlT = mApplies ? Math.round(effectiveMinHrs * rate * 100) / 100 : tlR;
-    const hrsT = mApplies ? effectiveMinHrs : thR;
-    const subT = mApplies ? Math.round((subR + (tlT - tlR)) * 100) / 100 : subR;
-    const preDisc = subT + tripFee;
-    const dAmt = discount && discount.value > 0
-      ? (discount.type === "percent"
-          ? Math.round(preDisc * (discount.value / 100) * 100) / 100
-          : Math.min(preDisc, discount.value))
-      : 0;
-    const baseAfter = Math.max(0, Math.round((preDisc - dAmt) * 100) / 100);
-    const tax = computeTax({ labor: tlT, materials: mTot, tripFee, discountAmount: dAmt, taxPct, taxMode: effectiveTaxMode }).taxAmount;
-    return { total: Math.round((baseAfter + tax) * 100) / 100, labor: tlT, mat: Math.round(mTot * 100) / 100, hrs: hrsT };
+    const c = priceCascade({
+      laborRaw: items.reduce((s, i) => s + i.lc, 0),
+      hoursRaw: items.reduce((s, i) => s + i.laborHrs, 0),
+      materials: items.reduce((s, i) => s + i.mc, 0),
+      rate,
+      minHrs: effectiveMinHrs,
+      tripFee,
+      discount,
+      taxPct,
+      taxMode: effectiveTaxMode,
+      subtotalRaw: items.reduce((s, i) => s + i.tot, 0),
+    });
+    return { total: c.grandTotal, labor: c.tl, mat: Math.round(items.reduce((s, i) => s + i.mc, 0) * 100) / 100, hrs: c.th };
   };
   const tierBk = {
     base: tierBreakdownOf(itemsForTier("base")),
