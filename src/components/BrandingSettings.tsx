@@ -51,11 +51,14 @@ export default function BrandingSettings() {
   // /card/[slug] page reads them. Drafts resync if the org reloads.
   const [headlineDraft, setHeadlineDraft] = useState("");
   const [servicesDraft, setServicesDraft] = useState("");
+  const [cardPhotoUrl, setCardPhotoUrl] = useState("");
+  const [photoUploading, setPhotoUploading] = useState(false);
   useEffect(() => {
-    let c: { headline?: string; services?: string[] } = {};
+    let c: { headline?: string; services?: string[]; photoUrl?: string } = {};
     try { c = org?.site_content ? JSON.parse(org.site_content) : {}; } catch { /* */ }
     setHeadlineDraft(c.headline || "");
     setServicesDraft(Array.isArray(c.services) ? c.services.join("\n") : "");
+    setCardPhotoUrl(c.photoUrl || "");
   }, [org?.site_content]);
 
   if (!isOwner || !org) return null;
@@ -83,7 +86,7 @@ export default function BrandingSettings() {
 
   // Merge a patch into the org's site_content JSON without clobbering the
   // marketing-site fields (whyUs / about / cta / etc.) that live alongside.
-  const saveCardContent = async (patch: { headline?: string; services?: string[] }) => {
+  const saveCardContent = async (patch: { headline?: string; services?: string[]; photoUrl?: string | null }) => {
     let current: Record<string, unknown> = {};
     try { current = org.site_content ? JSON.parse(org.site_content) : {}; } catch { /* */ }
     await db.patch("organizations", org.id, { site_content: JSON.stringify({ ...current, ...patch }) });
@@ -163,6 +166,32 @@ export default function BrandingSettings() {
         .showToast("Logo upload error: " + (err instanceof Error ? err.message : String(err)), "error");
     } finally {
       setUploading(false);
+    }
+  };
+
+  // Optional card photo — uploaded to the same public `receipts` bucket as the
+  // logo, but stored in site_content.photoUrl (no schema change). Removing it
+  // is a saveCardContent({ photoUrl: null }).
+  const onCardPhotoFile = async (file: File) => {
+    if (!file) return;
+    setPhotoUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `card/${org.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await supabase.storage
+        .from("receipts")
+        .upload(path, file, { upsert: false, contentType: file.type || undefined });
+      if (error) {
+        useStore.getState().showToast("Upload failed: " + error.message, "error");
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
+      await saveCardContent({ photoUrl: urlData.publicUrl });
+      useStore.getState().showToast("Card photo updated", "success");
+    } catch (err) {
+      useStore.getState().showToast("Photo upload error: " + (err instanceof Error ? err.message : String(err)), "error");
+    } finally {
+      setPhotoUploading(false);
     }
   };
 
@@ -490,6 +519,48 @@ export default function BrandingSettings() {
           />
           <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
             Blank = &ldquo;Serving {"{city}"}&rdquo; from your address.
+          </div>
+        </div>
+
+        {/* Optional photo — a headshot / team / work shot on the card. */}
+        <div style={{ marginBottom: 10 }}>
+          <label className="sl" style={{ fontSize: 14 }}>Photo <span className="dim">· optional</span></label>
+          <div className="dim" style={{ fontSize: 12, margin: "2px 0 8px" }}>
+            A headshot, team, or work photo shown on your card. Leave it off if you&rsquo;d rather not.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {cardPhotoUrl ? (
+              <img src={cardPhotoUrl} alt="Card photo" style={{ width: 58, height: 58, borderRadius: "50%", objectFit: "cover", border: "1px solid var(--color-border-dark-2)", flexShrink: 0 }} />
+            ) : (
+              <div style={{ width: 58, height: 58, borderRadius: "50%", background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Icon name="photo" size={22} color="var(--color-dim)" />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <label className="bo" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, cursor: photoUploading ? "not-allowed" : "pointer", opacity: photoUploading ? 0.6 : 1 }}>
+                <Icon name="camera" size={14} /> {photoUploading ? "Uploading…" : cardPhotoUrl ? "Change photo" : "Upload photo"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={photoUploading}
+                  style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) onCardPhotoFile(f); e.target.value = ""; }}
+                />
+              </label>
+              {cardPhotoUrl && (
+                <button
+                  className="bo"
+                  onClick={async () => {
+                    if (!await useStore.getState().showConfirm("Remove Photo", "Remove the photo from your card?")) return;
+                    await saveCardContent({ photoUrl: null });
+                    useStore.getState().showToast("Photo removed", "success");
+                  }}
+                  style={{ fontSize: 13 }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

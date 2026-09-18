@@ -41,6 +41,9 @@ interface SiteContent {
   whyUs?: string[];
   cta?: string;
   about?: string;
+  /** Optional card photo (headshot / team / work shot). Shown only when set —
+   *  the owner opts in by uploading one in Operations → Settings → Public card. */
+  photoUrl?: string;
 }
 
 const DEFAULT_SERVICES = [
@@ -255,6 +258,22 @@ function CardPageInner() {
               {org.name}
             </div>
             {tagline && <div style={{ fontSize: 14, color: "#b6bccb", marginTop: 5 }}>{tagline}</div>}
+
+            {/* Optional card photo — a headshot / team / work shot. Only shown
+                when the owner has uploaded one (site_content.photoUrl). */}
+            {content?.photoUrl && (
+              <img
+                src={content.photoUrl}
+                alt={org.name || ""}
+                style={{
+                  width: 108, height: 108, borderRadius: "50%", objectFit: "cover",
+                  marginTop: 14, background: "#0a0a0f",
+                  border: `2px solid ${rgba(brand, 0.55)}`,
+                  boxShadow: `0 0 26px -6px ${rgba(brand, 0.7)}, inset 0 1px 0 rgba(255,255,255,.15)`,
+                }}
+                onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+              />
+            )}
 
             {/* Trust chips */}
             {(org.license_num || rating > 0) && (
