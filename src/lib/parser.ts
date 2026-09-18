@@ -708,6 +708,12 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       .replace(/\([^)]*\)/g, " ")      // drop "(3 gal)", "(235 sqft + 10% waste)"
       .replace(/[0-9]/g, " ")           // drop stray numbers
       .replace(/[^a-z\s]/g, " ")        // drop punctuation/units symbols
+      // Drop bare unit WORDS too — "Wall paint (2 gal)" and "Wall paint
+      // 2 gal" must normalize to the same key ("wall paint"), or two AI
+      // batches phrasing the size with/without parens escape the dedup
+      // and the customer gets the line twice. Found by the quote-math
+      // audit suite. "tub" (bathtub) stays; container "tubs" strips.
+      .replace(/\b(gal|gallon|gallons|qt|quart|quarts|sqft|sq|ft|lf|roll|rolls|pack|packs|tubs|ea|each|pcs|x)\b/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   const globalSeen = new Set<string>();
