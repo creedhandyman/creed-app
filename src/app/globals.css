@@ -1000,6 +1000,13 @@ button:focus-visible {
 }
 .pub * { box-sizing: border-box; }
 .pub-wrap { max-width: 460px; margin: 0 auto; }
+/* Public pages (lead / status / review / portal) read like a phone card
+   by default. On a desktop screen let them breathe — a 460px strip
+   centered in a 1920px viewport read as broken. Inputs and cards scale
+   with the wrap, so nothing else changes. */
+@media (min-width: 900px) {
+  .pub-wrap { max-width: 720px; }
+}
 
 /* brand header */
 .pub .bh { text-align: center; margin-bottom: 18px; }
