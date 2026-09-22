@@ -197,11 +197,12 @@ export const PRICE_POINTS = [
   { h: "Cleanup and haul-away included", p: "The old material leaves with the truck." },
 ];
 
-// The Creed HM digital business card — the direct way to send a work
-// order into the app (photos + details land as a lead with referral
-// attribution). Linked from the contact + property-managers pages.
+// The Creed HM lead form — the direct way to send a work order / quote
+// request into the app (photos + details land as a lead with referral
+// attribution). Every Request-a-quote button + the contact and
+// property-managers work-order links point here.
 export const WORK_ORDER = {
-  url: "https://www.creedhm.com/card/creedhandyman?tech=78353c52-0de5-4a05-b57e-5eb0bd54813f",
+  url: "https://www.creedhm.com/lead/creedhandyman?tech=78353c52-0de5-4a05-b57e-5eb0bd54813f",
   label: "Submit a work order",
 };
 
