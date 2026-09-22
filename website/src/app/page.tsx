@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED } from "@/lib/site";
+import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED, WORK_ORDER } from "@/lib/site";
 import { Kicker, SecLabel, BeforeAfter, CtaBand, CredStrip } from "@/components/blocks";
 import Img from "@/components/Img";
 
@@ -26,7 +26,7 @@ export default function HomePage() {
               the work starts.
             </p>
             <div className="btn-row" style={{ marginTop: 30 }}>
-              <Link href="/contact" className="btn btn-red">Request a quote</Link>
+              <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Request a quote</a>
               <a href={SITE.phoneHref} className="btn btn-outline">Book a time</a>
             </div>
             <div className="hero-ticks">

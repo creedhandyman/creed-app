@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SERVICES, SITE } from "@/lib/site";
+import { SERVICES, SITE, WORK_ORDER } from "@/lib/site";
 import { Kicker, CtaBand } from "@/components/blocks";
 
 export function generateStaticParams() {
@@ -41,7 +41,7 @@ export default async function ServicePage({
           <h1 className="h1">{svc.name}</h1>
           <p className="lead" style={{ maxWidth: "52ch" }}>{svc.intro}</p>
           <div className="btn-row" style={{ marginTop: 30 }}>
-            <Link href="/contact" className="btn btn-red">Request a quote</Link>
+            <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Request a quote</a>
             <a href={SITE.phoneHref} className="btn btn-outline">Call {SITE.phone}</a>
           </div>
         </div>

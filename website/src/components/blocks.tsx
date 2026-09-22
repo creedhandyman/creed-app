@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { SITE } from "@/lib/site";
+import { SITE, WORK_ORDER } from "@/lib/site";
 import Img from "@/components/Img";
 
 /** Kicker (red bar + blue label) used at the top of page heroes. */
@@ -114,7 +113,9 @@ export function CtaBand({
         <h2>{title}</h2>
         <p>{copy}</p>
         <div className="btn-row">
-          <Link href="/contact" className="btn btn-dark">Request a quote</Link>
+          {/* The Creed HM card takes photos + details straight onto the
+              board — better than the plain form for the same job. */}
+          <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-dark">Request a quote</a>
           <a href={SITE.phoneHref} className="btn btn-white">Call {SITE.phone}</a>
         </div>
       </div>
