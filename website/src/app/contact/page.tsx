@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SITE } from "@/lib/site";
+import { SITE, WORK_ORDER } from "@/lib/site";
 import { PageHero } from "@/components/blocks";
 import QuoteForm from "@/components/QuoteForm";
 
@@ -24,6 +24,17 @@ export default function ContactPage() {
             <QuoteForm />
           </div>
           <div>
+            <div className="card" style={{ marginBottom: 24, borderColor: "var(--blue)" }}>
+              <h3 className="h3" style={{ fontSize: 18 }}>Have a work order ready?</h3>
+              <p style={{ fontSize: 15.5, lineHeight: 1.6, color: "var(--muted)", margin: "0 0 16px" }}>
+                Send it straight through our Creed HM card — photos, details,
+                and the address in one go. It lands on our board the moment
+                you hit send.
+              </p>
+              <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red" style={{ fontSize: 14.5, padding: "12px 20px" }}>
+                {WORK_ORDER.label}
+              </a>
+            </div>
             <div className="card" style={{ marginBottom: 24 }}>
               <h3 className="h3" style={{ fontSize: 18 }}>Faster by phone</h3>
               <p style={{ margin: "0 0 10px" }}>

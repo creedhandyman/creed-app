@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { SITE } from "@/lib/site";
+import { SITE, WORK_ORDER } from "@/lib/site";
 import { PageHero, CtaBand } from "@/components/blocks";
 
 export const metadata: Metadata = {
@@ -26,7 +25,8 @@ export default function PropertyManagersPage() {
         lead="Make-ready work between tenants, start to finish: patch and paint, fixtures, rekeys, and the punch list from your walkthrough — one crew, one invoice, unit ready to show."
       >
         <div className="btn-row" style={{ marginTop: 30 }}>
-          <a href={SITE.phoneHref} className="btn btn-red">Call {SITE.phone}</a>
+          <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">{WORK_ORDER.label}</a>
+          <a href={SITE.phoneHref} className="btn btn-outline">Call {SITE.phone}</a>
           <a href={`mailto:${SITE.email}`} className="btn btn-outline">Email the shop</a>
         </div>
       </PageHero>
@@ -55,9 +55,9 @@ export default function PropertyManagersPage() {
               first punch list is the audition — send one over.
             </p>
           </div>
-          <Link href="/contact" className="btn btn-outline" style={{ whiteSpace: "nowrap" }}>
-            Send a punch list
-          </Link>
+          <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-outline" style={{ whiteSpace: "nowrap" }}>
+            {WORK_ORDER.label}
+          </a>
         </div>
       </section>
 
