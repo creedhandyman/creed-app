@@ -273,6 +273,16 @@ textarea.field { resize: vertical; min-height: 120px; }
 /* ---------- generic two-col ---------- */
 .two-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; }
 
+/* ---------- services-page brand art (desktop: beside the hero;
+   phone: under the service cards) ---------- */
+.svc-art { border: 2px solid var(--line); background: #000; }
+.svc-art img { width: 100%; display: block; }
+.svc-art-mobile { display: none; }
+@media (max-width: 900px) {
+  .svc-art-desktop { display: none; }
+  .svc-art-mobile { display: block; }
+}
+
 /* ---------- cards ---------- */
 .card { border: 2px solid var(--line); background: var(--panel); padding: 24px; }
 

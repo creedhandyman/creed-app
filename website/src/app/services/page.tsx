@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SERVICES, SITE } from "@/lib/site";
-import { PageHero, CtaBand } from "@/components/blocks";
+import { Kicker, CtaBand } from "@/components/blocks";
 
 export const metadata: Metadata = {
   title: "Handyman services",
@@ -11,11 +11,21 @@ export const metadata: Metadata = {
 export default function ServicesPage() {
   return (
     <main>
-      <PageHero
-        kicker="Services"
-        title="What we fix"
-        lead="Six things we do most, listed plainly. If your job is not on a list, ask anyway — odd jobs are the job."
-      />
+      <section className="band">
+        <div className="container two-col" style={{ padding: "56px 24px 48px", alignItems: "center", gap: 40 }}>
+          <div>
+            <Kicker>Services</Kicker>
+            <h1 className="h1">What we fix</h1>
+            <p className="lead" style={{ maxWidth: "52ch" }}>
+              Six things we do most, listed plainly. If your job is not on a
+              list, ask anyway — odd jobs are the job.
+            </p>
+          </div>
+          <div className="svc-art svc-art-desktop">
+            <img src="/assets/neon-sign.webp" alt="Creed Handyman LLC — established 2022 — call 316-400-7414" />
+          </div>
+        </div>
+      </section>
       <section className="band">
         <div className="container section">
           <div className="svc-grid">
@@ -32,6 +42,9 @@ export default function ServicesPage() {
                 </p>
               </Link>
             ))}
+          </div>
+          <div className="svc-art svc-art-mobile" style={{ marginTop: 24 }}>
+            <img src="/assets/neon-sign.webp" alt="Creed Handyman LLC — established 2022 — call 316-400-7414" />
           </div>
           <p style={{ marginTop: 28, fontSize: 16.5, color: "var(--dim)" }}>
             Bigger than a handyman job? If it needs a specialty contractor, we
