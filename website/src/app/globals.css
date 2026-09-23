@@ -296,9 +296,21 @@ textarea.field { resize: vertical; min-height: 120px; }
 .two-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; }
 
 /* ---------- services-page brand art (desktop: beside the hero;
-   phone: under the service cards) ---------- */
-.svc-art { border: 2px solid var(--line); background: #000; }
-.svc-art img { width: 100%; display: block; }
+   phone: between the hero and the service cards) ----------
+   No frame — the art's black background fades into the page via an
+   edge mask (both gradients intersected), so the sign floats. */
+.svc-art { border: 0; background: transparent; }
+.svc-art img {
+  width: 100%; display: block;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 8%, #000 92%, transparent),
+    linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent, #000 8%, #000 92%, transparent),
+    linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
+  mask-composite: intersect;
+}
 .svc-art-mobile { display: none; }
 @media (max-width: 900px) {
   .svc-art-desktop { display: none; }
