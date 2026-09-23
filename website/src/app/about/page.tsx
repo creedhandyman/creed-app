@@ -5,7 +5,7 @@ import { PageHero, CredStrip, CtaBand } from "@/components/blocks";
 
 export const metadata: Metadata = {
   title: "About — the name is the promise",
-  description: `Creed Handyman is a certified, insured, one-crew shop serving ${SITE.areaLine}. NATE HVAC certified, EPA 608, 10,000+ hours on the tools.`,
+  description: `Creed Handyman is a certified, insured, one-crew shop serving ${SITE.areaLine}. NATE HVAC certified, EPA 608, 17,000+ hours of hands-on experience.`,
 };
 
 export default function AboutPage() {
@@ -30,7 +30,7 @@ export default function AboutPage() {
             <h2 className="h2" style={{ fontSize: 30 }}>Who shows up</h2>
             <p style={{ fontSize: 17, lineHeight: 1.6, color: "var(--muted)", margin: "0 0 18px" }}>
               Creed Handyman is Bernard&rsquo;s shop — a working tradesman, not a
-              dispatcher. Nine years and ten thousand-plus hours on the tools,
+              dispatcher. Seventeen thousand-plus hours on the tools,
               NATE-certified in HVAC with EPA 608 refrigerant certification,
               and general liability insurance on every job.
             </p>

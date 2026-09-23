@@ -129,7 +129,7 @@ export function CredStrip() {
     { h: "NATE", p: "HVAC certified technician" },
     { h: "EPA 608", p: "Refrigerant handling certified" },
     { h: "Insured", p: "General liability on every job" },
-    { h: "10,000+ hours", p: "On the tools" },
+    { h: "17,000+ hours", p: "Hands-on work experience" },
   ];
   return (
     <section className="cred-strip">
