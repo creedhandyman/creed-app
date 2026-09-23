@@ -13,8 +13,8 @@ export const SITE = {
   county: "Sedgwick County",
   areaLine: "Wichita and all of Sedgwick County",
   hours: [
-    { d: "Mon–Fri", h: "8:00 AM – 6:00 PM" },
-    { d: "Saturday", h: "8:00 AM – 2:00 PM" },
+    { d: "Mon–Fri", h: "9:00 AM – 7:00 PM" },
+    { d: "Saturday", h: "9:00 AM – 12:00 PM" },
     { d: "Sunday", h: "Closed" },
   ],
   cities: [

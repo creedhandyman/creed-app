@@ -28,6 +28,9 @@ export default function ServicesPage() {
       </section>
       <section className="band">
         <div className="container section">
+          <div className="svc-art svc-art-mobile" style={{ marginBottom: 24 }}>
+            <img src="/assets/neon-sign.webp" alt="Creed Handyman LLC — established 2022 — call 316-400-7414" />
+          </div>
           <div className="svc-grid">
             {SERVICES.map((s, i) => (
               <Link href={`/services/${s.slug}`} className="svc" key={s.slug}>
@@ -42,9 +45,6 @@ export default function ServicesPage() {
                 </p>
               </Link>
             ))}
-          </div>
-          <div className="svc-art svc-art-mobile" style={{ marginTop: 24 }}>
-            <img src="/assets/neon-sign.webp" alt="Creed Handyman LLC — established 2022 — call 316-400-7414" />
           </div>
           <p style={{ marginTop: 28, fontSize: 16.5, color: "var(--dim)" }}>
             Bigger than a handyman job? If it needs a specialty contractor, we
