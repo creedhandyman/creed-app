@@ -299,6 +299,12 @@ textarea.field { resize: vertical; min-height: 120px; }
    phone: between the hero and the service cards) ----------
    No frame — the art's black background fades into the page via an
    edge mask (both gradients intersected), so the sign floats. */
+/* Services hero: give the art the bigger column on desktop. */
+.svc-hero { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+@media (max-width: 900px) {
+  .svc-hero { grid-template-columns: 1fr; }
+}
+
 .svc-art { border: 0; background: transparent; }
 .svc-art img {
   width: 100%; display: block;
@@ -314,7 +320,8 @@ textarea.field { resize: vertical; min-height: 120px; }
 .svc-art-mobile { display: none; }
 @media (max-width: 900px) {
   .svc-art-desktop { display: none; }
-  .svc-art-mobile { display: block; }
+  /* Full-bleed on phones — the edge fade carries it to the screen edges. */
+  .svc-art-mobile { display: block; margin-left: -24px; margin-right: -24px; }
 }
 
 /* ---------- cards ---------- */

@@ -12,7 +12,7 @@ export default function ServicesPage() {
   return (
     <main>
       <section className="band">
-        <div className="container two-col" style={{ padding: "56px 24px 48px", alignItems: "center", gap: 40 }}>
+        <div className="container two-col svc-hero" style={{ padding: "56px 24px 48px", alignItems: "center", gap: 40 }}>
           <div>
             <Kicker>Services</Kicker>
             <h1 className="h1">What we fix</h1>
