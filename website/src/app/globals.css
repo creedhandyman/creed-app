@@ -130,9 +130,31 @@ a:hover { color: #7fb8ec; }
 .nav a:hover { color: #fff; }
 .hdr-call { background: var(--red); color: #fff; font-family: var(--font-head); font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 18px; white-space: nowrap; }
 .hdr-call:hover { background: var(--red-hi); color: #fff; }
+/* Desktop hamburger — the full-site menu next to the call button. */
+.hdr-menu { position: relative; }
+.hdr-burger {
+  width: 42px; height: 42px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: transparent; border: 2px solid #3a4148; cursor: pointer; padding: 0;
+}
+.hdr-burger span { display: block; width: 18px; height: 2px; background: #fff; }
+.hdr-burger:hover { border-color: var(--blue); }
+.hdr-menu-backdrop { position: fixed; inset: 0; z-index: 24; }
+.hdr-menu-panel {
+  position: absolute; right: 0; top: calc(100% + 12px); z-index: 25;
+  min-width: 230px; background: var(--panel); border: 2px solid var(--line); padding: 6px 0;
+}
+.hdr-menu-panel a {
+  display: block; padding: 11px 18px;
+  font-family: var(--font-head); font-size: 13.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted);
+}
+.hdr-menu-panel a:hover { color: #fff; background: #1b2127; }
+
 .subnav { display: none; }
 @media (max-width: 920px) {
   .nav { display: none; }
+  .hdr-menu { display: none; }
   .subnav {
     display: flex; gap: 20px; overflow-x: auto; padding: 10px 24px;
     border-top: 2px solid var(--line);
