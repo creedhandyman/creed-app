@@ -172,7 +172,7 @@ export const GALLERY = [
   },
   {
     title: "Deck stair rebuild",
-    note: "Tired treads swapped out and the whole staircase recoated.",
+    note: "The whole staircase remade from scratch, then restained.",
     before: "/assets/ba6-before.jpg",
     after: "/assets/ba6-after.jpg",
   },
