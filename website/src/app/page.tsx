@@ -43,7 +43,7 @@ export default function HomePage() {
             <div className="imgwrap">
               <Img
                 src={HERO.after}
-                alt="New Pergo plank flooring after a subfloor water-damage repair on a Wichita job"
+                alt="New Pergo plank flooring after a carpet tear-out on a Wichita job"
                 style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", display: "block", filter: "saturate(.9) contrast(1.04)" }}
               />
               <div className="edge" />
