@@ -125,6 +125,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const equipment = useStore((s) => s.equipment);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+  const navBottom = useStore((s) => s.navBottom);
   // Inline dark tokens are fixed values — the Properties value-pills sit on a
   // white .section card in light mode, so flip their fill/border or the
   // inherited (dark) text renders black-on-black.
@@ -295,6 +296,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // (in <PropertySearch>) and the inline filter on the visible list,
   // so the list and the typeahead stay in sync.
   const [searchQuery, setSearchQuery] = useState("");
+  // Bulk status edit — "Select" in the list header enters select mode: cards
+  // toggle membership instead of opening, and a sticky bar applies one status
+  // to every selected job (same side effects as a single status change).
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggleSelected = (id: string) =>
+    setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   // Drives the review-request modal. Set to a job when status transitions
   // to "complete" or "paid" AND the job hasn't had a review request yet.
   const [reviewJob, setReviewJob] = useState<Job | null>(null);
@@ -509,21 +519,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     setUploading(false);
   };
 
-  const setStatus = async (id: string, status: string): Promise<void> => {
-    // Warn if completing with unchecked work order items
-    if (status === "complete") {
-      const job = jobs.find((j) => j.id === id);
-      if (job) {
-        try {
-          const jobData = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-          const workOrder = jobData?.workOrder || [];
-          const unchecked = workOrder.filter((w: { done: boolean }) => !w.done).length;
-          if (unchecked > 0) {
-            if (!await useStore.getState().showConfirm(t("jobs.incompleteItems"), `${unchecked} ${unchecked !== 1 ? t("jobs.workOrderItemsPlural") : t("jobs.workOrderItemSingular")} ${t("jobs.stillUncheckedMarkComplete")}`)) return;
-          }
-        } catch { /* no work order, proceed */ }
-      }
-    }
+  // Unchecked work-order items on a job (0 when there's no work order).
+  const uncheckedCount = (job: Job): number => {
+    try {
+      const jobData = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+      const workOrder = (jobData?.workOrder || []) as { done: boolean }[];
+      return workOrder.filter((w) => !w.done).length;
+    } catch { return 0; }
+  };
+
+  // Core status write + completion side effects, shared by the single-job
+  // setStatus and the bulk bar. No confirm and no reload — callers own those.
+  const applyStatus = async (id: string, status: string): Promise<void> => {
     await db.patch("jobs", id, { status });
 
     // When a job goes Complete, teach the AI quoter from its real hours
@@ -542,7 +549,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         }
       }
     }
+  };
 
+  const setStatus = async (id: string, status: string): Promise<void> => {
+    // Warn if completing with unchecked work order items
+    if (status === "complete") {
+      const job = jobs.find((j) => j.id === id);
+      const unchecked = job ? uncheckedCount(job) : 0;
+      if (unchecked > 0) {
+        if (!await useStore.getState().showConfirm(t("jobs.incompleteItems"), `${unchecked} ${unchecked !== 1 ? t("jobs.workOrderItemsPlural") : t("jobs.workOrderItemSingular")} ${t("jobs.stillUncheckedMarkComplete")}`)) return;
+      }
+    }
+    await applyStatus(id, status);
     loadAll();
 
     // Status changes are intentionally SILENT. Previously every flip (a)
@@ -553,6 +571,40 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     // button under the detail CTA (messageCustomer), and a review is requested
     // from the manual "Request Review" button in Manage plus the post-payment
     // automation — so changing status no longer pops anything up.
+  };
+
+  const statusLabel = (s: string) => (s === "lead" ? t("jobs.lead") : (t(`status.${s}`) || s));
+
+  // Apply bulkStatus to every selected job. One confirm up front (it also
+  // flags jobs that still have unchecked work-order items when completing),
+  // then the same per-job side effects as setStatus, one reload at the end.
+  // Jobs already at the target status are skipped so e.g. a re-complete can't
+  // feed the AI learning twice.
+  const bulkApply = async () => {
+    if (!bulkStatus || !selectedIds.length || bulkBusy) return;
+    const targets = jobs.filter((j) => selectedIds.includes(j.id) && j.status !== bulkStatus);
+    const label = statusLabel(bulkStatus);
+    if (!targets.length) {
+      useStore.getState().showToast(`${t("jobs.bulkAlready")} ${label}`, "info");
+      return;
+    }
+    let msg = `${targets.length} ${targets.length === 1 ? t("jobs.bulkJobOne") : t("jobs.bulkJobMany")} → ${label}`;
+    if (bulkStatus === "complete") {
+      const open = targets.filter((j) => uncheckedCount(j) > 0).length;
+      if (open) msg += ` · ${open} ${t("jobs.bulkHaveUnchecked")}`;
+    }
+    if (!await useStore.getState().showConfirm(t("jobs.bulkConfirmTitle"), msg)) return;
+    setBulkBusy(true);
+    try {
+      for (const j of targets) await applyStatus(j.id, bulkStatus);
+    } finally {
+      setBulkBusy(false);
+      await loadAll();
+    }
+    useStore.getState().showToast(`${t("jobs.bulkUpdated")} ${targets.length} → ${label}`, "success");
+    setSelectedIds([]);
+    setBulkStatus("");
+    setSelectMode(false);
   };
 
   // "Message customer" button under the CTA. Builds a status-aware, editable
@@ -1575,10 +1627,20 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     <div className="fi">
       {subScreenJsx || detailScreen || (
         <>
-      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 10, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <Icon name="jobs" size={22} color="var(--color-primary)" />
-        {t("nav.jobs")}
-      </h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <h2 style={{ fontSize: 24, color: "var(--color-primary)", margin: 0, display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Icon name="jobs" size={22} color="var(--color-primary)" />
+          {t("nav.jobs")}
+        </h2>
+        <button
+          className="bo"
+          onClick={() => { setSelectMode((m) => !m); setSelectedIds([]); setBulkStatus(""); }}
+          style={{ width: "auto", fontSize: 13.5, padding: "5px 12px", display: "inline-flex", alignItems: "center", gap: 6, ...(selectMode ? { color: "var(--color-primary)", borderColor: "var(--color-primary)" } : {}) }}
+        >
+          <Icon name={selectMode ? "close" : "checkCircle"} size={14} />
+          {selectMode ? t("common.cancel") : t("jobs.select")}
+        </button>
+      </div>
 
       {/* Job tabs */}
       {(() => {
@@ -1602,7 +1664,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setJobTab(tab.id)}
+                onClick={() => { setJobTab(tab.id); setSelectedIds([]); }}
                 style={{
                   padding: "5px 12px",
                   borderRadius: 6,
@@ -1761,8 +1823,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           );
         }
 
-        return filtered.map((j) => {
+        const cards = filtered.map((j) => {
           const w = getWorkers(j);
+          const isSel = selectMode && selectedIds.includes(j.id);
           // Status-aware triage hint for the collapsed card's second row —
           // surfaces the job's next-action context the way the mockup does
           // (On site · <tech>, Ready to invoice, …). Icons are curated names
@@ -1782,12 +1845,28 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           })();
 
           return (
-            <div key={j.id} id={`job-row-${j.id}`} className="cd mb statusstrip" style={{ ["--c" as any]: statusColor(j.status) }}>
-              {/* Collapsed header */}
+            <div key={j.id} id={`job-row-${j.id}`} className="cd mb statusstrip" style={{ ["--c" as any]: statusColor(j.status), ...(isSel ? { outline: "2px solid var(--color-primary)", outlineOffset: -2 } : {}) }}>
+              {/* Collapsed header — in select mode a tap toggles the checkbox
+                  instead of opening the detail screen. */}
               <div
-                style={{ cursor: "pointer" }}
-                onClick={() => setDetailJobId(j.id)}
+                style={{ cursor: "pointer", display: "flex", alignItems: "flex-start", gap: selectMode ? 10 : 0 }}
+                onClick={() => (selectMode ? toggleSelected(j.id) : setDetailJobId(j.id))}
+                {...(selectMode ? { role: "checkbox", "aria-checked": isSel } : {})}
               >
+                {selectMode && (
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 2,
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      border: `2px solid ${isSel ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                      background: isSel ? "var(--color-primary)" : "transparent",
+                    }}
+                  >
+                    {isSel && <Icon name="check" size={14} color="#fff" strokeWidth={3} />}
+                  </span>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
                 {/* Row 1 — client headline + address (map pin) · amount */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
@@ -1845,10 +1924,67 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     <Icon name="next" size={14} />
                   </span>
                 </div>
+                </div>
               </div>
             </div>
           );
         });
+
+        const visibleIds = filtered.map((j) => j.id);
+        const allSel = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+        return (
+          <>
+            {cards}
+            {/* Bulk status bar — sticks above the bottom nav while scrolling. */}
+            {selectMode && (
+              <div
+                style={{
+                  position: "sticky",
+                  bottom: navBottom ? "calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px)" : 12,
+                  zIndex: 30, marginTop: 4, padding: 10, borderRadius: 14,
+                  background: darkMode ? "var(--color-card-dark)" : "var(--color-card-light)",
+                  border: "1.5px solid var(--color-primary)",
+                  boxShadow: "0 10px 30px rgba(0,0,0,.55)",
+                  display: "flex", flexDirection: "column", gap: 8,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontFamily: "Oswald", fontSize: 15, letterSpacing: ".3px" }}>
+                    {selectedIds.length} {t("jobs.selectedCount")}
+                  </span>
+                  <button
+                    className="bo"
+                    onClick={() => setSelectedIds(allSel ? [] : visibleIds)}
+                    style={{ width: "auto", fontSize: 13, padding: "4px 10px" }}
+                  >
+                    {allSel ? t("jobs.clearSelection") : t("jobs.selectAll")}
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select
+                    value={bulkStatus}
+                    onChange={(e) => setBulkStatus(e.target.value)}
+                    aria-label={t("jobs.setStatusTo")}
+                    style={{ flex: 1, fontSize: 15 }}
+                  >
+                    <option value="">{t("jobs.setStatusTo")}</option>
+                    {["lead", "quoted", "accepted", "scheduled", "active", "complete", "invoiced", "paid"].map((st) => (
+                      <option key={st} value={st}>{statusLabel(st)}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="bb"
+                    disabled={!selectedIds.length || !bulkStatus || bulkBusy}
+                    onClick={bulkApply}
+                    style={{ width: "auto", padding: "8px 16px", fontSize: 15, opacity: !selectedIds.length || !bulkStatus || bulkBusy ? 0.5 : 1 }}
+                  >
+                    {bulkBusy ? "…" : t("jobs.apply")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        );
       })()}
 
       <div style={{ textAlign: "center", marginTop: 16 }}>
