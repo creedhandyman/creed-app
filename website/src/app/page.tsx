@@ -32,7 +32,6 @@ export default function HomePage() {
             </p>
             <div className="btn-row" style={{ marginTop: 30 }}>
               <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Request a quote</a>
-              <a href={SITE.phoneHref} className="btn btn-outline">Book a time</a>
             </div>
             <div className="hero-ticks">
               <span className="tick"><i />Licensed &amp; insured</span>
