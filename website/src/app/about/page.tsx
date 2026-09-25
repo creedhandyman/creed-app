@@ -6,6 +6,7 @@ import { PageHero, CredStrip, CtaBand } from "@/components/blocks";
 export const metadata: Metadata = {
   title: "About — the name is the promise",
   description: `Creed Handyman is a certified, insured, one-crew shop serving ${SITE.areaLine}. NATE HVAC certified, EPA 608, 17,000+ hours of hands-on experience.`,
+  alternates: { canonical: "/about" },
 };
 
 export default function AboutPage() {
@@ -50,6 +51,7 @@ export default function AboutPage() {
               <img
                 src="/assets/mascot.jpg"
                 alt="Creed Handyman mascot — Bernard with a paint roller and drill"
+                loading="lazy"
                 style={{ width: "100%", display: "block" }}
               />
               <div style={{ borderTop: "2px solid var(--line)", padding: "12px 18px", fontFamily: "var(--font-head)", fontSize: 12.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--dim)" }}>

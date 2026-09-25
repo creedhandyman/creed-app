@@ -17,8 +17,9 @@ export async function generateMetadata({
   const svc = SERVICES.find((s) => s.slug === slug);
   if (!svc) return {};
   return {
-    title: `${svc.name} — Wichita handyman service`,
+    title: `${svc.name} services in Wichita, KS`,
     description: `${svc.blurb} ${SITE.rate}/hr with a two-hour minimum across ${SITE.areaLine}, quoted before the work starts.`,
+    alternates: { canonical: `/services/${svc.slug}` },
   };
 }
 
@@ -33,8 +34,29 @@ export default async function ServicePage({
 
   const others = SERVICES.filter((s) => s.slug !== svc.slug);
 
+  // Service structured data — ties this page's trade to the business +
+  // the cities it serves.
+  const serviceLd = {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    serviceType: `${svc.name} — handyman service`,
+    description: svc.blurb,
+    url: `${SITE.domain}/services/${svc.slug}`,
+    provider: {
+      "@type": "HomeAndConstructionBusiness",
+      name: SITE.name,
+      telephone: "+13164007414",
+      url: SITE.domain,
+    },
+    areaServed: SITE.cities.map((c) => ({ "@type": "City", name: `${c}, KS` })),
+  };
+
   return (
     <main>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceLd) }}
+      />
       <section className="band">
         <div className="container" style={{ padding: "56px 24px 48px" }}>
           <Kicker>{SITE.city}, Kansas · Service</Kicker>

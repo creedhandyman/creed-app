@@ -5,6 +5,7 @@ import { PageHero, BeforeAfter, CtaBand } from "@/components/blocks";
 export const metadata: Metadata = {
   title: "Before & after gallery",
   description: `Real repair and turnover work around ${SITE.city} — photo-documented before and after, the way every Creed job is run.`,
+  alternates: { canonical: "/gallery" },
 };
 
 export default function GalleryPage() {

@@ -5,6 +5,7 @@ import { PageHero, CtaBand } from "@/components/blocks";
 export const metadata: Metadata = {
   title: "Serving our churches — free labor",
   description: `Free handyman labor for local churches in ${SITE.areaLine} that reach out. Materials at cost, first come first served.`,
+  alternates: { canonical: "/churches" },
 };
 
 export default function ChurchesPage() {

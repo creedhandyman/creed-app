@@ -191,6 +191,62 @@ export const PRICE_POINTS = [
   { h: "Cleanup and haul-away included", p: "The old material leaves with the truck." },
 ];
 
+// Per-city service-area pages (local SEO). Each renders via
+// components/CityPage.tsx at /<slug>; linked from the footer and sitemap.
+export const CITY_PAGES = [
+  {
+    slug: "handyman-derby-ks",
+    city: "Derby",
+    intro: "Straight down Rock Road from our Wichita home base — Derby calls get quoted before we start, same as everyone.",
+    body: [
+      "Derby is one of the fastest-growing towns in Kansas, and its housing shows every era from 1970s ranches to brand-new builds. We handle the punch lists both kinds generate: sticking doors, drywall cracks as foundations settle, fixture upgrades, and the fit-and-finish work builders leave behind.",
+      "With McConnell AFB next door, Derby also turns over a lot of rentals. Our make-ready service runs the whole between-tenants list — patch and paint, rekeys, blinds, detectors — and closes with a photo report when the unit is ready to show.",
+    ],
+    jobs: [
+      "Drywall crack and settling repairs",
+      "Door adjustment and hardware",
+      "Ceiling fans and light fixtures",
+      "Faucets, toilets, and disposals",
+      "Rental make-ready turnovers",
+      "TV mounting and furniture assembly",
+    ],
+  },
+  {
+    slug: "handyman-haysville-ks",
+    city: "Haysville",
+    intro: "Ten minutes south on Broadway — the Peach Capital of Kansas is squarely inside our service area.",
+    body: [
+      "Much of Haysville's housing is sturdy mid-century ranch stock, and that generation of home is where a good handyman earns his keep: original plumbing fixtures due for replacement, worn flooring, weathered decks and stairs, and the water damage that shows up around bathrooms and water heaters.",
+      "We repair honestly — patch and match rather than replace whole rooms — and when a job needs a licensed specialty contractor, we say so before any money changes hands.",
+    ],
+    jobs: [
+      "Faucet, toilet, and supply-line replacement",
+      "Water-damage drywall repairs",
+      "Deck and stair repair and staining",
+      "Interior painting and trim",
+      "Flooring repairs and plank installs",
+      "Doors, locks, and weatherstripping",
+    ],
+  },
+  {
+    slug: "handyman-goddard-ks",
+    city: "Goddard",
+    intro: "West down Kellogg from Wichita — Goddard is an easy run from our home base.",
+    body: [
+      "Goddard is growing fast west of Wichita, and newer subdivisions come with their own to-do lists: builder-grade fixtures worth upgrading, TVs and shelving to mount, playsets and flat-pack furniture to assemble, and the small fixes the builder never came back for.",
+      "Established Goddard homes get the full menu too — plumbing and electrical swaps, drywall and paint, doors and locks, and make-ready turnovers for rentals.",
+    ],
+    jobs: [
+      "TV mounting with cords concealed",
+      "Fixture and hardware upgrades",
+      "Furniture, playset, and gym assembly",
+      "Drywall patching and paint touch-ups",
+      "Ceiling fans and smart thermostats",
+      "Fence gate and deck repairs",
+    ],
+  },
+];
+
 // The Creed HM lead form — the direct way to send a work order / quote
 // request into the app (photos + details land as a lead with referral
 // attribution). Every Request-a-quote button + the contact and

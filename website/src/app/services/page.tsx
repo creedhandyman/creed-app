@@ -6,6 +6,7 @@ import { Kicker, CtaBand } from "@/components/blocks";
 export const metadata: Metadata = {
   title: "Handyman services",
   description: `Plumbing, electrical, drywall and paint, doors and locks, mounting, and make-ready turnovers across ${SITE.areaLine}. ${SITE.rate}/hr, quoted first.`,
+  alternates: { canonical: "/services" },
 };
 
 export default function ServicesPage() {

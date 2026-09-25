@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED, WORK_ORDER } from "@/lib/site";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 import { Kicker, SecLabel, BeforeAfter, CtaBand, CredStrip } from "@/components/blocks";
 import Img from "@/components/Img";
 

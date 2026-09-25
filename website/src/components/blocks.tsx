@@ -64,6 +64,7 @@ export function BeforeAfter({
           <Img
             src={before}
             alt={`${title} — before`}
+            loading="lazy"
             style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", display: "block" }}
             className="ph"
           />
@@ -73,6 +74,7 @@ export function BeforeAfter({
           <Img
             src={after}
             alt={`${title} — after`}
+            loading="lazy"
             style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", display: "block" }}
             className="ph"
           />
@@ -103,7 +105,7 @@ export function CtaBand({
     <section className="band band-red" id="quote">
       {/* Decorative — the band's copy carries the message. */}
       <div className="cta-mascot" aria-hidden="true">
-        <img src="/assets/mascot.jpg" alt="" />
+        <img src="/assets/mascot.jpg" alt="" loading="lazy" />
       </div>
       <div className="container cta-close">
         <div className="kicker">

@@ -5,6 +5,7 @@ import { PageHero, CtaBand } from "@/components/blocks";
 export const metadata: Metadata = {
   title: "For property managers — make-ready & punch lists",
   description: `Turnovers scheduled around vacancy dates, one invoice per property, photo-documented completion, same ${SITE.rate}/hr rate. Wichita and Sedgwick County.`,
+  alternates: { canonical: "/property-managers" },
 };
 
 const POINTS = [

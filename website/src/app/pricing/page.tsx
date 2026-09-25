@@ -5,6 +5,7 @@ import { PageHero, CtaBand } from "@/components/blocks";
 export const metadata: Metadata = {
   title: `Pricing — ${SITE.rate}/hr, one rate for everything`,
   description: `${SITE.rate} an hour with a two-hour minimum. No trip charges inside Wichita, materials at cost, cleanup included. The quote is the invoice.`,
+  alternates: { canonical: "/pricing" },
 };
 
 export default function PricingPage() {

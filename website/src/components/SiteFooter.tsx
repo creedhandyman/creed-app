@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SITE } from "@/lib/site";
+import { SITE, CITY_PAGES } from "@/lib/site";
 
 export default function SiteFooter() {
   return (
@@ -29,7 +29,17 @@ export default function SiteFooter() {
           </div>
           <div>
             <div className="ftr-label">Service area — {SITE.county}</div>
-            <p style={{ fontSize: 15 }}>{SITE.cities.join(", ")}.</p>
+            <p style={{ fontSize: 15 }}>
+              {SITE.cities.map((c, i) => {
+                const page = CITY_PAGES.find((cp) => cp.city === c);
+                return (
+                  <span key={c}>
+                    {page ? <Link href={`/${page.slug}`} style={{ color: "var(--muted)", textDecoration: "underline" }}>{c}</Link> : c}
+                    {i < SITE.cities.length - 1 ? ", " : "."}
+                  </span>
+                );
+              })}
+            </p>
           </div>
         </div>
         <div className="ftr-bottom">

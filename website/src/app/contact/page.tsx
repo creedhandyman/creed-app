@@ -6,6 +6,7 @@ import QuoteForm from "@/components/QuoteForm";
 export const metadata: Metadata = {
   title: "Request a quote",
   description: `Tell us what needs fixing — you get a quote before anyone picks up a tool. Or call ${SITE.phone}. Serving ${SITE.areaLine}.`,
+  alternates: { canonical: "/contact" },
 };
 
 export default function ContactPage() {
