@@ -146,15 +146,15 @@ export const CREED = {
 // Hero photo. Drop the file in /public/assets. Falls back to a placeholder if missing.
 export const HERO = {
   after: "/assets/hero.jpg",
-  caption: "Water-damaged subfloor to finished oak · West Wichita",
+  caption: "Water-damaged subfloor to new Pergo planks · West Wichita",
 };
 
 // Before/after gallery. Drop images in /public/assets and keep these paths.
 // The homepage shows the first two; /gallery shows them all.
 export const GALLERY = [
   {
-    title: "Floor tear-out and hardwood",
-    note: "Stained subfloor pulled, oak laid and finished. Two days.",
+    title: "Floor tear-out and Pergo planks",
+    note: "Stained subfloor pulled, new Pergo plank flooring laid and finished.",
     before: "/assets/ba1-before.jpg",
     after: "/assets/ba1-after.jpg",
   },
@@ -175,12 +175,6 @@ export const GALLERY = [
     note: "Tired treads swapped out and the whole staircase recoated.",
     before: "/assets/ba6-before.jpg",
     after: "/assets/ba6-after.jpg",
-  },
-  {
-    title: "Water-damage ceiling repair",
-    note: "Stain cut out, patched, retextured, and repainted to match.",
-    before: "/assets/ba3-before.jpg",
-    after: "/assets/ba3-after.jpg",
   },
   {
     title: "Basement window rebuild",
