@@ -146,15 +146,15 @@ export const CREED = {
 // Hero photo. Drop the file in /public/assets. Falls back to a placeholder if missing.
 export const HERO = {
   after: "/assets/hero.jpg",
-  caption: "Water-damaged subfloor to new Pergo planks · West Wichita",
+  caption: "This room had a water-damaged subfloor. You'd never know. · West Wichita",
 };
 
 // Before/after gallery. Drop images in /public/assets and keep these paths.
 // The homepage shows the first two; /gallery shows them all.
 export const GALLERY = [
   {
-    title: "Floor tear-out and Pergo planks",
-    note: "Stained subfloor pulled, new Pergo plank flooring laid and finished.",
+    title: "Water-damaged floor rescue",
+    note: "The stained subfloor came out, new Pergo planks went in — from write-off to showpiece.",
     before: "/assets/ba1-before.jpg",
     after: "/assets/ba1-after.jpg",
   },
