@@ -1598,15 +1598,16 @@ ${cleanText.slice(0, 60000)}`
       method: "POST",
       headers: { "Content-Type": "application/json", "x-creed-call-type": "parse" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        // Sonnet 5 — successor to the 4.6 the pipeline was tuned on:
+        // smarter AND ~1/3 cheaper ($2/$10 vs $3/$15 per MTok). NOTE:
+        // Sonnet 5 REJECTS sampling params (temperature/top_p → 400), so
+        // the old `temperature: 0` determinism knob is gone by design —
+        // run-to-run consistency now rests on the prompt rules plus the
+        // deterministic validateQuote layer (dedup, caps, floors), which
+        // the zzz quote-math audit suite gates. Prompt caches are
+        // model-scoped: the first parse after a model change re-warms.
+        model: "claude-sonnet-5",
         max_tokens: 16000,
-        // Deterministic extraction. Quote categorization is structured
-        // pattern-matching against the inspection — not a creative
-        // generation task — so temperature=0 stops same-room-same-item
-        // drifting into different trades between two runs of the same
-        // PDF (e.g. "cove base" landing in Carpentry one run, Flooring
-        // the next).
-        temperature: 0,
         // Prompt caching: static rules FIRST (cache-hot on every call), then the
         // per-org learned-pricing block (cache-hot within a same-ZIP session),
         // then the volatile per-job header LAST so it never busts the cached
@@ -1731,7 +1732,7 @@ export async function checkAiAvailable(): Promise<boolean> {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-creed-call-type": "ping" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-5",
         max_tokens: 10,
         messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
       }),

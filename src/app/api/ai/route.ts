@@ -12,9 +12,13 @@ const MAX_BODY_BYTES = 6_000_000; // inspection pages ride as base64 image block
 // Approx Anthropic $/million tokens for cost estimation (Phase 0 measurement).
 // Estimates only — refine against the real invoice; used for relative tracking.
 const PRICING: Record<string, { in: number; out: number; cacheWrite: number; cacheRead: number }> = {
+  // Order matters for the prefix match below: "claude-sonnet-5" must not
+  // catch "claude-sonnet-4-*" ids (it can't — different prefix), but keep
+  // more-specific keys ahead of shorter ones if any are ever added.
+  "claude-sonnet-5": { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.2 },
   "claude-sonnet-4-6": { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.3 },
   "claude-haiku-4-5": { in: 1, out: 5, cacheWrite: 1.25, cacheRead: 0.1 },
-  "claude-opus-4-8": { in: 15, out: 75, cacheWrite: 18.75, cacheRead: 1.5 },
+  "claude-opus-4-8": { in: 5, out: 25, cacheWrite: 6.25, cacheRead: 0.5 },
 };
 
 export async function POST(req: NextRequest) {
@@ -62,7 +66,7 @@ export async function POST(req: NextRequest) {
       const model = body.model as string;
       // Prefix match so dated snapshots (e.g. claude-haiku-4-5-20251001) map to
       // their rate row.
-      const rateKey = Object.keys(PRICING).find((k) => model.startsWith(k)) || "claude-sonnet-4-6";
+      const rateKey = Object.keys(PRICING).find((k) => model.startsWith(k)) || "claude-sonnet-5";
       const rate = PRICING[rateKey];
       const inTok = usage.input_tokens || 0;
       const outTok = usage.output_tokens || 0;
