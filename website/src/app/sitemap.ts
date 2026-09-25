@@ -12,6 +12,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/pricing",
     "/property-managers",
     "/about",
+    "/guarantee",
     "/churches",
     "/contact",
     ...CITY_PAGES.map((c) => `/${c.slug}`),

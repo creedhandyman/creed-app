@@ -57,6 +57,40 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ---------- Trust opener ---------- */}
+      <section className="band">
+        <div className="trust-grid">
+          <div className="trust trust-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="8" r="7" /><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
+            </svg>
+            <span className="t-label">Official</span>
+            <p>Quality home repairs — licensed &amp; insured for your protection.</p>
+          </div>
+          <Link href="/guarantee" className="trust trust-black">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+            </svg>
+            <span className="t-label">Warranty</span>
+            <p>Peace of mind with our satisfaction guarantee. Read the terms →</p>
+          </Link>
+          <div className="trust trust-red">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 11.5 11 13.5 15 9.5" />
+            </svg>
+            <span className="t-label">Safe</span>
+            <p>Experienced professionals with clean background checks.</p>
+          </div>
+          <div className="trust trust-white">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" />
+            </svg>
+            <span className="t-label">Smooth</span>
+            <p>Making home repairs seamless.</p>
+          </div>
+        </div>
+      </section>
+
       {/* ---------- Credentials strip ---------- */}
       <CredStrip />
 

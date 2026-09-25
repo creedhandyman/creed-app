@@ -48,6 +48,7 @@ export default function SiteFooter() {
             <Link href="/services">Services</Link>
             <Link href="/pricing">Pricing</Link>
             <Link href="/about">About</Link>
+            <Link href="/guarantee">Guarantee</Link>
             <Link href="/churches">Churches</Link>
             <Link href="/contact">Contact</Link>
             <a href={SITE.social.facebook} target="_blank" rel="noopener">Facebook</a>

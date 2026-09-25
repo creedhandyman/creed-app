@@ -183,6 +183,26 @@ a:hover { color: #7fb8ec; }
 .hero-photo .price span { font-family: var(--font-head); font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
 .hero-photo .cap { border-top: 2px solid var(--line); padding: 14px 18px; font-family: var(--font-head); font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
 
+/* ---------- trust opener (4 color-blocked panels under the hero) ---------- */
+.trust-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.trust {
+  padding: 44px 28px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px;
+}
+.trust svg { width: 44px; height: 44px; flex: none; }
+.trust .t-label { font-family: var(--font-head); font-weight: 600; font-size: 17px; letter-spacing: 0.22em; text-transform: uppercase; }
+.trust p { font-size: 15px; line-height: 1.5; margin: 0; max-width: 28ch; }
+.trust-blue { background: var(--blue); color: #fff; }
+.trust-black { background: #0b0c0d; color: #fff; }
+.trust-black .t-label { color: var(--blue-lt); }
+a.trust { color: #fff; }
+a.trust-black:hover { background: #14171b; color: #fff; }
+.trust-red { background: var(--red); color: #fff; }
+.trust-white { background: #fff; color: #0b0c0d; }
+.trust-white .t-label { color: var(--red); }
+@media (max-width: 900px) { .trust-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .trust-grid { grid-template-columns: 1fr; } .trust { padding: 34px 24px; } }
+
 /* ---------- credentials strip ---------- */
 .cred-strip { border-top: 3px solid var(--blue); border-bottom: 2px solid var(--line); }
 .cred-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; background: var(--line); border-left: 2px solid var(--line); border-right: 2px solid var(--line); }
