@@ -334,7 +334,7 @@ ALWAYS keep c = qty × unitPrice when you set both.
 ## REAL-WORLD LABOR HOURS
 Quotes from this system historically run LOW on hours — completed jobs take 30-80% longer than quoted, especially bigger ones. When torn between two estimates, take the HIGHER.
 - laborHrs covers the FULL task lifecycle: load-in/setup, surface protection, demo, the work itself, cleanup, debris haul-out, and at least one material/supply run per job — not just tool-on-material time.
-- SCALE OVERHEAD WITH JOB SIZE. Large jobs lose real time to coordination, staging, re-work, and site surprises: add ~15% to total labor when the job exceeds 16 total hours, ~25% when it exceeds 40. Fold the uplift into the line items, or add one "Job setup, staging & cleanup" line under the dominant trade.
+- SCALE OVERHEAD WITH JOB SIZE. Large jobs lose real time to coordination, staging, re-work, and site surprises: add ~15% to total labor when the job exceeds 16 total hours, ~25% when it exceeds 40. Fold the uplift into the line items, or add one "Job setup, staging & cleanup" line under the dominant trade. SKIP this rule entirely when a PAST JOB DURATIONS section below says the team's actual hours already include overhead.
 - CREW SIZE: set crewSize to what the work physically needs (2 for sheet goods, appliances, ladder work over 8 ft, heavy demo). Two workers are NOT twice as fast — if you raise crewSize, do NOT cut laborHrs proportionally; coordination overhead eats 10-20% of the theoretical gain.
 - Dry/cure/inspection waits (paint coats, mud, concrete, caulk) add no labor hours but DO add estDays — never compress estDays below what cure times allow.
 
@@ -443,7 +443,7 @@ Count = number of rooms whose Smoke Alarm row has condition D or P — whether t
 
 ### F. Paint math (per house, NOT per room × N)
 For a make-ready job, supplies are SHARED across rooms:
-- Wall paint: BUY BY THE GALLON — GALLONS ONLY, never quarts. Touch-up only = 1 gal ($28), the minimum paint unit on any quote (a quart can costs almost as much, runs out mid-job, and leaves the client nothing for future touch-ups). Full house repaint = 8-12 gallons total.
+- Wall paint: BUY BY THE GALLON — GALLONS ONLY, never quarts. Touch-up only = 1 gal ($28), the minimum paint unit on any quote (a quart can costs almost as much, runs out mid-job, and leaves the client nothing for future touch-ups). That gallon is PER WALL COLOR PER JOB, not per room: every touch-up room sharing the wall color shares ONE gallon — put it once on the Whole Property Painting Supplies line and give the per-room touch-up lines $0 paint (NEVER one gallon per room). Full house repaint = 8-12 gallons total.
 - Ceiling paint: 2-4 gallons total for the whole house, regardless of how many rooms have ceiling work. Ceilings share paint.
 - Spackle: 1-2 tubs per house. NEVER per room.
 - Mesh tape: 1 roll per house.
@@ -497,11 +497,11 @@ Hours INCLUDE old floor removal, subfloor prep, AND new floor installation. Thes
 - Tile: 1 hour per 15-20 sqft
 - Baseboard per room: 1.5-2.5h
 - Big rooms (≥600 sqft) lean toward the lower sqft-per-hour figure (more hours), not the higher one — straight runs are faster per plank but cuts at perimeter, transitions, and disposal scale linearly with area.
-EXAMPLES (apply BOTH the per-sqft minimum AND the dollar floor below, take whichever is HIGHER):
+EXAMPLES of the per-sqft minimum ONLY — then apply the hard-surface dollar floor below and take whichever is HIGHER:
 - 450 sqft LVP, no demo: 450/35 = ~13h
 - 450 sqft LVP replacing carpet: 450/28 = ~16h
 - 920 sqft LVP replacing carpet: 920/28 = ~33h (NOT 17h — rip-out, disposal, and 920 sqft of cuts/transitions take real time)
-FLOORING DOLLAR FLOOR (additional check, AFTER the per-sqft minimum): Total flooring labor for a room (hours × labor rate) MUST also be ≥ $2.50/sqft. If at the user's labor rate the per-sqft hours produce less than that, RAISE hours until labor ≥ $2.50/sqft × room sqft. NEVER LOWER hours below the per-sqft minimum just because the dollar floor is already met — both rules are MINIMUMS, not targets.
+FLOORING DOLLAR FLOOR (additional check, AFTER the per-sqft minimum — HARD-SURFACE floors only: LVP / laminate / tile / hardwood. It does NOT apply to carpet; carpet labor follows its own 1h/50 sqft rate): Total hard-surface flooring labor for a room (hours × labor rate) MUST also be ≥ $2.50/sqft. If at the user's labor rate the per-sqft hours produce less than that, RAISE hours until labor ≥ $2.50/sqft × room sqft. NEVER LOWER hours below the per-sqft minimum just because the dollar floor is already met — both rules are MINIMUMS, not targets.
 FLOORING MATERIALS — calculate from sqft:
 - LVP/Laminate: $2.00/sqft + 10% waste. Example: 450 sqft = 495 sqft × $2 = $990
 - Underlayment: $0.30/sqft. Example: 450 sqft = $135
@@ -540,8 +540,8 @@ Doors: pre-hung door=2-2.5h, bifold=1.25h, entry door=2.5-3h
 ## MATERIALS — LOW-END RETAIL PRICES
 Smoke alarm=$18, outlet cover=$1, door knob=$15, pre-hung interior door=$90, pre-hung exterior/entry door=$275, bifold door=$50, blind=$10, ceiling fixture=$25, vanity light=$30, toilet seat=$18, shower head=$22, shower rod=$12, towel bar=$12, caulk=$5, screen door=$80, faucet=$55, toilet repair kit=$15, LVP=$2.00/sqft
 PAINT MATERIALS — wall paint averages $28/gal, primer $22/gal, trim semigloss $32/gal, ceiling flat $22/gal.
-GALLONS ONLY: every wall/ceiling/trim/baseboard/exterior paint and primer line is sized in GALLONS — NEVER emit a quart line ("1 qt", "(qt)") for these. One gallon is the minimum unit even for a single-room touch-up or a baseboard-only line; rooms doing the same color SHARE the gallon (list it once with both rooms in the note). Only specialty coatings that genuinely come small (wood stain, polyurethane, cabinet enamel) may stay quart-sized.
-Calculate per room:
+GALLONS ONLY: every wall/ceiling/trim/baseboard/exterior paint and primer line is sized in GALLONS — NEVER emit a quart line ("1 qt", "(qt)") for these. One gallon is the minimum unit even for a single-room touch-up or a baseboard-only line; touch-up rooms doing the same color SHARE the gallon — list it ONCE on the Whole Property Painting Supplies line (name the rooms in its note) and give those rooms' touch-up lines $0 paint. Only specialty coatings that genuinely come small (wood stain, polyurethane, cabinet enamel) may stay quart-sized.
+FULL-ROOM REPAINT only — calculate per room (touch-ups use the shared per-job gallon above, NOT this table):
 - Small room (bathroom, closet): 1 gal paint ($28) + 1 gal primer ($22) = $50
 - Medium room (bedroom, kitchen): 2 gal paint ($56) + 1 gal primer ($22) = $78
 - Large room (living room, open concept): 3 gal paint ($84) + 1 gal primer ($22) = $106
@@ -549,7 +549,7 @@ Calculate per room:
 - Trim/baseboard semi-gloss: 1 gal ($32) covers the whole house's trim touch-ups — ONE shared line, not a quart per room.
 - Full unit supplies (tape, spackle, rollers, cloths, drop cloths): $30-50 total — list ONCE under "Paint Supplies"
 For a full 3-bed house paint: ~12-15 gallons paint ($336-420) + primer ($60-90) + supplies ($45) = $440-555 materials total.
-IMPORTANT: Do NOT list just "1 gal" for every room. Calculate based on room size.
+IMPORTANT: For full repaints, do NOT list just "1 gal" for every room — size it by room. For touch-ups, never a gallon per room (see GALLONS ONLY).
 
 ## SPECIFIC DETAILS
 Capture from report: paint colors, hardware finishes (brushed nickel, oil-rubbed bronze), brands, sizes/dimensions, model numbers. Put in "comment" field AND material names.
@@ -597,15 +597,33 @@ export interface AiParseResult {
   estDays: number;
 }
 
+/**
+ * The model's generic job-size overhead line — "Job setup, staging & cleanup"
+ * from the prompt's SCALE OVERHEAD rule. aiParsePdfSingle drops it when the
+ * completed-job calibration is active, and learning.ts leaves it out of the
+ * QUOTED side of that calibration, so actual/quoted always compares clocked
+ * hours against task hours (never against task + overhead).
+ */
+export const isOverheadLine = (detail: string): boolean =>
+  /\bjob\s*set-?up\b[^—]*\bclean-?\s*up\b|\blarge-job overhead\b/i.test(detail || "");
+
 /* ====== POST-PARSE VALIDATION ====== */
-export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Room[] {
+export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phantomCheck?: boolean }): Room[] {
   // skipCaps suppresses the material-cost / labor-hours caps below. Use it
   // when re-validating data the user has already reviewed and saved (e.g.,
   // the editJobId reload path) — otherwise a Bernard-edited material that
   // lifted past the conservative AI-defense cap gets silently scaled back
   // down on the next render. Caps still fire on FRESH AI output, where
-  // they're catching hallucinated prices.
+  // they're catching hallucinated prices. Also use it on AI output that
+  // aiParsePdf already validated + labor-calibrated (QuoteForge's setRooms,
+  // mergeParseResults): the caps ran once pre-calibration, and re-running
+  // them would clamp calibrated hours non-monotonically.
   const skipCaps = opts?.skipCaps === true;
+  // phantomCheck re-runs ONLY the phantom-material pass under skipCaps — it
+  // touches materials, never hours, so it's safe on calibrated output.
+  // mergeParseResults needs it: a material smeared across rooms in DIFFERENT
+  // inspection batches is only visible once the batches are merged.
+  const phantomCheck = !skipCaps || opts?.phantomCheck === true;
   // 0. Ensure every item has a stable id. Without this, saved quotes from
   //    older versions (or any item that lost its id in transit) would all
   //    have id===undefined, and editing one item's hours would patch every
@@ -643,7 +661,7 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       .split(/\s+/)
       .some((w) => w.length >= 4 && hay.includes(w));
   };
-  if (!skipCaps) {
+  if (phantomCheck) {
     // Skip TYPE B / project-scope items (condition "-") since multi-unit jobs
     // legitimately list the same material across unit-grouped items.
     const materialCount: Record<string, { count: number; totalCost: number }> = {};
@@ -845,7 +863,22 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       const lc = it.detail.toLowerCase();
       const isSuppliesLine =
         /\bsupplies\b/.test(lc) && !/install|repair|replace|patch|paint(?:ing)?\s+(?:wall|ceiling|room|trim|door|baseboard)/.test(lc);
-      if (isSuppliesLine && it.laborHrs > 0) {
+      // Same for a project-scope PAINT PRODUCT line — "Whole Property — Trim
+      // Touch-up Paint (semi-gloss)": a can of paint with a finish/size spec,
+      // not a task (the touch-up labor lives on the per-room lines). The model
+      // gave one 0.5h, which calibration billed as 0.7h. A task that paints a
+      // named surface ("Paint trim (semi-gloss)", "Repaint door") is excluded.
+      // Shape-matched to the product noun phrase ("… — Whole Property — <≤3
+      // words> Paint|Primer (<finish or size>)" at the END), fresh AI output
+      // only — a saved/edited quote or a manual Add Item is never touched.
+      const productParen = lc.slice(lc.lastIndexOf("("));
+      const isPaintProductLine =
+        !skipCaps &&
+        it.userClassified !== true &&
+        it.condition === "-" &&
+        /(?:^|—)\s*whole property\s*—\s*(?:[a-z-]+\s+){0,3}(?:paint|primer)\s*\([^)]*\)\s*$/.test(lc) &&
+        /\b(?:gloss|satin|eggshell|flat|matte|gal|gallons?|qts?|quarts?)\b/.test(productParen);
+      if ((isSuppliesLine || isPaintProductLine) && it.laborHrs > 0) {
         return { ...it, laborHrs: 0 };
       }
       return it;
@@ -913,7 +946,11 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       // Interior framing / studs / blocking / sistering — Carpentry.
       // "shower wall framing" pulls Plumbing+10 from \bshower\b in the
       // scorer; the framing pattern is more specific and wins.
-      if (/\bframing\b|re.?frame|reframe|\bstuds?\b|\bblocking\b|\bjoists?\b|\bheaders?\b|sistering|\bsister\b/.test(s)) return "Carpentry";
+      // "stain-blocking primer" / "blocking sealer" are PAINT products, not
+      // framing blocking — strip them first (the real-world test saw a bath
+      // smudge touch-up land in Carpentry off "stain-blocking primer").
+      const sFraming = s.replace(/stain[\s-]*blocking|blocking[\s-]+(?:primer|sealer|paint)/g, " ");
+      if (/\bframing\b|re.?frame|reframe|\bstuds?\b|\bblocking\b|\bjoists?\b|\bheaders?\b|sistering|\bsister\b/.test(sFraming)) return "Carpentry";
       // Full window / door REPLACEMENT — Carpentry, even when the comment
       // describes trim painting or perimeter caulking that happens
       // alongside the install. Bernard hit this in prod: "Replace large
@@ -966,8 +1003,21 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean }): Roo
       // (dump fee / debris bags / hauling time) belongs in Cleaning per
       // the prompt; that's a separate line item the AI is responsible
       // for splitting.
+      // Removing a pest nest / debris / belongings that merely sits AT a door
+      // or window ("Remove wasp nest at door") is not carpentry demo — let the
+      // scorer place it (General).
+      // Only when the pest/debris is the OBJECT of the removal — "Remove and
+      // replace carpenter-bee damaged trim" is still carpentry.
+      const pestRemoval =
+        /\b(?:remove|clear|clean\s*out|knock\s*down|treat)\s+(?:(?:the|a|an|old|dead|active|all|any)\s+)*(?:wasp|hornet|bee|bird|spider|insect|pest)?s?\s*(?:nests?|hives?|webs?|cobwebs?|wasps|hornets|spiders|insects|pests)\b/.test(s) &&
+        !/\bcarpenter\s+bees?\b|\btermites?\b|\b(?:bee|insect|pest)[\s-]*damage/.test(s);
+      const debrisRemoval =
+        /\b(?:remove|clear|clean\s*out|haul(?:\s*away)?|trash[\s-]*out)\s+(?:(?:the|all|any|old|leftover|left[\s-]*behind|tenant|remaining|excess)\s+)*(?:debris|trash|junk|belongings|furniture)\b/.test(s) &&
+        !/\b(demo|tear.?out|rip.?out)\b/.test(s);
+      const notCarpentryRemoval = pestRemoval || debrisRemoval;
       if (/\b(demo|tear.?out|rip.?out|remove)\b/.test(s) &&
-          /(countertop|cabinet|trim|frame|framing|stud|drywall|baseboard|\bdoor\b|\bwindow\b)/.test(s)) {
+          /(countertop|cabinet|trim|frame|framing|stud|drywall|baseboard|\bdoor\b|\bwindow\b)/.test(s) &&
+          !notCarpentryRemoval) {
         return "Carpentry";
       }
       return null;
@@ -1201,7 +1251,13 @@ function mergeParseResults(partials: AiParseResult[]): AiParseResult {
   return {
     property: partials.find((p) => p.property)?.property || "",
     client: partials.find((p) => p.client)?.client || "",
-    rooms: validateQuote(Object.values(tradeByKey)),
+    // Each partial already went through validateQuote (caps included) AND the
+    // labor calibration in aiParsePdfSingle. Re-running the caps here would
+    // clamp calibrated hours back down (a 7h line ×1.48 = 10.4h → reset to 8h,
+    // below a 6.7h line's 10h). skipCaps keeps the cross-batch dedup + trade
+    // re-bucketing this merge actually needs; phantomCheck keeps the
+    // cross-batch phantom-material strip (materials only, hours untouched).
+    rooms: validateQuote(Object.values(tradeByKey), { skipCaps: true, phantomCheck: true }),
     notes: [...noteSet],
     crewSize: Math.max(...partials.map((p) => p.crewSize || 2)),
     estDays: Math.max(...partials.map((p) => p.estDays || 0)),
@@ -1319,6 +1375,15 @@ async function aiParsePdfSingle(
     // trade name; overall is the cross-trade fallback. 1 = no adjustment.
     const laborCalByTrade: Record<string, number> = {};
     let laborCalOverall = 1;
+    // Per-bucket factor (the trade's own ratio, else the overall one), clamped
+    // to the enforced 1–1.5 range. ≥1.05 = calibration will scale that bucket
+    // up. Those actual/quoted ratios come from CLOCKED hours, which already
+    // include setup, staging, supply runs and cleanup — so a separate job-size
+    // overhead uplift on top of them double-counts (the real-world test: a 25%
+    // "Job setup, staging & cleanup" line that calibration then scaled again,
+    // $418–$2,530/quote).
+    const calFactor = (bucket: string) =>
+      Math.min(1.5, Math.max(1, laborCalByTrade[bucket.trim().toLowerCase()] ?? laborCalOverall));
     try {
       const corrections = await db.get<{
         item_name: string; original_hours: number; corrected_hours: number;
@@ -1440,6 +1505,11 @@ async function aiParsePdfSingle(
           correctionsPrompt = "";
           if (jobCalLines.length) {
             correctionsPrompt += `\nPAST JOB DURATIONS — this team's ACTUAL hours from completed work vs what was quoted. Actuals consistently exceed quotes — weight your hours toward the ACTUAL side, especially where local data exists:\n${jobCalLines.join("\n")}\n`;
+            // Overall ratio only: a single calibrated trade mustn't switch the
+            // uplift off for the others (the code-side drop below is per bucket).
+            if (laborCalOverall >= 1.05) {
+              correctionsPrompt += `These actual hours already include this team's setup, staging, supply runs, coordination and cleanup. Keep each line's FULL TASK LIFECYCLE hours, but do NOT apply the SCALE OVERHEAD WITH JOB SIZE uplift and do NOT add a separate "Job setup, staging & cleanup" line.\n`;
+            }
           }
           if (localLessons.length && propertyZip) {
             correctionsPrompt += `\nLEARNED PRICING — LOCAL TO ZIP ${propertyZip} (prefer these for same-area jobs):\n${localLessons.slice(0, 25).join("\n")}\n`;
@@ -1483,6 +1553,16 @@ async function aiParsePdfSingle(
     // Pre-process text: strip summary table, clean noise
     let cleanText = text;
     let multiUnit = false;
+    // Structured text the app compiled from its OWN inspection data
+    // (compileInspectionText, via aiParseInspection). It has no summary/detail
+    // duplication, and repeats lines room after room BY DESIGN ("Condition: P
+    // (Poor)", "Actions: Maintenance", "Comment: Replace with LVP") — so the
+    // zInspector-PDF slice + line-dedup below must not touch it. The dedup was
+    // stripping every room after the first down to its bare header + size
+    // (conditions and comments gone), which is how an all-Satisfactory
+    // Bathroom 3 reached the model as nothing but "~50 sqft" and got quoted.
+    const structuredInspection =
+      /^\s*PROPERTY INSPECTION REPORT\n/.test(text) && /^=== .+ ===$/m.test(text);
     if (cleanText.trim()) {
       // ── STEP 1: Remove noise ──
       cleanText = cleanText.replace(/Page \d+ of \d+\s*Report generated by zInspector/gi, "");
@@ -1508,9 +1588,27 @@ async function aiParsePdfSingle(
         /\b\d{2,6}\s+[A-Za-z0-9][A-Za-z0-9 .']{2,30}?\b(?:Ave(?:nue)?|St(?:reet)?|Blvd|Boulevard|Ln|Lane|Dr(?:ive)?|Rd|Road|Ct|Court|Way|Cir(?:cle)?|Pl(?:ace)?|Ter(?:race)?)\b/gi,
       ) || [];
       const houseNums = new Set(addrMatches.map((a) => a.match(/^\d+/)?.[0] || "").filter(Boolean));
+      // Only a real unit IDENTIFIER counts ("Unit 1114", "Apt 2B", "Unit B"),
+      // keyed by the identifier so "Unit 1114" / "Unit #1114" are one unit.
+      // The old `unit\s*[A-Za-z0-9]+` matched any word after "unit" — "AC unit
+      // filters", zInspector's "Unit Compliance" section — so a plain
+      // single-unit report (1112 E 8th St N Unit 1114) read as a duplex and
+      // got unit-prefixed lines with the dedup safety switched off.
+      // Same-line only ([ \t], never \n — "…AC unit\nS" is a condition code on
+      // the next line), whole word "unit" (not "units"), a letter-only id must
+      // be a capital ("Unit B", not "the unit a few…") and not a lone condition
+      // code (S/F/P/D/N/E), and a number that's really a quantity ("unit 2
+      // ton", "Apt 3 yr") doesn't count.
       const unitTokens = new Set(
-        (cleanText.match(/\b(?:unit|apt|apartment|suite|ste)\s*#?\s*[A-Za-z0-9]+/gi) || [])
-          .map((u) => u.toLowerCase().replace(/\s+/g, " ")),
+        Array.from(
+          cleanText.matchAll(
+            /\b(?:unit|apt\.?|apartment|suite|ste\.?)(?![a-z])[ \t]*#?[ \t]*(\d+[A-Za-z]?|[A-Za-z]\d*)\b(?![ \t]*(?:-[ \t]*)?(?:(?:yrs?|years?|tons?|amps?|gal|gallons?|btu)\b|%))/gi,
+          ),
+        )
+          .map((m) => m[1])
+          .filter((t) => /\d/.test(t) || /^[A-Z]$/.test(t))
+          .filter((t) => !/^[SFPDNEI]$/.test(t))
+          .map((t) => t.toLowerCase()),
       );
       multiUnit = houseNums.size >= 2 || unitTokens.size >= 2;
 
@@ -1561,7 +1659,7 @@ async function aiParsePdfSingle(
       // Multi-unit reports keep the FULL text: the slice would cut both
       // units' address headers (they sit before the first detail section),
       // leaving nothing that says which unit a finding belongs to.
-      if (!multiUnit && detailStart > 100) {
+      if (!multiUnit && !structuredInspection && detailStart > 100) {
         cleanText = cleanText.slice(detailStart);
       }
 
@@ -1584,11 +1682,17 @@ async function aiParsePdfSingle(
       // Multi-unit reports skip the dedup: unit B's lines are near-identical
       // to unit A's (same rooms, same items), so whole-document dedup would
       // silently delete the second unit's findings.
-      if (!multiUnit) cleanText = deduped.join("\n");
+      if (!multiUnit && !structuredInspection) cleanText = deduped.join("\n");
 
       content.push({
         type: "text",
-        text: multiUnit
+        text: structuredInspection
+          ? `Structured inspection compiled by the app — each "=== Room ===" section lists every checked item with its condition and comment. Follow the Inspection Type brief at the top if there is one; otherwise quote only items that need work (Fair / Poor / Damaged, or a comment asking for work) — Satisfactory items with no work comment need nothing.${
+              multiUnit
+                ? `\nThis property has MULTIPLE UNITS: prefix every line item's "detail" with its unit (e.g. "Unit B — Bathroom — Re-caulk tub"), and quote each unit's work separately — never merge identical findings across units.`
+                : ""
+            }\n\n${cleanText.slice(0, 60000)}`
+          : multiUnit
           ? `IMPORTANT: This report covers MULTIPLE UNITS at similar addresses (duplex / multi-unit property). Keep each unit's findings SEPARATE and correctly labeled:
 - Prefix every line item's "detail" with its unit, e.g. "1105 — Kitchen — Replace sprayer" or "Unit B — Bathroom — Re-caulk tub".
 - Do NOT merge, dedupe, or skip rooms/items because they look identical across units — a duplex often needs the same repair in both units, and BOTH must be quoted.
@@ -1602,7 +1706,9 @@ ${cleanText.slice(0, 60000)}`
 
     content.push({
       type: "text",
-      text: multiUnit
+      text: structuredInspection
+        ? "Parse this inspection report following the quoting engine rules exactly. Return ONLY the JSON."
+        : multiUnit
         ? "Parse this MULTI-UNIT inspection report following the quoting engine rules exactly. Label every line item's detail with its unit and quote each unit's work separately — never collapse similar findings across units. Return ONLY the JSON."
         : "Parse this inspection report following the quoting engine rules exactly. Process ONLY the detailed room breakdowns, skip the summary table. Return ONLY the JSON.",
     });
@@ -1677,6 +1783,14 @@ ${cleanText.slice(0, 60000)}`
 
     const parsed = JSON.parse(jsonMatch[0]);
 
+    // A number (or numeric string like "2.5") ≥ 0 is kept as-is; anything else
+    // — omitted, null, "", "TBD" — falls back to 0.5h. (Number("") is 0, so a
+    // plain Number() check would have turned a blank into a free line.)
+    const modelHours = (v: unknown): number => {
+      const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+      return Number.isFinite(n) && n >= 0 ? n : 0.5;
+    };
+
     // Add IDs to items. We `...it` spread first so any extra fields the
     // AI emitted (notably `optional: true` for upsell rows per the
     // Actions-column policy) survive into the RoomItem. Subsequent
@@ -1687,7 +1801,11 @@ ${cleanText.slice(0, 60000)}`
         items: r.items.map((it) => ({
           ...it,
           id: crypto.randomUUID().slice(0, 8),
-          laborHrs: it.laborHrs || 0.5,
+          // Default only when the model OMITTED hours. An explicit 0 is
+          // intentional (a "no charge" flag/note or a materials-only line) —
+          // `|| 0.5` used to turn it into billed labor, which calibration then
+          // inflated further (a "no charge" HVAC note came out as 0.8h / $44).
+          laborHrs: modelHours(it.laborHrs),
           materials: it.materials?.length
             ? it.materials
             : [{ n: "Materials", c: 0 }],
@@ -1696,7 +1814,30 @@ ${cleanText.slice(0, 60000)}`
     );
 
     // ── POST-PARSE VALIDATION ──
-    const validatedRooms = validateQuote(rooms);
+    const validatedAll = validateQuote(rooms);
+
+    // ── OVERHEAD vs CALIBRATION ──
+    // When the history calibration below is going to scale a bucket up, a
+    // generic job-size overhead line in it double-counts: the actual/quoted
+    // ratios come from clocked hours that already include setup, staging and
+    // cleanup (and learning.ts leaves overhead lines out of the quoted side).
+    // The prompt says so, but this is the backstop — take the model's "Job
+    // setup, staging & cleanup" hours out before calibrating (it was 7–25% of
+    // every test quote, then got inflated again). A line that also carries
+    // materials keeps them at 0h; an hours-only line is removed. A note tells
+    // the owner so it can be added back.
+    let droppedOverheadHrs = 0;
+    const validatedRooms = validatedAll.map((room) => {
+      if (calFactor(room.name) < 1.05) return room;
+      return {
+        ...room,
+        items: room.items.flatMap((it) => {
+          if (!isOverheadLine(it.detail) || !(it.laborHrs > 0)) return [it];
+          droppedOverheadHrs += it.laborHrs;
+          return it.materials.some((m) => (m.c || 0) > 0) ? [{ ...it, laborHrs: 0 }] : [];
+        }),
+      };
+    });
 
     // ── LABOR-HOURS CALIBRATION (deterministic) ──
     // The prompt-side quoted-vs-actual history is advisory; this is the
@@ -1707,9 +1848,8 @@ ${cleanText.slice(0, 60000)}`
     // quotes that then match actuals push future ratios back toward 1.
     const calAdjustments: string[] = [];
     const calibratedRooms = validatedRooms.map((room) => {
-      const ratio = laborCalByTrade[room.name.trim().toLowerCase()] ?? laborCalOverall;
-      const factor = Math.min(1.5, Math.max(1, ratio));
-      if (factor < 1.05) return room;
+      const factor = calFactor(room.name);
+      if (factor < 1.05 || room.items.length === 0) return room;
       calAdjustments.push(`${room.name} +${Math.round((factor - 1) * 100)}%`);
       return {
         ...room,
@@ -1720,7 +1860,17 @@ ${cleanText.slice(0, 60000)}`
       };
     });
 
-    const notes: string[] = parsed.notes || [];
+    let notes: string[] = Array.isArray(parsed.notes)
+      ? parsed.notes.filter((n: unknown): n is string => typeof n === "string")
+      : [];
+    if (droppedOverheadHrs > 0) {
+      // The model's own note about the overhead line would now point at a
+      // line that no longer exists — drop it in favor of ours.
+      notes = notes.filter((n) => !(/job-size overhead|job\s*set-?up|staging\s*(?:&|and)\s*clean-?\s*up/i.test(n)));
+      notes.push(
+        `Took out the generic "Job setup, staging & cleanup" overhead hours (${Math.round(droppedOverheadHrs * 10) / 10}h) — your completed-job calibration already reflects real on-site overhead. Add it back if this job needs extra coordination.`,
+      );
+    }
     if (calAdjustments.length) {
       notes.push(
         `Labor hours adjusted up from your completed-job history (${calAdjustments.join(", ")}) — edit down if this job should run lean.`,
@@ -1862,8 +2012,23 @@ function compileInspectionText(
 
   rooms.forEach((room) => {
     text += `=== ${room.name} ===\n`;
+    // A room where every item is Satisfactory (or New/Excellent) needs no work.
+    // Printing its size — especially an ESTIMATED one for a 0-sqft room — made
+    // the model quote area work there anyway: a flooring inspection with
+    // Bathroom 3 all-S / 0 sqft came back with "Bathroom 3 — Replace flooring
+    // with LVP (~50 sqft est)", ~$364 nobody asked for. Initial baseline walks
+    // still document every room, so they keep the size — and so does a yard
+    // survey, where a Satisfactory lawn still gets the recurring mow/edge.
+    // An S item that carries a note may still ask for work ("S — needs heavy
+    // cleaning"), so only a room of all-S/N/E items with NO notes is no-work.
+    const isOk = (c?: string) => ["S", "N", "E"].includes(String(c || "S").toUpperCase());
+    const needsWork = room.items.some((it) => !isOk(it.condition) || !!(it.notes || "").trim());
+    const quotesEveryRoom = inspectionType === "initial" || inspectionType === "yard";
+    if (!needsWork && !quotesEveryRoom) {
+      text += `No work needed — every item in this room is Satisfactory. Do NOT create any line items for this room.\n`;
+    }
     const eff = effectiveSqft(room);
-    if (eff.sqft > 0) {
+    if (eff.sqft > 0 && (needsWork || quotesEveryRoom)) {
       text += eff.estimated
         ? `Room Size: ~${eff.sqft} square feet (ESTIMATED from room type — verify on site)\n`
         : `Room Size: ${eff.sqft} square feet\n`;
@@ -1876,8 +2041,8 @@ function compileInspectionText(
         "Satisfactory";
       text += `Detail: ${item.name}\n`;
       text += `Condition: ${item.condition} (${condLabel})\n`;
-      text += `Actions: ${item.condition === "S" ? "None" : "Maintenance"}\n`;
-      text += `Comment: ${item.notes || (item.condition === "S" ? "No issues" : "Needs attention")}\n`;
+      text += `Actions: ${isOk(item.condition) ? "None" : "Maintenance"}\n`;
+      text += `Comment: ${item.notes || (isOk(item.condition) ? "No issues" : "Needs attention")}\n`;
       if (item.photos.length) {
         text += `Photos: ${item.photos.length} attached\n`;
       }

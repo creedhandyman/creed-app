@@ -811,7 +811,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       const result = await aiParseInspection(input, rate, licensedTradesInsp, setParseStatus);
       if (result && result.rooms.length > 0) {
         setParseStatus("Building quote...");
-        setRooms(validateQuote(result.rooms));
+        // Already validated (caps + floors) and labor-calibrated inside the
+        // parse — skipCaps so a second cap pass can't clamp calibrated hours.
+        setRooms(validateQuote(result.rooms, { skipCaps: true }));
         setParsing(false);
         setParseStatus("");
         return;
@@ -994,7 +996,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
             return [...prev, ...beforePhotos.filter((p) => !existing.has(p.url))];
           });
         }
-        setRooms(validateQuote(result.rooms));
+        // aiParsePdf already validated (caps + floors) and labor-calibrated
+        // these rooms — skipCaps so the 10h/8h cap can't re-clamp calibrated
+        // hours (the real-world test saw a 10.4h line reset to 8h).
+        setRooms(validateQuote(result.rooms, { skipCaps: true }));
         setParsing(false);
         setParseStatus("");
         setMode("edit");

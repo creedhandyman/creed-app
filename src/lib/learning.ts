@@ -13,7 +13,7 @@
  * heavily. Requires the migration in CLAUDE.md (source / job_id / created_at).
  */
 import { db } from "./supabase";
-import { extractZip } from "./parser";
+import { extractZip, isOverheadLine } from "./parser";
 import type { Job, TimeEntry, Room, RoomItem } from "./types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -55,7 +55,14 @@ function parseJobItems(job: Job): { trade: string; item: RoomItem }[] {
     /* no parseable quote */
   }
   const out: { trade: string; item: RoomItem }[] = [];
-  for (const r of rooms) for (const it of r.items || []) out.push({ trade: r.name, item: it });
+  for (const r of rooms)
+    for (const it of r.items || []) {
+      // The generic "Job setup, staging & cleanup" line isn't a task — keep it
+      // off the QUOTED side so actual/quoted stays clocked hours vs task
+      // hours, the same basis the quoter drops it on (see isOverheadLine).
+      if (isOverheadLine(it.detail)) continue;
+      out.push({ trade: r.name, item: it });
+    }
   return out;
 }
 
