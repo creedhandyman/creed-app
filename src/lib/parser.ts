@@ -1239,6 +1239,19 @@ export const MATERIALS_PRICE_REFERENCE: string = (() => {
 // visible instead of silently degrading to the regex parser.
 let _lastAiError = "";
 export const getLastAiError = () => _lastAiError;
+
+/** Concatenate the TEXT blocks of a Messages API response's content.
+ *  Sonnet 5+ runs adaptive thinking when the request omits the thinking
+ *  param, so content[0] can be a THINKING block — the old naive
+ *  `content[0].text` read returned "" and broke quote parsing the day of
+ *  the model bump. Always extract text blocks by type. */
+export function aiText(content: unknown): string {
+  if (!Array.isArray(content)) return "";
+  return (content as { type?: string; text?: string }[])
+    .filter((b) => b && b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("\n");
+}
 const setAiError = (m: string) => { _lastAiError = m; };
 
 export async function aiParsePdf(
@@ -1607,6 +1620,11 @@ ${cleanText.slice(0, 60000)}`
         // the zzz quote-math audit suite gates. Prompt caches are
         // model-scoped: the first parse after a model change re-warms.
         model: "claude-sonnet-5",
+        // Structured extraction, not open-ended reasoning: disable
+        // thinking explicitly (Sonnet 5 runs ADAPTIVE thinking when the
+        // param is omitted), so the response is pure JSON text and no
+        // thinking tokens ride the bill or eat the output budget.
+        thinking: { type: "disabled" },
         max_tokens: 16000,
         // Prompt caching: static rules FIRST (cache-hot on every call), then the
         // per-org learned-pricing block (cache-hot within a same-ZIP session),
@@ -1651,9 +1669,8 @@ ${cleanText.slice(0, 60000)}`
       return null;
     }
 
-    // Extract JSON from response
-    const responseText =
-      data.content?.[0]?.text || "";
+    // Extract JSON from response (text blocks only — see aiText)
+    const responseText = aiText(data.content);
     const jsonMatch =
       responseText.match(/\{[\s\S]*\}/) || [];
     if (!jsonMatch[0]) { setAiError("AI returned no parseable quote JSON"); return null; }
@@ -1733,6 +1750,9 @@ export async function checkAiAvailable(): Promise<boolean> {
       headers: { "Content-Type": "application/json", "x-creed-call-type": "ping" },
       body: JSON.stringify({
         model: "claude-sonnet-5",
+        // 10-token availability ping — no thinking (Sonnet 5 defaults to
+        // adaptive when the param is omitted).
+        thinking: { type: "disabled" },
         max_tokens: 10,
         messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
       }),
@@ -2493,7 +2513,7 @@ Output ONLY valid JSON of this shape:
     console.error("VoiceWalkRoom AI response error:", data.error);
     return [];
   }
-  const responseText = data.content?.[0]?.text || "";
+  const responseText = aiText(data.content);
   const jsonMatch = responseText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return [];
   try {

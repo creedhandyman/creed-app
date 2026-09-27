@@ -3,6 +3,7 @@ import { apiFetch } from "@/lib/api";
 import { useState, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+import { aiText } from "@/lib/parser";
 import { Icon } from "../Icon";
 
 interface Message {
@@ -116,6 +117,10 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-5",
+          // Support chat — no thinking (Sonnet 5 defaults to adaptive
+          // when the param is omitted; content[0] would be a thinking
+          // block and the text read below would come up empty).
+          thinking: { type: "disabled" },
           max_tokens: 1500,
           system: SYSTEM_PROMPT,
           messages: apiMessages,
@@ -123,7 +128,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
       });
 
       const data = await res.json();
-      const text = data.content?.[0]?.text || "I couldn't process that. Try describing the issue differently.";
+      const text = aiText(data.content) || "I couldn't process that. Try describing the issue differently.";
 
       setMessages((prev) => [...prev, { role: "assistant", content: text }]);
     } catch {

@@ -26,6 +26,7 @@ import {
   TRADE_CATEGORY_LIST,
   AI_SYSTEM_PROMPT_BASE,
   getLastAiError,
+  aiText,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/lib/trades";
@@ -2699,7 +2700,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   }),
                 });
                 const data = await res.json();
-                const text = data.content?.[0]?.text || "";
+                const text = aiText(data.content);
                 const match = text.match(/\{[\s\S]*\}/);
                 if (!match) {
                   useStore.getState().showToast("AI returned no actions", "warning");
