@@ -3,6 +3,7 @@ import { wrapPrint, openPrint } from "./print-template";
 import { resolveTaxMode, type TaxMode } from "./tax";
 import { priceCascade, rateForRoom } from "./pricing";
 import { itemInTier, itemTiers, type TierKey } from "./tiers";
+import { approvalState, type QuoteApproval } from "./approval";
 
 interface ExportOptions {
   property: string;
@@ -71,6 +72,13 @@ interface ExportOptions {
    *  per-quote laborRate override (the override, passed as `rate`, is the
    *  rate for every section). Absent = flat `rate` everywhere (legacy). */
   tradeRates?: Record<string, number> | null;
+  /** The customer's online approval (quoteApprovalFromJob). When the items
+   *  being printed are the ones they signed (approvalState), the signature
+   *  prints in the Client Approval slot and the closing block reads
+   *  "Estimate Approved". Revised since → unsigned with a note about the
+   *  earlier approval; record lost → unsigned with a neutral "on file" note.
+   *  Null/undefined = blank signature lines. */
+  approval?: QuoteApproval | null;
 }
 
 const esc = (s: string) =>
@@ -221,18 +229,61 @@ export function exportQuotePdf(opts: ExportOptions) {
   const tierMin = showTiers ? Math.min(...tierColTotals) : grandTotal;
   const tierMax = showTiers ? Math.max(...tierColTotals) : grandTotal;
   const tierRange = tierMin === tierMax ? `$${tierMax.toFixed(0)}` : `$${tierMin.toFixed(0)}–$${tierMax.toFixed(0)}`;
+
+  // Customer approval (see approvalState in approval.ts). `signed` = approved
+  // AND the items printed below are the ones they signed → their signature
+  // prints. `revisedAfter` = the quote changed since → no signature, a note
+  // about the earlier approval. `unverified` = approved, but the record of
+  // which version was lost → no signature, a neutral "on file" note.
+  const approval = opts.approval && opts.approval.signature ? opts.approval : null;
+  const approvalAs = approval ? approvalState(approval, rooms, { tiersShown: showTiers }) : null;
+  const signed = approvalAs === "signed" ? approval : null;
+  const revisedAfter = approvalAs === "revised" ? approval : null;
+  const unverified = approvalAs === "unverified" ? approval : null;
+  const signedWhen = (a: QuoteApproval) => {
+    const d = a.approvedAt ? new Date(a.approvedAt) : null;
+    if (d && !Number.isNaN(d.getTime())) {
+      return {
+        long: d.toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }),
+        short: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      };
+    }
+    const s = (a.signatureDate || "").trim();
+    return { long: s, short: s };
+  };
+  // The picked Good-Better-Best option (tierCols are base, better, best).
+  const acceptedIdx = signed?.acceptedTier && showTiers
+    ? (["base", "better", "best"] as TierKey[]).indexOf(signed.acceptedTier)
+    : -1;
+  // What the closing block shows as approved: the recorded approved amount
+  // when there is one, else the picked option's / quote's current total.
+  const pricedNow = acceptedIdx >= 0 ? tierCols[acceptedIdx].total : showTiers ? null : grandTotal;
+  const approvedAmount = signed?.record && signed.record.total > 0 ? signed.record.total : pricedNow;
+  // The /status pad now captures dark ink, but signatures drawn before that
+  // are white ink on a transparent canvas — invisible on paper as-is.
+  // brightness(0) turns any ink color black and keeps the transparency, so
+  // both print. Only a strict PNG/WebP data
+  // URL is ever put in an <img>; any other data: value (never produced today)
+  // prints as "signature on file" rather than as raw base64 text.
+  const sigIsDataUrl = !!signed && /^data:/i.test(signed.signature);
+  const sigIsImage = sigIsDataUrl && /^data:image\/(?:png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(signed!.signature);
+  const sigTyped = !!signed && !sigIsDataUrl;
+  // A typed name is free text from the customer — clamp what prints.
+  const sigName = sigTyped ? signed!.signature.slice(0, 100) : "";
+
   const tiersHtml = showTiers
     ? `
-<h2>Choose Your Option</h2>
+<h2>${acceptedIdx >= 0 ? "Your Selected Option" : "Choose Your Option"}</h2>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px;page-break-inside:avoid">
   ${tierCols
     .map((col, idx) => {
       const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
+      const picked = idx === acceptedIdx;
       const itemsList = col.items.length
         ? `<ul style="padding-left:16px;margin:6px 0 0;font-size:11px;color:#444;line-height:1.5">${col.items.slice(0, 6).map((a) => `<li>${esc(a.it.detail)}</li>`).join("")}${col.items.length > 6 ? `<li>+${col.items.length - 6} more</li>` : ""}</ul>`
         : `<div style="font-size:11px;color:#888;margin-top:6px">No work in this option</div>`;
-      return `<div style="border:2px solid ${hue};border-radius:10px;padding:12px;page-break-inside:avoid">
-      <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}</div>
+      return `<div style="border:${picked ? 3 : 2}px solid ${hue};border-radius:10px;padding:12px;page-break-inside:avoid;${acceptedIdx >= 0 && !picked ? "opacity:.55;" : ""}">
+      <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}${picked ? ` <span style="font-size:10px;background:${hue};color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px;letter-spacing:.08em">✓ Selected</span>` : ""}</div>
       <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:${hue};margin:4px 0 2px">$${col.total.toFixed(0)}</div>
       <div style="font-size:11px;color:#666">${col.items.length} line item${col.items.length === 1 ? "" : "s"}</div>
       ${itemsList}
@@ -240,7 +291,9 @@ export function exportQuotePdf(opts: ExportOptions) {
     })
     .join("")}
 </div>
-<div style="font-size:11px;color:#888;margin-bottom:18px">Each option above is a complete, standalone scope — pick the one you want. The line-item breakdown that follows lists all quoted work across the options for reference.</div>
+<div style="font-size:11px;color:#888;margin-bottom:18px">${acceptedIdx >= 0
+    ? `Approved: <b>${esc(tierCols[acceptedIdx].name)}</b>. The other options are shown for reference only, and the line-item breakdown that follows lists all quoted work across the options.`
+    : "Each option above is a complete, standalone scope — pick the one you want. The line-item breakdown that follows lists all quoted work across the options for reference."}</div>
 `
     : "";
 
@@ -436,7 +489,9 @@ ${(client || clientEmail || clientPhone) ? `
   <div class="box"><div class="label">Property</div><div class="value">${esc(property || "—")}</div></div>
   <div class="box"><div class="label">Issue Date</div><div class="value">${today}</div></div>
   <div class="box"><div class="label">License No</div><div class="value">${esc(orgLicense || "—")}</div></div>
-  <div class="box"><div class="label">Valid For</div><div class="value">30 Days</div></div>
+  ${signed && signedWhen(signed).short
+    ? `<div class="box"><div class="label">Approved</div><div class="value">${esc(signedWhen(signed).short)}</div></div>`
+    : `<div class="box"><div class="label">Valid For</div><div class="value">${validDays} Days</div></div>`}
 </section>
 
 ${tiersHtml}
@@ -477,8 +532,8 @@ ${(markupPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
   ${discount ? `<tr style="color:#C00000"><td>${esc(discountLabel)}</td><td class="r" style="padding-left:24px">-$${discountAmount.toFixed(2)}</td></tr>` : ""}
   ${taxPct > 0 && taxMode !== "none" ? `<tr><td class="dim">${esc(taxLabel)}</td><td class="r" style="padding-left:24px">$${taxAmount.toFixed(2)}</td></tr>` : ""}
   <tr style="font-weight:700;font-size:16px;color:${accent};font-family:Oswald,sans-serif">
-    <td>${showTiers ? "OPTIONS" : "GRAND TOTAL"}</td>
-    <td class="r" style="padding-left:24px">${showTiers ? tierRange : `$${grandTotal.toFixed(2)}`}</td>
+    <td>${showTiers ? (acceptedIdx >= 0 ? "APPROVED OPTION" : "OPTIONS") : "GRAND TOTAL"}</td>
+    <td class="r" style="padding-left:24px">${showTiers ? (acceptedIdx >= 0 && approvedAmount !== null ? `$${approvedAmount.toFixed(2)}` : tierRange) : `$${grandTotal.toFixed(2)}`}</td>
   </tr>
 </table>
 ` : ""}
@@ -534,20 +589,49 @@ ${renders
 </div>
 
 <section style="background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border:2px solid ${accent};border-radius:12px;padding:20px 24px;margin-top:22px;text-align:center;page-break-inside:avoid">
-  <h3 style="font-family:Oswald,sans-serif;font-size:16px;color:${accent};text-transform:uppercase;margin:0 0 8px;letter-spacing:.08em">${showTiers ? "Choose Your Option" : "Accept This Estimate"}</h3>
+  ${signed ? `
+  <h3 style="font-family:Oswald,sans-serif;font-size:16px;color:#1b7a3d;text-transform:uppercase;margin:0 0 8px;letter-spacing:.08em">✓ Estimate Approved</h3>
+  ${acceptedIdx >= 0 ? `<div style="font-size:13px;color:#444;font-weight:600">Selected option: ${esc(tierCols[acceptedIdx].name)}</div>` : ""}
+  <div style="font-family:Oswald,sans-serif;font-size:32px;font-weight:700;color:${accent};margin:8px 0">${approvedAmount !== null ? `$${approvedAmount.toFixed(2)}` : tierRange}</div>
+  ${approvedAmount !== null && pricedNow !== null && Math.abs(approvedAmount - pricedNow) >= 1 ? `<div style="font-size:11px;color:#888;margin-top:-4px">Approved amount · line items as priced today: $${pricedNow.toFixed(2)}</div>` : ""}
+  <div style="font-size:12px;color:#444;line-height:1.9">
+    <div>Approved electronically${sigTyped ? ` by <b>${esc(sigName)}</b>` : ""}${signedWhen(signed).long ? ` on ${esc(signedWhen(signed).long)}` : ""}</div>
+    ${statusUrl ? `<div>🔗 <b>View online:</b> <a href="${esc(statusUrl)}" style="color:${accent}">${esc(statusUrl)}</a></div>` : ""}` : `
+  <h3 style="font-family:Oswald,sans-serif;font-size:16px;color:${accent};text-transform:uppercase;margin:0 0 8px;letter-spacing:.08em">${revisedAfter ? "Revised Estimate" : unverified ? "Estimate Approved" : showTiers ? "Choose Your Option" : "Accept This Estimate"}</h3>
   <div style="font-family:Oswald,sans-serif;font-size:32px;font-weight:700;color:${accent};margin:8px 0">${showTiers ? tierRange : `$${grandTotal.toFixed(2)}`}</div>
   <div style="font-size:12px;color:#444;line-height:1.9">
-    ${statusUrl ? `<div>🔗 <b>View &amp; approve online:</b> <a href="${esc(statusUrl)}" style="color:${accent}">${esc(statusUrl)}</a></div>` : ""}
+    ${unverified ? `<div>Approved electronically${signedWhen(unverified).long ? ` on ${esc(signedWhen(unverified).long)}` : ""}</div>` : ""}
+    ${statusUrl ? `<div>🔗 <b>${approval ? "View online" : "View &amp; approve online"}:</b> <a href="${esc(statusUrl)}" style="color:${accent}">${esc(statusUrl)}</a></div>` : ""}
+    ${revisedAfter ? `<div>Contact ${esc(orgName)} to approve this revised version.</div>` : ""}`}
     ${orgPhone ? `<div>☎ <b>Call:</b> ${esc(orgPhone)}</div>` : ""}
     ${orgEmail ? `<div>✉ <b>Email:</b> ${esc(orgEmail)}</div>` : ""}
   </div>
   <div style="font-size:11px;color:#888;margin-top:8px">Reference: ${quoteNum}</div>
 </section>
 
+${signed ? `
+<div class="sig-row" style="align-items:flex-end;page-break-inside:avoid">
+  <div class="sig-line">Authorized Signature &nbsp; / &nbsp; Date</div>
+  <div style="flex:1;min-width:0">
+    <div style="height:64px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;padding-bottom:2px">
+      ${sigIsImage
+        ? `<img src="${esc(signed.signature)}" alt="Client signature" style="max-height:62px;max-width:100%;object-fit:contain;filter:brightness(0)" />`
+        : !sigTyped
+        ? `<span style="font-size:12px;color:#666;font-style:italic">Signature on file</span>`
+        : `<span style="font-family:'Segoe Script','Brush Script MT','Snell Roundhand','Apple Chancery',cursive;font-size:26px;line-height:1.2;color:#1a2440;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(sigName)}</span>`}
+    </div>
+    <div class="sig-line">Client Approval &nbsp; / &nbsp; ${signedWhen(signed).short ? esc(signedWhen(signed).short) : "Date"}</div>
+  </div>
+</div>
+<div style="font-size:10px;color:#888;text-align:right;margin-top:4px">Client signed electronically${sigTyped ? " (typed name)" : ""}${signedWhen(signed).long ? ` on ${esc(signedWhen(signed).long)}` : ""}.</div>
+` : `
+${revisedAfter ? `<div style="font-size:11px;color:#8a5a00;background:#fff7e6;border:1px solid #f0d9a8;border-radius:6px;padding:8px 12px;margin-top:18px;page-break-inside:avoid">An earlier version of this estimate was approved electronically${signedWhen(revisedAfter).long ? ` on ${esc(signedWhen(revisedAfter).long)}` : ""}. It has been revised since, so that approval isn't applied to this version.</div>` : ""}
+${unverified ? `<div style="font-size:11px;color:#555;background:#f5f7fa;border:1px solid #dde3ea;border-radius:6px;padding:8px 12px;margin-top:18px;page-break-inside:avoid">Approved electronically${signedWhen(unverified).long ? ` on ${esc(signedWhen(unverified).long)}` : ""} — the client's signature is on file with ${esc(orgName)}.</div>` : ""}
 <div class="sig-row">
   <div class="sig-line">Authorized Signature &nbsp; / &nbsp; Date</div>
   <div class="sig-line">Client Approval &nbsp; / &nbsp; Date</div>
 </div>
+`}
 `;
 
   const html = wrapPrint(

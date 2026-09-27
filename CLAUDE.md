@@ -780,6 +780,25 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `acceptedTier` + total are recorded); the marketing `s/[slug]` page is the
   business card, not an approval page, so it's untouched.
 
+- **Signed quotes print the customer's signature**: the /status "Approve &
+  Sign" signature (typed name, or the pad's PNG — dark ink since this change;
+  older pad signatures were white ink, so the PDF applies `brightness(0)`)
+  prints in the quote PDF's Client Approval slot with the sign date, and the
+  closing block reads "✓ Estimate Approved" (+ the picked option for GBB).
+  `/api/jobs/approve` stamps `rooms.approval = {v,fp,total,at,tier?}` —
+  `fp` = `scopeFingerprint(rooms)` (`src/lib/approval.ts`: order-insensitive
+  hash of each line's canonical detail/hours/priced materials/tiers). The PDF
+  (`approvalState`) prints the signature only while the printed items still
+  match `fp`; revised since → unsigned + "earlier version was approved" note;
+  a post-2026-09-28 approval whose record got erased (stale-store blob writes)
+  → unsigned + neutral "on file" note; pre-record approvals print signed.
+  Reopening in QuoteForge must NOT read as revised: validateQuote's detail
+  rewrite + supplies-hours zeroing live in `src/lib/line-canon.ts`, shared by
+  parser.ts and the fingerprint — change them there only. The route also
+  refuses stale pages (409 `stale` when the page's `scopeFp`/`shownTotal`
+  don't match the server), leads, and malformed signatures (typed ≤100 chars;
+  canvas = PNG data URL ≤400KB). Once signed a quote can't be re-approved
+  online (pre-existing 409 lock) — a revised signed quote needs the owner.
 - **Security hardening (`SECURITY-AUDIT.md` — local, untracked)**: a multi-pass
   audit + remediation. API routes now require a Supabase JWT (`lib/api-auth.ts`
   `requireAuth`/`requireOwner`/`serviceClient`); service-role routes fail closed

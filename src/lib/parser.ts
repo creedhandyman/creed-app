@@ -2,6 +2,7 @@ import type { Room, RoomItem, Material, InspectionRoom } from "./types";
 import { db, supabase } from "./supabase";
 import { apiFetch } from "./api";
 import { MATERIALS_DB } from "./materials-db";
+import { TRADE_CATEGORY_LIST, canonicalDetail, isSuppliesOnlyLine } from "./line-canon";
 
 /* ====== PDF LOADING ====== */
 
@@ -196,7 +197,9 @@ export async function renderPdfPages(
 // in addition) and that drift caused downstream filtering/rollup to
 // silently miss line items. Anything outside the 7 is folded into one
 // of these via foldLegacyTrade() — most fall to "General".
-export const TRADE_CATEGORY_LIST = ["Plumbing", "Electrical", "Carpentry", "HVAC", "Painting", "Flooring", "General"] as const;
+// (Defined in line-canon.ts so the approval fingerprint can share the
+// line-text rules without importing the parser; re-exported here.)
+export { TRADE_CATEGORY_LIST };
 
 /** Map any non-canonical trade name (the AI's 10-bucket legacy
  *  emissions, or anything the model invents) into one of the 7
@@ -861,8 +864,7 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phanto
     ...r,
     items: r.items.map((it) => {
       const lc = it.detail.toLowerCase();
-      const isSuppliesLine =
-        /\bsupplies\b/.test(lc) && !/install|repair|replace|patch|paint(?:ing)?\s+(?:wall|ceiling|room|trim|door|baseboard)/.test(lc);
+      const isSuppliesLine = isSuppliesOnlyLine(it.detail);
       // Same for a project-scope PAINT PRODUCT line — "Whole Property — Trim
       // Touch-up Paint (semi-gloss)": a can of paint with a finish/size spec,
       // not a task (the touch-up labor lives on the per-room lines). The model
@@ -1147,47 +1149,15 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phanto
         if (!TRADE_SET.has(trade.toLowerCase())) {
           trade = foldLegacyTrade(trade);
         }
-        // Prepend room name to detail if not already there
-        const roomPrefix = r.name.replace(/\s*[:\/].*/g, "").trim();
-        const alreadyHasRoom = TRADE_CATEGORIES.some((t) => it.detail.toLowerCase().startsWith(t.toLowerCase()));
-        if (!alreadyHasRoom && !it.detail.includes(" — ") && !it.detail.includes(" - ") && roomPrefix) {
-          it.detail = `${roomPrefix} — ${it.detail}`;
-        }
-        // F6 location-fallback fix: if `detail` starts with a TRADE name
-        // followed by an em-dash/dash (e.g. "Painting — General Supplies",
-        // "Compliance — Patch above breaker box"), the editor parses the
-        // trade name as the room/location, so the LOCATION column shows
-        // the trade. Replace that leading trade-as-location with "Whole
-        // property" so shared/no-room items render sensibly.
-        //
-        // We catch BOTH the canonical 7-trade names AND the legacy
-        // bucket names ("Compliance", "Safety", "Cleaning/Hauling")
-        // because the AI still occasionally emits them as prefixes from
-        // training inertia even after the 7-trade prompt change.
-        // foldLegacyTrade rebuckets the item itself; this rewrites the
-        // rendered prefix to match. "Exterior" and "Appliances" are
-        // deliberately NOT in the list: they're legitimate zInspector
-        // AREA names the prompt tells the AI to keep as locations
-        // ("Exterior — Repaint awning") — scrubbing them here silently
-        // defeated that rule and flattened real locations to
-        // whole-property.
-        // Idempotent: "Whole Property — …" doesn't match any of these.
-        const TRADE_LOC_PREFIXES = [
-          ...TRADE_CATEGORIES,
-          "Safety", "Compliance", "Cleaning/Hauling",
-        ];
-        const tradeAsLocPrefix = TRADE_LOC_PREFIXES.find((t) => {
-          const lc = it.detail.toLowerCase();
-          return lc.startsWith(t.toLowerCase() + " —") || lc.startsWith(t.toLowerCase() + " -");
-        });
-        if (tradeAsLocPrefix) {
-          // Strip the leading "Trade — " (any number of repeats — handles
-          // "Painting — Painting — General Supplies" from a stale run).
-          it.detail = it.detail.replace(
-            new RegExp(`^(?:(?:${TRADE_LOC_PREFIXES.join("|")})\\s*[—\\-]\\s*)+`, "i"),
-            "Whole Property — "
-          );
-        }
+        // Location normalization of the detail (line-canon.ts): prefix the
+        // room name onto a bare detail, and F6 — a TRADE used as the
+        // location ("Painting — General Supplies", "Compliance — Patch above
+        // breaker box", even repeated) becomes "Whole Property — …", since
+        // the editor would otherwise show the trade in the LOCATION column.
+        // Shared with the approval fingerprint so a reopened quote still
+        // matches what the customer signed. Idempotent.
+        const canon = canonicalDetail(it.detail, r.name);
+        if (canon !== it.detail) it.detail = canon;
         if (!tradeMap[trade]) tradeMap[trade] = [];
         tradeMap[trade].push(it);
       });

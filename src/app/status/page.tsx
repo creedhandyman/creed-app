@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { itemInTier } from "@/lib/tiers";
+import { scopeFingerprint } from "@/lib/approval";
 
 const STATUS_STEPS = [
   { key: "quoted", label: "Quoted", icon: "📝" },
@@ -168,7 +169,10 @@ function StatusContent() {
     const { x, y } = getPos(e);
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
-    ctx.strokeStyle = "#fff";
+    // Dark ink on the light pad: the saved PNG prints as-is on the quote PDF
+    // (white ink needed a CSS filter to show on paper, which not every
+    // browser's print path is guaranteed to honor).
+    ctx.strokeStyle = "#1a2440";
     ctx.lineTo(x, y);
     ctx.stroke();
     setSigned(true);
@@ -199,20 +203,39 @@ function StatusContent() {
       const res = await fetch("/api/jobs/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId, token, signatureType, signatureValue, tier: tiered ? selectedTier : undefined }),
+        body: JSON.stringify({
+          jobId, token, signatureType, signatureValue, tier: tiered ? selectedTier : undefined,
+          // What THIS page showed — the server refuses the approval if the
+          // quote was revised after the page loaded (then we reload).
+          scopeFp: scopeFingerprint(quoteRooms),
+          shownTotal: tiered && tierTotals ? tierTotals[selectedTier] : (job.total || 0),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setSignError(data?.error || "Couldn't save your approval — please try again.");
         setSubmittingSig(false);
+        if (data?.stale) setTimeout(() => window.location.reload(), 2500);
         return;
       }
       const stampedDate = new Date().toLocaleDateString();
       // For a tiered quote, lock the accepted total to the picked option so the
       // post-approval display + deposit use it (the server did the same).
       const acceptedTotal = tiered && tierTotals ? tierTotals[selectedTier] : job.total;
+      // Mirror the server's blob stamps (approval record + picked option) so a
+      // PDF downloaded right away prints the approval without a reload.
+      let rooms = job.rooms;
+      try {
+        const blob = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+        if (blob && typeof blob === "object") {
+          if (data?.approval) blob.approval = data.approval;
+          if (tiered) blob.acceptedTier = selectedTier;
+          rooms = JSON.stringify(blob);
+        }
+      } catch { /* keep the stale blob — the PDF still prints the signature */ }
       setJob({
         ...job,
+        rooms,
         total: acceptedTotal,
         client_signature: signatureValue,
         signature_date: stampedDate,
@@ -533,17 +556,22 @@ function StatusContent() {
 
           {job.client_signature ? (
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 13, color: "#3ee08f", marginBottom: 6 }}>✅ Approved on {job.signature_date}</div>
+              <div style={{ fontSize: 13, color: "#3ee08f", marginBottom: 6 }}>✅ Approved on {job.approved_at && !Number.isNaN(Date.parse(job.approved_at)) ? new Date(job.approved_at).toLocaleDateString() : job.signature_date}</div>
               {/* Canvas signatures are data URLs (start with "data:");
                   typed signatures are plain strings — render each
                   appropriately. */}
               {job.client_signature.startsWith("data:") ? (
-                <img src={job.client_signature} alt="Signature" style={{ maxWidth: "100%", height: 60, border: "1px solid #1e1e2e", borderRadius: 8, background: "#0d0d15" }} />
+                <img src={job.client_signature} alt="Signature" style={{ maxWidth: "100%", height: 60, border: "1px solid #1e1e2e", borderRadius: 8, background: "#f7f7f2", filter: "brightness(0)" }} />
               ) : (
                 <div style={{ fontFamily: "Caveat, cursive, Georgia, serif", fontSize: 28, color: "#f1f2f6", padding: "10px 6px", border: "1px solid #1e1e2e", borderRadius: 8, background: "#0d0d15" }}>
                   {job.client_signature}
                 </div>
               )}
+            </div>
+          ) : job.status === "lead" ? (
+            // A request that hasn't been quoted yet — nothing to approve.
+            <div style={{ fontSize: 14, color: "#8a8a99", textAlign: "center", padding: "6px 0" }}>
+              Your quote isn&apos;t ready yet — you&apos;ll be able to review and approve it here once it&apos;s sent.
             </div>
           ) : (
             <>
@@ -574,6 +602,7 @@ function StatusContent() {
                     onChange={(e) => setTypedName(e.target.value)}
                     placeholder="Type your full name"
                     autoComplete="name"
+                    maxLength={100}
                     style={{ fontSize: 18 }}
                   />
                   <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 14, color: "#8a8a99", marginBottom: 11 }}>
@@ -599,7 +628,7 @@ function StatusContent() {
                     onTouchMove={draw}
                     onTouchEnd={stopDraw}
                     onTouchCancel={stopDraw}
-                    style={{ width: "100%", height: 100, border: "1px solid #2a2a3a", borderRadius: 11, background: "#0d0d15", cursor: "crosshair", touchAction: "none" }}
+                    style={{ width: "100%", height: 100, border: "1px solid #2a2a3a", borderRadius: 11, background: "#f7f7f2", cursor: "crosshair", touchAction: "none" }}
                   />
                   <div className="row" style={{ marginTop: 8, justifyContent: "space-between", alignItems: "center" }}>
                     <button onClick={clearSig} style={{ background: "none", color: "#8a8a99", fontSize: 13, padding: 0, textDecoration: "underline", border: "none", cursor: "pointer" }}>Clear</button>

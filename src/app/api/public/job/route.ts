@@ -39,9 +39,10 @@ export async function GET(req: NextRequest) {
       platform_fee_cents: _fee,
       created_by: _cb,
       referrer_tech_id: _ref,
+      approved_ip: _ip,
       ...job
     } = jobs[0] as Record<string, unknown>;
-    void _pi; void _fee; void _cb; void _ref;
+    void _pi; void _fee; void _cb; void _ref; void _ip;
 
     let org = null;
     if (job.org_id) {
@@ -51,7 +52,12 @@ export async function GET(req: NextRequest) {
       // org's Stripe Connect account id to an unauthenticated caller.
       const { data: orgs } = await supabase
         .from("organizations")
-        .select("id, name, logo_url, phone, default_rate, trade_rates, stripe_connected, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms")
+        // markup / tax / trip fee / min hours: the Download PDF re-prices the
+        // quote with the SAME cascade QuoteForge used — without them the
+        // customer's copy came out under-priced (and a signed copy then
+        // flagged a price change that never happened). email/address/license
+        // match the header the portal's copy prints. None are sensitive.
+        .select("id, name, logo_url, phone, email, address, license_num, default_rate, trade_rates, markup_pct, tax_pct, tax_mode, trip_fee, min_labor_hours, stripe_connected, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms")
         .eq("id", job.org_id)
         .limit(1);
       org = orgs?.[0] || null;

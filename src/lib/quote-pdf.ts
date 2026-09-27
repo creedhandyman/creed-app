@@ -1,5 +1,6 @@
 import type { Job, Room, JobDiscount } from "./types";
 import { exportQuotePdf } from "./export-pdf";
+import { quoteApprovalFromJob } from "./approval";
 
 /**
  * The subset of Organization fields the quote PDF needs. Both the full
@@ -141,5 +142,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     minLaborHours: effectiveMinLaborHours,
     taxMode: effectiveTaxMode,
     statusUrl: typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : "",
+    // A signed quote prints the customer's signature (unless revised since).
+    approval: quoteApprovalFromJob(job),
   });
 }

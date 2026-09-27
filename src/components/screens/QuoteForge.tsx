@@ -31,6 +31,7 @@ import {
 import type { InspectionInput, GuideStep } from "@/lib/parser";
 import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/lib/trades";
 import { exportQuotePdf } from "@/lib/export-pdf";
+import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom } from "@/lib/pricing";
 import Inspector from "./Inspector";
@@ -3032,6 +3033,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 taxMode: effectiveTaxMode,
                 tieredQuote,
                 tierNames,
+                // Same reference number the customer's copy prints (was a
+                // random one per export for saved quotes).
+                jobId: editingId || undefined,
+                // Signed quote → the customer's signature prints, unless
+                // the items on screen differ from what they signed.
+                approval: quoteApprovalFromJob(savedJob),
               });
             })()
           }
