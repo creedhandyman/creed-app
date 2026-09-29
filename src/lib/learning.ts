@@ -13,7 +13,8 @@
  * heavily. Requires the migration in CLAUDE.md (source / job_id / created_at).
  */
 import { db } from "./supabase";
-import { extractZip, isOverheadLine } from "./parser";
+import { extractZip, isOverheadLine, RAW_JOB_PREFIX } from "./parser";
+import { itemInTier, type TierKey } from "./tiers";
 import type { Job, TimeEntry, Room, RoomItem } from "./types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -46,11 +47,16 @@ export function jobActualHours(job: Job, timeEntries: TimeEntry[]): number {
     .reduce((s, e) => s + (e.hours || 0), 0);
 }
 
-function parseJobItems(job: Job): { trade: string; item: RoomItem }[] {
+function parseJobItems(job: Job): { items: { trade: string; item: RoomItem }[]; tierUnknown: boolean } {
   let rooms: Room[] = [];
+  let acceptedTier: TierKey | null = null;
+  let tiered = false;
   try {
     const blob = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
     if (blob && Array.isArray(blob.rooms)) rooms = blob.rooms as Room[];
+    tiered = blob?.tieredQuote === true;
+    const at = blob?.acceptedTier;
+    if (at === "base" || at === "better" || at === "best") acceptedTier = at;
   } catch {
     /* no parseable quote */
   }
@@ -61,9 +67,14 @@ function parseJobItems(job: Job): { trade: string; item: RoomItem }[] {
       // off the QUOTED side so actual/quoted stays clocked hours vs task
       // hours, the same basis the quoter drops it on (see isOverheadLine).
       if (isOverheadLine(it.detail)) continue;
+      // Only the SOLD scope was worked: on a Good-Better-Best quote only the
+      // picked option's lines were done. Counting the rest made the job look
+      // faster than it was. (Legacy `optional` lines ARE billed — they roll
+      // into the subtotal since 292b395 — so they stay in.)
+      if (tiered && acceptedTier && !itemInTier(it, acceptedTier)) continue;
       out.push({ trade: r.name, item: it });
     }
-  return out;
+  return { items: out, tierUnknown: tiered && !acceptedTier };
 }
 
 /**
@@ -81,10 +92,22 @@ function parseJobItems(job: Job): { trade: string; item: RoomItem }[] {
  * Best-effort: callers should wrap in try/catch so a learning failure never
  * blocks completing the job.
  */
-export async function recordJobOutcome(job: Job, actualHrs: number): Promise<void> {
+/** Someone is still on the clock for this job (an entry with a start and no
+ *  end) — its clocked total isn't final yet. Same job match as jobActualHours. */
+export function jobHasOpenEntries(job: Job, timeEntries: TimeEntry[]): boolean {
+  return timeEntries.some(
+    (e) => !!e.start_time && !e.end_time && (e.job_id ? e.job_id === job.id : e.job === job.property),
+  );
+}
+
+export async function recordJobOutcome(
+  job: Job,
+  actualHrs: number,
+  opts?: { crewStillClocked?: boolean },
+): Promise<void> {
   if (!actualHrs || actualHrs <= 0) return;
 
-  const items = parseJobItems(job);
+  const { items, tierUnknown } = parseJobItems(job);
   const estFromItems = items.reduce((s, x) => s + (x.item.laborHrs || 0), 0);
   const estHrs = estFromItems > 0 ? estFromItems : job.total_hrs || 0;
   if (estHrs <= 0) return;
@@ -126,6 +149,50 @@ export async function recordJobOutcome(job: Job, actualHrs: number): Promise<voi
         original_mat_cost: 0,
         corrected_mat_cost: 0,
         material_name: "Job completion (hours)",
+        trade,
+        zip,
+        source: "job_completion",
+        job_id: job.id,
+      });
+    }
+  }
+
+  // Raw-basis calibration rows (`__jobraw__:{trade}`): clocked hours vs the
+  // AI parser's OWN hours for its lines (RoomItem.aiHrs, stamped before the
+  // labor calibration scaled them). actual ÷ aiHrs is exactly the multiplier
+  // the quoter needs — independent of whatever factor, prompt or model
+  // produced the quote — so parser.ts calibrates from these once enough
+  // exist. Each line's share of the actual hours is pro-rata to its FINAL
+  // hours (the owner's edits inform the split); lines without aiHrs (manual
+  // or AI-Assist adds) drop out with their share. Always written — an
+  // on-target job has to pull the factor toward 1 as surely as a miss pulls
+  // it away. Skipped when the reading isn't trustworthy: a tiered quote with
+  // no recorded pick (sold scope unknown), a crew member still on the clock
+  // (actual not final), or a job spawned from a recurring template / plan
+  // (its lines are a copy of another job's quote, not an estimate for this
+  // one).
+  const spawned = /^(Recurring|Membership):/.test(String(job.created_by || ""));
+  if (!tierUnknown && !opts?.crewStillClocked && !spawned && estFromItems > 0) {
+    const raw: Record<string, { ai: number; fin: number }> = {};
+    for (const x of items) {
+      // T&M lines: aiHrs covers only the assessment visit, while the owner
+      // raises the line to cover the repair — not a model estimate to grade.
+      if (x.item.tnm === true) continue;
+      const ai = Number(x.item.aiHrs);
+      const fin = x.item.laborHrs || 0;
+      if (!(ai > 0) || !(fin > 0)) continue;
+      const t = raw[x.trade] || (raw[x.trade] = { ai: 0, fin: 0 });
+      t.ai += ai;
+      t.fin += fin;
+    }
+    for (const [trade, t] of Object.entries(raw)) {
+      await logCorrection({
+        item_name: `${RAW_JOB_PREFIX}${trade}`,
+        original_hours: round2(t.ai),
+        corrected_hours: round2(t.fin * scale),
+        original_mat_cost: 0,
+        corrected_mat_cost: 0,
+        material_name: "Job completion (AI hours)",
         trade,
         zip,
         source: "job_completion",

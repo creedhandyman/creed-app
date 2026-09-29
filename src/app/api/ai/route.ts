@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, serviceClient } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
+// A quote parse is a non-streaming call that writes ~10-13K tokens; say so
+// explicitly rather than lean on the platform default (15s off Fluid compute
+// would fail every parse).
+export const maxDuration = 300;
 
 // Defense-in-depth on top of auth: cap the work a single call can request so a
 // compromised/abusive session can't run up the Anthropic bill, and never let
@@ -12,9 +16,9 @@ const MAX_BODY_BYTES = 6_000_000; // inspection pages ride as base64 image block
 // Approx Anthropic $/million tokens for cost estimation (Phase 0 measurement).
 // Estimates only — refine against the real invoice; used for relative tracking.
 const PRICING: Record<string, { in: number; out: number; cacheWrite: number; cacheRead: number }> = {
-  // Order matters for the prefix match below: "claude-sonnet-5" must not
-  // catch "claude-sonnet-4-*" ids (it can't — different prefix), but keep
-  // more-specific keys ahead of shorter ones if any are ever added.
+  // Order matters for the prefix match below: more-specific keys first —
+  // "claude-sonnet-5" is a prefix of "claude-sonnet-5-5".
+  "claude-sonnet-5-5": { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.2 },
   "claude-sonnet-5": { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.2 },
   "claude-sonnet-4-6": { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.3 },
   "claude-haiku-4-5": { in: 1, out: 5, cacheWrite: 1.25, cacheRead: 0.1 },
@@ -45,16 +49,34 @@ export async function POST(req: NextRequest) {
       body.max_tokens = Math.min(body.max_tokens, MAX_TOKENS_CEILING);
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await response.json();
+    // Sonnet 5.5 can decline a request (HTTP 200, stop_reason "refusal").
+    // Server-side fallback re-runs "cyber" / "frontier_llm" declines on Claude
+    // Sonnet 5 inside the same call; "general_harms" / "bio" /
+    // "reasoning_extraction" declines still come back as refusals, so callers
+    // check stop_reason (the parse, AI Assist and Troubleshoot do). If the
+    // fallback option itself is ever rejected, retry once without it rather
+    // than break every AI call.
+    const send = (b: Record<string, unknown>, beta?: string) =>
+      fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          ...(beta ? { "anthropic-beta": beta } : {}),
+        },
+        body: JSON.stringify(b),
+      });
+    const withFallback = body.model === "claude-sonnet-5-5" && body.fallbacks === undefined;
+    let response = withFallback
+      ? await send({ ...body, fallbacks: "default" }, "server-side-fallback-2026-07-01")
+      : await send(body);
+    let data = await response.json();
+    if (withFallback && response.status === 400 && /fallback|beta/i.test(String(data?.error?.message ?? ""))) {
+      console.warn("[ai] server-side fallback rejected — retrying without it:", data?.error?.message);
+      response = await send(body);
+      data = await response.json();
+    }
 
     // Phase 0 — best-effort AI usage logging. Never blocks or breaks the
     // response: a missing ai_usage table or insert error is swallowed.
@@ -63,7 +85,9 @@ export async function POST(req: NextRequest) {
         input_tokens?: number; output_tokens?: number;
         cache_creation_input_tokens?: number; cache_read_input_tokens?: number;
       };
-      const model = body.model as string;
+      // The model that actually answered (a fallback-served call reports
+      // Sonnet 5 here); the request's model if the response lacks one.
+      const model = (typeof data?.model === "string" && data.model) || (body.model as string);
       // Prefix match so dated snapshots (e.g. claude-haiku-4-5-20251001) map to
       // their rate row.
       const rateKey = Object.keys(PRICING).find((k) => model.startsWith(k)) || "claude-sonnet-5";

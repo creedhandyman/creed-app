@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
+import { stripAiHrsFromBlob } from "@/lib/ai-hours";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,8 @@ export async function GET(req: NextRequest) {
       org = orgs?.[0] || null;
     }
 
-    return NextResponse.json({ job, org });
+    // aiHrs (the AI's own pre-calibration hours) is internal — see ai-hours.ts.
+    return NextResponse.json({ job: { ...job, rooms: stripAiHrsFromBlob(job.rooms) }, org });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     // eslint-disable-next-line no-console

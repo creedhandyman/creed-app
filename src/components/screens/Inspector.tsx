@@ -625,6 +625,14 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
    *  roomName is passed by the caller (which has the fresh roomData in
    *  scope) instead of being looked up here, so we don't need a stale
    *  closure or a side-effecting setState read. */
+  // Voice-walk rooms still being analyzed in the background (Whisper + AI).
+  // Generate waits for them: a room recorded moments before tapping Generate
+  // used to be quoted without its findings — the late result landed after the
+  // Inspector unmounted. Tracked by promise, not room name, so renaming a
+  // room mid-analysis can't leave the button stuck.
+  const pendingVoice = useRef(new Set<Promise<void>>());
+  const [pendingVoiceCount, setPendingVoiceCount] = useState(0);
+
   const processRoomVoice = useCallback(async (roomIdx: number, roomName: string, result: VoiceWalkResult) => {
     if (!roomName) return;
 
@@ -1265,7 +1273,14 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
               if (idx !== null && name) {
                 // Fire and forget. The user advances immediately; the
                 // chip in the strip flips ⏳ → ✓ when this finishes.
-                void processRoomVoice(idx, name, result);
+                const job: Promise<void> = processRoomVoice(idx, name, result)
+                  .catch(() => { /* logged inside processRoomVoice */ })
+                  .finally(() => {
+                    pendingVoice.current.delete(job);
+                    setPendingVoiceCount(pendingVoice.current.size);
+                  });
+                pendingVoice.current.add(job);
+                setPendingVoiceCount(pendingVoice.current.size);
               }
               // Show the all-rooms picker so the user CHOOSES the next
               // area (used to force sequential auto-advance — inspectors
@@ -1900,16 +1915,18 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
         <button
           className="bb"
           onClick={handleGenerate}
-          disabled={!isEditing && !isDocType && findingsCount === 0}
+          disabled={pendingVoiceCount > 0 || (!isEditing && !isDocType && findingsCount === 0)}
           style={{
             width: "100%",
             padding: 14,
             fontSize: 18,
-            background: !isEditing && !isDocType && findingsCount === 0 ? "#333" : "var(--color-primary)",
-            opacity: !isEditing && !isDocType && findingsCount === 0 ? 0.5 : 1,
+            background: pendingVoiceCount > 0 || (!isEditing && !isDocType && findingsCount === 0) ? "#333" : "var(--color-primary)",
+            opacity: pendingVoiceCount > 0 || (!isEditing && !isDocType && findingsCount === 0) ? 0.5 : 1,
           }}
         >
-          {isEditing
+          {pendingVoiceCount > 0
+            ? `Analyzing ${pendingVoiceCount} room${pendingVoiceCount === 1 ? "" : "s"}…`
+            : isEditing
             ? `💾 Save Changes (${findingsCount} finding${findingsCount === 1 ? "" : "s"})`
             : `🤖 Generate Quote (${findingsCount} findings)`}
         </button>

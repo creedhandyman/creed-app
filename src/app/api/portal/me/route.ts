@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
+import { stripAiHrsFromBlob } from "@/lib/ai-hours";
 
 export const dynamic = "force-dynamic";
 
@@ -125,7 +126,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       customer: customerRes.data[0],
       addresses: addressesRes.data || [],
-      jobs,
+      // aiHrs (the AI's own pre-calibration hours) is internal — see ai-hours.ts.
+      jobs: jobs.map((j) => ({ ...j, rooms: stripAiHrsFromBlob(j.rooms) })),
       receipts,
       memberships: enrichedMemberships,
       plans,

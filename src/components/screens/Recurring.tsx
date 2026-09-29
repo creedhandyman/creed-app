@@ -26,6 +26,7 @@ import {
   type Cadence,
 } from "@/lib/recurring";
 import type { Job, RecurringJob } from "@/lib/types";
+import { stripAiHrsFromBlob } from "@/lib/ai-hours";
 
 export default function Recurring() {
   const user = useStore((s) => s.user)!;
@@ -406,7 +407,8 @@ function NewFromJobPicker({
     setSaving(true);
     let templateRooms: unknown = {};
     try {
-      templateRooms = typeof selected.rooms === "string" ? JSON.parse(selected.rooms) : selected.rooms;
+      // stripAiHrs: each visit is its own job, not this quote's AI estimate.
+      templateRooms = stripAiHrsFromBlob(typeof selected.rooms === "string" ? JSON.parse(selected.rooms) : selected.rooms);
     } catch {
       templateRooms = {};
     }

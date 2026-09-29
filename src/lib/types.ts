@@ -589,6 +589,12 @@ export interface RoomItem {
   comment: string;
   laborHrs: number;
   materials: Material[];
+  /** The AI parser's OWN hours for this line, before the completed-job labor
+   *  calibration scaled them (laborHrs = aiHrs × factor at parse time).
+   *  Stamped only on parser output; owner edits change laborHrs, never this.
+   *  learning.ts compares it with clocked hours at completion so calibration
+   *  measures the model's real error (see laborCalibrationFrom in parser.ts). */
+  aiHrs?: number;
   /** Optional sqft soft-field surfaced in the QuoteTab's SQFT column.
    *  Captured by the manual Add Item form and editable per-row. */
   sqft?: number;
@@ -598,13 +604,9 @@ export interface RoomItem {
    *  classifier exists to rescue AI miscategorizations; manual entries
    *  are sacred and should never get rebucketed by either pass. */
   userClassified?: boolean;
-  /** Upsell / recommended add-on, not part of the base quote. The AI
-   *  emits this for inspector rows that flag an item as "not present /
-   *  could not test / recommended" rather than required maintenance
-   *  (e.g. "Install doorbell — currently no doorbell present"). The
-   *  QuoteForge editor excludes optional items from the headline
-   *  subtotal and shows them as a separate "Optional add-ons" line so
-   *  the base quote reflects required work only. */
+  /** LEGACY upsell flag. The Optional bucket was removed in 292b395: every
+   *  line (flagged or not) rolls into the subtotal and is worked, and
+   *  nothing filters on this any more. Old saved quotes may still carry it. */
   optional?: boolean;
   /** Time-and-materials / assessment-first scope. The AI emits this
    *  for inspector comments with evaluate / investigate / assess /

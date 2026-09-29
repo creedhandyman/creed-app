@@ -114,13 +114,14 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
 
       const res = await apiFetch("/api/ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-creed-call-type": "troubleshoot" },
         body: JSON.stringify({
-          model: "claude-sonnet-5",
-          // Support chat — no thinking (Sonnet 5 defaults to adaptive
-          // when the param is omitted; content[0] would be a thinking
-          // block and the text read below would come up empty).
-          thinking: { type: "disabled" },
+          model: "claude-sonnet-5-5",
+          // Support chat — no thinking, same as before the move. Sonnet 5.5
+          // 400s on {type:"disabled"}; between_tools is its no-thinking
+          // setting (allowed at effort high or below).
+          thinking: { type: "between_tools" },
+          output_config: { effort: "high" },
           max_tokens: 1500,
           system: SYSTEM_PROMPT,
           messages: apiMessages,
@@ -128,7 +129,10 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
       });
 
       const data = await res.json();
-      const text = aiText(data.content) || "I couldn't process that. Try describing the issue differently.";
+      // A declined answer can arrive half-written — never show it as complete.
+      const text = data.stop_reason === "refusal"
+        ? "I can't help with that one — try rephrasing, or call a licensed pro for gas or electrical work."
+        : aiText(data.content) || "I couldn't process that. Try describing the issue differently.";
 
       setMessages((prev) => [...prev, { role: "assistant", content: text }]);
     } catch {

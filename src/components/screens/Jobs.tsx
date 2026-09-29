@@ -10,7 +10,7 @@ import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
-import { recordJobOutcome } from "@/lib/learning";
+import { recordJobOutcome, jobHasOpenEntries } from "@/lib/learning";
 import { Icon } from "../Icon";
 import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
 import PropertySearch from "../PropertySearch";
@@ -28,6 +28,7 @@ import {
   formatNextFire,
   type Cadence,
 } from "@/lib/recurring";
+import { stripAiHrsFromBlob } from "@/lib/ai-hours";
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
    Under the Requested-tech picker: ranks the crew by distance from
@@ -541,7 +542,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       const completedJob = jobs.find((j) => j.id === id);
       if (completedJob) {
         try {
-          await recordJobOutcome(completedJob, getJobLabor(completedJob).totalHrs);
+          await recordJobOutcome(completedJob, getJobLabor(completedJob).totalHrs, {
+            crewStillClocked: jobHasOpenEntries(completedJob, useStore.getState().timeEntries),
+          });
         } catch { /* learning is best-effort */ }
         // Stamp the serviced unit's last_service_at (equipment asset history).
         if (completedJob.equipment_id) {
@@ -2160,7 +2163,8 @@ function MakeRecurringModal({
     setSaving(true);
     let templateRooms: unknown = {};
     try {
-      templateRooms = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+      // stripAiHrs: each visit is its own job, not this quote's AI estimate.
+      templateRooms = stripAiHrsFromBlob(typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms);
     } catch {
       templateRooms = {};
     }

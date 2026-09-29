@@ -610,6 +610,121 @@ export interface AiParseResult {
 export const isOverheadLine = (detail: string): boolean =>
   /\bjob\s*set-?up\b[^—]*\bclean-?\s*up\b|\blarge-job overhead\b/i.test(detail || "");
 
+/* ====== LABOR CALIBRATION ====== */
+
+/** A price_corrections row, as the labor calibration reads it. */
+export interface CalibrationRow {
+  item_name: string;
+  original_hours: number;
+  corrected_hours: number;
+  trade?: string;
+  job_id?: string;
+  created_at?: string;
+}
+
+/** Measured actual ÷ estimate. byTrade keys are lowercase trade buckets. */
+export interface LaborCalibration {
+  byTrade: Record<string, number>;
+  /** Cross-trade fallback; 1 = no adjustment. */
+  overall: number;
+  /** "raw" = measured against the AI's own pre-calibration hours;
+   *  "history" = legacy quoted-vs-actual rows; "none" = too little data. */
+  basis: "raw" | "history" | "none";
+}
+
+/** Completed jobs whose rows compare clocked hours with the AI's OWN
+ *  pre-calibration hours (RoomItem.aiHrs) — written by learning.ts. */
+export const RAW_JOB_PREFIX = "__jobraw__:";
+// Switch to the raw basis only once it rests on real volume: a handful of
+// small jobs (one under-clocked) mustn't move every quote overnight.
+const RAW_MIN_JOBS = 8;
+const RAW_MIN_HOURS = 40; // Σ AI hours across those jobs
+const RAW_MIN_TRADE_JOBS = 3; // a trade's own ratio, else the raw overall
+const RAW_MAX_JOBS = 25;
+const RAW_BATCH_MS = 2 * 60 * 1000;
+
+/**
+ * The labor calibration, from price_corrections rows already sorted
+ * newest-first and de-duped (as aiParsePdfSingle prepares them).
+ *
+ * Why two bases: the legacy `__job__` rows compare clocked hours with the
+ * FINAL quoted hours, which already carry whatever multiplier was applied when
+ * the job was quoted. Averaged over all history, a few huge jobs quoted before
+ * calibration existed (~2x over) pinned every trade at the +50% cap, and it
+ * could never come down — jobs quoted since (nudge + x1.5) land at ~1.0x
+ * actual, which the old average can't see. The `__jobraw__` rows compare
+ * clocked hours with the model's own hours, so actual/raw IS the multiplier
+ * needed, whatever model, prompt or factor produced the quote. Once
+ * RAW_MIN_JOBS completed jobs (and RAW_MIN_HOURS of AI hours) have them,
+ * calibration uses only those — the newest RAW_MAX_JOBS, so a model or prompt
+ * change washes through; until then the legacy computation runs unchanged.
+ */
+export function laborCalibrationFrom(rows: CalibrationRow[]): LaborCalibration {
+  const raw = rows.filter(
+    (r) => typeof r.item_name === "string" && r.item_name.startsWith(RAW_JOB_PREFIX) &&
+      !!r.job_id && Number(r.original_hours) > 0 && Number(r.corrected_hours) > 0,
+  );
+  // A job's raw rows are one batch: a re-completion writes a fresh set, and a
+  // trade that no longer has lines must not linger from the older set (the
+  // (job, trade) dedup alone would keep it). Keep a job's rows written within
+  // RAW_BATCH_MS of its newest one.
+  const newestAt = new Map<string, number>();
+  for (const r of raw) {
+    const t = Date.parse(r.created_at || "");
+    if (Number.isFinite(t) && t > (newestAt.get(r.job_id!) ?? -Infinity)) newestAt.set(r.job_id!, t);
+  }
+  const batch = raw.filter((r) => {
+    const n = newestAt.get(r.job_id!);
+    const t = Date.parse(r.created_at || "");
+    return n === undefined || !Number.isFinite(t) || n - t <= RAW_BATCH_MS;
+  });
+  const recentJobs: string[] = [];
+  for (const r of batch) {
+    if (recentJobs.length >= RAW_MAX_JOBS) break;
+    if (!recentJobs.includes(r.job_id!)) recentJobs.push(r.job_id!);
+  }
+  const keep = new Set(recentJobs);
+  const sums: Record<string, { q: number; a: number; jobs: Set<string> }> = {};
+  let q = 0, a = 0;
+  for (const r of batch) {
+    if (!keep.has(r.job_id!)) continue;
+    const est = Number(r.original_hours);
+    // One odd job (scope grew after the quote, a callback clocked to it)
+    // can't swing the factor: clamp each row to 0.4-3x its estimate.
+    const act = Math.min(3 * est, Math.max(0.4 * est, Number(r.corrected_hours)));
+    const trade = (r.item_name.slice(RAW_JOB_PREFIX.length) || r.trade || "General").toLowerCase();
+    const s = sums[trade] || (sums[trade] = { q: 0, a: 0, jobs: new Set() });
+    s.q += est; s.a += act; s.jobs.add(r.job_id!);
+    q += est; a += act;
+  }
+  if (recentJobs.length >= RAW_MIN_JOBS && q >= RAW_MIN_HOURS) {
+    const byTrade: Record<string, number> = {};
+    for (const [trade, s] of Object.entries(sums)) {
+      if (s.jobs.size >= RAW_MIN_TRADE_JOBS && s.q > 0) byTrade[trade] = s.a / s.q;
+    }
+    return { byTrade, overall: a / q, basis: "raw" };
+  }
+
+  // Legacy: final quoted vs actual. Per-trade ratio needs >=2 completed jobs in
+  // that trade; the overall ratio needs >=3 rows so one weird job can't swing
+  // every quote. (Same computation as before the raw basis existed.)
+  const byTradeSums: Record<string, { q: number; a: number; n: number }> = {};
+  for (const r of rows) {
+    if (typeof r.item_name !== "string" || !r.item_name.startsWith("__job__:")) continue;
+    const trade = r.item_name.slice("__job__:".length) || r.trade || "General";
+    const s = byTradeSums[trade] || (byTradeSums[trade] = { q: 0, a: 0, n: 0 });
+    s.q += r.original_hours; s.a += r.corrected_hours; s.n += 1;
+  }
+  const byTrade: Record<string, number> = {};
+  let sumQ = 0, sumA = 0, n = 0;
+  for (const [trade, s] of Object.entries(byTradeSums)) {
+    sumQ += s.q; sumA += s.a; n += s.n;
+    if (s.n >= 2 && s.q > 0) byTrade[trade.toLowerCase()] = s.a / s.q;
+  }
+  const overall = n >= 3 && sumQ > 0 ? sumA / sumQ : 1;
+  return { byTrade, overall, basis: n > 0 ? "history" : "none" };
+}
+
 /* ====== POST-PARSE VALIDATION ====== */
 export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phantomCheck?: boolean }): Room[] {
   // skipCaps suppresses the material-cost / labor-hours caps below. Use it
@@ -1340,11 +1455,14 @@ async function aiParsePdfSingle(
     // (everything else) so the AI prefers prices from the same ZIP code over
     // averaged numbers from other markets.
     let correctionsPrompt = "";
-    // Deterministic labor calibration, computed from the same __job__
-    // quoted-vs-actual history that feeds the prompt. Keyed by lowercase
-    // trade name; overall is the cross-trade fallback. 1 = no adjustment.
+    // Deterministic labor calibration (laborCalibrationFrom): the raw basis —
+    // __jobraw__ rows, clocked hours vs the AI's own aiHrs — once enough jobs
+    // have them, else the legacy __job__ quoted-vs-actual history that also
+    // feeds the prompt. Keyed by lowercase trade name; overall is the
+    // cross-trade fallback. 1 = no adjustment.
     const laborCalByTrade: Record<string, number> = {};
     let laborCalOverall = 1;
+    let laborCalBasis: LaborCalibration["basis"] = "none";
     // Per-bucket factor (the trade's own ratio, else the overall one), clamped
     // to the enforced 1–1.5 range. ≥1.05 = calibration will scale that bucket
     // up. Those actual/quoted ratios come from CLOCKED hours, which already
@@ -1385,6 +1503,9 @@ async function aiParsePdfSingle(
         const jobCalsByTrade: Record<string, JobCal> = {};
         const itemCorrections: typeof corrections = [];
         deduped.forEach((c) => {
+          // Raw-basis calibration rows feed laborCalibrationFrom only — never
+          // an item lesson or the prompt's quoted-vs-actual section.
+          if (typeof c.item_name === "string" && c.item_name.startsWith(RAW_JOB_PREFIX)) return;
           if (typeof c.item_name === "string" && c.item_name.startsWith("__job__:")) {
             const trade = c.item_name.slice("__job__:".length) || c.trade || "General";
             if (!jobCalsByTrade[trade]) {
@@ -1457,19 +1578,12 @@ async function aiParsePdfSingle(
           jobCalLines.push(`- ${trade}: ${parts.join(", ")}`);
         });
 
-        // Calibration ratios (actual ÷ quoted). Per-trade needs ≥2 completed
-        // jobs in that trade; the overall ratio needs ≥3 across all trades so
-        // one weird job can't swing every quote.
-        let calSumQuoted = 0, calSumActual = 0, calJobCount = 0;
-        Object.entries(jobCalsByTrade).forEach(([trade, cal]) => {
-          const q = cal.quoted.reduce((a, b) => a + b, 0);
-          const act = cal.actual.reduce((a, b) => a + b, 0);
-          calSumQuoted += q;
-          calSumActual += act;
-          calJobCount += cal.quoted.length;
-          if (cal.quoted.length >= 2 && q > 0) laborCalByTrade[trade.toLowerCase()] = act / q;
-        });
-        if (calJobCount >= 3 && calSumQuoted > 0) laborCalOverall = calSumActual / calSumQuoted;
+        // Calibration ratios (actual ÷ estimate) — raw basis once enough jobs
+        // quoted with aiHrs stamps have completed, else the legacy history.
+        const cal = laborCalibrationFrom(deduped);
+        Object.assign(laborCalByTrade, cal.byTrade);
+        laborCalOverall = cal.overall;
+        laborCalBasis = cal.basis;
 
         if (localLessons.length || otherLessons.length || jobCalLines.length) {
           correctionsPrompt = "";
@@ -1477,7 +1591,11 @@ async function aiParsePdfSingle(
             correctionsPrompt += `\nPAST JOB DURATIONS — this team's ACTUAL hours from completed work vs what was quoted. Actuals consistently exceed quotes — weight your hours toward the ACTUAL side, especially where local data exists:\n${jobCalLines.join("\n")}\n`;
             // Overall ratio only: a single calibrated trade mustn't switch the
             // uplift off for the others (the code-side drop below is per bucket).
-            if (laborCalOverall >= 1.05) {
+            // On the raw basis, always: its factor is measured clocked-vs-AI
+            // with overhead already inside the clocked side, so the uplift would
+            // double-count at ANY factor — and toggling it at 1.05 would make
+            // the model's hours depend on the factor they're measured against.
+            if (laborCalOverall >= 1.05 || laborCalBasis === "raw") {
               correctionsPrompt += `These actual hours already include this team's setup, staging, supply runs, coordination and cleanup. Keep each line's FULL TASK LIFECYCLE hours, but do NOT apply the SCALE OVERHEAD WITH JOB SIZE uplift and do NOT add a separate "Job setup, staging & cleanup" line.\n`;
             }
           }
@@ -1687,20 +1805,20 @@ ${cleanText.slice(0, 60000)}`
       method: "POST",
       headers: { "Content-Type": "application/json", "x-creed-call-type": "parse" },
       body: JSON.stringify({
-        // Sonnet 5 — successor to the 4.6 the pipeline was tuned on:
-        // smarter AND ~1/3 cheaper ($2/$10 vs $3/$15 per MTok). NOTE:
-        // Sonnet 5 REJECTS sampling params (temperature/top_p → 400), so
-        // the old `temperature: 0` determinism knob is gone by design —
-        // run-to-run consistency now rests on the prompt rules plus the
+        // Sonnet 5.5 — same $2/$10 price as Sonnet 5, smarter and faster.
+        // Like Sonnet 5 it REJECTS sampling params (temperature/top_p →
+        // 400): run-to-run consistency rests on the prompt rules plus the
         // deterministic validateQuote layer (dedup, caps, floors), which
         // the zzz quote-math audit suite gates. Prompt caches are
         // model-scoped: the first parse after a model change re-warms.
-        model: "claude-sonnet-5",
-        // Structured extraction, not open-ended reasoning: disable
-        // thinking explicitly (Sonnet 5 runs ADAPTIVE thinking when the
-        // param is omitted), so the response is pure JSON text and no
-        // thinking tokens ride the bill or eat the output budget.
-        thinking: { type: "disabled" },
+        model: "claude-sonnet-5-5",
+        // Structured extraction, not open-ended reasoning: turn thinking
+        // off. Sonnet 5.5 400s on {type:"disabled"} — "between_tools" is
+        // its lowest setting and, on a no-tools request like this one,
+        // behaves exactly like disabled did (text-only response, no
+        // thinking tokens on the bill or eating the output budget).
+        thinking: { type: "between_tools" },
+        output_config: { effort: "high" },
         max_tokens: 16000,
         // Prompt caching: static rules FIRST (cache-hot on every call), then the
         // per-org learned-pricing block (cache-hot within a same-ZIP session),
@@ -1742,6 +1860,14 @@ ${cleanText.slice(0, 60000)}`
     if (data.error) {
       console.error("AI response error:", data.error);
       setAiError(typeof data.error === "string" ? data.error : (data.error?.message || JSON.stringify(data.error)));
+      return null;
+    }
+    // Sonnet 5.5 can decline a request (HTTP 200, stop_reason "refusal") even
+    // after the server-side fallback — say that plainly instead of "no
+    // parseable quote JSON".
+    if (data.stop_reason === "refusal") {
+      const cat = data.stop_details?.category;
+      setAiError(`The AI declined to quote this${cat ? ` (safety filter: ${cat})` : ""} — try again, or build the quote by hand.`);
       return null;
     }
 
@@ -1798,7 +1924,7 @@ ${cleanText.slice(0, 60000)}`
     // the owner so it can be added back.
     let droppedOverheadHrs = 0;
     const validatedRooms = validatedAll.map((room) => {
-      if (calFactor(room.name) < 1.05) return room;
+      if (calFactor(room.name) < 1.05 && laborCalBasis !== "raw") return room;
       return {
         ...room,
         items: room.items.flatMap((it) => {
@@ -1813,18 +1939,23 @@ ${cleanText.slice(0, 60000)}`
     // The prompt-side quoted-vs-actual history is advisory; this is the
     // enforcement. Completed jobs run 30-80% over quoted hours on bigger
     // work, so scale each trade bucket's laborHrs UP by the measured
-    // actual/quoted ratio — never down (low quotes are the failure mode),
-    // clamped at +50% per parse. Self-correcting over time: calibrated
-    // quotes that then match actuals push future ratios back toward 1.
+    // actual/estimate ratio — never down (low quotes are the failure mode),
+    // clamped at +50% per parse. Every line keeps the model's own hours as
+    // aiHrs, so at completion learning.ts can compare clocked hours with what
+    // the MODEL said (not with the already-scaled quote) — that's what lets
+    // the factor come back down when it's no longer needed (laborCalibrationFrom).
     const calAdjustments: string[] = [];
     const calibratedRooms = validatedRooms.map((room) => {
       const factor = calFactor(room.name);
-      if (factor < 1.05 || room.items.length === 0) return room;
+      if (factor < 1.05 || room.items.length === 0) {
+        return { ...room, items: room.items.map((it) => ({ ...it, aiHrs: it.laborHrs || 0 })) };
+      }
       calAdjustments.push(`${room.name} +${Math.round((factor - 1) * 100)}%`);
       return {
         ...room,
         items: room.items.map((it) => ({
           ...it,
+          aiHrs: it.laborHrs || 0,
           laborHrs: Math.round((it.laborHrs || 0) * factor * 10) / 10,
         })),
       };
@@ -1869,10 +2000,11 @@ export async function checkAiAvailable(): Promise<boolean> {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-creed-call-type": "ping" },
       body: JSON.stringify({
-        model: "claude-sonnet-5",
-        // 10-token availability ping — no thinking (Sonnet 5 defaults to
-        // adaptive when the param is omitted).
-        thinking: { type: "disabled" },
+        model: "claude-sonnet-5-5",
+        // 10-token availability ping — no thinking. Sonnet 5.5 rejects
+        // {type:"disabled"}; between_tools is its no-thinking setting.
+        thinking: { type: "between_tools" },
+        output_config: { effort: "high" },
         max_tokens: 10,
         messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
       }),
@@ -2623,14 +2755,18 @@ Output ONLY valid JSON of this shape:
     method: "POST",
     headers: { "Content-Type": "application/json", "x-creed-call-type": "voicewalk" },
     body: JSON.stringify({
-      // Haiku: per-room structured extraction (reviewed output), ~4x cheaper
-      // than Sonnet. The core PDF parse stays on Sonnet.
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 4000,
-      // Deterministic per-room voice-walk extraction — same reasoning as
-      // the inspection PDF parser. Inspection→item structured mapping is
-      // not a creative task.
-      temperature: 0,
+      // Sonnet 5.5 — consolidated with the core parse (there is no Haiku 5;
+      // Haiku 4.5 is still the newest Haiku). These per-room calls are tiny,
+      // so the 2x-over-Haiku rate costs ~a cent per room while the findings
+      // feed the customer quote — accuracy wins. NOTE: Sonnet 5.5 rejects
+      // sampling params, so the old `temperature: 0` knob is gone.
+      model: "claude-sonnet-5-5",
+      // Sized for Sonnet's tokenizer (~30% more tokens than Haiku's).
+      max_tokens: 8000,
+      // Structured extraction — no thinking (between_tools = the 5.5
+      // equivalent of disabled on a no-tools request).
+      thinking: { type: "between_tools" },
+      output_config: { effort: "high" },
       // Cache the (fully static) voicewalk system prompt — every room in an
       // inspection re-sends it, so rooms 2..N read it instead of re-billing.
       // No reorder needed: all per-room content lives in `content`, not here.

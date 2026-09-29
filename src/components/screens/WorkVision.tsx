@@ -7,7 +7,7 @@ import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip } from "@/lib/parser";
 import { formatHours } from "@/lib/dates";
-import { recordJobOutcome, jobActualHours } from "@/lib/learning";
+import { recordJobOutcome, jobActualHours, jobHasOpenEntries } from "@/lib/learning";
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
@@ -652,7 +652,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // completion on a learning write.
     try {
       const fresh = useStore.getState().jobs.find((j) => j.id === activeJob.id) || activeJob;
-      await recordJobOutcome(fresh, jobActualHours(fresh, useStore.getState().timeEntries));
+      const entries = useStore.getState().timeEntries;
+      await recordJobOutcome(fresh, jobActualHours(fresh, entries), {
+        crewStillClocked: jobHasOpenEntries(fresh, entries),
+      });
       // Stamp the serviced unit's last_service_at (equipment asset history).
       if (fresh.equipment_id) {
         try { await db.patch("equipment", fresh.equipment_id, { last_service_at: new Date().toISOString() }); } catch { /* */ }

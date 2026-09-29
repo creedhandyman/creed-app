@@ -43,6 +43,7 @@ import CameraModal from "../CameraModal";
 import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { getUsage, incrementUsage } from "@/lib/inspection-usage";
+import { stripAiHrs } from "@/lib/ai-hours";
 
 /** A saved, reusable quote-as-template: a name + the line-item rooms blob
  *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
@@ -661,7 +662,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const name = templateName.trim();
     if (!name) { useStore.getState().showToast("Name the template", "warning"); return; }
     if (!rooms.length) { useStore.getState().showToast("Add line items first", "warning"); return; }
-    const res = await db.post("service_templates", { org_id: org?.id, name, template_rooms: JSON.stringify(rooms) });
+    const res = await db.post("service_templates", { org_id: org?.id, name, template_rooms: JSON.stringify(stripAiHrs(rooms)) });
     if (!res) {
       // db.post already toasted the real Supabase error (missing table / RLS /
       // column). Don't claim success or close the form so the user can retry.
@@ -675,7 +676,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // Seed a fresh quote from a template's line items (clear any prior edit state).
   const seedFromTemplate = (tpl: ServiceTemplate) => {
     let parsed: Room[] = [];
-    try { parsed = JSON.parse(tpl.template_rooms) as Room[]; } catch { /* */ }
+    // stripAiHrs: a template's lines aren't this job's AI estimate (templates
+    // saved before the strip may still carry the stamp).
+    try { parsed = stripAiHrs(JSON.parse(tpl.template_rooms) as Room[]); } catch { /* */ }
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined);
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null);
@@ -2685,9 +2688,17 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   method: "POST",
                   headers: { "Content-Type": "application/json", "x-creed-call-type": "assist" },
                   body: JSON.stringify({
-                    // Haiku: assist edits are user-reviewed before applying, ~4x cheaper.
-                    model: "claude-haiku-4-5-20251001",
-                    max_tokens: 4000,
+                    // Sonnet 5.5 — consolidated with the parse (no Haiku 5
+                    // exists). Assist edits touch quote money; the calls are
+                    // small, so the smarter model costs ~a cent more each.
+                    model: "claude-sonnet-5-5",
+                    // No thinking: between_tools is the 5.5 equivalent of
+                    // disabled on a no-tools request (pure JSON text back).
+                    thinking: { type: "between_tools" },
+                    output_config: { effort: "high" },
+                    // Sized for Sonnet's tokenizer (~30% more tokens than
+                    // Haiku's for the same JSON).
+                    max_tokens: 8000,
                     messages: [{ role: "user", content: [{ type: "text", text: userMsg }] }],
                     // Cache the big static blocks (engine rules + edit-mode
                     // spec) first; volatile per-quote header last so it can't
@@ -2706,9 +2717,13 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   }),
                 });
                 const data = await res.json();
-                const text = aiText(data.content);
+                const text = data.stop_reason === "refusal" || data.stop_reason === "max_tokens" ? "" : aiText(data.content);
                 const match = text.match(/\{[\s\S]*\}/);
-                if (!match) {
+                if (data.stop_reason === "refusal") {
+                  useStore.getState().showToast("The AI declined this request — edit the lines by hand", "warning");
+                } else if (data.stop_reason === "max_tokens") {
+                  useStore.getState().showToast("That request was too big for one pass — split it into smaller asks", "warning");
+                } else if (!match) {
                   useStore.getState().showToast("AI returned no actions", "warning");
                 } else {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2758,6 +2773,13 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                         ...cur,
                         ...itemPatch,
                       } as RoomItem;
+                      // A rewritten task is a new scope, not the AI's original
+                      // estimate — drop aiHrs so calibration doesn't grade the
+                      // owner's scope change as model error (hours-only patches
+                      // keep it: those are corrections the grading should see).
+                      if (typeof itemPatch.detail === "string" && itemPatch.detail !== cur.detail) {
+                        delete (patched as { aiHrs?: number }).aiHrs;
+                      }
                       if (newTrade && newTrade !== next[pos.ri].name) {
                         moves.push({ oldRi: pos.ri, ii: pos.ii, newTrade, patched });
                       } else {

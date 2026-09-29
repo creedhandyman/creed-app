@@ -221,7 +221,7 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID,
     user_id UUID,
-    call_type TEXT,                 -- parse | ping | voicewalk | assist | other
+    call_type TEXT,                 -- parse | ping | voicewalk | assist | troubleshoot | other
     model TEXT,
     input_tokens INTEGER DEFAULT 0,
     output_tokens INTEGER DEFAULT 0,
@@ -1087,6 +1087,30 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   200-row per-item cap → learns faster) and **de-dupes `job_completion` rows
   by (job_id, item_name)** so a re-completed job (or both paths firing) can't
   double-count. Needs the `source`/`job_id`/`created_at` migration above.
+  **Labor calibration (2026-09-29)**: parser.ts scales each trade bucket's AI
+  hours by `min(1.5, max(1, actual/estimate))` (`laborCalibrationFrom`). The
+  legacy basis (`__job__:` rows = FINAL quoted vs clocked) is pinned at the cap
+  by a few huge pre-Aug-6 jobs (~2x over) and can't self-correct — jobs quoted
+  since (prompt nudge + x1.5) land at ~1.0x actual. So every parsed line now
+  carries `aiHrs` (the model's own hours before scaling), learning.ts writes
+  `__jobraw__:{trade}` rows (Σ aiHrs vs the lines' pro-rata share of clocked
+  hours; always written; sold scope only — the picked GBB option; T&M lines,
+  recurring/membership-spawned jobs and jobs with crew still clocked in are
+  skipped), and once ≥8 completed jobs AND ≥40 AI hours have them the factor
+  comes from those alone (newest 25 jobs, a job's rows = its newest batch,
+  rows clamped 0.4–3x, a trade's own ratio needs ≥3 jobs). On the raw basis
+  the overhead regime is always "included" (no SCALE OVERHEAD uplift, overhead
+  line dropped) so aiHrs doesn't depend on the factor. Keep the prompt nudge:
+  removing it with the factor capped would under-quote. aiHrs is stripped from
+  templates, recurring copies and customer payloads (`src/lib/ai-hours.ts`),
+  and an AI Assist rewrite of a line's detail drops it. AI Assist adds stay
+  uncalibrated on purpose (owners type hours).
+- **Models**: every AI call is `claude-sonnet-5-5` (parse, ping, voice walk,
+  AI Assist, Troubleshoot — Haiku retired 2026-09-29; there is no Haiku 5).
+  Thinking off = `thinking: {type:"between_tools"}` + `effort:"high"`
+  (`{type:"disabled"}` and `temperature` 400 on Sonnet 5.5). `/api/ai` adds
+  server-side refusal fallback (`fallbacks:"default"` + beta
+  `server-side-fallback-2026-07-01`, retried once without it if rejected).
 - **Stripe Connect**: per-org accounts. `/api/stripe/connect`,
   `/callback`, `/refresh`, `/webhook` (signature required, no
   dev-mode bypass). `/api/verify-payment` server-verifies the
