@@ -7,6 +7,7 @@ import { Icon } from "@/components/Icon";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { itemInTier } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
+import { smsConsentGranted } from "@/lib/sms-consent";
 
 const STATUS_STEPS = [
   { key: "quoted", label: "Quoted", icon: "📝" },
@@ -130,6 +131,10 @@ function StatusContent() {
   const [submittingSig, setSubmittingSig] = useState(false);
   const [typedName, setTypedName] = useState("");
   const [authorized, setAuthorized] = useState(false);
+  // Optional text-message consent — unchecked by default and separate from
+  // approving; the exact wording shown goes with it as proof of opt-in.
+  const [smsOptIn, setSmsOptIn] = useState(false);
+  const smsConsentRef = useRef<HTMLLabelElement>(null);
   const [signError, setSignError] = useState("");
 
   // Deposit / Stripe checkout
@@ -208,6 +213,8 @@ function StatusContent() {
           // What THIS page showed — the server refuses the approval if the
           // quote was revised after the page loaded (then we reload).
           scopeFp: scopeFingerprint(quoteRooms),
+          smsConsent: smsOptIn,
+          smsConsentText: smsConsentRef.current?.innerText.replace(/\s+/g, " ").trim() || "",
           shownTotal: tiered && tierTotals ? tierTotals[selectedTier] : (job.total || 0),
         }),
       });
@@ -575,6 +582,25 @@ function StatusContent() {
             </div>
           ) : (
             <>
+              {/* Optional text-message consent (A2P 10DLC) — its own box,
+                  unchecked, never required to approve. A customer who
+                  already opted in on the website sees a note instead. */}
+              {smsConsentGranted(job.rooms) ? (
+                <div style={{ fontSize: 13, color: "#8a8a99", marginBottom: 11 }}>
+                  You&apos;re set to get texts about this job. Reply STOP anytime to opt out.
+                </div>
+              ) : (
+                <label ref={smsConsentRef} style={{ display: "flex", alignItems: "flex-start", gap: 9, cursor: "pointer", fontSize: 12.5, lineHeight: 1.5, color: "#8a8a99", marginBottom: 13 }}>
+                  <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} style={{ marginTop: 2, cursor: "pointer", flexShrink: 0 }} />
+                  <span>
+                    <b style={{ color: "#c9c9d6" }}>(Optional)</b> Yes, send me text messages from {org?.name || "this business"} about this job: appointment and arrival updates, invoices and payment links, customer-portal login links, and a review request after the job. Message frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to opt out. Consent is not a condition of purchase.
+                    {(org?.privacy_url || org?.sms_terms_url) && " "}
+                    {org?.privacy_url && <a href={org.privacy_url} target="_blank" rel="noopener noreferrer" style={{ color: "#6fa8ff" }}>Privacy Policy</a>}
+                    {org?.privacy_url && org?.sms_terms_url && " · "}
+                    {org?.sms_terms_url && <a href={org.sms_terms_url} target="_blank" rel="noopener noreferrer" style={{ color: "#6fa8ff" }}>Terms of Service</a>}
+                  </span>
+                </label>
+              )}
               {/* Mode toggle */}
               <div style={{ display: "flex", gap: 4, marginBottom: 11, background: "#0d0d15", borderRadius: 10, padding: 3 }}>
                 {(["type", "draw"] as const).map((m) => (

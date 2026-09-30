@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
-import { stripAiHrsFromBlob } from "@/lib/ai-hours";
+import { customerSafeBlob } from "@/lib/ai-hours";
 
 export const dynamic = "force-dynamic";
 
@@ -58,14 +58,26 @@ export async function GET(req: NextRequest) {
         // customer's copy came out under-priced (and a signed copy then
         // flagged a price change that never happened). email/address/license
         // match the header the portal's copy prints. None are sensitive.
-        .select("id, name, logo_url, phone, email, address, license_num, default_rate, trade_rates, markup_pct, tax_pct, tax_mode, trip_fee, min_labor_hours, stripe_connected, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms")
+        .select("id, name, logo_url, phone, email, address, license_num, default_rate, trade_rates, markup_pct, tax_pct, tax_mode, trip_fee, min_labor_hours, stripe_connected, brand_color, brand_color_2, deposit_pct, quote_valid_days, quote_terms, site_content")
         .eq("id", job.org_id)
         .limit(1);
-      org = orgs?.[0] || null;
+      // From site_content, only the two policy links the approval page's
+      // text-consent box shows (set in Ops → Settings → Branding) — not the
+      // rest of the marketing JSON.
+      if (orgs?.[0]) {
+        const { site_content: sc, ...rest } = orgs[0] as Record<string, unknown>;
+        let privacy_url = "", sms_terms_url = "";
+        try {
+          const c = typeof sc === "string" && sc ? JSON.parse(sc) : {};
+          if (typeof c?.privacyUrl === "string" && /^https:\/\//.test(c.privacyUrl)) privacy_url = c.privacyUrl;
+          if (typeof c?.smsTermsUrl === "string" && /^https:\/\//.test(c.smsTermsUrl)) sms_terms_url = c.smsTermsUrl;
+        } catch { /* malformed site_content — no links */ }
+        org = { ...rest, privacy_url, sms_terms_url };
+      }
     }
 
-    // aiHrs (the AI's own pre-calibration hours) is internal — see ai-hours.ts.
-    return NextResponse.json({ job: { ...job, rooms: stripAiHrsFromBlob(job.rooms) }, org });
+    // aiHrs + the consent record's IP are internal — see ai-hours.ts.
+    return NextResponse.json({ job: { ...job, rooms: customerSafeBlob(job.rooms) }, org });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     // eslint-disable-next-line no-console

@@ -53,6 +53,10 @@ export interface Organization {
                  // older Operations/Admin UIs that still read `plan`.
   billing_enforced?: boolean;
   site_content?: string;
+  /** Policy links for the approval page's text-consent box. NOT columns:
+   *  /api/public/job derives them from site_content.privacyUrl/smsTermsUrl. */
+  privacy_url?: string;
+  sms_terms_url?: string;
   site_published?: boolean;
   site_slug?: string;
   trip_fee?: number;

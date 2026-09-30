@@ -53,12 +53,18 @@ export default function BrandingSettings() {
   const [servicesDraft, setServicesDraft] = useState("");
   const [cardPhotoUrl, setCardPhotoUrl] = useState("");
   const [photoUploading, setPhotoUploading] = useState(false);
+  // Policy links for the quote approval page's text-consent box (carriers
+  // require both for business texting). Stored in site_content too.
+  const [privacyUrlDraft, setPrivacyUrlDraft] = useState("");
+  const [smsTermsUrlDraft, setSmsTermsUrlDraft] = useState("");
   useEffect(() => {
-    let c: { headline?: string; services?: string[]; photoUrl?: string } = {};
+    let c: { headline?: string; services?: string[]; photoUrl?: string; privacyUrl?: string; smsTermsUrl?: string } = {};
     try { c = org?.site_content ? JSON.parse(org.site_content) : {}; } catch { /* */ }
     setHeadlineDraft(c.headline || "");
     setServicesDraft(Array.isArray(c.services) ? c.services.join("\n") : "");
     setCardPhotoUrl(c.photoUrl || "");
+    setPrivacyUrlDraft(c.privacyUrl || "");
+    setSmsTermsUrlDraft(c.smsTermsUrl || "");
   }, [org?.site_content]);
 
   if (!isOwner || !org) return null;
@@ -86,7 +92,7 @@ export default function BrandingSettings() {
 
   // Merge a patch into the org's site_content JSON without clobbering the
   // marketing-site fields (whyUs / about / cta / etc.) that live alongside.
-  const saveCardContent = async (patch: { headline?: string; services?: string[]; photoUrl?: string | null }) => {
+  const saveCardContent = async (patch: { headline?: string; services?: string[]; photoUrl?: string | null; privacyUrl?: string; smsTermsUrl?: string }) => {
     let current: Record<string, unknown> = {};
     try { current = org.site_content ? JSON.parse(org.site_content) : {}; } catch { /* */ }
     await db.patch("organizations", org.id, { site_content: JSON.stringify({ ...current, ...patch }) });
@@ -590,6 +596,47 @@ export default function BrandingSettings() {
             Up to 6 show as colored chips. Blank = your licensed trades, then a default list.
           </div>
         </div>
+      </div>
+
+      {/* Text messaging — policy links for the approval page's consent box. */}
+      <div className="cd mb">
+        <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="phone" size={16} color="var(--color-primary)" />
+          Text messaging
+        </h4>
+        <div className="dim" style={{ fontSize: 12.5, marginBottom: 12 }}>
+          Linked next to the optional &ldquo;text me&rdquo; box customers see when they approve a
+          quote. Carriers require both pages before they&rsquo;ll approve business texting.
+        </div>
+        {([
+          { key: "privacyUrl", label: "Privacy policy URL", draft: privacyUrlDraft, set: setPrivacyUrlDraft, ph: "https://yourbusiness.com/privacy" },
+          { key: "smsTermsUrl", label: "SMS terms URL", draft: smsTermsUrlDraft, set: setSmsTermsUrlDraft, ph: "https://yourbusiness.com/sms-terms" },
+        ] as const).map((f) => (
+          <div key={f.key} style={{ marginBottom: 10 }}>
+            <label className="sl" style={{ fontSize: 14 }}>{f.label}</label>
+            <input
+              value={f.draft}
+              onChange={(e) => f.set(e.target.value)}
+              onBlur={async () => {
+                const v = f.draft.trim();
+                if (v && !/^https:\/\/\S+\.\S+/.test(v)) {
+                  useStore.getState().showToast("Use a full https:// link", "warning");
+                  return;
+                }
+                let cur = "";
+                try { cur = (org.site_content ? JSON.parse(org.site_content)[f.key] : "") || ""; } catch { /* */ }
+                if (v !== cur) {
+                  await saveCardContent({ [f.key]: v });
+                  useStore.getState().showToast(`${f.label.replace(" URL", "")} link saved`, "success");
+                }
+              }}
+              placeholder={f.ph}
+              inputMode="url"
+              autoCapitalize="off"
+              style={{ fontSize: 15 }}
+            />
+          </div>
+        ))}
       </div>
     </>
   );

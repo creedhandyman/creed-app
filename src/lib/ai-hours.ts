@@ -45,3 +45,21 @@ export function stripAiHrsFromBlob<T>(raw: T): T {
     return raw;
   }
 }
+
+/** A job's rooms blob as customers may see it (public status page, portal):
+ *  aiHrs removed, and the IP address in a text-message consent record
+ *  (smsConsent.ip — see sms-consent.ts) dropped. Same shape in as out. */
+export function customerSafeBlob<T>(raw: T): T {
+  const stripped = stripAiHrsFromBlob(raw);
+  try {
+    const blob = typeof stripped === "string" ? JSON.parse(stripped) : stripped;
+    const c = blob && typeof blob === "object" && !Array.isArray(blob) ? (blob as Obj).smsConsent : undefined;
+    if (!c || typeof c !== "object" || !("ip" in (c as Obj))) return stripped;
+    const { ip: _ip, ...rest } = c as Obj;
+    void _ip;
+    const out = { ...(blob as Obj), smsConsent: rest };
+    return (typeof stripped === "string" ? JSON.stringify(out) : out) as T;
+  } catch {
+    return stripped;
+  }
+}

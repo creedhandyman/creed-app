@@ -5,6 +5,7 @@ import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
 import { itemInTier, type TierKey } from "@/lib/tiers";
 import { scopeFingerprint, type ApprovalRecord } from "@/lib/approval";
 import type { Room } from "@/lib/types";
+import { applySmsConsent } from "@/lib/sms-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,10 @@ interface Body {
    *  page bundles send neither and are accepted as before. */
   scopeFp?: string;
   shownTotal?: number;
+  /** The optional text-message consent box on the approval page (unchecked
+   *  by default, separate from approving) and the exact wording it showed. */
+  smsConsent?: boolean;
+  smsConsentText?: string;
 }
 
 const trim = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
@@ -227,6 +232,18 @@ export async function POST(req: NextRequest) {
             : {}),
         };
         blob.approval = approval;
+        // Text-message consent from the approval page's optional box — kept
+        // with the job as proof of opt-in (sms-consent.ts). Unchecked never
+        // revokes an earlier website opt-in.
+        if (typeof body.smsConsent === "boolean") {
+          applySmsConsent(blob, {
+            granted: body.smsConsent,
+            at: nowIso,
+            source: "quote approval page",
+            text: trim(body.smsConsentText),
+            ip,
+          });
+        }
         patch.rooms = JSON.stringify(blob);
       }
     } catch {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
 import { residentContact } from "@/lib/resident";
+import { smsConsentGranted } from "@/lib/sms-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -191,6 +192,13 @@ async function dispatchOne(
     const toPhone = resident.phone || customer?.phone || "";
     if (!toPhone) {
       errors.push("No phone on resident or customer");
+    } else if (resident.phone) {
+      // Business texts need the recipient's own opt-in (A2P 10DLC / CTIA).
+      // The consent on file came from the customer (quote form / approval
+      // page) — it doesn't cover a resident on a property-management job.
+      errors.push("SMS: the resident hasn't opted in to texts");
+    } else if (!smsConsentGranted(job.rooms)) {
+      errors.push("SMS: no text-message consent on record for this customer");
     } else {
       const r = await sendSms(toPhone, body);
       if (r.ok) sentAny = true; else errors.push(`SMS: ${r.error}`);

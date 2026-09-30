@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { dispatchNotifications } from "@/lib/notify-server";
 import { siteOrigin } from "@/lib/site-url";
+import { applySmsConsent } from "@/lib/sms-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -197,15 +198,13 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
         // Consent record per CTIA 5.1.2: when, where, the exact wording
         // shown, and the requester's IP (phone + name are on the lead).
         ...(typeof body.sms_consent === "boolean"
-          ? {
-              smsConsent: {
-                granted: body.sms_consent,
-                at: new Date().toISOString(),
-                source: "website quote form",
-                text: trim(body.sms_consent_text).slice(0, 1000),
-                ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("x-real-ip") || "",
-              },
-            }
+          ? applySmsConsent({}, {
+              granted: body.sms_consent,
+              at: new Date().toISOString(),
+              source: "website quote form",
+              text: trim(body.sms_consent_text),
+              ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("x-real-ip") || "",
+            })
           : {}),
       }),
       total: 0,
