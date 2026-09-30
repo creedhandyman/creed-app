@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
+import { withOptOut } from "@/lib/sms-consent";
 
 /**
  * Server-only notification helpers. Shared by /api/notify (job assigned)
@@ -60,7 +61,7 @@ async function sendSms(to: string, body: string): Promise<{ ok: boolean; error?:
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-  const form = new URLSearchParams({ To: phone, From: from, Body: body });
+  const form = new URLSearchParams({ To: phone, From: from, Body: withOptOut(body) });
   try {
     const res = await fetch(url, {
       method: "POST",

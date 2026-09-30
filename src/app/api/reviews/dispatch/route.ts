@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
 import { residentContact } from "@/lib/resident";
-import { smsConsentGranted } from "@/lib/sms-consent";
+import { smsConsentGranted, withOptOut } from "@/lib/sms-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -117,7 +117,7 @@ async function sendSms(to: string, body: string): Promise<{ ok: true } | { ok: f
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-  const form = new URLSearchParams({ To: phone, From: from, Body: body });
+  const form = new URLSearchParams({ To: phone, From: from, Body: withOptOut(body) });
 
   const res = await fetch(url, {
     method: "POST",

@@ -64,3 +64,17 @@ export function applySmsConsent(blob: Obj, next: SmsConsentRecord): Obj {
   }
   return blob;
 }
+
+/**
+ * Every business text says how to stop them — carriers look for it (CTIA),
+ * and Twilio acts on a STOP reply either way. Appends "Reply STOP to opt
+ * out." on its own line unless the message already carries STOP wording
+ * (e.g. an owner's custom review template that includes it). A plain
+ * "stop by Tuesday" doesn't count as opt-out wording.
+ */
+export function withOptOut(body: string): string {
+  const text = (body || "").trimEnd();
+  if (!text) return text;
+  if (/\b(?:reply|text|send)\s+["'“]?stop\b|\bstop\s+to\s+(?:opt|unsub|end|cancel|quit)/i.test(text)) return text;
+  return `${text}\nReply STOP to opt out.`;
+}

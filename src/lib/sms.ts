@@ -1,6 +1,7 @@
 // Server-only Twilio sender. Single send path shared by /api/sms (after auth)
 // and /api/portal/request-link (server-to-server) so there's no internal HTTP
 // hop to a public route — that hop is what made /api/sms hard to lock down.
+import { withOptOut } from "@/lib/sms-consent";
 
 /** Loose US → E.164. "+" prefixes are kept; bare 10/11-digit US numbers get +1. */
 export function normalizePhone(raw: string): string {
@@ -38,7 +39,7 @@ export async function sendSms(to: string, body: string): Promise<SmsResult> {
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-  const form = new URLSearchParams({ To: dest, From: from, Body: text });
+  const form = new URLSearchParams({ To: dest, From: from, Body: withOptOut(text) });
 
   const res = await fetch(url, {
     method: "POST",
