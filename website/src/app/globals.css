@@ -370,3 +370,21 @@ textarea.field { resize: vertical; min-height: 120px; }
   .svc-grid { grid-template-columns: 1fr; }
   .cred-grid { grid-template-columns: 1fr; }
 }
+
+/* Legal pages (privacy / SMS terms) — readable single column. */
+.legal { max-width: 780px; }
+.legal p, .legal li { font-size: 16.5px; line-height: 1.65; color: var(--muted); }
+.legal p { margin: 0 0 16px; }
+.legal ul { margin: 0 0 16px; padding-left: 22px; }
+.legal li { margin-bottom: 8px; }
+.legal li b, .legal p b { color: var(--ink); font-weight: 600; }
+.legal .h3 { margin: 34px 0 12px; color: var(--ink); scroll-margin-top: 90px; }
+.legal a { color: var(--blue-lt); }
+.legal-date { font-family: var(--font-head); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim) !important; }
+.legal-key { border-left: 3px solid var(--blue); padding-left: 16px; color: var(--ink) !important; }
+
+/* Quote form — optional SMS consent checkbox. */
+.fconsent { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; font-size: 14px; line-height: 1.55; color: var(--dim); }
+.fconsent input { flex: none; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--blue); cursor: pointer; }
+.fconsent a { color: var(--blue-lt); }
+.fconsent b { color: var(--ink); font-weight: 600; }

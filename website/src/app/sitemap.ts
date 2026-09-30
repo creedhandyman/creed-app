@@ -15,6 +15,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/guarantee",
     "/churches",
     "/contact",
+    "/privacy",
+    "/sms-terms",
     ...CITY_PAGES.map((c) => `/${c.slug}`),
   ];
   return pages.map((p) => ({

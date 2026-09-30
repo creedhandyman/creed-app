@@ -29,6 +29,12 @@ interface Body {
   zip?: string;
   description: string;
   photos?: string[];
+  /** The website quote form's optional text-message consent box (unchecked
+   *  by default). Recorded on the lead as proof of opt-in for carrier
+   *  (A2P 10DLC) compliance. Absent = the form didn't ask (older forms, /lead). */
+  sms_consent?: boolean;
+  /** The exact consent wording the form showed (stored with the opt-in). */
+  sms_consent_text?: string;
   /** Profile.id of the technician whose share-link / QR brought the
    *  visitor here. Set by /card and /lead from ?tech=… or sessionStorage. */
   referrer_tech_id?: string;
@@ -185,7 +191,23 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       customer_id: customerId,
       address_id: addressId,
       job_date: today,
-      rooms: JSON.stringify({ leadDescription: description, leadPhotos: photos }),
+      rooms: JSON.stringify({
+        leadDescription: description,
+        leadPhotos: photos,
+        // Consent record per CTIA 5.1.2: when, where, the exact wording
+        // shown, and the requester's IP (phone + name are on the lead).
+        ...(typeof body.sms_consent === "boolean"
+          ? {
+              smsConsent: {
+                granted: body.sms_consent,
+                at: new Date().toISOString(),
+                source: "website quote form",
+                text: trim(body.sms_consent_text).slice(0, 1000),
+                ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("x-real-ip") || "",
+              },
+            }
+          : {}),
+      }),
       total: 0,
       total_labor: 0,
       total_mat: 0,

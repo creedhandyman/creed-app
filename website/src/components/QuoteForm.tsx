@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { LEADS, SITE } from "@/lib/site";
 
 type FormState = "idle" | "sending" | "ok" | "err";
@@ -14,6 +15,7 @@ type FormState = "idle" | "sending" | "ok" | "err";
 export default function QuoteForm() {
   const [state, setState] = useState<FormState>("idle");
   const [error, setError] = useState("");
+  const [textsOk, setTextsOk] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -35,7 +37,12 @@ export default function QuoteForm() {
       city: String(f.get("city") || "").trim(),
       state: "KS",
       description: String(f.get("description") || "").trim(),
+      // Optional, unchecked by default — recorded on the lead as proof of
+      // text-message consent (carriers require it for business texting).
+      sms_consent: f.get("sms_consent") === "yes",
+      sms_consent_text: (form.querySelector("#qf-sms")?.closest("label") as HTMLElement | null)?.innerText.replace(/\s+/g, " ").trim() || "",
     };
+    setTextsOk(body.sms_consent);
 
     setState("sending");
     setError("");
@@ -59,7 +66,7 @@ export default function QuoteForm() {
       <div className="form-ok">
         <h3 className="h3" style={{ color: "var(--blue-lt)" }}>Got it. We&rsquo;ll call you back.</h3>
         <p style={{ fontSize: 16, lineHeight: 1.55, color: "var(--muted)", margin: "0 0 14px" }}>
-          Your request is in — expect a call or text within one business day.
+          Your request is in — expect a call{textsOk ? " or text" : ""} within one business day.
           Photos help us quote faster: text them to{" "}
           <a href={SITE.phoneHref} style={{ whiteSpace: "nowrap" }}>{SITE.phone}</a>.
         </p>
@@ -110,6 +117,18 @@ export default function QuoteForm() {
           required
           placeholder="e.g. Kitchen faucet drips, and the disposal hums but won't spin."
         />
+      </div>
+      <div className="frow">
+        <label className="fconsent" htmlFor="qf-sms">
+          <input id="qf-sms" name="sms_consent" type="checkbox" value="yes" />
+          <span>
+            <b>(Optional)</b> Yes, send me text messages from {SITE.legalName} about my request:
+            quote and appointment updates, customer-portal login links, and a review request after
+            the job. Message frequency varies. Msg &amp; data rates may apply. Reply HELP for help,
+            STOP to opt out. Consent is not a condition of purchase.{" "}
+            <Link href="/privacy">Privacy Policy</Link> · <Link href="/sms-terms">Terms of Service</Link>
+          </span>
+        </label>
       </div>
       {/* Honeypot field — hidden from people, tempting to bots. */}
       <div style={{ position: "absolute", left: "-5000px" }} aria-hidden="true">

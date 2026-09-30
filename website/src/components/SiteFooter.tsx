@@ -51,6 +51,8 @@ export default function SiteFooter() {
             <Link href="/guarantee">Guarantee</Link>
             <Link href="/churches">Churches</Link>
             <Link href="/contact">Contact</Link>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/sms-terms">SMS Terms</Link>
             <a href={SITE.social.facebook} target="_blank" rel="noopener">Facebook</a>
             <a href={SITE.social.instagram} target="_blank" rel="noopener">Instagram</a>
           </div>

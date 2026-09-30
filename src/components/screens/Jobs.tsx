@@ -839,6 +839,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           return {
             description: data?.leadDescription as string | undefined,
             photos: (Array.isArray(data?.leadPhotos) ? data.leadPhotos : []) as string[],
+            // Website quote-form text consent (absent on older/other leads).
+            smsConsent: typeof data?.smsConsent?.granted === "boolean" ? (data.smsConsent.granted as boolean) : null,
           };
         } catch { return null; }
       })() : null;
@@ -985,6 +987,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       <img src={url} alt="" style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 6, border: "1px solid var(--color-border-dark)" }} />
                     </a>
                   ))}
+                </div>
+              )}
+              {djLead.smsConsent !== null && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: djLead.smsConsent ? "var(--color-success)" : "var(--color-dim)", paddingBottom: 4 }}>
+                  <Icon name={djLead.smsConsent ? "check" : "phone"} size={13} />
+                  {djLead.smsConsent ? t("jobs.smsConsentYes") : t("jobs.smsConsentNo")}
                 </div>
               )}
             </div>
