@@ -5,7 +5,7 @@ export const SITE = {
   phone: "(316) 400-7414",
   phoneHref: "tel:+13164007414",
   email: "bernard@creedhm.com",
-  domain: "https://creedhandyman.com",
+  domain: "https://www.creedhandyman.com",
   rate: "$55",
   minimum: "Two-hour minimum",
   city: "Wichita",
