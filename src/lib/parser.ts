@@ -321,6 +321,12 @@ If you process both, every item will be doubled. The final quote should have 20-
 
 CROSS-AREA DEDUP — inspections ALSO list the same PHYSICAL OBJECT under multiple areas: a back-door lock under "Laundry Room" AND again under "Keys/Remotes"; a doorbell under "Entry" AND under "Compliance"; a gate under "Exterior" twice. One physical door/device/fixture = ONE line item, priced ONCE, no matter how many areas mention it. Count the physical objects before quoting lock/key work: "replace back door lock to match front" (a room's door row) + "back door and side door have no keys — replace both handle and deadbolt locks on both doors" (Keys/Remotes row) = TWO doors total → 2 handle sets + 2 deadbolts (the hardware the Keys row itself names), NEVER 3 sets. A house has one back door; if two areas describe re-keying it, that is the same job twice.
 
+CROSS-TRADE ECHO — the other way the same fix gets billed twice: ONE finding whose work lives entirely in ONE trade produces exactly ONE line item. NEVER re-emit the fix as a second, usually labor-only, line under another trade — the client reads both lines and sees the same repair charged twice. Real failures to avoid (each was ONE inspection finding):
+- "Railing is loose, needs securing" → ONE Carpentry line. NOT Carpentry "Secure loose stair railing to wall" PLUS General "Re-secure loose stair railing".
+- "Flooring coming apart, replacement needed" → ONE Flooring line (the replacement). NOT also a Carpentry "replace/repair flooring planks" line — replacing the floor already removes the bad planks.
+- "Small hole in door requires patching, replace interior door" → the Carpentry line (patch + new door) covers it. A separate Painting "patch and paint hole where door removed" line re-bills the same patch.
+When rule 5a legitimately splits a finding across two trades, the split DIVIDES the work: each line covers only its own trade's share, the hours sum to what one combined line would carry, and neither line repeats the other's verbs. Final pass before you emit: group your lines by room/location — two lines at the same location naming the same object (railing, flooring, door, blind, fence…) under different trades are the same fix. Merge them into the trade that owns the work.
+
 ## LINE ITEM FORMAT
 Every line item MUST include:
 - "detail": "Room Name — Brief task description" (e.g. "Kitchen — Replace sprayer and re-caulk sink")
@@ -367,7 +373,7 @@ The test before you emit a multi-clause line: does every clause belong to the sa
 6. SHARED SUPPLIES ONCE. Paint rollers, tape, drop cloths, brushes, spackle go in ONE "Whole Property — Painting Supplies" item under Painting. CRITICAL: This is a materials-only line — laborHrs MUST be 0. Supplies are consumables, not a labor task. Same rule for any other shared-consumables line you create (drywall mud kit, miscellaneous fasteners, etc.). NEVER duplicate supplies per room.
 
 7. ACTIONS-COLUMN POLICY. Each summary-table row carries an "Action" value (Maintenance / None) plus a Comment. Apply this precedence:
-- Action = Maintenance → ALWAYS emit a line.
+- Action = Maintenance → ALWAYS emit a line. Even on condition S or E: "Fireplace Equipment — S — Maintenance — Inspect and verify proper venting" still earns a (small, labor-only) line — a good condition rating does not cancel an explicit Maintenance action.
 - Action = None AND comment has an explicit install/replace/repair verb → emit a line (the inspector mistagged).
 - Action = None AND comment is an absence/recommendation ("Not present", "Could not test but appears operable", "Recommended", "No closet present", "No garbage disposal present", "Optional upgrade") → SKIP. The owner only wants required work in the quote; "nice to have" / "they don't currently have one" rows don't earn a line. EXCEPTION: rows untestable because a UTILITY was off ("unable to test — water shut off") are never skipped — they roll into the rule 7d verification line, whatever their Action value says.
 - Action = None AND condition = "S" with no actionable comment → SKIP (no line).
@@ -401,7 +407,7 @@ The dropped item is almost always sentence #2 or later, or the second clause aft
 
 9. COPY IDENTIFIERS VERBATIM. The "property" and "client" output fields are transcription, not interpretation: copy the property address EXACTLY as the report prints it — never change the street suffix (St stays St, it never becomes Ave), never expand/abbreviate or "correct" it — and copy client/company names character-for-character ("Keyrenter" never becomes "Key renter"). A mismatched address or misspelled client name on a signable estimate is an instant credibility hit with a property-management client.
 
-10. DISCLOSE ASSUMED COUNTS. When a finding needs a quantity the report never states ("replace all blinds with broken slats", "missing light bulbs"), pick a reasonable count AND say so in the comment: "assumes 2 blinds — confirm on site". Counts the report DOES state are binding (section C below). Never present a guessed quantity as if it were documented.
+10. DISCLOSE ASSUMED COUNTS. When a finding needs a quantity the report never states ("replace all blinds with broken slats", "missing light bulbs"), pick a reasonable count AND say so in the comment: "assumes 2 blinds — confirm on site". Counts the report DOES state are binding (section C below). Never present a guessed quantity as if it were documented. AREAS count too: when a flooring or painting line needs a sqft the report never states, mark it estimated — "LVP flooring (est. 150 sqft — verify on site)" — never a bare number that reads as measured. Guessed sqft drives real dollars both ways; the owner must know which areas to re-measure.
 
 ## COMMON ERRORS — read these every time before generating output
 
@@ -1287,6 +1293,61 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phanto
 }
 
 /**
+ * Cross-trade echo detector — the deterministic net under the prompt's
+ * CROSS-TRADE ECHO rule. The model occasionally re-emits ONE inspection
+ * finding as a second, labor-only line under another trade ("Secure loose
+ * stair railing to wall" in Carpentry + "Re-secure loose stair railing" in
+ * General = the same railing billed twice — a real Keyrenter quote shipped
+ * that way, QT-PN1Q5S). Auto-deleting is too risky: rule-5a splits like
+ * drywall-patch (Carpentry) + repaint (Painting) legitimately share
+ * location and some words. So this only WARNS — a labor-only line whose
+ * location matches a priced line in another trade, and whose content words
+ * are ≥60% contained in that line's, is flagged for the owner to review.
+ * Tokens are crudely stemmed (re- prefix, ing/ed/es/e/s suffixes) so
+ * "Re-secure"≈"secure", "damaged"≈"damage", "flooring"≈"floors".
+ */
+export function crossTradeEchoWarnings(rooms: Room[]): string[] {
+  const STOP = new Set([
+    "the", "a", "an", "and", "or", "to", "with", "for", "of", "on", "in",
+    "at", "as", "is", "are", "needs", "needed", "new", "area", "areas", "where",
+  ]);
+  const stem = (w: string) => w.replace(/^re-?/, "").replace(/(ings?|ed|es|e|s)$/, "");
+  const parse = (detail: string): { loc: string; set: Set<string> } => {
+    const idx = detail.indexOf("—");
+    const loc = (idx >= 0 ? detail.slice(0, idx) : "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const task = (idx >= 0 ? detail.slice(idx + 1) : detail).toLowerCase();
+    const set = new Set(
+      task.split(/[^a-z-]+/).map(stem).filter((w) => w.length > 2 && !STOP.has(w)),
+    );
+    return { loc, set };
+  };
+  type Line = { trade: string; detail: string; loc: string; set: Set<string>; laborOnly: boolean; hrs: number };
+  const lines: Line[] = [];
+  rooms.forEach((r) => r.items.forEach((it) => {
+    const { loc, set } = parse(it.detail || "");
+    const matTotal = (it.materials || []).reduce((s, m) => s + (m.c || 0), 0);
+    lines.push({ trade: r.name, detail: it.detail || "", loc, set, laborOnly: matTotal === 0, hrs: it.laborHrs || 0 });
+  }));
+  const warnings: string[] = [];
+  for (const echo of lines) {
+    if (!echo.laborOnly || !(echo.hrs > 0) || !echo.loc || echo.set.size < 2) continue;
+    for (const other of lines) {
+      if (other === echo || other.trade === echo.trade || other.loc !== echo.loc) continue;
+      let shared = 0;
+      echo.set.forEach((t) => { if (other.set.has(t)) shared += 1; });
+      if (shared >= 2 && shared / echo.set.size >= 0.6) {
+        warnings.push(
+          `Possible double-charge: "${echo.detail}" (${echo.trade}, labor-only) looks like the same fix as "${other.detail}" (${other.trade}). Review and remove one.`,
+        );
+        break; // one warning per echo line is enough
+      }
+    }
+    if (warnings.length >= 4) break; // don't drown the owner in notes
+  }
+  return warnings;
+}
+
+/**
  * Extract a 5-digit US ZIP from an address string. Returns "" if not present.
  * Tolerates "12345" or "12345-6789" formats anywhere in the string; if
  * multiple matches exist, takes the last one (typically the trailing ZIP).
@@ -1977,6 +2038,10 @@ ${cleanText.slice(0, 60000)}`
         `Labor hours adjusted up from your completed-job history (${calAdjustments.join(", ")}) — edit down if this job should run lean.`,
       );
     }
+    // Cross-trade echo check: the same finding billed in two trades (one of
+    // them labor-only) slips past text dedup because the wording differs.
+    // Warn, never auto-delete — rule-5a splits can look similar.
+    notes.push(...crossTradeEchoWarnings(calibratedRooms));
 
     return {
       property: parsed.property || "",
@@ -2611,6 +2676,9 @@ export async function aiParseInspection(
       `${missingCounterRooms.length} room${missingCounterRooms.length === 1 ? "" : "s"} had Counters flagged D/P but the AI didn't include a countertop line — auto-added a conservative replacement (default laminate). Adjust tier/sqft before sending: ${missingCounterRooms.map((r) => r.name).join(", ")}.`,
     );
   }
+
+  // Same cross-trade echo net as the PDF path (see crossTradeEchoWarnings).
+  merged.notes.push(...crossTradeEchoWarnings(merged.rooms));
 
   return merged;
 }
