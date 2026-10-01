@@ -172,7 +172,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     try { return activeJob ? (typeof activeJob.rooms === "string" ? JSON.parse(activeJob.rooms) : activeJob.rooms) : null; }
     catch { return null; }
   })();
-  const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[] = jobData?.workOrder || [];
+  // `itemId` links a task to its quote line (stamped by QuoteForge's save).
+  const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; itemId?: string }[] = jobData?.workOrder || [];
 
   // ── Guide-tab persistence ────────────────────────────────────────
   // Stable identity for a shop item so checked-state survives reorders /
@@ -724,8 +725,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // matched the work-order TRADE against the inspection's physical ROOM name,
   // which never hit, so everything fell back to MED). Values: D=damaged,
   // P=poor, F=fair, S=satisfactory, "-"=general project scope.
-  const woCondition = (w: { room?: string; detail?: string }): string | undefined => {
-    const rooms: { name?: string; items?: { detail?: string; condition?: string }[] }[] = jobData?.rooms || [];
+  const woCondition = (w: { room?: string; detail?: string; itemId?: string }): string | undefined => {
+    const rooms: { name?: string; items?: { id?: string; detail?: string; condition?: string }[] }[] = jobData?.rooms || [];
+    // Linked task → its exact quote line (survives a renamed task/line).
+    if (w.itemId) {
+      for (const r of rooms) {
+        const hit = r.items?.find((i) => i.id === w.itemId);
+        if (hit) return hit.condition;
+      }
+    }
     const d = (w.detail || "").toLowerCase();
     const room = rooms.find((r) => (r.name || "") === (w.room || ""));
     const it = room?.items?.find((i) => {
@@ -734,7 +742,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     });
     return it?.condition;
   };
-  const priOf = (w: { pri?: string; room?: string; detail?: string }): string => {
+  const priOf = (w: { pri?: string; room?: string; detail?: string; itemId?: string }): string => {
     const c = woCondition(w);
     if (c === "D") return "HIGH";              // damaged → urgent
     if (c === "F" || c === "S") return "LOW";  // fair / satisfactory → minor
@@ -777,15 +785,19 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // inspection photos that captured the area before work started. Crews on
   // site need this context — the Tasks tab was previously just a checklist.
   type Material = { n: string; c: number };
-  type QuoteItem = { detail: string; comment?: string; materials?: Material[]; laborHrs?: number; condition?: string };
+  type QuoteItem = { id?: string; detail: string; comment?: string; materials?: Material[]; laborHrs?: number; condition?: string };
   type Room = { name: string; items: QuoteItem[] };
   type InspectionItem = { name: string; condition?: string; comment?: string; photos?: string[] };
   type InspectionRoom = { name: string; items: InspectionItem[] };
-  const enrichTask = (task: { room: string; detail: string }) => {
+  const enrichTask = (task: { room: string; detail: string; itemId?: string }) => {
     const rooms: Room[] = jobData?.rooms || [];
     const room = rooms.find((r) => r.name === task.room);
     const tDetail = (task.detail || "").toLowerCase();
-    const item = room?.items?.find(
+    // Linked task → its exact quote line; else the legacy loose text match.
+    const linked = task.itemId
+      ? rooms.flatMap((r) => r.items || []).find((i) => i.id === task.itemId)
+      : undefined;
+    const item = linked || room?.items?.find(
       (i) => (i.detail || "").toLowerCase() === tDetail || tDetail.includes((i.detail || "").toLowerCase()) || (i.detail || "").toLowerCase().includes(tDetail),
     );
     const inspRooms: InspectionRoom[] = jobData?.inspection?.rooms || [];

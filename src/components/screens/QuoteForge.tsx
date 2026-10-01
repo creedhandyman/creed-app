@@ -29,6 +29,7 @@ import {
   aiText,
 } from "@/lib/parser";
 import type { InspectionInput, GuideStep } from "@/lib/parser";
+import { syncWorkOrder, quoteItemIds } from "@/lib/work-order-sync";
 import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/lib/trades";
 import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
@@ -359,6 +360,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [inspParseFailed, setInspParseFailed] = useState(false);
   // Editable work order — null means "use auto-generated from guide.steps"
   const [customWorkOrder, setCustomWorkOrder] = useState<GuideStep[] | null>(null);
+  // Quote-line ids already accounted for by the work order — lines that were in
+  // the quote when the work order was loaded, plus tasks removed in the Guide
+  // tab. A line NOT in here and with no task is new → syncWorkOrder adds one.
+  const woKnownIdsRef = useRef<Set<string>>(new Set());
   // Per-quote discount. Lives on the rooms JSON blob (no schema change).
   // null = no discount; on save, persisted as `data.discount` so reloads
   // round-trip.
@@ -443,6 +448,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCustomerId(d.customerId || undefined); setAddressId(d.addressId || undefined);
       setText(d.text || ""); setQuickDesc(d.quickDesc || ""); setQuickPhotos(d.quickPhotos || []);
       setRooms(d.rooms || []); setWorkers(d.workers || []); setJobPhotos(d.jobPhotos || []);
+      woKnownIdsRef.current = quoteItemIds(d.rooms || []);
       setCustomWorkOrder(d.customWorkOrder ?? null);
       setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
       setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
@@ -521,21 +527,29 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         clearEditJob?.();
         return;
       }
+      let loadedRooms: Room[] = [];
       if (data?.rooms?.length) {
         // skipCaps on reload: the user has already reviewed and saved
         // these items. The material/labor caps in validateQuote are an
         // AI-defense layer; re-applying them here would scale a Bernard-
         // edited material price back down to the cap (the bug Bernard
         // hit where the materials list edit "didn't save").
-        setRooms(validateQuote(data.rooms, { skipCaps: true }));
+        loadedRooms = validateQuote(data.rooms, { skipCaps: true });
+        setRooms(loadedRooms);
       }
       if (data?.workers?.length) {
         setWorkers(data.workers.map((w: { id: string }) => w.id));
       }
       if (data?.workOrder?.length) {
-        // Preserve any prior edits (incl. `done` checkboxes from Jobs/WorkVision)
+        // Preserve any prior edits (incl. `done` checkboxes from Jobs/WorkVision).
+        // Keep the quote-line link (itemId) so later quote edits follow the
+        // task; every line already in the quote counts as accounted for, so a
+        // task removed on purpose isn't re-added (see work-order-sync).
+        woKnownIdsRef.current = quoteItemIds(loadedRooms);
         setCustomWorkOrder(data.workOrder.map((s: GuideStep) => ({
           room: s.room, detail: s.detail, action: s.action, pri: s.pri, hrs: s.hrs,
+          ...(s.itemId ? { itemId: s.itemId } : {}),
+          ...(s.custom ? { custom: true } : {}),
         })));
       }
       // Guide-tab persistent state — same keys WorkVision uses, so
@@ -1104,43 +1118,30 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   };
 
   /* ── customWorkOrder sync ──
-     When a path adds new items to `rooms` (AI Assist, manual Add Item),
-     extend `customWorkOrder` with the auto-generated work-order steps for
-     those new items. Without this, a `customWorkOrder` loaded from the
-     prior save shadows guide.steps in the Guide tab (line:
-     `workOrder={customWorkOrder ?? guide.steps}`), so the additions never
-     appear in the work order — and on save, `sourceSteps = customWorkOrder`
-     drops them from `data.workOrder` entirely. The user sees the items
-     in the Quote tab, edits hrs there, saves, and on next view the work
-     order is missing them. Bernard's repeat-bite repro:
-       1. Open existing job in QuoteForge edit mode (customWorkOrder loaded with N items)
-       2. Use "Additional Work" AI to describe new flooring
-       3. AI returns new rooms; setRooms appends — customWorkOrder is unchanged
-       4. Bernard tries to bump hrs on the new flooring item — either it
-          isn't visible in the Guide tab at all, or his edit doesn't make
-          it into the saved workOrder.
-     This helper appends only NEW (key-not-present) auto-generated steps,
-     so prior user customizations to existing steps are preserved. */
+     A `customWorkOrder` (loaded from the prior save, or started by a Guide-tab
+     edit) shadows guide.steps in the Guide tab and is what saveJob writes to
+     `rooms.workOrder` — the list WorkVision's Tasks tab and the Jobs
+     work-order screen show. It used to be a detached copy: only NEW lines were
+     appended (by text key), so editing a line's text/hours/notes/condition in
+     the Quote tab, or deleting it, never reached the work order (and an AI
+     Assist rewrite of a line's text appended a duplicate task). Every task is
+     now linked to its quote line by id and re-synced whenever the quote or the
+     work order changes — see src/lib/work-order-sync.ts for the merge rules.
+     null = "use guide.steps", which is already derived live from rooms. */
+  // customWorkOrder is a dep (not just rooms) so a work order freshly started
+  // from guide.steps gets its sync baseline right away — otherwise the NEXT
+  // quote edit would only set the baseline and never reach the task. Settles
+  // in one pass: syncWorkOrder returns null when nothing changed, and
+  // returning `curr` lets React bail out.
+  useEffect(() => {
+    setCustomWorkOrder((curr) => {
+      if (curr === null) return null;
+      return syncWorkOrder(curr, rooms, woKnownIdsRef.current) ?? curr;
+    });
+  }, [rooms, customWorkOrder]);
+  // Text key for matching legacy (pre-itemId) saved tasks in saveJob.
   const woKeyOf = (s: { room?: string; detail?: string }) =>
     `${(s.room || "").toLowerCase().trim()}|||${(s.detail || "").toLowerCase().trim()}`;
-  const extendCustomWorkOrderFromRooms = (newRooms: Room[], origin: string) => {
-    setCustomWorkOrder((curr) => {
-      // null = "use guide.steps", which is recomputed every render from
-      // rooms, so it auto-includes new items already. Nothing to do.
-      if (curr === null) return null;
-      const newGuide = makeGuide(newRooms);
-      const seen = new Set(curr.map(woKeyOf));
-      const additions = newGuide.steps.filter((s) => !seen.has(woKeyOf(s)));
-      if (additions.length) {
-        // eslint-disable-next-line no-console
-        console.log(
-          `[QuoteForge.${origin}] Appending ${additions.length} new step(s) to customWorkOrder so they survive save:`,
-          additions.map((a) => `${a.room} — ${a.detail} (${a.hrs}h)`),
-        );
-      }
-      return [...curr, ...additions];
-    });
-  };
 
   /* ── Add item ── */
   const addItem = () => {
@@ -1197,10 +1198,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // newly-added item is freshly minted by the user — they typed the
     // numbers, no need to second-guess them.
     const newRooms = validateQuote(merged, { skipCaps: true });
+    // The work-order sync effect gives this new line a task automatically.
     setRooms(newRooms);
-    // Same reason as AI Assist: extend customWorkOrder so this new item
-    // shows in the Guide tab and persists into workOrder on save.
-    extendCustomWorkOrderFromRooms(newRooms, "addItem");
     // Track custom material for AI learning. Tag with the property's ZIP so
     // future quotes in the same area weight these prices over out-of-region.
     db.post("price_corrections", {
@@ -1457,7 +1456,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // Pull the prior saved blob so an edit-save merges into it instead of
     // overwriting field-collected state (work-order `done` checkmarks,
     // after/work photos, jobNotes from WorkVision, etc.).
-    type WO = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; tier?: string; tiers?: TierKey[] };
+    type WO = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; tier?: string; tiers?: TierKey[]; itemId?: string; custom?: boolean };
     type JobPhoto = { url: string; label: string; type: "before" | "after" | "work" };
     let prevData: Record<string, unknown> = {};
     if (editingId) {
@@ -1467,19 +1466,29 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       } catch { prevData = {}; }
     }
 
-    // Use custom work order if user edited it, otherwise auto-generate from guide
-    const sourceSteps = customWorkOrder ?? guide.steps;
+    // Use custom work order if user edited it, otherwise auto-generate from
+    // guide. Re-sync against the quote right here too (not only via the
+    // effect) so a save fired in the same tick as a line edit can't write a
+    // work order that's one edit behind.
+    const sourceSteps = customWorkOrder
+      ? (syncWorkOrder(customWorkOrder, rooms, woKnownIdsRef.current) ?? customWorkOrder)
+      : guide.steps;
     const prevWO: WO[] = Array.isArray(prevData.workOrder) ? prevData.workOrder as WO[] : [];
     const prevWOByKey = new Map(prevWO.map((w) => [woKeyOf(w), w]));
-    const seenKeys = new Set<string>();
+    // Prior tasks by quote-line id — so a task whose line text was edited
+    // keeps its `done` checkmark from the field (the text key changed).
+    const prevWOByItem = new Map(prevWO.filter((w) => w.itemId).map((w) => [w.itemId as string, w]));
+    const usedPrior = new Set<WO>();
     // Tag each work-order task with its line-item option MEMBERSHIP set (for
-    // Good-Better-Best pruning on approval). Keyed identically to woKeyOf so
-    // the lookup aligns; an unmatched step defaults to all three options — a
-    // safe fallback (in every option, so a mis-tag never hides a task).
+    // Good-Better-Best pruning on approval). By line id first, then the text
+    // key; an unmatched step defaults to all three options — a safe fallback
+    // (in every option, so a mis-tag never hides a task).
     const tierByKey = new Map<string, TierKey[]>();
+    const tierById = new Map<string, TierKey[]>();
     for (const r of rooms) {
       for (const it of r.items) {
         tierByKey.set(woKeyOf({ room: r.name, detail: it.detail }), itemTiers(it));
+        if (it.id) tierById.set(it.id, itemTiers(it));
       }
     }
     // Merge prior work-order items by (room, detail). Take EVERY editable
@@ -1491,8 +1500,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // we add alongside `done` (e.g. `completed_at`).
     const workOrder: WO[] = sourceSteps.map((s) => {
       const key = woKeyOf(s);
-      seenKeys.add(key);
-      const prior = prevWOByKey.get(key) as (WO & { completed_at?: string }) | undefined;
+      const byItem = s.itemId ? prevWOByItem.get(s.itemId) : undefined;
+      const byKey = prevWOByKey.get(key);
+      const prior = (byItem || (byKey && !usedPrior.has(byKey) ? byKey : undefined)) as (WO & { completed_at?: string }) | undefined;
+      if (prior) usedPrior.add(prior);
       const next: WO & { completed_at?: string } = {
         // editable fields — always from the new step
         room: s.room,
@@ -1500,10 +1511,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         action: s.action,
         pri: s.pri,
         hrs: s.hrs,
-        tiers: tierByKey.get(key) || ["base", "better", "best"],
+        tiers: (s.itemId && tierById.get(s.itemId)) || tierByKey.get(key) || ["base", "better", "best"],
         // completion-state — inherit from prior, default to "not done" for
         // freshly-keyed items
         done: prior?.done === true,
+        // Link back to the quote line so the next edit session (and
+        // WorkVision's task detail) can follow it even if the text changes.
+        ...(s.itemId ? { itemId: s.itemId } : {}),
+        ...(s.custom ? { custom: true } : {}),
       };
       if (prior?.completed_at) next.completed_at = prior.completed_at;
       // Diagnostic: surface when an in-session edit changed any editable
@@ -1525,7 +1540,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // quote — drop them but warn so we'd notice in the console if a save
     // unexpectedly nukes finished work.
     const droppedDone = prevWO
-      .filter((w) => w.done && !seenKeys.has(woKeyOf(w)))
+      .filter((w) => w.done && !usedPrior.has(w))
       .map((w) => `${w.room} — ${w.detail}`);
     if (droppedDone.length) {
       console.warn(
@@ -2843,8 +2858,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                   // AI-defense caps here would scale Bernard-edited
                   // material prices back down on every AI Assist call.
                   const validated = validateQuote(working, { skipCaps: true });
+                  // Added / rewritten / removed lines reach the work order via
+                  // the work-order sync effect (linked by line id).
                   setRooms(validated);
-                  extendCustomWorkOrderFromRooms(validated, "AIAssist");
 
                   // Pricing meta ops (Feature 2b). Only apply when the
                   // field is PRESENT in the response — `undefined` means
@@ -3180,13 +3196,18 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           onRemoveStep={(i) => {
             setCustomWorkOrder((curr) => {
               const base = curr ?? guide.steps.map((s) => ({ ...s }));
+              // Removed on purpose — mark its quote line accounted for so the
+              // work-order sync doesn't re-add a task for it.
+              const gone = base[i]?.itemId;
+              if (gone) woKnownIdsRef.current.add(gone);
               return base.filter((_, idx) => idx !== i);
             });
           }}
           onAddStep={(step) => {
             setCustomWorkOrder((curr) => {
               const base = curr ?? guide.steps.map((s) => ({ ...s }));
-              return [...base, step];
+              // Hand-added task, not from a quote line — never re-linked.
+              return [...base, { ...step, custom: true }];
             });
           }}
           onReset={() => setCustomWorkOrder(null)}

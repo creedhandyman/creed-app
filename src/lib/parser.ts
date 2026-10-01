@@ -3181,6 +3181,30 @@ export interface GuideStep {
   action: string;
   pri: "HIGH" | "MED" | "LOW";
   hrs: number;
+  /** id of the quote line (RoomItem.id) this task was built from — the link
+   *  that lets a quote edit flow into its work-order task (work-order-sync).
+   *  Absent on tasks saved before the link existed and on custom tasks. */
+  itemId?: string;
+  /** Hand-added in the Guide tab (not from a quote line) — never re-linked. */
+  custom?: boolean;
+  /** Session-only: the quote-line values this task was last synced from, so a
+   *  sync can tell a QUOTE edit (flows in) from a Guide-tab tweak (kept). */
+  src?: GuideStepSrc;
+}
+
+export interface GuideStepSrc {
+  room: string;
+  detail: string;
+  action: string;
+  pri: "HIGH" | "MED" | "LOW";
+  hrs: number;
+}
+
+/** Severity → work-order priority, matching the inspection rating semantics:
+ *  Damaged = urgent; Fair / Satisfactory = minor; Poor and general project
+ *  scope ("-") = needed. Shared by makeGuide and the work-order sync. */
+export function priFromCondition(condition?: string): "HIGH" | "MED" | "LOW" {
+  return condition === "D" ? "HIGH" : condition === "F" || condition === "S" ? "LOW" : "MED";
 }
 
 export interface Guide {
@@ -3409,19 +3433,14 @@ export function makeGuide(rooms: Room[]): Guide {
         }
       });
 
-      // Severity → work-order priority, matching the inspection rating
-      // semantics: Damaged = urgent; Fair / Satisfactory = minor; Poor and
-      // general project scope ("-") = needed.
-      const pri: "HIGH" | "MED" | "LOW" =
-        it.condition === "D" ? "HIGH"
-        : it.condition === "F" || it.condition === "S" ? "LOW"
-        : "MED";
       steps.push({
         room: r.name,
         detail: it.detail,
         action: it.comment,
-        pri,
+        pri: priFromCondition(it.condition),
         hrs: it.laborHrs,
+        // Link the task to its quote line so later quote edits can follow it.
+        ...(it.id ? { itemId: it.id } : {}),
       });
     })
   );

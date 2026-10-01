@@ -1153,10 +1153,17 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Marketing.tsx no longer exists (superseded by website/, English by
   choice). Remaining untranslated: MoreHub tile names/subs, Quests
   micro-labels, portal (customer-facing, English for now).
-- `customWorkOrder` in QuoteForge — if rooms change after the user
-  starts editing the work order, the auto-generated guide.steps
-  drifts but the customWorkOrder stays. There's a "Regenerate"
-  button but it could be smarter (merge new tasks rather than wipe).
+- ~~`customWorkOrder` drift~~ FIXED: work-order tasks carry `itemId` (their
+  quote line's RoomItem.id, stamped by `makeGuide`, persisted in
+  `rooms.workOrder`). `src/lib/work-order-sync.ts` `syncWorkOrder` (run by a
+  QuoteForge effect + again in saveJob) is a three-way merge: a field the QUOTE
+  changed flows into the task, a Guide-tab-only tweak is kept, a deleted line
+  drops its task, a new line gets one, custom (`custom:true`) tasks and tasks
+  removed on purpose (`woKnownIdsRef`) are left alone, legacy tasks re-link by
+  text once. saveJob inherits `done` by itemId first, so renaming a line keeps
+  its field checkmark. WorkVision pairs task ↔ quote line by itemId. Rules are
+  covered by `src/__tests__/work-order-sync.test.ts`. Edits reach WorkVision /
+  Jobs on SAVE (the work order lives in the saved blob).
 - `tsconfig.tsbuildinfo` is gitignored but the worktree's local copy
   sometimes shows up in `git status -s`. Always add files explicitly,
   not `git add -A`.
