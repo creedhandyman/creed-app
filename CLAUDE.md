@@ -883,9 +883,16 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   onboarding); Team tile badge; `getAuthedProfile` returns no org for pending.
   Same migration gave `notifications` select/update-own policies — it had RLS
   on with NO policies, so the bell was ALWAYS empty (193 unseen rows; ones
-  older than 3 days were marked read). STILL RLS-on/no-policy (client can't
-  use them): time_off_requests, equipment, recurring_jobs, membership_plans,
-  customer_memberships, review_requests, team_messages.
+  older than 3 days were marked read). Migration `feature_table_policies`
+  fixed the rest that were RLS-on/no-policy (time off, equipment, recurring,
+  memberships never saved; review-request cancel failed; inspection_usage
+  always read 0): time_off_requests = own rows + admins see/decide the crew's,
+  file own only as 'pending'; equipment = crew-wide; recurring_jobs +
+  membership_plans = crew reads, owner/manager writes; customer_memberships =
+  read-only (server writes); review_requests = read + cancel a scheduled one;
+  inspection_usage = org read/insert/update (soft cap, toast only). Still
+  service-role-only BY DESIGN: payments, portal_tokens, push_subscriptions,
+  ai_usage, cron_log, waitlist; team_messages is unused.
 
 - **AI Render from the quote (`Creed_AI_Render_Enhancement`)**: the "after"
   render now reads the quote's own line items instead of a fixed prompt.
