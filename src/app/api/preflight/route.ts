@@ -74,6 +74,8 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   // Join approval — invite-link joiners wait as "pending" (RLS hides the
   // business from them) until an owner approves them in Ops → Team.
   { key: "profiles.status", table: "profiles", column: "status" },
+  // Quote sent tracking (dashboard To send vs Waiting on customer).
+  { key: "jobs.quote_sent_at", table: "jobs", column: "quote_sent_at" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

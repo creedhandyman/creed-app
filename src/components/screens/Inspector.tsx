@@ -969,7 +969,15 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => { if (!isEditing) clearSaved(); onCancel(); }}>←</button>
+          <button className="bo" onClick={() => {
+            // Leaving with findings already entered keeps them in the resume
+            // slot (QuoteForge offers "Resume") instead of wiping the whole
+            // walkthrough — two taps on this arrow used to throw it all away.
+            const hasFindings = roomData.some((r) => r.items.some((it) => (it.notes || "").trim() || it.photos.length));
+            if (!isEditing && !hasFindings) clearSaved();
+            else if (!isEditing) useStore.getState().showToast("Inspection saved — open Full Inspection and tap Resume to keep going.", "info");
+            onCancel();
+          }}>←</button>
           <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Icon name="search" size={18} color="var(--color-primary)" />{isEditing ? tr("insp.editInspection") : tr("insp.newInspection")}
           </h2>

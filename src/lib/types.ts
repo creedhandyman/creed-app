@@ -132,7 +132,7 @@ export interface Profile {
  *  `user_id`. SMS is a delivery side-effect at creation time, gated by the
  *  recipient's prefs — the row is always written so the feed is complete.
  *  Named AppNotification to avoid colliding with the DOM `Notification`. */
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved";
 
 export interface AppNotification {
   id: string;
@@ -235,6 +235,8 @@ export interface Job {
   // (via SMS / email / copy). Stops the auto-prompt from re-firing every
   // time the row re-renders after completion.
   review_requested_at?: string;
+  /** When the quote was last sent to the customer (Text/Email/Copy/Share). */
+  quote_sent_at?: string | null;
   /** Profile.id of the technician whose QR code / share-link the lead
    *  came in through. Set by /api/leads when the lead-intake URL had
    *  ?tech=<id>. Powers Network Scout / referral credit so a tech who

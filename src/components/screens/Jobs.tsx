@@ -1,5 +1,6 @@
 "use client";
 import { apiFetch, getStatusLink } from "@/lib/api";
+import { markQuoteSent, sentAgo } from "@/lib/quote-send";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
@@ -296,7 +297,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // notify buttons. Scoped by jobId so switching jobs hides a stale draft.
   // kind "invoice": sending (Open Messages / Copy) is what marks the job
   // invoiced — not generating a PDF nobody received.
-  const [sendStrip, setSendStrip] = useState<{ jobId: string; phone: string; msg: string; kind?: "invoice" } | null>(null);
+  const [sendStrip, setSendStrip] = useState<{ jobId: string; phone: string; msg: string; kind?: "invoice" | "quote" } | null>(null);
   // Record a payment taken outside Stripe (cash/check/…). `ref` is minted
   // when the sheet opens → the server's idempotency key for this payment.
   const [recordPay, setRecordPay] = useState<{ jobId: string; amount: string; method: "cash" | "check" | "card" | "other"; ref: string; busy?: boolean } | null>(null);
@@ -651,7 +652,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       default:
         msg = `Hi ${name}! Here's an update on your job at ${prop}:${url ? ` ${url}` : ""}`;
     }
-    setSendStrip({ jobId: job.id, phone: cust?.phone || "", msg });
+    setSendStrip({ jobId: job.id, phone: cust?.phone || "", msg, kind: job.status === "quoted" ? "quote" : undefined });
   };
 
   // Paid-to-date / balance — what the customer actually still owes.
@@ -679,7 +680,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     try { url = await getStatusLink(job.id); } catch { url = ""; }
     setSendStrip({ jobId: job.id, phone: cust?.phone || "", msg: invoiceText(job, url), kind: "invoice" });
   };
-  const markSent = (jobId: string, kind?: "invoice") => {
+  const markSent = (jobId: string, kind?: "invoice" | "quote") => {
+    if (kind === "quote") { void markQuoteSent(jobId).then(() => loadAll()); return; }
     if (kind !== "invoice") return;
     const job = jobs.find((j) => j.id === jobId);
     if (job?.status === "complete") void setStatus(jobId, "invoiced");
@@ -1896,7 +1898,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           const hint: { icon: string; text: string } = (() => {
             switch (j.status) {
               case "lead":      return { icon: "quote", text: t("jobs.hintNewLead") };
-              case "quoted":    return { icon: "send", text: j.job_date ? `${t("status.quoted")} · ${j.job_date}` : t("status.quoted") };
+              case "quoted":    return j.quote_sent_at
+                ? { icon: "send", text: t("jobs.hintSentAgo").replace("{ago}", sentAgo(j.quote_sent_at)) }
+                : { icon: "warn", text: t("jobs.hintNotSent") };
               case "accepted":  return { icon: "schedule", text: t("jobs.hintScheduleIt") };
               case "scheduled": return { icon: "schedule", text: j.job_date || t("status.scheduled") };
               case "active":    return { icon: "worker", text: w.length ? `${t("jobs.hintOnSite")} · ${w[0].name}` : t("jobs.hintInProgress") };

@@ -391,6 +391,8 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // Jobs actions
     "jobs.sendInvoice": "Send invoice",
+    "jobs.hintSentAgo": "Sent {ago}",
+    "jobs.hintNotSent": "Not sent yet",
     "jobs.recordPayment": "Record payment",
     "jobs.invoicePdf": "Invoice PDF",
     "jobs.connectStripeHint": "Take card payments — connect Stripe (about 2 min)",
@@ -451,6 +453,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "dash.tapToSchedule": "Tap to schedule",
     "dash.needsAttention": "Needs attention",
     "dash.toSend": "To send",
+    "dash.waitingOnCustomer": "Waiting on customer",
     "dash.toInvoice": "To invoice",
     "dash.unpaid": "Unpaid",
     "dash.myCheck": "My check",
@@ -1162,6 +1165,8 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // Jobs actions
     "jobs.sendInvoice": "Enviar factura",
+    "jobs.hintSentAgo": "Enviada {ago}",
+    "jobs.hintNotSent": "Sin enviar",
     "jobs.recordPayment": "Registrar pago",
     "jobs.invoicePdf": "Factura PDF",
     "jobs.connectStripeHint": "Acepta pagos con tarjeta — conecta Stripe (unos 2 min)",
@@ -1222,6 +1227,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "dash.tapToSchedule": "Toca para agendar",
     "dash.needsAttention": "Requiere atención",
     "dash.toSend": "Por enviar",
+    "dash.waitingOnCustomer": "Esperando al cliente",
     "dash.toInvoice": "Por facturar",
     "dash.unpaid": "Sin pagar",
     "dash.myCheck": "Mi cheque",

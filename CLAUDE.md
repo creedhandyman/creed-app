@@ -795,6 +795,17 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `online` listener covers reconnect while the app is open). SW + offline
   behaviour can't be tested locally (no dev env) — verify on-device.
 
+- **Sending quotes (2026-10-02)**: QuoteForge **Send** saves first
+  (`saveJob({stay:true})` keeps the editor open on the saved job and returns
+  its id — no more "save once, then send" dead end) and opens `SendSheet`
+  (Text / Email / Copy / Share; editable message with the status link, quote
+  validity from org settings, "Options from $X" for tiered quotes). Any send
+  action stamps `jobs.quote_sent_at` (`lib/quote-send.ts markQuoteSent`; also
+  from the Jobs send strip on a quoted job). Job cards show "Sent 3d ago" /
+  "Not sent yet"; dashboard Needs-attention is 2x2: To send (quoted, unsent) ·
+  Waiting on customer (quoted, sent) · To invoice · Unpaid. `/api/jobs/approve`
+  fires `notifyQuoteApproved` (bell `quote_approved`, deep-links the job) on
+  the FIRST approval only. Editing a saved quote no longer resets `job_date`.
 - **Good-Better-Best tiered quotes**: present 3 cumulative options on a quote so
   techs upsell and the customer picks one. **No schema change — all on the rooms
   JSON blob.** Per-item `RoomItem.tier` (`base`/`better`/`best`, absent = base);

@@ -97,7 +97,9 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
     })
     .reduce((s, j) => s + (j.total || 0), 0);
   const open = jobs.filter((j) => !j.archived);
-  const toSend = open.filter((j) => j.status === "quoted").length;
+  // A quote that already went out is waiting on the customer, not on you.
+  const toSend = open.filter((j) => j.status === "quoted" && !j.quote_sent_at).length;
+  const waiting = open.filter((j) => j.status === "quoted" && !!j.quote_sent_at).length;
   const toInvoice = open.filter((j) => j.status === "complete").length;
   const unpaid = open.filter((j) => j.status === "invoiced").length;
   const pipeline = open
@@ -198,9 +200,10 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
             {upNext}
             <div>
               <div className="sl" style={{ margin: "0 2px 7px" }}>{t("dash.needsAttention")}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {[
                   { n: toSend, k: "toSend", l: t("dash.toSend"), c: "#ff5b5b" },
+                  { n: waiting, k: "waiting", l: t("dash.waitingOnCustomer"), c: "#ff9f43" },
                   { n: toInvoice, k: "toInvoice", l: t("dash.toInvoice"), c: "#2e8bff" },
                   { n: unpaid, k: "unpaid", l: t("dash.unpaid"), c: "#7b54f0" },
                 ].map((a) => (

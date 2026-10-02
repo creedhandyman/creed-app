@@ -6,6 +6,7 @@ import { itemInTier, type TierKey } from "@/lib/tiers";
 import { scopeFingerprint, type ApprovalRecord } from "@/lib/approval";
 import type { Room } from "@/lib/types";
 import { applySmsConsent } from "@/lib/sms-consent";
+import { notifyQuoteApproved } from "@/lib/notify-server";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
     // also feed the portal-session authorization below.
     const { data: jobs, error: getErr } = await supabase
       .from("jobs")
-      .select("id, status, client_signature, org_id, customer_id, rooms, total")
+      .select("id, status, client_signature, org_id, customer_id, rooms, total, property, client")
       .eq("id", jobId)
       .limit(1);
     if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 });
@@ -262,6 +263,25 @@ export async function POST(req: NextRequest) {
         { error: `${updErr.message}${updErr.message.includes("approved_") ? " — has the schema migration been run? See CLAUDE.md." : ""}` },
         { status: 500 }
       );
+    }
+
+    // Tell the owner — first approval only (quoted → accepted), never on a
+    // re-sign of an already-accepted job.
+    if (patch.status === "accepted") {
+      let option: string | null = null;
+      try {
+        const b = typeof patch.rooms === "string" ? JSON.parse(patch.rooms as string) : null;
+        const tk = b?.acceptedTier as string | undefined;
+        if (b?.tieredQuote && tk) option = tk === "base" ? "Base" : (b.tierNames?.[tk] || tk);
+      } catch { /* no option label */ }
+      await notifyQuoteApproved(supabase, {
+        jobId,
+        orgId: job.org_id,
+        total: Number(patch.total ?? job.total) || 0,
+        property: job.property,
+        client: job.client,
+        option,
+      });
     }
 
     // `approval` lets the /status page fold the record into its local copy of

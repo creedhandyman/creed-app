@@ -28,7 +28,7 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:creedhandyman@gmail.c
 const PUSH_ENABLED = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 
 // join_request rows are written by a DB trigger (profiles insert), not here.
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved";
 
 export interface NotifyRecipient {
   /** Recipient profile id. */
@@ -276,6 +276,50 @@ export async function notifyJobPaid(
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("[notify] job-paid notification failed:", e);
+  }
+}
+
+/**
+ * "Customer approved & signed" alert to owners/managers, deep-linked to the
+ * job so the next tap is Schedule. Fired by /api/jobs/approve on the FIRST
+ * approval only (quoted → accepted). Never throws.
+ */
+export async function notifyQuoteApproved(
+  supabase: SupabaseClient,
+  p: { jobId: string; orgId: string; total: number; property?: string | null; client?: string | null; option?: string | null },
+): Promise<void> {
+  try {
+    if (!p.orgId || !p.jobId) return;
+    const { data: admins } = await supabase
+      .from("profiles")
+      .select("id, phone, notify_sms")
+      .eq("org_id", p.orgId)
+      .eq("status", "active")
+      .in("role", ["owner", "manager"]);
+    const recipients: NotifyRecipient[] = (admins || []).map((a) => ({
+      id: a.id as string,
+      phone: (a.phone as string | null) ?? null,
+      notify_sms: (a.notify_sms as boolean | null) ?? null,
+      eventOptIn: null,
+    }));
+    if (!recipients.length) return;
+    const who = p.client || "Your customer";
+    const what = p.property || "their job";
+    const amt = `$${(Number(p.total) || 0).toFixed(2)}`;
+    const title = "Quote approved";
+    const body = `${who} approved & signed ${what} — ${amt}${p.option ? ` (${p.option})` : ""}. Tap to schedule it.`;
+    await dispatchNotifications(supabase, {
+      orgId: p.orgId,
+      type: "quote_approved",
+      title,
+      body,
+      jobId: p.jobId,
+      smsBody: `${title}: ${who} approved ${what} — ${amt}.`,
+      recipients,
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[notify] quote-approved notification failed:", e);
   }
 }
 

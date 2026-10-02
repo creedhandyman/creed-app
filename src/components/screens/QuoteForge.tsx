@@ -45,6 +45,8 @@ import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 import { stripAiHrs } from "@/lib/ai-hours";
+import SendSheet from "../SendSheet";
+import { markQuoteSent } from "@/lib/quote-send";
 
 /** A saved, reusable quote-as-template: a name + the line-item rooms blob
  *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
@@ -351,6 +353,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   };
   const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
   const [showRender, setShowRender] = useState(false);
+  // Send sheet (Text / Email / Copy / Share) for the saved quote.
+  const [sendSheet, setSendSheet] = useState<{ jobId: string; phone: string; email: string; subject: string; message: string } | null>(null);
   // Auto-built "after" render prompt from this quote's line items (visible
   // scope only — paint/floors/fixtures; hidden/plumbing work is skipped).
   const renderSeed = useMemo(() => buildRenderPrompt(rooms), [rooms]);
@@ -1441,17 +1445,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   };
 
   /* ── Save job ── */
-  const saveJob = async () => {
+  // stay: keep the editor open on the saved job (Save & Send) instead of
+  // resetting and jumping to Jobs. Resolves the saved job's id, or null if it
+  // didn't save (validation, cancelled confirm, or a failed write).
+  const saveJob = async (opts?: { stay?: boolean }): Promise<string | null> => {
     if (!prop.trim()) {
       useStore.getState().showToast("Enter a property address", "warning");
-      return;
+      return null;
     }
     if (rooms.length === 0) {
       useStore.getState().showToast("Add at least one item to the quote", "warning");
-      return;
+      return null;
     }
     if (gt <= 0 && !await useStore.getState().showConfirm("Empty Quote", "Quote total is $0. Save anyway?")) {
-      return;
+      return null;
     }
     // Pull the prior saved blob so an edit-save merges into it instead of
     // overwriting field-collected state (work-order `done` checkmarks,
@@ -1646,7 +1653,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       client: client || "",
       ...(customerId ? { customer_id: customerId } : {}),
       ...(addressId ? { address_id: addressId } : {}),
-      job_date: new Date().toISOString().split("T")[0],
+      // Only on create — re-saving an old quote must not move it to today
+      // (it would jump months in Financials and on the customer's page).
+      ...(editingId ? {} : { job_date: new Date().toISOString().split("T")[0] }),
       rooms: JSON.stringify(data),
       total: lockTotal,
       total_labor: lockLabor,
@@ -1660,11 +1669,23 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // A failed write must NOT fall through to the reset below — that clears
     // the draft and the editor, and an unsaved (often AI-built) quote is gone
     // for good. db already toasted why; stay put so Save can be tapped again.
-    const saved = editingId
-      ? await db.patch("jobs", editingId, jobData)
-      : (await db.post("jobs", jobData)) !== null;
-    if (!saved) return;
+    let savedId: string | null = editingId;
+    if (editingId) {
+      if (!await db.patch("jobs", editingId, jobData)) return null;
+    } else {
+      const rows = await db.post<{ id: string }>("jobs", jobData);
+      if (rows === null) return null;
+      savedId = rows[0]?.id ?? null;
+    }
     useStore.getState().showToast((editingId ? "Job updated: " : "Job created: ") + prop, "success");
+
+    if (opts?.stay && savedId) {
+      // Saved — now it's an existing quote; keep editing it in place.
+      clearDraft();
+      setEditingId(savedId);
+      await loadAll();
+      return savedId;
+    }
 
     savingRef.current = true;
     clearDraft();
@@ -1696,6 +1717,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setTierNames({ better: "Better", best: "Best" });
     savingRef.current = false;
     setPage("jobs");
+    return savedId;
   };
 
   /* ══════════════════════════════════════════
@@ -3098,42 +3120,55 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         </button>
         <button
           onClick={async () => {
-            // Need a saved job so the email can link the customer to their
-            // status page (approve + download PDF). Mirrors PDF/Render gating.
-            if (!editingId) {
-              useStore.getState().showToast("Save the quote once, then send — so the customer gets an approve & download link.", "info");
-              return;
-            }
+            // Save first (creates the job on a new quote, or saves pending
+            // edits on an existing one) so the customer's link shows exactly
+            // what's on screen — then pick Text / Email / Copy / Share.
+            const id = await saveJob({ stay: true });
+            if (!id) return;
             const customerData = customerId
               ? useStore.getState().customers.find((c) => c.id === customerId)
               : undefined;
-            const email = customerData?.email || "";
-            const orgName = useStore.getState().org?.name || "Service Provider";
-            const statusUrl = await getStatusLink(editingId);
-            const subject = encodeURIComponent(`Quote — ${prop}`);
-            const body = encodeURIComponent(
-              `Hi ${client || "there"},\n\n` +
-              `Please find your property repair quote for ${prop}.\n\n` +
-              `Total: $${headlineTotal.toFixed(2)}\n` +
-              `Labor: $${headlineLabor.toFixed(2)} (${headlineHrs.toFixed(1)} hours)\n` +
-              `Materials: $${headlineMat.toFixed(2)}\n\n` +
-              `Review, approve, and download your quote here:\n${statusUrl}\n\n` +
-              `This quote is valid for 30 days.\n\n` +
-              `Thank you,\n${orgName}\n`
-            );
-            window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_self");
+            const o = useStore.getState().org;
+            const statusUrl = await getStatusLink(id);
+            const validDays = Number(o?.quote_valid_days) > 0 ? Number(o?.quote_valid_days) : 30;
+            const totalLine = tieredQuote
+              ? `Options from $${Math.min(tierTotals.base, tierTotals.better, tierTotals.best).toFixed(2)} — pick the one you want on the page.`
+              : `Total: $${headlineTotal.toFixed(2)}`;
+            setSendSheet({
+              jobId: id,
+              phone: customerData?.phone || "",
+              email: customerData?.email || "",
+              subject: `Quote — ${prop}`,
+              message:
+                `Hi ${client || "there"}! Here's your quote from ${o?.name || "us"} for ${prop}.\n\n` +
+                `${totalLine}\n\n` +
+                `Review, approve & sign here:\n${statusUrl}\n\n` +
+                `This quote is good for ${validDays} days. Thank you!`,
+            });
           }}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}
         >
           <Icon name="send" size={14} /> Send
         </button>
         <button
-          onClick={saveJob}
+          onClick={() => { void saveJob(); }}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-success)", background: "var(--color-success)", color: "#06371f", boxShadow: "0 0 22px -6px rgba(0,204,102,.6)", cursor: "pointer" }}
         >
           <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? "Update" : "Save job"}
         </button>
       </div>
+
+      {sendSheet && (
+        <SendSheet
+          title="Send quote"
+          phone={sendSheet.phone}
+          email={sendSheet.email}
+          subject={sendSheet.subject}
+          message={sendSheet.message}
+          onClose={() => setSendSheet(null)}
+          onSent={() => { void markQuoteSent(sendSheet.jobId).then(() => loadAll()); }}
+        />
+      )}
 
       {/* Save the current quote as a reusable service template */}
       <button
