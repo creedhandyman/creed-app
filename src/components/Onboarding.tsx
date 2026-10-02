@@ -7,6 +7,7 @@ import { Icon } from "./Icon";
 import Grizz from "./Grizz";
 import { TRADE_IDS, tradeConfig, tradePatch } from "@/lib/trades";
 import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
+import { getLang, setLang } from "@/lib/i18n";
 
 /**
  * Guided onboarding led by Grizz, the handyman-bear mascot. Eight steps walk a
@@ -261,7 +262,17 @@ export default function Onboarding() {
       <div style={{ width: "100%", maxWidth: 430, display: "flex", flexDirection: "column" }}>
 
         {/* Skip */}
-        <div style={{ display: "flex", justifyContent: "flex-end", minHeight: 18, padding: "13px 22px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 18, padding: "13px 22px 0" }}>
+          {/* App language — picked here so a Spanish-speaking crew member
+              lands in Spanish (defaults to the phone's language). */}
+          <span style={{ display: "inline-flex", gap: 4, fontSize: 12 }}>
+            {(["en", "es"] as const).map((l) => (
+              <span key={l} onClick={() => { setLang(l); window.location.reload(); }}
+                style={{ cursor: "pointer", padding: "2px 7px", borderRadius: 6, color: getLang() === l ? "#fff" : "#666", background: getLang() === l ? "rgba(46,117,182,.5)" : "transparent" }}>
+                {l === "en" ? "English" : "Español"}
+              </span>
+            ))}
+          </span>
           {showSkip && (
             <span onClick={skip} style={{ fontSize: 12, color: "#666", cursor: "pointer" }}>Skip tour</span>
           )}

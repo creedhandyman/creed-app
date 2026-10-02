@@ -11,11 +11,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
-import { t } from "@/lib/i18n";
+import { t, getLang } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
 import { Icon } from "./Icon";
 import { tipsEnabled, setTipsEnabled } from "@/lib/grizz";
 import { isPushSupported, isSubscribed, enablePush, disablePush } from "@/lib/push";
+import { SUPPORT_EMAIL } from "@/lib/platform-admin";
+import { apiFetch } from "@/lib/api";
 
 interface Props {
   onClose: () => void;
@@ -171,7 +173,7 @@ export default function Settings({ onClose }: Props) {
         </div>
         <div className="drow"><span className="l">Email</span><span className="v" style={{ fontSize: 12.5 }}>{user.email || "—"}</span></div>
         <div className="drow"><span className="l">Role · Emp #</span><span className="v">{roleLabel || "—"}{user.emp_num ? ` · ${user.emp_num}` : ""}</span></div>
-        <div className="drow"><span className="l">Rate · started</span><span className="v">${user.rate || 55}/hr{startYear ? ` · ${startYear}` : ""}</span></div>
+        <div className="drow"><span className="l">Rate · started</span><span className="v">{user.rate ? `$${user.rate}/hr` : t("settings.rateNotSet")}{startYear ? ` · ${startYear}` : ""}</span></div>
       </div>
 
       {/* Notifications */}
@@ -241,7 +243,7 @@ export default function Settings({ onClose }: Props) {
           <span className="l">{t("settings.language")} / Idioma</span>
           <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
             {[{ key: "en", label: "English" }, { key: "es", label: "Español" }].map((opt) => {
-              const isActive = (typeof window !== "undefined" ? localStorage.getItem("c_lang") : "en") === opt.key || (!localStorage.getItem("c_lang") && opt.key === "en");
+              const isActive = getLang() === opt.key;
               return (<button key={opt.key} onClick={() => { localStorage.setItem("c_lang", opt.key); window.location.reload(); }} style={{ padding: "4px 12px", fontSize: 13, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
             })}
           </div>
@@ -372,12 +374,22 @@ export default function Settings({ onClose }: Props) {
       <div style={{ textAlign: "center", color: "var(--color-dim)", fontSize: 12, margin: "12px 0 8px" }}>
         Creed HM · v1.0.0
       </div>
+      <div style={{ textAlign: "center", marginBottom: 8, fontSize: 12.5 }}>
+        <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Creed app help")}`} style={{ color: "var(--color-primary)" }}>
+          {t("settings.contactSupport")}
+        </a>
+      </div>
       <div style={{ textAlign: "center", marginBottom: 8 }}>
+        {user.role === "owner" ? (
+          // An owner deleting their login would orphan the business + crew.
+          <div className="dim" style={{ fontSize: 12, padding: "0 12px" }}>{t("settings.ownerDeleteNote")}</div>
+        ) : (
         <button
           onClick={async () => {
-            if (!await useStore.getState().showConfirm("Delete Account", "Delete your account? This cannot be undone.")) return;
-            if (!await useStore.getState().showConfirm("Are You Sure?", "All your data will be lost.")) return;
-            await db.del("profiles", user.id);
+            if (!await useStore.getState().showConfirm(t("settings.deleteAccount"), t("settings.deleteConfirm").replace("{biz}", org?.name || "the business"))) return;
+            const res = await apiFetch("/api/account/delete", { method: "POST" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { useStore.getState().showToast(data.error || t("settings.deleteFailed"), "error"); return; }
             logout();
             onClose();
           }}
@@ -385,6 +397,7 @@ export default function Settings({ onClose }: Props) {
         >
           {t("settings.deleteAccount")}
         </button>
+        )}
       </div>
     </div>
   );

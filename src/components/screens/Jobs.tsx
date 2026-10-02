@@ -30,6 +30,7 @@ import {
   type Cadence,
 } from "@/lib/recurring";
 import { stripAiHrsFromBlob } from "@/lib/ai-hours";
+import { useBackLayer } from "@/lib/back-layer";
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
    Under the Requested-tech picker: ranks the crew by distance from
@@ -292,6 +293,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Phase 3: sub-screen opened from the detail's Work section (work order /
   // receipts). null = show the detail (or the list). Back clears it.
   const [subScreen, setSubScreen] = useState<{ id: string; kind: "workorder" | "receipts" } | null>(null);
+  // System back closes the sub-screen, then the detail — instead of leaving Jobs.
+  useBackLayer(!!detailJobId, () => setDetailJobId(null));
+  useBackLayer(!!subScreen, () => setSubScreen(null));
   // "Send to client" SMS strip — once the (tokenized) status link is minted we
   // open an editable strip that fires a native sms: deep link, matching the
   // notify buttons. Scoped by jobId so switching jobs hides a stale draft.

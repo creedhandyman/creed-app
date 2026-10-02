@@ -15,6 +15,7 @@ import BrandingSettings from "../BrandingSettings";
 import { Icon, type IconName } from "../Icon";
 import { t } from "@/lib/i18n";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { useBackLayer } from "@/lib/back-layer";
 
 /**
  * Catches render-time crashes inside an Ops sub-tab so the whole tab
@@ -610,6 +611,9 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   useEffect(() => {
     if (tab !== "customers") setSelectedCustomerId(null);
   }, [tab]);
+  // System back: customer → customer list → Ops hub (instead of leaving Ops).
+  useBackLayer(isAdmin && tab !== null, () => setTab(null));
+  useBackLayer(!!selectedCustomerId, () => setSelectedCustomerId(null));
 
   // ── Hub KPIs + tile subs. Payroll due is exact (unpaid hours × each
   // person's rate). Revenue + Net profit come from the SAME shared math
@@ -696,7 +700,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
       {isAdmin && tab && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <button
-            onClick={() => setTab(null)}
+            onClick={() => (selectedCustomerId ? setSelectedCustomerId(null) : setTab(null))}
             aria-label={t("ops.backToOperations")}
             style={{ width: 30, height: 30, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit" }}
           >

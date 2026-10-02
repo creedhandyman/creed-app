@@ -35,6 +35,10 @@ export default function AppShell() {
   const [opsInitialTab, setOpsInitialTab] = useState<string | null>(null);
   const user = useStore((s) => s.user)!;
   const darkMode = useStore((s) => s.darkMode);
+  // Bumped when the CURRENT tab is tapped again → the screen remounts at its
+  // top level (job list, Ops hub…), the way phone apps behave. Not for the
+  // quote editor, where a remount would throw away unsaved edits.
+  const [resetKey, setResetKey] = useState(0);
 
   const isAdmin = user.role === "owner" || user.role === "manager";
 
@@ -47,7 +51,15 @@ export default function AppShell() {
   const fromPop = useRef(false);
   useEffect(() => {
     // Seed the first entry so the earliest back has state to land on.
-    window.history.replaceState({ creedPage: "dash" }, "");
+    // Deferred a tick: Next's app router sets up its history state in a
+    // PARENT effect, which runs after this child effect. Seeding first left
+    // the entry without Next's internal state, and Next hard-RELOADS the page
+    // when back lands on such an entry (back to the dashboard reloaded the
+    // app). Merging into Next's state keeps its markers.
+    const seed = setTimeout(() => {
+      const cur = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+      window.history.replaceState({ ...cur, creedPage: "dash" }, "");
+    }, 0);
     const onPop = (e: PopStateEvent) => {
       const st = (e.state || {}) as { creedPage?: string; creedSettings?: boolean };
       fromPop.current = true;
@@ -61,7 +73,7 @@ export default function AppShell() {
       fromPop.current = false;
     };
     window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
+    return () => { clearTimeout(seed); window.removeEventListener("popstate", onPop); };
   }, []);
 
   // Settings is an overlay, not a page — it gets its own history entry so
@@ -83,6 +95,12 @@ export default function AppShell() {
     // everyone (per-sub-tab admin gating lives inside Operations.tsx).
     if (!isAdmin && ["payroll", "financials"].includes(p)) {
       setPage("dash");
+      return;
+    }
+    if (p === page && !fromPop.current && p !== "qf") {
+      setResetKey((k) => k + 1);
+      setJobDetailId(null);
+      window.scrollTo(0, 0);
       return;
     }
     if (p !== "qf") setEditJobId(null);
@@ -140,7 +158,8 @@ export default function AppShell() {
       case "mileage":
         return <Mileage setPage={goToPage} />;
       case "map":
-        return <CrewMap setPage={goToPage} />;
+        // Everyone's clock-in locations — owners/managers only.
+        return isAdmin ? <CrewMap setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
       case "troubleshoot":
         return <Troubleshoot setPage={goToPage} />;
       case "financials":
@@ -156,7 +175,7 @@ export default function AppShell() {
     <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
       <OfflineBanner />
       <VerticalNav page={page} setPage={goToPage} isAdmin={isAdmin} />
-      <div className="mc">{renderPage()}</div>
+      <div className="mc" key={`${page}:${resetKey}`}>{renderPage()}</div>
       {/* The "quote" tip is mounted inside QuoteForge's hub (not here) so it
           doesn't float over the editor / inspection / Voice Walk sub-screens. */}
       {page === "sched" && <Coachmark id="schedule_v2" text={<>Tap <b>Dispatch</b> to see all your unscheduled jobs and hit <b>Assign</b> to drop them onto any date.</>} />}

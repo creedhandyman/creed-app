@@ -74,10 +74,16 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
   const leadCount = useStore((s) =>
     s.jobs.filter((j) => j.status === "lead" && !j.archived).length
   );
+  // Unread bell notifications light a dot on Home (the bell lives on the
+  // dashboard), so a tech on Time / Work mode still sees there's something.
+  const unreadCount = useStore((s) => s.notifications.filter((n) => !n.read_at).length);
   const items = navBottom ? [...NAV_ITEMS].reverse() : NAV_ITEMS;
   // We're on an overflow page (or the hub itself) whenever the current page
   // isn't one of the 4 base tabs — that's when the More slot lights up.
-  const onOverflow = !BASE_TAB_IDS.includes(page);
+  // Work mode is part of the Time flow (clock in → work order), so it lights
+  // the Time tab, not the More slot.
+  const navPage = page === "workvision" ? "time" : page;
+  const onOverflow = !BASE_TAB_IDS.includes(navPage);
 
   return (
     <div className="vnav">
@@ -88,12 +94,15 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
         // bar reflects where you are, and still taps through to the hub so
         // you can switch tabs.
         const isMore = item.id === "more";
-        const morph = isMore && page !== "more" ? OVERFLOW_TABS[page] : null;
+        const morph = isMore && navPage !== "more" ? OVERFLOW_TABS[navPage] : null;
         const iconName: IconName = morph ? morph.icon : item.icon;
-        const label = morph ? t(morph.labelKey) : t(item.labelKey);
-        const active = isMore ? onOverflow : page === item.id;
-        const color = isMore ? (TAB_COLOR[page] || TAB_COLOR.more) : (TAB_COLOR[item.id] || TAB_COLOR.dash);
+        // Crew open Ops from the "Time Off" tile (it roots them at HR), so
+        // the slot should say that, not "Ops".
+        const label = morph ? t(navPage === "ops" && !isAdmin ? "nav.timeOff" : morph.labelKey) : t(item.labelKey);
+        const active = isMore ? onOverflow : navPage === item.id;
+        const color = isMore ? (TAB_COLOR[navPage] || TAB_COLOR.more) : (TAB_COLOR[item.id] || TAB_COLOR.dash);
         const showLeadDot = item.id === "jobs" && leadCount > 0;
+        const showBellDot = item.id === "dash" && unreadCount > 0;
 
         return (
           <button
@@ -129,6 +138,12 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
               >
                 {leadCount > 9 ? "9+" : leadCount}
               </span>
+            )}
+            {showBellDot && (
+              <span
+                aria-label={`${unreadCount} unread ${unreadCount === 1 ? "notification" : "notifications"}`}
+                style={{ position: "absolute", top: 4, right: 10, width: 9, height: 9, borderRadius: "50%", background: "#ff3d6e", boxShadow: "0 0 0 2px var(--color-dark-bg)" }}
+              />
             )}
           </button>
         );

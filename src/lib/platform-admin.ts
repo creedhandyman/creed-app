@@ -8,3 +8,6 @@ const PLATFORM_ADMIN_EMAILS = ["creedhandyman@gmail.com"];
 export function isPlatformAdmin(email?: string | null): boolean {
   return !!email && PLATFORM_ADMIN_EMAILS.includes(email.trim().toLowerCase());
 }
+
+/** Where customers reach Creed (Settings + Ask Grizz "Contact support"). */
+export const SUPPORT_EMAIL = "creedhandyman@gmail.com";

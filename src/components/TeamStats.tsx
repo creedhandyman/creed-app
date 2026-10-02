@@ -192,32 +192,50 @@ export default function TeamStats() {
     .map((p) => ({ p, stats: careerStats(p) }))
     .sort((a, b) => b.stats.totalEarned - a.stats.totalEarned);
 
-  // Shared editable controls (role / rate / remove) — owner only.
-  const editControls = (u: Profile) => (
+  // Shared editable controls (role / rate / remove) — owner/manager.
+  // Managers can't touch an owner's row or hand out the owner role (the
+  // database refuses it too — profiles_guard); promotions ask first.
+  const amOwner = user.role === "owner";
+  const editControls = (u: Profile) => {
+    const lockedRow = !amOwner && u.role === "owner";
+    return (
     <div className="row" style={{ gap: 6, marginBottom: 10, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+      {lockedRow ? (
+        <span className="dim" style={{ fontSize: 13 }}>{t("team.ownerLocked")}</span>
+      ) : (
       <select
         defaultValue={u.role}
         style={{ width: "auto", fontSize: 14, padding: "3px 6px" }}
         onChange={async (e) => {
-          if (u.id === user.id && (e.target.value === "tech" || e.target.value === "apprentice")) {
+          const next = e.target.value as Profile["role"];
+          if (u.id === user.id && (next === "tech" || next === "apprentice")) {
             if (!(await useStore.getState().showConfirm(t("team.warning"), t("team.demoteWarning")))) {
               e.target.value = u.role;
               return;
             }
           }
-          await db.patch("profiles", u.id, { role: e.target.value });
-          if (u.id === user.id) setUser({ ...user, role: e.target.value as Profile["role"] });
+          if (u.id !== user.id && (next === "owner" || next === "manager")) {
+            const msg = (next === "owner" ? t("team.promoteOwnerMsg") : t("team.promoteManagerMsg")).replace("{name}", u.name);
+            if (!(await useStore.getState().showConfirm(t("team.promoteTitle"), msg))) {
+              e.target.value = u.role;
+              return;
+            }
+          }
+          if (!await db.patch("profiles", u.id, { role: next })) { e.target.value = u.role; return; }
+          if (u.id === user.id) setUser({ ...user, role: next });
           loadAll();
         }}
       >
         <option value="apprentice">{t("team.roleApprentice")}</option>
         <option value="tech">{t("team.roleTech")}</option>
         <option value="manager">{t("team.roleManager")}</option>
-        <option value="owner">{t("team.roleOwner")}</option>
+        {amOwner && <option value="owner">{t("team.roleOwner")}</option>}
       </select>
+      )}
       <span>$</span>
       <input
         type="number"
+        disabled={lockedRow}
         defaultValue={u.rate}
         style={{ width: 60, padding: "3px 6px", fontSize: 14 }}
         onBlur={async (e) => {
@@ -228,7 +246,7 @@ export default function TeamStats() {
         }}
       />
       <span style={{ fontSize: 13 }}>{t("team.perHr")}</span>
-      {u.id !== user.id && (
+      {u.id !== user.id && !lockedRow && (
         <button
           onClick={async () => {
             if (!(await useStore.getState().showConfirm(t("team.removeMember"), `${t("team.removeConfirmPre")} ${u.name} ${t("team.removeConfirmPost")}`))) return;
@@ -242,7 +260,8 @@ export default function TeamStats() {
         </button>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <div>

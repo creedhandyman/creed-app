@@ -13,6 +13,7 @@ import { useState } from "react";
 import Grizz from "./Grizz";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "./Icon";
+import { SUPPORT_EMAIL } from "@/lib/platform-admin";
 
 interface Props {
   onClose: () => void;
@@ -34,9 +35,9 @@ const SECTIONS: Section[] = [
       {
         heading: "Set up your business once",
         lines: [
-          "More → Settings → Brand: upload your logo, business name, license #, address, phone, email. These appear on every quote, invoice, and PDF.",
-          "Set your default labor rate, materials markup %, and tax % there too. Per-trade hourly overrides live under each trade.",
-          "More → Operations → Team: add employees with their pay rate so payroll knows what to log when they clock in.",
+          "More → Business settings: upload your logo and add your business name, license #, address, phone and email. These appear on every quote, invoice and PDF.",
+          "Set your hourly labor rate, materials markup % and tax % there too (Quote Settings). Per-trade rates override the hourly rate for that trade.",
+          "More → Operations → Team → Invite a teammate: send the link by text. When they sign up you'll get a request — tap Approve, then set their pay rate.",
         ],
       },
       {
@@ -46,7 +47,7 @@ const SECTIONS: Section[] = [
           "Jobs — every quote and active job in one list. Tap a card to open the full detail screen.",
           "Home — your dashboard: next job, money snapshot, and quick actions.",
           "Time — clock in/out. Once clocked in, this becomes WorkVision — your in-field cockpit.",
-          "More — Schedule, Quests, Operations, Customers, Mileage, Settings, and Help all live here.",
+          "More — Schedule, Quests, Operations, Customers, Mileage, My settings, Business settings and Ask Grizz all live here.",
         ],
       },
     ],
@@ -127,13 +128,13 @@ const SECTIONS: Section[] = [
         heading: "Mark complete",
         lines: [
           "Tap Complete Job at the bottom of the WorkVision Tasks tab, or flip the status in Jobs. A completion report PDF is generated from your checklist and photos.",
-          "Mark Invoiced when you send the bill, or skip straight to Paid for same-day cash or Zelle jobs.",
+          "Tap Send invoice to text the bill (with a pay link) — that marks it Invoiced. Took cash, a check or Zelle? Tap Record payment and enter the amount.",
         ],
       },
       {
         heading: "Stripe payments",
         lines: [
-          "Connect Stripe once under More → Operations → Billing. The customer's status-link page then shows a Pay button.",
+          "Connect Stripe once under More → Operations → Payments & plan. The customer's job page then shows a Pay button.",
           "When they pay, the job auto-flips to Paid via the Stripe webhook — you don't have to touch it.",
         ],
       },
@@ -154,7 +155,7 @@ const SECTIONS: Section[] = [
       {
         heading: "Operations hub",
         lines: [
-          "More → Operations opens a tile grid. Tap any tile to go deep: Payroll, Financials, Customers, Recurring, HR, Team, Billing, Settings.",
+          "More → Operations opens a tile grid. Tap any tile to go deep: Payroll, Financials, Customers, Recurring, HR, Team, Payments & plan, Business settings.",
           "Payroll — run pay for your crew. Time entries are marked paid (not deleted) so Team Stats keeps lifetime history.",
           "Financials — revenue, profit, A/R aging, by-trade breakdown, top clients. Print a P&L for any period.",
           "HR — approve time-off requests, adjust PTO and sick balances per employee.",
@@ -193,7 +194,7 @@ const SECTIONS: Section[] = [
         heading: "AI quotes feel off",
         lines: [
           "Edit the price or hours on items the AI got wrong, then save. Future quotes in the same ZIP code will weight your corrections — it learns fast.",
-          "Set per-trade rates under Ops → Settings if your plumbing rate differs from your carpentry rate; the AI uses these for labor.",
+          "Set per-trade rates under Ops → Business settings if your plumbing rate differs from your carpentry rate; the AI uses these for labor.",
         ],
       },
       {
@@ -276,6 +277,10 @@ export default function UserGuideModal({ onClose }: Props) {
         <p className="dim" style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.5 }}>
           A quick walkthrough of the app, in the order you'll use it on a real job. Tap any section to expand.
         </p>
+        <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Creed app help")}`}
+          style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--color-border-dark-2)", color: "var(--color-primary)", textDecoration: "none" }}>
+          <Icon name="mail" size={15} /> Stuck? Email support — a real person will help.
+        </a>
 
         {SECTIONS.map((sec) => {
           const open = openId === sec.id;

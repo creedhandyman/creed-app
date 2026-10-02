@@ -804,6 +804,22 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `online` listener covers reconnect while the app is open). SW + offline
   behaviour can't be tested locally (no dev env) — verify on-device.
 
+- **Navigation (2026-10-02)**: `lib/back-layer.ts` `useBackLayer(open, close)`
+  gives an in-screen level its own history entry so Android back closes it
+  (Jobs detail + sub-screen, Ops area + customer, Dashboard notifications).
+  In-app close consumes the entry; unmount (navigating away) leaves it; the
+  close/unmount/StrictMode-remount decision is deferred a tick. Browser-tested
+  (10-step harness, incl. StrictMode). GOTCHA found doing it: Next's app
+  router HARD-RELOADS on popstate to an entry without its `__NA` state —
+  AppShell's seed replaceState used to wipe it (back to the dashboard reloaded
+  the app); it now merges into Next's state a tick later. Any custom
+  pushState/replaceState must keep `...history.state`. Re-tapping the current
+  tab remounts the screen at its top level (`resetKey`; not for `qf`).
+  Work mode lights the Time tab; crew see "Time Off" in the More slot; unread
+  bell dot on Home; Crew Map is owner/manager only; managers can't touch owner
+  rows or grant owner (UI + profiles_guard); promotions confirm. Delete account
+  = `/api/account/delete` (deletes profile + auth user; refused for owners).
+  `getLang()` falls back to the phone language; onboarding has EN/ES.
 - **Sending quotes (2026-10-02)**: QuoteForge **Send** saves first
   (`saveJob({stay:true})` keeps the editor open on the saved job and returns
   its id — no more "save once, then send" dead end) and opens `SendSheet`

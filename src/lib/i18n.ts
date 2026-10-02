@@ -94,6 +94,26 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.time": "Time",
     "nav.pay": "Pay",
     "nav.quest": "Quest",
+    "more.schedule": "Schedule",
+    "more.scheduleSub": "Calendar · assignments",
+    "more.quests": "Quests",
+    "more.questsSub": "Crew incentives",
+    "more.operations": "Operations",
+    "more.operationsSub": "Payroll · Financials · Team",
+    "more.timeOffSub": "Requests · balances",
+    "more.customers": "Customers",
+    "more.customersSub": "CRM & history",
+    "more.mileage": "Mileage",
+    "more.mileageSub": "Trip logging",
+    "more.crewMap": "Crew Map",
+    "more.crewMapSub": "Stamps · today's stops",
+    "more.mySettings": "My settings",
+    "more.mySettingsSub": "Profile · notifications · language",
+    "more.businessSettings": "Business settings",
+    "more.businessSettingsSub": "Logo · rates · quote terms",
+    "more.askGrizz": "Ask Grizz",
+    "more.askGrizzSub": "How Creed works · contact support",
+    "nav.timeOff": "Time Off",
     "nav.ops": "Ops",
     "nav.home": "Home",
     "nav.more": "More",
@@ -253,6 +273,11 @@ const translations: Record<Lang, Record<string, string>> = {
     "settings.navigation": "Navigation",
     "settings.language": "Language",
     "settings.logout": "Logout",
+    "settings.rateNotSet": "Rate not set — ask your manager",
+    "settings.contactSupport": "Questions or problems? Contact support",
+    "settings.ownerDeleteNote": "To close your business or hand it to someone else, contact support — deleting the owner's login would lock your crew out.",
+    "settings.deleteConfirm": "Delete your login? You'll be removed from {biz}. Your past hours stay on the payroll records. This can't be undone.",
+    "settings.deleteFailed": "Couldn't delete your account — please try again.",
     "settings.deleteAccount": "Delete Account",
 
     // Work Vision
@@ -316,8 +341,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "ops.financials": "Financials",
     "ops.recurring": "Recurring & Plans",
     "ops.team": "Team",
-    "ops.billing": "Billing",
-    "ops.settings": "Settings",
+    "ops.billing": "Payments & plan",
+    "ops.settings": "Business settings",
     "ops.quoteSettings": "Quote Settings",
     "ops.laborRate": "Your hourly labor rate",
     "ops.laborRateHelp": "What you charge per hour of labor. Every quote is priced from this unless a trade has its own rate below.",
@@ -538,6 +563,10 @@ const translations: Record<Lang, Record<string, string>> = {
     "team.inviteMessage": "Join {biz} on Creed — tap to create your account:",
     "team.inviteManual": "Send this link to your teammate:",
     "team.joinRequests": "Waiting to join",
+    "team.ownerLocked": "Owner — only an owner can change this",
+    "team.promoteTitle": "Change role",
+    "team.promoteOwnerMsg": "Make {name} an OWNER? Owners control billing, payouts and the whole team — including removing you.",
+    "team.promoteManagerMsg": "Make {name} a manager? Managers can run payroll, edit pay rates and approve new crew.",
     "team.approve": "Approve",
     "team.decline": "Decline",
     "team.approvedToast": "{name} is in — set their pay rate below.",
@@ -868,6 +897,26 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.time": "Tiempo",
     "nav.pay": "Pago",
     "nav.quest": "Metas",
+    "more.schedule": "Agenda",
+    "more.scheduleSub": "Calendario · asignaciones",
+    "more.quests": "Misiones",
+    "more.questsSub": "Incentivos del equipo",
+    "more.operations": "Operaciones",
+    "more.operationsSub": "Nómina · Finanzas · Equipo",
+    "more.timeOffSub": "Solicitudes · saldos",
+    "more.customers": "Clientes",
+    "more.customersSub": "CRM e historial",
+    "more.mileage": "Millaje",
+    "more.mileageSub": "Registro de viajes",
+    "more.crewMap": "Mapa del equipo",
+    "more.crewMapSub": "Marcas · paradas de hoy",
+    "more.mySettings": "Mis ajustes",
+    "more.mySettingsSub": "Perfil · notificaciones · idioma",
+    "more.businessSettings": "Ajustes del negocio",
+    "more.businessSettingsSub": "Logo · tarifas · términos",
+    "more.askGrizz": "Pregúntale a Grizz",
+    "more.askGrizzSub": "Cómo funciona Creed · soporte",
+    "nav.timeOff": "Tiempo libre",
     "nav.ops": "Ops",
     "nav.home": "Inicio",
     "nav.more": "Más",
@@ -1027,6 +1076,11 @@ const translations: Record<Lang, Record<string, string>> = {
     "settings.navigation": "Navegaci\u00f3n",
     "settings.language": "Idioma",
     "settings.logout": "Cerrar Sesi\u00f3n",
+    "settings.rateNotSet": "Tarifa sin fijar — pregunta a tu gerente",
+    "settings.contactSupport": "¿Preguntas o problemas? Contacta a soporte",
+    "settings.ownerDeleteNote": "Para cerrar tu negocio o pasarlo a otra persona, contacta a soporte — borrar la cuenta del dueño dejaría a tu equipo sin acceso.",
+    "settings.deleteConfirm": "¿Borrar tu cuenta? Saldrás de {biz}. Tus horas pasadas quedan en los registros de nómina. No se puede deshacer.",
+    "settings.deleteFailed": "No se pudo borrar tu cuenta — inténtalo de nuevo.",
     "settings.deleteAccount": "Eliminar Cuenta",
 
     // Work Vision
@@ -1090,8 +1144,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "ops.financials": "Finanzas",
     "ops.recurring": "Recurrentes y planes",
     "ops.team": "Equipo",
-    "ops.billing": "Facturaci\u00f3n",
-    "ops.settings": "Configuraci\u00f3n",
+    "ops.billing": "Pagos y plan",
+    "ops.settings": "Ajustes del negocio",
     "ops.quoteSettings": "Ajustes de Cotizaci\u00f3n",
     "ops.laborRate": "Tu tarifa de mano de obra por hora",
     "ops.laborRateHelp": "Lo que cobras por hora de trabajo. Cada cotización se calcula con esto, salvo que un oficio tenga su propia tarifa abajo.",
@@ -1312,6 +1366,10 @@ const translations: Record<Lang, Record<string, string>> = {
     "team.inviteMessage": "Únete a {biz} en Creed — toca para crear tu cuenta:",
     "team.inviteManual": "Envía este enlace a tu compañero:",
     "team.joinRequests": "Esperando unirse",
+    "team.ownerLocked": "Dueño — solo un dueño puede cambiar esto",
+    "team.promoteTitle": "Cambiar rol",
+    "team.promoteOwnerMsg": "¿Hacer a {name} DUEÑO? Los dueños controlan la facturación, los pagos y todo el equipo — incluso pueden quitarte a ti.",
+    "team.promoteManagerMsg": "¿Hacer a {name} gerente? Los gerentes pueden pagar nómina, cambiar tarifas y aprobar nuevo personal.",
     "team.approve": "Aprobar",
     "team.decline": "Rechazar",
     "team.approvedToast": "{name} ya está dentro — fija su tarifa abajo.",
@@ -1553,10 +1611,14 @@ const translations: Record<Lang, Record<string, string>> = {
   },
 };
 
-// Get current language from localStorage
+// Current language: the saved choice, else the phone's own language (a crew
+// member with a Spanish phone gets Spanish without hunting for the setting).
 export function getLang(): Lang {
   if (typeof window === "undefined") return "en";
-  return (localStorage.getItem("c_lang") as Lang) || "en";
+  let saved: string | null = null;
+  try { saved = localStorage.getItem("c_lang"); } catch { /* */ }
+  if (saved === "en" || saved === "es") return saved;
+  return (navigator.language || "").toLowerCase().startsWith("es") ? "es" : "en";
 }
 
 export function setLang(lang: Lang) {

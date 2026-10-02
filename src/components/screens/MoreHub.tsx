@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "@/components/Icon";
 import UserGuideModal from "@/components/UserGuideModal";
 import Grizz from "@/components/Grizz";
+import { t } from "@/lib/i18n";
 
 interface Props {
   setPage: (p: string) => void;
@@ -27,7 +28,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
   const name = user?.name || "—";
   const initials =
     name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
-  const roleLabel = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "";
+  const roleLabel = user?.role ? t(`team.role${user.role.charAt(0).toUpperCase()}${user.role.slice(1)}`) : "";
 
   // Role gate: techs/apprentices don't manage the business, so the admin
   // tiles never render for them — Customers (CRM) is hidden outright, and
@@ -38,24 +39,31 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
   const tiles: {
     id: string; icon: IconName; name: string; sub: string; color: string; tint: string; onClick: () => void;
   }[] = [
-    { id: "sched", icon: "schedule", name: "Schedule", sub: "Calendar · assignments", color: "#ff8a3d", tint: "rgba(255,138,61,.16)", onClick: () => setPage("sched") },
-    { id: "quests", icon: "trophy", name: "Quests", sub: "Crew incentives", color: "var(--color-violet)", tint: "rgba(157,78,221,.16)", onClick: () => setPage("quests") },
+    { id: "sched", icon: "schedule", name: t("more.schedule"), sub: t("more.scheduleSub"), color: "#ff8a3d", tint: "rgba(255,138,61,.16)", onClick: () => setPage("sched") },
+    { id: "quests", icon: "trophy", name: t("more.quests"), sub: t("more.questsSub"), color: "var(--color-violet)", tint: "rgba(157,78,221,.16)", onClick: () => setPage("quests") },
     isAdmin
-      ? { id: "ops", icon: "ops", name: "Operations", sub: "Payroll · Financials · Team", color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() }
-      : { id: "ops", icon: "schedule", name: "Time Off", sub: "Requests · balances", color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() },
+      ? { id: "ops", icon: "ops", name: t("more.operations"), sub: t("more.operationsSub"), color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() }
+      : { id: "ops", icon: "schedule", name: t("nav.timeOff"), sub: t("more.timeOffSub"), color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() },
     ...(isAdmin
-      ? [{ id: "clients", icon: "clients" as IconName, name: "Customers", sub: "CRM & history", color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => openOps("customers") }]
+      ? [{ id: "clients", icon: "clients" as IconName, name: t("more.customers"), sub: t("more.customersSub"), color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => openOps("customers") }]
       : []),
-    { id: "mileage", icon: "mileage", name: "Mileage", sub: "Trip logging", color: "#14b8a6", tint: "rgba(20,184,166,.16)", onClick: () => setPage("mileage") },
-    { id: "map", icon: "map", name: "Crew Map", sub: "Stamps · today's stops", color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") },
-    { id: "settings", icon: "settings", name: "Settings", sub: isAdmin ? "Account · branding" : "Account · notifications", color: "#aab", tint: "rgba(138,138,153,.18)", onClick: openSettings },
-    { id: "grizz", icon: "info", name: "Ask Grizz", sub: "Tips & how Creed works", color: "#f5b400", tint: "rgba(245,180,0,.14)", onClick: () => setShowGuide(true) },
+    { id: "mileage", icon: "mileage", name: t("more.mileage"), sub: t("more.mileageSub"), color: "#14b8a6", tint: "rgba(20,184,166,.16)", onClick: () => setPage("mileage") },
+    // Crew Map shows everyone's clock-in locations — owners/managers only.
+    ...(isAdmin
+      ? [{ id: "map", icon: "map" as IconName, name: t("more.crewMap"), sub: t("more.crewMapSub"), color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") }]
+      : []),
+    // Personal settings only — business settings live in Ops → Business settings.
+    { id: "settings", icon: "settings", name: t("more.mySettings"), sub: t("more.mySettingsSub"), color: "#aab", tint: "rgba(138,138,153,.18)", onClick: openSettings },
+    ...(isAdmin
+      ? [{ id: "biz", icon: "ops" as IconName, name: t("more.businessSettings"), sub: t("more.businessSettingsSub"), color: "#06b6d4", tint: "rgba(6,182,212,.14)", onClick: () => openOps("settings") }]
+      : []),
+    { id: "grizz", icon: "info", name: t("more.askGrizz"), sub: t("more.askGrizzSub"), color: "#f5b400", tint: "rgba(245,180,0,.14)", onClick: () => setShowGuide(true) },
   ];
 
   return (
     <div className="fi">
       <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <Icon name="menu" size={22} color="var(--color-primary)" /> More
+        <Icon name="menu" size={22} color="var(--color-primary)" /> {t("nav.more")}
       </h2>
 
       {/* Profile -> Settings (Account) */}
@@ -72,7 +80,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 11, marginBottom: 11 }}>
         {tiles.map((tile, i) => {
           // An odd tile count leaves the last tile alone with an empty cell
-          // beside it (the tech view has no Customers tile → 7 tiles). Span the
+          // beside it (e.g. the tech view). Span the
           // odd last one across both columns so the grid fills evenly.
           const spanFull = tiles.length % 2 === 1 && i === tiles.length - 1;
           return (

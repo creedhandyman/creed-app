@@ -10,6 +10,7 @@ import NotificationsPanel from "../NotificationsPanel";
 import GettingStarted from "../GettingStarted";
 import BrandFooter from "../BrandFooter";
 import CountUp from "@/components/CountUp";
+import { useBackLayer } from "@/lib/back-layer";
 
 interface Props {
   setPage: (p: string) => void;
@@ -111,6 +112,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
 
   const [showUserGuide, setShowUserGuide] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
+  useBackLayer(showNotifs, () => setShowNotifs(false));
 
   // ── Shared building blocks ──
   // Glow CTA — layout + hue live in globals.css (.cta / .glow-*) so every
