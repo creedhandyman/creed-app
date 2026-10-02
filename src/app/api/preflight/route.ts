@@ -71,6 +71,9 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "time_entries.paid_at", table: "time_entries", column: "paid_at" },
   { key: "time_entries.job_id", table: "time_entries", column: "job_id" },
   { key: "profiles.photo_url", table: "profiles", column: "photo_url" },
+  // Join approval — invite-link joiners wait as "pending" (RLS hides the
+  // business from them) until an owner approves them in Ops → Team.
+  { key: "profiles.status", table: "profiles", column: "status" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

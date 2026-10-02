@@ -249,7 +249,7 @@ export default function Onboarding() {
     stepIdx === 0 ? "Get started"
     : stepIdx === 1 ? (saving ? (mode === "create" ? "Creating…" : "Joining…") : mode === "create" ? "Create my business" : "Join team")
     : stepIdx === 2 ? "Continue"
-    : stepIdx === 7 ? "Start my first quote"
+    : stepIdx === 7 ? (mode === "join" ? "Done" : "Start my first quote")
     : "Next";
 
   const showSkip = stepIdx !== 1 && stepIdx !== 7;
@@ -493,7 +493,9 @@ export default function Onboarding() {
                 ))}
                 <div className="ob-speech">
                   <div className="ob-who">Grizz</div>
-                  <p>{"That's the whole loop — "}<b>quote, schedule, work, paid</b>{". You're all set. Let's go quote your first job!"}</p>
+                  <p>{mode === "join"
+                    ? <>{"That's the whole loop — "}<b>quote, schedule, work, paid</b>{". I've asked your boss to let you in — you'll be on the crew as soon as they approve."}</>
+                    : <>{"That's the whole loop — "}<b>quote, schedule, work, paid</b>{". You're all set. Let's go quote your first job!"}</>}</p>
                 </div>
                 <h2 className="ob-h2" style={{ marginTop: "auto", paddingBottom: 10 }}>{"You're "}<span className="ob-g">ready</span> 🎉</h2>
               </>

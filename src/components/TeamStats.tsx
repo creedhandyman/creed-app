@@ -29,6 +29,7 @@ export default function TeamStats() {
   const user = useStore((s) => s.user)!;
   const profiles = useStore((s) => s.profiles);
   const org = useStore((s) => s.org);
+  const pendingMembers = useStore((s) => s.pendingMembers);
   const timeEntries = useStore((s) => s.timeEntries);
   const jobs = useStore((s) => s.jobs);
   const reviews = useStore((s) => s.reviews);
@@ -269,6 +270,46 @@ export default function TeamStats() {
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(46,139,255,.12)", border: "1.5px dashed rgba(46,139,255,.5)", borderRadius: 13, padding: 12, fontFamily: "Oswald", fontWeight: 600, fontSize: 13, color: "#8cc0ff", marginBottom: 13, cursor: "pointer" }}
         >
           <Icon name="clients" size={16} color="#8cc0ff" /> {t("team.inviteTeammate")}
+        </div>
+      )}
+
+      {/* Join requests — someone used the invite link and is waiting. They
+          see nothing of the business until approved (RLS). */}
+      {isOwner && pendingMembers.length > 0 && (
+        <div className="cd mb" style={{ padding: "10px 12px", border: "1px solid rgba(140,192,255,.5)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#8cc0ff", marginBottom: 6 }}>
+            <Icon name="clients" size={14} color="#8cc0ff" /> {t("team.joinRequests")} ({pendingMembers.length})
+          </div>
+          {pendingMembers.map((m) => (
+            <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: "1px solid rgba(255,255,255,.06)" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{m.name || m.email}</div>
+                <div className="dim" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}</div>
+              </div>
+              <button
+                className="bg"
+                style={{ fontSize: 13, padding: "6px 12px", flex: "none" }}
+                onClick={async () => {
+                  if (!await db.patch("profiles", m.id, { status: "active" })) return;
+                  await loadAll();
+                  useStore.getState().showToast(t("team.approvedToast").replace("{name}", (m.name || "They").split(" ")[0]), "success");
+                }}
+              >
+                {t("team.approve")}
+              </button>
+              <button
+                className="bo"
+                style={{ fontSize: 13, padding: "6px 10px", flex: "none" }}
+                onClick={async () => {
+                  if (!await useStore.getState().showConfirm(t("team.declineTitle"), t("team.declineMsg").replace("{name}", m.name || m.email))) return;
+                  await db.del("profiles", m.id);
+                  await loadAll();
+                }}
+              >
+                {t("team.decline")}
+              </button>
+            </div>
+          ))}
         </div>
       )}
 

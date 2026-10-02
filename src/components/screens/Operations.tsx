@@ -586,6 +586,9 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   const pendingTimeOffCount = isAdmin
     ? timeOffRequests.filter((r) => r && r.status === "pending").length
     : 0;
+  // Join requests waiting for approval (Team tile badge).
+  const pendingMembers = useStore((s) => s.pendingMembers) ?? [];
+  const pendingJoinCount = isAdmin ? pendingMembers.length : 0;
 
   // tab = null → the launcher hub (admins). A non-null tab opens that
   // area's detail. Non-admins skip the hub entirely (HR is their root).
@@ -664,7 +667,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {validTabs.map((id) => {
             const st = TILE_STYLE[id];
-            const badge = id === "hr" ? pendingTimeOffCount : 0;
+            const badge = id === "hr" ? pendingTimeOffCount : id === "team" ? pendingJoinCount : 0;
             return (
               <button
                 key={id}

@@ -117,11 +117,11 @@ async function isOwnerSession(
   if (error || !data.user) return null;
   const { data: prof } = await supabase
     .from("profiles")
-    .select("role, org_id")
+    .select("role, org_id, status")
     .eq("id", data.user.id)
     .maybeSingle();
-  const p = prof as { role?: string; org_id?: string } | null;
-  const isMgr = p?.role === "owner" || p?.role === "manager";
+  const p = prof as { role?: string; org_id?: string; status?: string } | null;
+  const isMgr = (p?.role === "owner" || p?.role === "manager") && p?.status !== "pending";
   return isMgr && p?.org_id ? p.org_id : null;
 }
 
@@ -253,7 +253,8 @@ export async function GET(req: NextRequest) {
     const { data: profileRows, error: profErr } = await supabase
       .from("profiles")
       .select("id, name, rate, emp_num")
-      .eq("org_id", org.id);
+      .eq("org_id", org.id)
+      .neq("status", "pending"); // join requests aren't crew yet
 
     if (profErr) {
       skipped.push({ id: org.id, name: org.name, reason: `profile query failed: ${profErr.message}`, config: cfg });

@@ -86,6 +86,10 @@ interface AppState {
   customers: Customer[];
   addresses: Address[];
   profiles: Profile[];
+  /** Join requests (status "pending") — kept OUT of `profiles` so they never
+   *  show up in payroll, scheduling, crew lists etc. until approved. Only
+   *  owners/managers can see them (RLS). */
+  pendingMembers: Profile[];
   jobs: Job[];
   timeEntries: TimeEntry[];
   reviews: Review[];
@@ -162,7 +166,7 @@ interface AppState {
 // account's session (the offline fast-path in loadAll serves whatever is in
 // memory, so stale collections here would leak across users).
 const EMPTY_COLLECTIONS = {
-  customers: [], addresses: [], profiles: [], jobs: [], timeEntries: [],
+  customers: [], addresses: [], profiles: [], pendingMembers: [], jobs: [], timeEntries: [],
   reviews: [], referrals: [], schedule: [], payHistory: [], receipts: [],
   questPayouts: [], timeOffRequests: [], recurringJobs: [], reviewRequests: [],
   membershipPlans: [], customerMemberships: [], equipment: [], notifications: [],
@@ -296,7 +300,9 @@ export const useStore = create<AppState>((set, get) => ({
         // with no org_id routes the root page into onboarding. (A cached real
         // profile wins — an empty read there is more likely a blip.)
         const cachedUser = get().user;
-        if (cachedUser?.id === session.user.id && cachedUser.org_id) return;
+        // (Not for a pending join request: an empty read there means the owner
+        // declined — the profile was deleted — so fall through to onboarding.)
+        if (cachedUser?.id === session.user.id && cachedUser.org_id && cachedUser.status !== "pending") return;
         const stub = stubProfile(session.user.id, session.user.email || "", session.user.user_metadata);
         set({ user: stub });
         sv("user", stub);
@@ -365,6 +371,7 @@ export const useStore = create<AppState>((set, get) => ({
   customers: [],
   addresses: [],
   profiles: [],
+  pendingMembers: [],
   jobs: [],
   timeEntries: [],
   reviews: [],
@@ -503,7 +510,9 @@ export const useStore = create<AppState>((set, get) => ({
     const cur = get();
     const customersF = customers ?? cur.customers;
     const addressesF = addresses ?? cur.addresses;
-    const profilesF = profiles ?? cur.profiles;
+    const allProfilesF = profiles ?? [...cur.profiles, ...cur.pendingMembers];
+    const profilesF = allProfilesF.filter((p) => p.status !== "pending");
+    const pendingMembersF = allProfilesF.filter((p) => p.status === "pending");
     const jobsF = jobs ?? cur.jobs;
     const timeEntriesF = timeEntries ?? cur.timeEntries;
     const reviewsF = reviews ?? cur.reviews;
@@ -521,7 +530,7 @@ export const useStore = create<AppState>((set, get) => ({
     const notificationsF = notifications ?? cur.notifications;
 
     set({
-      customers: customersF, addresses: addressesF, profiles: profilesF, jobs: jobsF,
+      customers: customersF, addresses: addressesF, profiles: profilesF, pendingMembers: pendingMembersF, jobs: jobsF,
       // Materialize any not-yet-synced offline writes on top of server truth so
       // an optimistic clock-out isn't clobbered by a poll that lands before the
       // queue flushes. Once flushed, the queue is empty and this is a no-op.

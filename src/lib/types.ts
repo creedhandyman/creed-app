@@ -102,6 +102,10 @@ export interface Profile {
   start_date: string;
   emp_num: string;
   org_id: string;
+  /** "pending" = asked to join via an invite link and is waiting for an
+   *  owner/manager to approve (RLS gives them nothing of the business until
+   *  then). Absent on rows read before the column existed = active. */
+  status?: "active" | "pending";
   /** Mobile number for SMS notifications (E.164 or loose US — the send
    *  path normalizes). Optional; SMS notifications skip users without one. */
   phone?: string;
@@ -128,7 +132,7 @@ export interface Profile {
  *  `user_id`. SMS is a delivery side-effect at creation time, gated by the
  *  recipient's prefs — the row is always written so the feed is complete.
  *  Named AppNotification to avoid colliding with the DOM `Notification`. */
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request";
 
 export interface AppNotification {
   id: string;

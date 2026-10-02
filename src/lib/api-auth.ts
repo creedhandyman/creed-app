@@ -67,10 +67,13 @@ export async function getAuthedProfile(req: NextRequest): Promise<AuthedProfile 
   if (!user) return null;
   const { data } = await serviceClient()
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, status")
     .eq("id", user.userId)
     .maybeSingle();
-  const p = data as { org_id?: string | null; role?: string | null } | null;
+  const p = data as { org_id?: string | null; role?: string | null; status?: string | null } | null;
+  // Waiting for approval → no business yet (mirrors auth_org_id() in RLS), so
+  // org-scoped routes treat them like a signed-in user with no org.
+  if (p?.status === "pending") return { ...user, orgId: null, role: null };
   return { ...user, orgId: p?.org_id ?? null, role: p?.role ?? null };
 }
 

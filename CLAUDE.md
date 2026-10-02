@@ -854,6 +854,22 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   INSERT WITH CHECK (true) for every role (anon could add a fake time entry to
   any org); now `to authenticated with check (org_id = auth_org_id())`.
   referrals + reviews keep public insert ON PURPOSE (public site/review forms).
+  **Join approval** (migration `join_approval_and_notification_access`):
+  `profiles.status` ('active'|'pending'). A client insert into an org that
+  already has members is forced to 'pending' (trigger `profiles_on_insert`);
+  `auth_org_id()`/`auth_role()` only count ACTIVE profiles, so a pending
+  joiner reads nothing org-scoped (customers/service_templates/org policies
+  were moved onto the helpers for this). Trigger `profiles_notify_join` drops
+  a `join_request` bell row for owners/managers; only they can flip status
+  (profiles_guard). App: store splits `pendingMembers` out of `profiles`;
+  root page shows `PendingApproval` (re-checks every 15s); Ops → Team lists
+  requests with Approve/Decline (decline = delete profile → they fall back to
+  onboarding); Team tile badge; `getAuthedProfile` returns no org for pending.
+  Same migration gave `notifications` select/update-own policies — it had RLS
+  on with NO policies, so the bell was ALWAYS empty (193 unseen rows; ones
+  older than 3 days were marked read). STILL RLS-on/no-policy (client can't
+  use them): time_off_requests, equipment, recurring_jobs, membership_plans,
+  customer_memberships, review_requests, team_messages.
 
 - **AI Render from the quote (`Creed_AI_Render_Enhancement`)**: the "after"
   render now reads the quote's own line items instead of a fixed prompt.

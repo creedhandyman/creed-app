@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import Landing from "@/components/marketing/Landing";
 import Onboarding from "@/components/Onboarding";
+import PendingApproval from "@/components/PendingApproval";
 import AppShell from "@/components/AppShell";
 import BillingGate from "@/components/BillingGate";
 import Toast from "@/components/Toast";
@@ -106,6 +107,9 @@ export default function Home() {
 
   // User exists but no org — needs onboarding
   if (!user.org_id) return <Onboarding />;
+
+  // Asked to join a business; waiting for the owner to approve.
+  if (user.status === "pending") return <><Toast /><PendingApproval /></>;
 
   if (loading) {
     return <LoadingScreen />;
