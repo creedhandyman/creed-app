@@ -243,13 +243,16 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
       // single→single edits so the column isn't referenced pre-migration.
       if (endDate) patch.end_date = endDate;
       else if (editSched.end_date) patch.end_date = null;
-      await db.patch("schedule", editSched.id, patch);
+      // Failed write (already toasted) — keep the modal open to retry.
+      if (!await db.patch("schedule", editSched.id, patch)) return;
     } else {
       // Only send end_date for a real range so single-day scheduling still
       // works before the `end_date` column migration runs.
       const payload: Record<string, unknown> = { sched_date: dropTarget, job: armedJob, note };
       if (endDate) payload.end_date = endDate;
-      await db.post("schedule", payload);
+      // Only bump the job to "scheduled" once the calendar entry exists —
+      // otherwise it drops out of Unscheduled with nothing on the calendar.
+      if (await db.post("schedule", payload) === null) return;
       const matched = jobs.find((j) => j.property === armedJob && (j.status === "quoted" || j.status === "accepted"));
       if (matched) await db.patch("jobs", matched.id, { status: "scheduled" });
     }

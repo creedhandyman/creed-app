@@ -8,6 +8,8 @@ import { Icon } from "../Icon";
 import { parseEntryDate, formatHours } from "@/lib/dates";
 import { newRowId } from "@/lib/offline-queue";
 import { getFix } from "@/lib/geo";
+import { LONG_SHIFT_MS, entryStartMs, isStaleOpenEntry } from "@/lib/shift";
+import { useFinishTime } from "../FinishTimeModal";
 
 // Decimal hours (the stored unit) <-> hours+minutes fields, so all time
 // entry/editing happens in "Xh Ym" while the DB keeps decimals.
@@ -229,35 +231,22 @@ export default function Timer({ setPage }: Props) {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  // Tick + auto-stop after 12 hours
-  const MAX_TIMER_MS = 12 * 60 * 60 * 1000; // 12 hours
+  const [askFinish, finishModal] = useFinishTime();
+
+  // Tick. A shift past the long-shift limit is a forgotten clock-out: ask for
+  // the real finish time (once per screen visit) instead of the old silent
+  // auto-stop that booked a flat 12 hours.
+  const MAX_TIMER_MS = LONG_SHIFT_MS;
+  const askedStaleRef = useRef(false);
   useEffect(() => {
     if (!on || !st) return;
     const elapsed = Date.now() - st;
     if (elapsed >= MAX_TIMER_MS) {
-      // Auto-stop: patch the existing active entry with 12 hours.
-      useStore.getState().showToast(t("timer.autoStopped"), "info");
-      (async () => {
-        const hrs = 12;
-        const amount = Math.round(hrs * rate * 100) / 100;
-        if (activeId) {
-          await saveTimeEntry(activeId, { hours: hrs, amount, end_time: fmtTime(Date.now()) }, "patch");
-        } else {
-          await saveTimeEntry(newRowId(), {
-            job: sj || "General",
-            job_id: resolveActiveJobId(jobs, sj),
-            entry_date: new Date().toLocaleDateString(),
-            hours: hrs, amount,
-            user_id: user.id, user_name: user.name,
-            start_time: fmtTime(st),
-            end_time: fmtTime(Date.now()),
-          }, "post");
-        }
-        setActiveId(null);
-      })();
-      setOn(false);
-      setSt(null);
-      setEl(0);
+      setEl(elapsed);
+      if (!askedStaleRef.current) {
+        askedStaleRef.current = true;
+        void stop();
+      }
       return;
     }
     setEl(elapsed);
@@ -333,12 +322,19 @@ export default function Timer({ setPage }: Props) {
     if (clockBusyRef.current || !on) return;
     clockBusyRef.current = true;
     try {
-    const hrs = Math.round(el / 3600000 * 100) / 100;
+    // Forgotten clock-out → ask when they actually finished.
+    let endAt = Date.now();
+    if (st && endAt - st >= LONG_SHIFT_MS) {
+      const picked = await askFinish(st);
+      if (picked === null) return;
+      endAt = picked;
+    }
+    const hrs = st ? Math.round((endAt - st) / 3600000 * 100) / 100 : Math.round(el / 3600000 * 100) / 100;
     if (hrs >= 0.01) {
       const closePatch = {
         hours: hrs,
         amount: Math.round(hrs * rate * 100) / 100,
-        end_time: fmtTime(Date.now()),
+        end_time: fmtTime(endAt),
         job: sj || "General",
       };
       let closedId: string | null = null;
@@ -464,6 +460,7 @@ export default function Timer({ setPage }: Props) {
 
   return (
     <div className="fi">
+      {finishModal}
       {/* Topbar — clock + TIME; right shows the date (off) or a live chip (on) */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -754,6 +751,49 @@ export default function Timer({ setPage }: Props) {
 
       {/* ── Crew Activity tab (admin only) ── */}
       {tab === "crew" && isOwner && (<>
+        {/* Forgotten clock-outs — open shifts from an earlier day (hidden from
+            the today-only crew cards below) or past the long-shift limit.
+            Fix = set the real finish time; unpaid only (payroll never claims
+            an open shift, so these are all still owed). */}
+        {(() => {
+          const stale = timeEntries.filter((e) => !e.end_time && e.start_time && !e.paid_at && isStaleOpenEntry(e.entry_date, e.start_time));
+          if (!stale.length) return null;
+          return (
+            <div className="cd mb" style={{ padding: "10px 11px", border: "1px solid rgba(255,177,94,.45)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#ffb15e", marginBottom: 6 }}>
+                <Icon name="warn" size={14} color="#ffb15e" /> Forgot to clock out?
+              </div>
+              {stale.map((e) => {
+                const startMs = entryStartMs(e.entry_date, e.start_time);
+                const who = profiles.find((p) => p.id === e.user_id) || profiles.find((p) => p.name === e.user_name);
+                const name = who?.name || e.user_name || "Crew";
+                return (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid rgba(255,255,255,.06)" }}>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>
+                      <b>{name.split(" ")[0]}</b>
+                      <span className="dim"> · {e.job || "General"} · since {e.entry_date} {e.start_time}</span>
+                    </div>
+                    {startMs !== null && (
+                      <button
+                        onClick={async () => {
+                          const endAt = await askFinish(startMs, name.split(" ")[0]);
+                          if (endAt === null) return;
+                          const hrs = Math.round((endAt - startMs) / 3600000 * 100) / 100;
+                          const r = who?.rate || 55;
+                          await saveTimeEntry(e.id, { hours: hrs, amount: Math.round(hrs * r * 100) / 100, end_time: fmtTime(endAt) }, "patch");
+                        }}
+                        className="bo"
+                        style={{ fontSize: 12, padding: "5px 10px", flex: "none" }}
+                      >
+                        Set finish time
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
         {(() => {
           const todayUS = new Date().toLocaleDateString("en-US");
           const todayISO = new Date().toISOString().split("T")[0];
@@ -834,6 +874,14 @@ export default function Timer({ setPage }: Props) {
                       <button onClick={async () => {
                         if (!await useStore.getState().showConfirm("Force Clock-Out", `Clock out ${p.name}? This closes the session without their own clock-out.`)) return;
                         const e = activeEntry!;
+                        const startMs = entryStartMs(e.entry_date, e.start_time);
+                        if (startMs !== null && Date.now() - startMs >= LONG_SHIFT_MS) {
+                          const endAt = await askFinish(startMs, p.name.split(" ")[0]);
+                          if (endAt === null) return;
+                          const h = Math.round((endAt - startMs) / 3600000 * 100) / 100;
+                          await saveTimeEntry(e.id, { hours: h, amount: Math.round(h * rRate * 100) / 100, end_time: fmtTime(endAt) }, "patch");
+                          return;
+                        }
                         const hrs = e.start_time ? (() => { const m = e.start_time.match(/(\d+):(\d+)\s*([AP]M)?/i); if (!m) return 0; let h = parseInt(m[1]); const mm = parseInt(m[2]); const ap = m[3]?.toUpperCase(); if (ap === "PM" && h < 12) h += 12; if (ap === "AM" && h === 12) h = 0; const st = new Date(); st.setHours(h, mm, 0, 0); return Math.round((Date.now() - st.getTime()) / 3600000 * 100) / 100; })() : 0;
                         await saveTimeEntry(e.id, { hours: hrs, amount: Math.round(hrs * rRate * 100) / 100, end_time: fmtTime(Date.now()) }, "patch");
                       }} style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 9, padding: "7px", marginBottom: 6, cursor: "pointer" }}>

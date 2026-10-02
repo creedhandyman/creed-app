@@ -1657,13 +1657,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       created_by: user.name,
     };
 
-    if (editingId) {
-      await db.patch("jobs", editingId, jobData);
-      useStore.getState().showToast("Job updated: " + prop, "success");
-    } else {
-      await db.post("jobs", jobData);
-      useStore.getState().showToast("Job created: " + prop, "success");
-    }
+    // A failed write must NOT fall through to the reset below — that clears
+    // the draft and the editor, and an unsaved (often AI-built) quote is gone
+    // for good. db already toasted why; stay put so Save can be tapped again.
+    const saved = editingId
+      ? await db.patch("jobs", editingId, jobData)
+      : (await db.post("jobs", jobData)) !== null;
+    if (!saved) return;
+    useStore.getState().showToast((editingId ? "Job updated: " : "Job created: ") + prop, "success");
 
     savingRef.current = true;
     clearDraft();

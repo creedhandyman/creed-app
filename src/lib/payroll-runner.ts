@@ -222,6 +222,14 @@ export async function runPayrollForUser(opts: RunPayrollOpts): Promise<RunPayrol
   // The manual path runs with the anon key and relies on RLS to scope
   // — so we skip the explicit filter there to keep legacy rows with
   // NULL org_id reachable (Payroll.tsx pre-refactor never filtered).
+  //
+  // Never claim a shift that's still running (start_time set, no end_time).
+  // It has 0 hours now; claiming it stamps paid_at, and the hours patched on
+  // at clock-out would then be invisible to every later run — lost pay. It
+  // rolls into the next payroll once closed. Manual entries have no
+  // start_time, so they always qualify.
+  const CLOSED_ARMS = "end_time.not.is.null,start_time.is.null";
+  const CLOSED = `or(${CLOSED_ARMS})`;
   let claimQuery = supabase
     .from("time_entries")
     .update({ paid_at: paidAt })
@@ -236,11 +244,12 @@ export async function runPayrollForUser(opts: RunPayrollOpts): Promise<RunPayrol
     // AND user_name matches (the legacy fallback). Escape user_name so
     // commas / parens / quotes inside the name don't break the filter.
     const escapedName = String(userName).replace(/"/g, '\\"');
+    // One `or` param only — the closed-shift test is nested into each arm.
     claimQuery = claimQuery.or(
-      `user_id.eq.${userId},and(user_id.is.null,user_name.eq."${escapedName}")`,
+      `and(user_id.eq.${userId},${CLOSED}),and(user_id.is.null,user_name.eq."${escapedName}",${CLOSED})`,
     );
   } else {
-    claimQuery = claimQuery.eq("user_id", userId);
+    claimQuery = claimQuery.eq("user_id", userId).or(CLOSED_ARMS);
   }
 
   const { data: claimed, error: claimErr } = await claimQuery.select();

@@ -15,6 +15,8 @@ import MileageQuickTrack from "../MileageQuickTrack";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
 import { getFix } from "@/lib/geo";
+import { LONG_SHIFT_MS } from "@/lib/shift";
+import { useFinishTime } from "../FinishTimeModal";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
 import { pickReceiptPhoto } from "@/lib/image";
@@ -260,7 +262,21 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // clocked in right now (same pattern Timer.tsx uses). When the caller knows
   // exactly which job they meant (they tapped a row in the All-Jobs list),
   // pass jobId so we don't have to disambiguate by address.
+  // Double-tap guard (same as Timer's): a second tap on a job card before
+  // the first clock-in's state lands would insert a second open shift and
+  // double-count the labor.
+  const [askFinish, finishModal] = useFinishTime();
+  const clockBusyRef = useRef(false);
   const clockIn = async (job: string, jobId?: string) => {
+    if (clockBusyRef.current || on) return;
+    clockBusyRef.current = true;
+    try {
+      await clockInNow(job, jobId);
+    } finally {
+      clockBusyRef.current = false;
+    }
+  };
+  const clockInNow = async (job: string, jobId?: string) => {
     const startedAt = Date.now();
     const resolvedJobId = jobId || resolveActiveJobId(jobs, job);
     setSj(job);
@@ -301,13 +317,23 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Clock out + save — patches the existing active row instead of inserting
   // a new entry, so "Currently Clocked In" updates correctly. Falls back to
   // patching whatever open row this user has if activeId got lost.
-  const clockOut = async () => {
-    if (!st) return;
-    const hrs = (Date.now() - st) / (1000 * 60 * 60);
+  // `endAt` = the finish time already picked (Complete Job asks first).
+  // Otherwise a shift past the long-shift limit — a forgotten clock-out —
+  // asks for the real finish time instead of booking all of it.
+  // Resolves false if the tech cancelled that question (still clocked in).
+  const clockOut = async (endAtArg?: number): Promise<boolean> => {
+    if (!st) return true;
+    let endAt = endAtArg ?? Date.now();
+    if (endAtArg === undefined && endAt - st >= LONG_SHIFT_MS) {
+      const picked = await askFinish(st);
+      if (picked === null) return false;
+      endAt = picked;
+    }
+    const hrs = (endAt - st) / (1000 * 60 * 60);
     const rounded = Math.round(hrs * 100) / 100;
     const amount = Math.round(hrs * rate * 100) / 100;
     if (hrs > 0.01) {
-      const closePatch = { hours: rounded, amount, end_time: fmtTime(Date.now()), job: sj || "General" };
+      const closePatch = { hours: rounded, amount, end_time: fmtTime(endAt), job: sj || "General" };
       if (activeId) {
         // Durable — survives offline and replays on reconnect.
         await saveTimeEntry(activeId, closePatch, "patch");
@@ -354,6 +380,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setActiveJobId(null);
     await loadAll();
     useStore.getState().showToast(`Clocked out — ${formatHours(hrs)} logged`, "success");
+    return true;
   };
 
   // Toggle work order item. Match by `(room, detail)` against the latest
@@ -627,7 +654,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
   // Complete job
   const completeJob = async () => {
-    if (!activeJob) return;
+    if (!activeJob) {
+      useStore.getState().showToast("You're clocked in to General — clock in to a job to complete it.", "warning");
+      return;
+    }
     const unchecked = workOrder.filter((w) => !w.done).length;
     if (unchecked > 0) {
       if (!await useStore.getState().showConfirm("Incomplete Items", `${unchecked} item${unchecked !== 1 ? "s" : ""} unchecked. Complete anyway?`)) return;
@@ -635,7 +665,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // Remind to take after photos
     const photoCount = jobData?.photos?.filter((p: { type: string }) => p.type === "after").length || 0;
     if (photoCount === 0) {
-      if (!await useStore.getState().showConfirm("No Completion Photos", "You haven't uploaded any after photos. Take photos of your completed work before finishing?")) {
+      // Confirm = finish anyway, Cancel = go take photos. (The old wording
+      // asked "take photos?" — so Confirm finished WITHOUT them, backwards.)
+      if (!await useStore.getState().showConfirm("Finish without after photos?", "There are no after photos yet — they make the job report and your portfolio. Cancel to go take some, or Confirm to finish without them.")) {
         setSection("photos");
         return;
       }
@@ -644,10 +676,21 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // toggle) so the rooms blob is fully committed before the status flip.
     // Avoids a window where Complete fires, then a stale queued patch
     // overwrites the just-committed blob with state from a pre-complete read.
+    // Forgotten clock-out? Get the real finish time BEFORE marking the job
+    // complete, so cancelling leaves everything as it was.
+    let endAt = Date.now();
+    if (st && endAt - st >= LONG_SHIFT_MS) {
+      const picked = await askFinish(st);
+      if (picked === null) return;
+      endAt = picked;
+    }
     await roomsQueue.current;
-    await db.patch("jobs", activeJob.id, { status: "complete" });
+    // If the status write fails (no signal), stop here: db already toasted
+    // that it didn't save, and the tech stays clocked in to try again —
+    // instead of a "Job completed!" for a job that never reaches To invoice.
+    if (!await db.patch("jobs", activeJob.id, { status: "complete" })) return;
     // Clock out
-    await clockOut();
+    await clockOut(endAt);
     // Teach the AI quoter from this job's real hours. clockOut() refreshed the
     // store, so the final session is now counted. Best-effort — never block
     // completion on a learning write.
@@ -923,6 +966,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // ── CLOCKED IN — WORK MODE ──
   return (
     <div className="fi">
+      {finishModal}
       {/* Topbar — back + title + live timer chip */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -930,7 +974,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("wv.title")}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={clockOut} aria-label="Clock out" style={{ fontSize: 12, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 99, padding: "5px 9px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <button onClick={() => { void clockOut(); }} aria-label="Clock out" style={{ fontSize: 12, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 99, padding: "5px 9px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
             <Icon name="stop" size={11} color="#ff9d9d" /> {t("wv.clockOut")}
           </button>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>

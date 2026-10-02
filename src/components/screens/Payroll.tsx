@@ -266,6 +266,14 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const teamUnpaidHours = empRows.reduce((s, r) => s + r.hrs, 0);
   const processAllTotal = empRows.filter((r) => r.hasRate).reduce((s, r) => s + r.amount, 0);
   const teamCycleTotal = processAllTotal;
+  // Crew on the clock right now — their running shift is never claimed by a
+  // pay run (payroll-runner skips open rows), so it lands in NEXT payroll.
+  const onClockNames = profiles
+    .filter((p) => timeEntries.some((e) => !e.paid_at && e.start_time && !e.end_time && (e.user_id === p.id || (!e.user_id && e.user_name === p.name))))
+    .map((p) => p.name.split(/\s+/)[0]);
+  const onClockNote = onClockNames.length
+    ? `${onClockNames.join(", ")} ${onClockNames.length === 1 ? "is" : "are"} still clocked in — the running shift goes in next payroll.`
+    : "";
 
   // Process All — pays everyone with a rate for their unpaid base hours via
   // the safe, tested auto-run endpoint (same path Auto Payroll uses). Quest
@@ -276,7 +284,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
     const n = empRows.filter((r) => r.hasRate).length;
     const ok = await useStore.getState().showConfirm(
       "Process all payroll",
-      `Pay ${n} crew with a rate for all unpaid hours — $${processAllTotal.toFixed(2)} total. Quest bonuses aren't included (approve those per person). Safe to run; already-paid hours are never paid twice.`,
+      `Pay ${n} crew with a rate for all unpaid hours — $${processAllTotal.toFixed(2)} total. Quest bonuses aren't included (approve those per person). Safe to run; already-paid hours are never paid twice.${onClockNote ? " " + onClockNote : ""}`,
     );
     if (!ok) return;
     setProcessingAll(true);
@@ -388,6 +396,11 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
             })
           )}
 
+          {onClockNote && (
+            <p className="dim" style={{ fontSize: 12, margin: "0 2px 8px", display: "flex", alignItems: "center", gap: 6 }}>
+              <Icon name="time" size={13} /> {onClockNote}
+            </p>
+          )}
           {/* Process All — base pay for everyone with a rate (no bonuses). */}
           <button
             onClick={processAll}

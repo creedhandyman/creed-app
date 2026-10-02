@@ -117,6 +117,13 @@ function reportDbError(table: string, op: string, err: unknown) {
   if (typeof window === "undefined") return;
   const toast = (window as unknown as { __dbToast?: (m: string, t: "error" | "info") => void }).__dbToast;
   if (!toast) return;
+  // A WRITE that dies on the network did not save — say so plainly. (The
+  // quiet "Syncing…" below is only true for reads, which the next poll
+  // retries; nothing retries a lost write except the user.)
+  if (op !== "load" && isTransientNetworkError(err)) {
+    toast("No connection — that change didn't save. Try again when you have signal.", "error");
+    return;
+  }
   if (transient) {
     const now = Date.now();
     if (now - lastSyncToastAt < 5000) return; // debounce
@@ -188,16 +195,21 @@ export const db = {
     }
   },
 
+  /** Resolves true when the write landed, false when it failed (already
+   *  toasted). Callers that move on after saving (clear a draft, navigate,
+   *  show success) must check it. */
   patch: async (
     table: string,
     id: string,
     updates: Record<string, unknown>
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     try {
       const { error } = await supabase.from(table).update(updates).eq("id", id);
       if (error) throw error;
+      return true;
     } catch (err) {
       reportDbError(table, "update", err);
+      return false;
     }
   },
 
