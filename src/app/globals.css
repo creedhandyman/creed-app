@@ -163,6 +163,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   transition: opacity var(--t-fast) var(--ease-out);
 }
 input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+/* iOS Safari collapses an EMPTY date/time input to almost no height, so a
+   blank time field (e.g. the Schedule modal's Time with no saved default)
+   can't be tapped to open the picker. Give the value box a real height and
+   the field a full tap target. */
+input[type="date"], input[type="time"] { min-height: 44px; display: block; }
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value { min-height: 1.5em; text-align: left; }
 
 .dark input, .dark textarea, .dark select {
   background: #1a1a28;
