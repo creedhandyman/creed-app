@@ -742,9 +742,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   it). Onboarding asks the labor rate + auto-generates `site_slug`.
   **Trial**: `src/lib/trial.ts` `TRIAL_DAYS = 14`, no card; Stripe Checkout
   gets only the REMAINING trial (`trial_end`, none once it's over).
-  NOTE `organizations.billing_enforced` defaults FALSE and nothing sets it, so
-  the paywall is OFF for every org — the trial is cosmetic until that's
-  flipped (verify STRIPE_PRICE_* first). **Platform operator**:
+  **Paywall ON for new signups since 2026-10-02** (migration
+  `enforce_billing_for_new_orgs`: `billing_enforced` column default TRUE,
+  copied onto every app-created org by organizations_guard — clients can't
+  opt out). The 6 orgs that existed before (incl. Creed Handyman LLC) stay
+  `billing_enforced = false` = free/grandfathered; flip one by SQL if needed.
+  STRIPE_PRICE_SOLO/CREW/PRO are set (owner-confirmed). **Platform operator**:
   `lib/platform-admin.ts` (email allowlist) gates the Beta preflight panel and
   keeps raw Postgres detail in db toasts; customers get plain-language errors.
 
