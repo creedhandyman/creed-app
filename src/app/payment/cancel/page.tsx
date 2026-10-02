@@ -24,24 +24,11 @@ export default function PaymentCancel() {
           Payment Cancelled
         </h1>
         <p style={{ color: "#888", fontSize: 16, fontFamily: "Source Sans 3, sans-serif", marginBottom: 24 }}>
-          Your payment was not processed. You can try again from your invoice.
+          Your payment was not processed.
         </p>
-        <a
-          href="/"
-          style={{
-            display: "inline-block",
-            padding: "10px 24px",
-            background: "#2E75B6",
-            color: "#fff",
-            borderRadius: 8,
-            textDecoration: "none",
-            fontFamily: "Oswald, sans-serif",
-            textTransform: "uppercase",
-            fontSize: 16,
-          }}
-        >
-          Back to App
-        </a>
+        <p style={{ color: "#666", fontSize: 14, fontFamily: "Source Sans 3, sans-serif" }}>
+          No charge was made. You can close this page, or open the link the business texted you to try again.
+        </p>
       </div>
     </div>
   );

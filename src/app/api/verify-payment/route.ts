@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { recordJobPayment, scheduleReviewRequest } from "@/lib/payment-fulfillment";
 import { notifyJobPaid } from "@/lib/notify-server";
+import { signJobToken } from "@/lib/job-token";
+import { siteOrigin } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -109,7 +111,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ ok: true, ...result });
+    // For the success page: who was paid (their branding, not Creed's) and a
+    // way back to the job page. Best-effort — never fail a verified payment.
+    let business: { name?: string; logo_url?: string | null; brand_color?: string | null } | null = null;
+    let statusUrl: string | null = null;
+    try {
+      const { data: org } = await supabase
+        .from("organizations").select("name, logo_url, brand_color").eq("id", job.org_id).maybeSingle();
+      business = org || null;
+    } catch { /* */ }
+    try {
+      statusUrl = `${siteOrigin()}/status?job=${jobId}&t=${encodeURIComponent(signJobToken(jobId))}`;
+    } catch { /* PORTAL_SESSION_SECRET unset */ }
+
+    return NextResponse.json({ ok: true, ...result, paidNow, business, statusUrl });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("verify-payment error:", message);

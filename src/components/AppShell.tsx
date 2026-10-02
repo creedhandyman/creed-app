@@ -121,7 +121,7 @@ export default function AppShell() {
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
-        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string) => { setScheduleJobName(name); goToPage("sched"); }} initialDetailJobId={jobDetailId} clearInitialDetail={() => setJobDetailId(null)} />;
+        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string) => { setScheduleJobName(name); goToPage("sched"); }} initialDetailJobId={jobDetailId} clearInitialDetail={() => setJobDetailId(null)} openOps={goToOps} />;
       case "sched":
         return <Schedule setPage={goToPage} preSelectJob={scheduleJobName} />;
       case "time":

@@ -567,6 +567,22 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   job to `invoiced` when it no longer covers the total. Until the migration
   runs, the code degrades to a single-payment check (a lone deposit still won't
   mark the job paid) instead of erroring on a real customer payment.
+  **Getting paid UX (2026-10-02)**: "Mark paid" is gone — owners log cash /
+  check / own-terminal card via **Record payment** (`/api/payments/record`,
+  owner-only, service role) which goes through the same `recordJobPayment`
+  (ledger row `stripe_session_id = manual_<client uuid>` = idempotency key;
+  kind = cash|check|card|other; never overwrites a card payment's
+  stripe_payment_intent_id) → paid only when covered, review request then
+  scheduled. `scheduleReviewRequest` skips jobs with `review_requested_at`
+  (already asked by hand). Jobs: Complete → **Send invoice** (send strip
+  `kind:"invoice"`; Open Messages/Copy is what flips complete→invoiced —
+  printing the PDF no longer does); invoice PDF + text show paid-to-date and
+  the BALANCE. /status: complete/invoiced jobs get "Pay your balance" even
+  without an online signature; deposit default = org.deposit_pct (0 → pay in
+  full only). /api/checkout refuses orgs with no stripe_account_id (the charge
+  would have landed on the platform) and returns plain errors; cancel returns
+  to the referring /status page. /payment/success uses verify-payment's
+  fullyPaid/balance + the org's logo + a signed /status link.
 - Review-Request automation (v1):
   ```
   CREATE TABLE IF NOT EXISTS review_requests (

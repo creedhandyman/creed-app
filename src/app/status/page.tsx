@@ -137,9 +137,15 @@ function StatusContent() {
   const smsConsentRef = useRef<HTMLLabelElement>(null);
   const [signError, setSignError] = useState("");
 
-  // Deposit / Stripe checkout
-  const [depositPct, setDepositPct] = useState(50);
+  // Deposit / Stripe checkout. The default deposit is the business's own
+  // setting (Ops → Settings → Quote terms, also printed on the quote PDF);
+  // 0 = they don't take deposits → only "Pay in full".
+  const [depositPick, setDepositPct] = useState<number | null>(null);
+  const orgDepositPct = Number(org?.deposit_pct ?? 50);
+  const depositPct = depositPick ?? (orgDepositPct > 0 && orgDepositPct < 100 ? orgDepositPct : 100);
+  const depositOptions = orgDepositPct > 0 && orgDepositPct < 100 ? [orgDepositPct, 100] : [100];
   const [depositLoading, setDepositLoading] = useState(false);
+  const [payError, setPayError] = useState("");
 
   const getPos = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     const canvas = canvasRef.current;
@@ -287,7 +293,9 @@ function StatusContent() {
       const paidToDate = Number(job.amount_paid) || 0;
       const balanceDue = Math.round(Math.max(0, baseTotal - paidToDate) * 100) / 100;
       const deposit = Math.round(baseTotal * (depositPct / 100) * 100) / 100;
-      const amount = Math.min(deposit, balanceDue);
+      // Once the work is done it's a bill, not a deposit: charge the balance.
+      const billing = job.status === "complete" || job.status === "invoiced";
+      const amount = billing ? balanceDue : Math.min(deposit, balanceDue);
       if (amount <= 0) {
         setDepositLoading(false);
         return;
@@ -308,11 +316,11 @@ function StatusContent() {
       if (data?.url) {
         window.location.href = data.url;
       } else {
-        setSignError(data?.error || "Couldn't start checkout.");
+        setPayError(data?.error || "Couldn't start the payment — please try again.");
         setDepositLoading(false);
       }
-    } catch (e) {
-      setSignError(e instanceof Error ? e.message : "Network error.");
+    } catch {
+      setPayError("No connection — check your signal and try again.");
       setDepositLoading(false);
     }
   };
@@ -353,6 +361,11 @@ function StatusContent() {
     balanceDue,
   );
   const remainingAfterDeposit = Math.round(Math.max(0, balanceDue - depositAmount) * 100) / 100;
+  // After the work: a bill for the balance — shown whether or not the
+  // customer signed online (owner-entered / verbally approved jobs too).
+  const billing = job.status === "complete" || job.status === "invoiced";
+  const showPayCard = job.total > 0 && job.status !== "paid" && !!org?.stripe_connected && balanceDue > 0
+    && (billing || !!job.client_signature);
   // Only surface the picker when the options actually differ in price — a
   // tiered quote with nothing tagged better/best has three identical totals.
   const showTierPicker = tiered && !!tierTotals && (tierSplit || tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
@@ -678,11 +691,25 @@ function StatusContent() {
             the contractor has Stripe Connect set up. We default to a 50%
             deposit; the prospect can dial it up to 100% (full payment
             up front) before being routed to Stripe Checkout. */}
-        {job.client_signature && job.total > 0 && job.status !== "paid" && org?.stripe_connected && (
+        {showPayCard && billing && (
           <div className="card">
-            <div className="lbl">Pay Deposit</div>
+            <div className="lbl">Pay your balance</div>
+            <button className="btn glow-gold" onClick={startDeposit} disabled={depositLoading}>
+              <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${balanceDue.toFixed(2)} now`}
+            </button>
+            {payError && <p style={{ fontSize: 13, color: "#ff8888", textAlign: "center", margin: "9px 0 0" }}>{payError}</p>}
+            <p style={{ fontSize: 12, color: "#666", textAlign: "center", margin: "9px 0 0" }}>
+              Secure checkout via Stripe.
+              {paidToDate > 0 && ` $${paidToDate.toFixed(2)} already paid of $${effectiveTotal.toFixed(2)}.`}
+            </p>
+          </div>
+        )}
+        {showPayCard && !billing && (
+          <div className="card">
+            <div className="lbl">{depositOptions.length > 1 ? "Pay deposit" : "Pay now"}</div>
+            {depositOptions.length > 1 && (
             <div style={{ display: "flex", gap: 6, marginBottom: 11 }}>
-              {[25, 50, 100].map((p) => (
+              {depositOptions.map((p) => (
                 <button
                   key={p}
                   onClick={() => setDepositPct(p)}
@@ -698,6 +725,7 @@ function StatusContent() {
                 </button>
               ))}
             </div>
+            )}
             <button className="btn glow-gold" onClick={startDeposit} disabled={depositLoading || depositAmount <= 0}>
               <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${depositAmount.toFixed(2)} now`}
             </button>
@@ -706,6 +734,7 @@ function StatusContent() {
               {paidToDate > 0 && ` $${paidToDate.toFixed(2)} already paid.`}
               {remainingAfterDeposit > 0 && ` Remaining $${remainingAfterDeposit.toFixed(2)} due on completion.`}
             </p>
+            {payError && <p style={{ fontSize: 13, color: "#ff8888", textAlign: "center", margin: "9px 0 0" }}>{payError}</p>}
           </div>
         )}
 

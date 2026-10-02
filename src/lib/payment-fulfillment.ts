@@ -91,7 +91,9 @@ export async function recordJobPayment(
 
   const patch: Record<string, unknown> = {
     amount_paid: amountPaid,
-    stripe_payment_intent_id: paymentIntentId,
+    // A cash/check payment (no intent) must not wipe a card payment's id —
+    // the refund webhook relies on it.
+    ...(paymentIntentId ? { stripe_payment_intent_id: paymentIntentId } : {}),
     platform_fee_cents:
       ledgerFeeCents ?? (Number(p.jobFeeCents) || 0) + (alreadyRecorded ? 0 : platformFeeCents),
   };
@@ -126,9 +128,12 @@ export async function scheduleReviewRequest(
   if (existing && existing.length) return;
 
   const { data: jobRows } = await supabase
-    .from("jobs").select("id, org_id, customer_id").eq("id", jobId).limit(1);
+    .from("jobs").select("id, org_id, customer_id, review_requested_at").eq("id", jobId).limit(1);
   const job = jobRows?.[0];
   if (!job?.org_id) return;
+  // Already asked by hand (the tech's post-completion prompt or "Request
+  // review") — don't text the customer a second time.
+  if (job.review_requested_at) return;
 
   const { data: orgRows } = await supabase
     .from("organizations")

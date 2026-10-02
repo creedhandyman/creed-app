@@ -64,6 +64,14 @@ export async function POST(req: NextRequest) {
       .single();
     const orgName = org?.name || "Service Provider";
     const stripeAccountId = org?.stripe_account_id || "";
+    // No payout account = the charge would land on Creed's platform account,
+    // not the business's. Refuse instead.
+    if (!stripeAccountId) {
+      return NextResponse.json(
+        { error: `${orgName} isn't set up for card payments yet — please contact them to pay another way.` },
+        { status: 400 },
+      );
+    }
     const plan = org?.subscription_plan ?? null;
 
     // ── Platform fee (capped monthly sum, computed stateless) ────────────────
@@ -103,6 +111,8 @@ export async function POST(req: NextRequest) {
     // ────────────────────────────────────────────────────────────────────────
 
     const origin = req.headers.get("origin") || "https://www.creedhm.com";
+    const referer = req.headers.get("referer") || "";
+    const cancelUrl = referer.startsWith(`${origin}/status?`) ? referer : `${origin}/payment/cancel`;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sessionParams: any = {
@@ -123,7 +133,9 @@ export async function POST(req: NextRequest) {
       mode: "payment",
       // session_id lets /payment/success verify server-side before flipping status.
       success_url: `${origin}/payment/success?job_id=${job.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/payment/cancel`,
+      // Cancelling returns the customer to the job page they paid from (the
+      // /status link they were texted), not a dead-end "cancelled" page.
+      cancel_url: cancelUrl,
       metadata: {
         job_id: job.id,
         org_id: job.org_id,
@@ -141,13 +153,11 @@ export async function POST(req: NextRequest) {
     // Route payment to the org's connected account. application_fee_amount is
     // the capped Creed platform fee — omitted entirely when 0 (Pro or at-cap)
     // because Stripe rejects application_fee_amount: 0 on destination charges.
-    if (stripeAccountId) {
-      sessionParams.payment_intent_data = {
-        transfer_data: { destination: stripeAccountId },
-      };
-      if (platformFeeCents > 0) {
-        sessionParams.payment_intent_data.application_fee_amount = platformFeeCents;
-      }
+    sessionParams.payment_intent_data = {
+      transfer_data: { destination: stripeAccountId },
+    };
+    if (platformFeeCents > 0) {
+      sessionParams.payment_intent_data.application_fee_amount = platformFeeCents;
     }
 
     const Stripe = (await import("stripe")).default;
@@ -156,7 +166,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // The customer sees this — keep Stripe's raw text in the logs only.
+    console.error("[checkout]", error instanceof Error ? error.message : error);
+    return NextResponse.json({ error: "Couldn't start the payment — please try again in a minute." }, { status: 500 });
   }
 }

@@ -111,9 +111,11 @@ interface Props {
    *  later plain nav to Jobs lands on the list. */
   initialDetailJobId?: string | null;
   clearInitialDetail?: () => void;
+  /** Open an Operations area (e.g. "billing" to connect Stripe). */
+  openOps?: (tab?: string) => void;
 }
 
-export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJobId, clearInitialDetail }: Props) {
+export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJobId, clearInitialDetail, openOps }: Props) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
@@ -292,7 +294,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // "Send to client" SMS strip — once the (tokenized) status link is minted we
   // open an editable strip that fires a native sms: deep link, matching the
   // notify buttons. Scoped by jobId so switching jobs hides a stale draft.
-  const [sendStrip, setSendStrip] = useState<{ jobId: string; phone: string; msg: string } | null>(null);
+  // kind "invoice": sending (Open Messages / Copy) is what marks the job
+  // invoiced — not generating a PDF nobody received.
+  const [sendStrip, setSendStrip] = useState<{ jobId: string; phone: string; msg: string; kind?: "invoice" } | null>(null);
+  // Record a payment taken outside Stripe (cash/check/…). `ref` is minted
+  // when the sheet opens → the server's idempotency key for this payment.
+  const [recordPay, setRecordPay] = useState<{ jobId: string; amount: string; method: "cash" | "check" | "card" | "other"; ref: string; busy?: boolean } | null>(null);
   // Property typeahead query — drives both the dropdown suggestions
   // (in <PropertySearch>) and the inline filter on the visible list,
   // so the list and the typeahead stay in sync.
@@ -636,7 +643,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         msg = `Hi ${name}! Work is complete at ${prop}. View details & sign off: ${url}`;
         break;
       case "invoiced":
-        msg = `Hi ${name}! Your invoice for ${prop}: $${(job.total || 0).toFixed(2)}. View & pay: ${url}`;
+        msg = invoiceText(job, url);
         break;
       case "paid":
         msg = `Thank you ${name}! Payment received for ${prop}. We appreciate your business!\n\n— ${orgName}`;
@@ -645,6 +652,64 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         msg = `Hi ${name}! Here's an update on your job at ${prop}:${url ? ` ${url}` : ""}`;
     }
     setSendStrip({ jobId: job.id, phone: cust?.phone || "", msg });
+  };
+
+  // Paid-to-date / balance — what the customer actually still owes.
+  const balanceOf = (job: Job) => {
+    const paid = Math.round((Number(job.amount_paid) || 0) * 100) / 100;
+    const due = Math.round(Math.max(0, (job.total || 0) - paid) * 100) / 100;
+    return { paid, due };
+  };
+
+  const invoiceText = (job: Job, url: string) => {
+    const { paid, due } = balanceOf(job);
+    const name = job.client || "there";
+    const prop = job.property || "your property";
+    const lines = [`Hi ${name}! Here's your invoice from ${org?.name || "us"} for ${prop}.`, ""];
+    lines.push(paid > 0 ? `Balance due: $${due.toFixed(2)} (after the $${paid.toFixed(2)} you already paid)` : `Total due: $${due.toFixed(2)}`);
+    if (url) lines.push("", org?.stripe_connected ? `View & pay online: ${url}` : `View your invoice: ${url}`);
+    return lines.join("\n");
+  };
+
+  // "Send invoice": a ready-to-send text with the balance + the job link
+  // (the customer pays there). The job flips to Invoiced when it's sent.
+  const sendInvoice = async (job: Job) => {
+    const cust = job.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
+    let url = "";
+    try { url = await getStatusLink(job.id); } catch { url = ""; }
+    setSendStrip({ jobId: job.id, phone: cust?.phone || "", msg: invoiceText(job, url), kind: "invoice" });
+  };
+  const markSent = (jobId: string, kind?: "invoice") => {
+    if (kind !== "invoice") return;
+    const job = jobs.find((j) => j.id === jobId);
+    if (job?.status === "complete") void setStatus(jobId, "invoiced");
+  };
+
+  const openRecordPay = (job: Job) => {
+    const { due } = balanceOf(job);
+    setRecordPay({ jobId: job.id, amount: due > 0 ? due.toFixed(2) : "", method: "cash", ref: crypto.randomUUID() });
+  };
+  const saveRecordPay = async () => {
+    if (!recordPay || recordPay.busy) return;
+    const amount = parseFloat(recordPay.amount);
+    const toast = useStore.getState().showToast;
+    if (!(amount > 0)) { toast(t("jobs.enterAmount"), "warning"); return; }
+    setRecordPay({ ...recordPay, busy: true });
+    try {
+      const res = await apiFetch("/api/payments/record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: recordPay.jobId, amount, method: recordPay.method, ref: recordPay.ref }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(data.error || t("jobs.recordFailed"), "error"); setRecordPay((r) => (r ? { ...r, busy: false } : r)); return; }
+      setRecordPay(null);
+      await loadAll();
+      toast(data.fullyPaid ? t("jobs.paidInFull") : t("jobs.paymentRecordedBalance").replace("{due}", Number(data.balance || 0).toFixed(2)), "success");
+    } catch {
+      toast(t("jobs.recordFailed"), "error");
+      setRecordPay((r) => (r ? { ...r, busy: false } : r));
+    }
   };
 
   const deleteJob = async (id: string) => {
@@ -664,6 +729,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     });
     const invoiceNum = "INV-" + j.id.slice(0, 6).toUpperCase();
     const orgName = org?.name || "Service Provider";
+    // A deposit already collected comes off what's due.
+    const { paid: paidSoFar, due: balanceDueNow } = balanceOf(j);
 
     // Totals breakdown. The invoice used to print only labor + materials + the
     // grand total, so a per-quote discount was invisible (and labor+materials
@@ -764,10 +831,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
 <section style="margin:12px 0 20px;padding:22px 26px;background:linear-gradient(135deg,#f0f4f8 0%,#e8eef5 100%);border-radius:10px;border-left:4px solid #2E75B6;display:flex;justify-content:space-between;align-items:center">
   <div>
-    <div style="font-family:Oswald,sans-serif;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.12em">Total Amount Due</div>
+    <div style="font-family:Oswald,sans-serif;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.12em">${paidSoFar > 0 ? "Balance Due" : "Total Amount Due"}</div>
     <div style="font-size:11px;color:#666;margin-top:2px">Reference: ${invoiceNum}</div>
+    ${paidSoFar > 0 ? `<div style="font-size:11.5px;color:#444;margin-top:6px">Invoice total $${(j.total || 0).toFixed(2)} · Paid $${paidSoFar.toFixed(2)}</div>` : ""}
   </div>
-  <div style="font-family:Oswald,sans-serif;font-size:34px;color:#2E75B6;font-weight:700">$${(j.total || 0).toFixed(2)}</div>
+  <div style="font-family:Oswald,sans-serif;font-size:34px;color:#2E75B6;font-weight:700">$${balanceDueNow.toFixed(2)}</div>
 </section>
 
 <h2>Payment Terms</h2>
@@ -816,8 +884,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       case "accepted":  return { label: t("jobs.schedule"), icon: "schedule", onClick: () => (onScheduleJob ? onScheduleJob(dj.property) : setPage("sched")) };
       case "scheduled": return { label: t("jobs.markActive"), icon: "play", onClick: () => setStatus(dj.id, "active") };
       case "active":    return { label: t("jobs.markComplete"), icon: "check", onClick: () => setStatus(dj.id, "complete") };
-      case "complete":  return { label: t("jobs.generateInvoice"), icon: "receipt", onClick: () => { generateInvoice(dj); setStatus(dj.id, "invoiced"); } };
-      case "invoiced":  return { label: t("jobs.markPaid"), icon: "checkCircle", onClick: () => setStatus(dj.id, "paid") };
+      case "complete":  return { label: t("jobs.sendInvoice"), icon: "send", onClick: () => { void sendInvoice(dj); } };
+      case "invoiced":  return { label: t("jobs.recordPayment"), icon: "checkCircle", onClick: () => openRecordPay(dj) };
       case "paid":      return { label: t("jobs.requestReview"), icon: "star", onClick: () => setReviewJob(dj) };
       default:          return null;
     }
@@ -957,13 +1025,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <a
                   href={`sms:${sendStrip.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(sendStrip.msg)}`}
-                  onClick={() => setSendStrip(null)}
+                  onClick={() => { markSent(sendStrip.jobId, sendStrip.kind); setSendStrip(null); }}
                   className="bb"
                   style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
                 >
                   <Icon name="send" size={15} color="#fff" /> Open Messages
                 </a>
-                <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast("Couldn't copy on this device", "error"); } }} style={{ fontSize: 14 }}>Copy</button>
+                <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); markSent(sendStrip.jobId, sendStrip.kind); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast("Couldn't copy on this device", "error"); } }} style={{ fontSize: 14 }}>Copy</button>
                 <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label="Cancel" style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
               </div>
             </div>
@@ -1224,65 +1292,51 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 </>
               );
             })()}
-            {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
+            {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (() => {
+              const { due: balanceDue } = balanceOf(dj);
+              const btn = { fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 } as const;
+              return (
+              <>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
-                <button
-                  className="bo"
-                  onClick={() => { generateInvoice(dj); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }}
-                  style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                >
-                  <Icon name="receipt" size={14} /> {dj.status === "complete" ? t("jobs.invoice") : t("jobs.viewInvoice")}
+                {/* Printing is just a PDF — it no longer marks the job invoiced. */}
+                <button className="bo" onClick={() => generateInvoice(dj)} style={btn}>
+                  <Icon name="receipt" size={14} /> {t("jobs.invoicePdf")}
                 </button>
-                {(dj.status === "invoiced" || dj.status === "complete") && org?.stripe_connected && (() => {
-                  // Charge only what's still owed — a deposit already collected
-                  // must not be billed twice. The server clamps to the balance
-                  // as well; this keeps the button honest and hides it at $0.
-                  const balanceDue = Math.round(Math.max(0, (dj.total || 0) - (dj.amount_paid || 0)) * 100) / 100;
-                  if (balanceDue <= 0) return null;
-                  return (
-                  <>
-                    <button
-                      className="bo"
-                      onClick={async () => {
-                        try {
-                          const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: balanceDue, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
-                          const data = await res.json();
-                          if (data.url) { navigator.clipboard.writeText(data.url); useStore.getState().showToast(t("jobs.paymentLinkCopied"), "success"); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
-                          else useStore.getState().showToast(t("jobs.errorPrefix") + " " + (data.error || t("jobs.couldNotCreateLink")), "error");
-                        } catch { useStore.getState().showToast(t("jobs.failedCreateLink"), "error"); }
-                      }}
-                      style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                    >
-                      <Icon name="link" size={14} /> {t("jobs.sendLink")}
-                    </button>
-                    <button
-                      className="bo"
-                      onClick={async () => {
-                        try {
-                          const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, property: dj.property, client: dj.client, amount: balanceDue, orgName: org?.name || "Service Provider", stripeAccountId: org?.stripe_account_id || "" }) });
-                          const data = await res.json();
-                          if (data.url) { setPayQR({ url: data.url, jobId: dj.id, amount: balanceDue }); if (dj.status === "complete") setStatus(dj.id, "invoiced"); }
-                          else useStore.getState().showToast(t("jobs.errorPrefix") + " " + (data.error || t("jobs.couldNotCreatePayment")), "error");
-                        } catch { useStore.getState().showToast(t("jobs.failedCreatePayment"), "error"); }
-                      }}
-                      style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                    >
-                      <Icon name="qr" size={14} /> {t("jobs.collectNow")}
-                    </button>
-                  </>
-                  );
-                })()}
-                {dj.status === "invoiced" && (
+                {dj.status !== "paid" && balanceDue > 0 && (
+                  <button className="bo" onClick={() => { void sendInvoice(dj); }} style={btn}>
+                    <Icon name="send" size={14} /> {t("jobs.sendInvoice")}
+                  </button>
+                )}
+                {dj.status !== "paid" && balanceDue > 0 && org?.stripe_connected && (
                   <button
-                    className="bg"
-                    onClick={() => setStatus(dj.id, "paid")}
-                    style={{ fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                    className="bo"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, amount: balanceDue }) });
+                        const data = await res.json();
+                        if (data.url) setPayQR({ url: data.url, jobId: dj.id, amount: balanceDue });
+                        else useStore.getState().showToast(data.error || t("jobs.couldNotCreatePayment"), "error");
+                      } catch { useStore.getState().showToast(t("jobs.failedCreatePayment"), "error"); }
+                    }}
+                    style={btn}
                   >
-                    <Icon name="check" size={14} /> {t("jobs.markPaid")}
+                    <Icon name="qr" size={14} /> {t("jobs.collectNow")}
+                  </button>
+                )}
+                {dj.status !== "paid" && balanceDue > 0 && (
+                  <button className="bg" onClick={() => openRecordPay(dj)} style={btn}>
+                    <Icon name="check" size={14} /> {t("jobs.recordPayment")}
                   </button>
                 )}
               </div>
-            )}
+              {dj.status !== "paid" && balanceDue > 0 && !org?.stripe_connected && user.role === "owner" && openOps && (
+                <div onClick={() => openOps("billing")} className="dim" style={{ fontSize: 13, paddingTop: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Icon name="money" size={13} /> {t("jobs.connectStripeHint")} <Icon name="next" size={13} />
+                </div>
+              )}
+              </>
+              );
+            })()}
           </div>
 
           {/* Work */}
@@ -2006,6 +2060,39 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       </div>
         </>
       )}
+
+      {/* Record payment (cash / check / own card terminal) */}
+      {recordPay && (() => {
+        const rj = jobs.find((j) => j.id === recordPay.jobId);
+        const { paid, due } = rj ? balanceOf(rj) : { paid: 0, due: 0 };
+        return (
+          <div onClick={() => !recordPay.busy && setRecordPay(null)} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380, padding: 20 }}>
+              <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 4 }}>{t("jobs.recordPayment")}</h3>
+              <div className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
+                {rj?.property}{paid > 0 ? ` · ${t("jobs.alreadyPaid")} $${paid.toFixed(2)}` : ""} · {t("jobs.balanceDue")} ${due.toFixed(2)}
+              </div>
+              <label className="sl">{t("jobs.amountReceived")}</label>
+              <div className="row" style={{ gap: 6, margin: "4px 0 12px", alignItems: "center" }}>
+                <span>$</span>
+                <input type="number" inputMode="decimal" min="0" step="0.01" value={recordPay.amount} onChange={(e) => setRecordPay({ ...recordPay, amount: e.target.value })} style={{ flex: 1 }} />
+              </div>
+              <label className="sl">{t("jobs.paidBy")}</label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, margin: "4px 0 16px" }}>
+                {(["cash", "check", "card", "other"] as const).map((m) => (
+                  <button key={m} type="button" className={recordPay.method === m ? "bb" : "bo"} onClick={() => setRecordPay({ ...recordPay, method: m })} style={{ fontSize: 13, padding: "7px 0" }}>
+                    {t(`jobs.payMethod.${m}`)}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="bo" onClick={() => setRecordPay(null)} disabled={recordPay.busy} style={{ flex: 1 }}>{t("common.cancel")}</button>
+                <button className="bg" onClick={saveRecordPay} disabled={recordPay.busy} style={{ flex: 2 }}>{recordPay.busy ? t("jobs.savingPayment") : t("jobs.savePayment")}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Payment QR overlay */}
       {payQR && (
