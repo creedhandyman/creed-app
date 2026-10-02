@@ -14,21 +14,20 @@ import { apiFetch } from "@/lib/api";
  *   4. plan      — Solo / Crew / Pro card picker (Crew is "Most Popular")
  *   5. checkout  — pre-Stripe summary + "Continue to Checkout" CTA
  *
- * The route guards itself: if there's no Supabase session, route to
- * /signup. If there's a session but no profile row (the email-confirm
- * round-trip case), bootstrap the org + owner profile right here using
- * `bootstrapOrgAndProfile` from /signup, then continue with the wizard.
+ * The route guards itself: no Supabase session → /signup; a session with
+ * no business yet → "/" (the one onboarding flow: Create / Join). It never
+ * creates an org itself. In practice it now serves owners picking a plan
+ * (Ops → Billing → /onboarding?step=plan, and Stripe's cancel_url).
  *
  * Stripe wiring (the last-step "Continue to Checkout" button) lands in
  * a follow-up commit. For now, we patch the chosen plan onto the org
  * row and route the user into the app — they'll still be inside their
- * 30-day trial, so BillingGate lets them in.
+ * free trial (TRIAL_DAYS), so BillingGate lets them in.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase, db } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import type { Organization, Profile } from "@/lib/types";
-import { bootstrapOrgAndProfile } from "@/lib/signup-helpers";
 
 const PRIMARY = "#2E75B6";
 const ACCENT = "#00cc66";
@@ -67,19 +66,19 @@ export default function OnboardingPage() {
         return;
       }
       const profiles = await db.get<Profile>("profiles", { id: session.user.id });
-      if (profiles.length && profiles[0].org_id) {
-        const orgs = await db.get<Organization>("organizations", { id: profiles[0].org_id });
-        setUser(profiles[0]);
-        if (orgs.length) setOrg(orgs[0]);
-      } else {
-        const meta = (session.user.user_metadata || {}) as { name?: string };
-        const seed = await bootstrapOrgAndProfile(
-          session.user.id,
-          session.user.email || "",
-          meta.name || (session.user.email || "owner").split("@")[0],
-        );
-        if (seed) { setUser(seed.profile); setOrg(seed.org); }
+      const orgs = profiles.length && profiles[0].org_id
+        ? await db.get<Organization>("organizations", { id: profiles[0].org_id })
+        : [];
+      if (!orgs.length) {
+        // No business yet (old email-confirm links still land here). Never
+        // auto-create one — a crew member joining their boss would become
+        // the owner of an empty business. The app root runs the one
+        // onboarding flow (Create a business / Join a team).
+        window.location.replace("/");
+        return;
       }
+      setUser(profiles[0]);
+      setOrg(orgs[0]);
       setBootstrapping(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -463,7 +462,7 @@ function SlugStep({ slug, setSlug }: { slug: string; setSlug: (v: string) => voi
 function PlanStep({ plan, setPlan }: { plan: Plan; setPlan: (p: Plan) => void }) {
   return (
     <>
-      <StepHeader title="Choose your plan" sub="Free for the first 30 days. Cancel anytime in the first month at no charge." />
+      <StepHeader title="Choose your plan" sub="You won't be charged until your free trial ends. Cancel anytime before then at no charge." />
 
       <div style={{ display: "grid", gap: 10 }}>
         {PLAN_CARDS.map((p) => {
@@ -521,14 +520,14 @@ function CheckoutStep({ org, plan }: { org: Organization; plan: Plan }) {
       <div style={{ background: "#0d0d15", border: "1px solid #1e1e2e", borderRadius: 10, padding: 16, marginBottom: 12 }}>
         <Row label="Business">{org.name}</Row>
         <Row label="Plan">{tier.name} — ${tier.price}/mo</Row>
-        <Row label="Trial">30 days free, starts today</Row>
+        <Row label="Billing starts">When your free trial ends</Row>
         {org.site_slug && <Row label="URL">creedhm.com/card/{org.site_slug}</Row>}
       </div>
 
       <div style={{ background: "#13182a", border: `1px solid ${PRIMARY}55`, borderRadius: 8, padding: 12, fontSize: 14, color: "#aabbd4", lineHeight: 1.5 }}>
-        Next, we&apos;ll route you to Stripe to confirm your payment method.
-        You won&apos;t be charged today — your card is held for after the
-        30-day trial. Cancel anytime from your billing dashboard.
+        Next, we&apos;ll route you to Stripe to add your payment method.
+        You won&apos;t be charged until the rest of your free trial is used
+        up. Cancel anytime from your billing dashboard.
       </div>
     </>
   );

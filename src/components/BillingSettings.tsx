@@ -8,6 +8,7 @@ import { t } from "@/lib/i18n";
 import { applyPromoCode } from "@/lib/promo-codes";
 import { getUsage, getCap, type UsageInfo } from "@/lib/inspection-usage";
 import type { Organization } from "@/lib/types";
+import { trialEndFromStart } from "@/lib/trial";
 
 /**
  * Billing & Payments — Stripe Connect (accept payments from clients) plus
@@ -54,7 +55,14 @@ export default function BillingSettings() {
                 className="bb"
                 onClick={async () => {
                   const btn = document.activeElement as HTMLButtonElement;
+                  const label = btn?.textContent || "";
                   if (btn) btn.textContent = "Connecting...";
+                  // Plain-language failure; the raw detail goes to the console.
+                  const fail = (detail: unknown) => {
+                    console.error("[stripe connect]", detail);
+                    if (btn) btn.textContent = label;
+                    useStore.getState().showToast("Couldn't start the Stripe setup — please try again in a minute. If it keeps failing, contact support.", "error");
+                  };
                   try {
                     const res = await apiFetch("/api/stripe/connect", {
                       method: "POST",
@@ -67,10 +75,7 @@ export default function BillingSettings() {
                       }),
                     });
                     if (!res.ok) {
-                      const text = await res.text();
-                      useStore
-                        .getState()
-                        .showToast("Stripe error (" + res.status + "): " + text, "error");
+                      fail(`${res.status}: ${await res.text()}`);
                       return;
                     }
                     const data = await res.json();
@@ -80,21 +85,10 @@ export default function BillingSettings() {
                       });
                       window.location.href = data.url;
                     } else {
-                      useStore
-                        .getState()
-                        .showToast(
-                          "Error: " + (data.error || "Could not start Stripe setup"),
-                          "error",
-                        );
+                      fail(data.error || "no url");
                     }
                   } catch (e) {
-                    useStore
-                      .getState()
-                      .showToast(
-                        "Failed to start Stripe setup: " +
-                          (e instanceof Error ? e.message : "Network error"),
-                        "error",
-                      );
+                    fail(e);
                   }
                 }}
                 style={{ fontSize: 15, padding: "10px 20px", display: "inline-flex", alignItems: "center", gap: 6 }}
@@ -129,15 +123,11 @@ export default function BillingSettings() {
           {(() => {
             const status = org?.subscription_status || "trial";
             // Prefer Stripe's authoritative trial_ends_at (written by
-            // the webhook); fall back to the org-create trial_start + 30
-            // days for trials that pre-date Stripe wiring.
+            // the webhook); fall back to the org-create trial_start +
+            // TRIAL_DAYS for trials that pre-date Stripe wiring.
             const trialEnd = org?.trial_ends_at
               ? new Date(org.trial_ends_at)
-              : (() => {
-                  const t = new Date(org?.trial_start || new Date());
-                  t.setDate(t.getDate() + 30);
-                  return t;
-                })();
+              : trialEndFromStart(org?.trial_start);
             const daysLeft = Math.max(
               0,
               Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),

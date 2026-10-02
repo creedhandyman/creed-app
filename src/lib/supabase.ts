@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { isPlatformAdmin } from "./platform-admin";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -131,8 +132,32 @@ function reportDbError(table: string, op: string, err: unknown) {
     toast("Syncing data…", "info");
     return;
   }
+  // Customers get plain words; the platform operator keeps the full Postgres
+  // detail (that's how a missing migration — "column … does not exist" — gets
+  // noticed). The raw error is always in the console either way.
   const msg = formatDbError(err);
-  toast(`${op} ${table} failed: ${msg}`, "error");
+  if (isOperator()) {
+    toast(`${op} ${table} failed: ${msg}`, "error");
+    return;
+  }
+  const code = (err as { code?: string } | null)?.code;
+  toast(
+    op === "load"
+      ? "Couldn't load some of your data — it'll retry on its own in a few seconds."
+      : `Couldn't save that change — please try again.${code ? ` If it keeps happening, contact support (code ${code}).` : ""}`,
+    "error",
+  );
+}
+
+/** The signed-in user is a Creed platform operator (reads the persisted
+ *  profile — this module can't import the store without a cycle). */
+function isOperator(): boolean {
+  try {
+    const u = JSON.parse(localStorage.getItem("c_user") || "null") as { email?: string } | null;
+    return isPlatformAdmin(u?.email);
+  } catch {
+    return false;
+  }
 }
 
 export const db = {

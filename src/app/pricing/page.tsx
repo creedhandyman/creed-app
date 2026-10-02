@@ -4,7 +4,7 @@
  *
  * TIERS + FEATURES are the single source of truth for plan data (also used
  * by the app's billing). CTAs route into the real signup funnel
- * (/signin?mode=signup) — no waitlist; first month is free.
+ * (/signin?mode=signup) — no waitlist; free trial (TRIAL_DAYS), no card.
  *
  * Server component (no client hooks) so it can export per-page SEO metadata;
  * Icon / Link / MarketingShell are client islands rendered within it.
@@ -13,11 +13,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import MarketingShell from "@/components/marketing/MarketingShell";
+import { TRIAL_DAYS } from "@/lib/trial";
 
 export const metadata: Metadata = {
   title: "Pricing · Creed Handy Manager",
   description:
-    "Simple plans that grow with you — Solo $24.99, Crew $59.99, Pro $149.99. First month free, every plan includes the full toolkit. Solo/Crew add a 0.5% platform fee on payments, capped at $100/month. Pro pays zero.",
+    "Simple plans that grow with you — Solo $24.99, Crew $59.99, Pro $149.99. 14-day free trial, no card needed — every plan includes the full toolkit. Solo/Crew add a 0.5% platform fee on payments, capped at $100/month. Pro pays zero.",
 };
 
 type Plan = "solo" | "crew" | "pro";
@@ -41,7 +42,7 @@ const TIERS: Tier[] = [
     price: 24.99,
     tagline: "For independent operators",
     cap: "1 user · 75 inspections/mo",
-    badge: "First month free",
+    badge: `${TRIAL_DAYS} days free`,
     ctaLabel: "Start Free Trial",
     bullets: [
       "75 AI inspections / renders per month",
@@ -121,7 +122,7 @@ interface FAQ {
 // 0.5% capped at $100/mo for Solo/Crew, $0 for Pro.
 // Source of truth: src/lib/platform-fee.ts (PLATFORM_FEE_RATE + PLATFORM_FEE_CAP_CENTS).
 const FAQS: FAQ[] = [
-  { q: 'Is there really a free month?', a: 'Yes — every plan’s first month is free. No charge until it ends, and you can cancel anytime before then.' },
+  { q: 'Do I need a card to try it?', a: `No. You get ${TRIAL_DAYS} days of the full app free, no card needed. Pick a plan whenever you're ready — if you don't, nothing is charged.` },
   { q: 'What counts as an “inspection”?', a: 'Each AI quote or photo render you generate. Most solo operators stay well under 75 a month; upgrade anytime if you grow.' },
   { q: 'Do you take a cut of my payments?', a: 'A small one — and it’s capped. Customer payments run through your own Stripe account and land in your bank. On Solo and Crew plans, Creed adds a 0.5% platform fee on payments processed through the app — never more than $100 in a month — plus the standard Stripe processing fees. Pro plans pay no platform fee at all. Your monthly subscription is billed separately.' },
   { q: 'What’s the most I’ll pay in platform fees?', a: 'On Solo and Crew, $100 a month — that’s the cap, no matter how much you process. Once you hit it, every other payment that month is platform-fee-free. On Pro, there’s no platform fee at all.' },
@@ -152,7 +153,7 @@ export default function PricingPage() {
                 ${t.price}<small style={t.featured ? { color: "#9a9aa8" } : undefined}>/mo</small>
               </div>
               <div className="cap">{t.cap}</div>
-              <div className="badge">{t.badge || "First month free"}</div>
+              <div className="badge">{t.badge || `${TRIAL_DAYS} days free`}</div>
               <ul>
                 {t.bullets.map((b) => (
                   <li key={b}><Icon name="check" size={16} color="#3ee08f" /> {b}</li>
@@ -186,7 +187,7 @@ export default function PricingPage() {
         </div>
 
         <div style={{ textAlign: "center", padding: "50px 0" }}>
-          <Link className="btn btn-glow btn-lg" href="/signin?mode=signup"><Icon name="rocket" size={18} /> Start your free month</Link>
+          <Link className="btn btn-glow btn-lg" href="/signin?mode=signup"><Icon name="rocket" size={18} /> Start your free trial</Link>
         </div>
       </div>
     </MarketingShell>

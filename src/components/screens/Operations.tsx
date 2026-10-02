@@ -14,6 +14,7 @@ import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
 import { Icon, type IconName } from "../Icon";
 import { t } from "@/lib/i18n";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 
 /**
  * Catches render-time crashes inside an Ops sub-tab so the whole tab
@@ -168,6 +169,7 @@ function PreflightPanel() {
 
 function OpsSettings() {
   const org = useStore((s) => s.org);
+  const userEmail = useStore((s) => s.user?.email);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
 
@@ -188,8 +190,9 @@ function OpsSettings() {
 
   return (
     <div>
-      {/* Beta preflight — one-tap deployment readiness check */}
-      <PreflightPanel />
+      {/* Beta preflight — one-tap deployment readiness check. Platform
+          operators only: customers shouldn't see env vars / migrations. */}
+      {isPlatformAdmin(userEmail) && <PreflightPanel />}
 
       {/* Branding & Business Info — logo, name, phone, address, license # */}
       <BrandingSettings />
@@ -230,6 +233,31 @@ function OpsSettings() {
           <Icon name="trending" size={16} color="var(--color-primary)" />
           {t("ops.quoteSettings")}
         </h4>
+        {/* The base hourly rate every quote is priced from (trade-specific
+            rates below override it per trade). */}
+        <div className="mb">
+          <label className="sl">{t("ops.laborRate")}</label>
+          <div className="row" style={{ gap: 6, marginTop: 4, alignItems: "center" }}>
+            <span>$</span>
+            <input
+              type="number"
+              key={`dr-${org.default_rate ?? 55}`}
+              defaultValue={org.default_rate ?? 55}
+              min="1"
+              step="1"
+              placeholder="55"
+              style={{ flex: "0 0 100px" }}
+              onBlur={async (e) => {
+                const v = parseFloat(e.target.value);
+                if (!(v > 0) || v === org.default_rate) return;
+                await db.patch("organizations", org.id, { default_rate: v });
+                refreshOrg();
+              }}
+            />
+            <span style={{ fontSize: 13 }}>/hr</span>
+          </div>
+          <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.laborRateHelp")}</div>
+        </div>
         <div className="g2 mb">
           <div>
             <label className="sl">{t("ops.markup")}</label>
@@ -367,7 +395,7 @@ function OpsSettings() {
           <div key={trade} className="row" style={{ marginBottom: 4 }}>
             <span style={{ fontSize: 14, width: 80 }}>{trade}</span>
             <span>$</span>
-            <input type="number" key={`${trade}-${tradeRates[trade] || ""}`} defaultValue={tradeRates[trade] || ""} placeholder="55" min="0" step="1" style={{ width: 70, fontSize: 14 }}
+            <input type="number" key={`${trade}-${tradeRates[trade] || ""}`} defaultValue={tradeRates[trade] || ""} placeholder={String(org.default_rate || 55)} min="0" step="1" style={{ width: 70, fontSize: 14 }}
               onBlur={async (e) => {
                 const val = parseFloat(e.target.value);
                 const updated = { ...tradeRates };

@@ -6,12 +6,12 @@ import Grizz from "./Grizz";
 import { gsDismissed, dismissGs, tipsEnabled } from "@/lib/grizz";
 
 /**
- * Dashboard "Getting Started" card (owner/admin only). Four activation tasks
+ * Dashboard "Getting Started" card (owner/admin only). Activation tasks
  * whose completion is DERIVED FROM REAL DATA — so it self-checks as the owner
  * actually does the work (no per-task booleans stored). Each row deep-links to
  * the relevant screen.
  *
- * It disappears for good once (a) the × is tapped, or (b) all four are done —
+ * It disappears for good once (a) the × is tapped, or (b) all of them are done —
  * in which case it shows a one-time "You're rolling!" celebration with confetti,
  * then never renders again (persisted via gs_dismissed). Hidden entirely when
  * the global "Show Grizz tips" switch is off.
@@ -42,6 +42,7 @@ export default function GettingStarted({
   useEffect(() => { setDismissed(gsDismissed(uid) || !tipsEnabled(uid)); }, [uid]);
 
   const tasks = [
+    { key: "phone", label: "Add your business phone (it prints on quotes)", done: !!org?.phone?.trim(), go: () => openOps("settings") },
     { key: "logo", label: "Add your business logo", done: !!org?.logo_url, go: () => openOps("settings") },
     { key: "quote", label: "Create your first quote", done: jobs.length >= 1, go: () => setPage("qf") },
     { key: "stripe", label: "Connect Stripe to get paid", done: org?.stripe_connected === true, go: () => openOps("billing") },
@@ -50,7 +51,7 @@ export default function GettingStarted({
   const doneCount = tasks.filter((t) => t.done).length;
   const allDone = doneCount === tasks.length;
 
-  // First time all four are done: persist dismissal so it never returns, show
+  // First time all tasks are done: persist dismissal so it never returns, show
   // the celebration, then auto-collapse it after a beat (with a manual × too)
   // so it doesn't sit on the dashboard forever for an already-set-up account.
   useEffect(() => {

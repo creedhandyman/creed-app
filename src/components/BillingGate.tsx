@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { applyPromoCode } from "@/lib/promo-codes";
+import { TRIAL_DAYS, trialEndFromStart, daysLeftUntil } from "@/lib/trial";
 
 // localStorage key for trial-banner dismissal. Keyed by the days-remaining
 // count so a dismiss at "7 days left" doesn't suppress the banner once we
@@ -38,7 +39,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
     const trialEnd = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
     const daysLeft = trialEnd
       ? Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-      : 30;
+      : TRIAL_DAYS;
     if (daysLeft > 0) {
       return <TrialBanner daysLeft={daysLeft} org={org} user={user}>{children}</TrialBanner>;
     }
@@ -47,10 +48,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
   // Pre-Stripe trial (signed up but hasn't hit Stripe Checkout yet) —
   // we compute from trial_start, the org-create timestamp.
   if (org.trial_start) {
-    const trialStart = new Date(org.trial_start);
-    const trialEnd = new Date(trialStart);
-    trialEnd.setDate(trialEnd.getDate() + 30);
-    const daysLeft = Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    const daysLeft = daysLeftUntil(trialEndFromStart(org.trial_start));
 
     if (daysLeft > 0) {
       // Still in trial — show banner but allow access. Banner is
@@ -68,7 +66,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
     setLoading(true);
     try {
       // Save selected plan, then hand off to the Stripe Checkout endpoint
-      // that uses STRIPE_PRICE_<PLAN> env vars + a 30-day trial.
+      // that uses STRIPE_PRICE_<PLAN> env vars (no extra trial once it's over).
       await db.patch("organizations", org.id, { plan: selectedPlan, subscription_plan: selectedPlan });
 
       const res = await apiFetch("/api/stripe/create-checkout-session", {
@@ -108,7 +106,7 @@ export default function BillingGate({ children }: { children: React.ReactNode })
         <p style={{ color: "#888", fontSize: 16, marginBottom: 24, fontFamily: "Source Sans 3, sans-serif" }}>
           {org.subscription_status === "past_due"
             ? "Please update your payment method to continue using Creed HM."
-            : "Your 30-day free trial has ended. Subscribe to keep using Creed HM."}
+            : `Your ${TRIAL_DAYS}-day free trial has ended. Pick a plan to keep using Creed HM — everything you set up is still here.`}
         </p>
 
         {isOwner ? (

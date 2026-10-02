@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthedProfile } from "@/lib/api-auth";
+import { trialEndFromStart } from "@/lib/trial";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,9 @@ export const dynamic = "force-dynamic";
  * Starts a Stripe Checkout Session for the new-customer signup flow.
  * The org row already exists at this point (created by /signup); we
  * look up or create the Stripe Customer, then hand off to Stripe with
- * a 30-day trial attached to the subscription.
+ * whatever is LEFT of the org's free trial (TRIAL_DAYS from signup) as the
+ * subscription's trial — subscribing early never shortens it, and
+ * subscribing after it ended doesn't grant a second one.
  *
  * Body: { orgId: string, plan: "solo" | "crew" | "pro", returnUrl?: string }
  * Returns: { url: string } — redirect target the client opens.
@@ -50,8 +53,9 @@ export async function POST(req: NextRequest) {
     }
     const priceId = process.env[PRICE_ENV[plan]];
     if (!priceId) {
+      console.error(`[checkout] missing env ${PRICE_ENV[plan]}`);
       return NextResponse.json(
-        { error: `Missing env ${PRICE_ENV[plan]} — set it in Vercel before this plan is purchasable` },
+        { error: "That plan can't be purchased right now — please contact support." },
         { status: 500 },
       );
     }
@@ -63,7 +67,7 @@ export async function POST(req: NextRequest) {
     // and reuse an existing stripe_customer_id if one is already on file.
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
-      .select("id, name, email, stripe_customer_id, stripe_subscription_id")
+      .select("id, name, email, stripe_customer_id, stripe_subscription_id, trial_start")
       .eq("id", orgId)
       .single();
 
@@ -85,18 +89,21 @@ export async function POST(req: NextRequest) {
         .eq("id", orgId);
     }
 
+    // Stripe needs trial_end ≥ 48h out; with less left, bill from today.
+    const trialEnd = trialEndFromStart(org.trial_start);
+    const keepTrial = trialEnd.getTime() - Date.now() > 48 * 60 * 60 * 1000;
+
     const origin = returnUrl || req.headers.get("origin") || "https://www.creedhm.com";
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
-      // 30-day trial. Card required upfront — `payment_method_collection`
-      // defaults to "always" for subscription mode but we set it
-      // explicitly so anyone reading the call knows what to expect.
+      // The card is collected HERE, when they choose to subscribe — the
+      // free trial itself never needed one.
       payment_method_collection: "always",
       subscription_data: {
-        trial_period_days: 30,
+        ...(keepTrial ? { trial_end: Math.floor(trialEnd.getTime() / 1000) } : {}),
         metadata: { org_id: orgId, plan },
       },
       // Stripe-recommended toggle: lets the customer remove and re-add

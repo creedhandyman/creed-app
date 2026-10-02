@@ -6,6 +6,7 @@ import type { Organization, Profile } from "@/lib/types";
 import { Icon } from "./Icon";
 import Grizz from "./Grizz";
 import { TRADE_IDS, tradeConfig, tradePatch } from "@/lib/trades";
+import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
 
 /**
  * Guided onboarding led by Grizz, the handyman-bear mascot. Eight steps walk a
@@ -26,6 +27,25 @@ import { TRADE_IDS, tradeConfig, tradePatch } from "@/lib/trades";
 
 const TOTAL = 8;
 
+
+/** URL-safe slug from a business name, made unique against existing orgs
+ *  (organizations are publicly readable). "" if nothing usable — the owner
+ *  can still set one later in Ops → Settings. */
+async function freeSlug(name: string): Promise<string> {
+  const base = name.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28).replace(/-+$/, "");
+  if (base.length < 3) return "";
+  for (let n = 1; n <= 20; n++) {
+    const candidate = n === 1 ? base : `${base}-${n}`;
+    try {
+      const taken = await db.get<Organization>("organizations", { site_slug: candidate }, { strict: true });
+      if (!taken.length) return candidate;
+    } catch {
+      return ""; // can't check → leave it unset rather than risk a clash
+    }
+  }
+  return "";
+}
+
 export default function Onboarding() {
   const user = useStore((s) => s.user)!;
   const setUser = useStore((s) => s.setUser);
@@ -33,20 +53,28 @@ export default function Onboarding() {
 
   // ── Setup form (Step 1) — same inputs the bare form collected, trimmed to
   // the essentials the mockup shows. Name required; phone/city optional.
-  const [mode, setMode] = useState<"create" | "join">("create");
+  // An invite link (/signin?join=<code>) stashes the code before signup;
+  // pick it up so the crew member lands on "Join a team", code filled in.
+  const [pendingJoin] = useState(() => {
+    try { return localStorage.getItem(JOIN_CODE_KEY) || ""; } catch { return ""; }
+  });
+  const [mode, setMode] = useState<"create" | "join">(pendingJoin ? "join" : "create");
   const [bizName, setBizName] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCode, setInviteCode] = useState(pendingJoin);
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   // Primary trade chosen on step 2 (create flow only). Defaults to handyman
   // so the multi-trade behavior is unchanged if the user skips the pick.
   const [selectedTrade, setSelectedTrade] = useState("handyman");
+  // Hourly labor rate — the number every quote is built on. "" = untouched
+  // (the trade's default applies).
+  const [rateDraft, setRateDraft] = useState("");
 
   // ── Tour state. createdBiz holds the freshly inserted rows so the tour keeps
   // rendering; finish() applies them to the store to enter the app.
-  const [stepIdx, setStepIdx] = useState(0);
+  const [stepIdx, setStepIdx] = useState(pendingJoin ? 1 : 0);
   const [createdBiz, setCreatedBiz] = useState<{ org: Organization; profile: Profile } | null>(null);
   const created = createdBiz !== null;
 
@@ -77,6 +105,10 @@ export default function Onboarding() {
     try {
       const orgResult = await db.post<Organization>("organizations", {
         name: bizName.trim(),
+        // Web link for the business card / lead form (/s/<slug>) — made from
+        // the name so there's no "pick a URL slug" step. Editable later in
+        // Ops → Settings.
+        site_slug: await freeSlug(bizName),
         phone,
         email: user.email,
         license_num: "",
@@ -86,7 +118,7 @@ export default function Onboarding() {
         trial_start: new Date().toISOString(),
         subscription_status: "trial",
       });
-      if (!orgResult?.length) { setErr("Failed to create business"); setSaving(false); return; }
+      if (!orgResult?.length) { setErr("Couldn't create your business — check your connection and try again."); setSaving(false); return; }
       const org = orgResult[0];
 
       const profileResult = await db.post<Profile>("profiles", {
@@ -99,7 +131,7 @@ export default function Onboarding() {
         emp_num: "001",
         org_id: org.id,
       });
-      if (!profileResult?.length) { setErr("Failed to create profile"); setSaving(false); return; }
+      if (!profileResult?.length) { setErr("Couldn't finish setting up your account — try again."); setSaving(false); return; }
 
       setCreatedBiz({ org, profile: profileResult[0] });
       setSaving(false);
@@ -112,12 +144,22 @@ export default function Onboarding() {
   };
 
   const joinBusiness = async () => {
-    if (!inviteCode.trim()) { setErr("Enter an invite code"); return; }
+    // Accept the bare code OR the whole invite link pasted in.
+    const raw = inviteCode.trim();
+    const fromLink = raw.match(/[?&]join=([^&\s]+)/)?.[1];
+    const code = (fromLink ? decodeURIComponent(fromLink) : raw).trim();
+    if (!code) { setErr("Paste the invite link or code your boss sent you"); return; }
+    // A malformed code would hit the DB as a bad uuid and toast a raw
+    // Postgres error — catch it here in plain words.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)) {
+      setErr("That doesn't look like an invite code — ask your boss to send the invite link again.");
+      return;
+    }
     setSaving(true);
     setErr("");
     try {
-      const orgs = await db.get<Organization>("organizations", { id: inviteCode.trim() });
-      if (!orgs.length) { setErr("Business not found — check the invite code"); setSaving(false); return; }
+      const orgs = await db.get<Organization>("organizations", { id: code });
+      if (!orgs.length) { setErr("That invite code didn't match a business — ask your boss to send the invite link again."); setSaving(false); return; }
       const org = orgs[0];
 
       const profileResult = await db.post<Profile>("profiles", {
@@ -125,13 +167,17 @@ export default function Onboarding() {
         email: user.email,
         name: user.name,
         role: "tech",
-        rate: org.default_rate || 35,
+        // Pay rate is set by the owner (Ops → Team) — NOT the business's billing
+        // rate, which would quietly pay a new tech $55+/hr. 0 shows as "No
+        // rate" in Payroll and auto payroll skips them until it's set.
+        rate: 0,
         start_date: new Date().toISOString().split("T")[0],
         emp_num: String(Math.floor(Math.random() * 900) + 100),
         org_id: org.id,
       });
       if (!profileResult?.length) { setErr("Failed to join — you may already be a member"); setSaving(false); return; }
 
+      try { localStorage.removeItem(JOIN_CODE_KEY); } catch { /* */ }
       setCreatedBiz({ org, profile: profileResult[0] });
       setSaving(false);
       setStepIdx(3); // skip the trade picker — joiners inherit the org's trade
@@ -142,13 +188,29 @@ export default function Onboarding() {
     }
   };
 
+  // The owner's own rate (step 2) wins over the trade default — on the org's
+  // default_rate AND on the trade's clean-match bucket tradePatch seeded.
+  const withRate = <P extends { default_rate: number; trade_rates?: string }>(patch: P): P => {
+    const r = parseFloat(rateDraft);
+    if (!(r > 0)) return patch;
+    const out = { ...patch, default_rate: r };
+    if (patch.trade_rates) {
+      try {
+        const rates = JSON.parse(patch.trade_rates) as Record<string, number>;
+        const seeded = Object.keys(rates).find((k) => rates[k] === patch.default_rate);
+        if (seeded) { rates[seeded] = r; out.trade_rates = JSON.stringify(rates); }
+      } catch { /* keep as-is */ }
+    }
+    return out;
+  };
+
   // Persist the chosen trade to the created org (create flow, step 2).
   // Best-effort: db.patch toasts its own errors. Also updates the stashed
   // org so finish()/the back button reflect the pick. tradePatch seeds
   // default_rate + (for clean-match trades) trade_rates without clobbering.
   const saveTrade = async () => {
     if (!createdBiz || mode !== "create") return;
-    const patch = tradePatch(selectedTrade, createdBiz.org.trade_rates);
+    const patch = withRate(tradePatch(selectedTrade, createdBiz.org.trade_rates));
     await db.patch("organizations", createdBiz.org.id, patch);
     setCreatedBiz((prev) => (prev ? { ...prev, org: { ...prev.org, ...patch } } : prev));
   };
@@ -160,7 +222,7 @@ export default function Onboarding() {
   const finish = () => {
     if (!createdBiz) { setStepIdx(1); return; }
     const org = mode === "create"
-      ? { ...createdBiz.org, ...tradePatch(selectedTrade, createdBiz.org.trade_rates) }
+      ? { ...createdBiz.org, ...withRate(tradePatch(selectedTrade, createdBiz.org.trade_rates)) }
       : createdBiz.org;
     setOrg(org);
     setUser(createdBiz.profile);
@@ -236,7 +298,9 @@ export default function Onboarding() {
                   <div className="ob-who">Grizz</div>
                   <p>{mode === "create"
                     ? "First — what's your business called? That's the only thing I really need. The rest you can add later."
-                    : "Joining a crew? Paste the invite code your boss gave you — it's in their Team settings."}</p>
+                    : pendingJoin
+                      ? "Your invite code is filled in — tap Join team and you're in."
+                      : "Joining a crew? Paste the invite link or code your boss sent you. (Bosses: Ops → Team → Invite a teammate.)"}</p>
                 </div>
 
                 <div className="ob-toggle">
@@ -262,7 +326,7 @@ export default function Onboarding() {
                 ) : (
                   <div className="ob-field">
                     <label>Invite code</label>
-                    <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} placeholder="Paste invite code here" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+                    <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} placeholder="Paste invite link or code" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
                   </div>
                 )}
 
@@ -301,12 +365,25 @@ export default function Onboarding() {
                   })}
                 </div>
 
+                <div className="ob-field" style={{ marginTop: 12 }}>
+                  <label>Your hourly labor rate</label>
+                  <input
+                    value={rateDraft}
+                    onChange={(e) => setRateDraft(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder={`$${trade.defaultRate} — typical ${trade.name.toLowerCase()} rate`}
+                    inputMode="decimal"
+                  />
+                  <div style={{ fontSize: 11.5, color: "#8b8b99", marginTop: 4 }}>
+                    Every quote is priced from this. Change it anytime in Ops → Settings.
+                  </div>
+                </div>
+
                 <div className="ob-tpreview">
                   <div className="ob-who" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <Icon name="sparkle" size={13} color="#7fb6ff" /> I&apos;ll set up for you
                   </div>
                   <div className="ob-chips">
-                    <span className="ob-chip">Default rate <b>${trade.defaultRate}/hr</b></span>
+                    <span className="ob-chip">Rate <b>${parseFloat(rateDraft) > 0 ? parseFloat(rateDraft) : trade.defaultRate}/hr</b></span>
                     <span className="ob-chip">Units <b>{trade.units}</b></span>
                     <span className="ob-chip">{trade.name} checklist <b>✓</b></span>
                   </div>

@@ -6,6 +6,7 @@ import type { Profile } from "@/lib/types";
 import { t } from "@/lib/i18n";
 import { formatHours } from "@/lib/dates";
 import { Icon } from "./Icon";
+import { inviteLink } from "@/lib/signup-helpers";
 
 /**
  * Team Stats — supersets the old TeamSettings panel. Keeps every admin
@@ -27,6 +28,7 @@ import { Icon } from "./Icon";
 export default function TeamStats() {
   const user = useStore((s) => s.user)!;
   const profiles = useStore((s) => s.profiles);
+  const org = useStore((s) => s.org);
   const timeEntries = useStore((s) => s.timeEntries);
   const jobs = useStore((s) => s.jobs);
   const reviews = useStore((s) => s.reviews);
@@ -246,7 +248,24 @@ export default function TeamStats() {
       {/* Invite CTA */}
       {isOwner && user.org_id && (
         <div
-          onClick={() => { navigator.clipboard.writeText(user.org_id); useStore.getState().showToast(t("team.inviteCopied"), "success"); }}
+          onClick={async () => {
+            // Share sheet (text/WhatsApp/email) with a link that opens signup
+            // and drops them on "Join a team" with the code filled in. Falls
+            // back to copying the link; the toast only claims what happened.
+            const url = inviteLink(window.location.origin, user.org_id);
+            const text = t("team.inviteMessage").replace("{biz}", org?.name || "our team");
+            const toast = useStore.getState().showToast;
+            if (navigator.share) {
+              try { await navigator.share({ title: t("team.inviteTitle"), text, url }); return; }
+              catch (e) { if ((e as Error)?.name === "AbortError") return; }
+            }
+            try {
+              await navigator.clipboard.writeText(`${text} ${url}`);
+              toast(t("team.inviteCopied"), "success");
+            } catch {
+              toast(`${t("team.inviteManual")} ${url}`, "info");
+            }
+          }}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(46,139,255,.12)", border: "1.5px dashed rgba(46,139,255,.5)", borderRadius: 13, padding: 12, fontFamily: "Oswald", fontWeight: 600, fontSize: 13, color: "#8cc0ff", marginBottom: 13, cursor: "pointer" }}
         >
           <Icon name="clients" size={16} color="#8cc0ff" /> {t("team.inviteTeammate")}

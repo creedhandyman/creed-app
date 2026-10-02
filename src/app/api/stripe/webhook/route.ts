@@ -33,7 +33,7 @@ function planFromSubscription(sub: Stripe.Subscription): string | null {
 
 /**
  * Map Stripe subscription.status to our org.subscription_status.
- * - trialing  → "trialing"   (during the 30-day free trial)
+ * - trialing  → "trialing"   (rest of the free trial — see lib/trial.ts)
  * - active    → "active"
  * - past_due  → "past_due"
  * - unpaid    → "past_due"   (treat the same way — billing failed)

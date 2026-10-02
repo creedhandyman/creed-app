@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireOwner } from "@/lib/api-auth";
+import { trialEndFromStart, daysLeftUntil } from "@/lib/trial";
 
 export const dynamic = "force-dynamic";
 
@@ -89,10 +90,8 @@ export async function POST(req: NextRequest) {
 
       if (!org) return NextResponse.json({ error: "Org not found" }, { status: 404 });
 
-      const trialStart = new Date(org.trial_start);
-      const trialEnd = new Date(trialStart);
-      trialEnd.setDate(trialEnd.getDate() + 30);
-      const trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+      const trialEnd = trialEndFromStart(org.trial_start);
+      const trialDaysLeft = daysLeftUntil(trialEnd);
 
       return NextResponse.json({
         status: org.subscription_status || "trial",

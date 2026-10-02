@@ -704,6 +704,25 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Signup / onboarding = ONE flow (2026-10-02)**: every account goes through
+  the Grizz `Onboarding.tsx` (Create a business / Join a team). The email-
+  confirm link lands on `/`; `initAuth`/`login` turn a session with NO profile
+  row into a stub user (`org_id ""`) → onboarding. `/onboarding` (the old
+  5-step wizard) never creates an org any more (it auto-made invited crew the
+  OWNER of an empty business) — it redirects profile-less users to `/` and
+  now only serves owners picking a plan (Ops → Billing, Stripe cancel_url).
+  Invite = share link `/signin?mode=signup&join=<orgId>` (`inviteLink()` in
+  `lib/signup-helpers.ts`; the code is stashed in localStorage
+  `c_join_code`); joiners start at pay rate 0 ("No rate" until the owner sets
+  it). Onboarding asks the labor rate + auto-generates `site_slug`.
+  **Trial**: `src/lib/trial.ts` `TRIAL_DAYS = 14`, no card; Stripe Checkout
+  gets only the REMAINING trial (`trial_end`, none once it's over).
+  NOTE `organizations.billing_enforced` defaults FALSE and nothing sets it, so
+  the paywall is OFF for every org — the trial is cosmetic until that's
+  flipped (verify STRIPE_PRICE_* first). **Platform operator**:
+  `lib/platform-admin.ts` (email allowlist) gates the Beta preflight panel and
+  keeps raw Postgres detail in db toasts; customers get plain-language errors.
+
 - **PWA / offline (installable + offline reads)**: three layers.
   **P1** — `public/sw.js` (web push + lifecycle) is registered in
   `app/page.tsx`; `InstallPrompt.tsx` captures `beforeinstallprompt` for an

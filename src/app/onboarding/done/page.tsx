@@ -12,7 +12,7 @@
  * if the webhook also lands, whichever writes first wins and the other
  * is a harmless no-op.
  *
- * We don't BLOCK the redirect on it: the 30-day trial means BillingGate
+ * We don't BLOCK the redirect on it: the trial (lib/trial.ts) means BillingGate
  * lets the owner in regardless, and the sync completes in the
  * background. We pause for a beat so the success copy reads as a real
  * moment, then bounce to "/".
@@ -50,7 +50,7 @@ export default function OnboardingDonePage() {
           You&apos;re in
         </h1>
         <p style={{ color: "#aaa", fontSize: 16, lineHeight: 1.55, margin: "0 0 20px" }}>
-          Your 30-day trial just started — no charges until it ends.
+          You're subscribed — no charges until your free trial ends.
           Setting up your dashboard now…
         </p>
         <div style={{ display: "inline-block", width: 28, height: 28, border: "3px solid #1e1e2e", borderTopColor: PRIMARY, borderRadius: "50%", animation: "spin 800ms linear infinite" }} />

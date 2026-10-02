@@ -1,52 +1,18 @@
 /**
- * Shared bootstrap used by both /signup (auto-confirm path) and
- * /onboarding (email-confirm round-trip path). Inserts the starter
- * `organizations` row + the owner's `profiles` row immediately after
- * a successful Supabase Auth signup.
+ * Signup plumbing shared by /signin and onboarding.
  *
- * Idempotent: if the caller re-runs after the verify-link round-trip
- * and a profile already exists, returns the existing pair instead of
- * spinning up a duplicate org.
+ * (The old bootstrapOrgAndProfile, which auto-created an org for any
+ * confirmed user, is gone: it made crew members who signed up to join their
+ * boss the OWNER of an empty business. Every account now goes through the
+ * one onboarding flow — Create a business / Join a team.)
  */
-import { db } from "./supabase";
-import type { Organization, Profile } from "./types";
 
-export async function bootstrapOrgAndProfile(
-  userId: string,
-  email: string,
-  name: string,
-): Promise<{ org: Organization; profile: Profile } | null> {
-  const existing = await db.get<Profile>("profiles", { id: userId });
-  if (existing.length && existing[0].org_id) {
-    const orgs = await db.get<Organization>("organizations", { id: existing[0].org_id });
-    if (orgs.length) return { org: orgs[0], profile: existing[0] };
-  }
+/** localStorage key an invite link (/signin?join=<code>) leaves for onboarding,
+ *  which renders at "/" after auth (the query string is gone by then). */
+export const JOIN_CODE_KEY = "c_join_code";
 
-  const orgRows = await db.post<Organization>("organizations", {
-    name: `${name}'s Business`,
-    phone: "",
-    email,
-    license_num: "",
-    address: "",
-    default_rate: 55,
-    primary_trade: "handyman",
-    trial_start: new Date().toISOString(),
-    subscription_status: "trial",
-  });
-  if (!orgRows?.length) return null;
-  const org = orgRows[0];
-
-  const profileRows = await db.post<Profile>("profiles", {
-    id: userId,
-    email,
-    name,
-    role: "owner",
-    rate: 55,
-    start_date: new Date().toISOString().split("T")[0],
-    emp_num: "001",
-    org_id: org.id,
-  });
-  if (!profileRows?.length) return null;
-
-  return { org, profile: profileRows[0] };
+/** Shareable invite link for an org — opens Create account, then lands the
+ *  new user on "Join a team" with the code filled in. */
+export function inviteLink(origin: string, orgId: string): string {
+  return `${origin}/signin?mode=signup&join=${encodeURIComponent(orgId)}`;
 }

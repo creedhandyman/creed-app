@@ -168,6 +168,21 @@ const EMPTY_COLLECTIONS = {
   membershipPlans: [], customerMemberships: [], equipment: [], notifications: [],
 };
 
+/** Placeholder user for a signed-in account that has no profile row yet.
+ *  org_id "" sends the root page to onboarding, which inserts the real row. */
+function stubProfile(id: string, email: string, meta?: { name?: string } | null): Profile {
+  return {
+    id,
+    email,
+    name: (meta?.name || "").trim() || (email.split("@")[0] || "Owner"),
+    role: "tech",
+    rate: 35,
+    start_date: new Date().toISOString().split("T")[0],
+    emp_num: "",
+    org_id: "",
+  } as Profile;
+}
+
 export const useStore = create<AppState>((set, get) => ({
   /* ── Auth ── */
   user: ld<Profile | null>("user", null),
@@ -176,9 +191,21 @@ export const useStore = create<AppState>((set, get) => ({
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return error.message;
     // Fetch profile by auth user ID
-    const profiles = await db.get<Profile>("profiles", { id: data.user.id });
+    let profiles: Profile[];
+    try {
+      profiles = await db.get<Profile>("profiles", { id: data.user.id }, { strict: true });
+    } catch {
+      return "Couldn't reach the server — check your connection and try again.";
+    }
     const profile = profiles[0];
-    if (!profile) return "Profile not found";
+    // Signed up but never finished setup (e.g. confirmed their email, then
+    // closed the tab) → straight into onboarding (Create / Join), not an error.
+    if (!profile) {
+      const stub = stubProfile(data.user.id, data.user.email || email, data.user.user_metadata);
+      set({ user: stub, ...EMPTY_COLLECTIONS });
+      sv("user", stub);
+      return null;
+    }
 
     // Clear any prior account's in-memory data BEFORE this user's loadAll, so a
     // session switch on a shared device can't surface the previous user's rows
@@ -201,10 +228,12 @@ export const useStore = create<AppState>((set, get) => ({
       password,
       options: {
         data: { name },
-        // Land the confirmation link on /onboarding (which bootstraps the org +
-        // profile). Without this it falls back to Supabase's Site URL and the
-        // link can dead-end. The redirect host must be in Supabase's allow-list.
-        emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/onboarding` : undefined,
+        // Land the confirmation link on the app root: initAuth sees a session
+        // with no profile and opens the ONE onboarding flow (Create a business
+        // / Join a team). Without this it falls back to Supabase's Site URL
+        // and the link can dead-end. The redirect host must be in Supabase's
+        // allow-list.
+        emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/` : undefined,
       },
     });
     if (error) return error.message;
@@ -216,7 +245,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (!data.session) return "CHECK_EMAIL";
 
     // Auto-proceed to onboarding — no invite or authorization needed
-    set({ user: { id: data.user.id, email, name, role: "tech", rate: 35, start_date: new Date().toISOString().split("T")[0], emp_num: "", org_id: "" } });
+    set({ user: stubProfile(data.user.id, email, { name }) });
     return "ONBOARD";
   },
 
@@ -244,7 +273,14 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const profiles = await db.get<Profile>("profiles", { id: session.user.id });
+        let profiles: Profile[];
+        try {
+          profiles = await db.get<Profile>("profiles", { id: session.user.id }, { strict: true });
+        } catch {
+          // Transient failure (blip while onLine still read true), NOT a
+          // deleted account — keep the cached user; it self-heals next init.
+          return;
+        }
         if (profiles.length) {
           const profile = profiles[0];
           set({ user: profile });
@@ -255,10 +291,15 @@ export const useStore = create<AppState>((set, get) => ({
           }
           return;
         }
-        // Valid session but the profile fetch came back empty — almost always a
-        // transient failure (blip while onLine still read true), NOT a deleted
-        // account. Keep the cached user rather than signing a valid session out;
-        // it self-heals on the next init. Only a missing SESSION logs out.
+        // Valid session, fetch SUCCEEDED, no profile: signed up (e.g. via the
+        // email-confirm link) but never created/joined a business. A stub user
+        // with no org_id routes the root page into onboarding. (A cached real
+        // profile wins — an empty read there is more likely a blip.)
+        const cachedUser = get().user;
+        if (cachedUser?.id === session.user.id && cachedUser.org_id) return;
+        const stub = stubProfile(session.user.id, session.user.email || "", session.user.user_metadata);
+        set({ user: stub });
+        sv("user", stub);
         return;
       }
       const cached = ld<Profile | null>("user", null);

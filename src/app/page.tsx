@@ -73,8 +73,9 @@ export default function Home() {
           "info",
         );
       } else if (stripeStatus === "error") {
-        const reason = params.get("reason") || "unknown";
-        showToast(`Stripe connection failed (${reason}). Check Vercel env vars.`, "error");
+        // eslint-disable-next-line no-console
+        console.error("[stripe connect] failed:", params.get("reason") || "unknown");
+        showToast("Stripe didn't finish connecting. Open Ops → Billing and tap Connect again — your progress there is saved.", "error");
       }
     }
   }, []);
