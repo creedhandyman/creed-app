@@ -156,13 +156,18 @@ a:hover { color: var(--color-primary-soft); }
 .light ::-webkit-scrollbar-thumb:hover { background: #b5bac4; }
 
 /* ─── INPUTS ───────────────────────────────────────── */
-input[type="date"]::-webkit-calendar-picker-indicator {
+/* Dark mode: native date/time pickers (and their icons) render dark-themed
+   instead of a black clock on a black field. */
+.dark input { color-scheme: dark; }
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
   filter: invert(20%) sepia(100%) saturate(5000%) hue-rotate(0deg);
   cursor: pointer;
   opacity: 0.8;
   transition: opacity var(--t-fast) var(--ease-out);
 }
-input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 /* iOS Safari collapses an EMPTY date/time input to almost no height, so a
    blank time field (e.g. the Schedule modal's Time with no saved default)
    can't be tapped to open the picker. Give the value box a real height and
