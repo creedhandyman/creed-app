@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireOwner } from "@/lib/api-auth";
+import { requireOwner, serviceClient } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +35,18 @@ export async function POST(req: NextRequest) {
       business_profile: { name: orgName || undefined },
       metadata: { org_id: orgId },
     });
+
+    // Record the new account server-side. The app can no longer write
+    // stripe_account_id itself (a DB trigger blocks it): letting the client
+    // set it is what would let anyone repoint an org's payouts.
+    const { error: saveErr } = await serviceClient()
+      .from("organizations")
+      .update({ stripe_account_id: account.id })
+      .eq("id", orgId);
+    if (saveErr) {
+      console.error("[stripe connect] saving account id failed:", saveErr);
+      return NextResponse.json({ error: "Couldn't save the Stripe account" }, { status: 500 });
+    }
 
     const origin = returnUrl || req.headers.get("origin") || "http://localhost:3000";
     const accountLink = await stripe.accountLinks.create({

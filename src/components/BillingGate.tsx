@@ -67,7 +67,8 @@ export default function BillingGate({ children }: { children: React.ReactNode })
     try {
       // Save selected plan, then hand off to the Stripe Checkout endpoint
       // that uses STRIPE_PRICE_<PLAN> env vars (no extra trial once it's over).
-      await db.patch("organizations", org.id, { plan: selectedPlan, subscription_plan: selectedPlan });
+      // subscription_plan (sets the platform fee) is Stripe-synced only.
+      await db.patch("organizations", org.id, { plan: selectedPlan });
 
       const res = await apiFetch("/api/stripe/create-checkout-session", {
         method: "POST",

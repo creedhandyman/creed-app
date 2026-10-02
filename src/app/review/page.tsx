@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { db } from "@/lib/supabase";
+import { db, supabase } from "@/lib/supabase";
 import type { Profile, Organization } from "@/lib/types";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
@@ -24,8 +24,10 @@ function ReviewContent() {
       db.get<Organization>("organizations", { id: orgId }).then((orgs) => {
         if (orgs.length) setOrgData(orgs[0]);
       });
-      db.get<Profile>("profiles", { org_id: orgId }).then((profiles) => {
-        setEmployees(profiles.filter((p) => p.name?.trim()));
+      // Public page (signed-out customers): the anon role may only read a
+      // few profile columns, so ask for exactly those — select * is denied.
+      supabase.from("profiles").select("id, name").eq("org_id", orgId).then(({ data }) => {
+        setEmployees(((data || []) as Profile[]).filter((p) => p.name?.trim()));
       });
     } else {
       // No org specified — don't load any employees to prevent cross-org data leak

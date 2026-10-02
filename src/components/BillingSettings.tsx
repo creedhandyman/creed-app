@@ -80,9 +80,7 @@ export default function BillingSettings() {
                     }
                     const data = await res.json();
                     if (data.url) {
-                      await db.patch("organizations", user.org_id, {
-                        stripe_account_id: data.accountId,
-                      });
+                      // /api/stripe/connect already saved the account id.
                       window.location.href = data.url;
                     } else {
                       fail(data.error || "no url");
@@ -236,10 +234,12 @@ export default function BillingSettings() {
                     // it surfaces back in /onboarding's plan picker when
                     // the owner returns to finish checkout.
                     <select
-                      value={plan}
+                      value={org?.plan || plan}
                       onChange={async (e) => {
                         if (!org) return;
-                        await db.patch("organizations", org.id, { plan: e.target.value, subscription_plan: e.target.value });
+                        // Only the chosen plan; subscription_plan (which sets
+                        // the platform fee) is written by Stripe sync only.
+                        await db.patch("organizations", org.id, { plan: e.target.value });
                         const orgs = await db.get<Organization>("organizations", { id: org.id });
                         if (orgs.length) setOrg(orgs[0]);
                       }}

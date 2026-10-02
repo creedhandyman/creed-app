@@ -1762,9 +1762,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     }
                     const data = await res.json();
                     if (data.url) {
-                      await db.patch("organizations", user.org_id, {
-                        stripe_account_id: data.accountId,
-                      });
+                      // /api/stripe/connect already saved the account id.
                       window.location.href = data.url;
                     } else {
                       useStore.getState().showToast(t("jobs.errorPrefix") + " " + (data.error || t("jobs.couldNotStartStripe")), "error");
