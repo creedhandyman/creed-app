@@ -849,6 +849,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   (anon, authenticated) — keep them INVOKER security. So the app must never
   write those columns: `/api/stripe/connect` saves stripe_account_id
   server-side; the app writes `plan`, never `subscription_plan` (sets the fee).
+  Follow-up migration `org_scoped_inserts`: jobs / mileage / pay_history /
+  price_corrections / quest_payouts / receipts / schedule / time_entries had
+  INSERT WITH CHECK (true) for every role (anon could add a fake time entry to
+  any org); now `to authenticated with check (org_id = auth_org_id())`.
+  referrals + reviews keep public insert ON PURPOSE (public site/review forms).
 
 - **AI Render from the quote (`Creed_AI_Render_Enhancement`)**: the "after"
   render now reads the quote's own line items instead of a fixed prompt.
