@@ -309,6 +309,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `/api/portal/me` selects so the customer's downloaded copy matches. Until the
   migration runs, saving toasts "column does not exist" (best-effort) but the
   PDF falls back to 50% / 30 days.
+- Schedule ↔ job link (**ALREADY RUN in prod 2026-10-02**, migration
+  `schedule_job_id`, backfilled to the latest job at that address created on/
+  before the entry's date): `ALTER TABLE schedule ADD COLUMN job_id uuid;`.
+  Schedule.tsx used to match entries to jobs by the address TEXT, so a new job
+  at an address that had ever been scheduled (repeat / property-manager work)
+  never showed as Unscheduled. Now `isScheduled(job)` = a linked entry for that
+  job, or a legacy unlinked entry at that address NOT older than the job;
+  `jobForEntry(e)` resolves the linked job. Jobs → Schedule passes the job id
+  (`preSelectJobId`), quickAdd writes `job_id`, AppFolio imports link it too.
 - Multi-day scheduling: `ALTER TABLE schedule ADD COLUMN IF NOT EXISTS end_date TEXT;`
   (YYYY-MM-DD; absent/equal to sched_date = single day). Schedule.tsx treats
   an entry as covering `sched_date..end_date` (`spansDay()` helper). Single-day

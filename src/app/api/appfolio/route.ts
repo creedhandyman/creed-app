@@ -193,6 +193,7 @@ export async function POST(req: NextRequest) {
     sched_date: schedDate,
     job: property,
     note,
+    ...(jobId ? { job_id: jobId } : {}),
   };
   if (body.endDate && body.endDate > schedDate) schedPayload.end_date = body.endDate;
 

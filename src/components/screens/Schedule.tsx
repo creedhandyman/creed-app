@@ -122,6 +122,9 @@ function RouteOptimizer({ addresses }: { addresses: string[] }) {
 interface Props {
   setPage: (p: string) => void;
   preSelectJob?: string | null;
+  /** The exact job behind preSelectJob (Jobs → Schedule), so the entry links
+   *  to it instead of whatever job last had that address. */
+  preSelectJobId?: string | null;
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -138,7 +141,7 @@ const MONTH_NAMES = [
 const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-export default function Schedule({ setPage, preSelectJob }: Props) {
+export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Props) {
   const jobs = useStore((s) => s.jobs);
   const profiles = useStore((s) => s.profiles);
   const schedule = useStore((s) => s.schedule);
@@ -153,6 +156,10 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   // job's Assign button (Day-view Unscheduled) or a preSelectJob deep-link
   // (Jobs → "Schedule this job"), which defaults the day to today.
   const [armedJob, setArmedJob] = useState<string | null>(preSelectJob || null);
+  // The exact job being scheduled (schedule.job_id). null = address-only
+  // (legacy entry being edited, or a job we couldn't identify).
+  const [armedJobId, setArmedJobId] = useState<string | null>(preSelectJobId || null);
+  const arm = (j: { id: string; property: string }) => { setArmedJob(j.property); setArmedJobId(j.id); };
   const [dropTarget, setDropTarget] = useState<string | null>(preSelectJob ? ymd(new Date()) : null);
   // Last-used time and workers persist between drops so back-to-back
   // scheduling sessions don't require re-typing the same defaults.
@@ -173,7 +180,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   // creating a new one (post).
   const [editSched, setEditSched] = useState<typeof schedule[number] | null>(null);
   // Reset the multi-day end + edit target whenever the modal closes (any path).
-  useEffect(() => { if (!armedJob) { setEndTarget(null); setEditSched(null); } }, [armedJob]);
+  useEffect(() => { if (!armedJob) { setEndTarget(null); setEditSched(null); setArmedJobId(null); } }, [armedJob]);
 
   // When a job is armed via the drag palette, re-run the day-suggestion
   // logic so the user immediately sees a "schedule near nearby work" hint.
@@ -249,11 +256,14 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
       // Only send end_date for a real range so single-day scheduling still
       // works before the `end_date` column migration runs.
       const payload: Record<string, unknown> = { sched_date: dropTarget, job: armedJob, note };
+      if (armedJobId) payload.job_id = armedJobId;
       if (endDate) payload.end_date = endDate;
       // Only bump the job to "scheduled" once the calendar entry exists —
       // otherwise it drops out of Unscheduled with nothing on the calendar.
       if (await db.post("schedule", payload) === null) return;
-      const matched = jobs.find((j) => j.property === armedJob && (j.status === "quoted" || j.status === "accepted"));
+      const matched = armedJobId
+        ? jobs.find((j) => j.id === armedJobId && (j.status === "quoted" || j.status === "accepted"))
+        : jobs.find((j) => j.property === armedJob && (j.status === "quoted" || j.status === "accepted"));
       if (matched) await db.patch("jobs", matched.id, { status: "scheduled" });
     }
     // Persist time + workers so the next drop pre-fills with the same
@@ -352,18 +362,30 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
   };
   const initialsOf = (name: string): string => (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
   const jobFor = (property?: string) => property ? jobs.filter((j) => j.property === property && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] : undefined;
-  const entryWorkers = (e: { note?: string; job?: string }): string[] => {
+  // An entry's job: the linked one when it has job_id, else (legacy) the
+  // latest job at that address.
+  const jobForEntry = (e: { job?: string; job_id?: string | null }) =>
+    (e.job_id ? jobs.find((j) => j.id === e.job_id) : undefined) || jobFor(e.job);
+  // Is this job on the calendar? Linked entries count only for their own job.
+  // A legacy (unlinked) entry at the same address counts only if it isn't
+  // older than the job — an old job's visit must not hide a new one there.
+  const isScheduled = (j: { id: string; property: string; created_at?: string }) =>
+    schedule.some((e) => e.job_id
+      ? e.job_id === j.id
+      : e.job === j.property && (!j.created_at || e.sched_date >= j.created_at.slice(0, 10)));
+  const entryWorkers = (e: { note?: string; job?: string; job_id?: string | null }): string[] => {
     const w = parseWorkers(e.note);
-    const j = jobFor(e.job);
+    const j = jobForEntry(e);
     return (j?.requested_tech && !w.includes(j.requested_tech)) ? [...w, j.requested_tech] : w;
   };
-  const matchesWorker = (e: { note?: string; job?: string }) => !workerFilter || entryWorkers(e).includes(workerFilter);
+  const matchesWorker = (e: { note?: string; job?: string; job_id?: string | null }) => !workerFilter || entryWorkers(e).includes(workerFilter);
 
   // Open the quick-schedule modal pre-filled to EDIT/MOVE an existing entry
   // (change its day(s), time, crew, notes — or unschedule it).
   const openEdit = (s: typeof schedule[number]) => {
     setEditSched(s);
     setArmedJob(s.job);
+    setArmedJobId(s.job_id || null);
     setDropTarget(s.sched_date);
     setEndTarget(s.end_date || null);
     setQsTime(parseTime(s.note));
@@ -590,8 +612,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
         const ds = ymd(viewDate);
         const dayEntries = schedule.filter((s) => spansDay(s, ds) && matchesWorker(s))
           .sort((a, b) => (parseTime(a.note) || "99:99").localeCompare(parseTime(b.note) || "99:99"));
-        const scheduledProps = new Set(schedule.map((s) => s.job));
-        const unscheduled = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !scheduledProps.has(j.property));
+        const unscheduled = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !isScheduled(j));
         return (
           <div className="mb">
             {dayEntries.length === 0 && (
@@ -600,7 +621,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             {/* Route optimizer — suggests the least-driving stop order (3+ stops). */}
             <RouteOptimizer addresses={dayEntries.map((s) => s.job).filter(Boolean)} />
             {dayEntries.map((s) => {
-              const j = jobFor(s.job);
+              const j = jobForEntry(s);
               const color = j ? statusColor(j.status) : "var(--color-primary)";
               const time = parseTime(s.note);
               const crew = entryWorkers(s);
@@ -637,7 +658,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14 }}>{j.property}</div>
                     <div style={{ fontSize: 11.5, color: "var(--color-dim)", textTransform: "capitalize" }}>{j.status} · {t("sched.noDayYet")}</div>
                   </div>
-                  <button onClick={() => { setArmedJob(j.property); setDropTarget(ds); }} style={{ fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--color-primary)", borderRadius: 8, padding: "6px 10px", border: "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0 }}>
+                  <button onClick={() => { arm(j); setDropTarget(ds); }} style={{ fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--color-primary)", borderRadius: 8, padding: "6px 10px", border: "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0 }}>
                     <Icon name="schedule" size={12} color="#fff" /> {t("sched.assign")}
                   </button>
                 </div>
@@ -654,7 +675,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
             const ds = ymd(d);
             const dayEntries = schedule.filter((s) => spansDay(s, ds) && matchesWorker(s)).sort((a, b) => (parseTime(a.note) || "99:99").localeCompare(parseTime(b.note) || "99:99"));
             const isToday = ds === todayStr;
-            const totalHrs = dayEntries.reduce((sum, e) => sum + (jobFor(e.job)?.total_hrs || 0), 0);
+            const totalHrs = dayEntries.reduce((sum, e) => sum + (jobForEntry(e)?.total_hrs || 0), 0);
             return (
               <div key={i} onClick={() => setSelectedDay(ds)} style={{ background: darkMode ? "#16161f" : "#fff", border: `1px solid ${isToday ? "rgba(46,139,255,.5)" : "var(--color-border-dark)"}`, boxShadow: isToday ? "0 0 0 1px rgba(46,139,255,.2)" : "none", borderRadius: 13, padding: "10px 11px", marginBottom: 8, opacity: dayEntries.length ? 1 : 0.5, cursor: "pointer" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: dayEntries.length ? 7 : 0 }}>
@@ -664,7 +685,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                 {dayEntries.length === 0 ? (
                   <div style={{ fontSize: 12.5, color: "var(--color-dim)" }}>{t("sched.noJobsShort")}</div>
                 ) : dayEntries.map((s) => {
-                  const j = jobFor(s.job);
+                  const j = jobForEntry(s);
                   const color = j ? statusColor(j.status) : "var(--color-primary)";
                   const time = parseTime(s.note);
                   const crew = entryWorkers(s);
@@ -698,7 +719,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
               const dayEntries = schedule.filter((s) => spansDay(s, ds) && matchesWorker(s));
               const isToday = ds === todayStr;
               const isSel = ds === selectedDay;
-              const dots = dayEntries.slice(0, 4).map((s) => { const j = jobFor(s.job); return j ? statusColor(j.status) : "var(--color-primary)"; });
+              const dots = dayEntries.slice(0, 4).map((s) => { const j = jobForEntry(s); return j ? statusColor(j.status) : "var(--color-primary)"; });
               return (
                 <div key={i} onClick={() => setSelectedDay(isSel ? null : ds)} style={{ aspectRatio: ".92", borderRadius: 8, padding: "3px 2px", display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer", background: isSel ? "rgba(46,139,255,.16)" : (darkMode ? "#16161f" : "#fff"), border: `1px solid ${isSel || isToday ? "var(--color-primary)" : "var(--color-border-dark)"}` }}>
                   <div style={{ fontSize: 11.5, color: isToday ? "var(--color-primary)" : "inherit", fontWeight: isToday ? 700 : 400 }}>{d.getDate()}</div>
@@ -714,8 +735,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
 
       {/* ── DISPATCH VIEW — assign jobs to days + techs ── */}
       {view === "dispatch" && (() => {
-        const scheduledProps = new Set(schedule.map((s) => s.job));
-        const needScheduling = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !scheduledProps.has(j.property));
+        const needScheduling = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !isScheduled(j));
         const weekDates = week.map((d) => ymd(d));
         const weekStart = weekDates[0];
         const weekEnd = weekDates[weekDates.length - 1];
@@ -735,7 +755,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.property}</div>
                   <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>{j.trade || t("sched.job")} · {(j.total_hrs || 0).toFixed(1)}h · {j.status}</div>
                 </div>
-                <button onClick={() => { setArmedJob(j.property); setDropTarget(todayStr); }} style={{ fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--color-primary)", borderRadius: 8, padding: "6px 12px", border: "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0 }}>
+                <button onClick={() => { arm(j); setDropTarget(todayStr); }} style={{ fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--color-primary)", borderRadius: 8, padding: "6px 12px", border: "none", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0 }}>
                   <Icon name="schedule" size={12} color="#fff" /> {t("sched.assign")}
                 </button>
               </div>
@@ -757,7 +777,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                     <span className="dim" style={{ fontSize: 11.5 }}>{mine.length ? `${mine.length} ${mine.length !== 1 ? t("sched.jobsPlural") : t("sched.jobSingular")}` : t("sched.available")}</span>
                   </div>
                   {mine.map((s) => {
-                    const j = jobFor(s.job);
+                    const j = jobForEntry(s);
                     const multi = !!(s.end_date && s.end_date > s.sched_date);
                     const dlabel = multi
                       ? `${new Date(s.sched_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}–${new Date((s.end_date as string) + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
@@ -799,9 +819,7 @@ export default function Schedule({ setPage, preSelectJob }: Props) {
                   // to a real Job row so we can wire SMS notifications. Last-
                   // updated wins on duplicates so the most recent quote at
                   // that address is what we text about.
-                  const linkedJob = jobs
-                    .filter((j) => j.property === s.job && !j.archived)
-                    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+                  const linkedJob = jobForEntry(s);
                   return (
                     <div key={s.id} className="sep" style={{ fontSize: 14, padding: "8px 0" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: linkedJob ? 6 : 0, gap: 6 }}>

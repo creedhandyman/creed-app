@@ -373,6 +373,9 @@ export interface ScheduleEntry {
   sched_date: string;       // start day (YYYY-MM-DD)
   end_date?: string;        // last day for multi-day jobs; absent = single day
   job: string;
+  /** The exact job this visit is for. Absent on legacy rows → matched by
+   *  the `job` address text. */
+  job_id?: string | null;
   note: string;
   created_at?: string;
 }

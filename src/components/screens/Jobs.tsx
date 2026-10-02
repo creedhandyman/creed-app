@@ -106,7 +106,7 @@ function ClosestTechHint({ job }: { job: Job }) {
 interface Props {
   setPage: (p: string) => void;
   onEditJob?: (jobId: string) => void;
-  onScheduleJob?: (jobName: string) => void;
+  onScheduleJob?: (jobName: string, jobId?: string) => void;
   /** Open straight to this job's detail screen (notification deep-link).
    *  Seeds detail state on mount; clearInitialDetail resets the parent so a
    *  later plain nav to Jobs lands on the list. */
@@ -883,7 +883,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     switch (dj.status) {
       case "lead":      return { label: t("jobs.buildQuote"), icon: "quote", onClick: () => onEditJob?.(dj.id) };
       case "quoted":    return { label: t("jobs.editSendQuote"), icon: "edit", onClick: () => onEditJob?.(dj.id) };
-      case "accepted":  return { label: t("jobs.schedule"), icon: "schedule", onClick: () => (onScheduleJob ? onScheduleJob(dj.property) : setPage("sched")) };
+      case "accepted":  return { label: t("jobs.schedule"), icon: "schedule", onClick: () => (onScheduleJob ? onScheduleJob(dj.property, dj.id) : setPage("sched")) };
       case "scheduled": return { label: t("jobs.markActive"), icon: "play", onClick: () => setStatus(dj.id, "active") };
       case "active":    return { label: t("jobs.markComplete"), icon: "check", onClick: () => setStatus(dj.id, "complete") };
       case "complete":  return { label: t("jobs.sendInvoice"), icon: "send", onClick: () => { void sendInvoice(dj); } };

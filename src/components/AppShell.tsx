@@ -25,6 +25,7 @@ export default function AppShell() {
   const [showSettings, setShowSettings] = useState(false);
   const [editJobId, setEditJobId] = useState<string | null>(null);
   const [scheduleJobName, setScheduleJobName] = useState<string | null>(null);
+  const [scheduleJobId, setScheduleJobId] = useState<string | null>(null);
   // Deep-link target for the Jobs detail screen (tapping a notification on
   // the dashboard opens that job). Jobs seeds its detail state from this on
   // mount, then clears it so a later plain nav to Jobs opens the list.
@@ -121,9 +122,9 @@ export default function AppShell() {
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
-        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string) => { setScheduleJobName(name); goToPage("sched"); }} initialDetailJobId={jobDetailId} clearInitialDetail={() => setJobDetailId(null)} openOps={goToOps} />;
+        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string, id?: string) => { setScheduleJobName(name); setScheduleJobId(id || null); goToPage("sched"); }} initialDetailJobId={jobDetailId} clearInitialDetail={() => setJobDetailId(null)} openOps={goToOps} />;
       case "sched":
-        return <Schedule setPage={goToPage} preSelectJob={scheduleJobName} />;
+        return <Schedule setPage={goToPage} preSelectJob={scheduleJobName} preSelectJobId={scheduleJobId} />;
       case "time":
         return <TimerScreen setPage={goToPage} />;
       case "payroll":
