@@ -830,6 +830,25 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   URLs so both render. Don't revert receipt uploads to the public `receipts`
   bucket. Logos/renders/job-photos stay public (customer-facing). Owner-confirmed
   live: RLS on; `ADMIN_PASSWORD`/`PROMO_CODES`/Upstash set.
+  **profiles/organizations lockdown (2026-10-02, migration
+  `lock_down_profiles_and_organizations`, rehearsed 37/37 in a rolled-back
+  txn)**: profiles had an `open` FOR ALL true policy (anyone could edit/delete
+  any profile, self-promote to owner) and both tables had FOR ALL
+  `org_isolation` (any tech could edit the org incl. its Stripe payout
+  account). Now: profiles read = self + own org (anon: column grant id/name/
+  org_id/photo_url/role only — `/review` selects `id, name`); insert = own
+  row, owner only into an EMPTY org, joiners tech/apprentice at rate 0;
+  update = self or owner/manager of the org, with trigger `profiles_guard`
+  letting only owner/manager change role/rate/start_date/emp_num/PTO and
+  only an owner touch the owner role; delete = self or admin (manager can't
+  remove an owner). organizations: writes = "Owners update org" only;
+  trigger `organizations_guard` (replaced `protect_org_entitlement`, which
+  rejected EVERY app insert — signup was broken) resets billing/payout
+  fields on client inserts and blocks client changes to billing_enforced /
+  subscription_* / stripe_* / trial_*. Guards check `current_user` in
+  (anon, authenticated) — keep them INVOKER security. So the app must never
+  write those columns: `/api/stripe/connect` saves stripe_account_id
+  server-side; the app writes `plan`, never `subscription_plan` (sets the fee).
 
 - **AI Render from the quote (`Creed_AI_Render_Enhancement`)**: the "after"
   render now reads the quote's own line items instead of a fixed prompt.
