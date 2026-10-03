@@ -135,37 +135,39 @@ export default function HomePage() {
 
       {/* ---------- Pricing ---------- */}
       <section className="band" id="pricing">
-        <div className="container section price-grid">
-          <div>
-            <SecLabel>03 — Pricing</SecLabel>
-            <h2 className="h2" style={{ marginBottom: 16 }}>One rate for everything.</h2>
-            <p className="lead" style={{ fontSize: 17.5, marginBottom: 28 }}>
-              You get an estimate before work starts, and the price on the
-              invoice is the price we agreed on.
-            </p>
-            <div className="rate-slab">
-              <div className="num">
-                <b>{SITE.rate}</b>
-                <span>/ hour</span>
-              </div>
-              <div className="min">{SITE.minimum}</div>
-            </div>
-            <div className="special">
-              <span className="k">Special</span>
-              <div className="num"><b>{SPECIAL.price}</b><span>{SPECIAL.title}</span></div>
-              <p>{SPECIAL.note}</p>
-            </div>
-          </div>
-          <div className="pointlist">
-            {PRICE_POINTS.map((pt) => (
-              <div className="point" key={pt.h}>
-                <i />
-                <div>
-                  <b>{pt.h}</b>
-                  <p>{pt.p}</p>
+        <div className="container section">
+          <SecLabel>03 — Pricing</SecLabel>
+          <h2 className="h2" style={{ marginBottom: 16 }}>One rate for everything.</h2>
+          <p className="lead" style={{ fontSize: 17.5, marginBottom: 32, maxWidth: "60ch" }}>
+            You get an estimate before work starts, and the price on the
+            invoice is the price we agreed on.
+          </p>
+          <div className="price-grid price-plumb">
+            <div className="price-cards">
+              <div className="rate-slab">
+                <div className="num">
+                  <b>{SITE.rate}</b>
+                  <span>/ hour</span>
                 </div>
+                <div className="min">{SITE.minimum}</div>
               </div>
-            ))}
+              <div className="special">
+                <span className="k">Special</span>
+                <div className="num"><b>{SPECIAL.price}</b><span>{SPECIAL.title}</span></div>
+                <p>{SPECIAL.note}</p>
+              </div>
+            </div>
+            <div className="pointlist">
+              {PRICE_POINTS.map((pt) => (
+                <div className="point" key={pt.h}>
+                  <i />
+                  <div>
+                    <b>{pt.h}</b>
+                    <p>{pt.p}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
