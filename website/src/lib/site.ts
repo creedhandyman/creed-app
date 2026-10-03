@@ -184,7 +184,15 @@ export const GALLERY = [
   },
 ];
 
+// Intro offer shown in the pricing sections (home + /pricing).
+export const SPECIAL = {
+  price: "$80",
+  title: "Wichita house call special",
+  note: "One small repair inside Wichita city limits — the visit and up to an hour of work for a flat $80.",
+};
+
 export const PRICE_POINTS = [
+  { h: "Free estimates", p: "Send photos or have us look — the quote costs you nothing." },
   { h: "No mystery fees", p: "The quote is the number on the invoice." },
   { h: "No trip charges inside Wichita", p: "Driving to you is on us." },
   { h: "Materials billed at cost", p: "Receipts on request, no markup." },

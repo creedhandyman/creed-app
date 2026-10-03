@@ -238,6 +238,12 @@ a.svc:hover { background: #1b2127; color: inherit; }
 .rate-slab .num b { font-family: var(--font-head); font-weight: 700; font-size: clamp(60px, 8vw, 84px); line-height: 0.85; letter-spacing: -0.02em; }
 .rate-slab .num span { font-family: var(--font-head); font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--blue-lt); }
 .rate-slab .min { border-top: 2px solid var(--line); padding-top: 12px; font-family: var(--font-head); font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.special { margin-top: 18px; border: 2px solid var(--red); background: var(--panel2); padding: 22px 24px; }
+.special .k { font-family: var(--font-head); font-size: 12.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--red-hi); }
+.special .num { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 8px; }
+.special .num b { font-family: var(--font-head); font-weight: 700; font-size: 48px; line-height: 0.9; }
+.special .num span { font-family: var(--font-head); font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.special p { font-size: 15px; line-height: 1.5; color: var(--muted); margin: 0; }
 .pointlist { border-top: 2px solid var(--line); }
 .point { border-bottom: 2px solid var(--line); padding: 20px 0; display: flex; gap: 16px; align-items: baseline; }
 .point i { width: 8px; height: 8px; background: var(--blue); display: block; flex: none; transform: translateY(6px); }

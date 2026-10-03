@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SITE, PRICE_POINTS } from "@/lib/site";
+import { SITE, PRICE_POINTS, SPECIAL } from "@/lib/site";
 import { PageHero, CtaBand } from "@/components/blocks";
 
 export const metadata: Metadata = {
@@ -26,6 +26,11 @@ export default function PricingPage() {
                 <span>/ hour</span>
               </div>
               <div className="min">{SITE.minimum}</div>
+            </div>
+            <div className="special">
+              <span className="k">Special</span>
+              <div className="num"><b>{SPECIAL.price}</b><span>{SPECIAL.title}</span></div>
+              <p>{SPECIAL.note}</p>
             </div>
             <p style={{ marginTop: 20, fontSize: 15.5, lineHeight: 1.55, color: "var(--dim)" }}>
               The two-hour minimum covers the truck, the tools, and getting to

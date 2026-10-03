@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED, WORK_ORDER } from "@/lib/site";
+import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED, WORK_ORDER, SPECIAL } from "@/lib/site";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -27,15 +27,14 @@ export default function HomePage() {
             </h1>
             <p className="lead" style={{ maxWidth: "46ch" }}>
               Repairs done right — certified, insured, and straightforward.
-              {" "}{SITE.rate} an hour with a two-hour minimum, quoted before
-              the work starts.
+              Free estimates, and you get the price before any work starts.
             </p>
             <div className="btn-row" style={{ marginTop: 30 }}>
               <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Request a quote</a>
             </div>
             <div className="hero-ticks">
               <span className="tick"><i />Licensed &amp; insured</span>
-              <span className="tick"><i />Upfront pricing</span>
+              <span className="tick"><i />Free estimates</span>
               <span className="tick"><i />Cleanup included</span>
             </div>
           </div>
@@ -48,8 +47,8 @@ export default function HomePage() {
               />
               <div className="edge" />
               <div className="price">
-                <b>{SITE.rate}</b>
-                <span>/ hr</span>
+                <b>FREE</b>
+                <span>estimates</span>
               </div>
             </div>
             <div className="cap">{HERO.caption}</div>
@@ -150,6 +149,11 @@ export default function HomePage() {
                 <span>/ hour</span>
               </div>
               <div className="min">{SITE.minimum}</div>
+            </div>
+            <div className="special">
+              <span className="k">Special</span>
+              <div className="num"><b>{SPECIAL.price}</b><span>{SPECIAL.title}</span></div>
+              <p>{SPECIAL.note}</p>
             </div>
           </div>
           <div className="pointlist">

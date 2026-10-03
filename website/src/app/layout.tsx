@@ -20,7 +20,7 @@ const sourceSans = Source_Sans_3({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.domain),
   title: {
-    default: `${SITE.name} — Wichita, KS handyman | ${SITE.rate}/hr, quoted first`,
+    default: `${SITE.name} — Wichita, KS handyman | Free estimates`,
     template: `%s — ${SITE.name} | Wichita, KS`,
   },
   description: `Certified, insured handyman serving ${SITE.areaLine}. ${SITE.rate} an hour with a two-hour minimum, quoted before the work starts. Call ${SITE.phone}.`,
