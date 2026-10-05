@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED, WORK_ORDER, SPECIAL } from "@/lib/site";
+import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED, WORK_ORDER, SPECIAL, REVIEWS, FAQ } from "@/lib/site";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -15,7 +15,7 @@ export default function HomePage() {
       <section className="band">
         <div className="container hero-grid">
           <div>
-            <Kicker>{SITE.city}, Kansas</Kicker>
+            <Kicker>Wichita handyman · License #{SITE.license}</Kicker>
             <h1 className="h1 h1-creed">
               {CREED.lines.map((l, i) => (
                 <span className="line" key={i}>
@@ -26,12 +26,18 @@ export default function HomePage() {
               <span className="tail">{CREED.tail}</span>
             </h1>
             <p className="lead" style={{ maxWidth: "46ch" }}>
-              Repairs done right — certified, insured, and straightforward.
-              Free estimates, and you get the price before any work starts.
+              Painting, flooring, repairs, and rental turnovers across
+              Wichita — licensed, insured, and straightforward. Free
+              estimates, and you get the price before any work starts.
             </p>
             <div className="btn-row" style={{ marginTop: 30 }}>
-              <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Request a quote</a>
+              <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Get a free estimate</a>
+              <a href={SITE.smsHref} className="btn btn-outline">Text a photo</a>
             </div>
+            <a href="#reviews" className="hero-rating">
+              <span className="stars" aria-hidden="true">★★★★★</span>
+              <b>{REVIEWS.rating}</b> on {REVIEWS.source} · Read what customers say
+            </a>
             <div className="hero-ticks">
               <span className="tick"><i />Licensed &amp; insured</span>
               <span className="tick"><i />Free estimates</span>
@@ -42,7 +48,7 @@ export default function HomePage() {
             <div className="imgwrap">
               <Img
                 src={HERO.after}
-                alt="New Pergo plank flooring after a carpet tear-out on a Wichita job"
+                alt="Bernard Reed, owner of Creed Handyman, standing by his work truck in Wichita"
                 style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", display: "block", filter: "saturate(.9) contrast(1.04)" }}
               />
               <div className="edge" />
@@ -90,6 +96,30 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ---------- Reviews ---------- */}
+      <section className="band band-alt" id="reviews">
+        <div className="container section">
+          <SecLabel>What customers say</SecLabel>
+          <h2 className="h2" style={{ marginBottom: 10 }}>
+            <span style={{ color: "#f5b301" }} aria-hidden="true">★★★★★ </span>
+            {REVIEWS.rating} from every customer review
+          </h2>
+          <p className="sub" style={{ marginBottom: 28 }}>Verified reviews from {REVIEWS.source}. Real Wichita customers.</p>
+          <div className="review-grid">
+            {REVIEWS.items.map((r) => (
+              <figure className="review" key={r.name}>
+                <div className="stars" aria-label="5 out of 5 stars">★★★★★</div>
+                <blockquote>“{r.text}”</blockquote>
+                <figcaption><b>{r.name}</b> · {r.job}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <a href={SITE.googleProfile} target="_blank" rel="noopener" className="golink" style={{ display: "inline-block", marginTop: 24 }}>
+            See us on Google →
+          </a>
+        </div>
+      </section>
+
       {/* ---------- Credentials strip ---------- */}
       <CredStrip />
 
@@ -98,8 +128,8 @@ export default function HomePage() {
         <div className="container section">
           <SecLabel>01 — Services</SecLabel>
           <h2 className="h2">What we fix</h2>
-          <p className="sub">Six things we do most. If it is not on the list, ask.</p>
-          <div className="svc-grid">
+          <p className="sub">Handyman services across Wichita and Sedgwick County. If it is not on the list, ask.</p>
+          <div className="svc-grid svc-grid-4">
             {SERVICES.map((s, i) => (
               <Link href={`/services/${s.slug}`} className="svc" key={s.slug}>
                 <div className="svc-num">
@@ -200,6 +230,32 @@ export default function HomePage() {
           </div>
           <Link href="/churches" className="golink">Reach out →</Link>
         </div>
+      </section>
+
+      {/* ---------- FAQ ---------- */}
+      <section className="band band-alt" id="faq">
+        <div className="container section">
+          <SecLabel>Questions</SecLabel>
+          <h2 className="h2" style={{ marginBottom: 28 }}>Before you call</h2>
+          <div className="faq">
+            {FAQ.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}</summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              mainEntity: FAQ.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+            }),
+          }}
+        />
       </section>
 
       {/* ---------- Closing CTA ---------- */}

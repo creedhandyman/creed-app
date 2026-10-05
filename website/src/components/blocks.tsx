@@ -105,7 +105,7 @@ export function CtaBand({
     <section className="band band-red" id="quote">
       {/* Decorative — the band's copy carries the message. */}
       <div className="cta-mascot" aria-hidden="true">
-        <img src="/assets/mascot.jpg" alt="" loading="lazy" />
+        <img src="/assets/mascot.jpg" alt="Creed Handyman mascot with a paint roller and drill" loading="lazy" />
       </div>
       <div className="container cta-close">
         <div className="kicker">
@@ -128,9 +128,9 @@ export function CtaBand({
 /** The 4-up credentials strip. */
 export function CredStrip() {
   const CREDS = [
-    { h: "NATE", p: "HVAC certified technician" },
-    { h: "EPA 608", p: "Refrigerant handling certified" },
-    { h: "Insured", p: "General liability on every job" },
+    { h: "Licensed", p: `Contractor license #${SITE.license}` },
+    { h: "Insured", p: `${SITE.insurer} general liability, every job` },
+    { h: "NATE · EPA 608", p: "HVAC & refrigerant certified" },
     { h: "17,000+ hours", p: "Hands-on work experience" },
   ];
   return (

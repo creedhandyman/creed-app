@@ -28,7 +28,7 @@ export default function SiteHeader() {
     <header className="hdr">
       <div className="hdr-in">
         <Link href="/" className="hdr-logo">
-          <img src={SITE.logo} alt="" />
+          <img src={SITE.logo} alt="Creed Handyman logo" />
           <span className="hdr-word">
             Creed<span> Handyman</span>
           </span>

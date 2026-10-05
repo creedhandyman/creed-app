@@ -18,7 +18,7 @@ export default function ServicesPage() {
             <Kicker>Services</Kicker>
             <h1 className="h1">What we fix</h1>
             <p className="lead" style={{ maxWidth: "52ch" }}>
-              Six things we do most, listed plainly. If your job is not on a
+              Painting, flooring, turnovers, and the repairs in between, listed plainly. If your job is not on a
               list, ask anyway — odd jobs are the job.
             </p>
           </div>
@@ -32,7 +32,7 @@ export default function ServicesPage() {
           <div className="svc-art svc-art-mobile" style={{ marginBottom: 24 }}>
             <img src="/assets/neon-sign.webp" alt="Creed Handyman LLC — established 2022 — call 316-400-7414" />
           </div>
-          <div className="svc-grid">
+          <div className="svc-grid svc-grid-4">
             {SERVICES.map((s, i) => (
               <Link href={`/services/${s.slug}`} className="svc" key={s.slug}>
                 <div className="svc-num">

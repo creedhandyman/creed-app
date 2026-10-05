@@ -8,7 +8,7 @@ export default function SiteFooter() {
         <div className="foot-grid">
           <div>
             <div className="ftr-brand">
-              <img src={SITE.logo} alt="" />
+              <img src={SITE.logo} alt="Creed Handyman logo" />
               <span>{SITE.name}</span>
             </div>
             <p style={{ marginBottom: 12 }}>

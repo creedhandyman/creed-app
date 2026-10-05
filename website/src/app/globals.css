@@ -301,13 +301,17 @@ a.svc:hover { background: #1b2127; color: inherit; }
 .callbar { display: none; }
 @media (max-width: 767px) {
   .callbar {
-    display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-    background: var(--red); color: #fff;
-    font-family: var(--font-head); font-size: 17px; letter-spacing: 0.1em; text-transform: uppercase;
-    padding: 18px 24px; text-align: center; border-top: 2px solid var(--bg);
+    display: grid; grid-template-columns: 1fr 1fr 1.4fr; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    border-top: 2px solid var(--bg); background: var(--bg);
   }
-  .callbar:hover { color: #fff; }
-  body { padding-bottom: 62px; }
+  .callbar a {
+    display: block; padding: 17px 8px; text-align: center; color: #fff;
+    font-family: var(--font-head); font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase;
+    background: var(--blue); border-right: 2px solid var(--bg);
+  }
+  .callbar a.cb-quote { background: var(--red); border-right: 0; }
+  .callbar a:hover { color: #fff; }
+  body { padding-bottom: 60px; }
 }
 
 /* ---------- forms ---------- */
@@ -404,3 +408,30 @@ textarea.field { resize: vertical; min-height: 120px; }
 .fconsent b { color: var(--ink); font-weight: 600; }
 
 .price-cards .special { margin-top: 0; }
+
+/* ---------- hero rating link ---------- */
+.hero-rating { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; font-size: 15px; color: var(--muted); }
+.hero-rating .stars { color: #f5b301; letter-spacing: 2px; }
+.hero-rating b { color: #fff; }
+.hero-rating:hover { color: #fff; }
+
+/* ---------- reviews ---------- */
+.review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.review { margin: 0; background: var(--panel); border: 2px solid var(--line); padding: 24px 26px; display: flex; flex-direction: column; gap: 12px; }
+.review .stars { color: #f5b301; letter-spacing: 3px; font-size: 18px; }
+.review blockquote { margin: 0; font-size: 16.5px; line-height: 1.55; color: #e6e9ec; flex: 1; }
+.review figcaption { font-size: 14.5px; color: var(--dim); }
+.review figcaption b { color: #fff; font-family: var(--font-head); font-weight: 500; letter-spacing: 0.04em; }
+@media (max-width: 760px) { .review-grid { grid-template-columns: 1fr; } }
+
+/* ---------- 4-up services grid (8 services) ---------- */
+@media (min-width: 1000px) { .svc-grid.svc-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* ---------- FAQ ---------- */
+.faq { border-top: 2px solid var(--line); max-width: 860px; }
+.faq details { border-bottom: 2px solid var(--line); }
+.faq summary { cursor: pointer; list-style: none; padding: 20px 36px 20px 0; position: relative; font-family: var(--font-head); font-size: 19px; text-transform: uppercase; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 4px; top: 16px; font-size: 26px; color: var(--blue-lt); }
+.faq details[open] summary::after { content: "–"; }
+.faq p { margin: 0 0 20px; font-size: 16.5px; line-height: 1.6; color: var(--muted); max-width: 70ch; }

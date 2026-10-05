@@ -22,6 +22,10 @@ export const SITE = {
     "Valley Center", "Maize", "Goddard", "Kechi", "Cheney",
     "Clearwater", "Colwich", "Andale", "Garden Plain", "Mount Hope", "Bentley",
   ],
+  license: "8145054",
+  insurer: "Hiscox",
+  googleProfile: "https://share.google/iWyuFiCuRR2FXA2UN",
+  smsHref: "sms:+13164007414",
   logo: "/assets/logo.png",
   social: {
     facebook: "https://www.facebook.com/profile.php?id=100093350324125",
@@ -30,6 +34,70 @@ export const SITE = {
 };
 
 export const SERVICES = [
+  {
+    slug: "drywall-paint",
+    name: "Painting & drywall",
+    blurb: "Interior painting, drywall patches, texture matching, trim and touch-ups.",
+    intro: "Fresh paint and clean walls do more for a room than anything else — holes, cracks, and stains patched and texture-matched first, so the finish looks new.",
+    tasks: [
+      "Drywall hole and crack repair",
+      "Texture matching — orange peel, knockdown",
+      "Water-damage patch and repaint",
+      "Ceiling stain sealing and repair",
+      "Trim, baseboard, and door casing",
+      "Caulking and paint touch-up",
+      "Interior painting by the room",
+      "Popcorn ceiling patching",
+    ],
+  },
+  {
+    slug: "make-ready",
+    name: "Make-ready & work orders",
+    blurb: "Vacant-unit turnovers, punch lists, and small work orders, start to finish.",
+    intro: "Between tenants is where we earn our keep — one crew works the whole punch list, and the unit comes back ready to show.",
+    tasks: [
+      "Full punch-list turnover work",
+      "Patch, texture, and repaint",
+      "Fixture and hardware swaps",
+      "Rekeying",
+      "Blinds and detector replacement",
+      "Caulk and grout refresh",
+      "Small plumbing and electrical items",
+      "Photo-documented completion report",
+    ],
+  },
+  {
+    slug: "flooring",
+    name: "Flooring",
+    blurb: "Carpet tear-out, vinyl and laminate plank installs, transitions and trim.",
+    intro: "Worn carpet out, durable plank in — the fastest way to make a room or a rental feel new.",
+    tasks: [
+      "Carpet and pad tear-out and haul-away",
+      "Luxury vinyl plank (LVP) installation",
+      "Laminate plank installation",
+      "Subfloor checks and prep",
+      "Transitions and thresholds",
+      "Baseboard and quarter-round",
+      "Damaged plank repair",
+      "Rental-grade flooring for turnovers",
+    ],
+  },
+  {
+    slug: "trash-outs",
+    name: "Trash-outs & cleanouts",
+    blurb: "Vacant-unit trash-outs and haul-away so the turnover can start.",
+    intro: "Left-behind furniture, junk, and debris hauled out so the unit is empty and ready for repairs.",
+    tasks: [
+      "Vacant-unit trash-outs",
+      "Furniture and appliance haul-away",
+      "Garage and shed cleanouts",
+      "Construction debris removal",
+      "Move-out cleanouts for landlords",
+      "Haul-away after our own repair work",
+      "Photo documentation for property owners",
+      "Bundled with make-ready turnovers",
+    ],
+  },
   {
     slug: "plumbing",
     name: "Plumbing",
@@ -60,22 +128,6 @@ export const SERVICES = [
       "Doorbells and video doorbells",
       "Thermostat swaps",
       "Breaker swaps",
-    ],
-  },
-  {
-    slug: "drywall-paint",
-    name: "Drywall & paint",
-    blurb: "Holes, cracks, texture matching, trim and touch-up work.",
-    intro: "Holes, cracks, and water stains disappear — texture matched so you can't find the patch afterward.",
-    tasks: [
-      "Drywall hole and crack repair",
-      "Texture matching — orange peel, knockdown",
-      "Water-damage patch and repaint",
-      "Ceiling stain sealing and repair",
-      "Trim, baseboard, and door casing",
-      "Caulking and paint touch-up",
-      "Interior painting by the room",
-      "Popcorn ceiling patching",
     ],
   },
   {
@@ -110,22 +162,6 @@ export const SERVICES = [
       "Garage storage and racks",
     ],
   },
-  {
-    slug: "make-ready",
-    name: "Make-ready",
-    blurb: "Turnovers and punch lists between tenants, start to finish.",
-    intro: "Between tenants is where we earn our keep — one crew works the whole punch list, and the unit comes back ready to show.",
-    tasks: [
-      "Full punch-list turnover work",
-      "Patch, texture, and repaint",
-      "Fixture and hardware swaps",
-      "Rekeying",
-      "Blinds and detector replacement",
-      "Caulk and grout refresh",
-      "Small plumbing and electrical items",
-      "Photo-documented completion report",
-    ],
-  },
 ];
 
 // The CREED itself — the acronym the company is named for. The homepage
@@ -145,8 +181,8 @@ export const CREED = {
 
 // Hero photo. Drop the file in /public/assets. Falls back to a placeholder if missing.
 export const HERO = {
-  after: "/assets/hero.jpg",
-  caption: "Old carpet out, Pergo planks down — same room, whole new feel. · West Wichita",
+  after: "/assets/bernard-truck.jpg",
+  caption: "Bernard Reed, owner · Licensed & insured · Wichita",
 };
 
 // Before/after gallery. Drop images in /public/assets and keep these paths.
@@ -272,3 +308,26 @@ export const LEADS = {
   endpoint: "https://www.creedhm.com/api/leads",
   slug: "creedhandyman",
 };
+
+// Customer reviews (verified on Angi). Shown on the homepage; add new ones
+// at the top. Keep first name + last initial only.
+export const REVIEWS = {
+  source: "Angi",
+  rating: "5.0",
+  items: [
+    { name: "Jacob G.", job: "Handyman", text: "I've worked with plenty of people in the past who procrastinate, or do half the job and expect me to accept it. It was the total opposite with Creed! Very professional, on time, and truly took his time to make sure everything was done properly. I wouldn't recommend any other handyman!" },
+    { name: "Alissa S.", job: "Interior paint & repair", text: "I had multiple small holes around my bathroom window that were starting to create concerns. They replaced and installed new tiling as well as insulation to fix it. They were quick and efficient. I rely on them for all my house work, whether it's a small or a big project." },
+    { name: "Danielle S.", job: "Bathroom renovation", text: "My bathrooms were renovated. The job was done exactly how I wanted. Excellent work!" },
+    { name: "Alexia M.", job: "Drain cleaning", text: "Cleaned my drains — I was having a lot of problems and haven't had a problem since. Very good customer service and prices." },
+  ],
+};
+
+// Homepage FAQ (also emitted as FAQPage structured data).
+export const FAQ = [
+  { q: "Are estimates really free?", a: "Yes. Send photos through the quote form or have us take a look — you get the price before any work starts, and it costs you nothing." },
+  { q: "How much do you charge?", a: "$55 an hour with a two-hour minimum, materials at cost. Inside Wichita there is also an $80 house-call special for one small repair — the visit and up to an hour of work." },
+  { q: "Are you licensed and insured?", a: "Yes — license #8145054, with general liability insurance through Hiscox on every job." },
+  { q: "Do you charge a trip fee?", a: "No trip charges inside Wichita. For the rest of Sedgwick County we will tell you up front if anything applies." },
+  { q: "Do you work with landlords and property managers?", a: "Yes — vacant-unit turnovers, trash-outs, punch lists, and work orders are a big part of what we do, with one invoice per property and photo reports when the unit is ready." },
+  { q: "What areas do you serve?", a: "Wichita and all of Sedgwick County, including Derby, Haysville, Park City, Bel Aire, Maize, Goddard, and Valley Center." },
+];
