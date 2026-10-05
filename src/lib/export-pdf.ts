@@ -2,7 +2,7 @@ import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 import { resolveTaxMode, type TaxMode } from "./tax";
 import { priceCascade, rateForRoom } from "./pricing";
-import { itemInTier, itemTiers, type TierKey } from "./tiers";
+import { itemInTier, itemTiers, tierMembershipLabel, type TierKey } from "./tiers";
 import { approvalState, type QuoteApproval } from "./approval";
 
 interface ExportOptions {
@@ -279,9 +279,32 @@ export function exportQuotePdf(opts: ExportOptions) {
     .map((col, idx) => {
       const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
       const picked = idx === acceptedIdx;
-      const itemsList = col.items.length
-        ? `<ul style="padding-left:16px;margin:6px 0 0;font-size:11px;color:#444;line-height:1.5">${col.items.slice(0, 6).map((a) => `<li>${esc(a.it.detail)}</li>`).join("")}${col.items.length > 6 ? `<li>+${col.items.length - 6} more</li>` : ""}</ul>`
-        : `<div style="font-size:11px;color:#888;margin-top:6px">No work in this option</div>`;
+      // Base lists its scope; Better/Best list only what CHANGES vs the
+      // option before them — three near-identical lists hid the difference.
+      const li = (pairs: TierPair[], max: number, mark = "", style = "") =>
+        pairs.slice(0, max).map((a) => `<li${style ? ` style="${style}"` : ""}>${mark}${esc(a.it.detail)}</li>`).join("")
+        + (pairs.length > max ? `<li>+${pairs.length - max} more</li>` : "");
+      const ul = (inner: string, marked = false) => `<ul style="padding-left:${marked ? 2 : 16}px;margin:4px 0 0;font-size:11px;color:#444;line-height:1.5;${marked ? "list-style:none;" : ""}">${inner}</ul>`;
+      const sub = (txt: string) => `<div style="font-size:11px;font-weight:700;color:${hue};margin-top:8px">${txt}</div>`;
+      let itemsList: string;
+      if (!col.items.length) {
+        itemsList = `<div style="font-size:11px;color:#888;margin-top:6px">No work in this option</div>`;
+      } else if (idx === 0) {
+        itemsList = sub("Includes:") + ul(li(col.items, 8));
+      } else {
+        const prev = tierCols[idx - 1];
+        const added = col.items.filter((p) => !prev.items.includes(p));
+        const removed = prev.items.filter((p) => !col.items.includes(p));
+        const keptAll = removed.length === 0;
+        const kept = prev.items.length - removed.length;
+        itemsList = !added.length && keptAll
+          ? `<div style="font-size:11px;color:#888;margin-top:8px">Same scope as ${esc(prev.name)}</div>`
+          : (keptAll
+              ? sub(`Everything in ${esc(prev.name)}, plus:`)
+              : sub(kept > 0 ? `${esc(prev.name)} scope, with these changes:` : "Includes:"))
+            + (added.length ? ul(li(added, 10, kept > 0 || keptAll ? "+ " : ""), kept > 0 || keptAll) : "")
+            + (removed.length && kept > 0 ? ul(li(removed, 6, "− ", "color:#999;text-decoration:line-through"), true) : "");
+      }
       return `<div style="border:${picked ? 3 : 2}px solid ${hue};border-radius:10px;padding:12px;page-break-inside:avoid;${acceptedIdx >= 0 && !picked ? "opacity:.55;" : ""}">
       <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}${picked ? ` <span style="font-size:10px;background:${hue};color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px;letter-spacing:.08em">✓ Selected</span>` : ""}</div>
       <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:${hue};margin:4px 0 2px">$${col.total.toFixed(0)}</div>
@@ -293,7 +316,7 @@ export function exportQuotePdf(opts: ExportOptions) {
 </div>
 <div style="font-size:11px;color:#888;margin-bottom:18px">${acceptedIdx >= 0
     ? `Approved: <b>${esc(tierCols[acceptedIdx].name)}</b>. The other options are shown for reference only, and the line-item breakdown that follows lists all quoted work across the options.`
-    : "Each option above is a complete, standalone scope — pick the one you want. The line-item breakdown that follows lists all quoted work across the options for reference."}</div>
+    : "Each option above is a complete, standalone price — pick the one you want. The line-item breakdown that follows lists all quoted work across the options; lines that belong to only some options are tagged."}</div>
 `
     : "";
 
@@ -370,8 +393,14 @@ export function exportQuotePdf(opts: ExportOptions) {
 
     const matMap: Record<
       string,
-      { n: string; unitPrice: number; qty: number; total: number; notes: string[] }
+      { n: string; unitPrice: number; qty: number; total: number; notes: string[]; tag: string | null }
     > = {};
+    // Tiered quote: tag lines that aren't in every option ("Better & Best
+    // only") so the breakdown shows what each option adds.
+    const tagOf = (it: RoomItem) => (showTiers ? tierMembershipLabel(it, tierNames) : null);
+    const tagHtml = (tag: string | null) => tag
+      ? ` <span style="display:inline-block;font-size:10px;font-weight:700;color:#7a3fb8;border:1px solid #7a3fb8;border-radius:4px;padding:0 5px;margin-left:2px;white-space:nowrap">${esc(tag)}</span>`
+      : "";
     cat.items.forEach((it) => {
       it.materials.forEach((m) => {
         if (m.c > 0) {
@@ -387,7 +416,9 @@ export function exportQuotePdf(opts: ExportOptions) {
           // trailing-space differences in AI output don't split rows.
           // Display name preserves original casing (first-seen).
           const nameKey = m.n.trim().toLowerCase();
-          const key = nameKey + "|" + matUnit;
+          const tag = tagOf(it);
+          // Don't merge the same SKU across lines in different options.
+          const key = nameKey + "|" + matUnit + "|" + (tag || "");
           if (matMap[key]) {
             matMap[key].qty += matQty;
             matMap[key].total += m.c;
@@ -400,6 +431,7 @@ export function exportQuotePdf(opts: ExportOptions) {
               qty: matQty,
               total: m.c,
               notes: it.detail ? [it.detail] : [],
+              tag,
             };
           }
         }
@@ -407,7 +439,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     });
     let matRows = "";
     Object.values(matMap).forEach((m) => {
-      matRows += `<tr><td>${esc(m.n)}</td><td class="r">${m.qty}</td><td class="r">$${m.unitPrice.toFixed(2)}</td><td class="r">$${m.total.toFixed(2)}</td><td class="dim">${esc(m.notes.join(", "))}</td></tr>`;
+      matRows += `<tr><td>${esc(m.n)}</td><td class="r">${m.qty}</td><td class="r">$${m.unitPrice.toFixed(2)}</td><td class="r">$${m.total.toFixed(2)}</td><td class="dim">${esc(m.notes.join(", "))}${tagHtml(m.tag)}</td></tr>`;
     });
     // Items with no billable materials never reach matMap, so their scope
     // used to be invisible on the printed quote — a verification-only
@@ -419,7 +451,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     cat.items.forEach((it) => {
       if (it.detail && !notedDetails.has(it.detail)) {
         notedDetails.add(it.detail);
-        matRows += `<tr><td class="dim">Labor only</td><td class="r dim">—</td><td class="r dim">—</td><td class="r dim">$0.00</td><td class="dim">${esc(it.detail)}</td></tr>`;
+        matRows += `<tr><td class="dim">Labor only</td><td class="r dim">—</td><td class="r dim">—</td><td class="r dim">$0.00</td><td class="dim">${esc(it.detail)}${tagHtml(tagOf(it))}</td></tr>`;
       }
     });
 

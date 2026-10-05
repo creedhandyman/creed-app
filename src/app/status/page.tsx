@@ -5,7 +5,7 @@ import type { Job, Organization, Room } from "@/lib/types";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
-import { itemInTier } from "@/lib/tiers";
+import { itemInTier, tierDeltas } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
 import { smsConsentGranted } from "@/lib/sms-consent";
 
@@ -397,6 +397,12 @@ function StatusContent() {
     });
   })();
   const itemCount = breakdown.reduce((s, b) => s + b.count, 0);
+  // What the picked option changes vs the one before it (Better vs Base, Best
+  // vs Better) — the price cards alone didn't show the difference.
+  const tierNameOf = (k: "base" | "better" | "best") => (k === "base" ? "Base" : tierNames[k]);
+  const pickedDelta = showTierPicker
+    ? tierDeltas(quoteRooms.flatMap((rm) => rm?.items || [])).find((d) => d.tier === (job.client_signature && acceptedTier ? acceptedTier : selectedTier)) || null
+    : null;
 
   return (
     <div className="pub">
@@ -534,9 +540,38 @@ function StatusContent() {
                 );
               })}
             </div>
+            {pickedDelta && (() => {
+              const d = pickedDelta;
+              const kept = d.prev ? d.items.length - d.added.length : 0;
+              const heading = !d.prev
+                ? `${tierNameOf(d.tier)} includes`
+                : !d.added.length && !d.removed.length
+                  ? `Same scope as ${tierNameOf(d.prev)}`
+                  : !d.removed.length
+                    ? `Everything in ${tierNameOf(d.prev)}, plus`
+                    : kept > 0 ? `${tierNameOf(d.prev)} scope, with these changes` : `${tierNameOf(d.tier)} includes`;
+              const mark = d.prev && kept > 0;
+              return (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 12, color: "#cfd2da", fontWeight: 700, marginBottom: 4 }}>{heading}</div>
+                  {d.added.map((it, i) => (
+                    <div className="wo" key={`a${i}`}>
+                      {mark && <span style={{ color: "#3ee08f", fontWeight: 700, width: 12, flexShrink: 0 }}>+</span>}
+                      <span style={{ color: "#cfd2da" }}>{it.detail}</span>
+                    </div>
+                  ))}
+                  {kept > 0 && d.removed.map((it, i) => (
+                    <div className="wo" key={`r${i}`}>
+                      <span style={{ color: "#ff6b6b", fontWeight: 700, width: 12, flexShrink: 0 }}>−</span>
+                      <span style={{ color: "#8a8a99", textDecoration: "line-through" }}>{it.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             {!job.client_signature && (
               <div style={{ fontSize: 12, color: "#8a8a99", marginTop: 8, textAlign: "center" }}>
-                Each option includes everything in the one before it. Pick one, then approve below.
+                Tap an option to see what it includes, then approve below.
               </div>
             )}
           </div>
