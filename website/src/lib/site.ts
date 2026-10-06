@@ -370,12 +370,14 @@ export const LEADS = {
 // Customer reviews (verified on Angi). Shown on the homepage; add new ones
 // at the top. Keep first name + last initial only.
 export const REVIEWS = {
-  source: "Angi",
+  source: "Google & Angi",
   rating: "5.0",
   items: [
+    { name: "Alex E.", job: "Google review", text: "Exemplary service, their team came in and completed the job in great time for what it was and they paid close attention to detail and future durability! Thank you Creed Handyman!!" },
     { name: "Jacob G.", job: "Handyman", text: "I've worked with plenty of people in the past who procrastinate, or do half the job and expect me to accept it. It was the total opposite with Creed! Very professional, on time, and truly took his time to make sure everything was done properly. I wouldn't recommend any other handyman!" },
     { name: "Alissa S.", job: "Interior paint & repair", text: "I had multiple small holes around my bathroom window that were starting to create concerns. They replaced and installed new tiling as well as insulation to fix it. They were quick and efficient. I rely on them for all my house work, whether it's a small or a big project." },
     { name: "Danielle S.", job: "Bathroom renovation", text: "My bathrooms were renovated. The job was done exactly how I wanted. Excellent work!" },
+    { name: "Sherry", job: "Google review", text: "Thanks for your quick response on handy work, we really appreciate your business." },
     { name: "Alexia M.", job: "Drain cleaning", text: "Cleaned my drains — I was having a lot of problems and haven't had a problem since. Very good customer service and prices." },
   ],
 };

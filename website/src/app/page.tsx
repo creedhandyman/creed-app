@@ -104,7 +104,7 @@ export default function HomePage() {
             <span style={{ color: "#f5b301" }} aria-hidden="true">★★★★★ </span>
             {REVIEWS.rating} from every customer review
           </h2>
-          <p className="sub" style={{ marginBottom: 28 }}>Verified reviews from {REVIEWS.source}. Real Wichita customers.</p>
+          <p className="sub" style={{ marginBottom: 28 }}>Verified reviews from Google and Angi. Real Wichita customers.</p>
           <div className="review-grid">
             {REVIEWS.items.map((r) => (
               <figure className="review" key={r.name}>
