@@ -400,7 +400,7 @@ export const RECENT = [
   { src: "/assets/recent-04.webp", caption: "Fireplace trim work" },
   { src: "/assets/recent-05.webp", caption: "Deck stairs, rebuilt & stained" },
   { src: "/assets/recent-06.webp", caption: "Move-in ready" },
-  { src: "/assets/recent-07.webp", caption: "Whole-house turnover" },
+  { src: "/assets/recent-07.webp", caption: "Color change, gray to white" },
   { src: "/assets/recent-08.webp", caption: "Rental turnover" },
   { src: "/assets/recent-09.webp", caption: "Cozy bedroom, dark walls & lighting" },
   { src: "/assets/recent-10.webp", caption: "Kitchen & living turnover" },
