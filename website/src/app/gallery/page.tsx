@@ -20,7 +20,7 @@ export default function GalleryPage() {
         <div className="container section">
           <div className="gal-grid">
             {GALLERY.map((g) => (
-              <BeforeAfter key={g.title} {...g} />
+              <BeforeAfter key={g.title} title={g.title} note={g.note} before={g.before} after={g.after} />
             ))}
           </div>
           <p style={{ marginTop: 32, fontSize: 16, color: "var(--dim)" }}>

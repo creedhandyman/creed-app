@@ -162,7 +162,7 @@ export default function HomePage() {
           </div>
           <div className="gal-grid">
             {GALLERY.slice(0, 2).map((g) => (
-              <BeforeAfter key={g.title} {...g} />
+              <BeforeAfter key={g.title} title={g.title} note={g.note} before={g.before} after={g.after} />
             ))}
           </div>
         </div>

@@ -188,30 +188,87 @@ export const HERO = {
 
 // Before/after gallery. Drop images in /public/assets and keep these paths.
 // The homepage shows the first two; /gallery shows them all.
-export const GALLERY = [
+export const GALLERY: {
+  title: string;
+  note: string;
+  before: string;
+  after: string;
+  services?: string[]; // service slugs this job shows off (service pages list them)
+}[] = [
+  {
+    title: "Bathroom remodel",
+    note: "Dated vanity and vinyl floor out — new floating vanity, tile floor, backsplash, and a lighted mirror in.",
+    before: "/assets/ba7-before.webp",
+    after: "/assets/ba7-after.webp",
+    services: ["plumbing"],
+  },
+  {
+    title: "Rental turnover",
+    note: "Stained carpet out, vinyl plank in, and the yellowed doors and trim repainted white.",
+    before: "/assets/ba8-before.webp",
+    after: "/assets/ba8-after.webp",
+    services: ["make-ready", "flooring", "drywall-paint"],
+  },
   {
     title: "Carpet-to-Pergo makeover",
     note: "The worn carpet came up, the solid subfloor underneath got new Pergo planks — and the room feels brand new.",
     before: "/assets/ba1-before.webp",
     after: "/assets/ba1-after.webp",
+    services: ["flooring"],
+  },
+  {
+    title: "Patched floor to new plank",
+    note: "A floor of mismatched patches replaced with one clean run of vinyl plank.",
+    before: "/assets/ba9-before.webp",
+    after: "/assets/ba9-after.webp",
+    services: ["flooring"],
+  },
+  {
+    title: "Staircase refinish",
+    note: "Bare, stained stair treads finished with new plank treads and risers.",
+    before: "/assets/ba10-before.webp",
+    after: "/assets/ba10-after.webp",
+    services: ["flooring"],
   },
   {
     title: "Rental make-ready",
     note: "Carpet out, plank in, walls and trim repainted for turnover.",
     before: "/assets/ba2-before.webp",
     after: "/assets/ba2-after.webp",
+    services: ["make-ready", "flooring", "drywall-paint"],
+  },
+  {
+    title: "Garage repaint",
+    note: "Peeling walls and ceiling scraped, prepped, and repainted clean white.",
+    before: "/assets/ba11-before.webp",
+    after: "/assets/ba11-after.webp",
+    services: ["drywall-paint"],
+  },
+  {
+    title: "Sliding patio door install",
+    note: "Old exterior door gone — the opening framed out and a new sliding patio door installed.",
+    before: "/assets/ba12-before.webp",
+    after: "/assets/ba12-after.webp",
+    services: ["doors-locks"],
   },
   {
     title: "Deck rescue and repaint",
     note: "Peeling paint scraped and sanded off, then the whole deck recoated.",
     before: "/assets/ba5-before.webp",
     after: "/assets/ba5-after.webp",
+    services: ["drywall-paint"],
   },
   {
     title: "Deck stair rebuild",
     note: "The whole staircase remade from scratch, then restained.",
     before: "/assets/ba6-before.webp",
     after: "/assets/ba6-after.webp",
+  },
+  {
+    title: "Fence replacement",
+    note: "A leaning, weathered fence torn out and rebuilt with new posts and pickets.",
+    before: "/assets/ba13-before.webp",
+    after: "/assets/ba13-after.webp",
   },
   {
     title: "Basement window rebuild",
