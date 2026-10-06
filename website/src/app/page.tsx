@@ -7,6 +7,7 @@ export const metadata: Metadata = {
 };
 import { Kicker, SecLabel, BeforeAfter, CtaBand, CredStrip } from "@/components/blocks";
 import Img from "@/components/Img";
+import RecentWork from "@/components/RecentWork";
 
 export default function HomePage() {
   return (
@@ -166,6 +167,14 @@ export default function HomePage() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* ---------- Recent work reel ---------- */}
+      <section className="band band-alt rw-band" aria-label="Recent work">
+        <div className="container" style={{ paddingTop: 8, paddingBottom: 18 }}>
+          <span className="rw-label">Recent work around Wichita</span>
+        </div>
+        <RecentWork />
       </section>
 
       {/* ---------- Pricing ---------- */}

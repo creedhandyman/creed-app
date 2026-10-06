@@ -522,3 +522,25 @@ textarea.field { resize: vertical; min-height: 120px; }
 .cmp-range::-moz-range-thumb { width: 60px; height: 400px; border: 0; }
 .cmp-range:focus-visible + .cmp-hint, .cmp:focus-within .cmp-handle span { outline: 2px solid #fff; outline-offset: 3px; }
 .cmp-hint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(11,12,13,.82); color: #fff; font-family: var(--font-head); font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; padding: 7px 12px; pointer-events: none; }
+
+/* ---------- recent-work reel ---------- */
+.rw-band { padding-bottom: 40px; }
+.rw-label { font-family: var(--font-head); font-size: 12.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--dim); }
+.rw { overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 24px; }
+.rw::-webkit-scrollbar { display: none; }
+.rw-track { display: flex; gap: 14px; width: max-content; }
+.rw-tile { margin: 0; position: relative; width: 300px; flex: none; scroll-snap-align: start; overflow: hidden; border: 2px solid var(--line); background: var(--panel); }
+.rw-tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; transition: transform .6s cubic-bezier(.2,.7,.2,1); }
+.rw-tile figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 14px 11px; background: linear-gradient(transparent, rgba(11,12,13,.9)); font-family: var(--font-head); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
+.rw-tile[aria-hidden="true"] { display: none; }
+@media (max-width: 560px) { .rw-tile { width: 78vw; } }
+
+/* Desktop with motion allowed: a slow, seamless drift that pauses on hover. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .rw { overflow: hidden; padding: 0; mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+  .rw-tile[aria-hidden="true"] { display: block; }
+  .rw-track { animation: rwDrift 60s linear infinite; }
+  .rw:hover .rw-track { animation-play-state: paused; }
+  .rw-tile:hover img { transform: scale(1.06); }
+}
+@keyframes rwDrift { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 7px)); } }

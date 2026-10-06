@@ -391,3 +391,17 @@ export const FAQ = [
   { q: "Do you work with landlords and property managers?", a: "Yes — vacant-unit turnovers, trash-outs, punch lists, and work orders are a big part of what we do, with one invoice per property and photo reports when the unit is ready." },
   { q: "What areas do you serve?", a: "Wichita and all of Sedgwick County, including Derby, Haysville, Park City, Bel Aire, Maize, Goddard, and Valley Center." },
 ];
+
+// "Recent work" photo reel (single after shots). Short, plain captions.
+export const RECENT = [
+  { src: "/assets/recent-01.webp", caption: "Bathroom remodel" },
+  { src: "/assets/recent-02.webp", caption: "New laminate flooring" },
+  { src: "/assets/recent-03.webp", caption: "Tub surround & vanity" },
+  { src: "/assets/recent-04.webp", caption: "Fireplace tile surround" },
+  { src: "/assets/recent-05.webp", caption: "Deck stairs, rebuilt & stained" },
+  { src: "/assets/recent-06.webp", caption: "Move-in ready" },
+  { src: "/assets/recent-07.webp", caption: "Whole-house turnover" },
+  { src: "/assets/recent-08.webp", caption: "Rental turnover" },
+  { src: "/assets/recent-09.webp", caption: "Living room refresh" },
+  { src: "/assets/recent-10.webp", caption: "Kitchen turnover" },
+];
