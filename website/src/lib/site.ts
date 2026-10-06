@@ -397,7 +397,7 @@ export const RECENT = [
   { src: "/assets/recent-01.webp", caption: "Bathroom remodel" },
   { src: "/assets/recent-02.webp", caption: "New laminate flooring" },
   { src: "/assets/recent-03.webp", caption: "Tub surround & vanity" },
-  { src: "/assets/recent-04.webp", caption: "Fireplace tile surround" },
+  { src: "/assets/recent-04.webp", caption: "Fireplace trim work" },
   { src: "/assets/recent-05.webp", caption: "Deck stairs, rebuilt & stained" },
   { src: "/assets/recent-06.webp", caption: "Move-in ready" },
   { src: "/assets/recent-07.webp", caption: "Whole-house turnover" },

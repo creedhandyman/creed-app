@@ -73,10 +73,15 @@ export default function Motion() {
     const onScroll = () => hdr?.classList.toggle("hdr-scrolled", window.scrollY > 12);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
+    // iOS Safari only applies :active (holding a finger pauses the work reel)
+    // when a touchstart listener exists.
+    const noop = () => {};
+    document.addEventListener("touchstart", noop, { passive: true });
 
     return () => {
       io.disconnect();
       window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("touchstart", noop);
     };
   }, [pathname]);
 

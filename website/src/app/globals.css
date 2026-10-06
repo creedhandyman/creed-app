@@ -535,12 +535,19 @@ textarea.field { resize: vertical; min-height: 120px; }
 .rw-tile[aria-hidden="true"] { display: none; }
 @media (max-width: 560px) { .rw-tile { width: 78vw; } }
 
-/* Desktop with motion allowed: a slow, seamless drift that pauses on hover. */
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+/* Motion allowed (desktop AND phone): a slow, seamless drift. Pauses on
+   hover, or while a finger is held on it. Reduced-motion = plain swipe row. */
+@media (prefers-reduced-motion: no-preference) {
   .rw { overflow: hidden; padding: 0; mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
   .rw-tile[aria-hidden="true"] { display: block; }
   .rw-track { animation: rwDrift 60s linear infinite; }
-  .rw:hover .rw-track { animation-play-state: paused; }
+  .rw:hover .rw-track, .rw:active .rw-track { animation-play-state: paused; }
+}
+@media (prefers-reduced-motion: no-preference) and (max-width: 560px) {
+  .rw-tile { width: 70vw; }
+  .rw-track { animation-duration: 50s; }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .rw-tile:hover img { transform: scale(1.06); }
 }
 @keyframes rwDrift { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 7px)); } }
