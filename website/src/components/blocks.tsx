@@ -1,5 +1,5 @@
 import { SITE, WORK_ORDER } from "@/lib/site";
-import Img from "@/components/Img";
+import CompareSlider from "@/components/CompareSlider";
 
 /** Kicker (red bar + blue label) used at the top of page heroes. */
 export function Kicker({ children }: { children: React.ReactNode }) {
@@ -59,28 +59,7 @@ export function BeforeAfter({
 }) {
   return (
     <div className="ba">
-      <div className="ba-imgs">
-        <div className="ba-cell">
-          <Img
-            src={before}
-            alt={`${title} — before`}
-            loading="lazy"
-            style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", display: "block" }}
-            className="ph"
-          />
-          <span className="ba-tag">BEFORE</span>
-        </div>
-        <div className="ba-cell">
-          <Img
-            src={after}
-            alt={`${title} — after`}
-            loading="lazy"
-            style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", display: "block" }}
-            className="ph"
-          />
-          <span className="ba-tag after">AFTER</span>
-        </div>
-      </div>
+      <CompareSlider before={before} after={after} title={title} />
       <div className="ba-meta">
         <h3>{title}</h3>
         <p>{note}</p>

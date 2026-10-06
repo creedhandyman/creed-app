@@ -139,6 +139,10 @@ export default function HomePage() {
                 </div>
                 <h3 className="h3">{s.name}</h3>
                 <p>{s.blurb}</p>
+                <ul className="svc-tasks" aria-hidden="true">
+                  {s.tasks.slice(0, 4).map((t) => <li key={t}>{t}</li>)}
+                </ul>
+                <span className="svc-more">See everything we do →</span>
               </Link>
             ))}
           </div>

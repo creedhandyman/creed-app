@@ -4,6 +4,7 @@ import { Oswald, Source_Sans_3 } from "next/font/google";
 import { SITE, CREED, WORK_ORDER } from "@/lib/site";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
+import Motion from "@/components/Motion";
 import "./globals.css";
 
 const oswald = Oswald({
@@ -80,6 +81,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        <Motion />
         <Analytics />
       </body>
     </html>
