@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SITE, WORK_ORDER } from "@/lib/site";
 import { PageHero } from "@/components/blocks";
 import QuoteForm from "@/components/QuoteForm";
+import EmailLink from "@/components/EmailLink";
 
 export const metadata: Metadata = {
   title: "Request a quote",
@@ -43,7 +44,7 @@ export default function ContactPage() {
               </p>
               <p style={{ fontSize: 15.5, lineHeight: 1.6, color: "var(--muted)", margin: 0 }}>
                 Call or text — texted photos get the fastest quotes. Email works
-                too: <a href={`mailto:${SITE.email}`}>{SITE.email}</a>
+                too: <EmailLink />
               </p>
             </div>
             <div className="card" style={{ marginBottom: 24 }}>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SITE, CITY_PAGES } from "@/lib/site";
+import EmailLink from "@/components/EmailLink";
 
 export default function SiteFooter() {
   return (
@@ -16,7 +17,7 @@ export default function SiteFooter() {
             </p>
             <a href={SITE.phoneHref} className="ftr-phone">{SITE.phone}</a>
             <p style={{ marginTop: 6 }}>
-              <a href={`mailto:${SITE.email}`} style={{ color: "var(--muted)" }}>{SITE.email}</a>
+              <EmailLink style={{ color: "var(--muted)" }} />
             </p>
           </div>
           <div>

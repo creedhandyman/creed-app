@@ -26,7 +26,7 @@ export const SITE = {
   insurer: "Hiscox",
   googleProfile: "https://share.google/iWyuFiCuRR2FXA2UN",
   smsHref: "sms:+13164007414",
-  logo: "/assets/logo.png",
+  logo: "/assets/logo.webp",
   social: {
     facebook: "https://www.facebook.com/profile.php?id=100093350324125",
     instagram: "https://www.instagram.com/creedhandyman/",
@@ -182,7 +182,7 @@ export const CREED = {
 
 // Hero photo. Drop the file in /public/assets. Falls back to a placeholder if missing.
 export const HERO = {
-  after: "/assets/bernard-truck.jpg",
+  after: "/assets/bernard-truck.webp",
   caption: "Bernard Reed, owner · Licensed & insured · Wichita",
 };
 
@@ -192,32 +192,32 @@ export const GALLERY = [
   {
     title: "Carpet-to-Pergo makeover",
     note: "The worn carpet came up, the solid subfloor underneath got new Pergo planks — and the room feels brand new.",
-    before: "/assets/ba1-before.jpg",
-    after: "/assets/ba1-after.jpg",
+    before: "/assets/ba1-before.webp",
+    after: "/assets/ba1-after.webp",
   },
   {
     title: "Rental make-ready",
     note: "Carpet out, plank in, walls and trim repainted for turnover.",
-    before: "/assets/ba2-before.jpg",
-    after: "/assets/ba2-after.jpg",
+    before: "/assets/ba2-before.webp",
+    after: "/assets/ba2-after.webp",
   },
   {
     title: "Deck rescue and repaint",
     note: "Peeling paint scraped and sanded off, then the whole deck recoated.",
-    before: "/assets/ba5-before.jpg",
-    after: "/assets/ba5-after.jpg",
+    before: "/assets/ba5-before.webp",
+    after: "/assets/ba5-after.webp",
   },
   {
     title: "Deck stair rebuild",
     note: "The whole staircase remade from scratch, then restained.",
-    before: "/assets/ba6-before.jpg",
-    after: "/assets/ba6-after.jpg",
+    before: "/assets/ba6-before.webp",
+    after: "/assets/ba6-after.webp",
   },
   {
     title: "Basement window rebuild",
     note: "Rotted trim out, sealed up, and a new well cover fitted.",
-    before: "/assets/ba4-before.jpg",
-    after: "/assets/ba4-after.jpg",
+    before: "/assets/ba4-before.webp",
+    after: "/assets/ba4-after.webp",
   },
 ];
 

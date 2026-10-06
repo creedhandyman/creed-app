@@ -84,7 +84,7 @@ export function CtaBand({
     <section className="band band-red" id="quote">
       {/* Decorative — the band's copy carries the message. */}
       <div className="cta-mascot" aria-hidden="true">
-        <img src="/assets/mascot.jpg" alt="Creed Handyman mascot with a paint roller and drill" loading="lazy" />
+        <img src="/assets/mascot.webp" alt="Creed Handyman mascot with a paint roller and drill" loading="lazy" />
       </div>
       <div className="container cta-close">
         <div className="kicker">

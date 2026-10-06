@@ -128,7 +128,7 @@ export default function HomePage() {
       <section className="band" id="services">
         <div className="container section">
           <SecLabel>01 — Services</SecLabel>
-          <h2 className="h2">What we fix</h2>
+          <h2 className="h2">What we fix in Wichita</h2>
           <p className="sub">Handyman services across Wichita and Sedgwick County. If it is not on the list, ask.</p>
           <div className="svc-grid svc-grid-4">
             {SERVICES.map((s, i) => (

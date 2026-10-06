@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE } from "@/lib/site";
 import { PageHero } from "@/components/blocks";
+import EmailLink from "@/components/EmailLink";
 
 export const metadata: Metadata = {
   title: "SMS terms of service",
@@ -60,7 +61,7 @@ export default function SmsTermsPage() {
             <li>
               Reply <b>HELP</b> for help, or contact us at{" "}
               <a href={SITE.phoneHref}>{SITE.phone}</a> or{" "}
-              <a href={`mailto:${SITE.email}`}>{SITE.email}</a>.
+              <EmailLink />.
             </li>
           </ul>
 
@@ -78,7 +79,7 @@ export default function SmsTermsPage() {
           <p>
             {SITE.legalName} · {SITE.city}, Kansas ·{" "}
             <a href={SITE.phoneHref}>{SITE.phone}</a> ·{" "}
-            <a href={`mailto:${SITE.email}`}>{SITE.email}</a>
+            <EmailLink />
           </p>
         </div>
       </section>

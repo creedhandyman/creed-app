@@ -49,7 +49,7 @@ export default function AboutPage() {
           <div>
             <div style={{ border: "2px solid var(--line)", background: "var(--panel)", marginBottom: 24 }}>
               <img
-                src="/assets/mascot.jpg"
+                src="/assets/mascot.webp"
                 alt="Creed Handyman mascot — Bernard with a paint roller and drill"
                 loading="lazy"
                 style={{ width: "100%", display: "block" }}

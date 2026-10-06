@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE } from "@/lib/site";
 import { PageHero } from "@/components/blocks";
+import EmailLink from "@/components/EmailLink";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
@@ -99,7 +100,7 @@ export default function PrivacyPage() {
           </ul>
           <p>
             Call <a href={SITE.phoneHref}>{SITE.phone}</a> or email{" "}
-            <a href={`mailto:${SITE.email}`}>{SITE.email}</a> and we&rsquo;ll take care of it.
+            <EmailLink /> and we&rsquo;ll take care of it.
           </p>
 
           <h2 className="h3">Children</h2>
@@ -115,7 +116,7 @@ export default function PrivacyPage() {
           <p>
             {SITE.legalName} · {SITE.city}, Kansas ·{" "}
             <a href={SITE.phoneHref}>{SITE.phone}</a> ·{" "}
-            <a href={`mailto:${SITE.email}`}>{SITE.email}</a>
+            <EmailLink />
           </p>
         </div>
       </section>

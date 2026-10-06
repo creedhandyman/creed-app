@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SITE, WORK_ORDER } from "@/lib/site";
 import { PageHero, CtaBand } from "@/components/blocks";
+import EmailLink from "@/components/EmailLink";
 
 export const metadata: Metadata = {
   title: "For property managers — make-ready & punch lists",
@@ -28,7 +29,7 @@ export default function PropertyManagersPage() {
         <div className="btn-row" style={{ marginTop: 30 }}>
           <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">{WORK_ORDER.label}</a>
           <a href={SITE.phoneHref} className="btn btn-outline">Call {SITE.phone}</a>
-          <a href={`mailto:${SITE.email}`} className="btn btn-outline">Email the shop</a>
+          <EmailLink className="btn btn-outline" label="Email the shop" />
         </div>
       </PageHero>
 
