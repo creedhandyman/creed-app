@@ -55,6 +55,7 @@ export default function SiteFooter() {
             <Link href="/sms-terms">SMS Terms</Link>
             <a href={SITE.social.facebook} target="_blank" rel="noopener">Facebook</a>
             <a href={SITE.social.instagram} target="_blank" rel="noopener">Instagram</a>
+            <a href={SITE.social.homeadvisor} target="_blank" rel="noopener">HomeAdvisor</a>
           </div>
         </div>
       </div>

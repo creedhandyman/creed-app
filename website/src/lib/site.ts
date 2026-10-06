@@ -30,6 +30,7 @@ export const SITE = {
   social: {
     facebook: "https://www.facebook.com/profile.php?id=100093350324125",
     instagram: "https://www.instagram.com/creedhandyman/",
+    homeadvisor: "https://www.homeadvisor.com/rated.CreedHandyman.161678571.html",
   },
 };
 

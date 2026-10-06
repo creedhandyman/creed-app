@@ -114,9 +114,10 @@ export default function HomePage() {
               </figure>
             ))}
           </div>
-          <a href={SITE.googleProfile} target="_blank" rel="noopener" className="golink" style={{ display: "inline-block", marginTop: 24 }}>
-            See us on Google →
-          </a>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", marginTop: 24 }}>
+            <a href={SITE.social.homeadvisor} target="_blank" rel="noopener" className="golink">Read our reviews on HomeAdvisor →</a>
+            <a href={SITE.googleProfile} target="_blank" rel="noopener" className="golink">See us on Google →</a>
+          </div>
         </div>
       </section>
 
