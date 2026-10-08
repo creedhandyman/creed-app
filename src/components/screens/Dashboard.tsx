@@ -168,56 +168,35 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
     </div>
   );
 
-  // Header buttons sit on the brand gradient: translucent glass in the
-  // gradient's ink color instead of the dark card tile.
-  const headerBtn: React.CSSProperties = { background: "rgba(255,255,255,.16)", borderColor: "rgba(255,255,255,.28)", color: "inherit" };
-
   return (
     <div className="fi" style={{ minHeight: "calc(100dvh - 150px)", display: "flex", flexDirection: "column" }}>
-      {/* Brand header — the business's logo on its own brand gradient
-          (Business settings → Brand color; --brand-grad / --brand-ink are
-          set by ThemeProvider, default blue). Greeting + bell/help/settings
-          ride on it. No logo yet → the business's initials. */}
-      <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, padding: "14px 14px 15px", marginBottom: 14, background: "var(--brand-grad)", color: "var(--brand-ink)", boxShadow: "0 12px 30px -14px rgba(0,0,0,.65)" }}>
-        {/* soft sheen so the gradient reads as a surface, not a flat fill */}
-        <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 90% at 0% 0%, rgba(255,255,255,.22), transparent 55%)", pointerEvents: "none" }} />
-        {/* Top row: help (left) · LOGO (center) · bell + settings (right).
-            The side groups share one fixed width so the logo sits dead
-            center whatever the buttons are. */}
-        <div style={{ position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-          <div style={{ width: 74, display: "flex", gap: 6 }}>
-            <button onClick={() => setShowUserGuide(true)} aria-label="Ask Grizz" title="Ask Grizz" className="iconbtn" style={headerBtn}><Icon name="help" size={18} /></button>
-          </div>
-          <div style={{ height: 66, minWidth: 66, maxWidth: "calc(100% - 160px)", padding: org?.logo_url ? "6px 10px" : 0, borderRadius: 16, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: "0 6px 18px -8px rgba(0,0,0,.55)" }}>
-            {org?.logo_url ? (
-              <img src={org.logo_url} alt={org.name || ""} style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", display: "block" }} />
-            ) : (
-              <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, color: "var(--color-primary)" }}>
-                {(org?.name || user.name || "?").split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
+      {/* Topbar — plain, no banner: greeting + name (left) · the business
+          logo (center) · bell + settings (right). Equal side columns keep
+          the logo dead center. No logo yet → the business's initials. */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="dim" style={{ fontSize: 13 }}>{isAdmin ? t("dash.welcomeBack") : t("dash.letsGetIt")}</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".6px", textTransform: "uppercase", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+        </div>
+        <div style={{ height: 56, maxWidth: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {org?.logo_url ? (
+            <img src={org.logo_url} alt={org.name || ""} style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", display: "block" }} />
+          ) : (
+            <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, color: "var(--color-primary)" }}>
+              {(org?.name || user.name || "?").split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+          <button onClick={() => setShowNotifs(true)} aria-label={t("notif.title")} title={t("notif.title")} className="iconbtn" style={{ position: "relative" }}>
+            <Icon name="bell" size={18} />
+            {unreadCount > 0 && (
+              <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 12, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, border: "1.5px solid var(--color-dark-bg)" }}>
+                {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
-          </div>
-          <div style={{ width: 74, display: "flex", gap: 6, justifyContent: "flex-end" }}>
-            <button onClick={() => setShowNotifs(true)} aria-label={t("notif.title")} title={t("notif.title")} className="iconbtn" style={{ ...headerBtn, position: "relative" }}>
-              <Icon name="bell" size={18} />
-              {unreadCount > 0 && (
-                <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 12, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, border: "1.5px solid var(--color-dark-bg)" }}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </span>
-              )}
-            </button>
-            <button onClick={openSettings} aria-label={t("settings.title")} title={t("settings.title")} className="iconbtn" style={headerBtn}><Icon name="settings" size={18} /></button>
-          </div>
-        </div>
-        {/* Business name, then the greeting + person — centered under the logo. */}
-        <div style={{ position: "relative", textAlign: "center", marginTop: 10, minWidth: 0 }}>
-          {org?.name && (
-            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.92, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{org.name}</div>
-          )}
-          <div style={{ fontSize: 13, opacity: 0.85, marginTop: 2 }}>
-            {isAdmin ? t("dash.welcomeBack") : t("dash.letsGetIt")},{" "}
-            <b style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 15, letterSpacing: ".5px", textTransform: "uppercase", opacity: 1 }}>{user.name}</b>
-          </div>
+          </button>
+          <button onClick={openSettings} aria-label={t("settings.title")} title={t("settings.title")} className="iconbtn"><Icon name="settings" size={18} /></button>
         </div>
       </div>
 

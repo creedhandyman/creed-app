@@ -302,8 +302,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   look exactly as before). `.bb`, `.vnav button.act`, `.dhead` and the
   `.glow-blue` CTA ("Start a Quote") use them; the tokens' defaults live in a
   plain `:root` block (not `@theme`, which Tailwind may prune). The dashboard
-  header shows the logo CENTERED on `--brand-grad` (help left, bell+settings
-  right, equal-width side groups).
+  topbar is deliberately PLAIN (owner asked; a brand-color banner looked bad
+  on the dark screen): greeting + name left · the logo centered with no
+  tile/background · bell + settings right (`1fr auto 1fr` grid). Ask Grizz
+  lives in More, not the topbar.
 - Per-org quote-PDF terms (the "Notes & Exclusions" footer reacts to these
   instead of hardcoded 30-day / 50%-deposit text):
   ```sql
