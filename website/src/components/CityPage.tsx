@@ -11,7 +11,7 @@ export default function CityPage({ data }: { data: City }) {
     <main>
       <section className="band">
         <div className="container" style={{ padding: "56px 24px 48px" }}>
-          <Kicker>Service area · {SITE.county}</Kicker>
+          <Kicker>Service area · {data.county ?? SITE.county}</Kicker>
           <h1 className="h1">Handyman in {data.city}, KS</h1>
           <p className="lead" style={{ maxWidth: "52ch" }}>{data.intro}</p>
           <div className="btn-row" style={{ marginTop: 30 }}>

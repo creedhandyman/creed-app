@@ -5,7 +5,7 @@ import EmailLink from "@/components/EmailLink";
 
 export const metadata: Metadata = {
   title: "For property managers — make-ready & punch lists",
-  description: `Turnovers scheduled around vacancy dates, one invoice per property, photo-documented completion, same ${SITE.rate}/hr rate. Wichita and Sedgwick County.`,
+  description: `Turnovers scheduled around vacancy dates, one invoice per property, photo-documented completion, same ${SITE.rate}/hr rate. Wichita, Sedgwick County, Andover, and Newton.`,
   alternates: { canonical: "/property-managers" },
 };
 
@@ -53,7 +53,7 @@ export default function PropertyManagersPage() {
             <h2>Standing work welcome</h2>
             <p>
               A handful of Wichita property managers keep us on their turnover
-              rotation. If you manage units anywhere in {SITE.county}, the
+              rotation. If you manage units anywhere in {SITE.county}, Andover, or Newton, the
               first punch list is the audition — send one over.
             </p>
           </div>

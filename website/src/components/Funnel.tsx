@@ -108,7 +108,7 @@ export function ServiceArea() {
     <section className="band pc-only" id="area">
       <div className="container section" style={{ paddingTop: 48, paddingBottom: 48 }}>
         <SecLabel>Service area</SecLabel>
-        <h2 className="h2" style={{ fontSize: 30, marginBottom: 18 }}>Wichita and all of {SITE.county}</h2>
+        <h2 className="h2" style={{ fontSize: 30, marginBottom: 18 }}>Wichita, {SITE.county}, Andover &amp; Newton</h2>
         <div className="fn-cities">
           {SITE.cities.map((c) => {
             const slug = pageFor(c);

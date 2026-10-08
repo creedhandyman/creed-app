@@ -11,7 +11,7 @@ export const SITE = {
   city: "Wichita",
   region: "KS",
   county: "Sedgwick County",
-  areaLine: "Wichita and all of Sedgwick County",
+  areaLine: "Wichita, all of Sedgwick County, Andover, and Newton",
   hours: [
     { d: "Mon–Fri", h: "9:00 AM – 7:00 PM" },
     { d: "Saturday", h: "9:00 AM – 12:00 PM" },
@@ -19,7 +19,7 @@ export const SITE = {
   ],
   cities: [
     "Wichita", "Derby", "Haysville", "Park City", "Bel Aire",
-    "Valley Center", "Maize", "Goddard", "Kechi", "Cheney",
+    "Valley Center", "Maize", "Goddard", "Kechi", "Andover", "Newton", "Cheney",
     "Clearwater", "Colwich", "Andale", "Garden Plain", "Mount Hope", "Bentley",
   ],
   license: "8145054",
@@ -381,6 +381,42 @@ export const CITY_PAGES = [
       "Blinds, bulbs, and small fix-it lists",
     ],
   },
+  {
+    slug: "handyman-andover-ks",
+    city: "Andover",
+    county: "Butler County",
+    intro: "East on Kellogg from Wichita — Andover is a regular run for us, and every job is quoted before we start.",
+    body: [
+      "A lot of our Andover work happens out back. Kansas sun and storms are hard on decks: boards rot, corner posts sink, railings work loose, and stair blocks pull away. We replace what has failed, re-block and re-secure what is loose, and restain so the whole deck matches.",
+      "When a storm comes through, we handle the repairs it leaves behind — garage doors knocked off their tracks, wood gates and shed doors torn loose — along with the everyday list inside: running toilets, torn patio screens, ceiling leaks traced to the source, and old appliances hauled out.",
+    ],
+    jobs: [
+      "Rotted deck board replacement",
+      "Deck posts, railings, and stair repairs",
+      "Deck restaining and touch-up",
+      "Storm damage: garage doors, gates, and sheds",
+      "Toilet, screen door, and leak repairs",
+      "Appliance removal and haul-away",
+    ],
+  },
+  {
+    slug: "handyman-newton-ks",
+    city: "Newton",
+    county: "Harvey County",
+    intro: "Straight up I-135 from Wichita — we work Newton for landlords and homeowners alike, quoted before we start.",
+    body: [
+      "Most of our Newton work is rentals. We run full move-out inspections, then the make-ready punch list that follows — patch and paint, fixtures and outlets, plumbing checks from the faucets to the water heater — and close it out with a photo report so the owner sees exactly what was done.",
+      "Bigger turnovers get the bigger fixes: worn floors replaced with vinyl plank, broken fixtures swapped, and the repair and renovation work that gets a unit ready to rent again.",
+    ],
+    jobs: [
+      "Move-out inspections with photo reports",
+      "Make-ready punch lists",
+      "Vinyl plank flooring installs",
+      "Faucet, toilet, and drain repairs",
+      "Outlet and fixture replacement",
+      "Repairs and renovations between tenants",
+    ],
+  },
 ];
 
 // The Creed HM lead form — the direct way to send a work order / quote
@@ -421,9 +457,9 @@ export const FAQ = [
   { q: "Are estimates really free?", a: "Yes. Send photos through the quote form or have us take a look — you get the price before any work starts, and it costs you nothing." },
   { q: "How much do you charge?", a: "$55 an hour with a two-hour minimum, materials at cost. Inside Wichita there is also an $80 house-call special for one small repair — the visit and up to an hour of work." },
   { q: "Are you licensed and insured?", a: "Yes — license #8145054, with general liability insurance through Hiscox on every job." },
-  { q: "Do you charge a trip fee?", a: "No trip charges inside Wichita. For the rest of Sedgwick County we will tell you up front if anything applies." },
+  { q: "Do you charge a trip fee?", a: "No trip charges inside Wichita. For the rest of Sedgwick County, Andover, and Newton we will tell you up front if anything applies." },
   { q: "Do you work with landlords and property managers?", a: "Yes — vacant-unit turnovers, trash-outs, punch lists, and work orders are a big part of what we do, with one invoice per property and photo reports when the unit is ready." },
-  { q: "What areas do you serve?", a: "Wichita and all of Sedgwick County, including Derby, Haysville, Park City, Bel Aire, Maize, Goddard, and Valley Center." },
+  { q: "What areas do you serve?", a: "Wichita and all of Sedgwick County, including Derby, Haysville, Park City, Bel Aire, Kechi, Maize, Goddard, and Valley Center, plus Andover and Newton." },
 ];
 
 // "Recent work" photo reel (single after shots). Short, plain captions.

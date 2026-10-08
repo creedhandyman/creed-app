@@ -29,7 +29,7 @@ export default function SiteFooter() {
             </div>
           </div>
           <div>
-            <div className="ftr-label">Service area — {SITE.county}</div>
+            <div className="ftr-label">Service area</div>
             <p style={{ fontSize: 15 }}>
               {SITE.cities.map((c, i) => {
                 const page = CITY_PAGES.find((cp) => cp.city === c);

@@ -138,7 +138,7 @@ export default function HomePage() {
         <div className="container section">
           <SecLabel>Services</SecLabel>
           <h2 className="h2">What we fix in Wichita</h2>
-          <p className="sub">Handyman services across Wichita and Sedgwick County. If it is not on the list, ask.</p>
+          <p className="sub">Handyman services across {SITE.areaLine}. If it is not on the list, ask.</p>
           <div className="svc-grid svc-grid-4">
             {SERVICES.map((s, i) => (
               <Link href={`/services/${s.slug}`} className="svc" key={s.slug}>
