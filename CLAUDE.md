@@ -295,7 +295,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   + /api/portal/me selects). Color helpers (luminance → ink, shade/lighten/
   gradient) live in `src/lib/brand.ts`. Until the migration runs, saving a color
   toasts a "column does not exist" error (best-effort) but nothing breaks;
-  existing orgs default to #2E75B6.
+  existing orgs default to #2E75B6. **The 2nd (gradient) color now reaches the
+  app UI (2026-10-07)**: ThemeProvider also sets `--color-primary-2` (= 2nd
+  color, else lighten(c1,30)) and `--accent-glow` / `--accent-glow-2`
+  ("r, g, b"; default 46,139,255 for orgs that never picked a color, so they
+  look exactly as before). `.bb`, `.vnav button.act`, `.dhead` and the
+  `.glow-blue` CTA ("Start a Quote") use them; the tokens' defaults live in a
+  plain `:root` block (not `@theme`, which Tailwind may prune). The dashboard
+  header shows the logo CENTERED on `--brand-grad` (help left, bell+settings
+  right, equal-width side groups).
 - Per-org quote-PDF terms (the "Notes & Exclusions" footer reacts to these
   instead of hardcoded 30-day / 50%-deposit text):
   ```sql

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { DEFAULT_BRAND, isHex, brandInk, brandGrad, lighten } from "@/lib/brand";
+import { DEFAULT_BRAND, isHex, normHex, brandInk, brandGrad, lighten, rgbTriplet } from "@/lib/brand";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const darkMode = useStore((s) => s.darkMode);
@@ -29,8 +29,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const b2 = isHex(brandColor2) ? brandColor2 : null;
     root.setProperty("--color-primary", b);
     root.setProperty("--color-primary-soft", lighten(b, 30));
+    // The gradient's second stop: the business's own 2nd color when they
+    // turned the gradient on (Business settings → Brand color), else the
+    // lighter shade of their color (the look before gradients existed).
+    root.setProperty("--color-primary-2", b2 || lighten(b, 30));
     root.setProperty("--brand-ink", brandInk(b));
     root.setProperty("--brand-grad", brandGrad(b, b2));
+    // Glass surfaces (.dhead) are tinted with rgba(var(--accent-glow), a).
+    // An org that never picked a color keeps the original bright-blue glass.
+    const custom = isHex(brandColor) && normHex(brandColor) !== normHex(DEFAULT_BRAND);
+    const glow = custom ? rgbTriplet(b) : "46, 139, 255";
+    root.setProperty("--accent-glow", glow);
+    root.setProperty("--accent-glow-2", b2 ? rgbTriplet(b2) : glow);
   }, [brandColor, brandColor2]);
 
   return <>{children}</>;

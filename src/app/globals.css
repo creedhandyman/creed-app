@@ -52,6 +52,16 @@
   --t-slow: 320ms;
 }
 
+/* Brand-gradient tokens, outside @theme so Tailwind always emits them.
+   ThemeProvider overrides them per business (Business settings → Brand
+   color): --color-primary-2 = the 2nd gradient color (else a lighter shade
+   of the brand color); --accent-glow(-2) = "r, g, b" glass tints. */
+:root {
+  --color-primary-2: #3580c4;
+  --accent-glow: 46, 139, 255;
+  --accent-glow-2: 46, 139, 255;
+}
+
 /* ─── BASE ─────────────────────────────────────────── */
 * {
   margin: 0;
@@ -273,7 +283,7 @@ button:focus-visible {
 
 /* Primary blue button — slight gradient + glow on hover */
 .bb {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-soft) 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-2) 100%);
   color: #fff;
   padding: 10px 20px;
   border-radius: var(--r-md);
@@ -368,7 +378,9 @@ button:focus-visible {
   gap: 5px;
 }
 .cta:active { transform: scale(0.985); }
-.glow-blue  { background: rgba(46, 139, 255, 0.14); border: 1.5px solid rgba(46, 139, 255, 0.85); box-shadow: 0 0 24px -2px rgba(46, 139, 255, 0.5), inset 0 0 22px -8px rgba(46, 139, 255, 0.45); }
+/* The "blue" glow is the BRAND glow: tinted by the business's brand color(s)
+   (default = the original bright blue). */
+.glow-blue  { background: linear-gradient(135deg, rgba(var(--accent-glow), 0.14), rgba(var(--accent-glow-2), 0.14)); border: 1.5px solid rgba(var(--accent-glow), 0.85); box-shadow: 0 0 24px -2px rgba(var(--accent-glow), 0.5), inset 0 0 22px -8px rgba(var(--accent-glow-2), 0.45); }
 .glow-green { background: rgba(0, 204, 102, 0.14);  border: 1.5px solid rgba(0, 204, 102, 0.85);  box-shadow: 0 0 24px -2px rgba(0, 204, 102, 0.5),  inset 0 0 22px -8px rgba(0, 204, 102, 0.45); }
 .glow-red   { background: rgba(255, 91, 91, 0.14);  border: 1.5px solid rgba(255, 91, 91, 0.85);  box-shadow: 0 0 24px -2px rgba(255, 91, 91, 0.5),  inset 0 0 22px -8px rgba(255, 91, 91, 0.45); }
 
@@ -376,7 +388,7 @@ button:focus-visible {
    (set on .cta) on a near-white 14% fill reads as an empty ghost button. Swap
    to a SOLID saturated fill so the white text + button stay crisp. Dark keeps
    the neon glow above. (Creed_LightMode_CTA mock, option C — no JSX change.) */
-.light .glow-blue  { background: var(--color-primary); border-color: var(--color-primary); color: #fff; box-shadow: 0 0 17px -2px rgba(46, 117, 182, 0.6), 0 4px 12px -7px rgba(0, 0, 0, 0.22); }
+.light .glow-blue  { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-2)); border-color: var(--color-primary); color: #fff; box-shadow: 0 0 17px -2px rgba(var(--accent-glow), 0.6), 0 4px 12px -7px rgba(0, 0, 0, 0.22); }
 .light .glow-green { background: #00b85c; border-color: #00b85c; color: #fff; box-shadow: 0 0 17px -2px rgba(0, 204, 102, 0.6), 0 4px 12px -7px rgba(0, 0, 0, 0.22); }
 .light .glow-red   { background: #d23b3b; border-color: #d23b3b; color: #fff; box-shadow: 0 0 17px -2px rgba(210, 59, 59, 0.6), 0 4px 12px -7px rgba(0, 0, 0, 0.22); }
 .light .cta .ic    { background: rgba(255, 255, 255, 0.2); color: #fff; }
@@ -532,19 +544,21 @@ button:focus-visible {
 .dhead {
   /* Bright translucent-blue glow — matches the dashboard's glow cards
      (bright fill + ring + outer/inset glow) instead of the old dim navy. */
-  background: rgba(46, 139, 255, 0.14);
-  border: 1.5px solid rgba(46, 139, 255, 0.7);
+  /* Tinted by the business's brand color(s) — a 2-color gradient when they
+     picked one (default: the original bright-blue glass). */
+  background: linear-gradient(135deg, rgba(var(--accent-glow), 0.14), rgba(var(--accent-glow-2), 0.14));
+  border: 1.5px solid rgba(var(--accent-glow), 0.7);
   border-radius: var(--r-xl);
   padding: var(--pad-3);
   margin-bottom: 11px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 0 26px -4px rgba(46, 139, 255, 0.5), inset 0 0 26px -10px rgba(46, 139, 255, 0.38);
+  box-shadow: 0 0 26px -4px rgba(var(--accent-glow), 0.5), inset 0 0 26px -10px rgba(var(--accent-glow-2), 0.38);
 }
 .light .dhead {
-  background: rgba(46, 139, 255, 0.12);
-  border-color: rgba(46, 139, 255, 0.6);
-  box-shadow: 0 0 22px -6px rgba(46, 139, 255, 0.4);
+  background: linear-gradient(135deg, rgba(var(--accent-glow), 0.12), rgba(var(--accent-glow-2), 0.12));
+  border-color: rgba(var(--accent-glow), 0.6);
+  box-shadow: 0 0 22px -6px rgba(var(--accent-glow), 0.4);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -803,9 +817,9 @@ button:focus-visible {
 }
 
 .vnav button.act {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-soft) 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-2) 100%);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(46, 117, 182, 0.5);
+  box-shadow: 0 4px 16px rgba(var(--accent-glow), 0.5);
 }
 .vnav button.act:hover { transform: translateY(-1px); filter: brightness(1.05); }
 
