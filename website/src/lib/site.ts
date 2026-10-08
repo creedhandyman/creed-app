@@ -46,7 +46,7 @@ export const SERVICES = [
       "Water-damage patch and repaint",
       "Ceiling stain sealing and repair",
       "Trim, baseboard, and door casing",
-      "Caulking and paint touch-up",
+      "Exterior painting — trim, doors, decks, and fences",
       "Interior painting by the room",
       "Popcorn ceiling patching",
     ],
@@ -62,7 +62,7 @@ export const SERVICES = [
       "Fixture and hardware swaps",
       "Rekeying",
       "Blinds and detector replacement",
-      "Caulk and grout refresh",
+      "Ongoing property maintenance for landlords",
       "Small plumbing and electrical items",
       "Photo-documented completion report",
     ],
@@ -112,7 +112,7 @@ export const SERVICES = [
       "P-traps and drain leaks under sinks",
       "Dishwasher and icemaker hookups",
       "Outdoor spigots and hose bibs",
-      "Caulk and seal around tubs and sinks",
+      "Drain clearing — sinks, tubs, and showers",
     ],
   },
   {
@@ -137,7 +137,7 @@ export const SERVICES = [
     blurb: "Sticking doors, hardware, deadbolts, rekeys, weatherstripping.",
     intro: "Doors that stick, latches that miss, locks that need changing — squared, aligned, and working like they should.",
     tasks: [
-      "Sticking and rubbing door correction",
+      "Door repair — sticking, rubbing, and sagging doors",
       "Hinge, latch, and strike adjustment",
       "Deadbolt and handleset installation",
       "Rekeying on turnovers",
@@ -154,7 +154,7 @@ export const SERVICES = [
     intro: "Measured twice, anchored into studs, level the first time. Heavy things on walls the way they should be.",
     tasks: [
       "TV mounting with cords concealed",
-      "Shelving and floating shelves",
+      "Shelf mounting — floating shelves and shelving",
       "Mirrors and heavy art",
       "Blinds and curtain rods",
       "Flat-pack furniture assembly",
@@ -404,4 +404,19 @@ export const RECENT = [
   { src: "/assets/recent-08.webp", caption: "Rental turnover" },
   { src: "/assets/recent-09.webp", caption: "Cozy bedroom, dark walls & lighting" },
   { src: "/assets/recent-10.webp", caption: "Kitchen & living turnover" },
+];
+
+// Service index — the exact services people search for ("TV mounting in
+// Wichita, KS"), grouped under the page that covers each one. Rendered as a
+// linked list on the homepage (Wichita) and every city page (its own town),
+// with the location carried by the heading, not repeated on each line.
+export const SERVICE_INDEX: { slug: string; label: string; items: string[] }[] = [
+  { slug: "drywall-paint", label: "Painting & drywall", items: ["Drywall repair", "Interior painting", "Exterior painting", "Trim and baseboard repair"] },
+  { slug: "mounting-assembly", label: "Mounting & assembly", items: ["TV mounting", "Furniture assembly", "Shelf mounting"] },
+  { slug: "electrical", label: "Electrical", items: ["Ceiling fan installation", "Light fixture installation", "Switch and outlet replacement"] },
+  { slug: "plumbing", label: "Plumbing", items: ["Faucet repair", "Toilet repair", "Garbage disposal installation", "Drain clearing"] },
+  { slug: "doors-locks", label: "Doors & locks", items: ["Door repair", "Deadbolt installation", "Door rekey", "Weatherstripping"] },
+  { slug: "flooring", label: "Flooring", items: ["Vinyl plank flooring installation", "Carpet removal"] },
+  { slug: "make-ready", label: "Rentals & turnovers", items: ["Vacant unit make ready", "Rental turnover", "Property maintenance", "Handyman for landlords", "Handyman for property managers"] },
+  { slug: "trash-outs", label: "Trash-outs", items: ["Trash out service", "Cleanouts and haul-away"] },
 ];

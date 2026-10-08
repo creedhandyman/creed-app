@@ -8,6 +8,7 @@ export const metadata: Metadata = {
 import { Kicker, SecLabel, BeforeAfter, CtaBand, CredStrip } from "@/components/blocks";
 import Img from "@/components/Img";
 import RecentWork from "@/components/RecentWork";
+import ServiceIndex from "@/components/ServiceIndex";
 
 export default function HomePage() {
   return (
@@ -147,6 +148,7 @@ export default function HomePage() {
               </Link>
             ))}
           </div>
+          <ServiceIndex />
         </div>
       </section>
 

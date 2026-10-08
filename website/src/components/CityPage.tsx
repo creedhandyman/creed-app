@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SITE, WORK_ORDER, CITY_PAGES } from "@/lib/site";
 import { Kicker, CtaBand } from "@/components/blocks";
+import ServiceIndex from "@/components/ServiceIndex";
 
 type City = (typeof CITY_PAGES)[number];
 
@@ -11,7 +12,7 @@ export default function CityPage({ data }: { data: City }) {
       <section className="band">
         <div className="container" style={{ padding: "56px 24px 48px" }}>
           <Kicker>Service area · {SITE.county}</Kicker>
-          <h1 className="h1">Handyman in {data.city}, Kansas</h1>
+          <h1 className="h1">Handyman in {data.city}, KS</h1>
           <p className="lead" style={{ maxWidth: "52ch" }}>{data.intro}</p>
           <div className="btn-row" style={{ marginTop: 30 }}>
             <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Request a quote</a>
@@ -59,6 +60,12 @@ export default function CityPage({ data }: { data: City }) {
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="band band-alt">
+        <div className="container section">
+          <ServiceIndex city={data.city} />
         </div>
       </section>
 
