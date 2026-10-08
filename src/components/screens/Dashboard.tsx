@@ -173,12 +173,12 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
       {/* Topbar — plain, no banner: greeting + name (left) · the business
           logo (center) · bell + settings (right). Equal side columns keep
           the logo dead center. No logo yet → the business's initials. */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 6, marginBottom: 14 }}>
         <div style={{ minWidth: 0 }}>
           <div className="dim" style={{ fontSize: 13 }}>{isAdmin ? t("dash.welcomeBack") : t("dash.letsGetIt")}</div>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".6px", textTransform: "uppercase", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".4px", textTransform: "uppercase", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name.trim().split(/\s+/)[0]}</div>
         </div>
-        <div style={{ height: 56, maxWidth: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ height: 110, maxWidth: 170, display: "flex", alignItems: "center", justifyContent: "center" }}>
           {org?.logo_url ? (
             <img src={org.logo_url} alt={org.name || ""} style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", display: "block" }} />
           ) : (
