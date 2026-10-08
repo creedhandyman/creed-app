@@ -255,7 +255,7 @@ export default function HomePage() {
               Community
             </div>
             <h2>Serving our churches</h2>
-            <p>Free labor for local churches that reach out. Materials at cost, first come first served.</p>
+            <p>Free labor for local churches and nonprofits that reach out. Depending on the job, we may cover the materials too. First come, first served.</p>
           </div>
           <Link href="/churches" className="golink">Reach out →</Link>
         </div>

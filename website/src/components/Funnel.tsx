@@ -30,8 +30,8 @@ export function MeetOwner() {
             {SITE.insurer} on every job.
           </p>
           <p className="fn-p">
-            We are a faith-led shop, and it shows up in the work: honest numbers,
-            materials at cost, and free labor for local churches that reach out.
+            We are a faith-led shop, and it shows up in the work: honest numbers
+            and free labor for local churches and nonprofits that reach out.
           </p>
           <Link href="/about" className="golink" style={{ display: "inline-block", marginTop: 8 }}>More about us →</Link>
         </div>
