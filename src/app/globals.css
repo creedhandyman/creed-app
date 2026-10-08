@@ -1115,3 +1115,12 @@ button:focus-visible {
 /* contact rows */
 .pub .contact { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--pmuted); padding: 5px 0; }
 .pub .contact svg { color: #7fb6ff; }
+
+/* ─── HOME GATE (/) ─────────────────────────────────────
+   The home page's server HTML carries the marketing landing AND a hidden
+   boot screen (components/HomeGate.tsx). A head script in app/layout.tsx sets
+   html[data-session] when a signed-in user is cached, so they see the boot
+   screen, never a flash of the landing; visitors and crawlers see the landing. */
+.home-boot { display: none; }
+html[data-session] .home-landing { display: none; }
+html[data-session] .home-boot { display: block; }

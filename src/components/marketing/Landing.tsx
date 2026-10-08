@@ -2,14 +2,24 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import MarketingShell from "./MarketingShell";
+import { HOME_FAQ } from "./home-content";
 
+// Copy is written for what handyman business owners search ("handyman
+// software", "handyman estimate app", "handyman invoicing app"…). Every
+// claim here describes shipped behaviour — keep it that way.
 const FEATURES = [
-  { ic: "sparkle", bg: "rgba(245,180,0,.16)", c: "#ffd76b", h: "AI Quoting", p: "Snap photos or upload an inspection — the AI writes the itemized, trade-by-trade quote and learns your pricing over time." },
+  { ic: "sparkle", bg: "rgba(245,180,0,.16)", c: "#ffd76b", h: "AI Estimates & Quotes", p: "Snap photos, talk through the job with Voice Walk, or upload an inspection — the AI writes the itemized, trade-by-trade quote and learns your pricing over time." },
   { ic: "photo", bg: "rgba(157,78,221,.16)", c: "#d8b6ff", h: "AI “After” Render", p: "Show customers a photorealistic preview of the finished job — built from your quote — and close more work." },
-  { ic: "schedule", bg: "rgba(255,204,0,.16)", c: "#ffe07a", h: "Schedule & Dispatch", p: "Day, week, month views. Assign the crew, track time on site, and feed hours straight to payroll." },
-  { ic: "money", bg: "rgba(0,204,102,.16)", c: "#3ee08f", h: "Get Paid Faster", p: "Customers e-sign quotes, pay deposits, and follow a live status tracker — powered by Stripe." },
-  { ic: "clients", bg: "rgba(46,117,182,.16)", c: "#7fb6ff", h: "Crew & Payroll", p: "Time clock, work orders, auto-payroll, mileage, and HR — the back office on autopilot." },
+  { ic: "schedule", bg: "rgba(255,204,0,.16)", c: "#ffe07a", h: "Scheduling & Dispatch", p: "Day, week, month views. Assign the crew, track time on site, and feed hours straight to payroll." },
+  { ic: "money", bg: "rgba(0,204,102,.16)", c: "#3ee08f", h: "Invoicing & Payments", p: "Customers e-sign quotes, pay deposits and balances by card, and follow a live job tracker — powered by Stripe." },
+  { ic: "clients", bg: "rgba(46,117,182,.16)", c: "#7fb6ff", h: "Time Clock & Payroll", p: "A crew time clock that works without signal, work orders, auto-payroll, mileage, and HR — the back office on autopilot." },
   { ic: "trophy", bg: "rgba(255,61,110,.16)", c: "#ff8aa8", h: "Grow & Motivate", p: "Digital business card, automatic reviews, a customer portal, and gamified Quests that keep your crew hungry." },
+];
+
+const STEPS = [
+  { h: "Walk the job", p: "Snap photos room by room, or talk it through with Voice Walk while the app listens and takes notes." },
+  { h: "AI writes the quote", p: "An itemized estimate by trade with hours, materials and your rates — plus optional Good / Better / Best options. Tweak it in minutes." },
+  { h: "Send it, sign it, get paid", p: "Text the customer a link. They sign and pay a deposit by card; you schedule the crew, and the invoice follows the work." },
 ];
 
 const STATS = [
@@ -34,9 +44,9 @@ export default function Landing() {
       <header className="hero">
         <div className="wrap herogrid">
           <div>
-            <div className="pill"><Icon name="sparkle" size={14} /> AI-powered quoting · built by a handyman</div>
-            <h1 className="hero-h">Run your whole<br /><span className="g">handyman business</span><br />from your pocket.</h1>
-            <div className="hsub">Quote with AI, schedule the crew, and get paid — all in one app. No spreadsheets, no paperwork, no second tool.</div>
+            <div className="pill"><Icon name="sparkle" size={14} /> Handyman business software · built by a working handyman</div>
+            <h1 className="hero-h">The <span className="g">handyman app</span><br />that quotes, schedules<br />and gets you paid.</h1>
+            <p className="hsub">AI writes the quote from your photos, the crew clocks in from their phones, and customers sign and pay online. One app for your whole handyman business — no spreadsheets, no second tool.</p>
             <div className="hbtns">
               <Link className="btn btn-glow btn-lg" href="/signin?mode=signup"><Icon name="rocket" size={18} /> Get Started Free</Link>
               <Link className="btn btn-ghost btn-lg" href="/features"><Icon name="start" size={18} /> See it in action</Link>
@@ -68,7 +78,7 @@ export default function Landing() {
       {/* Feature grid */}
       <section className="feat"><div className="wrap">
         <div className="kick">Everything in one app</div>
-        <div className="h2">From the first photo<br />to <span className="g">final payment</span></div>
+        <h2 className="h2">From the first photo<br />to <span className="g">final payment</span></h2>
         <div className="grid3">
           {FEATURES.map((f) => (
             <div className="fcard" key={f.h}>
@@ -80,12 +90,54 @@ export default function Landing() {
         </div>
       </div></section>
 
+      {/* How it works */}
+      <section className="feat"><div className="wrap">
+        <div className="kick">How it works</div>
+        <h2 className="h2">From walk-through<br />to <span className="g">signed quote</span></h2>
+        <div className="grid3">
+          {STEPS.map((s, i) => (
+            <div className="fcard" key={s.h}>
+              <div className="stepn">{i + 1}</div>
+              <h3>{s.h}</h3>
+              <p>{s.p}</p>
+            </div>
+          ))}
+        </div>
+      </div></section>
+
       {/* Replaces band */}
       <section className="replaces"><div className="wrap">
         <div className="kick">Stop paying for five tools</div>
-        <div className="h2">Replaces the apps<br />you&apos;re <span className="g">juggling now</span></div>
+        <h2 className="h2">Replaces the apps<br />you&apos;re <span className="g">juggling now</span></h2>
         <div className="repchips">
           {REPLACES.map((r) => <span className="repchip" key={r.l} style={{ color: r.c }}>{r.l}</span>)}
+        </div>
+      </div></section>
+
+      {/* Built in the field */}
+      <section className="feat"><div className="wrap">
+        <div className="kick">Built in the field</div>
+        <h2 className="h2">Built by a handyman company.<br /><span className="g">Used every day.</span></h2>
+        <p className="lead">Creed Handy Manager is built and used daily by Creed Handyman LLC in Wichita, KS. The crew&apos;s quotes, schedules, time cards and payroll all run through it — so every feature started as a real job that needed it.</p>
+        <div className="hbtns" style={{ justifyContent: "center", marginTop: 26 }}>
+          <a className="btn btn-ghost" href="https://www.creedhandyman.com" target="_blank" rel="noopener">See Creed Handyman <Icon name="next" size={16} /></a>
+        </div>
+      </div></section>
+
+      {/* FAQ — the same HOME_FAQ feeds the FAQPage structured data in app/page.tsx */}
+      <section className="feat" id="faq"><div className="wrap">
+        <div className="kick">Questions</div>
+        <h2 className="h2">Handyman software,<br /><span className="g">answered</span></h2>
+        <div className="faq">
+          {HOME_FAQ.map((f) => (
+            <div className="q" key={f.q}>
+              <h3>{f.q}</h3>
+              <p>
+                {f.a}
+                {f.more && <> <Link className="faqmore" href={f.more.href}>{f.more.label} →</Link></>}
+              </p>
+            </div>
+          ))}
         </div>
       </div></section>
 

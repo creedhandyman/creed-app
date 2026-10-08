@@ -4,6 +4,7 @@ import MarketingShell from "@/components/marketing/MarketingShell";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · Creed Handy Manager",
+  alternates: { canonical: "/privacy" },
   description: "How Creed Handy Manager collects, uses, and protects your data.",
 };
 
@@ -22,7 +23,7 @@ export default function PrivacyPage() {
     <MarketingShell>
       <div className="phead"><div className="wrap">
         <div className="kick">Legal</div>
-        <div className="h1">Privacy <span className="g">Policy</span></div>
+        <h1 className="h1">Privacy <span className="g">Policy</span></h1>
         <div className="lead">Plain-language summary of what we collect and how it&apos;s used. Last updated June 2026.</div>
       </div></div>
       <div className="wrap" style={{ maxWidth: 800, padding: "20px 24px 80px" }}>

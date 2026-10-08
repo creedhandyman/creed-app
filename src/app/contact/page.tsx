@@ -3,6 +3,7 @@ import MarketingShell from "@/components/marketing/MarketingShell";
 
 export const metadata: Metadata = {
   title: "Contact · Creed Handy Manager",
+  alternates: { canonical: "/contact" },
   description: "Get in touch with the Creed Handy Manager team — support, questions, and demos.",
 };
 
@@ -11,7 +12,7 @@ export default function ContactPage() {
     <MarketingShell>
       <div className="phead"><div className="wrap">
         <div className="kick">Contact</div>
-        <div className="h1">Talk to <span className="g">a human</span></div>
+        <h1 className="h1">Talk to <span className="g">a human</span></h1>
         <div className="lead">Built by a handyman — questions, support, and demos go straight to the team.</div>
       </div></div>
       <div className="wrap" style={{ maxWidth: 560, padding: "30px 24px 80px" }}>

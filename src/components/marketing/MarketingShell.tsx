@@ -28,11 +28,14 @@ export default function MarketingShell({ children }: { children: React.ReactNode
   // Signed-in visitors never see the marketing site — bounce them into the
   // app. Also doubles as the post-login redirect from /signin (once login
   // sets the store user, this fires and routes to "/" → the app gate).
+  // Not on "/" itself: HomeGate server-renders the landing there (hidden for
+  // signed-in users) and swaps in the app on its own — replacing "/" with "/"
+  // would only re-navigate.
   const user = useStore((s) => s.user);
   const router = useRouter();
   useEffect(() => {
-    if (user) router.replace("/");
-  }, [user, router]);
+    if (user && path !== "/") router.replace("/");
+  }, [user, router, path]);
 
   // Scroll-reveal for marketing cards. We add `.reveal-init` (hidden) only when
   // JS runs AND motion is allowed, then reveal each on scroll — so no-JS and

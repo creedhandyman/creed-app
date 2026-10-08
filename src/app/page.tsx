@@ -1,119 +1,91 @@
-"use client";
-import { useEffect, useState } from "react";
-import { useStore } from "@/lib/store";
-import Landing from "@/components/marketing/Landing";
-import Onboarding from "@/components/Onboarding";
-import PendingApproval from "@/components/PendingApproval";
-import AppShell from "@/components/AppShell";
-import BillingGate from "@/components/BillingGate";
-import Toast from "@/components/Toast";
-import ConfirmModal from "@/components/ConfirmModal";
-import InstallPrompt from "@/components/InstallPrompt";
-import BrandFooter from "@/components/BrandFooter";
+/**
+ * "/" — the marketing landing for visitors, the app for signed-in users.
+ *
+ * A server page so it can carry the home page's own SEO metadata (canonical,
+ * title, description) and structured data. All the client logic — auth, the
+ * app shell, the logged-in/out switch — lives in components/HomeGate.tsx,
+ * which server-renders the landing copy (see its header comment).
+ */
+import type { Metadata } from "next";
+import HomeGate from "@/components/HomeGate";
+import { HOME_FAQ } from "@/components/marketing/home-content";
+import { SEO_ORIGIN } from "@/lib/seo";
+import { TRIAL_DAYS } from "@/lib/trial";
 
-/** Full-screen app loading state, shared by the pre-mount and data-loading
- *  gates — centered wordmark + the CREED HM™/© brand footer at the bottom. */
-function LoadingScreen() {
+const TITLE = "Handyman Software for Quotes, Scheduling & Payments — Creed Handy Manager";
+const DESCRIPTION = `Handyman business software built by a working handyman: AI quotes from photos, scheduling, time clock, invoicing and payments in one app. ${TRIAL_DAYS}-day free trial.`;
+
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    type: "website",
+    url: "/",
+    siteName: "Creed Handy Manager",
+    images: ["/CREED_LOGO.png"],
+  },
+};
+
+// Plan prices mirror TIERS in src/app/pricing/page.tsx. No aggregateRating on
+// purpose: star ratings may only be marked up from real, on-page reviews.
+const ORG_ID = `${SEO_ORIGIN}/#org`;
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": ORG_ID,
+      name: "Creed Handyman LLC",
+      url: SEO_ORIGIN,
+      logo: `${SEO_ORIGIN}/CREED_LOGO.png`,
+      sameAs: ["https://www.creedhandyman.com"],
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SEO_ORIGIN}/#website`,
+      url: SEO_ORIGIN,
+      name: "Creed Handy Manager",
+      publisher: { "@id": ORG_ID },
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "Creed Handy Manager",
+      url: SEO_ORIGIN,
+      description: DESCRIPTION,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web, iOS, Android",
+      publisher: { "@id": ORG_ID },
+      offers: {
+        "@type": "AggregateOffer",
+        lowPrice: "24.99",
+        highPrice: "149.99",
+        priceCurrency: "USD",
+        offerCount: 3,
+      },
+    },
+    {
+      "@type": "FAQPage",
+      mainEntity: HOME_FAQ.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
+    },
+  ],
+};
+
+export default function Page() {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#0a0a0f",
-        position: "relative",
-      }}
-    >
-      <h2 style={{ color: "#2E75B6", fontFamily: "Oswald" }}>Loading Creed...</h2>
-      <BrandFooter style={{ position: "absolute", bottom: 14, left: 0, right: 0 }} />
-    </div>
+    <>
+      <script
+        type="application/ld+json"
+        // Static data, but escape "<" so no string can ever close the tag.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c") }}
+      />
+      <HomeGate />
+    </>
   );
-}
-
-export default function Home() {
-  const [mounted, setMounted] = useState(false);
-  const user = useStore((s) => s.user);
-  const loading = useStore((s) => s.loading);
-  const startAutoRefresh = useStore((s) => s.startAutoRefresh);
-  const stopAutoRefresh = useStore((s) => s.stopAutoRefresh);
-  const initAuth = useStore((s) => s.initAuth);
-
-  useEffect(() => setMounted(true), []);
-
-  // Validate Supabase Auth session on mount
-  useEffect(() => {
-    initAuth();
-  }, [initAuth]);
-
-  // Register the service worker on load — needed for installability (the
-  // install prompt), push, and offline caching. No-op where unsupported.
-  useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
-  }, []);
-
-  // Handle Stripe redirect — refresh org data when returning from Stripe
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const stripeStatus = params.get("stripe");
-    if (stripeStatus) {
-      // Clean URL
-      window.history.replaceState({}, "", "/");
-      // Refresh org data
-      const { loadAll, showToast } = useStore.getState();
-      loadAll();
-      if (stripeStatus === "success") {
-        showToast("Stripe connected — you can accept payments now", "success");
-      } else if (stripeStatus === "pending") {
-        showToast(
-          "Stripe onboarding complete — Stripe is verifying your account. Payments usually enable within a few minutes.",
-          "info",
-        );
-      } else if (stripeStatus === "error") {
-        // eslint-disable-next-line no-console
-        console.error("[stripe connect] failed:", params.get("reason") || "unknown");
-        showToast("Stripe didn't finish connecting. Open Ops → Billing and tap Connect again — your progress there is saved.", "error");
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      startAutoRefresh();
-      return () => stopAutoRefresh();
-    }
-    // Key on user.id, NOT the user object reference. The previous
-    // `[user, ...]` dep fired this effect twice per visit: once from the
-    // localStorage-rehydrated cached user, then again when initAuth
-    // re-set the same user with a fresh object reference. Each re-fire
-    // ran startAutoRefresh → loadAll, which pulled all 14 tables a
-    // second time. ~30 redundant Supabase queries per visit. Keying on
-    // user?.id collapses that to a single fire.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, startAutoRefresh, stopAutoRefresh]);
-
-  // Don't render until client-side to avoid hydration mismatch
-  if (!mounted) {
-    return <LoadingScreen />;
-  }
-
-  // Logged-out visitors get the marketing landing; signed-in users never
-  // see it (they fall through to onboarding / the app below).
-  if (!user) return <Landing />;
-
-  // User exists but no org — needs onboarding
-  if (!user.org_id) return <Onboarding />;
-
-  // Asked to join a business; waiting for the owner to approve.
-  if (user.status === "pending") return <><Toast /><PendingApproval /></>;
-
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
-  return <><Toast /><ConfirmModal /><InstallPrompt /><BillingGate><AppShell /></BillingGate></>;
 }

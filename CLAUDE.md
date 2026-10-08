@@ -190,8 +190,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 - `NEXT_PUBLIC_SITE_URL` — canonical app origin. `src/lib/site-url.ts`
   defaults to `https://www.creedhm.com` (the **apex `creedhm.com` has no TLS
   cert** — `www` is the served origin, matching the Stripe routes' hardcoded
-  fallback). `app/layout.tsx` separately defaults to the apex for OG/metadata
-  only (never navigated, so the cert is moot there).
+  fallback). SEO metadata does NOT follow this env var: `app/layout.tsx`'s
+  `metadataBase`, every marketing page's canonical, robots.txt and the sitemap
+  use `src/lib/seo.ts` `SEO_ORIGIN` (hardcoded `https://www.creedhm.com`).
   **Portal magic-link emails/texts derive their origin from this**, via
   `src/lib/site-url.ts` `portalRedeemUrl()` — NOT the request `Host`/`Origin`
   header. This is a security fix: a spoofed Host on the PUBLIC
@@ -743,6 +744,32 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 "column does not exist" error so the user notices.)
 
 ## Big systems shipped recently (for context)
+
+- **creedhm.com SEO (2026-10-08)**: Google used to get only "Loading Creed..."
+  from `/` (the page was one client component behind a `mounted` gate), with no
+  robots/sitemap/canonical. Now `app/page.tsx` is a SERVER page (home metadata +
+  canonical + JSON-LD @graph: Organization, WebSite, SoftwareApplication w/ an
+  AggregateOffer of the 3 plans, FAQPage — NO aggregateRating until there are
+  real on-page reviews) rendering `components/HomeGate.tsx` (the old client
+  gate). Before mount HomeGate emits BOTH `.home-landing` (the landing) and a
+  hidden `.home-boot` loading screen; an inline head script in `layout.tsx`
+  sets `html[data-session]` when localStorage `c_user` has an id, and
+  globals.css swaps which one shows — so crawlers/visitors get the landing in
+  the first HTML and signed-in users never see it flash. Post-mount both
+  branches return a fragment with `.home-landing` first so React keeps its DOM;
+  an effect drops the flag once there's no user (stale cache / sign-out).
+  MarketingShell's signed-in redirect skips `/`. `app/robots.ts` (blocks /api/
+  /admin /portal /status /payment /onboarding /reset-password) + `app/sitemap.ts`
+  (6 marketing pages — add new public pages there AND give them
+  `alternates.canonical`). Marketing headlines are real `<h1>`/`<h2>` now
+  (`.mkt .h1/.h2` classes kept, so the look didn't change). Home FAQ copy lives
+  in `components/marketing/home-content.ts` (feeds the visible FAQ + FAQPage;
+  plan prices there mirror pricing/page.tsx TIERS). creedhandyman.com's footer
+  links back ("Runs on Creed Handy Manager"). Owner to-dos: 308 apex→www in
+  Vercel Domains (check the Stripe webhook host first — Stripe won't follow a
+  redirect) + verify creedhm.com in Search Console and submit the sitemap.
+  Verified locally with placeholder Supabase env (a worktree `.env.local`, then
+  deleted): crawler HTML, no hydration warnings, flag on/off paths, mobile.
 
 - **Signup / onboarding = ONE flow (2026-10-02)**: every account goes through
   the Grizz `Onboarding.tsx` (Create a business / Join a team). The email-

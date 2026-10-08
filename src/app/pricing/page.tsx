@@ -16,7 +16,8 @@ import MarketingShell from "@/components/marketing/MarketingShell";
 import { TRIAL_DAYS } from "@/lib/trial";
 
 export const metadata: Metadata = {
-  title: "Pricing · Creed Handy Manager",
+  title: "Handyman Software Pricing · Creed Handy Manager",
+  alternates: { canonical: "/pricing" },
   description:
     "Simple plans that grow with you — Solo $24.99, Crew $59.99, Pro $149.99. 14-day free trial, no card needed — every plan includes the full toolkit. Solo/Crew add a 0.5% platform fee on payments, capped at $100/month. Pro pays zero.",
 };
@@ -138,7 +139,7 @@ export default function PricingPage() {
     <MarketingShell>
       <div className="phead"><div className="wrap">
         <div className="kick">Pricing</div>
-        <div className="h1">Simple plans that <span className="g">grow with you</span></div>
+        <h1 className="h1">Simple plans that <span className="g">grow with you</span></h1>
         <div className="lead">Start free. Upgrade when your crew does. Every plan includes the full toolkit — plans differ by team size and AI volume.</div>
       </div></div>
 

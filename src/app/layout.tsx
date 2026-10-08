@@ -2,8 +2,17 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./marketing.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { SEO_ORIGIN } from "@/lib/seo";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://creedhm.com";
+// Relative metadata URLs (canonicals, OG) resolve against the one indexed
+// origin — www — not the env-driven app origin (see lib/seo.ts).
+const SITE_URL = SEO_ORIGIN;
+
+// Runs before first paint: flags a cached signed-in user so the home page's
+// server-rendered landing stays hidden for them (HomeGate.tsx + globals.css
+// .home-landing / .home-boot). Read-only; a bad value just means no flag.
+const SESSION_FLAG_SCRIPT =
+  'try{var u=JSON.parse(localStorage.getItem("c_user")||"null");if(u&&u.id)document.documentElement.setAttribute("data-session","1")}catch(e){}';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -42,6 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: SESSION_FLAG_SCRIPT }} />
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body>
