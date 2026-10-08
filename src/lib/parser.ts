@@ -1531,8 +1531,12 @@ async function aiParsePdfSingle(
     // overhead uplift on top of them double-counts (the real-world test: a 25%
     // "Job setup, staging & cleanup" line that calibration then scaled again,
     // $418–$2,530/quote).
+    // Legacy basis capped at 1.15, not 1.5: it's pinned at its cap by pre-Aug-6
+    // jobs, and on top of the prompt's "take the HIGHER" nudge x1.5 put big
+    // quotes ~1.45-1.9x the model's own hours (2026-10-08, owner: "quotes
+    // slightly high"). The raw basis is measured against aiHrs, so it keeps 1.5.
     const calFactor = (bucket: string) =>
-      Math.min(1.5, Math.max(1, laborCalByTrade[bucket.trim().toLowerCase()] ?? laborCalOverall));
+      Math.min(laborCalBasis === "raw" ? 1.5 : 1.15, Math.max(1, laborCalByTrade[bucket.trim().toLowerCase()] ?? laborCalOverall));
     try {
       const corrections = await db.get<{
         item_name: string; original_hours: number; corrected_hours: number;
@@ -1649,7 +1653,7 @@ async function aiParsePdfSingle(
         if (localLessons.length || otherLessons.length || jobCalLines.length) {
           correctionsPrompt = "";
           if (jobCalLines.length) {
-            correctionsPrompt += `\nPAST JOB DURATIONS — this team's ACTUAL hours from completed work vs what was quoted. Actuals consistently exceed quotes — weight your hours toward the ACTUAL side, especially where local data exists:\n${jobCalLines.join("\n")}\n`;
+            correctionsPrompt += `\nPAST JOB DURATIONS — this team's ACTUAL hours from completed work vs what was quoted. Use them to size similar work, especially where local data exists:\n${jobCalLines.join("\n")}\n`;
             // Overall ratio only: a single calibrated trade mustn't switch the
             // uplift off for the others (the code-side drop below is per bucket).
             // On the raw basis, always: its factor is measured clocked-vs-AI
