@@ -833,6 +833,19 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   rows or grant owner (UI + profiles_guard); promotions confirm. Delete account
   = `/api/account/delete` (deletes profile + auth user; refused for owners).
   `getLang()` falls back to the phone language; onboarding has EN/ES.
+- **Shop (custom) quests (2026-10-08)**: owners/managers make their own
+  quests from Quests → Quests tab → **Shop quests** (`ShopQuestsManager.tsx`;
+  renders nothing for crew). Stored in `organizations.quest_config._custom`
+  (no schema change — `parseQuestConfig()` in `lib/quests.ts` splits it from
+  the built-in toggles; Settings → Quest Bonuses spreads the same JSON so it
+  keeps `_custom`). Each quest = name/desc + a metric from
+  `CUSTOM_QUEST_METRICS` (jobs completed, hours, 5★/good reviews, booked
+  referrals, upsells, 24h+ jobs, requested-by-name, no-callback streak) or
+  `manual` (owner taps who earned it; marks are `${userId}@${cycleKey}` so
+  they only count in that 6-month cycle) + goal + bonus. `computeQuests` adds
+  a "SHOP QUESTS" tier with keys `custom_<id>`, so the Quests screen, the
+  confetti and Payroll's earned/approve/paid-this-cycle flow all work
+  unchanged. Not counted toward HandyKing. Engine tested 12/12.
 - **Crew size + estimated days (2026-10-08)**: QuoteForge's pricing row has a
   **Crew** picker (Auto · 1–4; rooms blob `data.crewSize`, null = Auto). It
   NEVER changes price — labor hours are TOTAL work hours — only the PDF's per-
