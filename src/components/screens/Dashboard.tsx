@@ -23,6 +23,7 @@ interface Props {
 
 export default function Dashboard({ setPage, openSettings, openJob, openOps }: Props) {
   const user = useStore((s) => s.user)!;
+  const org = useStore((s) => s.org);
   const isAdmin = user.role === "owner" || user.role === "manager";
   const jobs = useStore((s) => s.jobs);
   const darkMode = useStore((s) => s.darkMode);
@@ -167,16 +168,38 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
     </div>
   );
 
+  // Header buttons sit on the brand gradient: translucent glass in the
+  // gradient's ink color instead of the dark card tile.
+  const headerBtn: React.CSSProperties = { background: "rgba(255,255,255,.16)", borderColor: "rgba(255,255,255,.28)", color: "inherit" };
+
   return (
     <div className="fi" style={{ minHeight: "calc(100dvh - 150px)", display: "flex", flexDirection: "column" }}>
-      {/* Topbar — greeting + name + help / settings */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div>
-          <div className="dim" style={{ fontSize: 14 }}>{isAdmin ? t("dash.welcomeBack") : t("dash.letsGetIt")}</div>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 23, letterSpacing: ".8px", textTransform: "uppercase" }}>{user.name}</div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setShowNotifs(true)} aria-label={t("notif.title")} title={t("notif.title")} className="iconbtn" style={{ position: "relative" }}>
+      {/* Brand header — the business's logo on its own brand gradient
+          (Business settings → Brand color; --brand-grad / --brand-ink are
+          set by ThemeProvider, default blue). Greeting + bell/help/settings
+          ride on it. No logo yet → the business's initials. */}
+      <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, padding: "14px 14px 15px", marginBottom: 14, background: "var(--brand-grad)", color: "var(--brand-ink)", boxShadow: "0 12px 30px -14px rgba(0,0,0,.65)" }}>
+        {/* soft sheen so the gradient reads as a surface, not a flat fill */}
+        <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 90% at 0% 0%, rgba(255,255,255,.22), transparent 55%)", pointerEvents: "none" }} />
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 54, height: 54, borderRadius: 14, background: "#fff", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: "0 4px 14px -6px rgba(0,0,0,.5)" }}>
+            {org?.logo_url ? (
+              <img src={org.logo_url} alt={org.name || ""} style={{ width: "100%", height: "100%", objectFit: "contain", padding: 5 }} />
+            ) : (
+              <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, color: "var(--color-primary)" }}>
+                {(org?.name || user.name || "?").split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {org?.name && (
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12.5, letterSpacing: ".08em", lineHeight: 1.2, textTransform: "uppercase", opacity: 0.92, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 2 }}>{org.name}</div>
+            )}
+            <div style={{ fontSize: 13, opacity: 0.85 }}>{isAdmin ? t("dash.welcomeBack") : t("dash.letsGetIt")}</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, letterSpacing: ".6px", textTransform: "uppercase", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+          </div>
+        <div style={{ display: "flex", gap: 6, alignSelf: "flex-start" }}>
+          <button onClick={() => setShowNotifs(true)} aria-label={t("notif.title")} title={t("notif.title")} className="iconbtn" style={{ ...headerBtn, position: "relative" }}>
             <Icon name="bell" size={18} />
             {unreadCount > 0 && (
               <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 12, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, border: "1.5px solid var(--color-dark-bg)" }}>
@@ -184,8 +207,9 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
               </span>
             )}
           </button>
-          <button onClick={() => setShowUserGuide(true)} aria-label="Ask Grizz" title="Ask Grizz" className="iconbtn"><Icon name="help" size={18} /></button>
-          <button onClick={openSettings} aria-label={t("settings.title")} title={t("settings.title")} className="iconbtn"><Icon name="settings" size={18} /></button>
+          <button onClick={() => setShowUserGuide(true)} aria-label="Ask Grizz" title="Ask Grizz" className="iconbtn" style={headerBtn}><Icon name="help" size={18} /></button>
+          <button onClick={openSettings} aria-label={t("settings.title")} title={t("settings.title")} className="iconbtn" style={headerBtn}><Icon name="settings" size={18} /></button>
+        </div>
         </div>
       </div>
 
