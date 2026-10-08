@@ -44,7 +44,10 @@ export default function SiteFooter() {
           </div>
         </div>
         <div className="ftr-bottom">
-          <span>© {new Date().getFullYear()} {SITE.name} · {SITE.city}, Kansas</span>
+          <span>
+            © {new Date().getFullYear()} {SITE.name} · {SITE.city}, Kansas · Runs on{" "}
+            <a href="https://www.creedhm.com" title="Handyman business software">Creed Handy Manager</a>
+          </span>
           <div className="ftr-links">
             <Link href="/services">Services</Link>
             <Link href="/pricing">Pricing</Link>
