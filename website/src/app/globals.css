@@ -13,7 +13,7 @@
 }
 
 * { box-sizing: border-box; }
-html { color-scheme: dark; scroll-behavior: smooth; }
+html { color-scheme: dark; scroll-behavior: smooth; scroll-padding-top: 80px; }
 body {
   margin: 0;
   background: var(--bg);
@@ -542,3 +542,40 @@ textarea.field { resize: vertical; min-height: 120px; }
 .sx-group li a:hover { color: #fff; }
 @media (max-width: 900px) { .sx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .sx-grid { gap: 22px 18px; } .sx-group li { font-size: 15px; } }
+
+/* ---------- homepage funnel sections (desktop) ---------- */
+.fn-p { font-size: 17px; line-height: 1.6; color: var(--muted); margin: 0 0 18px; }
+.fn-pledge { border-color: var(--blue); }
+.fn-sign { font-family: var(--font-head); font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--blue-lt); margin: 18px 0 0; }
+.fn-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; background: var(--line); border: 2px solid var(--line); counter-reset: none; }
+.fn-steps li { background: var(--panel); padding: 26px 22px 24px; position: relative; }
+.fn-steps li + li::before { content: ""; position: absolute; left: -9px; top: 38px; width: 16px; height: 16px; background: var(--panel); border-top: 2px solid var(--line); border-right: 2px solid var(--line); transform: rotate(45deg); z-index: 1; }
+.fn-n { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; background: var(--red); color: #fff; font-family: var(--font-head); font-size: 19px; margin-bottom: 16px; }
+.fn-steps b { display: block; font-family: var(--font-head); font-weight: 500; font-size: 20px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; color: #fff; }
+.fn-steps p { font-size: 15.5px; line-height: 1.55; color: var(--muted); margin: 0; }
+.fn-guarantee { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 40px; align-items: center; border: 2px solid var(--blue); background: linear-gradient(120deg, rgba(0,95,179,.16), transparent 60%); padding: 36px 40px; }
+.fn-seal { width: 150px; height: 150px; border-radius: 50%; border: 3px solid var(--blue-lt); outline: 2px dashed rgba(77,155,224,.45); outline-offset: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-head); text-transform: uppercase; color: #fff; }
+.fn-seal b { font-size: 64px; font-weight: 600; line-height: .9; }
+.fn-seal span { font-size: 15px; letter-spacing: .24em; color: var(--blue-lt); }
+.fn-cities { display: flex; flex-wrap: wrap; gap: 10px; }
+.fn-city { border: 2px solid var(--line); padding: 7px 14px; font-size: 15px; color: var(--muted); }
+.fn-city-link { border-color: var(--blue); color: #fff; }
+.fn-city-link:hover { background: var(--blue); color: #fff; }
+.fn-contact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.fn-contact .card p { font-size: 15.5px; line-height: 1.6; color: var(--muted); margin: 0 0 16px; }
+.fn-contact .card p:last-child { margin-bottom: 0; }
+@media (max-width: 900px) { .pc-only { display: none; } }
+
+/* funnel progress rail — wide desktops only */
+.frail { display: none; }
+@media (min-width: 1300px) {
+  .frail { display: flex; flex-direction: column; gap: 14px; position: fixed; right: 22px; top: 50%; transform: translateY(-50%); z-index: 15; }
+  .frail::before { content: ""; position: absolute; right: 5px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
+  .frail a { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 12px; height: 12px; }
+  .frail i { width: 12px; height: 12px; border: 2px solid #4a525a; background: var(--bg); flex: none; transition: background .25s, border-color .25s, transform .25s; }
+  .frail a.done i { border-color: var(--blue); background: var(--blue); }
+  .frail a.on i { border-color: var(--red); background: var(--red); transform: scale(1.35); }
+  .frail .lbl { font-family: var(--font-head); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #fff; background: rgba(11,12,13,.92); border: 1px solid var(--line); padding: 4px 9px; white-space: nowrap; opacity: 0; transform: translateX(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
+  .frail a:hover .lbl, .frail a.on .lbl { opacity: 1; transform: none; }
+}
+@media (min-width: 1300px) and (max-width: 1499px) { .frail a.on:not(:hover) .lbl { opacity: 0; } }

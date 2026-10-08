@@ -9,10 +9,14 @@ import { Kicker, SecLabel, BeforeAfter, CtaBand, CredStrip } from "@/components/
 import Img from "@/components/Img";
 import RecentWork from "@/components/RecentWork";
 import ServiceIndex from "@/components/ServiceIndex";
+import { MeetOwner, HowItWorks, GuaranteeBand, ServiceArea, ContactStrip } from "@/components/Funnel";
+import FunnelRail from "@/components/FunnelRail";
 
 export default function HomePage() {
   return (
     <main>
+      <FunnelRail />
+
       {/* ---------- Hero ---------- */}
       <section className="band">
         <div className="container hero-grid">
@@ -126,10 +130,13 @@ export default function HomePage() {
       {/* ---------- Credentials strip ---------- */}
       <CredStrip />
 
+      {/* ---------- Meet the owner (desktop) ---------- */}
+      <MeetOwner />
+
       {/* ---------- Services ---------- */}
       <section className="band" id="services">
         <div className="container section">
-          <SecLabel>01 — Services</SecLabel>
+          <SecLabel>Services</SecLabel>
           <h2 className="h2">What we fix in Wichita</h2>
           <p className="sub">Handyman services across Wichita and Sedgwick County. If it is not on the list, ask.</p>
           <div className="svc-grid svc-grid-4">
@@ -157,7 +164,7 @@ export default function HomePage() {
         <div className="container section">
           <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "baseline", justifyContent: "space-between", marginBottom: 36 }}>
             <div>
-              <SecLabel>02 — Gallery</SecLabel>
+              <SecLabel>Our work</SecLabel>
               <h2 className="h2" style={{ marginBottom: 10 }}>Before &amp; after</h2>
               <p style={{ fontSize: 18, color: "var(--muted)", margin: 0 }}>Real jobs around Wichita.</p>
             </div>
@@ -179,10 +186,13 @@ export default function HomePage() {
         <RecentWork />
       </section>
 
+      {/* ---------- How it works (desktop) ---------- */}
+      <HowItWorks />
+
       {/* ---------- Pricing ---------- */}
       <section className="band" id="pricing">
         <div className="container section">
-          <SecLabel>03 — Pricing</SecLabel>
+          <SecLabel>Pricing</SecLabel>
           <h2 className="h2" style={{ marginBottom: 16 }}>One rate for everything.</h2>
           <p className="lead" style={{ fontSize: 17.5, marginBottom: 32, maxWidth: "60ch" }}>
             You get an estimate before work starts, and the price on the
@@ -218,6 +228,9 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ---------- Guarantee (desktop) ---------- */}
+      <GuaranteeBand />
+
       {/* ---------- Property managers band ---------- */}
       <section className="band band-alt" id="property-managers">
         <div className="container promo" style={{ padding: "48px 24px" }}>
@@ -248,6 +261,9 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ---------- Service area (desktop) ---------- */}
+      <ServiceArea />
+
       {/* ---------- FAQ ---------- */}
       <section className="band band-alt" id="faq">
         <div className="container section">
@@ -273,6 +289,9 @@ export default function HomePage() {
           }}
         />
       </section>
+
+      {/* ---------- Contact / book (desktop) ---------- */}
+      <ContactStrip />
 
       {/* ---------- Closing CTA ---------- */}
       <CtaBand />
