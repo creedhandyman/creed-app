@@ -565,6 +565,20 @@ textarea.field { resize: vertical; min-height: 120px; }
 .fn-contact .card p { font-size: 15.5px; line-height: 1.6; color: var(--muted); margin: 0 0 16px; }
 .fn-contact .card p:last-child { margin-bottom: 0; }
 @media (max-width: 900px) { .pc-only { display: none; } }
+@media (max-width: 900px) {
+  .fn-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fn-steps li + li::before { display: none; }
+  .fn-guarantee { grid-template-columns: 1fr; gap: 24px; padding: 28px 22px; justify-items: start; }
+  .fn-seal { width: 110px; height: 110px; }
+  .fn-seal b { font-size: 46px; }
+  .fn-seal span { font-size: 12px; }
+}
+@media (max-width: 560px) {
+  .fn-steps { grid-template-columns: 1fr; }
+  .fn-steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 16px; padding: 20px 18px; }
+  .fn-steps .fn-n { grid-row: span 2; margin: 0; }
+  .fn-steps b { font-size: 18px; margin-bottom: 4px; }
+}
 
 /* funnel progress rail — wide desktops only */
 .frail { display: none; }

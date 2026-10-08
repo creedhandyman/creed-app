@@ -6,7 +6,8 @@ import EmailLink from "@/components/EmailLink";
 /* Homepage "funnel" sections — each one condenses a full page (About,
    How it works, Guarantee, Service area, Contact) into the homepage so a
    desktop visitor walks trust → proof → price → guarantee → book without
-   leaving. `pc-only` hides them on phones (the phone page stays short). */
+   leaving. `pc-only` hides a section on phones (How it works + Guarantee
+   show everywhere; the rest stay desktop-only to keep the phone page short). */
 
 export function MeetOwner() {
   const PLEDGE = [
@@ -54,7 +55,7 @@ export function HowItWorks() {
     { h: "Done & guaranteed", p: "Photos of the finished job, backed by our one-year workmanship guarantee." },
   ];
   return (
-    <section className="band band-alt pc-only" id="process">
+    <section className="band band-alt" id="process">
       <div className="container section">
         <SecLabel>How it works</SecLabel>
         <h2 className="h2" style={{ marginBottom: 32 }}>From photo to finished in four steps</h2>
@@ -78,7 +79,7 @@ export function HowItWorks() {
 
 export function GuaranteeBand() {
   return (
-    <section className="band pc-only" id="guarantee">
+    <section className="band" id="guarantee">
       <div className="container section">
         <div className="fn-guarantee">
           <div className="fn-seal" aria-hidden="true">
