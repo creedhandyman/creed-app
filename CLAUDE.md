@@ -833,6 +833,16 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   rows or grant owner (UI + profiles_guard); promotions confirm. Delete account
   = `/api/account/delete` (deletes profile + auth user; refused for owners).
   `getLang()` falls back to the phone language; onboarding has EN/ES.
+- **Crew size + estimated days (2026-10-08)**: QuoteForge's pricing row has a
+  **Crew** picker (Auto · 1–4; rooms blob `data.crewSize`, null = Auto). It
+  NEVER changes price — labor hours are TOTAL work hours — only the PDF's per-
+  section "Xh × N crew" split (Auto keeps the old >8h→2 rule) and the days.
+  The AI parse's `estDays` (counts dry/cure waits) is now kept too
+  (`data.estDays`, was dropped). ONE helper, `src/lib/job-duration.ts`
+  `estimateDays(totalHrs, crew, aiEstDays)` = max(ceil(hrs ÷ crew ÷ 8),
+  aiEstDays), drives both the editor's "≈ N days on site" hint and the quote
+  PDF's "Estimated completion: about N working days" box under the summary
+  (threaded through `quote-pdf.ts` for the customer/Jobs copies).
 - **Sending quotes (2026-10-02)**: QuoteForge **Send** saves first
   (`saveJob({stay:true})` keeps the editor open on the saved job and returns
   its id — no more "save once, then send" dead end) and opens `SendSheet`

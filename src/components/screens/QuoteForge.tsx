@@ -47,6 +47,7 @@ import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 import { stripAiHrs } from "@/lib/ai-hours";
 import SendSheet from "../SendSheet";
 import { markQuoteSent } from "@/lib/quote-send";
+import { estimateDays, planningCrew } from "@/lib/job-duration";
 
 /** A saved, reusable quote-as-template: a name + the line-item rooms blob
  *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
@@ -391,6 +392,15 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // `data.tierNames`; the per-item tier rides on each RoomItem (data.rooms).
   const [tieredQuote, setTieredQuote] = useState(false);
   const [tierNames, setTierNames] = useState<{ better: string; best: string }>({ better: "Better", best: "Best" });
+  // Crew size for this quote (rooms blob `data.crewSize`). null = Auto (the
+  // PDF's per-section guess: 2 people when a trade section is over 8 hrs,
+  // else 1). It does NOT change the price — labor hours are TOTAL work hours
+  // — only how they split on site: the PDF's "Xh × N crew" line and the
+  // "≈ N days on site" hint.
+  const [crewSize, setCrewSize] = useState<number | null>(null);
+  // The AI parse's own day estimate (rooms blob `data.estDays`) — it counts
+  // dry/cure waits that add days but no labor hours. Feeds estimateDays().
+  const [aiEstDays, setAiEstDays] = useState<number | null>(null);
   // Which tier you're currently organizing in the editor (UI-only, not saved).
   // The 3 total tiles double as this switch; each line item then shows ONE
   // include checkbox for the active tier, so tagging an item never overwrites
@@ -432,7 +442,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     v: 1, savedAt: Date.now(),
     mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos,
     rooms, workers, jobPhotos, customWorkOrder,
-    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames,
+    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -457,6 +467,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
       setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
       setTieredQuote(!!d.tieredQuote); setTierNames(d.tierNames || { better: "Better", best: "Best" });
+      setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
+      setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
       setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
       setCheckedTools(d.checkedTools || []); setCheckedShop(d.checkedShop || []);
       setRemovedGuideShop(d.removedGuideShop || []);
@@ -484,7 +496,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const t = setTimeout(() => { try { localStorage.setItem(DRAFT_KEY, snapshot); } catch { /* */ } }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab, editJobId, editingId]);
+  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab, editJobId, editingId]);
 
   // Flush immediately when the app is backgrounded/closed — the 600ms debounce
   // may not fire if the user leaves right after typing. Ref keeps the latest
@@ -586,6 +598,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // Good-Better-Best (per-quote, rooms blob). Absent = off; legacy quotes
       // load as non-tiered so nothing changes for them.
       setTieredQuote(data?.tieredQuote === true);
+      const cs = data?.crewSize;
+      setCrewSize(typeof cs === "number" && cs > 0 ? Math.round(cs) : null);
+      const ed = data?.estDays;
+      setAiEstDays(typeof ed === "number" && ed > 0 ? ed : null);
       const tn = data?.tierNames as { better?: unknown; best?: unknown } | undefined;
       setTierNames({
         better: typeof tn?.better === "string" && tn.better.trim() ? tn.better : "Better",
@@ -700,7 +716,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined);
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null);
-    setTieredQuote(false); setTierNames({ better: "Better", best: "Best" });
+    setTieredQuote(false); setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
@@ -836,6 +852,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // Already validated (caps + floors) and labor-calibrated inside the
         // parse — skipCaps so a second cap pass can't clamp calibrated hours.
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
+        setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setParsing(false);
         setParseStatus("");
         return;
@@ -1022,6 +1039,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // these rooms — skipCaps so the 10h/8h cap can't re-clamp calibrated
         // hours (the real-world test saw a 10.4h line reset to 8h).
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
+        setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setParsing(false);
         setParseStatus("");
         setMode("edit");
@@ -1602,6 +1620,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // re-deriving the pricing math server-side.
       tieredQuote: tieredQuote,
       tierNames: tierNames,
+      // Crew size (null = Auto). Explicit so picking Auto clears it.
+      crewSize: crewSize,
+      estDays: aiEstDays,
       tierTotals: tieredQuote ? tierTotals : null,
       tierBreakdown: tieredQuote ? tierBreakdown : null,
       // Whether the options actually differ in SCOPE (not just price) — so the
@@ -1714,7 +1735,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setLaborRate(null);
     setMinLaborHours(null);
     setTieredQuote(false);
-    setTierNames({ better: "Better", best: "Best" });
+    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     savingRef.current = false;
     setPage("jobs");
     return savedId;
@@ -2296,7 +2317,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setLaborRate(null);
           setMinLaborHours(null);
           setTieredQuote(false);
-          setTierNames({ better: "Better", best: "Best" });
+          setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
         }}>←</button>
         <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚡ Quote</h2>
         <span style={{ fontSize: 12 }} className="dim">
@@ -2594,6 +2615,46 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               → {effectiveTaxMode === "materials" ? "mat only" : effectiveTaxMode === "none" ? "no tax" : "L + M"}
             </span>
           )}
+
+          <span style={{ width: 1, height: 18, background: "#444", margin: "0 4px" }} />
+
+          <span
+            style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}
+            title="How many people work this job. Doesn't change the price (labor hours are total work hours) — it sets the crew line on the quote and the days on site."
+          >
+            Crew
+          </span>
+          <div style={{ display: "inline-flex", borderRadius: 6, overflow: "hidden", border: "1px solid #2E75B655" }}>
+            {([null, 1, 2, 3, 4] as const).map((n) => {
+              const active = crewSize === n;
+              return (
+                <button
+                  key={String(n)}
+                  onClick={() => setCrewSize(n)}
+                  aria-label={n === null ? "Crew size: auto" : `Crew size: ${n}`}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: 13,
+                    fontFamily: "Oswald",
+                    background: active ? "var(--color-primary)" : "transparent",
+                    color: active ? "#fff" : "#888",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {n === null ? "Auto" : n}
+                </button>
+              );
+            })}
+          </div>
+          {thRaw > 0 && (() => {
+            const days = estimateDays(thRaw, crewSize, aiEstDays);
+            return (
+              <span style={{ fontSize: 12, color: "#888", fontFamily: "Oswald" }}>
+                ≈ {days} day{days > 1 ? "s" : ""} on site{crewSize === null ? ` · crew of ${planningCrew(thRaw, null)}` : ""}
+              </span>
+            );
+          })()}
         </div>
       </div>
 
@@ -3094,6 +3155,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 taxMode: effectiveTaxMode,
                 tieredQuote,
                 tierNames,
+                crewSize,
+                estDays: aiEstDays,
                 // Same reference number the customer's copy prints (was a
                 // random one per export for saved quotes).
                 jobId: editingId || undefined,
