@@ -559,8 +559,9 @@ textarea.field { resize: vertical; min-height: 120px; }
 .fn-seal span { font-size: 15px; letter-spacing: .24em; color: var(--blue-lt); }
 .fn-cities { display: flex; flex-wrap: wrap; gap: 10px; }
 .fn-city { border: 2px solid var(--line); padding: 7px 14px; font-size: 15px; color: var(--muted); }
-.fn-city-link { border-color: var(--blue); color: #fff; }
-.fn-city-link:hover { background: var(--blue); color: #fff; }
+.fn-city-link span { color: var(--blue-lt); }
+.fn-city-link:hover { border-color: var(--blue); background: var(--blue); color: #fff; }
+.fn-city-link:hover span { color: #fff; }
 .fn-contact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .fn-contact .card p { font-size: 15.5px; line-height: 1.6; color: var(--muted); margin: 0 0 16px; }
 .fn-contact .card p:last-child { margin-bottom: 0; }

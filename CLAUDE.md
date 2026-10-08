@@ -86,8 +86,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   "website"). Type-check: `npx tsc --noEmit` inside `website/`.
 - Pages: home, services (+6 slugs), gallery, pricing,
   property-managers, about, churches, contact, plus per-city SEO pages
-  /handyman-{derby,haysville,goddard}-ks (shared CityPage template,
-  content in site.ts CITY_PAGES, linked from the footer city list).
+  /handyman-{derby,haysville,goddard,bel-aire,kechi}-ks (shared CityPage
+  template, content in site.ts CITY_PAGES, linked from the footer city
+  list + the homepage service-area chips, which mark linked towns with →).
+  Write new town pages from REAL job history (query the Creed org's jobs by
+  town name / ZIP in Supabase) — Bel Aire + Kechi were; Park City / Valley
+  Center / Maize had ~no jobs (2026-10-08), so they were skipped as thin.
   Sitemap/robots/JSON-LD (HomeAndConstructionBusiness + per-service
   Service schema, service-area, no street address) + per-page
   canonicals done. The leftover Wix `en` CNAME was deleted 2026-09-25;

@@ -347,6 +347,40 @@ export const CITY_PAGES = [
       "Fence gate and deck repairs",
     ],
   },
+  {
+    slug: "handyman-bel-aire-ks",
+    city: "Bel Aire",
+    intro: "Right on Wichita's northeast edge — Bel Aire and the neighborhoods around it are a regular stop on our schedule.",
+    body: [
+      "Bel Aire and northeast Wichita keep us busy with the parts of a house that wear out first: closet doors that jump their tracks, garage-door springs and seals, sliding doors that let in drafts and water, and back-door trim and sills that rot out at the bottom.",
+      "Outside, it's fence boards, deck boards, leaky hose bibs, and window wells. Inside, drywall patches, baseboard and trim, touch-up paint, and thermostats. One call covers the whole list, quoted before we start.",
+    ],
+    jobs: [
+      "Closet door rollers, tracks, and rehangs",
+      "Garage door springs and weather seals",
+      "Door trim, sill, and threshold replacement",
+      "Fence and deck board replacement",
+      "Leaky hose bibs and spigots",
+      "Drywall patching, trim, and touch-up paint",
+    ],
+  },
+  {
+    slug: "handyman-kechi-ks",
+    city: "Kechi",
+    intro: "Just northeast of Wichita — Kechi is a short drive from our home base, and every job gets quoted before we start.",
+    body: [
+      "Kechi to-do lists run indoors and out: fence gates sagging off their posts, entry doors and deadbolts that stopped latching, outlets and fixtures that quit working, and the chores nobody wants — wasp nests under the eaves, debris hauled off.",
+      "We take on the bigger fixes too. When a bathroom floor goes soft, we tear out the rotted subfloor, lay new flooring, reset the toilet on a solid flange, and haul away the debris.",
+    ],
+    jobs: [
+      "Rotted subfloor and bathroom floor replacement",
+      "Door knobs, deadbolts, and entry hardware",
+      "Fence gate and post repairs",
+      "Outlet and light fixture troubleshooting",
+      "Ceiling patch and paint",
+      "Blinds, bulbs, and small fix-it lists",
+    ],
+  },
 ];
 
 // The Creed HM lead form — the direct way to send a work order / quote

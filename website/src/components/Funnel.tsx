@@ -113,7 +113,7 @@ export function ServiceArea() {
           {SITE.cities.map((c) => {
             const slug = pageFor(c);
             return slug ? (
-              <Link key={c} href={`/${slug}`} className="fn-city fn-city-link">{c}</Link>
+              <Link key={c} href={`/${slug}`} className="fn-city fn-city-link">{c} <span aria-hidden="true">→</span></Link>
             ) : (
               <span key={c} className="fn-city">{c}</span>
             );
