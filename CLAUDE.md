@@ -1259,6 +1259,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   templates, recurring copies and customer payloads (`src/lib/ai-hours.ts`),
   and an AI Assist rewrite of a line's detail drops it. AI Assist adds stay
   uncalibrated on purpose (owners type hours).
+  **Legacy cap lowered to 1.15x (0de85c7, 2026-10-08)** after "quotes slightly
+  high": big quotes were 1.45–1.9x aiHrs. Raw basis still caps at 1.5x. The
+  learned-durations prompt no longer says "actuals consistently exceed quotes".
 - **Models**: every AI call is `claude-sonnet-5-5` (parse, ping, voice walk,
   AI Assist, Troubleshoot — Haiku retired 2026-09-29; there is no Haiku 5).
   Thinking off = `thinking: {type:"between_tools"}` + `effort:"high"`
