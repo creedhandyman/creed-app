@@ -28,22 +28,33 @@ function applyTradeChecklist(base: string[], primaryTrade?: string | null): stri
   const tradeList = tradeConfig(resolvePrimaryTrade(primaryTrade)).checklistTemplate;
   return tradeList.length ? tradeList : base;
 }
+// The Move Out set doubles as the VACANT TURN (make-ready) checklist: every
+// item a unit needs checked before it's rent-ready. Items start "OK", so a
+// longer list costs the inspector one glance per line, not a tap — and a line
+// that isn't on the list is work the quote silently misses. Appliances are
+// split out (a dead dishwasher is its own line + part), and "Whole Unit"
+// holds the turn tasks that belong to no single room (clean, trash-out,
+// bulbs, re-key, keys). Names feed the AI parser + VoiceWalk keyword ticks
+// (ITEM_KEYWORD_OVERRIDES) — keep them in English.
+const BEDROOM_ITEMS = ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Closet", "Electrical/Lights", "Ceiling Fan", "Smoke Detector", "Baseboards", "Cleaning"];
+const BATH_ITEMS = ["Toilet", "Sink/Vanity", "Tub/Shower", "Shower Rod/Door", "Flooring", "Walls/Ceiling", "Doors", "Mirror/Medicine Cabinet", "Towel Bar/TP Holder", "Exhaust Fan", "GFCI Outlets", "Electrical/Lights", "Caulking", "Cleaning"];
 export const ROOM_PRESETS: Record<string, string[]> = {
-  Kitchen: ["Sink/Faucet", "Counters", "Cabinets", "Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Appliances", "Electrical/Lights", "Caulking"],
-  "Living Room": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Electrical/Lights", "Baseboards"],
-  "Dining Room": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Electrical/Lights", "Baseboards"],
-  Entry: ["Flooring", "Walls/Ceiling", "Door/Lock", "Doorbell", "Electrical/Lights"],
-  "Hallway/Stairs": ["Flooring", "Walls/Ceiling", "Electrical/Lights", "Railings", "Baseboards"],
-  "Laundry Room": ["Flooring", "Walls/Ceiling", "Connections", "Venting", "Cabinets", "Electrical"],
-  "Bedroom 1": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Closet", "Electrical/Lights", "Baseboards"],
-  "Bedroom 2": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Closet", "Electrical/Lights", "Baseboards"],
-  "Bedroom 3": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Closet", "Electrical/Lights", "Baseboards"],
-  "Bedroom 4": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Closet", "Electrical/Lights", "Baseboards"],
-  "Bathroom 1": ["Toilet", "Sink/Vanity", "Tub/Shower", "Flooring", "Walls/Ceiling", "Mirror/Medicine Cabinet", "Towel Bar/TP Holder", "Exhaust Fan", "Caulking", "Electrical/Lights"],
-  "Bathroom 2": ["Toilet", "Sink/Vanity", "Tub/Shower", "Flooring", "Walls/Ceiling", "Mirror/Medicine Cabinet", "Towel Bar/TP Holder", "Exhaust Fan", "Caulking", "Electrical/Lights"],
-  "Bathroom 3": ["Toilet", "Sink/Vanity", "Tub/Shower", "Flooring", "Walls/Ceiling", "Mirror/Medicine Cabinet", "Towel Bar/TP Holder", "Exhaust Fan", "Caulking", "Electrical/Lights"],
-  Garage: ["Door/Opener", "Flooring", "Walls", "Electrical/Lights", "Exterior Door"],
-  Exterior: ["Siding", "Gutters/Downspouts", "Porch/Deck", "Landscaping", "Exterior Lights", "Fencing", "HVAC Unit"],
+  Kitchen: ["Sink/Faucet", "Under-Sink/Leaks", "Garbage Disposal", "Counters", "Cabinets/Drawers", "Range/Oven", "Range Hood/Microwave", "Refrigerator", "Dishwasher", "Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Electrical/Lights", "GFCI Outlets", "Caulking", "Cleaning"],
+  "Living Room": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Electrical/Lights", "Ceiling Fan", "Baseboards", "Cleaning"],
+  "Dining Room": ["Flooring", "Walls/Ceiling", "Doors", "Windows/Blinds", "Electrical/Lights", "Ceiling Fan", "Baseboards", "Cleaning"],
+  Entry: ["Flooring", "Walls/Ceiling", "Door/Lock", "Weatherstrip/Threshold", "Doorbell", "Electrical/Lights"],
+  "Hallway/Stairs": ["Flooring", "Walls/Ceiling", "Electrical/Lights", "Smoke Detector", "Linen Closet", "Railings", "Baseboards"],
+  "Laundry Room": ["Flooring", "Walls/Ceiling", "Washer Box/Valves", "Dryer Vent", "Cabinets", "Electrical"],
+  "Bedroom 1": BEDROOM_ITEMS,
+  "Bedroom 2": BEDROOM_ITEMS,
+  "Bedroom 3": BEDROOM_ITEMS,
+  "Bedroom 4": BEDROOM_ITEMS,
+  "Bathroom 1": BATH_ITEMS,
+  "Bathroom 2": BATH_ITEMS,
+  "Bathroom 3": BATH_ITEMS,
+  Garage: ["Door/Opener", "Opener Safety Sensors", "Flooring", "Walls", "Electrical/Lights", "Exterior Door"],
+  Exterior: ["Front/Back Doors", "Windows/Screens", "Siding", "Gutters/Downspouts", "Porch/Deck", "Driveway/Walks", "Landscaping", "Trash/Debris", "Exterior Lights", "Hose Bibs", "Address Numbers/Mailbox", "Fencing", "HVAC Unit"],
+  "Whole Unit": ["Utilities On (water/power/gas)", "Deep Clean", "Trash-out/Debris", "Odor/Pests", "Paint (overall)", "Blinds (overall)", "Light Bulbs", "Outlet/Switch Covers", "Door Stops", "Locks/Re-key", "Keys/Remotes"],
   Compliance: ["Water Heater", "HVAC System", "Air Filter", "Condenser Unit", "Breaker Panel", "Smoke/CO Detectors", "Fire Extinguisher", "Thermostat", "GFCI Outlets"],
 };
 
@@ -114,6 +125,51 @@ function getPresets(itemName: string): string[] {
     return ["Blow walks + drive", "Blow and haul debris"];
   if (/weed control|weed pull|weed\/vine/.test(n))
     return ["Spray weeds", "Hand pull beds", "Clear vines", "Pre-emergent"];
+  // ── Vacant-turn items (ROOM_PRESETS). Above the yard + generic rules on
+  // purpose: "Odor/Pests" would hit the yard /pest/ chips, "Ceiling Fan"
+  // the /ceiling/ paint chips, "Shower Rod/Door" the plumbing ones. ──
+  if (/utilities/.test(n))
+    return ["All on", "Water off", "Power off", "Gas off — can't test"];
+  if (/deep clean|^cleaning$/.test(n))
+    return ["Light clean", "Standard clean", "Deep clean", "Heavy — grease/trash/pet"];
+  if (/trash-out|trash\/debris/.test(n))
+    return ["A few bags", "Truck/trailer load", "Furniture left behind", "Haul to dump"];
+  if (/odor|pests/.test(n))
+    return ["No odor/pests", "Pet odor", "Smoke odor", "Roaches/mice — treat"];
+  if (/paint \(overall\)/.test(n))
+    return ["Touch-up only", "Full repaint", "Ceilings too", "Smoke/nicotine — prime"];
+  if (/blinds \(overall\)/.test(n))
+    return ["All good", "Replace damaged (count)", "Replace all"];
+  if (/light bulbs/.test(n))
+    return ["All working", "Replace bulbs (count)"];
+  if (/door stops/.test(n))
+    return ["Install missing", "Replace damaged"];
+  if (/keys|remote/.test(n))
+    return ["All keys present", "Missing keys", "Garage remote missing", "Mailbox key missing"];
+  if (/ceiling fan/.test(n))
+    return ["Works OK", "Wobbles — balance", "Missing blade/globe", "Replace fan"];
+  if (/under-sink/.test(n))
+    return ["No leaks", "Active leak", "Water damage in cabinet", "Replace P-trap"];
+  if (/disposal/.test(n))
+    return ["Works OK", "Jammed — reset", "Leaking", "Replace unit"];
+  if (/range|oven|refrigerator|dishwasher|microwave/.test(n))
+    return ["Works OK", "Needs cleaning", "Repair", "Replace", "Missing parts/racks"];
+  if (/shower rod/.test(n))
+    return ["Re-secure rod", "Replace rod", "Replace shower door", "Adjust door"];
+  if (/washer box/.test(n))
+    return ["Valves OK", "Leaking valve", "Replace washer box"];
+  if (/sensor/.test(n))
+    return ["Aligned OK", "Realign", "Replace sensors"];
+  if (/hose bib/.test(n))
+    return ["OK", "Leaking", "Replace bib", "Missing handle"];
+  if (/address|mailbox/.test(n))
+    return ["Install numbers", "Replace mailbox", "Mailbox lock"];
+  if (/driveway\/walks/.test(n))
+    return ["Clean", "Patch cracks", "Trip hazard"];
+  if (/weatherstrip|threshold/.test(n))
+    return ["Replace weatherstrip", "Replace threshold", "Adjust door sweep"];
+  if (/smoke detector/.test(n))
+    return ["Replace battery", "Replace unit", "Missing — install", "Test"];
   if (/visual check/.test(n))
     return ["Looks good", "Damage found", "Repair needed"];
   if (/stain touch/.test(n))
@@ -195,7 +251,8 @@ const ROOM_ORDER = [
   "Bedroom 3", "Bedroom 4",
   "Bathroom 1", "Bathroom 2",
   "Bathroom 3", "Garage",
-  "Exterior", "Compliance",
+  "Exterior", "Whole Unit",
+  "Compliance",
 ];
 
 /* ── Inspection types ───────────────────────────────────────────────
@@ -324,7 +381,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
     id: "move-out",
     label: "Move Out",
     icon: "package",
-    description: "Standard move-out walkthrough — condition per item across every area.",
+    description: "Move-out / vacant turn — everything to make the unit rent-ready, item by item across every area.",
     suggestedRooms: ROOM_ORDER,
     itemsForRoom: moveOutItems,
   },
@@ -335,7 +392,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
     description: "Light move-in condition check — simple enough for a resident to walk themselves.",
     // Compliance (breaker panel / GFCI checks) is pro territory; the
     // resident-friendly walk skips it.
-    suggestedRooms: ROOM_ORDER.filter((r) => r !== "Compliance"),
+    suggestedRooms: ROOM_ORDER.filter((r) => r !== "Compliance" && r !== "Whole Unit"),
     itemsForRoom: moveInItems,
   },
   {
@@ -344,7 +401,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
     icon: "layers",
     description: "Floor-only inspection — sqft + condition per room.",
     // Skip non-floor areas (Compliance/Exterior have no flooring to track).
-    suggestedRooms: ROOM_ORDER.filter((r) => !["Compliance", "Exterior"].includes(r)),
+    suggestedRooms: ROOM_ORDER.filter((r) => !["Compliance", "Exterior", "Whole Unit"].includes(r)),
     itemsForRoom: () => FLOORING_ITEMS,
   },
   {
@@ -352,7 +409,7 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
     label: "Painting Only",
     icon: "paint",
     description: "Painted-surface inspection — walls, ceilings, trim, doors.",
-    suggestedRooms: ROOM_ORDER.filter((r) => !["Compliance", "Exterior"].includes(r)),
+    suggestedRooms: ROOM_ORDER.filter((r) => !["Compliance", "Exterior", "Whole Unit"].includes(r)),
     itemsForRoom: () => PAINTING_ITEMS,
   },
   {

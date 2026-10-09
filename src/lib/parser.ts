@@ -2138,7 +2138,7 @@ const ROOM_SQFT_DEFAULTS: { test: RegExp; sqft: number }[] = [
    pseudo-areas that show up in initial-walkthrough + yard inspections.
    These get NO estimate so we never print a bogus "Room Size" on an
    electrical panel or a lawn. */
-const NON_ROOM_SQFT = /panel|breaker|hvac|furnace|condenser|water\s*heater|foundation|\broof\b|gutter|drainage|crawl|exterior|siding|grounds|yard|lawn|landscap|driveway|fence|\bdeck\b|patio|porch|whole\s*property/;
+const NON_ROOM_SQFT = /panel|breaker|hvac|furnace|condenser|water\s*heater|foundation|\broof\b|gutter|drainage|crawl|exterior|siding|grounds|yard|lawn|landscap|driveway|fence|\bdeck\b|patio|porch|whole\s*(property|unit|house)/;
 
 /** Effective sqft for pricing / reporting. A real W×L measurement
  *  (room.sqft > 0) always wins. Otherwise fall back to a typical size by
@@ -2169,15 +2169,20 @@ function compileInspectionText(
   // Surface the inspection type so the AI knows what kind of scope to
   // emit. Move-out (default) = standard comprehensive quote. The other
   // four types narrow / shift the scope per the brief below.
-  if (inspectionType && inspectionType !== "move-out") {
+  {
     const brief: Record<string, string> = {
+      // Default type. Only says what "done" means for a turn and that the
+      // Whole Unit area is real work — it never asks for unflagged work, so
+      // it can't inflate a quote.
+      "move-out": "MOVE-OUT / VACANT TURN (make-ready) — scope the work to make this unit rent-ready. Quote each item marked Fair/Poor/Damaged or carrying a note as its own line, including the \"Whole Unit\" turn tasks (deep clean, trash-out, light bulbs, re-key/locks, door stops, overall paint). Satisfactory items without notes need NO work — do not add unflagged work.",
       "move-in": "MOVE-IN condition documentation — a light per-room walkthrough recording baseline condition at occupancy. Satisfactory items (even ones with notes) are documentation, NOT work to quote. Quote ONLY items explicitly marked Fair/Poor/Damaged, and keep the scope minimal — this report may legitimately produce very few or zero line items.",
       flooring: "FLOORING-ONLY survey — quote ONLY flooring work (LVP, carpet, tile, sqft-priced baseboards/cove base). Every line item MUST be in the Flooring trade bucket. Skip any non-flooring findings even if mentioned in passing.",
       painting: "PAINTING-ONLY survey — quote ONLY painted-surface work (wall paint, ceiling paint, trim/baseboard paint, door paint, window-casing paint, drywall patch + paint, caulking). Every line item MUST be in the Painting trade bucket.",
       yard: "RECURRING YARD/GROUNDS service — this is NOT a one-time repair quote. Quote a recurring service (per-visit pricing for mow/edge/trim/cleanup tasks). Group line items under the General trade bucket. Do not include carpentry, plumbing, electrical, or HVAC items.",
       initial: "INITIAL BASELINE walkthrough — comprehensive scope across interior rooms AND structural/MEP areas (foundation, roof, drainage, electrical panel, HVAC, plumbing, water heater). Treat this as a property-condition baseline; surface every meaningful finding even when it's data-capture rather than required repair (e.g. note Panel Brand, HVAC tonnage, water-heater age). Use the standard 7-trade taxonomy.",
     };
-    text += `Inspection Type: ${inspectionType}\n${brief[inspectionType] || ""}\n`;
+    const type = inspectionType || "move-out";
+    text += `Inspection Type: ${type}\n${brief[type] || ""}\n`;
   }
   text += `\n`;
 
