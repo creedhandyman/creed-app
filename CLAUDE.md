@@ -770,6 +770,14 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   redirect) + verify creedhm.com in Search Console and submit the sitemap.
   Verified locally with placeholder Supabase env (a worktree `.env.local`, then
   deleted): crawler HTML, no hydration warnings, flag on/off paths, mobile.
+  GOTCHA when running `next dev` locally: `/` registers `public/sw.js`, which
+  caches `/_next/static/*` cache-FIRST — fine in prod (hashed chunk names), but
+  dev chunk names don't change, so after an edit the page runs STALE client JS
+  (old UI + bogus hydration mismatches). Unregister the SW + clear caches
+  (`navigator.serviceWorker.getRegistrations()` → unregister, `caches.keys()` →
+  delete) after each edit, or test in a fresh tab. The marketing brand mark is
+  the real badge `public/creed-logo-badge.png` (`.blogo-img`, nav/footer +
+  sign-in panel) — the old placeholder "C" tile (`.blogo`) is unused now.
 
 - **Signup / onboarding = ONE flow (2026-10-02)**: every account goes through
   the Grizz `Onboarding.tsx` (Create a business / Join a team). The email-

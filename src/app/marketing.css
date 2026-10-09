@@ -27,6 +27,9 @@
 .mkt .brand { display: flex; align-items: center; gap: 11px; font-family: Oswald, sans-serif; font-weight: 700; font-size: 20px; letter-spacing: .5px; text-transform: uppercase; }
 .mkt .blogo { width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(135deg, #2E75B6, #16365a); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; box-shadow: 0 0 20px -4px rgba(46, 117, 182, .8); flex-shrink: 0; }
 .mkt .brand b { background: linear-gradient(90deg, #cfe3ff, #7fb6ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+/* The real crown-and-hammer badge (public/creed-logo-badge.png) — replaced the
+   placeholder "C" tile (.blogo). Round, with the same blue glow. */
+.mkt .blogo-img { display: block; width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 20px -4px rgba(46, 117, 182, .8); }
 .mkt .nlinks { display: flex; align-items: center; gap: 26px; font-size: 15px; color: var(--mmuted); }
 .mkt .nlinks a.navlink:hover, .mkt .nlinks a.navlink.on { color: var(--mtext); }
 .mkt .nlinks a.navlink.on { color: var(--mblueSoft); }
@@ -234,6 +237,7 @@
 .mkt .signbrand { position: relative; padding: 60px 56px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; border-right: 1px solid var(--mline);
   background: radial-gradient(700px 480px at 20% 0%, rgba(46, 117, 182, .3), transparent 65%), radial-gradient(560px 420px at 90% 100%, rgba(0, 204, 102, .12), transparent 65%); }
 .mkt .signbrand .blogo { width: 52px; height: 52px; border-radius: 15px; font-size: 26px; margin-bottom: 26px; }
+.mkt .signbrand .blogo-img { width: 52px; height: 52px; margin-bottom: 26px; }
 .mkt .signbrand h2 { font-family: Oswald, sans-serif; font-weight: 700; font-size: clamp(28px, 3vw, 42px); text-transform: uppercase; line-height: 1.08; }
 .mkt .signbrand p { color: #cdd2dc; font-size: 17px; line-height: 1.55; margin-top: 16px; max-width: 420px; }
 .mkt .sigfeat { margin-top: 30px; display: flex; flex-direction: column; gap: 13px; }
@@ -279,6 +283,7 @@
   .mkt .wrap { padding: 0 16px; }
   .mkt nav .brand { font-size: 15px; gap: 8px; }
   .mkt nav .blogo { width: 30px; height: 30px; font-size: 15px; }
+  .mkt nav .blogo-img { width: 30px; height: 30px; }
   .mkt .nlinks { gap: 0; }
   .mkt .nlinks .btn { padding: 8px 13px; font-size: 12.5px; border-radius: 10px; }
   .mkt .nlinks .btn svg { width: 15px; height: 15px; }

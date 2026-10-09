@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
@@ -11,7 +12,15 @@ export const PRODUCT_NAME = "Creed Handy Manager";
 function Brand({ small }: { small?: boolean }) {
   return (
     <span className="brand" style={small ? { fontSize: 15 } : undefined}>
-      <span className="blogo" style={small ? { width: 28, height: 28, fontSize: 14 } : undefined}>C</span>
+      <Image
+        src="/creed-logo-badge.png"
+        alt="Creed Handy Manager logo"
+        width={small ? 28 : 36}
+        height={small ? 28 : 36}
+        className="blogo-img"
+        style={small ? { width: 28, height: 28 } : undefined}
+        priority={!small}
+      />
       Creed&nbsp;<b>Handy&nbsp;Manager</b>
     </span>
   );
