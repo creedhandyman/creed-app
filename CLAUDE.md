@@ -886,6 +886,18 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   a "SHOP QUESTS" tier with keys `custom_<id>`, so the Quests screen, the
   confetti and Payroll's earned/approve/paid-this-cycle flow all work
   unchanged. Not counted toward HandyKing. Engine tested 12/12.
+- **Vacant-turn inspections (2026-10-08, 87be489)**: the Move Out type
+  ("Move Out / Turn") IS the make-ready checklist — `ROOM_PRESETS` in
+  Inspector.tsx splits appliances out, adds fans / bedroom smoke detectors /
+  GFCIs / per-room Cleaning / exterior doors, hose bibs, mailbox, trash, and a
+  **Whole Unit** area (utilities, deep clean, trash-out, odor/pests, paint,
+  blinds, bulbs, covers, door stops, re-key, keys). Items default OK, so length
+  is cheap. New item names need a `getPresets` chip rule (above the yard rules
+  — `/pest/`, `/ceiling/` collide) + a VoiceWalk `ITEM_KEYWORD_OVERRIDES`
+  entry. `compileInspectionText` now sends a move-out brief too (quote flagged
+  items only). Inspection blobs store `type`, `inspected_by/at`, sqft/W/L.
+  Report (`printInspection`): walk date, type, severity counts, worst-first
+  Work Needed punch list with checkboxes, then the full condition record.
 - **Crew size + estimated days (2026-10-08)**: QuoteForge's pricing row has a
   **Crew** picker (Auto · 1–4; rooms blob `data.crewSize`, null = Auto). It
   NEVER changes price — labor hours are TOTAL work hours — only the PDF's per-
