@@ -125,9 +125,14 @@ function getPresets(itemName: string): string[] {
     return ["Blow walks + drive", "Blow and haul debris"];
   if (/weed control|weed pull|weed\/vine/.test(n))
     return ["Spray weeds", "Hand pull beds", "Clear vines", "Pre-emergent"];
-  // ── Vacant-turn items (ROOM_PRESETS). Above the yard + generic rules on
-  // purpose: "Odor/Pests" would hit the yard /pest/ chips, "Ceiling Fan"
-  // the /ceiling/ paint chips, "Shower Rod/Door" the plumbing ones. ──
+  // ── Checklist items (ROOM_PRESETS / move-in / flooring / painting). Each
+  // chip is a note the crew would actually write: the defect + the fix, so
+  // the AI quote and the punch list both read clearly. Above the yard +
+  // generic rules on purpose: "Odor/Pests" would hit the yard /pest/ chips,
+  // "Ceiling Fan" the /ceiling/ paint chips, "Range Hood" the range chips,
+  // "Door/Opener" the door chips. ORDER MATTERS within this block too. ──
+  if (/^overall condition$/.test(n))
+    return ["Clean, good condition", "Minor wear", "Needs cleaning", "Damage — see photos"];
   if (/utilities/.test(n))
     return ["All on", "Water off", "Power off", "Gas off — can't test"];
   if (/deep clean|^cleaning$/.test(n))
@@ -147,29 +152,121 @@ function getPresets(itemName: string): string[] {
   if (/keys|remote/.test(n))
     return ["All keys present", "Missing keys", "Garage remote missing", "Mailbox key missing"];
   if (/ceiling fan/.test(n))
-    return ["Works OK", "Wobbles — balance", "Missing blade/globe", "Replace fan"];
+    return ["Works OK", "Wobbles — balance", "Missing blade/globe", "Pull chain broken", "Replace fan"];
   if (/under-sink/.test(n))
     return ["No leaks", "Active leak", "Water damage in cabinet", "Replace P-trap"];
   if (/disposal/.test(n))
     return ["Works OK", "Jammed — reset", "Leaking", "Replace unit"];
-  if (/range|oven|refrigerator|dishwasher|microwave/.test(n))
-    return ["Works OK", "Needs cleaning", "Repair", "Replace", "Missing parts/racks"];
+  if (/hood|microwave/.test(n))
+    return ["Works OK", "Light/fan out", "Replace filter", "Needs degreasing", "Replace"];
+  if (/range|oven/.test(n))
+    return ["Works OK", "Burner out", "Replace drip pans", "Missing knobs", "Needs degreasing", "Replace range"];
+  if (/refrigerator/.test(n))
+    return ["Works OK", "Not cooling", "Ice maker out", "Missing shelf/drawer", "Needs cleaning", "Replace"];
+  if (/dishwasher/.test(n))
+    return ["Works OK", "Won't drain", "Leaks", "Missing rack", "Needs cleaning", "Replace"];
+  if (/^appliances$/.test(n))
+    return ["All work", "Needs cleaning", "Repair (which)", "Replace (which)"];
   if (/shower rod/.test(n))
     return ["Re-secure rod", "Replace rod", "Replace shower door", "Adjust door"];
-  if (/washer box/.test(n))
-    return ["Valves OK", "Leaking valve", "Replace washer box"];
+  if (/^tub\/shower$/.test(n))
+    return ["Re-caulk", "Slow drain — clear", "Drips — replace cartridge", "Replace shower head", "Reglaze tub", "Clean soap scum/mildew"];
+  if (/^toilet$/.test(n))
+    return ["Runs — flapper/fill valve", "Rocks — reset wax ring", "Clogged", "Replace seat", "Leaks at base", "Replace toilet"];
+  if (/^sink\/vanity$/.test(n))
+    return ["Slow drain — clear", "Drips — replace faucet", "Replace stopper", "Vanity damaged", "Replace supply lines", "Re-caulk"];
+  if (/^sink\/faucet$/.test(n))
+    return ["Drips — replace faucet", "Low pressure — aerator", "Slow drain — clear", "Replace sprayer", "Replace supply lines", "Re-caulk sink"];
+  if (/^counters?$/.test(n))
+    return ["Clean", "Re-caulk backsplash", "Burn/chip — repair", "Re-seal", "Replace - laminate", "Replace - quartz", "Replace - granite"];
+  if (/cabinets/.test(n) && !/counter/.test(n))
+    return ["Adjust hinges", "Replace hinge", "Drawer slide broken", "Replace pulls", "Clean inside", "Repaint"];
+  if (/washer box|washer\/dryer hookups/.test(n))
+    return ["Valves OK", "Leaking valve", "Replace washer box", "No dryer outlet/gas"];
   if (/sensor/.test(n))
     return ["Aligned OK", "Realign", "Replace sensors"];
+  if (/opener/.test(n))
+    return ["Opener not working", "Replace opener", "Broken spring", "Adjust tracks/rollers", "Missing remote"];
   if (/hose bib/.test(n))
     return ["OK", "Leaking", "Replace bib", "Missing handle"];
   if (/address|mailbox/.test(n))
     return ["Install numbers", "Replace mailbox", "Mailbox lock"];
   if (/driveway\/walks/.test(n))
     return ["Clean", "Patch cracks", "Trip hazard"];
-  if (/weatherstrip|threshold/.test(n))
-    return ["Replace weatherstrip", "Replace threshold", "Adjust door sweep"];
+  if (/weatherstrip/.test(n))
+    return ["Replace weatherstrip", "Replace threshold", "Adjust door sweep", "Daylight under door"];
   if (/smoke detector/.test(n))
-    return ["Replace battery", "Replace unit", "Missing — install", "Test"];
+    return ["Replace battery", "Replace unit", "Missing — install", "Expired — replace"];
+  if (/subfloor/.test(n))
+    return ["Solid", "Soft spot — repair", "Water damage — replace section", "Level/patch"];
+  if (/transition/.test(n))
+    return ["Replace transition strip", "Missing threshold", "Trip hazard"];
+  if (/tear-out/.test(n))
+    return ["Carpet + pad", "LVP/laminate", "Tile — heavy demo", "Haul-away only"];
+  if (/^floor(ing)?( \(condition\)|\/carpet)?$/.test(n))
+    return ["Carpet clean", "Carpet stains", "Re-stretch carpet", "Replace with carpet", "Replace with LVP", "Repair plank", "Refinish hardwood", "Replace with tile"];
+  if (/^walls?(\/ceiling)?$|firewall/.test(n))
+    return ["Nail holes — patch", "Drywall repair", "Touch-up paint", "Full repaint", "Water stain — prime", "Texture match"];
+  if (/^doors$/.test(n))
+    return ["Doesn't latch — adjust", "Hole — replace slab", "Replace knob/lever", "Missing door stop", "Touch-up paint"];
+  if (/front\/back doors|exterior door|^door\/locks?$/.test(n))
+    return ["Re-key", "Replace deadbolt", "Replace knob/lever", "Weatherstrip", "Doesn't latch — adjust", "Replace door"];
+  if (/locks\/re-key/.test(n))
+    return ["Re-key all locks", "Replace deadbolt", "Replace knob/lever", "Key all to one"];
+  if (/windows\/(blinds|screens)/.test(n))
+    return ["Replace blinds", "Broken slats", "Torn screen — rescreen", "Won't lock", "Broken glass", "Re-caulk"];
+  if (/outlet\/switch covers/.test(n))
+    return ["Replace missing covers", "Replace cracked covers", "Painted over — replace"];
+  if (/gfci/.test(n))
+    return ["Tests OK", "Won't reset", "Replace GFCI", "No GFCI — install"];
+  if (/^electrical(\/lights)?$|^lights(\/outlets)?$|exterior lights/.test(n))
+    return ["Bulbs out", "Fixture not working", "Replace fixture", "Outlet dead", "Missing cover plates", "Replace switch"];
+  if (/^caulking$/.test(n))
+    return ["Re-caulk tub", "Re-caulk sink", "Re-caulk backsplash", "Remove mildew"];
+  if (/closet/.test(n))
+    return ["Door off track", "Replace rod", "Replace shelf", "Replace closet door", "Missing pulls"];
+  if (/exhaust fan/.test(n))
+    return ["Not working", "Noisy — replace", "Clean grille", "Replace cover"];
+  if (/dryer vent/.test(n))
+    return ["Clean lint", "Reconnect duct", "Replace foil duct", "Replace exterior flap"];
+  if (/^baseboards?$/.test(n))
+    return ["Re-nail", "Replace section", "Touch-up paint", "Missing quarter round"];
+  if (/railings?$/.test(n))
+    return ["Loose — re-secure", "Replace baluster", "Paint/stain"];
+  if (/doorbell/.test(n))
+    return ["Not working", "Replace button", "Replace chime"];
+  if (/mirror|medicine/.test(n))
+    return ["Desilvered — replace", "Re-secure", "Replace cabinet", "Missing shelf"];
+  if (/towel|tp holder/.test(n))
+    return ["Loose — re-secure", "Missing — install", "Replace"];
+  if (/^landscaping$|^yard$/.test(n))
+    return ["Mow/trim overgrowth", "Weeds in beds", "Remove dead shrubs", "Trim limbs off roof", "Haul yard debris"];
+  if (/^siding/.test(n))
+    return ["Loose panel — re-secure", "Cracked/hail — replace panels", "Rot — replace board", "Peeling paint", "Pressure wash"];
+  if (/^gutters/.test(n))
+    return ["Clean", "Loose — re-secure", "Leaking seam", "Downspout missing", "Add extension"];
+  if (/porch|deck/.test(n))
+    return ["Loose/rotted boards", "Loose railing", "Re-stain/seal", "Pressure wash", "Trip hazard"];
+  if (/^fenc/.test(n))
+    return ["Leaning — reset post", "Broken pickets", "Gate won't latch", "Replace section", "Stain/paint"];
+  if (/condenser/.test(n))
+    return ["Runs OK", "Not running", "Clean coils", "Bent fins", "Level the pad"];
+  if (/^hvac/.test(n))
+    return ["Heat + cool work", "No cooling", "No heat", "Service/tune-up", "Replace filter"];
+  if (/water heater/.test(n))
+    return ["Hot water OK", "No hot water", "Leaking", "Check T&P valve", "Flush tank", "Replace unit"];
+  if (/air filter/.test(n))
+    return ["Dirty — replace", "Missing — install", "Note size"];
+  if (/thermostat/.test(n))
+    return ["Works OK", "Blank — batteries", "Replace", "Check wiring"];
+  if (/breaker panel/.test(n))
+    return ["Label breakers", "Missing blanks", "Replace breaker", "Cover plate"];
+  if (/smoke\/co/.test(n))
+    return ["All tested OK", "Replace batteries", "Missing — install", "Expired — replace", "Need CO detector"];
+  if (/window casings/.test(n))
+    return ["Touch-up paint", "Full repaint", "Re-caulk", "Fill/sand"];
+  if (/^ceiling$/.test(n))
+    return ["Water stain — prime", "Repaint ceiling", "Patch/texture", "Popcorn — scrape"];
   if (/visual check/.test(n))
     return ["Looks good", "Damage found", "Repair needed"];
   if (/stain touch/.test(n))
@@ -1759,7 +1856,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             {showNotes && (<>
               {/* Quick note presets — tailored to this item type */}
               <div style={{ display: "flex", gap: 3, marginBottom: 4, flexWrap: "wrap" }}>
-                {getPresets(item.name).map((preset) => (
+                {getPresets(item.name).map((preset, _i, allPresets) => (
                   <button
                     key={preset}
                     onClick={() => {
@@ -1780,7 +1877,12 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
                       const filler = new Set(["with", "and", "the", "or", "a", "to", "for"]);
                       const significant = (lcPreset.match(/\b[\w/]+\b/g) || []).filter((w) => !filler.has(w));
                       const intent = significant[significant.length - 1] || "";
-                      if (intent && lcCurrent.includes(intent)) {
+                      // Only upgrade a free-typed fragment. If the note
+                      // already holds another chip ("Replace door" then
+                      // "Hole — replace slab"), or several sentences, the
+                      // chips stack — never wipe a note the crew built.
+                      const holdsChip = allPresets.some((p) => p !== preset && lcCurrent.includes(p.toLowerCase()));
+                      if (intent && lcCurrent.includes(intent) && !holdsChip && !current.includes(". ")) {
                         updateItem(currentRoomIdx, itemIdx, "notes", preset);
                         return;
                       }
