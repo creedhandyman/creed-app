@@ -1127,6 +1127,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   + gallery + photo-count moved to a bottom scrim; REC timer + N/total + flash
   to a top scrim. The separate checklist / empty-state cards render only when
   NOT inspecting (pre-record review). Snap / upload / audio plumbing unchanged.
+  **Live ticks (3447b5f)**: a Whisper pass every 3s on only the NEW audio
+  (recorder's chunk[0] = header + chunks since the last pass − 2s overlap,
+  merged by `mergeOverlap`); a recorder whose windows 400 falls back to
+  cumulative. Live passes send `hint` (room checklist) → `/api/transcribe`
+  appends it to the prompt and blanks prompt-echo output (silence
+  hallucination). Rate limit for /api/transcribe is 30/min — don't lower it.
 - **QuoteForge redesign (from mockup)**: `Creed_Quote_Section` mockup —
   restyled the hub + editor; all AI/editing logic preserved. **Hub**: topbar
   (QUOTEFORGE + "New quote") + three glow CTAs (Quick Quote gold, Full
