@@ -73,9 +73,17 @@ export async function POST(req: NextRequest) {
     fwd.append("response_format", "json");
     // Bias the recognizer toward inspection vocabulary so common terms
     // ("caulking", "GFCI", "drywall", "vanity") land cleanly.
+    // Voice Walk's live passes add the room's checklist as `hint` so its
+    // words come back spelled the way the auto-tick matcher looks for them.
+    // Plain text only, capped (Whisper's prompt window is ~224 tokens).
+    const rawHint = formData.get("hint");
+    const hint = typeof rawHint === "string"
+      ? rawHint.replace(/[^\w\s,/()'-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 400)
+      : "";
     fwd.append(
       "prompt",
-      "Property inspection narration. Common terms: flooring, walls, ceiling, drywall, caulking, vanity, faucet, toilet, garbage disposal, exhaust fan, GFCI outlet, breaker panel, water heater, HVAC, condenser, smoke detector, carbon monoxide, baseboard, doorknob, deadbolt, blind, screen, window, gutter, downspout."
+      "Property inspection narration. Common terms: flooring, walls, ceiling, drywall, caulking, vanity, faucet, toilet, garbage disposal, exhaust fan, GFCI outlet, breaker panel, water heater, HVAC, condenser, smoke detector, carbon monoxide, baseboard, doorknob, deadbolt, blind, screen, window, gutter, downspout." +
+        (hint ? ` Checklist: ${hint}.` : "")
     );
 
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
@@ -98,7 +106,24 @@ export async function POST(req: NextRequest) {
     } catch {
       parsed = { text };
     }
-    return NextResponse.json({ text: parsed.text || "" });
+    let out = parsed.text || "";
+    // On a silent stretch Whisper tends to echo its prompt back. Live passes
+    // (the ones sending a hint) are short and often land on a pause, and an
+    // echoed checklist would tick items nobody mentioned — so drop any pass
+    // that reads like the prompt: its header words, or mostly prompt terms.
+    if (hint && out) {
+      const lc = out.toLowerCase();
+      const promptWords = new Set(
+        ("property inspection narration common terms checklist " + hint + " flooring walls ceiling drywall caulking vanity faucet toilet garbage disposal exhaust fan gfci outlet breaker panel water heater hvac condenser smoke detector carbon monoxide baseboard doorknob deadbolt blind screen window gutter downspout")
+          .toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
+      );
+      const words = lc.split(/[^a-z0-9]+/).filter(Boolean);
+      const fromPrompt = words.filter((w) => promptWords.has(w)).length;
+      if (/inspection narration|common terms|checklist:/.test(lc) || (words.length >= 5 && fromPrompt / words.length >= 0.8)) {
+        out = "";
+      }
+    }
+    return NextResponse.json({ text: out });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("transcribe error:", message);

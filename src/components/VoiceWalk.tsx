@@ -126,6 +126,22 @@ function itemKeywords(itemName: string): string[] {
     .filter((p) => p.length >= 3);
 }
 
+/** Append a live window's transcript to the text so far. Windows overlap by
+ *  a couple of seconds, so the new text usually re-says the last few words —
+ *  drop the longest run (≤12 words) that ends `prev` and starts `next`. */
+function mergeOverlap(prev: string, next: string): string {
+  if (!prev) return next;
+  const a = prev.split(/\s+/);
+  const b = next.split(/\s+/);
+  const norm = (w: string) => w.toLowerCase().replace(/[^a-z0-9']/g, "");
+  for (let k = Math.min(12, a.length, b.length); k >= 1; k--) {
+    if (a.slice(-k).map(norm).join(" ") === b.slice(0, k).map(norm).join(" ")) {
+      return [...a, ...b.slice(k)].join(" ");
+    }
+  }
+  return `${prev} ${next}`;
+}
+
 // Legacy ROOM_PRESETS-based lookup. Used as a fallback when the parent
 // didn't pass an `itemsForRoom` prop (e.g. older callers). The
 // type-aware path is preferred — see the wrapper inside the component.
@@ -267,6 +283,14 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   // in-flight flag keeps the ~15s passes from overlapping if one is slow.
   const liveChunksRef = useRef<Blob[]>([]);
   const liveXcribeInFlight = useRef(false);
+  // Windowed live passes (see the live auto-tick effect): how far into the
+  // current recorder's chunks we've transcribed, this segment's text so far,
+  // the room transcript from before this segment, and whether this recorder's
+  // header+tail windows failed to decode (then fall back to cumulative).
+  const liveDoneRef = useRef(0);
+  const liveSegTextRef = useRef("");
+  const liveSegBaseRef = useRef<string | null>(null);
+  const liveWindowBrokenRef = useRef(false);
 
   // Speech support detection
   const [supported] = useState<boolean>(() => !!getSpeechRecognition());
@@ -454,6 +478,10 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
           // interval (read-only there; onstop still folds them into
           // roomAudioChunksRef as the canonical audio).
           liveChunksRef.current = myChunks;
+          liveDoneRef.current = 0;
+          liveSegTextRef.current = "";
+          liveSegBaseRef.current = null;
+          liveWindowBrokenRef.current = false;
           // Capture the room name at recording-start so onstop folds
           // into the right bucket even if currentRoomRef somehow drifts.
           const myRoom = currentRoomRef.current;
@@ -610,40 +638,68 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
   /* ── Live auto-tick (premier feature) ───────────────────────────────
      The checklist ticks off as the user talks — with NO second mic and NO
      Web-Speech restart chime. MediaRecorder already holds ONE audio stream
-     open; every ~13s we transcribe the audio captured so far via Whisper
-     (/api/transcribe) and feed it to the keyword matcher above. Cumulative
-     passes are supersets and `mentioned` is a Set, so re-runs only ever ADD
-     ticks (never un-tick). Best-effort: failures stay silent, and the
-     end-of-room canonical transcription is unaffected. */
+     open; every few seconds we transcribe the NEW audio via Whisper
+     (/api/transcribe) and feed it to the keyword matcher above.
+     Each pass sends only the audio since the last pass (+ LIVE_OVERLAP
+     chunks so a word split across the cut isn't lost), prefixed with the
+     recorder's first chunk — it carries the WebM/MP4 header the later chunks
+     can't be decoded without. That keeps every pass ~5s of audio however long
+     the room runs (it used to re-send the whole room every 13s, so passes got
+     slower as you talked). If this recorder's windows won't decode, it falls
+     back to cumulative passes. `mentioned` is a Set, so passes only ever ADD
+     ticks. Best-effort: failures stay silent, and the end-of-room canonical
+     transcription (the whole audio) is unaffected. */
   useEffect(() => {
     if (!inspecting) return;
     let cancelled = false;
+    const LIVE_OVERLAP = 2; // chunks are 1s (rec.start(1000))
+    // Whisper prompt hint: this room's checklist words, so "GFCI", "P-trap"
+    // etc. come back spelled the way the matcher looks for them.
+    const room0 = currentRoomRef.current;
+    const hint = room0 ? itemsFor(room0).join(", ").slice(0, 400) : "";
     const run = async () => {
       if (liveXcribeInFlight.current) return;
       const room = currentRoomRef.current;
       if (!room) return;
       const chunks = liveChunksRef.current;
-      if (!chunks.length) return;
-      const size = chunks.reduce((s, b) => s + b.size, 0);
-      if (size < 8000) return; // not enough audio yet for a useful pass
+      const end = chunks.length;
+      if (end < 2 || end <= liveDoneRef.current) return; // nothing new yet
+      const windowed = !liveWindowBrokenRef.current && liveDoneRef.current > 0;
+      const start = windowed ? Math.max(1, liveDoneRef.current - LIVE_OVERLAP) : 0;
+      const parts = windowed ? [chunks[0], ...chunks.slice(start, end)] : chunks.slice(0, end);
+      const size = parts.reduce((s, b) => s + b.size, 0);
+      if (size < 3000) return; // a breath, not words
       liveXcribeInFlight.current = true;
       try {
         const mime = recorderRef.current?.mimeType || chunks[0]?.type || "audio/webm";
-        const blob = new Blob(chunks.slice(), { type: mime });
+        const blob = new Blob(parts, { type: mime });
         const fd = new FormData();
         fd.append("audio", blob, `voicewalk-live-${room.replace(/\W+/g, "-")}.webm`);
+        if (hint) fd.append("hint", hint);
         const res = await apiFetch("/api/transcribe", { method: "POST", body: fd });
-        if (cancelled || !res.ok) return;
+        if (cancelled || chunks !== liveChunksRef.current) return; // recorder changed mid-flight
+        if (!res.ok) {
+          // A header+tail window the decoder rejects (400) → this recorder
+          // goes cumulative. Rate limits / outages just retry next tick.
+          if (windowed && res.status === 400) liveWindowBrokenRef.current = true;
+          return;
+        }
         const data = await res.json().catch(() => ({}));
         const text = ((data.text as string) || "").trim();
+        liveDoneRef.current = end;
         if (cancelled || !text) return;
-        // Feed the transcript the auto-tick effect already watches. Always
-        // write the latest pass — items already ticked stay ticked (Set),
-        // and new mentions get picked up.
+        liveSegTextRef.current = windowed
+          ? mergeOverlap(liveSegTextRef.current, text)
+          : text; // cumulative pass = this whole segment so far
+        // Feed the transcript the auto-tick effect watches. The segment text
+        // is appended to whatever the room had before this recorder started
+        // (pause/resume used to overwrite the earlier segments' words).
         setRoomRecordings((prev) => {
           const cur = prev[room] || emptyRecording();
-          if (cur.transcript === text) return prev;
-          return { ...prev, [room]: { ...cur, transcript: text } };
+          if (liveSegBaseRef.current === null) liveSegBaseRef.current = cur.transcript || "";
+          const full = [liveSegBaseRef.current, liveSegTextRef.current].filter(Boolean).join(" ");
+          if (cur.transcript === full) return prev;
+          return { ...prev, [room]: { ...cur, transcript: full } };
         });
         setTranscriptTick((t) => t + 1);
       } catch {
@@ -652,9 +708,9 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
         liveXcribeInFlight.current = false;
       }
     };
-    // First pass a bit sooner so early mentions tick quickly, then steady.
-    const first = setTimeout(run, 7000);
-    const iv = setInterval(run, 13000);
+    // First pass as soon as there's a sentence's worth, then every 3s.
+    const first = setTimeout(run, 2500);
+    const iv = setInterval(run, 3000);
     return () => { cancelled = true; clearTimeout(first); clearInterval(iv); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspecting]);
