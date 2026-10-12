@@ -971,6 +971,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   per-option diff (`optionDiffSummary`, e.g. "Best +2 −1 ~1") and snapshots
   for **Undo last AI change** (cleared when the quote changes). Prompt adds a
   MINIMAL CHANGES rule; max_tokens 16000 for big quotes.
+  **New work → the option being organized (2026-10-12)**: a line with no
+  `tiers` counts as in ALL three, so new work used to land in every option.
+  Now, with options on: the Add tab stamps `tiers` from an "Add to option"
+  chip row (default = the option being organized, `editTier`; `nTiers` state
+  resets when that changes), and AI Assist adds with no option named get
+  `defaultAddTiers: [editTier]` (the prompt says ORGANIZING: <option> and to
+  use all three only when the user says every option needs it).
 
 - **Signed quotes print the customer's signature**: the /status "Approve &
   Sign" signature (typed name, or the pad's PNG — dark ink since this change;

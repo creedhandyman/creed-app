@@ -87,6 +87,17 @@ describe("applyAssistOps — all options", () => {
   });
 });
 
+describe("new work goes in the option being organized", () => {
+  test("an add with no option named lands in the default option only", () => {
+    const r = applyAssistOps(quote(), { add: [{ detail: "Garage — Epoxy floor" }] }, { newId, defaultAddTiers: ["best"] });
+    expect(r.rooms.flatMap((x) => x.items).find((i) => i.detail === "Garage — Epoxy floor")!.tiers).toEqual(["best"]);
+  });
+  test("an add the AI tagged for every option keeps all three", () => {
+    const r = applyAssistOps(quote(), { add: [{ detail: "Fix leak", tiers: ["base", "better", "best"] }] }, { newId, defaultAddTiers: ["best"] });
+    expect(r.rooms.flatMap((x) => x.items).find((i) => i.detail === "Fix leak")!.tiers).toEqual(["base", "better", "best"]);
+  });
+});
+
 test("optionDiffSummary names exactly the options that changed", () => {
   const before = quote();
   const after = applyAssistOps(before, { remove: [{ key: "tile" }] }, { scope: "best", newId }).rooms;

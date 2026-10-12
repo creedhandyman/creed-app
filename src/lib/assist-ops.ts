@@ -58,7 +58,13 @@ const order = (s: Set<TierKey>) => TIER_KEYS.filter((k) => s.has(k));
 export function applyAssistOps(
   rooms: Room[],
   ops: AssistOps,
-  opts: { scope?: TierKey | null; newId: () => string },
+  opts: {
+    scope?: TierKey | null;
+    newId: () => string;
+    /** Options for an unscoped add the AI didn't assign — the option the owner
+     *  is organizing. Absent = legacy "in every option". */
+    defaultAddTiers?: TierKey[] | null;
+  },
 ): AssistResult {
   const scope = opts.scope ?? null;
   let tiersTouched = 0, forked = 0, blocked = 0;
@@ -180,7 +186,7 @@ export function applyAssistOps(
   }
 
   for (const a of ops.add || []) {
-    const tiers = scope ? [scope] : cleanTiers(a.tiers);
+    const tiers = scope ? [scope] : (cleanTiers(a.tiers) ?? cleanTiers(opts.defaultAddTiers));
     const item = {
       id: opts.newId(),
       detail: a.detail,
