@@ -938,6 +938,14 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   NOT done: per-tier pruning of the saved work order (it keeps all items; only
   `acceptedTier` + total are recorded); the marketing `s/[slug]` page is the
   business card, not an approval page, so it's untouched.
+  **AI Assist knows options (2026-10-12)**: while options are on it sends each
+  line's `tiers` + `options {on, names}`, and the edit-mode JSON accepts
+  `add[].tiers`, `update[].patch.tiers`, `setOptions`, `setTierNames` — so
+  "Base repairs, Better adds hardware, Best replaces" restructures the quote.
+  Tiers are sanitized client-side; tagging lines while options are off turns
+  them on. validateQuote's global dedupe key includes an explicit `tiers` set,
+  so the same task priced per option (standard vs premium) isn't collapsed
+  (`src/__tests__/tier-dedupe.test.ts`).
 
 - **Signed quotes print the customer's signature**: the /status "Approve &
   Sign" signature (typed name, or the pad's PNG — dark ink since this change;

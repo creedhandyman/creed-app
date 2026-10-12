@@ -868,7 +868,10 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phanto
         .filter(Boolean)
         .sort()
         .join("+");
-      const key = `${detailKey}|${matKey}`;
+      // Good-Better-Best: the same task priced differently per option (e.g.
+      // standard vs premium paint) is two real lines, not a duplicate.
+      const tierKey = Array.isArray(it.tiers) ? [...it.tiers].sort().join(",") : "";
+      const key = `${detailKey}|${matKey}|${tierKey}`;
       if (globalSeen.has(key)) {
         console.warn(`VALIDATION: Global duplicate removed — "${it.detail}" [${matKey}]`);
         return false;
