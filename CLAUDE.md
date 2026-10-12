@@ -1003,6 +1003,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   up. Each trade's section bar adds per-option totals ("not included" when
   absent) and "Estimated completion" lists days per option. Non-tiered quotes
   are unchanged.
+  **Per-option breakdowns**: after the overview, the line-item breakdown is
+  built once PER OPTION (`buildBreakdown(cats, perOption)` over that option's
+  lines via `itemInTier`) — "Base — Breakdown & Costs $X", then Better, then
+  Best (page break before each after the first); no option tags inside, and
+  section materials are marked up like `tierTotalOf` so section totals equal
+  the option's summary column. An approved quote prints only the picked
+  option's breakdown.
 
 - **Signed quotes print the customer's signature**: the /status "Approve &
   Sign" signature (typed name, or the pad's PNG — dark ink since this change;

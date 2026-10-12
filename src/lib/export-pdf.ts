@@ -324,8 +324,8 @@ export function exportQuotePdf(opts: ExportOptions) {
     .join("")}
 </div>
 <div style="font-size:11px;color:#888;margin-bottom:18px">${acceptedIdx >= 0
-    ? `Approved: <b>${esc(tierCols[acceptedIdx].name)}</b>. The other options are shown for reference only, and the line-item breakdown that follows lists all quoted work across the options.`
-    : "Each option above is a complete, standalone price — pick the one you want. The line-item breakdown that follows lists all quoted work across the options; lines that belong to only some options are tagged."}</div>
+    ? `Approved: <b>${esc(tierCols[acceptedIdx].name)}</b>. The other options are shown for reference only; the breakdown that follows is the approved option's work.`
+    : "Each option above is a complete, standalone price — pick the one you want. Each option has its own full breakdown after the summary."}</div>
 `
     : "";
 
@@ -406,8 +406,13 @@ export function exportQuotePdf(opts: ExportOptions) {
   // every room/task that needed it. Different SKUs of the same product
   // family ("Wall paint (1 gal)" vs "Wall paint (3 gal)") stay separate
   // because their unit prices differ.
+  // Built per item set: the whole quote, or (option quotes) ONE option's lines
+  // — then every row belongs to that option, so no option tags, and the
+  // section total is that option's (materials marked up like tierTotalOf, so
+  // it matches the option's column in the summary).
+  const buildBreakdown = (cats: Category[], perOption: boolean): string => {
   let breakdownHtml = "";
-  categories.forEach((cat) => {
+  cats.forEach((cat) => {
     const sectionRate = roomRate(cat.name);
     const sectionHrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
     const sectionLabor = sectionHrs * sectionRate;
@@ -415,6 +420,11 @@ export function exportQuotePdf(opts: ExportOptions) {
       (s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0),
       0,
     );
+    // Marked-up materials, the way option prices are computed (tierTotalOf).
+    const optMat = cat.items.reduce((s, it) => {
+      const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
+      return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+    }, 0);
 
     const matMap: Record<
       string,
@@ -422,7 +432,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     > = {};
     // Tiered quote: tag lines that aren't in every option ("Better & Best
     // only") so the breakdown shows what each option adds.
-    const tagOf = (it: RoomItem) => (showTiers ? tierMembershipLabel(it, tierNames) : null);
+    const tagOf = (it: RoomItem) => (showTiers && !perOption ? tierMembershipLabel(it, tierNames) : null);
     const tagHtml = (tag: string | null) => tag
       ? ` <span style="display:inline-block;font-size:10px;font-weight:700;color:#7a3fb8;border:1px solid #7a3fb8;border-radius:4px;padding:0 5px;margin-left:2px;white-space:nowrap">${esc(tag)}</span>`
       : "";
@@ -499,15 +509,37 @@ export function exportQuotePdf(opts: ExportOptions) {
       </table>
       <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:${accent};font-weight:600">
         Labor (${clockHrs}h × ${crewSize} crew = ${shownHrs.toFixed(1)} man-hrs @ $${sectionRate}/hr): $${sectionLabor.toFixed(2)}
-        &nbsp;·&nbsp; Material: $${sectionMat.toFixed(2)}
-        &nbsp;·&nbsp; <b>${showTiers ? "All lines" : "Section Total"}: $${(sectionLabor + sectionMat).toFixed(2)}</b>
-        ${showTiers ? `<div style="margin-top:3px;font-weight:600">${tierCols.map((c, i) => {
+        &nbsp;·&nbsp; Material: $${(perOption ? optMat : sectionMat).toFixed(2)}${perOption && markupPct > 0 ? ` (incl. ${markupPct}% markup)` : ""}
+        &nbsp;·&nbsp; <b>${showTiers && !perOption ? "All lines" : "Section Total"}: $${(sectionLabor + (perOption ? optMat : sectionMat)).toFixed(2)}</b>
+        ${showTiers && !perOption ? `<div style="margin-top:3px;font-weight:600">${tierCols.map((c, i) => {
           const o = optCat(i, cat.name.trim().toLowerCase());
           return `${esc(c.name)}: ${o.count ? `$${o.total.toFixed(2)}` : "not included"}`;
         }).join(" &nbsp;·&nbsp; ")}</div>` : ""}
       </div>
     </div>`;
   });
+  return breakdownHtml;
+  };
+
+  const tierKeys: TierKey[] = ["base", "better", "best"];
+  const breakdownHtml = !showTiers
+    ? buildBreakdown(categories, false)
+    : tierCols.map((col, idx) => {
+        // Approved quote: only the option the customer bought.
+        if (acceptedIdx >= 0 && idx !== acceptedIdx) return "";
+        const key = tierKeys[idx];
+        const cats = categories
+          .map((c) => ({ name: c.name, items: c.items.filter((it) => itemInTier(it, key)) }))
+          .filter((c) => c.items.length > 0);
+        const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
+        const first = acceptedIdx >= 0 || idx === 0;
+        return `
+<div style="${first ? "" : "page-break-before:always;"}">
+  <h2 style="color:${hue};border-color:${hue}">${esc(col.name)} — Breakdown &amp; Costs <span style="float:right">$${col.total.toFixed(2)}</span></h2>
+  <div class="dim" style="font-size:12px;margin:-4px 0 10px">Everything included in the ${esc(col.name)} option${acceptedIdx === idx ? " (approved)" : ""}. Section totals add up to this option's summary column; the option total also includes any minimum charge, trip fee, discount and tax.</div>
+  ${cats.length ? buildBreakdown(cats, true) : `<div class="dim">No work in this option.</div>`}
+</div>`;
+      }).join("");
 
   // Subtotal before markup/tax
   const subtotal = cascade.subtotal;
@@ -588,7 +620,7 @@ ${showTiers ? (() => {
     </tr>
   </tbody>
 </table>
-<div class="dim" style="font-size:11px;margin:-4px 0 14px">Each column is a complete, standalone price.${markupPct > 0 ? ` Material markup (${markupPct}%) is included in each section.` : ""} The line-item breakdown below lists all quoted work; lines in only some options are tagged.</div>`;
+<div class="dim" style="font-size:11px;margin:-4px 0 14px">Each column is a complete, standalone price.${markupPct > 0 ? ` Material markup (${markupPct}%) is included in each section.` : ""}${acceptedIdx >= 0 ? " The breakdown below is the approved option's work." : " Each option's full breakdown follows, one after another."}</div>`;
 })() : `<h2>Estimate Summary</h2>
 <table>
   <thead>
@@ -652,7 +684,7 @@ ${(() => {
 </div>`;
 })()}
 
-<h2>Project Breakdown &amp; Costs</h2>
+${showTiers ? "" : "<h2>Project Breakdown &amp; Costs</h2>"}
 ${breakdownHtml}
 
 ${photos.length > 0 ? `
