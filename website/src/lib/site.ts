@@ -11,7 +11,7 @@ export const SITE = {
   city: "Wichita",
   region: "KS",
   county: "Sedgwick County",
-  areaLine: "Wichita and all of Sedgwick County",
+  areaLine: "Wichita, all of Sedgwick County, Andover, and Newton",
   hours: [
     { d: "Mon–Fri", h: "9:00 AM – 7:00 PM" },
     { d: "Saturday", h: "9:00 AM – 12:00 PM" },
@@ -19,17 +19,86 @@ export const SITE = {
   ],
   cities: [
     "Wichita", "Derby", "Haysville", "Park City", "Bel Aire",
-    "Valley Center", "Maize", "Goddard", "Kechi", "Cheney",
+    "Valley Center", "Maize", "Goddard", "Kechi", "Andover", "Newton", "Cheney",
     "Clearwater", "Colwich", "Andale", "Garden Plain", "Mount Hope", "Bentley",
   ],
-  logo: "/assets/logo.png",
+  license: "8145054",
+  insurer: "Hiscox",
+  googleProfile: "https://share.google/iWyuFiCuRR2FXA2UN",
+  smsHref: "sms:+13164007414",
+  logo: "/assets/logo.webp",
   social: {
     facebook: "https://www.facebook.com/profile.php?id=100093350324125",
     instagram: "https://www.instagram.com/creedhandyman/",
+    homeadvisor: "https://www.homeadvisor.com/rated.CreedHandyman.161678571.html",
   },
 };
 
 export const SERVICES = [
+  {
+    slug: "drywall-paint",
+    name: "Painting & drywall",
+    blurb: "Interior painting, drywall patches, texture matching, trim and touch-ups.",
+    intro: "Fresh paint and clean walls do more for a room than anything else — holes, cracks, and stains patched and texture-matched first, so the finish looks new.",
+    tasks: [
+      "Drywall hole and crack repair",
+      "Texture matching — orange peel, knockdown",
+      "Water-damage patch and repaint",
+      "Ceiling stain sealing and repair",
+      "Trim, baseboard, and door casing",
+      "Exterior painting — trim, doors, decks, and fences",
+      "Interior painting by the room",
+      "Popcorn ceiling patching",
+    ],
+  },
+  {
+    slug: "make-ready",
+    name: "Make-ready & work orders",
+    blurb: "Vacant-unit turnovers, punch lists, and small work orders, start to finish.",
+    intro: "Between tenants is where we earn our keep — one crew works the whole punch list, and the unit comes back ready to show.",
+    tasks: [
+      "Full punch-list turnover work",
+      "Patch, texture, and repaint",
+      "Fixture and hardware swaps",
+      "Rekeying",
+      "Blinds and detector replacement",
+      "Ongoing property maintenance for landlords",
+      "Small plumbing and electrical items",
+      "Photo-documented completion report",
+    ],
+  },
+  {
+    slug: "flooring",
+    name: "Flooring",
+    blurb: "Carpet tear-out, vinyl and laminate plank installs, transitions and trim.",
+    intro: "Worn carpet out, durable plank in — the fastest way to make a room or a rental feel new.",
+    tasks: [
+      "Carpet and pad tear-out and haul-away",
+      "Luxury vinyl plank (LVP) installation",
+      "Laminate plank installation",
+      "Subfloor checks and prep",
+      "Transitions and thresholds",
+      "Baseboard and quarter-round",
+      "Damaged plank repair",
+      "Rental-grade flooring for turnovers",
+    ],
+  },
+  {
+    slug: "trash-outs",
+    name: "Trash-outs & cleanouts",
+    blurb: "Vacant-unit trash-outs and haul-away so the turnover can start.",
+    intro: "Left-behind furniture, junk, and debris hauled out so the unit is empty and ready for repairs.",
+    tasks: [
+      "Vacant-unit trash-outs",
+      "Furniture and appliance haul-away",
+      "Garage and shed cleanouts",
+      "Construction debris removal",
+      "Move-out cleanouts for landlords",
+      "Haul-away after our own repair work",
+      "Photo documentation for property owners",
+      "Bundled with make-ready turnovers",
+    ],
+  },
   {
     slug: "plumbing",
     name: "Plumbing",
@@ -43,7 +112,7 @@ export const SERVICES = [
       "P-traps and drain leaks under sinks",
       "Dishwasher and icemaker hookups",
       "Outdoor spigots and hose bibs",
-      "Caulk and seal around tubs and sinks",
+      "Drain clearing — sinks, tubs, and showers",
     ],
   },
   {
@@ -63,28 +132,12 @@ export const SERVICES = [
     ],
   },
   {
-    slug: "drywall-paint",
-    name: "Drywall & paint",
-    blurb: "Holes, cracks, texture matching, trim and touch-up work.",
-    intro: "Holes, cracks, and water stains disappear — texture matched so you can't find the patch afterward.",
-    tasks: [
-      "Drywall hole and crack repair",
-      "Texture matching — orange peel, knockdown",
-      "Water-damage patch and repaint",
-      "Ceiling stain sealing and repair",
-      "Trim, baseboard, and door casing",
-      "Caulking and paint touch-up",
-      "Interior painting by the room",
-      "Popcorn ceiling patching",
-    ],
-  },
-  {
     slug: "doors-locks",
     name: "Doors & locks",
     blurb: "Sticking doors, hardware, deadbolts, rekeys, weatherstripping.",
     intro: "Doors that stick, latches that miss, locks that need changing — squared, aligned, and working like they should.",
     tasks: [
-      "Sticking and rubbing door correction",
+      "Door repair — sticking, rubbing, and sagging doors",
       "Hinge, latch, and strike adjustment",
       "Deadbolt and handleset installation",
       "Rekeying on turnovers",
@@ -101,29 +154,13 @@ export const SERVICES = [
     intro: "Measured twice, anchored into studs, level the first time. Heavy things on walls the way they should be.",
     tasks: [
       "TV mounting with cords concealed",
-      "Shelving and floating shelves",
+      "Shelf mounting — floating shelves and shelving",
       "Mirrors and heavy art",
       "Blinds and curtain rods",
       "Flat-pack furniture assembly",
       "Anchoring furniture for tip-over safety",
       "Grab bars, towel bars, and hooks",
       "Garage storage and racks",
-    ],
-  },
-  {
-    slug: "make-ready",
-    name: "Make-ready",
-    blurb: "Turnovers and punch lists between tenants, start to finish.",
-    intro: "Between tenants is where we earn our keep — one crew works the whole punch list, and the unit comes back ready to show.",
-    tasks: [
-      "Full punch-list turnover work",
-      "Patch, texture, and repaint",
-      "Fixture and hardware swaps",
-      "Rekeying",
-      "Blinds and detector replacement",
-      "Caulk and grout refresh",
-      "Small plumbing and electrical items",
-      "Photo-documented completion report",
     ],
   },
 ];
@@ -145,42 +182,99 @@ export const CREED = {
 
 // Hero photo. Drop the file in /public/assets. Falls back to a placeholder if missing.
 export const HERO = {
-  after: "/assets/hero.jpg",
-  caption: "Old carpet out, Pergo planks down — same room, whole new feel. · West Wichita",
+  after: "/assets/bernard-truck.webp",
+  caption: "Bernard Reed, owner · Licensed & insured · Wichita",
 };
 
 // Before/after gallery. Drop images in /public/assets and keep these paths.
 // The homepage shows the first two; /gallery shows them all.
-export const GALLERY = [
+export const GALLERY: {
+  title: string;
+  note: string;
+  before: string;
+  after: string;
+  services?: string[]; // service slugs this job shows off (service pages list them)
+}[] = [
+  {
+    title: "Bathroom remodel",
+    note: "Dated vanity and vinyl floor out — new floating vanity, tile floor, backsplash, and a lighted mirror in.",
+    before: "/assets/ba7-before.webp",
+    after: "/assets/ba7-after.webp",
+    services: ["plumbing"],
+  },
+  {
+    title: "Rental turnover",
+    note: "Stained carpet out, vinyl plank in, and the yellowed doors and trim repainted white.",
+    before: "/assets/ba8-before.webp",
+    after: "/assets/ba8-after.webp",
+    services: ["make-ready", "flooring", "drywall-paint"],
+  },
   {
     title: "Carpet-to-Pergo makeover",
     note: "The worn carpet came up, the solid subfloor underneath got new Pergo planks — and the room feels brand new.",
-    before: "/assets/ba1-before.jpg",
-    after: "/assets/ba1-after.jpg",
+    before: "/assets/ba1-before.webp",
+    after: "/assets/ba1-after.webp",
+    services: ["flooring"],
+  },
+  {
+    title: "Patched floor to new plank",
+    note: "A floor of mismatched patches replaced with one clean run of vinyl plank.",
+    before: "/assets/ba9-before.webp",
+    after: "/assets/ba9-after.webp",
+    services: ["flooring"],
+  },
+  {
+    title: "Staircase refinish",
+    note: "Bare, stained stair treads finished with new plank treads and risers.",
+    before: "/assets/ba10-before.webp",
+    after: "/assets/ba10-after.webp",
+    services: ["flooring"],
   },
   {
     title: "Rental make-ready",
     note: "Carpet out, plank in, walls and trim repainted for turnover.",
-    before: "/assets/ba2-before.jpg",
-    after: "/assets/ba2-after.jpg",
+    before: "/assets/ba2-before.webp",
+    after: "/assets/ba2-after.webp",
+    services: ["make-ready", "flooring", "drywall-paint"],
+  },
+  {
+    title: "Garage repaint",
+    note: "Peeling walls and ceiling scraped, prepped, and repainted clean white.",
+    before: "/assets/ba11-before.webp",
+    after: "/assets/ba11-after.webp",
+    services: ["drywall-paint"],
+  },
+  {
+    title: "Sliding patio door install",
+    note: "Old exterior door gone — the opening framed out and a new sliding patio door installed.",
+    before: "/assets/ba12-before.webp",
+    after: "/assets/ba12-after.webp",
+    services: ["doors-locks"],
   },
   {
     title: "Deck rescue and repaint",
     note: "Peeling paint scraped and sanded off, then the whole deck recoated.",
-    before: "/assets/ba5-before.jpg",
-    after: "/assets/ba5-after.jpg",
+    before: "/assets/ba5-before.webp",
+    after: "/assets/ba5-after.webp",
+    services: ["drywall-paint"],
   },
   {
     title: "Deck stair rebuild",
     note: "The whole staircase remade from scratch, then restained.",
-    before: "/assets/ba6-before.jpg",
-    after: "/assets/ba6-after.jpg",
+    before: "/assets/ba6-before.webp",
+    after: "/assets/ba6-after.webp",
+  },
+  {
+    title: "Fence replacement",
+    note: "A leaning, weathered fence torn out and rebuilt with new posts and pickets.",
+    before: "/assets/ba13-before.webp",
+    after: "/assets/ba13-after.webp",
   },
   {
     title: "Basement window rebuild",
     note: "Rotted trim out, sealed up, and a new well cover fitted.",
-    before: "/assets/ba4-before.jpg",
-    after: "/assets/ba4-after.jpg",
+    before: "/assets/ba4-before.webp",
+    after: "/assets/ba4-after.webp",
   },
 ];
 
@@ -253,6 +347,76 @@ export const CITY_PAGES = [
       "Fence gate and deck repairs",
     ],
   },
+  {
+    slug: "handyman-bel-aire-ks",
+    city: "Bel Aire",
+    intro: "Right on Wichita's northeast edge — Bel Aire and the neighborhoods around it are a regular stop on our schedule.",
+    body: [
+      "Bel Aire and northeast Wichita keep us busy with the parts of a house that wear out first: closet doors that jump their tracks, garage-door springs and seals, sliding doors that let in drafts and water, and back-door trim and sills that rot out at the bottom.",
+      "Outside, it's fence boards, deck boards, leaky hose bibs, and window wells. Inside, drywall patches, baseboard and trim, touch-up paint, and thermostats. One call covers the whole list, quoted before we start.",
+    ],
+    jobs: [
+      "Closet door rollers, tracks, and rehangs",
+      "Garage door springs and weather seals",
+      "Door trim, sill, and threshold replacement",
+      "Fence and deck board replacement",
+      "Leaky hose bibs and spigots",
+      "Drywall patching, trim, and touch-up paint",
+    ],
+  },
+  {
+    slug: "handyman-kechi-ks",
+    city: "Kechi",
+    intro: "Just northeast of Wichita — Kechi is a short drive from our home base, and every job gets quoted before we start.",
+    body: [
+      "Kechi to-do lists run indoors and out: fence gates sagging off their posts, entry doors and deadbolts that stopped latching, outlets and fixtures that quit working, and the chores nobody wants — wasp nests under the eaves, debris hauled off.",
+      "We take on the bigger fixes too. When a bathroom floor goes soft, we tear out the rotted subfloor, lay new flooring, reset the toilet on a solid flange, and haul away the debris.",
+    ],
+    jobs: [
+      "Rotted subfloor and bathroom floor replacement",
+      "Door knobs, deadbolts, and entry hardware",
+      "Fence gate and post repairs",
+      "Outlet and light fixture troubleshooting",
+      "Ceiling patch and paint",
+      "Blinds, bulbs, and small fix-it lists",
+    ],
+  },
+  {
+    slug: "handyman-andover-ks",
+    city: "Andover",
+    county: "Butler County",
+    intro: "East on Kellogg from Wichita — Andover is a regular run for us, and every job is quoted before we start.",
+    body: [
+      "A lot of our Andover work happens out back. Kansas sun and storms are hard on decks: boards rot, corner posts sink, railings work loose, and stair blocks pull away. We replace what has failed, re-block and re-secure what is loose, and restain so the whole deck matches.",
+      "When a storm comes through, we handle the repairs it leaves behind — garage doors knocked off their tracks, wood gates and shed doors torn loose — along with the everyday list inside: running toilets, torn patio screens, ceiling leaks traced to the source, and old appliances hauled out.",
+    ],
+    jobs: [
+      "Rotted deck board replacement",
+      "Deck posts, railings, and stair repairs",
+      "Deck restaining and touch-up",
+      "Storm damage: garage doors, gates, and sheds",
+      "Toilet, screen door, and leak repairs",
+      "Appliance removal and haul-away",
+    ],
+  },
+  {
+    slug: "handyman-newton-ks",
+    city: "Newton",
+    county: "Harvey County",
+    intro: "Straight up I-135 from Wichita — we work Newton for landlords and homeowners alike, quoted before we start.",
+    body: [
+      "Most of our Newton work is rentals. We run full move-out inspections, then the make-ready punch list that follows — patch and paint, fixtures and outlets, plumbing checks from the faucets to the water heater — and close it out with a photo report so the owner sees exactly what was done.",
+      "Bigger turnovers get the bigger fixes: worn floors replaced with vinyl plank, broken fixtures swapped, and the repair and renovation work that gets a unit ready to rent again.",
+    ],
+    jobs: [
+      "Move-out inspections with photo reports",
+      "Make-ready punch lists",
+      "Vinyl plank flooring installs",
+      "Faucet, toilet, and drain repairs",
+      "Outlet and fixture replacement",
+      "Repairs and renovations between tenants",
+    ],
+  },
 ];
 
 // The Creed HM lead form — the direct way to send a work order / quote
@@ -272,3 +436,57 @@ export const LEADS = {
   endpoint: "https://www.creedhm.com/api/leads",
   slug: "creedhandyman",
 };
+
+// Customer reviews (verified on Angi). Shown on the homepage; add new ones
+// at the top. Keep first name + last initial only.
+export const REVIEWS = {
+  source: "Google & Angi",
+  rating: "5.0",
+  items: [
+    { name: "Alex E.", job: "Google review", text: "Exemplary service, their team came in and completed the job in great time for what it was and they paid close attention to detail and future durability! Thank you Creed Handyman!!" },
+    { name: "Jacob G.", job: "Handyman", text: "I've worked with plenty of people in the past who procrastinate, or do half the job and expect me to accept it. It was the total opposite with Creed! Very professional, on time, and truly took his time to make sure everything was done properly. I wouldn't recommend any other handyman!" },
+    { name: "Alissa S.", job: "Interior paint & repair", text: "I had multiple small holes around my bathroom window that were starting to create concerns. They replaced and installed new tiling as well as insulation to fix it. They were quick and efficient. I rely on them for all my house work, whether it's a small or a big project." },
+    { name: "Danielle S.", job: "Bathroom renovation", text: "My bathrooms were renovated. The job was done exactly how I wanted. Excellent work!" },
+    { name: "Sherry", job: "Google review", text: "Thanks for your quick response on handy work, we really appreciate your business." },
+    { name: "Alexia M.", job: "Drain cleaning", text: "Cleaned my drains — I was having a lot of problems and haven't had a problem since. Very good customer service and prices." },
+  ],
+};
+
+// Homepage FAQ (also emitted as FAQPage structured data).
+export const FAQ = [
+  { q: "Are estimates really free?", a: "Yes. Send photos through the quote form or have us take a look — you get the price before any work starts, and it costs you nothing." },
+  { q: "How much do you charge?", a: "$55 an hour with a two-hour minimum, materials at cost. Inside Wichita there is also an $80 house-call special for one small repair — the visit and up to an hour of work." },
+  { q: "Are you licensed and insured?", a: "Yes — license #8145054, with general liability insurance through Hiscox on every job." },
+  { q: "Do you charge a trip fee?", a: "No trip charges inside Wichita. For the rest of Sedgwick County, Andover, and Newton we will tell you up front if anything applies." },
+  { q: "Do you work with landlords and property managers?", a: "Yes — vacant-unit turnovers, trash-outs, punch lists, and work orders are a big part of what we do, with one invoice per property and photo reports when the unit is ready." },
+  { q: "What areas do you serve?", a: "Wichita and all of Sedgwick County, including Derby, Haysville, Park City, Bel Aire, Kechi, Maize, Goddard, and Valley Center, plus Andover and Newton." },
+];
+
+// "Recent work" photo reel (single after shots). Short, plain captions.
+export const RECENT = [
+  { src: "/assets/recent-01.webp", caption: "Bathroom remodel" },
+  { src: "/assets/recent-02.webp", caption: "New laminate flooring" },
+  { src: "/assets/recent-03.webp", caption: "Tub surround & vanity" },
+  { src: "/assets/recent-04.webp", caption: "Fireplace trim work" },
+  { src: "/assets/recent-05.webp", caption: "Deck stairs, rebuilt & stained" },
+  { src: "/assets/recent-06.webp", caption: "Move-in ready" },
+  { src: "/assets/recent-07.webp", caption: "Color change, gray to white" },
+  { src: "/assets/recent-08.webp", caption: "Rental turnover" },
+  { src: "/assets/recent-09.webp", caption: "Cozy bedroom, dark walls & lighting" },
+  { src: "/assets/recent-10.webp", caption: "Kitchen & living turnover" },
+];
+
+// Service index — the exact services people search for ("TV mounting in
+// Wichita, KS"), grouped under the page that covers each one. Rendered as a
+// linked list on the homepage (Wichita) and every city page (its own town),
+// with the location carried by the heading, not repeated on each line.
+export const SERVICE_INDEX: { slug: string; label: string; items: string[] }[] = [
+  { slug: "drywall-paint", label: "Painting & drywall", items: ["Drywall repair", "Interior painting", "Exterior painting", "Trim and baseboard repair"] },
+  { slug: "mounting-assembly", label: "Mounting & assembly", items: ["TV mounting", "Furniture assembly", "Shelf mounting"] },
+  { slug: "electrical", label: "Electrical", items: ["Ceiling fan installation", "Light fixture installation", "Switch and outlet replacement"] },
+  { slug: "plumbing", label: "Plumbing", items: ["Faucet repair", "Toilet repair", "Garbage disposal installation", "Drain clearing"] },
+  { slug: "doors-locks", label: "Doors & locks", items: ["Door repair", "Deadbolt installation", "Door rekey", "Weatherstripping"] },
+  { slug: "flooring", label: "Flooring", items: ["Vinyl plank flooring installation", "Carpet removal"] },
+  { slug: "make-ready", label: "Rentals & turnovers", items: ["Vacant unit make ready", "Rental turnover", "Property maintenance", "Handyman for landlords", "Handyman for property managers"] },
+  { slug: "trash-outs", label: "Trash-outs", items: ["Trash out service", "Cleanouts and haul-away"] },
+];

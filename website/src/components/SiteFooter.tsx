@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SITE, CITY_PAGES } from "@/lib/site";
+import EmailLink from "@/components/EmailLink";
 
 export default function SiteFooter() {
   return (
@@ -8,7 +9,7 @@ export default function SiteFooter() {
         <div className="foot-grid">
           <div>
             <div className="ftr-brand">
-              <img src={SITE.logo} alt="" />
+              <img src={SITE.logo} alt="Creed Handyman logo" />
               <span>{SITE.name}</span>
             </div>
             <p style={{ marginBottom: 12 }}>
@@ -16,7 +17,7 @@ export default function SiteFooter() {
             </p>
             <a href={SITE.phoneHref} className="ftr-phone">{SITE.phone}</a>
             <p style={{ marginTop: 6 }}>
-              <a href={`mailto:${SITE.email}`} style={{ color: "var(--muted)" }}>{SITE.email}</a>
+              <EmailLink style={{ color: "var(--muted)" }} />
             </p>
           </div>
           <div>
@@ -28,7 +29,7 @@ export default function SiteFooter() {
             </div>
           </div>
           <div>
-            <div className="ftr-label">Service area — {SITE.county}</div>
+            <div className="ftr-label">Service area</div>
             <p style={{ fontSize: 15 }}>
               {SITE.cities.map((c, i) => {
                 const page = CITY_PAGES.find((cp) => cp.city === c);
@@ -43,7 +44,10 @@ export default function SiteFooter() {
           </div>
         </div>
         <div className="ftr-bottom">
-          <span>© {new Date().getFullYear()} {SITE.name} · {SITE.city}, Kansas</span>
+          <span>
+            © {new Date().getFullYear()} {SITE.name} · {SITE.city}, Kansas · Runs on{" "}
+            <a href="https://www.creedhm.com" title="Handyman business software">Creed Handy Manager</a>
+          </span>
           <div className="ftr-links">
             <Link href="/services">Services</Link>
             <Link href="/pricing">Pricing</Link>
@@ -55,6 +59,7 @@ export default function SiteFooter() {
             <Link href="/sms-terms">SMS Terms</Link>
             <a href={SITE.social.facebook} target="_blank" rel="noopener">Facebook</a>
             <a href={SITE.social.instagram} target="_blank" rel="noopener">Instagram</a>
+            <a href={SITE.social.homeadvisor} target="_blank" rel="noopener">HomeAdvisor</a>
           </div>
         </div>
       </div>

@@ -7,7 +7,7 @@ import { formatHours } from "@/lib/dates";
 import { Icon } from "../Icon";
 import { openPrint } from "@/lib/print-template";
 import { buildStubHtml, runPayrollForUser, type StubInput } from "@/lib/payroll-runner";
-import { computeQuests } from "@/lib/quests";
+import { computeQuests, parseQuestConfig } from "@/lib/quests";
 
 /** Trigger a browser download of an HTML string as a .html file. Used by
  *  the per-entry Download button so the employee can save the stub
@@ -77,8 +77,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
     .map((qp) => qp.quest_key);
 
   // Get quest config bonuses from org
-  let questConfig: Record<string, { enabled: boolean; bonus: number }> = {};
-  try { questConfig = org?.quest_config ? JSON.parse(org.quest_config) : {}; } catch { /* */ }
+  const { config: questConfig, custom: customQuests } = parseQuestConfig(org?.quest_config);
 
   // All completed-but-unpaid quests for the selected employee, computed with
   // the SAME per-tech, per-cycle engine the tech sees on their Quests screen —
@@ -90,6 +89,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
     jobs, reviews, referrals, timeEntries,
     questConfig,
     cycleStart,
+    customQuests,
   }).allQuests
     .filter((q) => q.progress >= q.goal && !paidQuests.includes(q.key))
     .map((q) => ({ key: q.key, name: q.name, bonus: q.bonusAmount }));

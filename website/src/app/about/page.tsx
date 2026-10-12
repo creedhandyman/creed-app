@@ -42,14 +42,14 @@ export default function AboutPage() {
             </p>
             <p style={{ fontSize: 17, lineHeight: 1.6, color: "var(--muted)", margin: 0 }}>
               We are a faith-led shop, and it shows up in the work: local
-              churches that reach out get our labor free, materials at cost.{" "}
+              churches and nonprofits that reach out get our labor free, and depending on the job, we may cover the materials too.{" "}
               <Link href="/churches">Read how that works →</Link>
             </p>
           </div>
           <div>
             <div style={{ border: "2px solid var(--line)", background: "var(--panel)", marginBottom: 24 }}>
               <img
-                src="/assets/mascot.jpg"
+                src="/assets/mascot.webp"
                 alt="Creed Handyman mascot — Bernard with a paint roller and drill"
                 loading="lazy"
                 style={{ width: "100%", display: "block" }}

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
@@ -11,7 +12,15 @@ export const PRODUCT_NAME = "Creed Handy Manager";
 function Brand({ small }: { small?: boolean }) {
   return (
     <span className="brand" style={small ? { fontSize: 15 } : undefined}>
-      <span className="blogo" style={small ? { width: 28, height: 28, fontSize: 14 } : undefined}>C</span>
+      <Image
+        src="/creed-logo-badge.png"
+        alt="Creed Handy Manager logo"
+        width={small ? 28 : 36}
+        height={small ? 28 : 36}
+        className="blogo-img"
+        style={small ? { width: 28, height: 28 } : undefined}
+        priority={!small}
+      />
       Creed&nbsp;<b>Handy&nbsp;Manager</b>
     </span>
   );
@@ -28,11 +37,14 @@ export default function MarketingShell({ children }: { children: React.ReactNode
   // Signed-in visitors never see the marketing site — bounce them into the
   // app. Also doubles as the post-login redirect from /signin (once login
   // sets the store user, this fires and routes to "/" → the app gate).
+  // Not on "/" itself: HomeGate server-renders the landing there (hidden for
+  // signed-in users) and swaps in the app on its own — replacing "/" with "/"
+  // would only re-navigate.
   const user = useStore((s) => s.user);
   const router = useRouter();
   useEffect(() => {
-    if (user) router.replace("/");
-  }, [user, router]);
+    if (user && path !== "/") router.replace("/");
+  }, [user, router, path]);
 
   // Scroll-reveal for marketing cards. We add `.reveal-init` (hidden) only when
   // JS runs AND motion is allowed, then reveal each on scroll — so no-JS and

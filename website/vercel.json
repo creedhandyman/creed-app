@@ -1,0 +1,8 @@
+{
+  "redirects": [
+    { "source": "/proservices", "destination": "/services", "permanent": true },
+    { "source": "/book-online", "destination": "/contact", "permanent": true },
+    { "source": "/tandc", "destination": "/guarantee", "permanent": true },
+    { "source": "/review", "destination": "/#reviews", "permanent": true }
+  ]
+}

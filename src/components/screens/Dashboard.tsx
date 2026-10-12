@@ -23,6 +23,7 @@ interface Props {
 
 export default function Dashboard({ setPage, openSettings, openJob, openOps }: Props) {
   const user = useStore((s) => s.user)!;
+  const org = useStore((s) => s.org);
   const isAdmin = user.role === "owner" || user.role === "manager";
   const jobs = useStore((s) => s.jobs);
   const darkMode = useStore((s) => s.darkMode);
@@ -169,13 +170,24 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
 
   return (
     <div className="fi" style={{ minHeight: "calc(100dvh - 150px)", display: "flex", flexDirection: "column" }}>
-      {/* Topbar — greeting + name + help / settings */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div>
-          <div className="dim" style={{ fontSize: 14 }}>{isAdmin ? t("dash.welcomeBack") : t("dash.letsGetIt")}</div>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 23, letterSpacing: ".8px", textTransform: "uppercase" }}>{user.name}</div>
+      {/* Topbar — plain, no banner: greeting + name (left) · the business
+          logo (center) · bell + settings (right). Equal side columns keep
+          the logo dead center. No logo yet → the business's initials. */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 6, marginBottom: 14 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="dim" style={{ fontSize: 13 }}>{isAdmin ? t("dash.welcomeBack") : t("dash.letsGetIt")}</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".4px", textTransform: "uppercase", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name.trim().split(/\s+/)[0]}</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ height: 110, maxWidth: 170, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {org?.logo_url ? (
+            <img src={org.logo_url} alt={org.name || ""} style={{ height: "100%", width: "auto", maxWidth: "100%", objectFit: "contain", display: "block" }} />
+          ) : (
+            <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, color: "var(--color-primary)" }}>
+              {(org?.name || user.name || "?").split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
           <button onClick={() => setShowNotifs(true)} aria-label={t("notif.title")} title={t("notif.title")} className="iconbtn" style={{ position: "relative" }}>
             <Icon name="bell" size={18} />
             {unreadCount > 0 && (
@@ -184,7 +196,6 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
               </span>
             )}
           </button>
-          <button onClick={() => setShowUserGuide(true)} aria-label="Ask Grizz" title="Ask Grizz" className="iconbtn"><Icon name="help" size={18} /></button>
           <button onClick={openSettings} aria-label={t("settings.title")} title={t("settings.title")} className="iconbtn"><Icon name="settings" size={18} /></button>
         </div>
       </div>

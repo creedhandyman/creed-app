@@ -1,21 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED, WORK_ORDER, SPECIAL } from "@/lib/site";
+import { SITE, SERVICES, HERO, GALLERY, PRICE_POINTS, CREED, WORK_ORDER, SPECIAL, REVIEWS, FAQ } from "@/lib/site";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 import { Kicker, SecLabel, BeforeAfter, CtaBand, CredStrip } from "@/components/blocks";
 import Img from "@/components/Img";
+import RecentWork from "@/components/RecentWork";
+import ServiceIndex from "@/components/ServiceIndex";
+import { MeetOwner, HowItWorks, GuaranteeBand, ServiceArea, ContactStrip } from "@/components/Funnel";
+import FunnelRail from "@/components/FunnelRail";
 
 export default function HomePage() {
   return (
     <main>
+      <FunnelRail />
+
       {/* ---------- Hero ---------- */}
       <section className="band">
         <div className="container hero-grid">
           <div>
-            <Kicker>{SITE.city}, Kansas</Kicker>
+            <Kicker>Wichita handyman · License #{SITE.license}</Kicker>
             <h1 className="h1 h1-creed">
               {CREED.lines.map((l, i) => (
                 <span className="line" key={i}>
@@ -26,12 +32,18 @@ export default function HomePage() {
               <span className="tail">{CREED.tail}</span>
             </h1>
             <p className="lead" style={{ maxWidth: "46ch" }}>
-              Repairs done right — certified, insured, and straightforward.
-              Free estimates, and you get the price before any work starts.
+              Painting, flooring, repairs, and rental turnovers across
+              Wichita — licensed, insured, and straightforward. Free
+              estimates, and you get the price before any work starts.
             </p>
             <div className="btn-row" style={{ marginTop: 30 }}>
-              <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Request a quote</a>
+              <a href={WORK_ORDER.url} target="_blank" rel="noopener" className="btn btn-red">Get a free estimate</a>
+              <a href={SITE.smsHref} className="btn btn-outline">Text a photo</a>
             </div>
+            <a href="#reviews" className="hero-rating">
+              <span className="stars" aria-hidden="true">★★★★★</span>
+              <b>{REVIEWS.rating}</b> on {REVIEWS.source} · Read what customers say
+            </a>
             <div className="hero-ticks">
               <span className="tick"><i />Licensed &amp; insured</span>
               <span className="tick"><i />Free estimates</span>
@@ -42,7 +54,7 @@ export default function HomePage() {
             <div className="imgwrap">
               <Img
                 src={HERO.after}
-                alt="New Pergo plank flooring after a carpet tear-out on a Wichita job"
+                alt="Bernard Reed, owner of Creed Handyman, standing by his work truck in Wichita"
                 style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", display: "block", filter: "saturate(.9) contrast(1.04)" }}
               />
               <div className="edge" />
@@ -90,16 +102,44 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ---------- Reviews ---------- */}
+      <section className="band band-alt" id="reviews">
+        <div className="container section">
+          <SecLabel>What customers say</SecLabel>
+          <h2 className="h2" style={{ marginBottom: 10 }}>
+            <span style={{ color: "#f5b301" }} aria-hidden="true">★★★★★ </span>
+            {REVIEWS.rating} from every customer review
+          </h2>
+          <p className="sub" style={{ marginBottom: 28 }}>Verified reviews from Google and Angi. Real Wichita customers.</p>
+          <div className="review-grid">
+            {REVIEWS.items.map((r) => (
+              <figure className="review" key={r.name}>
+                <div className="stars" aria-label="5 out of 5 stars">★★★★★</div>
+                <blockquote>“{r.text}”</blockquote>
+                <figcaption><b>{r.name}</b> · {r.job}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 32px", marginTop: 24 }}>
+            <a href={SITE.social.homeadvisor} target="_blank" rel="noopener" className="golink">Read our reviews on HomeAdvisor →</a>
+            <a href={SITE.googleProfile} target="_blank" rel="noopener" className="golink">See us on Google →</a>
+          </div>
+        </div>
+      </section>
+
       {/* ---------- Credentials strip ---------- */}
       <CredStrip />
+
+      {/* ---------- Meet the owner (desktop) ---------- */}
+      <MeetOwner />
 
       {/* ---------- Services ---------- */}
       <section className="band" id="services">
         <div className="container section">
-          <SecLabel>01 — Services</SecLabel>
-          <h2 className="h2">What we fix</h2>
-          <p className="sub">Six things we do most. If it is not on the list, ask.</p>
-          <div className="svc-grid">
+          <SecLabel>Services</SecLabel>
+          <h2 className="h2">What we fix in Wichita</h2>
+          <p className="sub">Handyman services across {SITE.areaLine}. If it is not on the list, ask.</p>
+          <div className="svc-grid svc-grid-4">
             {SERVICES.map((s, i) => (
               <Link href={`/services/${s.slug}`} className="svc" key={s.slug}>
                 <div className="svc-num">
@@ -108,9 +148,14 @@ export default function HomePage() {
                 </div>
                 <h3 className="h3">{s.name}</h3>
                 <p>{s.blurb}</p>
+                <ul className="svc-tasks" aria-hidden="true">
+                  {s.tasks.slice(0, 4).map((t) => <li key={t}>{t}</li>)}
+                </ul>
+                <span className="svc-more">See everything we do →</span>
               </Link>
             ))}
           </div>
+          <ServiceIndex />
         </div>
       </section>
 
@@ -119,7 +164,7 @@ export default function HomePage() {
         <div className="container section">
           <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "baseline", justifyContent: "space-between", marginBottom: 36 }}>
             <div>
-              <SecLabel>02 — Gallery</SecLabel>
+              <SecLabel>Our work</SecLabel>
               <h2 className="h2" style={{ marginBottom: 10 }}>Before &amp; after</h2>
               <p style={{ fontSize: 18, color: "var(--muted)", margin: 0 }}>Real jobs around Wichita.</p>
             </div>
@@ -127,16 +172,27 @@ export default function HomePage() {
           </div>
           <div className="gal-grid">
             {GALLERY.slice(0, 2).map((g) => (
-              <BeforeAfter key={g.title} {...g} />
+              <BeforeAfter key={g.title} title={g.title} note={g.note} before={g.before} after={g.after} />
             ))}
           </div>
         </div>
       </section>
 
+      {/* ---------- Recent work reel ---------- */}
+      <section className="band band-alt rw-band" aria-label="Recent work">
+        <div className="container" style={{ paddingTop: 8, paddingBottom: 18 }}>
+          <span className="rw-label">Recent work around Wichita</span>
+        </div>
+        <RecentWork />
+      </section>
+
+      {/* ---------- How it works (desktop) ---------- */}
+      <HowItWorks />
+
       {/* ---------- Pricing ---------- */}
       <section className="band" id="pricing">
         <div className="container section">
-          <SecLabel>03 — Pricing</SecLabel>
+          <SecLabel>Pricing</SecLabel>
           <h2 className="h2" style={{ marginBottom: 16 }}>One rate for everything.</h2>
           <p className="lead" style={{ fontSize: 17.5, marginBottom: 32, maxWidth: "60ch" }}>
             You get an estimate before work starts, and the price on the
@@ -172,6 +228,9 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ---------- Guarantee (desktop) ---------- */}
+      <GuaranteeBand />
+
       {/* ---------- Property managers band ---------- */}
       <section className="band band-alt" id="property-managers">
         <div className="container promo" style={{ padding: "48px 24px" }}>
@@ -196,11 +255,43 @@ export default function HomePage() {
               Community
             </div>
             <h2>Serving our churches</h2>
-            <p>Free labor for local churches that reach out. Materials at cost, first come first served.</p>
+            <p>Free labor for local churches and nonprofits that reach out. Depending on the job, we may cover the materials too. First come, first served.</p>
           </div>
           <Link href="/churches" className="golink">Reach out →</Link>
         </div>
       </section>
+
+      {/* ---------- Service area (desktop) ---------- */}
+      <ServiceArea />
+
+      {/* ---------- FAQ ---------- */}
+      <section className="band band-alt" id="faq">
+        <div className="container section">
+          <SecLabel>Questions</SecLabel>
+          <h2 className="h2" style={{ marginBottom: 28 }}>Before you call</h2>
+          <div className="faq">
+            {FAQ.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}</summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              mainEntity: FAQ.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+            }),
+          }}
+        />
+      </section>
+
+      {/* ---------- Contact / book (desktop) ---------- */}
+      <ContactStrip />
 
       {/* ---------- Closing CTA ---------- */}
       <CtaBand />

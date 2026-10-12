@@ -86,8 +86,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   "website"). Type-check: `npx tsc --noEmit` inside `website/`.
 - Pages: home, services (+6 slugs), gallery, pricing,
   property-managers, about, churches, contact, plus per-city SEO pages
-  /handyman-{derby,haysville,goddard}-ks (shared CityPage template,
-  content in site.ts CITY_PAGES, linked from the footer city list).
+  /handyman-{derby,haysville,goddard,bel-aire,kechi,andover,newton}-ks
+  (shared CityPage template; Andover/Newton are outside Sedgwick County, so
+  CITY_PAGES entries can carry their own `county` and areaLine names them), content in site.ts CITY_PAGES, linked from the footer city
+  list + the homepage service-area chips, which mark linked towns with →).
+  Write new town pages from REAL job history (query the Creed org's jobs by
+  town name / ZIP in Supabase) — Bel Aire + Kechi were; Park City / Valley
+  Center / Maize had ~no jobs (2026-10-08), so they were skipped as thin.
   Sitemap/robots/JSON-LD (HomeAndConstructionBusiness + per-service
   Service schema, service-area, no street address) + per-page
   canonicals done. The leftover Wix `en` CNAME was deleted 2026-09-25;
@@ -185,8 +190,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 - `NEXT_PUBLIC_SITE_URL` — canonical app origin. `src/lib/site-url.ts`
   defaults to `https://www.creedhm.com` (the **apex `creedhm.com` has no TLS
   cert** — `www` is the served origin, matching the Stripe routes' hardcoded
-  fallback). `app/layout.tsx` separately defaults to the apex for OG/metadata
-  only (never navigated, so the cert is moot there).
+  fallback). SEO metadata does NOT follow this env var: `app/layout.tsx`'s
+  `metadataBase`, every marketing page's canonical, robots.txt and the sitemap
+  use `src/lib/seo.ts` `SEO_ORIGIN` (hardcoded `https://www.creedhm.com`).
   **Portal magic-link emails/texts derive their origin from this**, via
   `src/lib/site-url.ts` `portalRedeemUrl()` — NOT the request `Host`/`Origin`
   header. This is a security fix: a spoofed Host on the PUBLIC
@@ -295,7 +301,17 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   + /api/portal/me selects). Color helpers (luminance → ink, shade/lighten/
   gradient) live in `src/lib/brand.ts`. Until the migration runs, saving a color
   toasts a "column does not exist" error (best-effort) but nothing breaks;
-  existing orgs default to #2E75B6.
+  existing orgs default to #2E75B6. **The 2nd (gradient) color now reaches the
+  app UI (2026-10-07)**: ThemeProvider also sets `--color-primary-2` (= 2nd
+  color, else lighten(c1,30)) and `--accent-glow` / `--accent-glow-2`
+  ("r, g, b"; default 46,139,255 for orgs that never picked a color, so they
+  look exactly as before). `.bb`, `.vnav button.act`, `.dhead` and the
+  `.glow-blue` CTA ("Start a Quote") use them; the tokens' defaults live in a
+  plain `:root` block (not `@theme`, which Tailwind may prune). The dashboard
+  topbar is deliberately PLAIN (owner asked; a brand-color banner looked bad
+  on the dark screen): greeting + name left · the logo centered with no
+  tile/background · bell + settings right (`1fr auto 1fr` grid). Ask Grizz
+  lives in More, not the topbar.
 - Per-org quote-PDF terms (the "Notes & Exclusions" footer reacts to these
   instead of hardcoded 30-day / 50%-deposit text):
   ```sql
@@ -729,6 +745,40 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **creedhm.com SEO (2026-10-08)**: Google used to get only "Loading Creed..."
+  from `/` (the page was one client component behind a `mounted` gate), with no
+  robots/sitemap/canonical. Now `app/page.tsx` is a SERVER page (home metadata +
+  canonical + JSON-LD @graph: Organization, WebSite, SoftwareApplication w/ an
+  AggregateOffer of the 3 plans, FAQPage — NO aggregateRating until there are
+  real on-page reviews) rendering `components/HomeGate.tsx` (the old client
+  gate). Before mount HomeGate emits BOTH `.home-landing` (the landing) and a
+  hidden `.home-boot` loading screen; an inline head script in `layout.tsx`
+  sets `html[data-session]` when localStorage `c_user` has an id, and
+  globals.css swaps which one shows — so crawlers/visitors get the landing in
+  the first HTML and signed-in users never see it flash. Post-mount both
+  branches return a fragment with `.home-landing` first so React keeps its DOM;
+  an effect drops the flag once there's no user (stale cache / sign-out).
+  MarketingShell's signed-in redirect skips `/`. `app/robots.ts` (blocks /api/
+  /admin /portal /status /payment /onboarding /reset-password) + `app/sitemap.ts`
+  (6 marketing pages — add new public pages there AND give them
+  `alternates.canonical`). Marketing headlines are real `<h1>`/`<h2>` now
+  (`.mkt .h1/.h2` classes kept, so the look didn't change). Home FAQ copy lives
+  in `components/marketing/home-content.ts` (feeds the visible FAQ + FAQPage;
+  plan prices there mirror pricing/page.tsx TIERS). creedhandyman.com's footer
+  links back ("Runs on Creed Handy Manager"). Owner to-dos: 308 apex→www in
+  Vercel Domains (check the Stripe webhook host first — Stripe won't follow a
+  redirect) + verify creedhm.com in Search Console and submit the sitemap.
+  Verified locally with placeholder Supabase env (a worktree `.env.local`, then
+  deleted): crawler HTML, no hydration warnings, flag on/off paths, mobile.
+  GOTCHA when running `next dev` locally: `/` registers `public/sw.js`, which
+  caches `/_next/static/*` cache-FIRST — fine in prod (hashed chunk names), but
+  dev chunk names don't change, so after an edit the page runs STALE client JS
+  (old UI + bogus hydration mismatches). Unregister the SW + clear caches
+  (`navigator.serviceWorker.getRegistrations()` → unregister, `caches.keys()` →
+  delete) after each edit, or test in a fresh tab. The marketing brand mark is
+  the real badge `public/creed-logo-badge.png` (`.blogo-img`, nav/footer +
+  sign-in panel) — the old placeholder "C" tile (`.blogo`) is unused now.
+
 - **Signup / onboarding = ONE flow (2026-10-02)**: every account goes through
   the Grizz `Onboarding.tsx` (Create a business / Join a team). The email-
   confirm link lands on `/`; `initAuth`/`login` turn a session with NO profile
@@ -823,6 +873,41 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   rows or grant owner (UI + profiles_guard); promotions confirm. Delete account
   = `/api/account/delete` (deletes profile + auth user; refused for owners).
   `getLang()` falls back to the phone language; onboarding has EN/ES.
+- **Shop (custom) quests (2026-10-08)**: owners/managers make their own
+  quests from Quests → Quests tab → **Shop quests** (`ShopQuestsManager.tsx`;
+  renders nothing for crew). Stored in `organizations.quest_config._custom`
+  (no schema change — `parseQuestConfig()` in `lib/quests.ts` splits it from
+  the built-in toggles; Settings → Quest Bonuses spreads the same JSON so it
+  keeps `_custom`). Each quest = name/desc + a metric from
+  `CUSTOM_QUEST_METRICS` (jobs completed, hours, 5★/good reviews, booked
+  referrals, upsells, 24h+ jobs, requested-by-name, no-callback streak) or
+  `manual` (owner taps who earned it; marks are `${userId}@${cycleKey}` so
+  they only count in that 6-month cycle) + goal + bonus. `computeQuests` adds
+  a "SHOP QUESTS" tier with keys `custom_<id>`, so the Quests screen, the
+  confetti and Payroll's earned/approve/paid-this-cycle flow all work
+  unchanged. Not counted toward HandyKing. Engine tested 12/12.
+- **Vacant-turn inspections (2026-10-08, 87be489)**: the Move Out type
+  ("Move Out / Turn") IS the make-ready checklist — `ROOM_PRESETS` in
+  Inspector.tsx splits appliances out, adds fans / bedroom smoke detectors /
+  GFCIs / per-room Cleaning / exterior doors, hose bibs, mailbox, trash, and a
+  **Whole Unit** area (utilities, deep clean, trash-out, odor/pests, paint,
+  blinds, bulbs, covers, door stops, re-key, keys). Items default OK, so length
+  is cheap. New item names need a `getPresets` chip rule (above the yard rules
+  — `/pest/`, `/ceiling/` collide) + a VoiceWalk `ITEM_KEYWORD_OVERRIDES`
+  entry. `compileInspectionText` now sends a move-out brief too (quote flagged
+  items only). Inspection blobs store `type`, `inspected_by/at`, sqft/W/L.
+  Report (`printInspection`): walk date, type, severity counts, worst-first
+  Work Needed punch list with checkboxes, then the full condition record.
+- **Crew size + estimated days (2026-10-08)**: QuoteForge's pricing row has a
+  **Crew** picker (Auto · 1–4; rooms blob `data.crewSize`, null = Auto). It
+  NEVER changes price — labor hours are TOTAL work hours — only the PDF's per-
+  section "Xh × N crew" split (Auto keeps the old >8h→2 rule) and the days.
+  The AI parse's `estDays` (counts dry/cure waits) is now kept too
+  (`data.estDays`, was dropped). ONE helper, `src/lib/job-duration.ts`
+  `estimateDays(totalHrs, crew, aiEstDays)` = max(ceil(hrs ÷ crew ÷ 8),
+  aiEstDays), drives both the editor's "≈ N days on site" hint and the quote
+  PDF's "Estimated completion: about N working days" box under the summary
+  (threaded through `quote-pdf.ts` for the customer/Jobs copies).
 - **Sending quotes (2026-10-02)**: QuoteForge **Send** saves first
   (`saveJob({stay:true})` keeps the editor open on the saved job and returns
   its id — no more "save once, then send" dead end) and opens `SendSheet`
@@ -1042,6 +1127,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   + gallery + photo-count moved to a bottom scrim; REC timer + N/total + flash
   to a top scrim. The separate checklist / empty-state cards render only when
   NOT inspecting (pre-record review). Snap / upload / audio plumbing unchanged.
+  **Live ticks (3447b5f)**: a Whisper pass every 3s on only the NEW audio
+  (recorder's chunk[0] = header + chunks since the last pass − 2s overlap,
+  merged by `mergeOverlap`); a recorder whose windows 400 falls back to
+  cumulative. Live passes send `hint` (room checklist) → `/api/transcribe`
+  appends it to the prompt and blanks prompt-echo output (silence
+  hallucination). Rate limit for /api/transcribe is 30/min — don't lower it.
 - **QuoteForge redesign (from mockup)**: `Creed_Quote_Section` mockup —
   restyled the hub + editor; all AI/editing logic preserved. **Hub**: topbar
   (QUOTEFORGE + "New quote") + three glow CTAs (Quick Quote gold, Full
@@ -1226,6 +1317,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   templates, recurring copies and customer payloads (`src/lib/ai-hours.ts`),
   and an AI Assist rewrite of a line's detail drops it. AI Assist adds stay
   uncalibrated on purpose (owners type hours).
+  **Legacy cap lowered to 1.15x (0de85c7, 2026-10-08)** after "quotes slightly
+  high": big quotes were 1.45–1.9x aiHrs. Raw basis still caps at 1.5x. The
+  learned-durations prompt no longer says "actuals consistently exceed quotes".
 - **Models**: every AI call is `claude-sonnet-5-5` (parse, ping, voice walk,
   AI Assist, Troubleshoot — Haiku retired 2026-09-29; there is no Haiku 5).
   Thinking off = `thinking: {type:"between_tools"}` + `effort:"high"`

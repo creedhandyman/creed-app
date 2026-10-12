@@ -7,6 +7,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "export",
   images: { unoptimized: true },
+  // Inline the (small) stylesheet into each page so it is not a
+  // render-blocking request.
+  experimental: { inlineCss: true },
 };
 
 export default nextConfig;

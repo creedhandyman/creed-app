@@ -40,7 +40,10 @@ const LIMITS: Record<string, number> = {
   "/api/ai": 5,
   "/api/ai/receipt": 10,
   "/api/render": 3,
-  "/api/transcribe": 5,
+  // Voice Walk ticks its checklist live with a short pass every ~3s (≤20/min
+  // while recording) plus the end-of-room pass. Each pass is ~5s of audio, so
+  // this is cheap; 5/min throttled the live ticks to a crawl.
+  "/api/transcribe": 30,
   "/api/sms": 3,
   "/api/leads": 5,
   "/api/waitlist": 5,

@@ -19,6 +19,11 @@ function toRgb(h: string): [number, number, number] {
   return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
 }
 
+/** "r, g, b" — for CSS `rgba(var(--x), a)` tokens. */
+export function rgbTriplet(h: string): string {
+  return toRgb(h).join(", ");
+}
+
 function toHex(rgb: [number, number, number]): string {
   return (
     "#" +

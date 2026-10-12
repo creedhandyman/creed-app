@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Image from "next/image";
 import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 import { Icon } from "@/components/Icon";
@@ -76,7 +77,7 @@ export default function Login() {
     <div className="signwrap">
       {/* Brand panel (hidden on mobile) */}
       <div className="signbrand">
-        <span className="blogo">C</span>
+        <Image src="/creed-logo-badge.png" alt="Creed Handy Manager logo" width={52} height={52} className="blogo-img" priority />
         {mode === "login" ? (
           <>
             <h2>Welcome back to<br /><span className="g">Creed Handy Manager</span></h2>

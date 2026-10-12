@@ -4,6 +4,7 @@ import { resolveTaxMode, type TaxMode } from "./tax";
 import { priceCascade, rateForRoom } from "./pricing";
 import { itemInTier, itemTiers, tierMembershipLabel, type TierKey } from "./tiers";
 import { approvalState, type QuoteApproval } from "./approval";
+import { estimateDays, planningCrew } from "./job-duration";
 
 interface ExportOptions {
   property: string;
@@ -66,6 +67,14 @@ interface ExportOptions {
    *  relabels the Better/Best columns. */
   tieredQuote?: boolean;
   tierNames?: { better: string; best: string };
+  /** Crew size picked on the quote (QuoteForge → Crew). Each trade section's
+   *  labor line splits its man-hours across this many people. Absent / null
+   *  = the per-section guess (2 when a section is over 8 hrs, else 1). Never
+   *  changes a dollar amount. */
+  crewSize?: number | null;
+  /** The AI parse's day estimate (counts dry/cure waits). The PDF's
+   *  "Estimated completion" uses the longer of this and hours ÷ crew. */
+  estDays?: number | null;
   /** Per-trade labor rates (org.trade_rates parsed) — each trade section
    *  bills at its own rate via the SAME rateForRoom resolver the
    *  QuoteForge preview uses. Callers must OMIT this when the quote has a
@@ -455,7 +464,9 @@ export function exportQuotePdf(opts: ExportOptions) {
       }
     });
 
-    const crewSize = sectionHrs > 8 ? 2 : 1;
+    const crewSize = typeof opts.crewSize === "number" && opts.crewSize > 0
+      ? Math.round(opts.crewSize)
+      : sectionHrs > 8 ? 2 : 1;
     // The printed equation must self-check: show clock hours at whatever
     // precision makes clockHrs × crew equal the printed man-hrs. The old
     // toFixed(1) printed "33.6h × 2 crew = 67.3 man-hrs" (33.65 rounded
@@ -569,6 +580,18 @@ ${(markupPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
   </tr>
 </table>
 ` : ""}
+
+${(() => {
+  // Estimated completion — same math as the editor's hint (lib/job-duration).
+  const days = estimateDays(totalHrs, opts.crewSize, opts.estDays);
+  if (!days) return "";
+  const crew = planningCrew(totalHrs, opts.crewSize);
+  return `<div class="box" style="background:#f5f7fa;border-left:4px solid ${accent};border-radius:6px;padding:8px 12px;margin:0 0 14px;font-size:13px">
+  <b style="color:${accent}">Estimated completion: about ${days} working day${days > 1 ? "s" : ""}</b>
+  <span class="dim"> · crew of ${crew} · ${totalHrs.toFixed(1)} labor hours</span>
+  <div class="dim" style="font-size:11px;margin-top:2px">Start date set when scheduled. Weather, material availability, inspections and drying times can extend this.</div>
+</div>`;
+})()}
 
 <h2>Project Breakdown &amp; Costs</h2>
 ${breakdownHtml}

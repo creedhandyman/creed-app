@@ -159,7 +159,7 @@ export default function Features() {
     <MarketingShell>
       <div className="phead"><div className="wrap">
         <div className="kick">Features</div>
-        <div className="h1">One app, the <span className="g">whole job</span></div>
+        <h1 className="h1">One app, the <span className="g">whole job</span></h1>
         <div className="lead">Everything a handyman business needs to quote, schedule, work, get paid, and grow — with AI doing the heavy lifting.</div>
       </div></div>
 

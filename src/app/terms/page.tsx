@@ -4,6 +4,7 @@ import MarketingShell from "@/components/marketing/MarketingShell";
 
 export const metadata: Metadata = {
   title: "Terms of Use · Creed Handy Manager",
+  alternates: { canonical: "/terms" },
   description:
     "Terms of Use for Creed Handy Manager — the field-service management app for handyman and trade crews.",
 };
@@ -41,9 +42,9 @@ export default function TermsPage() {
       <div className="phead">
         <div className="wrap">
           <div className="kick">Legal</div>
-          <div className="h1">
+          <h1 className="h1">
             Terms of <span className="g">Use</span>
-          </div>
+          </h1>
           <div className="lead">
             Last updated June 28, 2026 &middot; Effective on acceptance.
           </div>

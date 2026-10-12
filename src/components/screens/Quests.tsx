@@ -5,7 +5,8 @@ import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { QRCodeSVG } from "qrcode.react";
 import { Icon } from "../Icon";
-import { computeQuests, type QuestDef as Quest } from "@/lib/quests";
+import { computeQuests, parseQuestConfig, type QuestDef as Quest } from "@/lib/quests";
+import ShopQuestsManager from "../ShopQuestsManager";
 
 export default function Quests() {
   const user = useStore((s) => s.user)!;
@@ -51,14 +52,14 @@ export default function Quests() {
   // per-cycle stat bag (completedJobs, fiveStarReviews, convertedReferrals,
   // repeatClients, …); the per-user job/review attribution (time-entry join,
   // legacy job-name fallback, review name-tag) all lives in the engine now.
-  let questConfig: Record<string, { enabled?: boolean; bonus?: number }> = {};
-  try { questConfig = org?.quest_config ? JSON.parse(org.quest_config) : {}; } catch { /* */ }
+  const { config: questConfig, custom: customQuests } = parseQuestConfig(org?.quest_config);
   const { tiers, metrics } = computeQuests({
     userId: user.id,
     userName: user.name,
     jobs, reviews, referrals, timeEntries,
     questConfig,
     cycleStart,
+    customQuests,
   });
 
   // Remove empty tiers
@@ -320,6 +321,12 @@ export default function Quests() {
           {/* Annual potential */}
           <div style={{ textAlign: "center", fontSize: 12, color: "var(--color-dim)", marginTop: 6 }}>
             {t("quest.maxAnnual")} · <b style={{ fontFamily: "Oswald", color: "#f5b400", fontSize: 15 }}>${(maxPayout * 2).toLocaleString()}+</b>
+          </div>
+
+          {/* Owners/managers: make + manage the shop's own quests (renders
+              nothing for crew). */}
+          <div style={{ marginTop: 14 }}>
+            <ShopQuestsManager cycleStart={cycleStart} />
           </div>
         </div>
       )}

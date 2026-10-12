@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SERVICES, SITE, WORK_ORDER } from "@/lib/site";
-import { Kicker, CtaBand } from "@/components/blocks";
+import { SERVICES, SITE, WORK_ORDER, GALLERY } from "@/lib/site";
+import { Kicker, CtaBand, BeforeAfter } from "@/components/blocks";
 
 export function generateStaticParams() {
   return SERVICES.map((s) => ({ slug: s.slug }));
@@ -33,6 +33,7 @@ export default async function ServicePage({
   if (!svc) notFound();
 
   const others = SERVICES.filter((s) => s.slug !== svc.slug);
+  const jobs = GALLERY.filter((g) => g.services?.includes(svc.slug)).slice(0, 4);
 
   // Service structured data — ties this page's trade to the business +
   // the cities it serves.
@@ -98,6 +99,20 @@ export default async function ServicePage({
           </div>
         </div>
       </section>
+
+      {jobs.length > 0 && (
+        <section className="band">
+          <div className="container section">
+            <h2 className="h2" style={{ fontSize: 30, marginBottom: 8 }}>{svc.name}: before &amp; after</h2>
+            <p className="sub" style={{ marginBottom: 28 }}>Real jobs around Wichita. Drag the handle to compare.</p>
+            <div className="gal-grid">
+              {jobs.map((g) => (
+                <BeforeAfter key={g.title} title={g.title} note={g.note} before={g.before} after={g.after} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="band band-alt">
         <div className="container" style={{ padding: "36px 24px" }}>

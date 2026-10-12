@@ -47,6 +47,7 @@ import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 import { stripAiHrs } from "@/lib/ai-hours";
 import SendSheet from "../SendSheet";
 import { markQuoteSent } from "@/lib/quote-send";
+import { estimateDays, planningCrew } from "@/lib/job-duration";
 
 /** A saved, reusable quote-as-template: a name + the line-item rooms blob
  *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
@@ -391,6 +392,15 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // `data.tierNames`; the per-item tier rides on each RoomItem (data.rooms).
   const [tieredQuote, setTieredQuote] = useState(false);
   const [tierNames, setTierNames] = useState<{ better: string; best: string }>({ better: "Better", best: "Best" });
+  // Crew size for this quote (rooms blob `data.crewSize`). null = Auto (the
+  // PDF's per-section guess: 2 people when a trade section is over 8 hrs,
+  // else 1). It does NOT change the price — labor hours are TOTAL work hours
+  // — only how they split on site: the PDF's "Xh × N crew" line and the
+  // "≈ N days on site" hint.
+  const [crewSize, setCrewSize] = useState<number | null>(null);
+  // The AI parse's own day estimate (rooms blob `data.estDays`) — it counts
+  // dry/cure waits that add days but no labor hours. Feeds estimateDays().
+  const [aiEstDays, setAiEstDays] = useState<number | null>(null);
   // Which tier you're currently organizing in the editor (UI-only, not saved).
   // The 3 total tiles double as this switch; each line item then shows ONE
   // include checkbox for the active tier, so tagging an item never overwrites
@@ -432,7 +442,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     v: 1, savedAt: Date.now(),
     mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos,
     rooms, workers, jobPhotos, customWorkOrder,
-    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames,
+    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -457,6 +467,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
       setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
       setTieredQuote(!!d.tieredQuote); setTierNames(d.tierNames || { better: "Better", best: "Best" });
+      setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
+      setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
       setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
       setCheckedTools(d.checkedTools || []); setCheckedShop(d.checkedShop || []);
       setRemovedGuideShop(d.removedGuideShop || []);
@@ -484,7 +496,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const t = setTimeout(() => { try { localStorage.setItem(DRAFT_KEY, snapshot); } catch { /* */ } }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab, editJobId, editingId]);
+  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab, editJobId, editingId]);
 
   // Flush immediately when the app is backgrounded/closed — the 600ms debounce
   // may not fire if the user leaves right after typing. Ref keeps the latest
@@ -593,6 +605,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // Good-Better-Best (per-quote, rooms blob). Absent = off; legacy quotes
       // load as non-tiered so nothing changes for them.
       setTieredQuote(data?.tieredQuote === true);
+      const cs = data?.crewSize;
+      setCrewSize(typeof cs === "number" && cs > 0 ? Math.round(cs) : null);
+      const ed = data?.estDays;
+      setAiEstDays(typeof ed === "number" && ed > 0 ? ed : null);
       const tn = data?.tierNames as { better?: unknown; best?: unknown } | undefined;
       setTierNames({
         better: typeof tn?.better === "string" && tn.better.trim() ? tn.better : "Better",
@@ -707,7 +723,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined);
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null);
-    setTieredQuote(false); setTierNames({ better: "Better", best: "Best" });
+    setTieredQuote(false); setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
@@ -743,7 +759,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const openInspectionEdit = (insp: { id: string; property?: string; client?: string; customer_id?: string; address_id?: string; rooms?: string | unknown }) => {
     let parsed: Record<string, unknown> = {};
     try { parsed = typeof insp.rooms === "string" ? JSON.parse(insp.rooms) : (insp.rooms as Record<string, unknown>) || {}; } catch { parsed = {}; }
-    const inspBlob = (parsed as { inspection?: { rooms?: { name: string; sqft?: number; width?: number; length?: number; items: { name: string; condition: string; comment?: string; notes?: string; photos?: string[] }[] }[] } }).inspection;
+    const inspBlob = (parsed as { inspection?: { type?: string; rooms?: { name: string; sqft?: number; width?: number; length?: number; items: { name: string; condition: string; comment?: string; notes?: string; photos?: string[] }[] }[] } }).inspection;
     const initialData: InspectionData = {
       rooms: (inspBlob?.rooms || []).map((r) => ({
         name: r.name || "",
@@ -761,6 +777,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       client: insp.client || "",
       customer_id: insp.customer_id,
       address_id: insp.address_id,
+      // Without this an edited Painting/Flooring inspection reopened as Move Out.
+      inspection_type: (inspBlob?.type as InspectionData["inspection_type"]) || undefined,
     };
     // Heuristic linked-quote count: jobs at the same property that aren't
     // themselves an inspection AND carry an inspection blob in their data.
@@ -790,9 +808,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     let prevBlob: Record<string, unknown> = {};
     const prevJob = jobs.find((j) => j.id === editingInspection.id);
     try { prevBlob = prevJob ? (typeof prevJob.rooms === "string" ? JSON.parse(prevJob.rooms) : prevJob.rooms) || {} : {}; } catch { /* */ }
+    const prevInsp = (prevBlob.inspection as Record<string, unknown> | undefined) || {};
     const merged = {
       ...prevBlob,
       inspection: {
+        ...prevInsp,
+        type: data.inspection_type || prevInsp.type,
         rooms: data.rooms.map((r) => ({
           name: r.name,
           sqft: r.sqft,
@@ -843,6 +864,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // Already validated (caps + floors) and labor-calibrated inside the
         // parse — skipCaps so a second cap pass can't clamp calibrated hours.
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
+        setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setParsing(false);
         setParseStatus("");
         return;
@@ -893,9 +915,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           job_date: new Date().toISOString().split("T")[0],
           rooms: JSON.stringify({
             inspection: {
+              type: data.inspection_type || "move-out",
+              inspected_by: user.name,
+              inspected_at: new Date().toISOString(),
               rooms: data.rooms.map((r) => ({
                 name: r.name,
                 sqft: r.sqft,
+                width: r.width,
+                length: r.length,
                 items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
               })),
               property: data.property,
@@ -1029,6 +1056,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // these rooms — skipCaps so the 10h/8h cap can't re-clamp calibrated
         // hours (the real-world test saw a 10.4h line reset to 8h).
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
+        setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setParsing(false);
         setParseStatus("");
         setMode("edit");
@@ -1613,6 +1641,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // re-deriving the pricing math server-side.
       tieredQuote: tieredQuote,
       tierNames: tierNames,
+      // Crew size (null = Auto). Explicit so picking Auto clears it.
+      crewSize: crewSize,
+      estDays: aiEstDays,
       tierTotals: tieredQuote ? tierTotals : null,
       tierBreakdown: tieredQuote ? tierBreakdown : null,
       // Whether the options actually differ in SCOPE (not just price) — so the
@@ -1622,8 +1653,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // this session; otherwise keep whatever was there (handled by spread).
       ...(inspectionData ? {
         inspection: {
+          type: inspectionData.inspection_type || "move-out",
           rooms: inspectionData.rooms.map((r) => ({
             name: r.name,
+            sqft: r.sqft,
+            width: r.width,
+            length: r.length,
             items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
           })),
           property: inspectionData.property,
@@ -1725,7 +1760,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setLaborRate(null);
     setMinLaborHours(null);
     setTieredQuote(false);
-    setTierNames({ better: "Better", best: "Best" });
+    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     savingRef.current = false;
     setPage("jobs");
     return savedId;
@@ -1735,77 +1770,125 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
      START SCREEN
      ══════════════════════════════════════════ */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const printInspection = (insp: any, inspData: any, roomCount: number, findingsCount: number) => {
+  const printInspection = (insp: any, inspData: any, roomCount: number, _findingsCount: number) => {
     const esc = (s: string) =>
       String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const orgN = org?.name || "Service Provider";
-    const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const blob = inspData?.inspection || {};
+    // The date the unit was WALKED, not the day the PDF was printed — a
+    // move-out report is evidence of condition on that day.
+    const walkedRaw = blob.inspected_at || insp.job_date || insp.created_at;
+    const walked = walkedRaw ? new Date(String(walkedRaw).length === 10 ? walkedRaw + "T12:00:00" : walkedRaw) : new Date();
+    const today = (isNaN(walked.getTime()) ? new Date() : walked).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     const reportNum = "INS-" + String(insp.id ?? "").slice(0, 6).toUpperCase();
-    const rms = inspData?.inspection?.rooms || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rms: any[] = blob.rooms || [];
+    const TYPE_LABEL: Record<string, string> = {
+      "move-out": "Move-Out / Vacant Turn", "move-in": "Move-In Condition", flooring: "Flooring Survey",
+      painting: "Painting Survey", yard: "Yard / Grounds", initial: "Initial Walkthrough",
+    };
+    const typeLabel = TYPE_LABEL[blob.type] || "Property Inspection";
+    const inspector = blob.inspected_by || insp.created_by || "";
 
+    const COND: Record<string, { c: string; l: string; rank: number }> = {
+      D: { c: "#C00000", l: "DAMAGED", rank: 0 },
+      P: { c: "#e07000", l: "POOR", rank: 1 },
+      F: { c: "#b38f00", l: "FAIR", rank: 2 },
+      S: { c: "#00a352", l: "OK", rank: 3 },
+    };
+    const cond = (c: string) => COND[String(c || "S").toUpperCase()] || COND.S;
+    const chip = (c: string) => {
+      const k = cond(c);
+      return `<span style="font-family:Oswald,sans-serif;font-size:10px;padding:2px 8px;border-radius:3px;background:${k.c}1f;color:${k.c};letter-spacing:.06em;white-space:nowrap">${k.l}</span>`;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const noteOf = (it: any) => String(it.comment ?? it.notes ?? "").trim();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const photosOf = (it: any, size: number, max: number) => (it.photos?.length
+      ? it.photos.slice(0, max).map((u: string) => `<img src="${esc(u)}" alt="" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:4px;margin:0 3px 3px 0;border:1px solid #ddd" />`).join("")
+        + (it.photos.length > max ? `<span class="dim" style="font-size:10px">+${it.photos.length - max}</span>` : "")
+      : "");
+    // Work needed = anything rated below OK, or an OK item with a note
+    // ("OK — needs cleaning") — the same rule the AI quote uses.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const needsWork = (it: any) => cond(it.condition).rank < 3 || !!noteOf(it);
+
+    // ── Punch list: every finding, worst first, grouped by area, with a
+    // checkbox so the crew can work the turn straight off this page.
+    const counts = { D: 0, P: 0, F: 0, N: 0 };
+    let punchHtml = "";
+    rms.forEach((r) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const found = (r.items || []).filter(needsWork).sort((a: any, b: any) => cond(a.condition).rank - cond(b.condition).rank);
+      if (!found.length) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = found.map((it: any) => {
+        const k = String(it.condition || "S").toUpperCase();
+        if (k === "D" || k === "P" || k === "F") counts[k]++; else counts.N++;
+        return `<tr style="page-break-inside:avoid"><td style="width:22px;text-align:center"><span style="display:inline-block;width:13px;height:13px;border:1.5px solid #555;border-radius:2px"></span></td><td><b>${esc(it.name)}</b>${noteOf(it) ? `<div style="font-size:11.5px;color:#333;margin-top:2px">${esc(noteOf(it))}</div>` : ""}</td><td class="r" style="width:80px">${k === "D" || k === "P" || k === "F" ? chip(k) : `<span style="font-family:Oswald,sans-serif;font-size:10px;padding:2px 8px;border-radius:3px;background:#2E75B61f;color:#2E75B6;letter-spacing:.06em">NOTED</span>`}</td><td style="width:190px">${photosOf(it, 56, 3)}</td></tr>`;
+      }).join("");
+      punchHtml += `<h3 style="margin-top:12px">${esc(r.name)} <span style="font-family:Source Sans 3,sans-serif;font-size:11px;color:#888;font-weight:400">· ${found.length} item${found.length > 1 ? "s" : ""}</span></h3>
+<table><thead><tr><th></th><th>Work needed</th><th class="r">Condition</th><th>Photos</th></tr></thead><tbody>${rows}</tbody></table>`;
+    });
+    const totalFindings = counts.D + counts.P + counts.F + counts.N;
+
+    // ── Full condition record: every item checked, OK ones included — the
+    // move-out evidence (deposit disputes) and the baseline for next time.
     let areasHtml = "";
     let totalSqft = 0;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rms.forEach((r: any) => {
+    rms.forEach((r) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = r.items.map((it: any) => {
-        const cc = it.condition === "D" ? "#C00000" : it.condition === "P" ? "#ff8800" : it.condition === "F" ? "#ffcc00" : "#00cc66";
-        const cl = it.condition === "D" ? "DAMAGED" : it.condition === "P" ? "POOR" : it.condition === "F" ? "FAIR" : "OK";
-        const photos = it.photos?.length
-          ? it.photos.slice(0, 3).map((u: string) => `<img src="${esc(u)}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;margin-right:2px;border:1px solid #ddd" />`).join("")
-          : "";
-        return `<tr><td><b>${esc(it.name)}</b></td><td class="r"><span style="font-family:Oswald,sans-serif;font-size:10px;padding:2px 8px;border-radius:3px;background:${cc}22;color:${cc};letter-spacing:.06em">${cl}</span></td><td class="dim">${esc(it.comment || "")}</td><td>${photos}</td></tr>`;
+      const rows = (r.items || []).map((it: any) => {
+        const ok = !needsWork(it);
+        return `<tr style="page-break-inside:avoid${ok ? ";color:#666" : ""}"><td>${ok ? esc(it.name) : `<b>${esc(it.name)}</b>`}</td><td class="r" style="width:80px">${chip(it.condition)}</td><td class="dim">${esc(noteOf(it))}</td><td style="width:130px">${photosOf(it, 40, 3)}</td></tr>`;
       }).join("");
-      // Surface room dimensions inline next to the heading. Inspector
-      // captures W×L → sqft on each room; previously the PDF never
-      // showed the number. With it present, the PDF doubles as a
-      // takeoff sheet for flooring/painting estimates and Bernard
-      // (or anyone re-uploading the PDF later) can see the area.
+      // Room dimensions inline next to the heading, so the PDF doubles as a
+      // takeoff sheet for flooring/painting.
       const sqft = r.sqft && r.sqft > 0 ? r.sqft : 0;
       const w = r.width && r.width > 0 ? r.width : 0;
       const l = r.length && r.length > 0 ? r.length : 0;
       if (sqft > 0) totalSqft += sqft;
       const dimsLabel = sqft > 0
         ? `<span style="font-family:Oswald,sans-serif;font-size:11px;color:#2E75B6;font-weight:400;letter-spacing:.04em;margin-left:8px">${w && l ? `${w}&prime; × ${l}&prime; · ` : ""}${sqft.toLocaleString()} sqft</span>`
-        : `<span style="font-family:Source Sans 3,sans-serif;font-size:10px;color:#999;font-weight:400;margin-left:8px">(no dimensions captured)</span>`;
+        : "";
       areasHtml += `<h3>${esc(r.name)}${dimsLabel}</h3>
 <table>
-  <thead>
-    <tr>
-      <th>Item</th>
-      <th class="r" style="width:90px">Condition</th>
-      <th>Notes</th>
-      <th style="width:160px">Photos</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Item</th><th class="r">Condition</th><th>Notes</th><th>Photos</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>`;
     });
 
+    const stat = (n: number, label: string, color: string) => `<div class="box" style="flex:1;text-align:center;padding:12px 6px">
+    <div style="font-family:Oswald,sans-serif;font-size:26px;font-weight:700;color:${color};line-height:1">${n}</div>
+    <div class="label" style="margin-top:5px">${label}</div>
+  </div>`;
     const body = `
-<section style="display:flex;gap:12px;margin-bottom:18px">
-  <div class="box" style="flex:1;text-align:center;padding:14px">
-    <div style="font-family:Oswald,sans-serif;font-size:30px;font-weight:700;color:#2E75B6;line-height:1">${roomCount}</div>
-    <div class="label" style="margin-top:6px">Areas Inspected</div>
-  </div>
-  <div class="box" style="flex:1;text-align:center;padding:14px">
-    <div style="font-family:Oswald,sans-serif;font-size:30px;font-weight:700;color:#ff8800;line-height:1">${findingsCount}</div>
-    <div class="label" style="margin-top:6px">Findings</div>
-  </div>
-  ${totalSqft > 0 ? `<div class="box" style="flex:1;text-align:center;padding:14px">
-    <div style="font-family:Oswald,sans-serif;font-size:30px;font-weight:700;color:#00cc66;line-height:1">${totalSqft.toLocaleString()}</div>
-    <div class="label" style="margin-top:6px">Total Sqft</div>
-  </div>` : ""}
-</section>
-
-<section class="grid-2" style="margin-bottom:14px">
+<section class="grid-2" style="margin-bottom:12px">
   <div class="box"><div class="label">Property</div><div class="value">${esc(insp.property || "—")}</div></div>
   <div class="box"><div class="label">Client</div><div class="value">${esc(insp.client || "—")}</div></div>
+  <div class="box"><div class="label">Inspection</div><div class="value">${esc(typeLabel)}</div></div>
+  <div class="box"><div class="label">Inspected</div><div class="value">${esc(today)}${inspector ? ` · ${esc(inspector)}` : ""}</div></div>
 </section>
 
-<h2>Findings by Area</h2>
-${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findings recorded.</div>'}
+<section style="display:flex;gap:8px;margin-bottom:16px">
+  ${stat(roomCount, "Areas", "#2E75B6")}
+  ${stat(counts.D, "Damaged", COND.D.c)}
+  ${stat(counts.P, "Poor", COND.P.c)}
+  ${stat(counts.F + counts.N, "Fair / Noted", COND.F.c)}
+  ${totalSqft > 0 ? stat(totalSqft, "Total Sqft", "#00a352") : ""}
+</section>
+
+<h2>Work Needed — Punch List${totalFindings ? ` (${totalFindings})` : ""}</h2>
+${punchHtml || '<div class="dim" style="text-align:center;padding:14px">No work needed — every item checked OK.</div>'}
+
+<h2 style="page-break-before:always">Full Condition Record</h2>
+<div class="dim" style="font-size:11px;margin:-4px 0 8px">Every item checked, by area. Items in bold need work; grey items were checked and found OK.</div>
+${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas recorded.</div>'}
+
+<section class="grid-2" style="margin-top:22px;page-break-inside:avoid">
+  <div style="border-top:1px solid #999;padding-top:4px;font-size:11px;color:#555">Inspected by${inspector ? `: ${esc(inspector)}` : ""}</div>
+  <div style="border-top:1px solid #999;padding-top:4px;font-size:11px;color:#555">Reviewed by / date</div>
+</section>
 `;
 
     const html = wrapPrint(
@@ -2309,7 +2392,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
           setLaborRate(null);
           setMinLaborHours(null);
           setTieredQuote(false);
-          setTierNames({ better: "Better", best: "Best" });
+          setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
         }}>←</button>
         <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚡ Quote</h2>
         <span style={{ fontSize: 12 }} className="dim">
@@ -2607,6 +2690,46 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
               → {effectiveTaxMode === "materials" ? "mat only" : effectiveTaxMode === "none" ? "no tax" : "L + M"}
             </span>
           )}
+
+          <span style={{ width: 1, height: 18, background: "#444", margin: "0 4px" }} />
+
+          <span
+            style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}
+            title="How many people work this job. Doesn't change the price (labor hours are total work hours) — it sets the crew line on the quote and the days on site."
+          >
+            Crew
+          </span>
+          <div style={{ display: "inline-flex", borderRadius: 6, overflow: "hidden", border: "1px solid #2E75B655" }}>
+            {([null, 1, 2, 3, 4] as const).map((n) => {
+              const active = crewSize === n;
+              return (
+                <button
+                  key={String(n)}
+                  onClick={() => setCrewSize(n)}
+                  aria-label={n === null ? "Crew size: auto" : `Crew size: ${n}`}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: 13,
+                    fontFamily: "Oswald",
+                    background: active ? "var(--color-primary)" : "transparent",
+                    color: active ? "#fff" : "#888",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {n === null ? "Auto" : n}
+                </button>
+              );
+            })}
+          </div>
+          {thRaw > 0 && (() => {
+            const days = estimateDays(thRaw, crewSize, aiEstDays);
+            return (
+              <span style={{ fontSize: 12, color: "#888", fontFamily: "Oswald" }}>
+                ≈ {days} day{days > 1 ? "s" : ""} on site{crewSize === null ? ` · crew of ${planningCrew(thRaw, null)}` : ""}
+              </span>
+            );
+          })()}
         </div>
       </div>
 
@@ -3107,6 +3230,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
                 taxMode: effectiveTaxMode,
                 tieredQuote,
                 tierNames,
+                crewSize,
+                estDays: aiEstDays,
                 // Same reference number the customer's copy prints (was a
                 // random one per export for saved quotes).
                 jobId: editingId || undefined,

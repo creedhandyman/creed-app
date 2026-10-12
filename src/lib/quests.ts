@@ -48,6 +48,58 @@ export interface QuestMetrics {
   handyKingProgress: number;
 }
 
+/** What a shop (custom) quest counts. Every metric is per-tech and
+ *  per-cycle, measured by the same engine as the built-in quests. "manual"
+ *  = no automatic tracking: the owner marks who did it (e.g. "Keep the truck
+ *  stocked all month"). */
+export type CustomQuestMetric =
+  | "jobs_completed" | "hours" | "five_star" | "positive_reviews"
+  | "referrals" | "upsells" | "big_jobs" | "requested_by_name"
+  | "zero_callback" | "manual";
+
+export const CUSTOM_QUEST_METRICS: { key: CustomQuestMetric; label: string; unit: string }[] = [
+  { key: "jobs_completed", label: "Jobs completed", unit: "jobs" },
+  { key: "hours", label: "Hours worked", unit: "hrs" },
+  { key: "five_star", label: "5-star reviews", unit: "5★" },
+  { key: "positive_reviews", label: "Good reviews (3+ stars)", unit: "reviews" },
+  { key: "referrals", label: "Referrals that book a job", unit: "clients" },
+  { key: "upsells", label: "Upsells", unit: "upsells" },
+  { key: "big_jobs", label: "Big jobs (24+ hrs)", unit: "jobs" },
+  { key: "requested_by_name", label: "Clients who request them by name", unit: "clients" },
+  { key: "zero_callback", label: "Jobs in a row with no callback", unit: "streak" },
+  { key: "manual", label: "I'll mark who did it", unit: "done" },
+];
+
+/** An owner-made quest. Stored in organizations.quest_config under
+ *  `_custom` (no schema change; the built-in quest keys sit beside it). */
+export interface CustomQuest {
+  id: string;
+  name: string;
+  desc?: string;
+  metric: CustomQuestMetric;
+  goal: number;
+  bonus: number;
+  enabled: boolean;
+  /** "manual" quests: who the owner marked done, as `${userId}@${cycleKey}` —
+   *  so a mark only counts for the cycle it was given in. */
+  done?: string[];
+}
+
+/** Cycle id used to scope manual marks ("2026-07" = the Jul–Dec cycle). */
+export const questCycleKey = (cycleStart: Date) =>
+  `${cycleStart.getFullYear()}-${String(cycleStart.getMonth() + 1).padStart(2, "0")}`;
+
+/** quest_config JSON → the built-in toggles/bonuses + the shop quests. */
+export function parseQuestConfig(raw?: string | null): {
+  config: Record<string, { enabled?: boolean; bonus?: number }>;
+  custom: CustomQuest[];
+} {
+  let obj: Record<string, unknown> = {};
+  try { obj = raw ? JSON.parse(raw) : {}; } catch { obj = {}; }
+  const custom = Array.isArray(obj._custom) ? (obj._custom as CustomQuest[]).filter((q) => q && q.id && q.name) : [];
+  return { config: obj as Record<string, { enabled?: boolean; bonus?: number }>, custom };
+}
+
 export interface QuestEngineInput {
   userId: string;
   userName: string;
@@ -57,6 +109,8 @@ export interface QuestEngineInput {
   timeEntries: TimeEntry[];
   questConfig: Record<string, { enabled?: boolean; bonus?: number }>;
   cycleStart: Date;
+  /** The shop's own quests (parseQuestConfig(...).custom). */
+  customQuests?: CustomQuest[];
 }
 
 export interface QuestEngineResult {
@@ -73,7 +127,7 @@ export const QUEST_DEFAULT_BONUSES: Record<string, number> = {
 };
 
 export function computeQuests(input: QuestEngineInput): QuestEngineResult {
-  const { userId, userName, jobs, reviews, referrals, timeEntries, questConfig, cycleStart } = input;
+  const { userId, userName, jobs, reviews, referrals, timeEntries, questConfig, cycleStart, customQuests = [] } = input;
 
   const inCycle = (dateStr?: string | null): boolean => {
     if (!dateStr) return false;
@@ -271,6 +325,40 @@ export function computeQuests(input: QuestEngineInput): QuestEngineResult {
       ].filter((q): q is QuestDef => !!q),
     },
   ];
+
+  // Shop quests — the owner's own, on the same per-tech, per-cycle numbers.
+  // Keyed `custom_<id>` so Payroll's paid-this-cycle check and approvals work
+  // exactly like the built-ins. Not counted toward HandyKing.
+  const T5 = "var(--color-violet)";
+  const cycleKey = questCycleKey(cycleStart);
+  const metricValue = (q: CustomQuest): number => {
+    switch (q.metric) {
+      case "jobs_completed": return completedJobs;
+      case "hours": return Math.floor(totalHours);
+      case "five_star": return fiveStarReviews;
+      case "positive_reviews": return positiveReviews;
+      case "referrals": return convertedReferrals;
+      case "upsells": return upsellCount;
+      case "big_jobs": return bigJobs;
+      case "requested_by_name": return myRequestClients.size;
+      case "zero_callback": return zeroCallbackStreak;
+      case "manual": return (q.done || []).includes(`${userId}@${cycleKey}`) ? 1 : 0;
+      default: return 0;
+    }
+  };
+  const shopQuests: QuestDef[] = customQuests
+    .filter((q) => q.enabled !== false)
+    .map((q) => {
+      const goal = q.metric === "manual" ? 1 : Math.max(1, Math.round(Number(q.goal) || 1));
+      const metric = CUSTOM_QUEST_METRICS.find((m) => m.key === q.metric);
+      const bonus = Math.max(0, Math.round(Number(q.bonus) || 0));
+      return {
+        key: `custom_${q.id}`, name: q.name, desc: q.desc || metric?.label || "",
+        bonus: "$" + bonus, bonusAmount: bonus,
+        progress: Math.min(metricValue(q), goal), goal, unit: metric?.unit || "", tier: "S", tierColor: T5,
+      };
+    });
+  if (shopQuests.length) tiers.push({ name: "SHOP: SHOP QUESTS", color: T5, quests: shopQuests });
 
   const allQuests = tiers.flatMap((tr) => tr.quests);
 
