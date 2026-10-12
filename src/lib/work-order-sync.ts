@@ -56,6 +56,12 @@ export function syncWorkOrder(steps: GuideStep[], rooms: Room[], known: Set<stri
     }
   }
 
+  // No quote lines = the editor is being reset or a quote hasn't loaded yet,
+  // never "the user deleted every line". Dropping every linked task here is
+  // how work orders were getting wiped (the editor's back arrow cleared the
+  // lines but kept the work order), so leave the tasks alone.
+  if (items.size === 0) return null;
+
   const linked = new Set<string>();
   for (const s of steps) if (s.itemId && items.has(s.itemId)) linked.add(s.itemId);
 

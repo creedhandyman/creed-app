@@ -555,6 +555,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           ...(s.itemId ? { itemId: s.itemId } : {}),
           ...(s.custom ? { custom: true } : {}),
         })));
+      } else {
+        // No saved tasks: rebuild from the quote (null = guide.steps). Never
+        // keep the previous quote's work order, and don't treat this quote's
+        // lines as "removed on purpose" — that's what left a job with lines
+        // but an empty work order forever.
+        woKnownIdsRef.current = new Set();
+        setCustomWorkOrder(null);
       }
       // Guide-tab persistent state — same keys WorkVision uses, so
       // shopping-list adds and checks survive across views.
@@ -1477,9 +1484,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // guide. Re-sync against the quote right here too (not only via the
     // effect) so a save fired in the same tick as a line edit can't write a
     // work order that's one edit behind.
-    const sourceSteps = customWorkOrder
+    const syncedSteps = customWorkOrder
       ? (syncWorkOrder(customWorkOrder, rooms, woKnownIdsRef.current) ?? customWorkOrder)
       : guide.steps;
+    // Safety net: a quote with lines never saves an empty work order (the
+    // crew's Tasks tab and the customer's progress list would go blank).
+    const hasLines = rooms.some((r) => r.items.length > 0);
+    const sourceSteps = syncedSteps.length === 0 && hasLines ? guide.steps : syncedSteps;
     const prevWO: WO[] = Array.isArray(prevData.workOrder) ? prevData.workOrder as WO[] : [];
     const prevWOByKey = new Map(prevWO.map((w) => [woKeyOf(w), w]));
     // Prior tasks by quote-line id — so a task whose line text was edited
@@ -2285,6 +2296,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No findi
         <button className="bo" onClick={() => {
           setMode(null);
           setRooms([]);
+          setCustomWorkOrder(null);
+          woKnownIdsRef.current = new Set();
           setJobPhotos([]);
           setInspectionData(null);
           setEditingId(null);

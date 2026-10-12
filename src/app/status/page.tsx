@@ -639,7 +639,7 @@ function StatusContent() {
                 </div>
               ) : (
                 <label ref={smsConsentRef} style={{ display: "flex", alignItems: "flex-start", gap: 9, cursor: "pointer", fontSize: 12.5, lineHeight: 1.5, color: "#8a8a99", marginBottom: 13 }}>
-                  <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} style={{ marginTop: 2, cursor: "pointer", flexShrink: 0 }} />
+                  <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} style={{ marginTop: 2, cursor: "pointer", flexShrink: 0, width: 18, height: 18, minHeight: 0, padding: 0 }} />
                   <span>
                     <b style={{ color: "#c9c9d6" }}>(Optional)</b> Yes, send me text messages from {org?.name || "this business"} about this job: appointment and arrival updates, invoices and payment links, customer-portal login links, and a review request after the job. Message frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to opt out. Consent is not a condition of purchase.
                     {(org?.privacy_url || org?.sms_terms_url) && " "}
@@ -680,7 +680,7 @@ function StatusContent() {
                     style={{ fontSize: 18 }}
                   />
                   <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 14, color: "#8a8a99", marginBottom: 11 }}>
-                    <input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} style={{ marginTop: 2, cursor: "pointer" }} />
+                    <input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} style={{ marginTop: 2, cursor: "pointer", flexShrink: 0, width: 18, height: 18, minHeight: 0, padding: 0 }} />
                     <span>I authorize {org?.name || "this contractor"} to perform the {showTierPicker ? "selected option" : "work"} described above for ${effectiveTotal.toFixed(2)}.</span>
                   </label>
                   <button className="btn glow-green" onClick={submitTypedSignature} disabled={!typedName.trim() || !authorized || submittingSig}>

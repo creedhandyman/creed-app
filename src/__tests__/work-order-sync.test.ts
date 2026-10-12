@@ -124,4 +124,12 @@ describe("syncWorkOrder", () => {
     const wo = settle(makeGuide(rooms).steps, rooms, quoteItemIds(rooms));
     expect(syncWorkOrder(wo, rooms, quoteItemIds(rooms))).toBeNull();
   });
+
+  test("an emptied quote (editor reset / mid-load) leaves the work order alone", () => {
+    const rooms = quote();
+    const wo = settle(makeGuide(rooms).steps, rooms, quoteItemIds(rooms));
+    expect(syncWorkOrder(wo, [], quoteItemIds(rooms))).toBeNull();
+    // and coming back to the same lines keeps every task
+    expect(settle(wo, rooms, quoteItemIds(rooms))).toHaveLength(2);
+  });
 });
