@@ -28,6 +28,27 @@ export interface ApprovalRecord {
   /** Server ISO timestamp of the approval. */
   at: string;
   tier?: TierKey;
+  /** How the customer approved: online (/status — the default when absent),
+   *  or recorded by the owner for a customer who doesn't do it online. */
+  via?: ApprovalVia;
+  /** Who recorded an offline approval (the owner/manager's name). */
+  by?: string;
+  /** The homeowner's name on an offline approval (also when they drew a
+   *  signature, so the name still prints). */
+  signer?: string;
+}
+
+export type ApprovalVia = "online" | "in_person" | "phone" | "paper";
+const VIAS: readonly ApprovalVia[] = ["online", "in_person", "phone", "paper"];
+
+/** "Approved electronically" / "Approved in person" / … for the PDF + app. */
+export function approvalPhrase(rec: Pick<ApprovalRecord, "via"> | null | undefined): string {
+  switch (rec?.via) {
+    case "in_person": return "Approved in person";
+    case "phone": return "Approved by phone";
+    case "paper": return "Approved on a signed paper copy";
+    default: return "Approved electronically";
+  }
 }
 
 /** Everything exportQuotePdf needs to render a signed quote. */
@@ -133,6 +154,9 @@ export function readApprovalRecord(blob: unknown): ApprovalRecord | null {
     total: typeof a.total === "number" && Number.isFinite(a.total) ? a.total : 0,
     at: typeof a.at === "string" ? a.at : "",
     ...(isTier(a.tier) ? { tier: a.tier } : {}),
+    ...(typeof a.via === "string" && (VIAS as readonly string[]).includes(a.via) ? { via: a.via as ApprovalVia } : {}),
+    ...(typeof a.by === "string" && a.by.trim() ? { by: a.by.trim().slice(0, 80) } : {}),
+    ...(typeof a.signer === "string" && a.signer.trim() ? { signer: a.signer.trim().slice(0, 100) } : {}),
   };
 }
 

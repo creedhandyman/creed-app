@@ -3,7 +3,7 @@ import { wrapPrint, openPrint } from "./print-template";
 import { resolveTaxMode, type TaxMode } from "./tax";
 import { priceCascade, rateForRoom } from "./pricing";
 import { itemInTier, itemTiers, tierMembershipLabel, type TierKey } from "./tiers";
-import { approvalState, type QuoteApproval } from "./approval";
+import { approvalState, approvalPhrase, type QuoteApproval } from "./approval";
 import { estimateDays, planningCrew } from "./job-duration";
 
 interface ExportOptions {
@@ -279,6 +279,12 @@ export function exportQuotePdf(opts: ExportOptions) {
   const sigTyped = !!signed && !sigIsDataUrl;
   // A typed name is free text from the customer — clamp what prints.
   const sigName = sigTyped ? signed!.signature.slice(0, 100) : "";
+  // How it was approved: online (default) or recorded by the owner for a
+  // homeowner who approved in person / by phone / on paper.
+  const how = (a: QuoteApproval) => approvalPhrase(a.record);
+  const offline = (a: QuoteApproval) => !!a.record?.via && a.record.via !== "online";
+  const signerName = (a: QuoteApproval) => (a.record?.signer || (a === signed && sigTyped ? sigName : "")).slice(0, 100);
+  const recordedBy = (a: QuoteApproval) => (offline(a) && a.record?.by ? ` — recorded by ${esc(a.record.by)}` : "");
 
   const tiersHtml = showTiers
     ? `
@@ -774,12 +780,12 @@ ${renders
   <div style="font-family:Oswald,sans-serif;font-size:32px;font-weight:700;color:${accent};margin:8px 0">${approvedAmount !== null ? `$${approvedAmount.toFixed(2)}` : tierRange}</div>
   ${approvedAmount !== null && pricedNow !== null && Math.abs(approvedAmount - pricedNow) >= 1 ? `<div style="font-size:11px;color:#888;margin-top:-4px">Approved amount · line items as priced today: $${pricedNow.toFixed(2)}</div>` : ""}
   <div style="font-size:12px;color:#444;line-height:1.9">
-    <div>Approved electronically${sigTyped ? ` by <b>${esc(sigName)}</b>` : ""}${signedWhen(signed).long ? ` on ${esc(signedWhen(signed).long)}` : ""}</div>
+    <div>${how(signed)}${signerName(signed) ? ` — <b>${esc(signerName(signed))}</b>` : ""}${signedWhen(signed).long ? ` on ${esc(signedWhen(signed).long)}` : ""}${recordedBy(signed)}</div>
     ${statusUrl ? `<div>🔗 <b>View online:</b> <a href="${esc(statusUrl)}" style="color:${accent}">${esc(statusUrl)}</a></div>` : ""}` : `
   <h3 style="font-family:Oswald,sans-serif;font-size:16px;color:${accent};text-transform:uppercase;margin:0 0 8px;letter-spacing:.08em">${revisedAfter ? "Revised Estimate" : unverified ? "Estimate Approved" : showTiers ? "Choose Your Option" : "Accept This Estimate"}</h3>
   <div style="font-family:Oswald,sans-serif;font-size:32px;font-weight:700;color:${accent};margin:8px 0">${showTiers ? tierRange : `$${grandTotal.toFixed(2)}`}</div>
   <div style="font-size:12px;color:#444;line-height:1.9">
-    ${unverified ? `<div>Approved electronically${signedWhen(unverified).long ? ` on ${esc(signedWhen(unverified).long)}` : ""}</div>` : ""}
+    ${unverified ? `<div>${how(unverified)}${signedWhen(unverified).long ? ` on ${esc(signedWhen(unverified).long)}` : ""}</div>` : ""}
     ${statusUrl ? `<div>🔗 <b>${approval ? "View online" : "View &amp; approve online"}:</b> <a href="${esc(statusUrl)}" style="color:${accent}">${esc(statusUrl)}</a></div>` : ""}
     ${revisedAfter ? `<div>Contact ${esc(orgName)} to approve this revised version.</div>` : ""}`}
     ${orgPhone ? `<div>☎ <b>Call:</b> ${esc(orgPhone)}</div>` : ""}
@@ -802,10 +808,12 @@ ${signed ? `
     <div class="sig-line">Client Approval &nbsp; / &nbsp; ${signedWhen(signed).short ? esc(signedWhen(signed).short) : "Date"}</div>
   </div>
 </div>
-<div style="font-size:10px;color:#888;text-align:right;margin-top:4px">Client signed electronically${sigTyped ? " (typed name)" : ""}${signedWhen(signed).long ? ` on ${esc(signedWhen(signed).long)}` : ""}.</div>
+<div style="font-size:10px;color:#888;text-align:right;margin-top:4px">${offline(signed)
+  ? `${how(signed)}${sigTyped ? " (name recorded)" : " (signed on screen)"}${signedWhen(signed).long ? ` on ${esc(signedWhen(signed).long)}` : ""}${recordedBy(signed)}.`
+  : `Client signed electronically${sigTyped ? " (typed name)" : ""}${signedWhen(signed).long ? ` on ${esc(signedWhen(signed).long)}` : ""}.`}</div>
 ` : `
-${revisedAfter ? `<div style="font-size:11px;color:#8a5a00;background:#fff7e6;border:1px solid #f0d9a8;border-radius:6px;padding:8px 12px;margin-top:18px;page-break-inside:avoid">An earlier version of this estimate was approved electronically${signedWhen(revisedAfter).long ? ` on ${esc(signedWhen(revisedAfter).long)}` : ""}. It has been revised since, so that approval isn't applied to this version.</div>` : ""}
-${unverified ? `<div style="font-size:11px;color:#555;background:#f5f7fa;border:1px solid #dde3ea;border-radius:6px;padding:8px 12px;margin-top:18px;page-break-inside:avoid">Approved electronically${signedWhen(unverified).long ? ` on ${esc(signedWhen(unverified).long)}` : ""} — the client's signature is on file with ${esc(orgName)}.</div>` : ""}
+${revisedAfter ? `<div style="font-size:11px;color:#8a5a00;background:#fff7e6;border:1px solid #f0d9a8;border-radius:6px;padding:8px 12px;margin-top:18px;page-break-inside:avoid">An earlier version of this estimate was ${how(revisedAfter).replace(/^Approved/, "approved")}${signedWhen(revisedAfter).long ? ` on ${esc(signedWhen(revisedAfter).long)}` : ""}. It has been revised since, so that approval isn't applied to this version.</div>` : ""}
+${unverified ? `<div style="font-size:11px;color:#555;background:#f5f7fa;border:1px solid #dde3ea;border-radius:6px;padding:8px 12px;margin-top:18px;page-break-inside:avoid">${how(unverified)}${signedWhen(unverified).long ? ` on ${esc(signedWhen(unverified).long)}` : ""} — the client's signature is on file with ${esc(orgName)}.</div>` : ""}
 <div class="sig-row">
   <div class="sig-line">Authorized Signature &nbsp; / &nbsp; Date</div>
   <div class="sig-line">Client Approval &nbsp; / &nbsp; Date</div>

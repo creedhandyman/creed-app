@@ -1012,6 +1012,24 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `tierTotalOf` (`lineCost`) so it all adds up. An approved quote prints only
   the picked option's complete breakdown.
 
+- **Record an offline approval (2026-10-12)**: for homeowners who won't use
+  the /status link. Jobs detail (quoted/accepted, unsigned) → **Record
+  approval (in person / phone)** → `RecordApprovalSheet.tsx`: pick the option
+  (tiered quotes, prices from `tierTotals`), how (in person / phone / signed
+  paper), the homeowner's name (defaults to the client) and, in person, an
+  optional on-screen signature pad (dark-ink PNG). POSTs owner/manager-only
+  `/api/jobs/record-approval` (org-scoped, refuses signed/lead jobs, tiered
+  needs a tier). The approval logic now lives in ONE helper,
+  `src/lib/approve-job.ts` `applyApproval` — used by BOTH this route and the
+  customer `/api/jobs/approve` (which keeps its token/portal auth, stale-page
+  check, SMS consent and owner notification): status quoted→accepted, option
+  price + tierBreakdown totals, work order pruned via itemInTier,
+  `acceptedTier`, and the `approval` record — now with optional `via`
+  (in_person|phone|paper; absent = online), `by` (recorder) and `signer`.
+  The PDF uses `approvalPhrase()` ("Approved in person — Jane Doe … —
+  recorded by Bernard") instead of always "Approved electronically".
+  Tested in `approve-job.test.ts`.
+
 - **Signed quotes print the customer's signature**: the /status "Approve &
   Sign" signature (typed name, or the pad's PNG — dark ink since this change;
   older pad signatures were white ink, so the PDF applies `brightness(0)`)

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { verifyJobToken } from "@/lib/job-token";
 import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
-import { itemInTier, type TierKey } from "@/lib/tiers";
-import { scopeFingerprint, type ApprovalRecord } from "@/lib/approval";
+import { scopeFingerprint } from "@/lib/approval";
+import { applyApproval } from "@/lib/approve-job";
 import type { Room } from "@/lib/types";
 import { applySmsConsent } from "@/lib/sms-consent";
 import { notifyQuoteApproved } from "@/lib/notify-server";
@@ -160,95 +160,24 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const nowIso = new Date().toISOString();
 
-    const patch: Record<string, unknown> = {
-      client_signature: signatureValue,
-      signature_date: new Date().toLocaleDateString(),
-      approved_at: nowIso,
-      approved_ip: ip || null,
-    };
-    if (job.status === "quoted") patch.status = "accepted";
-
-    // Tiered (Good-Better-Best) quote: the customer's picked option sets the
-    // accepted total + records which tier they chose. Option prices come from
-    // the blob's tierTotals (computed by the editor's authoritative pricing
-    // cascade) so there's no server-side re-derivation of the math.
-    const tier = body.tier;
-    if (tier === "base" || tier === "better" || tier === "best") {
-      try {
-        const blob = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-        const tt = blob?.tierTotals as Record<string, number> | undefined;
-        if (blob?.tieredQuote === true && tt && typeof tt[tier] === "number" && tt[tier] >= 0) {
-          patch.total = tt[tier];
-          blob.acceptedTier = tier;
-          // Lock the rest of the job to the accepted option so the crew + the
-          // paperwork match what was bought: snap the labor/material/hour totals
-          // to the tier's stored breakdown, and prune the crew work order to
-          // that tier's tasks. The full line-items stay on the blob (customer
-          // reference + any later upsell); only the operational artifacts move.
-          const bk = blob?.tierBreakdown?.[tier] as { labor?: number; mat?: number; hrs?: number } | undefined;
-          if (bk) {
-            if (typeof bk.labor === "number") patch.total_labor = bk.labor;
-            if (typeof bk.mat === "number") patch.total_mat = bk.mat;
-            if (typeof bk.hrs === "number") patch.total_hrs = bk.hrs;
-          }
-          // Work-order tasks carry their line-item option MEMBERSHIP at save
-          // time; keep only tasks whose set includes the accepted option.
-          // Legacy tasks (single `tier`, no `tiers`) fall back to the cumulative
-          // reading via itemInTier, and untagged tasks stay in (never hidden).
-          if (Array.isArray(blob?.workOrder)) {
-            blob.workOrder = blob.workOrder.filter(
-              (w: { tier?: string; tiers?: TierKey[] }) => itemInTier(w, tier),
-            );
-          }
-          patch.rooms = JSON.stringify(blob);
-        }
-      } catch {
-        /* malformed blob — fall back to the stored total */
-      }
-    }
-
-    // Record WHAT was signed: a fingerprint of the quote's line items + the
-    // approved amount, on the rooms blob (acceptedTier's home too, and
-    // QuoteForge's save spreads unknown blob keys, so it survives re-saves).
-    // The quote PDF prints the customer's signature only while the items it
-    // prints still match — a quote revised after signing never shows the
-    // signature on scope the customer didn't approve. Stamped on ANY object
-    // blob — one with no line items yet records the empty scope, so items
-    // added later read as a revision. Best-effort: an unparseable blob just
-    // means no record (the PDF then won't print the signature against any
-    // version); never fails the approval.
-    let approval: ApprovalRecord | null = null;
-    try {
-      const base = typeof patch.rooms === "string" ? patch.rooms : job.rooms;
-      const blob = typeof base === "string" ? JSON.parse(base) : base;
-      if (blob && typeof blob === "object" && !Array.isArray(blob)) {
-        const acceptedTier = blob.acceptedTier;
-        approval = {
-          v: 1,
-          fp: scopeFingerprint(Array.isArray(blob.rooms) ? blob.rooms : []),
-          total: typeof patch.total === "number" ? patch.total : Number(job.total) || 0,
+    // Lock the job to what was approved (status, picked option's price +
+    // work order, approval record) — shared with owner-recorded approvals.
+    const tier = body.tier === "base" || body.tier === "better" || body.tier === "best" ? body.tier : null;
+    const { patch, blob, approval } = applyApproval(job, { signature: signatureValue, tier, nowIso, via: "online", ip });
+    if (blob) {
+      // Text-message consent from the approval page's optional box — kept
+      // with the job as proof of opt-in (sms-consent.ts). Unchecked never
+      // revokes an earlier website opt-in.
+      if (typeof body.smsConsent === "boolean") {
+        applySmsConsent(blob, {
+          granted: body.smsConsent,
           at: nowIso,
-          ...(acceptedTier === "base" || acceptedTier === "better" || acceptedTier === "best"
-            ? { tier: acceptedTier as TierKey }
-            : {}),
-        };
-        blob.approval = approval;
-        // Text-message consent from the approval page's optional box — kept
-        // with the job as proof of opt-in (sms-consent.ts). Unchecked never
-        // revokes an earlier website opt-in.
-        if (typeof body.smsConsent === "boolean") {
-          applySmsConsent(blob, {
-            granted: body.smsConsent,
-            at: nowIso,
-            source: "quote approval page",
-            text: trim(body.smsConsentText),
-            ip,
-          });
-        }
-        patch.rooms = JSON.stringify(blob);
+          source: "quote approval page",
+          text: trim(body.smsConsentText),
+          ip,
+        });
       }
-    } catch {
-      approval = null;
+      patch.rooms = JSON.stringify(blob);
     }
 
     const { error: updErr } = await supabase

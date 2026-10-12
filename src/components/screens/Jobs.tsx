@@ -16,6 +16,7 @@ import { Icon } from "../Icon";
 import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
 import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
+import RecordApprovalSheet from "../RecordApprovalSheet";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours, parseEntryDate } from "@/lib/dates";
@@ -321,6 +322,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Drives the review-request modal. Set to a job when status transitions
   // to "complete" or "paid" AND the job hasn't had a review request yet.
   const [reviewJob, setReviewJob] = useState<Job | null>(null);
+  // Record an approval for a homeowner who said yes offline (in person / phone / paper).
+  const [approvalJob, setApprovalJob] = useState<Job | null>(null);
   const [rn, setRn] = useState("");
   const [ra, setRa] = useState("");
   // Pending receipt pages — uploaded as attached, saved as ONE receipt.
@@ -1004,6 +1007,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           {cta && (
             <button className="bb mb" onClick={cta.onClick} style={{ width: "100%", padding: "11px", fontFamily: "Oswald", fontSize: 16, letterSpacing: ".4px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               <Icon name={cta.icon} size={16} /> {cta.label}
+            </button>
+          )}
+
+          {/* Approved offline (in person / phone / paper)? Record it — locks the
+              picked option's price + work order like the online approval. */}
+          {(dj.status === "quoted" || dj.status === "accepted") && !dj.client_signature && (
+            <button
+              className="bo mb"
+              onClick={() => setApprovalJob(dj)}
+              style={{ width: "100%", padding: "10px", fontFamily: "Oswald", fontSize: 15, letterSpacing: ".3px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              <Icon name="checkCircle" size={15} /> Record approval (in person / phone)
             </button>
           )}
 
@@ -2212,6 +2227,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           />
         </div>
       )}
+
+      {/* Record an offline approval — mounted with the other modals so it
+          renders over the detail screen. */}
+      {approvalJob && <RecordApprovalSheet job={approvalJob} onClose={() => setApprovalJob(null)} />}
 
       {/* Review-request modal — auto-opens when a job hits complete/paid,
           or when the user clicks "📨 Request Review" on a job row. */}
