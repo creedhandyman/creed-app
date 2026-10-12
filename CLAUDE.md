@@ -993,6 +993,17 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   half-done edits would reach the customer's /status page + PDF and a signed
   quote would read as revised.
 
+- **Quote PDF summary per option (2026-10-12)**: on a tiered quote the
+  Estimate Summary used to total EVERY line ("ALL QUOTED WORK (reference)"),
+  matching no option. `export-pdf.ts` now renders "Estimate Summary by
+  Option": category rows × one column per option (`optCat` — same per-trade
+  rate + marked-up materials as `tierTotalOf`), a labor-hours row, an
+  adjustments row (= option total − sections: min charge / trip fee /
+  discount / tax) and OPTION TOTAL = the option price, so every column adds
+  up. Each trade's section bar adds per-option totals ("not included" when
+  absent) and "Estimated completion" lists days per option. Non-tiered quotes
+  are unchanged.
+
 - **Signed quotes print the customer's signature**: the /status "Approve &
   Sign" signature (typed name, or the pad's PNG — dark ink since this change;
   older pad signatures were white ink, so the PDF applies `brightness(0)`)

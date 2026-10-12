@@ -360,6 +360,22 @@ export function exportQuotePdf(opts: ExportOptions) {
 
   // Build summary rows per trade category (one row per category, not per
   // raw Room — so duplicate trade entries fold together).
+  // Good-Better-Best: the same per-category numbers, but per OPTION, priced
+  // exactly like tierTotalOf (per-trade rate, marked-up materials) so each
+  // option's column sums to its price once the cascade adjustments row is
+  // added. The all-lines summary below never matched any option.
+  const optCat = (idx: number, catKey: string) => {
+    const pairs = (tierCols[idx]?.items || []).filter((p) => p.room.trim().toLowerCase() === catKey);
+    const hrs = pairs.reduce((s, p) => s + p.it.laborHrs, 0);
+    const labor = pairs.reduce((s, p) => s + p.it.laborHrs * roomRate(p.room), 0);
+    const mat = pairs.reduce((s, p) => {
+      const raw = p.it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
+      return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+    }, 0);
+    return { hrs, total: labor + mat, count: pairs.length };
+  };
+  const optHrs = (idx: number) => (tierCols[idx]?.items || []).reduce((s, p) => s + p.it.laborHrs, 0);
+
   const summaryRows = categories.map((cat) => {
     const hrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
     const labor = hrs * roomRate(cat.name);
@@ -484,7 +500,11 @@ export function exportQuotePdf(opts: ExportOptions) {
       <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:${accent};font-weight:600">
         Labor (${clockHrs}h × ${crewSize} crew = ${shownHrs.toFixed(1)} man-hrs @ $${sectionRate}/hr): $${sectionLabor.toFixed(2)}
         &nbsp;·&nbsp; Material: $${sectionMat.toFixed(2)}
-        &nbsp;·&nbsp; <b>Section Total: $${(sectionLabor + sectionMat).toFixed(2)}</b>
+        &nbsp;·&nbsp; <b>${showTiers ? "All lines" : "Section Total"}: $${(sectionLabor + sectionMat).toFixed(2)}</b>
+        ${showTiers ? `<div style="margin-top:3px;font-weight:600">${tierCols.map((c, i) => {
+          const o = optCat(i, cat.name.trim().toLowerCase());
+          return `${esc(c.name)}: ${o.count ? `$${o.total.toFixed(2)}` : "not included"}`;
+        }).join(" &nbsp;·&nbsp; ")}</div>` : ""}
       </div>
     </div>`;
   });
@@ -539,7 +559,37 @@ ${(client || clientEmail || clientPhone) ? `
 
 ${tiersHtml}
 
-<h2>Estimate Summary</h2>
+${showTiers ? (() => {
+  const cols = tierCols.map((c, i) => ({ name: c.name, total: c.total, hue: i === 0 ? "#666" : i === 1 ? accent : "#7a3fb8", picked: i === acceptedIdx }));
+  const catRows = categories.map((cat) => {
+    const key = cat.name.trim().toLowerCase();
+    return { name: cat.name, per: cols.map((_, i) => optCat(i, key)) };
+  });
+  const sub = cols.map((_, i) => catRows.reduce((s, r) => s + r.per[i].total, 0));
+  const adj = cols.map((c, i) => Math.round((c.total - sub[i]) * 100) / 100);
+  const adjParts = [minApplies ? "minimum charge" : "", tripFee > 0 ? "trip fee" : "", discount ? "discount" : "", taxPct > 0 && taxMode !== "none" ? "tax" : ""].filter(Boolean);
+  const cell = (v: string, i: number) => `<td class="r" style="${cols[i].picked ? "background:#f3eefb;font-weight:700;" : ""}">${v}</td>`;
+  return `
+<h2>Estimate Summary by Option</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Category</th>
+      ${cols.map((c) => `<th class="r" style="width:110px">${esc(c.name)}${c.picked ? " ✓" : ""}</th>`).join("")}
+    </tr>
+  </thead>
+  <tbody>
+    ${catRows.map((r) => `<tr><td>${esc(r.name)}</td>${r.per.map((o, i) => cell(o.count ? `$${o.total.toFixed(2)}` : "—", i)).join("")}</tr>`).join("")}
+    <tr class="dim"><td>Labor hours</td>${cols.map((_, i) => cell(optHrs(i).toFixed(1), i)).join("")}</tr>
+    ${adj.some((a) => Math.abs(a) >= 0.01) ? `<tr class="dim"><td>${adjParts.length ? adjParts.join(", ").replace(/^./, (m) => m.toUpperCase()) : "Adjustments"}</td>${adj.map((a, i) => cell(`${a < 0 ? "-" : ""}$${Math.abs(a).toFixed(2)}`, i)).join("")}</tr>` : ""}
+    <tr style="font-weight:700;background:#f0f4f8;border-top:2px solid ${accent};color:${accent}">
+      <td>OPTION TOTAL</td>
+      ${cols.map((c, i) => cell(`$${c.total.toFixed(2)}`, i)).join("")}
+    </tr>
+  </tbody>
+</table>
+<div class="dim" style="font-size:11px;margin:-4px 0 14px">Each column is a complete, standalone price.${markupPct > 0 ? ` Material markup (${markupPct}%) is included in each section.` : ""} The line-item breakdown below lists all quoted work; lines in only some options are tagged.</div>`;
+})() : `<h2>Estimate Summary</h2>
 <table>
   <thead>
     <tr>
@@ -579,10 +629,19 @@ ${(markupPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
     <td class="r" style="padding-left:24px">${showTiers ? (acceptedIdx >= 0 && approvedAmount !== null ? `$${approvedAmount.toFixed(2)}` : tierRange) : `$${grandTotal.toFixed(2)}`}</td>
   </tr>
 </table>
-` : ""}
+` : ""}`}
 
 ${(() => {
   // Estimated completion — same math as the editor's hint (lib/job-duration).
+  if (showTiers) {
+    const per = tierCols.map((c, i) => ({ name: c.name, hrs: optHrs(i), days: estimateDays(optHrs(i), opts.crewSize, opts.estDays) }));
+    if (!per.some((p) => p.days)) return "";
+    return `<div class="box" style="background:#f5f7fa;border-left:4px solid ${accent};border-radius:6px;padding:8px 12px;margin:0 0 14px;font-size:13px">
+  <b style="color:${accent}">Estimated completion</b>
+  <span class="dim"> · ${per.map((p) => `${esc(p.name)}: about ${p.days} working day${p.days > 1 ? "s" : ""} (${p.hrs.toFixed(1)} hrs, crew of ${planningCrew(p.hrs, opts.crewSize)})`).join(" · ")}</span>
+  <div class="dim" style="font-size:11px;margin-top:2px">Start date set when scheduled. Weather, material availability, inspections and drying times can extend this.</div>
+</div>`;
+  }
   const days = estimateDays(totalHrs, opts.crewSize, opts.estDays);
   if (!days) return "";
   const crew = planningCrew(totalHrs, opts.crewSize);
