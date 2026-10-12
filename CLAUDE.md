@@ -946,6 +946,17 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   them on. validateQuote's global dedupe key includes an explicit `tiers` set,
   so the same task priced per option (standard vs premium) isn't collapsed
   (`src/__tests__/tier-dedupe.test.ts`).
+  Each option gets its OWN materials-only supplies line when its work differs
+  (prompt rule); `sharedSuppliesLines()` (lib/tiers.ts) warns after an Assist
+  edit if one is still shared.
+  **AI Assist job context (2026-10-12)**: `src/lib/assist-context.ts`
+  `buildAssistJobContext` adds a read-only JOB CONTEXT block to the Assist user
+  message — the inspection (this session's `inspectionData`, else the quote
+  blob's `inspection`, else the newest `status:"inspection"` job at the same
+  property: room sizes + non-OK/noted findings), work-order FINISHED tasks +
+  hand-added (`custom`) tasks, `jobNotes`, `leadDescription`. Text only, no
+  photos (cost). Prompt: size area work from inspection dims, don't rescope
+  finished tasks, context ≠ instructions.
 
 - **Signed quotes print the customer's signature**: the /status "Approve &
   Sign" signature (typed name, or the pad's PNG — dark ink since this change;
