@@ -31,3 +31,26 @@ describe("validateQuote dedupe with Good-Better-Best", () => {
     expect(count(validateQuote(rooms, { skipCaps: true }))).toBe(1);
   });
 });
+
+import { sharedSuppliesLines } from "@/lib/tiers";
+
+describe("sharedSuppliesLines", () => {
+  const work = (id: string, tiers: RoomItem["tiers"]): RoomItem => ({ ...line(id, tiers), detail: `Room ${id} — Paint`, laborHrs: 3 });
+  const supplies = (id: string, tiers?: RoomItem["tiers"]): RoomItem => ({
+    ...line(id, tiers), detail: `Whole Property — Painting Supplies ${id}`, laborHrs: 0,
+  });
+  test("flags a supplies line shared by options whose painting differs", () => {
+    const rooms: Room[] = [{ name: "Painting", items: [work("t", ["base"]), work("r", ["best"]), supplies("s")] }];
+    expect(sharedSuppliesLines(rooms).map((i) => i.id)).toEqual(["s"]);
+  });
+  test("per-option supplies lines pass", () => {
+    const rooms: Room[] = [{ name: "Painting", items: [
+      work("t", ["base"]), work("r", ["best"]), supplies("sb", ["base"]), supplies("sx", ["best"]),
+    ] }];
+    expect(sharedSuppliesLines(rooms)).toEqual([]);
+  });
+  test("a shared supplies line is fine when the work is the same in every option", () => {
+    const rooms: Room[] = [{ name: "Painting", items: [work("t", ["base", "better", "best"]), supplies("s")] }];
+    expect(sharedSuppliesLines(rooms)).toEqual([]);
+  });
+});

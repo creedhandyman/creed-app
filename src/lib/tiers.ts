@@ -57,6 +57,31 @@ export function tierDeltas<T extends TierItem>(items: T[]): TierDelta<T>[] {
   });
 }
 
+/** Materials-only "supplies" lines (no labor, priced materials) that two or
+ *  more options share although that trade's work differs between them — e.g.
+ *  one paint-supplies line shared by a touch-up Base and a full-repaint Best,
+ *  which under-buys paint for Best or over-charges Base. Each option should
+ *  carry its own supplies line sized to its own scope. */
+export function sharedSuppliesLines<
+  I extends TierItem & { detail: string; laborHrs: number; materials: { c: number }[] },
+>(rooms: { name: string; items: I[] }[]): I[] {
+  const out: I[] = [];
+  for (const r of rooms) {
+    for (const it of r.items) {
+      const mat = it.materials.reduce((s, m) => s + (m.c || 0), 0);
+      if ((it.laborHrs || 0) > 0 || mat <= 0) continue;
+      const shared = itemTiers(it);
+      if (shared.length < 2) continue;
+      // The trade's real work differs across the options this line spans.
+      const differs = r.items.some((o) =>
+        o !== it && (o.laborHrs || 0) > 0 && shared.some((t) => itemInTier(o, t)) && !shared.every((t) => itemInTier(o, t)),
+      );
+      if (differs) out.push(it);
+    }
+  }
+  return out;
+}
+
 /** Short customer-facing label for which options a line belongs to, or null
  *  when it's in all three (no tag needed). */
 export function tierMembershipLabel(item: TierItem, names: { better: string; best: string }): string | null {
