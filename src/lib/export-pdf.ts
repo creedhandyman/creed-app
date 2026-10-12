@@ -522,24 +522,57 @@ export function exportQuotePdf(opts: ExportOptions) {
   };
 
   const tierKeys: TierKey[] = ["base", "better", "best"];
+  // Line cost the way option prices count it (per-trade rate, marked-up mats).
+  const lineCost = (room: string, it: RoomItem) => {
+    const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
+    return it.laborHrs * roomRate(room) + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+  };
+  const pick = (keep: (it: RoomItem) => boolean) => categories
+    .map((c) => ({ name: c.name, items: c.items.filter(keep) }))
+    .filter((c) => c.items.length > 0);
+  const sumCats = (cats: Category[]) => cats.reduce((s, c) => s + c.items.reduce((ss, it) => ss + lineCost(c.name, it), 0), 0);
+  const optHue = (idx: number) => (idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8");
+
   const breakdownHtml = !showTiers
     ? buildBreakdown(categories, false)
-    : tierCols.map((col, idx) => {
-        // Approved quote: only the option the customer bought.
-        if (acceptedIdx >= 0 && idx !== acceptedIdx) return "";
-        const key = tierKeys[idx];
-        const cats = categories
-          .map((c) => ({ name: c.name, items: c.items.filter((it) => itemInTier(it, key)) }))
-          .filter((c) => c.items.length > 0);
-        const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
-        const first = acceptedIdx >= 0 || idx === 0;
-        return `
-<div style="${first ? "" : "page-break-before:always;"}">
-  <h2 style="color:${hue};border-color:${hue}">${esc(col.name)} — Breakdown &amp; Costs <span style="float:right">$${col.total.toFixed(2)}</span></h2>
-  <div class="dim" style="font-size:12px;margin:-4px 0 10px">Everything included in the ${esc(col.name)} option${acceptedIdx === idx ? " (approved)" : ""}. Section totals add up to this option's summary column; the option total also includes any minimum charge, trip fee, discount and tax.</div>
-  ${cats.length ? buildBreakdown(cats, true) : `<div class="dim">No work in this option.</div>`}
+    : acceptedIdx >= 0
+      // Approved quote: the picked option's complete breakdown only.
+      ? (() => {
+          const col = tierCols[acceptedIdx];
+          const cats = pick((it) => itemInTier(it, tierKeys[acceptedIdx]));
+          return `
+<h2 style="color:${optHue(acceptedIdx)};border-color:${optHue(acceptedIdx)}">${esc(col.name)} — Breakdown &amp; Costs <span style="float:right">$${col.total.toFixed(2)}</span></h2>
+<div class="dim" style="font-size:12px;margin:-4px 0 10px">The approved option's work. The option total also includes any minimum charge, trip fee, discount and tax.</div>
+${cats.length ? buildBreakdown(cats, true) : `<div class="dim">No work in this option.</div>`}`;
+        })()
+      // Not yet approved: shared work ONCE, then just what each option adds.
+      : (() => {
+          const inAll = (it: RoomItem) => itemTiers(it).length === 3;
+          const shared = pick(inAll);
+          const sharedSum = sumCats(shared);
+          const sharedHtml = shared.length ? `
+<h2>Work in Every Option — Breakdown &amp; Costs <span style="float:right">$${sharedSum.toFixed(2)}</span></h2>
+<div class="dim" style="font-size:12px;margin:-4px 0 10px">Included no matter which option you choose. Each option below adds its own work to this.</div>
+${buildBreakdown(shared, true)}` : "";
+          const optionsHtml = tierCols.map((col, idx) => {
+            const extra = pick((it) => !inAll(it) && itemInTier(it, tierKeys[idx]));
+            const extraSum = sumCats(extra);
+            const adj = Math.round((col.total - sharedSum - extraSum) * 100) / 100;
+            const hue = optHue(idx);
+            const math = [
+              shared.length ? `Shared work $${sharedSum.toFixed(2)}` : "",
+              `${esc(col.name)} work $${extraSum.toFixed(2)}`,
+              Math.abs(adj) >= 0.01 ? `charges, discount &amp; tax ${adj < 0 ? "−" : ""}$${Math.abs(adj).toFixed(2)}` : "",
+            ].filter(Boolean).join(" + ").replace("+ charges, discount &amp; tax −", "− charges, discount &amp; tax ");
+            return `
+<div style="page-break-before:always">
+  <h2 style="color:${hue};border-color:${hue}">${esc(col.name)} — What This Option Adds <span style="float:right">$${col.total.toFixed(2)}</span></h2>
+  <div style="font-size:12px;margin:-4px 0 10px;color:${hue};font-weight:600">${math} = <b>$${col.total.toFixed(2)}</b></div>
+  ${extra.length ? buildBreakdown(extra, true) : `<div class="dim" style="margin-bottom:12px">No work beyond the shared scope — this option is the work in every option.</div>`}
 </div>`;
-      }).join("");
+          }).join("");
+          return sharedHtml + optionsHtml;
+        })();
 
   // Subtotal before markup/tax
   const subtotal = cascade.subtotal;
@@ -620,7 +653,7 @@ ${showTiers ? (() => {
     </tr>
   </tbody>
 </table>
-<div class="dim" style="font-size:11px;margin:-4px 0 14px">Each column is a complete, standalone price.${markupPct > 0 ? ` Material markup (${markupPct}%) is included in each section.` : ""}${acceptedIdx >= 0 ? " The breakdown below is the approved option's work." : " Each option's full breakdown follows, one after another."}</div>`;
+<div class="dim" style="font-size:11px;margin:-4px 0 14px">Each column is a complete, standalone price.${markupPct > 0 ? ` Material markup (${markupPct}%) is included in each section.` : ""}${acceptedIdx >= 0 ? " The breakdown below is the approved option's work." : " The breakdown below lists work shared by every option once, then what each option adds."}</div>`;
 })() : `<h2>Estimate Summary</h2>
 <table>
   <thead>
