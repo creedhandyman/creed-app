@@ -154,7 +154,7 @@ export default function AppShell() {
       case "workvision":
         return <WorkVision setPage={goToPage} />;
       case "quests":
-        return <Quests />;
+        return <Quests openOps={goToOps} />;
       case "mileage":
         return <Mileage setPage={goToPage} />;
       case "map":

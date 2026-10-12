@@ -8,7 +8,7 @@ import { Icon } from "../Icon";
 import { computeQuests, parseQuestConfig, type QuestDef as Quest } from "@/lib/quests";
 import ShopQuestsManager from "../ShopQuestsManager";
 
-export default function Quests() {
+export default function Quests({ openOps }: { openOps?: (tab?: string) => void } = {}) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
@@ -24,6 +24,8 @@ export default function Quests() {
 
   // Review form
   const [rn, setRn] = useState("");
+  // Review-link card: Google listing (default) or the in-app /review page.
+  const [reviewSrc, setReviewSrc] = useState<"google" | "app">("google");
   const [rt, setRt] = useState("");
   const [rr, setRr] = useState(5);
 
@@ -396,7 +398,7 @@ export default function Quests() {
         <div>
           {/* Star hero */}
           <div style={{ background: "linear-gradient(135deg,#4a3712,#1c1409)", border: "1px solid rgba(245,180,0,.5)", borderRadius: 20, padding: 15, marginBottom: 12, textAlign: "center", boxShadow: "0 0 50px -12px rgba(245,180,0,.8), inset 0 0 42px -18px rgba(245,180,0,.6)" }}>
-            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, color: "#f5b400", lineHeight: 1, filter: "drop-shadow(0 0 16px rgba(245,180,0,.85))" }}>{reviews.length ? reviewAvg.toFixed(1) : "—"}</div>
+            <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, color: "#f5b400", lineHeight: 1, filter: "drop-shadow(0 0 16px rgba(245,180,0,.85))" }}>{reviews.length ? reviewAvg.toFixed(1) : <span style={{ fontSize: 24 }}>{t("quest.noReviewsYet")}</span>}</div>
             <div style={{ color: "#f5b400", fontSize: 17, letterSpacing: 2, margin: "4px 0", textShadow: "0 0 14px rgba(245,180,0,.8)" }}>
               {"★".repeat(Math.round(reviewAvg))}{"☆".repeat(Math.max(0, 5 - Math.round(reviewAvg)))}
             </div>
@@ -445,45 +447,88 @@ export default function Quests() {
             </div>
           ))}
 
-          {/* Collect via QR (function preserved) */}
-          <div className="cd mb" style={{ textAlign: "center", padding: 16, marginTop: 4 }}>
-            <h4 style={{ fontSize: 15, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Icon name="qr" size={15} /> {t("quest.clientReviewQr")}
-            </h4>
-            <div style={{ background: "#fff", display: "inline-block", padding: 12, borderRadius: 8, marginBottom: 8 }}>
-              <QRCodeSVG
-                value={typeof window !== "undefined" ? `${window.location.origin}/review${user.org_id ? "?org=" + user.org_id : ""}` : "/review"}
-                size={140}
-                level="M"
-              />
-            </div>
-            <p className="dim" style={{ fontSize: 13 }}>{t("quest.scanToReview")}</p>
-            <button
-              className="bo"
-              onClick={() => {
-                const url = `${window.location.origin}/review${user.org_id ? "?org=" + user.org_id : ""}`;
-                navigator.clipboard.writeText(url);
-                useStore.getState().showToast(t("quest.reviewLinkCopied"), "success");
-              }}
-              style={{ fontSize: 14, padding: "4px 12px", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 6 }}
-            >
-              <Icon name="link" size={13} /> {t("quest.copyLink")}
-            </button>
-          </div>
+          {/* Collect reviews: Google (the business's public listing) or the
+              in-app /review page (feeds this tab + the review quests). */}
+          {(() => {
+            const appUrl = typeof window !== "undefined" ? `${window.location.origin}/review${user.org_id ? "?org=" + user.org_id : ""}` : "/review";
+            const googleUrl = (org?.google_review_url || "").trim();
+            const isAdmin = user.role === "owner" || user.role === "manager";
+            // Crew can't set the Google link, so without one they just get the in-app page.
+            const src = reviewSrc === "google" && !googleUrl && !isAdmin ? "app" : reviewSrc;
+            const url = src === "google" ? googleUrl : appUrl;
+            const share = async () => {
+              const text = src === "google"
+                ? t("quest.reviewShareGoogle")
+                : t("quest.reviewShareApp");
+              try {
+                if (navigator.share) { await navigator.share({ title: org?.name || "Review", text, url }); return; }
+              } catch { return; /* user closed the share sheet */ }
+              navigator.clipboard.writeText(`${text} ${url}`);
+              useStore.getState().showToast(t("quest.reviewLinkCopied"), "success");
+            };
+            const segBtn = (key: "google" | "app", label: string) => (
+              <button
+                onClick={() => setReviewSrc(key)}
+                style={{ flex: 1, padding: "8px 6px", borderRadius: 10, border: 0, cursor: "pointer", fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".04em", textTransform: "uppercase", background: src === key ? "#f5b400" : "transparent", color: src === key ? "#1c1409" : "var(--color-dim)" }}
+              >
+                {label}
+              </button>
+            );
+            return (
+              <div className="cd mb" style={{ padding: 14, marginTop: 4, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "Oswald", fontWeight: 600, fontSize: 16, textTransform: "uppercase", letterSpacing: ".05em", alignSelf: "stretch", justifyContent: "center" }}>
+                  <Icon name="qr" size={16} /> {t("quest.collectReviews")}
+                </div>
+                <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 13, background: "rgba(255,255,255,.04)", border: `1px solid ${surfBorder}`, alignSelf: "stretch" }}>
+                  {(googleUrl || isAdmin) && segBtn("google", t("quest.reviewGoogle"))}
+                  {segBtn("app", t("quest.reviewInApp"))}
+                </div>
+                {url ? (
+                  <>
+                    <div style={{ background: "#fff", padding: 12, borderRadius: 12, lineHeight: 0 }}>
+                      <QRCodeSVG value={url} size={168} level="M" />
+                    </div>
+                    <p className="dim" style={{ fontSize: 13, textAlign: "center", margin: 0, maxWidth: 300 }}>
+                      {src === "google" ? t("quest.scanGoogle") : t("quest.scanToReview")}
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7, alignSelf: "stretch" }}>
+                      <button className="bo" onClick={() => { navigator.clipboard.writeText(url); useStore.getState().showToast(t("quest.reviewLinkCopied"), "success"); }}
+                        style={{ fontSize: 13, padding: "8px 4px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                        <Icon name="link" size={13} /> {t("quest.copy")}
+                      </button>
+                      <button className="bo" onClick={share}
+                        style={{ fontSize: 13, padding: "8px 4px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                        <Icon name="share" size={13} /> {t("quest.share")}
+                      </button>
+                      <button className="bo" onClick={() => window.open(url, "_blank", "noopener")}
+                        style={{ fontSize: 13, padding: "8px 4px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                        <Icon name="external" size={13} /> {t("quest.open")}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ textAlign: "center", padding: "6px 4px 2px" }}>
+                    <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>{t("quest.noGoogleLink")}</div>
+                    <button className="bb" onClick={() => openOps?.("settings")} style={{ fontSize: 13, padding: "7px 14px" }}>{t("quest.addGoogleLink")}</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Manual add (function preserved) */}
           <div className="cd mb">
             <h4 style={{ fontSize: 15, marginBottom: 8 }}>{t("quest.addReview")}</h4>
             <div className="row mb">
               <input value={rn} onChange={(e) => setRn(e.target.value)} placeholder={t("quest.client")} style={{ flex: 1 }} />
-              <select value={rr} onChange={(e) => setRr(Number(e.target.value))} style={{ width: 60 }}>
+              <select value={rr} onChange={(e) => setRr(Number(e.target.value))} style={{ width: 76, flex: "0 0 76px" }}>
                 {[5, 4, 3, 2, 1].map((x) => (
                   <option key={x} value={x}>{x}★</option>
                 ))}
               </select>
             </div>
             <textarea value={rt} onChange={(e) => setRt(e.target.value)} placeholder={t("quest.reviewPlaceholder")} style={{ height: 50, marginBottom: 6 }} />
-            <button className="bb" onClick={addReview} style={{ fontSize: 13 }}>{t("common.add")}</button>
+            <button className="bb" onClick={addReview} style={{ fontSize: 13, width: "100%" }}>{t("common.add")}</button>
           </div>
         </div>
       )}
