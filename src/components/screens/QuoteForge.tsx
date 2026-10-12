@@ -12,6 +12,7 @@ import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material, JobDiscount } from "@/lib/types";
 import { itemInTier, itemTiers, sharedSuppliesLines, type TierKey } from "@/lib/tiers";
 import { buildAssistJobContext, type AssistInspection } from "@/lib/assist-context";
+import { applyAssistOps, optionDiffSummary, type AssistAdd, type AssistPatch } from "@/lib/assist-ops";
 import {
   readPdf,
   renderPdfPages,
@@ -408,6 +409,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // another tier's selection. Tiers stack (cumulative), so lower tiers show as
   // inherited + locked when you're editing a higher one.
   const [editTier, setEditTier] = useState<"base" | "better" | "best">("base");
+  // An Undo snapshot belongs to the quote it was taken on.
+  useEffect(() => { setAssistUndo(null); }, [editingId, editJobId]);
+  // AI Assist option scope: "all", or one option — then only that option can
+  // change (enforced in lib/assist-ops.ts, not left to the model).
+  const [assistScope, setAssistScope] = useState<"all" | TierKey>("all");
+  // State before the last AI Assist apply, for the Undo button.
+  const [assistUndo, setAssistUndo] = useState<{
+    rooms: Room[]; tieredQuote: boolean; tierNames: { better: string; best: string };
+    laborRate: number | null; discount: JobDiscount | null; minLaborHours: number | null; taxMode: TaxMode | null;
+  } | null>(null);
   // Guide-tab persistent state — lifted out of GuideTab so adds survive
   // save+reload. Bernard hit the bug where new shopping-list items
   // disappeared on save: GuideTab held them in local component state that
@@ -2853,7 +2864,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                   orgTaxMode: resolveTaxMode(org?.tax_mode),
                   options: { on: tieredQuote, names: { base: "Base", better: tierNames.better, best: tierNames.best } },
                 };
-                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" },\n  "setMinLaborHours": 2,\n  "setTaxMode": "materials"\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\`, \`setDiscount\`, \`setMinLaborHours\`, \`setTaxMode\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  - "setMinLaborHours": <number> — per-quote override of the minimum-billable-labor-hours floor. The org has an org-wide default (shown in CURRENT PRICING META as minLaborHours when set on this quote, otherwise the floor is inherited from org settings). Examples:\n      "set the minimum to 2 hours for this job" → setMinLaborHours: 2\n      "drop the minimum to 0.5 hours" → setMinLaborHours: 0.5\n      "remove the minimum on this quote" / "no minimum on this job" → setMinLaborHours: 0\n      "reset minimum to the org default" / "inherit the org minimum" → setMinLaborHours: null\n    Numeric value 0 means "disable the floor for THIS quote" (still recorded as an override). null means "inherit the org default again".\n  - "setTaxMode": "total" | "materials" | "none" — per-quote override of how tax applies. CURRENT PRICING META exposes both the per-quote override (taxMode, null when inheriting) and the org default (orgTaxMode). Examples:\n      "tax materials only" / "only tax the materials" → setTaxMode: "materials"\n      "tax everything" / "tax labor and materials" → setTaxMode: "total"\n      "no tax on this one" / "tax-exempt" / "skip the tax" → setTaxMode: "none"\n      "reset tax mode to default" / "inherit the org tax setting" → setTaxMode: null\n    null clears the per-quote override (inherits the org default).\n  OMIT these fields entirely if the user did not mention rate, discount, minimum hours, or tax mode. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nGOOD-BETTER-BEST OPTIONS. A quote can offer the customer three options (keys "base", "better", "best"; CURRENT PRICING META.options gives whether they're on and their display names — the user may call an option by its display name). Every line belongs to a SET of options via "tiers" (e.g. ["base","better","best"] = in every option, ["best"] = Best only). Options are MEMBERSHIP sets, NOT cumulative: each option's price is exactly the lines in its set, so each option must be a complete, standalone scope.\n  - add[] entries may include "tiers": [...]. update[] patches may include "tiers": [...] to move a line between options.\n  - "setOptions": true | false — turn options on/off. Include true whenever the user describes different options and they're off.\n  - "setTierNames": { "better": "...", "best": "..." } — rename the Better/Best options (Base can't be renamed). Only when asked.\n  - When the user describes what each option includes, restructure with tiers: shared work goes in all three; an upgrade that REPLACES lower-option work goes only in the higher option(s) and the replaced line is removed from those options. Example: "Base repairs the screen door, Better adds new hardware, Best replaces the door" → repair line tiers ["base","better"], hardware line ["better"], new-door line ["best"].\n  - Two lines for the same task in different options (standard vs premium) must have distinguishable details, e.g. "Living Room — Paint walls (premium paint)".\n  - SUPPLIES PER OPTION: when options are on and a trade's work differs between options, a materials-only supplies line (paint, primer, caulk, tape, rollers…) must NOT be shared across those options. Give EACH option its own supplies line sized to that option's own scope (a full repaint needs far more paint/primer than touch-ups), with the option in the detail — e.g. "Whole Property — Painting Supplies & Paint (Best)" tiers ["best"]. Replace (remove, or narrow the tiers of) any existing shared supplies line instead of leaving it in place. Do this automatically whenever you restructure options — the user shouldn't have to ask.\n  - Never leave an option with no lines. A line added while options are on, with no option named, goes in all three. Don't change tiers when the request isn't about options. Omit "tiers" entirely when options stay off.\n\nJOB CONTEXT (when present in the user message) is read-only background: the saved INSPECTION (room sizes + what the tech found), WORK ORDER state, JOB NOTES and the CUSTOMER'S ORIGINAL REQUEST. Use it to do the edit right:\n  - Size area-based work (paint, flooring, drywall) from the inspection's room dimensions/sqft instead of guessing; only say "confirm on site" when the inspection has no size for that room.\n  - Keep rewritten lines faithful to what the inspection found (condition, location, notes).\n  - A work-order task the crew already FINISHED is done work: don't remove, rescope or move that line out of an option unless the user explicitly asks.\n  - Don't add lines for inspection findings, hand-added tasks or notes unless the user's request calls for them — they are context, not instructions.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
+                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" },\n  "setMinLaborHours": 2,\n  "setTaxMode": "materials"\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\`, \`setDiscount\`, \`setMinLaborHours\`, \`setTaxMode\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  - "setMinLaborHours": <number> — per-quote override of the minimum-billable-labor-hours floor. The org has an org-wide default (shown in CURRENT PRICING META as minLaborHours when set on this quote, otherwise the floor is inherited from org settings). Examples:\n      "set the minimum to 2 hours for this job" → setMinLaborHours: 2\n      "drop the minimum to 0.5 hours" → setMinLaborHours: 0.5\n      "remove the minimum on this quote" / "no minimum on this job" → setMinLaborHours: 0\n      "reset minimum to the org default" / "inherit the org minimum" → setMinLaborHours: null\n    Numeric value 0 means "disable the floor for THIS quote" (still recorded as an override). null means "inherit the org default again".\n  - "setTaxMode": "total" | "materials" | "none" — per-quote override of how tax applies. CURRENT PRICING META exposes both the per-quote override (taxMode, null when inheriting) and the org default (orgTaxMode). Examples:\n      "tax materials only" / "only tax the materials" → setTaxMode: "materials"\n      "tax everything" / "tax labor and materials" → setTaxMode: "total"\n      "no tax on this one" / "tax-exempt" / "skip the tax" → setTaxMode: "none"\n      "reset tax mode to default" / "inherit the org tax setting" → setTaxMode: null\n    null clears the per-quote override (inherits the org default).\n  OMIT these fields entirely if the user did not mention rate, discount, minimum hours, or tax mode. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nGOOD-BETTER-BEST OPTIONS. A quote can offer the customer three options (keys "base", "better", "best"; CURRENT PRICING META.options gives whether they're on and their display names — the user may call an option by its display name). Every line belongs to a SET of options via "tiers" (e.g. ["base","better","best"] = in every option, ["best"] = Best only). Options are MEMBERSHIP sets, NOT cumulative: each option's price is exactly the lines in its set, so each option must be a complete, standalone scope.\n  - add[] entries may include "tiers": [...]. To change a line's options use DELTAS in its update patch: "tiersAdd": ["best"] / "tiersRemove": ["base"] — never restate the whole set.\n  - MINIMAL CHANGES: touch ONLY the lines the request is about. Every other line keeps its options, hours, materials and wording exactly — do not return update/remove entries for them. On a big quote an unrequested change to another option is a serious error.\n  - OPTION SCOPE (when the user message names one): describe what that option needs with normal add/update/remove. Edit a line's content directly even if it's shared — the app splits it so only the scoped option gets the change; "remove" takes the line out of that option only. Alternates for the scoped option (e.g. LVP instead of patching tile, a full repaint instead of touch-ups) = add the new line + remove the line it replaces.\n  - "setOptions": true | false — turn options on/off. Include true whenever the user describes different options and they're off.\n  - "setTierNames": { "better": "...", "best": "..." } — rename the Better/Best options (Base can't be renamed). Only when asked.\n  - When the user describes what each option includes, restructure with tiers: shared work goes in all three; an upgrade that REPLACES lower-option work goes only in the higher option(s) and the replaced line is removed from those options. Example: "Base repairs the screen door, Better adds new hardware, Best replaces the door" → repair line tiers ["base","better"], hardware line ["better"], new-door line ["best"].\n  - Two lines for the same task in different options (standard vs premium) must have distinguishable details, e.g. "Living Room — Paint walls (premium paint)".\n  - SUPPLIES PER OPTION: when options are on and a trade's work differs between options, a materials-only supplies line (paint, primer, caulk, tape, rollers…) must NOT be shared across those options. Give EACH option its own supplies line sized to that option's own scope (a full repaint needs far more paint/primer than touch-ups), with the option in the detail — e.g. "Whole Property — Painting Supplies & Paint (Best)" tiers ["best"]. Replace (remove, or narrow the tiers of) any existing shared supplies line instead of leaving it in place. Do this automatically whenever you restructure options — the user shouldn't have to ask.\n  - Never leave an option with no lines. A line added while options are on, with no option named, goes in all three. Don't change tiers when the request isn't about options. Omit "tiers" entirely when options stay off.\n\nJOB CONTEXT (when present in the user message) is read-only background: the saved INSPECTION (room sizes + what the tech found), WORK ORDER state, JOB NOTES and the CUSTOMER'S ORIGINAL REQUEST. Use it to do the edit right:\n  - Size area-based work (paint, flooring, drywall) from the inspection's room dimensions/sqft instead of guessing; only say "confirm on site" when the inspection has no size for that room.\n  - Keep rewritten lines faithful to what the inspection found (condition, location, notes).\n  - A work-order task the crew already FINISHED is done work: don't remove, rescope or move that line out of an option unless the user explicitly asks.\n  - Don't add lines for inspection findings, hand-added tasks or notes unless the user's request calls for them — they are context, not instructions.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
                 // Read-only job context: the inspection (this session's, the
                 // quote's saved copy, or the newest inspection at this
                 // address), work-order state, job notes, original request.
@@ -2885,8 +2896,13 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                   jobNotes: typeof savedBlob.jobNotes === "string" ? savedBlob.jobNotes : null,
                   leadDescription: typeof savedBlob.leadDescription === "string" ? savedBlob.leadDescription : null,
                 });
+                const activeScope: TierKey | null = tieredQuote && assistScope !== "all" ? assistScope : null;
+                const scopeName = activeScope ? (activeScope === "base" ? "Base" : tierNames[activeScope]) : "";
                 const userMsg =
                   `Property: ${prop || "this property"}\n\n` +
+                  (activeScope
+                    ? `OPTION SCOPE: this request is ONLY about the "${scopeName}" option (key "${activeScope}"). Change only what that option needs; the app will keep every other option exactly as it is.\n\n`
+                    : "") +
                   (jobContext ? `JOB CONTEXT (reference only — not quote lines):\n${jobContext}\n\n` : "") +
                   `EXISTING QUOTE LINE ITEMS (${existingItemsContext.length}):\n` +
                   (existingItemsContext.length
@@ -2909,7 +2925,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                     output_config: { effort: "high" },
                     // Sized for Sonnet's tokenizer (~30% more tokens than
                     // Haiku's for the same JSON).
-                    max_tokens: 8000,
+                    // Big tiered quotes (100 lines, 3 options) need room.
+                    max_tokens: 16000,
                     messages: [{ role: "user", content: [{ type: "text", text: userMsg }] }],
                     // Cache the big static blocks (engine rules + edit-mode
                     // spec) first; volatile per-quote header last so it can't
@@ -2939,8 +2956,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                 } else {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const parsed = JSON.parse(match[0]) as {
-                    add?: Array<{ trade?: string; detail: string; condition?: string; comment?: string; laborHrs?: number; materials?: Array<{ n: string; c: number }>; sqft?: number; tiers?: unknown }>;
-                    update?: Array<{ key: string; patch: Partial<RoomItem & { trade?: string; sqft?: number }> }>;
+                    add?: AssistAdd[];
+                    update?: Array<{ key: string; patch: AssistPatch }>;
                     remove?: Array<{ key: string }>;
                     setLaborRate?: number | null;
                     setDiscount?: { type?: string; value?: number; label?: string } | null;
@@ -2949,119 +2966,19 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                     setOptions?: boolean;
                     setTierNames?: { better?: unknown; best?: unknown };
                   };
-                  // Keep only valid option keys, in Base→Best order; an
-                  // empty/invalid set means "leave membership alone".
-                  const cleanTiers = (v: unknown): TierKey[] | undefined => {
-                    if (!Array.isArray(v)) return undefined;
-                    const set = (["base", "better", "best"] as TierKey[]).filter((k) => v.includes(k));
-                    return set.length ? set : undefined;
-                  };
-                  let tiersTouched = 0;
                   const adds = parsed.add ?? [];
                   const updates = parsed.update ?? [];
                   const removes = parsed.remove ?? [];
-
-                  // Apply in REMOVE → UPDATE → ADD order. Removing first
-                  // means an update that targets a key the user also asked
-                  // to remove just no-ops (instead of resurrecting the
-                  // item). Adding last means new items can land in trade
-                  // buckets that an update may have just created.
-                  let working = rooms;
-                  const removeKeys = new Set(removes.map((r) => r.key));
-                  if (removeKeys.size > 0) {
-                    working = working
-                      .map((r) => ({ ...r, items: r.items.filter((it) => !removeKeys.has(it.id)) }))
-                      .filter((r) => r.items.length > 0);
-                  }
-                  if (updates.length > 0) {
-                    // Build a key → (roomIdx, itemIdx) lookup once.
-                    const idx = new Map<string, { ri: number; ii: number }>();
-                    working.forEach((r, ri) => r.items.forEach((it, ii) => idx.set(it.id, { ri, ii })));
-                    // Bucket moves get queued so we don't mutate the array
-                    // we're iterating. Each move = (oldRi, ii, newTrade,
-                    // patchedItem).
-                    const moves: Array<{ oldRi: number; ii: number; newTrade: string; patched: RoomItem }> = [];
-                    const next = working.map((r) => ({ ...r, items: [...r.items] }));
-                    for (const u of updates) {
-                      const pos = idx.get(u.key);
-                      if (!pos) {
-                        console.warn(`[AIAssist] update key not found: ${u.key}`);
-                        continue;
-                      }
-                      const cur = next[pos.ri].items[pos.ii];
-                      const { trade: newTrade, tiers: rawTiers, ...itemPatch } = (u.patch || {}) as Partial<RoomItem & { trade?: string; sqft?: number; tiers?: unknown }>;
-                      const patched: RoomItem = {
-                        ...cur,
-                        ...itemPatch,
-                      } as RoomItem;
-                      const nextTiers = cleanTiers(rawTiers);
-                      if (nextTiers) { patched.tiers = nextTiers; tiersTouched++; }
-                      // A rewritten task is a new scope, not the AI's original
-                      // estimate — drop aiHrs so calibration doesn't grade the
-                      // owner's scope change as model error (hours-only patches
-                      // keep it: those are corrections the grading should see).
-                      if (typeof itemPatch.detail === "string" && itemPatch.detail !== cur.detail) {
-                        delete (patched as { aiHrs?: number }).aiHrs;
-                      }
-                      if (newTrade && newTrade !== next[pos.ri].name) {
-                        moves.push({ oldRi: pos.ri, ii: pos.ii, newTrade, patched });
-                      } else {
-                        next[pos.ri].items[pos.ii] = patched;
-                      }
-                    }
-                    // Apply moves: remove from old room, append to (or
-                    // create) new trade bucket.
-                    if (moves.length > 0) {
-                      // Sort descending by ii so splices don't shift earlier
-                      // indices in the same room.
-                      const byRoom = new Map<number, number[]>();
-                      moves.forEach((m, mi) => {
-                        if (!byRoom.has(m.oldRi)) byRoom.set(m.oldRi, []);
-                        byRoom.get(m.oldRi)!.push(mi);
-                      });
-                      byRoom.forEach((mIndices, ri) => {
-                        const sorted = mIndices.sort((a, b) => moves[b].ii - moves[a].ii);
-                        sorted.forEach((mi) => {
-                          next[ri].items.splice(moves[mi].ii, 1);
-                        });
-                      });
-                      moves.forEach((m) => {
-                        const target = next.find((r) => r.name === m.newTrade);
-                        if (target) {
-                          target.items.push(m.patched);
-                        } else {
-                          next.push({ name: m.newTrade, items: [m.patched] });
-                        }
-                      });
-                    }
-                    working = next.filter((r) => r.items.length > 0);
-                  }
-                  if (adds.length > 0) {
-                    const newItems: Array<{ trade: string; item: RoomItem }> = adds.map((a) => ({
-                      trade: a.trade || "Carpentry",
-                      item: {
-                        id: crypto.randomUUID().slice(0, 8),
-                        detail: a.detail,
-                        condition: (a.condition as string) || "-",
-                        comment: a.comment || a.detail,
-                        laborHrs: a.laborHrs ?? 1,
-                        materials: a.materials?.length ? a.materials : [{ n: "Materials", c: 0 }],
-                        ...(a.sqft ? { sqft: a.sqft } : {}),
-                        ...(cleanTiers(a.tiers) ? { tiers: cleanTiers(a.tiers) } : {}),
-                      } as RoomItem,
-                    }));
-                    tiersTouched += newItems.filter((n) => n.item.tiers).length;
-                    const next = working.map((r) => ({ ...r, items: [...r.items] }));
-                    newItems.forEach(({ trade, item }) => {
-                      const target = next.find((r) => r.name === trade);
-                      if (target) {
-                        target.items.push(item);
-                      } else {
-                        next.push({ name: trade, items: [item] });
-                      }
-                    });
-                    working = next;
-                  }
+                  // Undo snapshot (rooms + everything an Assist call can set).
+                  setAssistUndo({ rooms, tieredQuote, tierNames, laborRate, discount, minLaborHours, taxMode });
+                  // Apply in REMOVE → UPDATE → ADD order; with a scoped option
+                  // only that option can change (lib/assist-ops.ts enforces it).
+                  const applied = applyAssistOps(rooms, { add: adds, update: updates, remove: removes }, {
+                    scope: activeScope,
+                    newId: () => crypto.randomUUID().slice(0, 8),
+                  });
+                  const working = applied.rooms;
+                  const tiersTouched = applied.tiersTouched;
 
                   // skipCaps: existing items in `working` were already
                   // user-reviewed (loaded from save). Re-applying the
@@ -3129,7 +3046,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
 
                   // Good-Better-Best. Lines given an option set while options
                   // are off would silently do nothing, so that turns them on.
-                  const optsOn = parsed.setOptions === true || parsed.setOptions === false
+                  const optsOn = parsed.setOptions === true || (parsed.setOptions === false && !activeScope)
                     ? parsed.setOptions
                     : (tiersTouched > 0 && !tieredQuote ? true : undefined);
                   if (optsOn !== undefined && optsOn !== tieredQuote) {
@@ -3153,6 +3070,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                   if (adds.length) summary.push(`+${adds.length} added`);
                   if (updates.length) summary.push(`${updates.length} updated`);
                   if (removes.length) summary.push(`-${removes.length} removed`);
+                  if (applied.forked) summary.push(`${applied.forked} split off for ${scopeName}`);
+                  if (applied.blocked) summary.push(`${applied.blocked} change${applied.blocked === 1 ? "" : "s"} to other options blocked`);
+                  // Per-option line changes, so an unexpected change to an
+                  // option the owner didn't mean to touch is visible at once.
+                  const optDiff = (optsOn ?? tieredQuote) ? optionDiffSummary(rooms, validated, tierNames) : "";
+                  if (optDiff) summary.push(optDiff);
                   // eslint-disable-next-line no-console
                   console.log(`[QuoteForge.AIAssist] ${summary.join(", ") || "no changes"}; rooms now ${validated.length}/${validated.reduce((n, r) => n + r.items.length, 0)}.`);
                   if (summary.length === 0) {
@@ -3177,6 +3100,54 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             {parsing ? "..." : "Apply"}
           </button>
         </div>
+        {tieredQuote && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            <span className="dim" style={{ fontSize: 12 }}>Change:</span>
+            {([
+              { key: "all", name: "All options", hue: "#8a8a99" },
+              { key: "base", name: "Base", hue: "#8a8a99" },
+              { key: "better", name: tierNames.better, hue: "#2E75B6" },
+              { key: "best", name: tierNames.best, hue: "#9d4edd" },
+            ] as const).map((o) => {
+              const on = assistScope === o.key;
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => setAssistScope(o.key)}
+                  style={{
+                    fontSize: 12, padding: "3px 10px", borderRadius: 999, cursor: "pointer",
+                    border: on ? `2px solid ${o.hue}` : `1px solid ${o.hue}55`,
+                    background: on ? `${o.hue}2e` : "transparent", color: on ? "#fff" : "var(--color-text-muted, #aaa)",
+                  }}
+                >
+                  {o.name}
+                </button>
+              );
+            })}
+            <span className="dim" style={{ fontSize: 11, flexBasis: "100%" }}>
+              {assistScope === "all"
+                ? "AI may change any option."
+                : `Only ${assistScope === "base" ? "Base" : tierNames[assistScope]} will change — other options stay exactly as they are.`}
+            </span>
+          </div>
+        )}
+        {assistUndo && !parsing && (
+          <button
+            type="button"
+            className="bo"
+            style={{ fontSize: 12, padding: "3px 10px", marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }}
+            onClick={() => {
+              const u = assistUndo;
+              setRooms(u.rooms); setTieredQuote(u.tieredQuote); setTierNames(u.tierNames);
+              setLaborRate(u.laborRate); setDiscount(u.discount); setMinLaborHours(u.minLaborHours); setTaxMode(u.taxMode);
+              setAssistUndo(null);
+              useStore.getState().showToast("Undid the last AI Assist change", "success");
+            }}
+          >
+            <Icon name="undo" size={12} /> Undo last AI change
+          </button>
+        )}
         {parseStatus && <div className="dim" style={{ fontSize: 14, marginTop: 4 }}>{parseStatus}</div>}
       </div>
 

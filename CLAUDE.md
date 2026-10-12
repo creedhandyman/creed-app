@@ -957,6 +957,20 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   hand-added (`custom`) tasks, `jobNotes`, `leadDescription`. Text only, no
   photos (cost). Prompt: size area work from inspection dims, don't rescope
   finished tasks, context ≠ instructions.
+  **AI Assist option scope + Undo (2026-10-12)** — after a 99-line TrueBuilt
+  quote came back with Better < Base (the AI dropped 8 unrelated lines out of
+  Better) and no real alternates: the apply step now lives in
+  `src/lib/assist-ops.ts` `applyAssistOps` (tested, `assist-ops.test.ts`). A
+  **Change: All / Base / Better / Best** chip row in the AI Assist card scopes
+  an edit to ONE option, enforced in code: adds → that option only; remove →
+  leaves that option (deleted only if in no other); a content edit to a
+  SHARED line FORKS it (edited copy in the scoped option, original untouched
+  elsewhere); membership changes to other options are dropped (`blocked`).
+  Unscoped edits use `tiersAdd`/`tiersRemove` deltas (a full `tiers` set is
+  still accepted); a line can't end up in no option. Every apply toasts a
+  per-option diff (`optionDiffSummary`, e.g. "Best +2 −1 ~1") and snapshots
+  for **Undo last AI change** (cleared when the quote changes). Prompt adds a
+  MINIMAL CHANGES rule; max_tokens 16000 for big quotes.
 
 - **Signed quotes print the customer's signature**: the /status "Approve &
   Sign" signature (typed name, or the pad's PNG — dark ink since this change;
