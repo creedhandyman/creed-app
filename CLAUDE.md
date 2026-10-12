@@ -979,6 +979,20 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `defaultAddTiers: [editTier]` (the prompt says ORGANIZING: <option> and to
   use all three only when the user says every option needs it).
 
+- **Edit-draft autosave for SAVED quotes (2026-10-12)**: the new-quote draft
+  (`c_qf_draft_<uid>`) never covered editing an existing job — edits lived
+  only on screen until Update/Send. Now each saved quote gets a phone-only
+  draft `c_qf_edit_<uid>_<jobId>` (`{v, savedAt, base, state}`), written
+  600ms after an edit and on background/pagehide, only while the screen
+  differs from `editBaselineRef` (the snapshot captured on the first render
+  after load or set right after a save; `editSnapshot()` drops the work
+  order's session-only `src`). Reopening the quote shows a Resume / Discard
+  card (writes pause until you choose); `stale` = the job's saved blob hash
+  (`hashText`) changed since the draft was made. A successful save drops the
+  draft; drafts expire after 14 days. Deliberately NOT a server auto-save —
+  half-done edits would reach the customer's /status page + PDF and a signed
+  quote would read as revised.
+
 - **Signed quotes print the customer's signature**: the /status "Approve &
   Sign" signature (typed name, or the pad's PNG — dark ink since this change;
   older pad signatures were white ink, so the PDF applies `brightness(0)`)

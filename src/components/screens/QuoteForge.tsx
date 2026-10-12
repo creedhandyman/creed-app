@@ -496,6 +496,83 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     } catch { /* */ }
   };
 
+  /* ── Edit-draft autosave (existing quotes) ────────────────────────────
+     Editing a SAVED quote used to live only on screen until Update/Send — the
+     back arrow, a closed app or the phone killing it in the background lost
+     everything. Each saved quote now gets its own phone-only draft, written as
+     you edit; reopening that quote offers Resume / Discard. Nothing reaches
+     the job (or the customer's page) until Update/Send, and a successful save
+     clears the draft. */
+  const EDIT_DRAFT_TTL = 14 * 24 * 3600 * 1000;
+  const editDraftKey = (id: string) => `c_qf_edit_${user?.id || "anon"}_${id}`;
+  // The saved state the editor loaded (or last saved) — a draft is only kept
+  // while the screen differs from it.
+  const editBaselineRef = useRef<{ id: string; snap: string } | null>(null);
+  // Fingerprint of the job's saved blob at load, to flag a draft made against
+  // an older version (someone saved the quote elsewhere since).
+  const editLoadedHashRef = useRef<string>("");
+  const [editDraftOffer, setEditDraftOffer] = useState<{ id: string; savedAt: number; stale: boolean } | null>(null);
+  const hashText = (s: string) => {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return `${s.length}:${h}`;
+  };
+  const editSnapshot = () => JSON.stringify({
+    prop, client, customerId, addressId, rooms, workers, jobPhotos,
+    // `src` is the sync's session-only baseline, not an edit.
+    customWorkOrder: customWorkOrder ? customWorkOrder.map(({ src: _src, ...s }) => s) : null,
+    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays,
+    customTools, customShop, checkedTools, checkedShop, removedGuideShop,
+  });
+  const writeEditDraft = (id: string, snap: string) => {
+    try { localStorage.setItem(editDraftKey(id), JSON.stringify({ v: 1, savedAt: Date.now(), base: editLoadedHashRef.current, state: JSON.parse(snap) })); } catch { /* */ }
+  };
+  const dropEditDraft = (id: string) => { try { localStorage.removeItem(editDraftKey(id)); } catch { /* */ } };
+  const resumeEditDraft = () => {
+    if (!editDraftOffer) return;
+    try {
+      const raw = localStorage.getItem(editDraftKey(editDraftOffer.id));
+      const d = raw ? JSON.parse(raw)?.state : null;
+      if (d) {
+        setProp(d.prop || ""); setClient(d.client || "");
+        setCustomerId(d.customerId || undefined); setAddressId(d.addressId || undefined);
+        setRooms(d.rooms || []); setWorkers(d.workers || []); setJobPhotos(d.jobPhotos || []);
+        woKnownIdsRef.current = quoteItemIds(d.rooms || []);
+        setCustomWorkOrder(d.customWorkOrder ?? null);
+        setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
+        setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
+        setTieredQuote(!!d.tieredQuote); setTierNames(d.tierNames || { better: "Better", best: "Best" });
+        setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
+        setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
+        setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
+        setCheckedTools(d.checkedTools || []); setCheckedShop(d.checkedShop || []);
+        setRemovedGuideShop(d.removedGuideShop || []);
+        useStore.getState().showToast("Unsaved changes restored — tap Update to save them", "success");
+      }
+    } catch { /* */ }
+    setEditDraftOffer(null);
+  };
+  const discardEditDraft = () => {
+    if (editDraftOffer) dropEditDraft(editDraftOffer.id);
+    setEditDraftOffer(null);
+  };
+  // Write the draft as you edit (debounced). Paused while a Resume/Discard
+  // choice is pending so the older draft isn't overwritten before you pick.
+  useEffect(() => {
+    if (!editingId || !mode || !DRAFTABLE_MODES.includes(mode) || savingRef.current) return;
+    const snap = editSnapshot();
+    const base = editBaselineRef.current;
+    // First render after a load = the saved version. Captured even while the
+    // Resume/Discard choice is open, so a resumed draft still counts as unsaved.
+    if (!base || base.id !== editingId) { editBaselineRef.current = { id: editingId, snap }; return; }
+    if (editDraftOffer) return;
+    if (snap === base.snap) { dropEditDraft(editingId); return; } // back to the saved version
+    const id = editingId;
+    const t = setTimeout(() => writeEditDraft(id, snap), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, prop, client, customerId, addressId, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, editingId, editDraftOffer]);
+
   // Show the "resume" card whenever we land on the hub with a saved draft.
   useEffect(() => {
     if (mode !== null || editJobId) return;
@@ -520,6 +597,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // closure so the once-registered listeners always see current state.
   const draftFlushRef = useRef<() => void>(() => {});
   draftFlushRef.current = () => {
+    // Saved quote being edited: write its draft now (the debounce may not fire).
+    if (editingId && mode && DRAFTABLE_MODES.includes(mode) && !savingRef.current && !editDraftOffer) {
+      const snap = editSnapshot();
+      const base = editBaselineRef.current;
+      if (base && base.id === editingId && snap !== base.snap) writeEditDraft(editingId, snap);
+    }
     if (!draftIsSaveable()) return;
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(collectDraft())); } catch { /* */ }
   };
@@ -651,6 +734,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     } catch {
       // rooms parse failed, start empty
     }
+
+    // Edit-draft: this load is the new baseline; offer any unsaved draft.
+    editBaselineRef.current = null;
+    editLoadedHashRef.current = hashText(typeof job.rooms === "string" ? job.rooms : JSON.stringify(job.rooms ?? ""));
+    setEditDraftOffer(null);
+    try {
+      const raw = localStorage.getItem(editDraftKey(job.id));
+      const d = raw ? JSON.parse(raw) : null;
+      if (d && typeof d.savedAt === "number" && Date.now() - d.savedAt < EDIT_DRAFT_TTL && d.state) {
+        setEditDraftOffer({ id: job.id, savedAt: d.savedAt, stale: !!d.base && d.base !== editLoadedHashRef.current });
+      } else if (raw) {
+        dropEditDraft(job.id); // expired or unreadable
+      }
+    } catch { /* */ }
 
     setMode("edit");
     clearEditJob?.();
@@ -1745,6 +1842,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     }
     useStore.getState().showToast((editingId ? "Job updated: " : "Job created: ") + prop, "success");
 
+    // Saved: the screen IS the saved version now — drop its edit draft and
+    // make this the new baseline.
+    if (savedId) {
+      dropEditDraft(savedId);
+      editBaselineRef.current = { id: savedId, snap: editSnapshot() };
+      editLoadedHashRef.current = hashText(jobData.rooms);
+    }
     if (opts?.stay && savedId) {
       // Saved — now it's an existing quote; keep editing it in place.
       clearDraft();
@@ -2419,6 +2523,25 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           ${rate}/hr{laborRate && laborRate > 0 ? " (override)" : ""}
         </span>
       </div>
+
+      {editDraftOffer && editDraftOffer.id === editingId && (
+        <div className="cd mb" style={{ border: "1px solid rgba(245,180,0,.55)", background: "rgba(245,180,0,.08)" }}>
+          <div style={{ fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="alert" size={15} color="#f5b400" />
+            Unsaved changes from {new Date(editDraftOffer.savedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+          </div>
+          <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
+            {editDraftOffer.stale
+              ? "This quote was saved again since then (maybe on another device). Resuming replaces that version on screen — nothing is saved until you tap Update."
+              : "You left this quote without saving. Resume to pick up where you left off — nothing is saved until you tap Update."}
+            {" "}New edits aren&apos;t kept as a draft until you choose.
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 10 }}>
+            <button className="bb" style={{ fontSize: 13, padding: "6px 14px" }} onClick={resumeEditDraft}>Resume</button>
+            <button className="bo" style={{ fontSize: 13, padding: "6px 14px" }} onClick={discardEditDraft}>Discard</button>
+          </div>
+        </div>
+      )}
 
       {/* Customer / property — pulled above the total so the glow card holds
           just the totals (render look). */}
