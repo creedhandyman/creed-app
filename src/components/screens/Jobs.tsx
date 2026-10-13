@@ -105,6 +105,30 @@ function ClosestTechHint({ job }: { job: Job }) {
   );
 }
 
+/* ── Nav intent (Home → a filtered Jobs list, or one job) ──────────
+   Dashboard tiles drop {page, tab?, filter?, jobId?, at} in sessionStorage
+   and switch to Jobs. Read inline (not lib/nav-intent) so this screen has
+   no hard dependency on the writer; a stale (>15s) or malformed intent is
+   ignored. Consumed once on mount. */
+const NAV_KEY = "c_nav_intent";
+function peekNavIntent(page: string): { tab?: string; filter?: string; jobId?: string } | null { try { const raw = sessionStorage.getItem(NAV_KEY); if (!raw) return null; const v = JSON.parse(raw); if (!v || v.page !== page || typeof v.at !== "number" || Date.now() - v.at > 15000) return null; return v; } catch { return null; } }
+type QuickKey = "lead" | "toSend" | "waiting" | "toInvoice" | "unpaid";
+const QUICK: QuickKey[] = ["lead", "toSend", "waiting", "toInvoice", "unpaid"];
+type JobTab = "active" | "billing" | "paid" | "archive";
+const JOB_TABS: JobTab[] = ["active", "billing", "paid", "archive"];
+// Same predicates as the Dashboard's Needs-attention counts, so a tile's
+// number always equals the filtered list it opens.
+const quickMatch = (j: Job, k: QuickKey): boolean => {
+  if (j.archived) return false;
+  switch (k) {
+    case "lead":      return j.status === "lead";
+    case "toSend":    return j.status === "quoted" && !j.quote_sent_at;
+    case "waiting":   return j.status === "quoted" && !!j.quote_sent_at;
+    case "toInvoice": return j.status === "complete";
+    case "unpaid":    return j.status === "invoiced";
+  }
+};
+
 interface Props {
   setPage: (p: string) => void;
   onEditJob?: (jobId: string) => void;
@@ -132,6 +156,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
   const navBottom = useStore((s) => s.navBottom);
+  // Owner/manager — money actions (record payment / approval) are their APIs.
+  const isAdmin = user.role === "owner" || user.role === "manager";
   // Inline dark tokens are fixed values — the Properties value-pills sit on a
   // white .section card in light mode, so flip their fill/border or the
   // inherited (dark) text renders black-on-black.
@@ -281,14 +307,28 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     };
   };
 
-  const [jobTab, setJobTab] = useState<"active" | "billing" | "paid" | "archive">("active");
+  // Home deep link (read once). A quick filter picks its tab: invoice/unpaid
+  // live under Billing, the rest under Active.
+  const [navIntent] = useState(() => peekNavIntent("jobs"));
+  const navFilter: QuickKey | null =
+    navIntent && typeof navIntent.filter === "string" && (QUICK as string[]).includes(navIntent.filter)
+      ? (navIntent.filter as QuickKey) : null;
+  const navTab: JobTab | null =
+    navIntent && typeof navIntent.tab === "string" && (JOB_TABS as string[]).includes(navIntent.tab)
+      ? (navIntent.tab as JobTab) : null;
+  const [jobTab, setJobTab] = useState<JobTab>(() =>
+    navFilter ? (navFilter === "toInvoice" || navFilter === "unpaid" ? "billing" : "active") : (navTab ?? "active"));
+  const [quickFilter, setQuickFilter] = useState<QuickKey | null>(navFilter ?? null);
   // Phase 2 redesign: id of the job shown in the separate detail screen
   // (null = the Jobs list). Set by tapping a card; cleared by the Back button.
-  const [detailJobId, setDetailJobId] = useState<string | null>(initialDetailJobId ?? null);
+  const [detailJobId, setDetailJobId] = useState<string | null>(
+    initialDetailJobId ?? (typeof navIntent?.jobId === "string" ? navIntent.jobId : null),
+  );
   // Consume the deep-link target once: reset the parent so navigating back
   // to Jobs via the nav tab later opens the list, not this job again.
   useEffect(() => {
     if (initialDetailJobId) clearInitialDetail?.();
+    if (navIntent) { try { sessionStorage.removeItem(NAV_KEY); } catch { /* storage blocked */ } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Phase 3: sub-screen opened from the detail's Work section (work order /
@@ -309,9 +349,21 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     jobId: string; phone: string; msg: string; kind?: "invoice" | "quote";
     recipients?: { label: string; phone: string; msg: string }[]; to?: number;
   } | null>(null);
+  // Bring a freshly opened send strip into view (it sits under the CTA, which
+  // may be scrolled off on a long detail screen).
+  const sendStripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    sendStripRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [sendStrip?.jobId]);
   // Record a payment taken outside Stripe (cash/check/…). `ref` is minted
   // when the sheet opens → the server's idempotency key for this payment.
-  const [recordPay, setRecordPay] = useState<{ jobId: string; amount: string; method: "cash" | "check" | "card" | "other"; ref: string; busy?: boolean } | null>(null);
+  // confirmOver: an amount above the balance was tapped once — the next tap saves.
+  const [recordPay, setRecordPay] = useState<{ jobId: string; amount: string; method: "cash" | "check" | "card" | "other"; ref: string; busy?: boolean; confirmOver?: boolean } | null>(null);
+  // Status → Paid while money is still owed: ask how before writing anything
+  // (record the payment, or just mark it). Cancel leaves the status alone.
+  const [paidChoice, setPaidChoice] = useState<{ jobId: string; due: number } | null>(null);
+  // Bulk → Paid with jobs still owing: log each balance as one payment method.
+  const [bulkPaid, setBulkPaid] = useState<{ method: "cash" | "check" | "card" | "other"; busy?: boolean } | null>(null);
   // Property typeahead query — drives both the dropdown suggestions
   // (in <PropertySearch>) and the inline filter on the visible list,
   // so the list and the typeahead stay in sync.
@@ -363,7 +415,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receipts]);
-  const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number } | null>(null);
+  // startPaid = the job's amount_paid when the QR opened; a rise means the
+  // customer paid, so the overlay flips to "Payment received".
+  const [payQR, setPayQR] = useState<{ url: string; jobId: string; amount: number; startPaid: number } | null>(null);
+  // While the QR is up, refresh faster than the 15s store poll so the
+  // payment shows up within a few seconds of the customer paying.
+  const payQRJobId = payQR?.jobId;
+  useEffect(() => {
+    if (!payQRJobId) return;
+    const timer = setInterval(() => { void loadAll(); }, 8000);
+    return () => clearInterval(timer);
+  }, [payQRJobId, loadAll]);
   const [connectingStripe, setConnectingStripe] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
 
@@ -576,6 +638,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   };
 
   const setStatus = async (id: string, status: string): Promise<void> => {
+    // Paid while money is still owed (owner/manager): don't just flip the
+    // status — the books would say paid with no payment behind it. Ask how
+    // they were paid first; nothing is written until they pick.
+    if (status === "paid" && isAdmin) {
+      const job = jobs.find((j) => j.id === id);
+      const due = job ? balanceOf(job).due : 0;
+      if (due > 0.009) { setPaidChoice({ jobId: id, due }); return; }
+    }
     // Warn if completing with unchecked work order items
     if (status === "complete") {
       const job = jobs.find((j) => j.id === id);
@@ -612,6 +682,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       useStore.getState().showToast(`${t("jobs.bulkAlready")} ${label}`, "info");
       return;
     }
+    // Bulk Paid with balances still owed → the record-payments sheet instead
+    // of a bare status flip (same rule as the single-job dropdown).
+    if (bulkStatus === "paid" && isAdmin && targets.some((j) => balanceOf(j).due > 0.009)) {
+      setBulkPaid({ method: "cash" });
+      return;
+    }
     let msg = `${targets.length} ${targets.length === 1 ? t("jobs.bulkJobOne") : t("jobs.bulkJobMany")} → ${label}`;
     if (bulkStatus === "complete") {
       const open = targets.filter((j) => uncheckedCount(j) > 0).length;
@@ -626,6 +702,78 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       await loadAll();
     }
     useStore.getState().showToast(`${t("jobs.bulkUpdated")} ${targets.length} → ${label}`, "success");
+    setSelectedIds([]);
+    setBulkStatus("");
+    setSelectMode(false);
+  };
+
+  // Confirm on the bulk-Paid sheet: each owing job gets ONE payment for its
+  // remaining balance through the same /api/payments/record call as the
+  // Record payment sheet (server flips it to paid once covered); jobs with
+  // nothing owed just take the status. Sequential so a failure is counted
+  // per job and never double-posts.
+  const confirmBulkPaid = async () => {
+    if (!bulkPaid || bulkPaid.busy) return;
+    const method = bulkPaid.method;
+    const targets = jobs.filter((j) => selectedIds.includes(j.id) && j.status !== "paid");
+    const owing = targets.filter((j) => balanceOf(j).due > 0.009);
+    const settled = targets.filter((j) => balanceOf(j).due <= 0.009);
+    setBulkPaid({ method, busy: true });
+    setBulkBusy(true);
+    let ok = 0;
+    let failed = 0;
+    let recorded = 0;
+    try {
+      for (const j of owing) {
+        const amount = balanceOf(j).due;
+        try {
+          const res = await apiFetch("/api/payments/record", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ jobId: j.id, amount, method, ref: crypto.randomUUID() }),
+          });
+          if (res.ok) { ok++; recorded += amount; } else failed++;
+        } catch { failed++; }
+      }
+      for (const j of settled) await applyStatus(j.id, "paid");
+    } finally {
+      setBulkBusy(false);
+      await loadAll();
+    }
+    setBulkPaid(null);
+    const done = t("jobs.bulkPaidDone").replace("{n}", String(ok)).replace("{amt}", recorded.toFixed(2));
+    // One toast slot — a failure line rides along with the summary rather
+    // than replacing it.
+    if (failed > 0) useStore.getState().showToast(`${done} · ${t("jobs.bulkPaidSomeFailed").replace("{n}", String(failed))}`, "warning");
+    else useStore.getState().showToast(done, "success");
+    setSelectedIds([]);
+    setBulkStatus("");
+    setSelectMode(false);
+  };
+
+  // Archive = hide from the work tabs (reversible from the Archive tab).
+  // Returns how many writes landed (db.patch toasts its own failures).
+  const archiveMany = async (ids: string[]): Promise<number> => {
+    const at = new Date().toISOString();
+    let n = 0;
+    for (const id of ids) {
+      if (await db.patch("jobs", id, { archived: true, archived_at: at })) n++;
+    }
+    await loadAll();
+    return n;
+  };
+  const archiveJob = async (job: Job) => {
+    if (!(await archiveMany([job.id]))) return;
+    useStore.getState().showToast(t("jobs.archivedToast"), "success");
+    setDetailJobId(null);
+  };
+  const bulkArchive = async () => {
+    if (!selectedIds.length || bulkBusy) return;
+    const ids = selectedIds.filter((id) => !jobs.find((j) => j.id === id)?.archived);
+    setBulkBusy(true);
+    let n = 0;
+    try { n = await archiveMany(ids); } finally { setBulkBusy(false); }
+    useStore.getState().showToast(t("jobs.archivedMany").replace("{n}", String(n)), "success");
     setSelectedIds([]);
     setBulkStatus("");
     setSelectMode(false);
@@ -672,18 +820,40 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // "Message customer" button under the CTA. Builds a status-aware, editable
   // text and opens the send strip (native SMS / Copy). This is the explicit
   // opt-in that replaced the old auto-copy-to-clipboard on every status change.
-  const messageCustomer = async (job: Job) => {
+  // followUp: a nudge on a quote that already went out (the "Follow up" CTA).
+  const messageCustomer = async (job: Job, opts?: { followUp?: boolean }) => {
     const orgName = org?.name || "us";
     const prop = job.property || "your property";
     const name = job.client || "there";
     let url = "";
-    try { url = await getStatusLink(job.id); } catch { url = ""; }
+    // A lead has no quote yet — its acknowledgement carries no link.
+    if (job.status !== "lead") {
+      try { url = await getStatusLink(job.id); } catch { url = ""; }
+    }
     let msg: string;
     switch (job.status) {
-      case "quoted":
-      case "accepted":
-        msg = `Hi ${name}! Here's your quote from ${orgName} for ${prop}:\n\nTotal: $${(job.total || 0).toFixed(2)}\n\nView details & approve: ${url}`;
+      case "lead":
+        msg = `Hi ${name}! Thanks for reaching out to ${orgName} about ${prop}. Got your request — I'll put a quote together and get back to you shortly.`;
         break;
+      case "quoted":
+      case "accepted": {
+        if (opts?.followUp && job.status === "quoted") {
+          msg = `Hi ${name}! Just checking in on the quote for ${prop} — happy to answer questions or adjust anything. Review & approve here: ${url}`;
+          break;
+        }
+        // Good/Better/Best: job.total is the Best price — lead with the
+        // cheapest option instead (same wording as QuoteForge's Send). Once
+        // an option was picked (acceptedTier), total IS that price.
+        let totalLine = `Total: $${(job.total || 0).toFixed(2)}`;
+        try {
+          const d = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+          const tt = d?.tieredQuote && !d?.acceptedTier ? d?.tierTotals : null;
+          const prices = tt ? [tt.base, tt.better, tt.best].filter((v): v is number => typeof v === "number" && v > 0) : [];
+          if (prices.length) totalLine = `Options from $${Math.min(...prices).toFixed(2)}`;
+        } catch { /* malformed rooms — plain total */ }
+        msg = `Hi ${name}! Here's your quote from ${orgName} for ${prop}:\n\n${totalLine}\n\nView details & approve: ${url}`;
+        break;
+      }
       case "scheduled":
         msg = `Hi ${name}! Your job at ${prop} has been scheduled. View details: ${url}`;
         break;
@@ -731,11 +901,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     const recipients = stripRecipients(job, invoiceText(job, url));
     setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: "invoice", recipients, to: 0 });
   };
-  const markSent = (jobId: string, kind?: "invoice" | "quote") => {
-    if (kind === "quote") { void markQuoteSent(jobId).then(() => loadAll()); return; }
+  // A follow-up re-stamps quote_sent_at too — it's the "last contacted" mark.
+  // quiet: the caller already toasted (Copy says "copied"; one toast slot).
+  const markSent = (jobId: string, kind?: "invoice" | "quote", quiet?: boolean) => {
+    const toast = useStore.getState().showToast;
+    if (kind === "quote") {
+      void markQuoteSent(jobId).then(() => { loadAll(); if (!quiet) toast(t("jobs.quoteMarkedSent"), "success"); });
+      return;
+    }
     if (kind !== "invoice") return;
     const job = jobs.find((j) => j.id === jobId);
-    if (job?.status === "complete") void setStatus(jobId, "invoiced");
+    if (job?.status === "complete") void setStatus(jobId, "invoiced").then(() => { if (!quiet) toast(t("jobs.invoiceMarkedSent"), "success"); });
   };
 
   const openRecordPay = (job: Job) => {
@@ -747,6 +923,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     const amount = parseFloat(recordPay.amount);
     const toast = useStore.getState().showToast;
     if (!(amount > 0)) { toast(t("jobs.enterAmount"), "warning"); return; }
+    // More than the balance? Probably a typo — the first tap shows a warning,
+    // the second saves it as entered.
+    const rj = jobs.find((j) => j.id === recordPay.jobId);
+    const due = rj ? balanceOf(rj).due : 0;
+    if (amount > due + 0.009 && !recordPay.confirmOver) { setRecordPay({ ...recordPay, confirmOver: true }); return; }
     setRecordPay({ ...recordPay, busy: true });
     try {
       const res = await apiFetch("/api/payments/record", {
@@ -766,8 +947,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   };
 
   const deleteJob = async (id: string) => {
-    if (await useStore.getState().showConfirm(t("jobs.deleteJobTitle"), t("jobs.deleteJobBody"))) {
+    const prop = jobs.find((j) => j.id === id)?.property;
+    if (await useStore.getState().showConfirm(t("jobs.deleteJobTitle"), t("jobs.deleteJobBodyNamed").replace("{prop}", prop || t("jobs.noAddress")))) {
       await db.del("jobs", id);
+      setDetailJobId(null);
       loadAll();
     }
   };
@@ -930,16 +1113,33 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Status-aware primary action for the detail header — the single
   // "what's next" button that advances a job through its lifecycle,
   // wired to the handlers that already exist on this screen.
+  // Quote building/sending and recording money are owner/manager actions
+  // (onEditJob is only passed to admins), so a tech sees no CTA there.
   const primaryCTA = (dj: typeof jobs[0]): { label: string; icon: string; onClick: () => void } | null => {
     switch (dj.status) {
-      case "lead":      return { label: t("jobs.buildQuote"), icon: "quote", onClick: () => onEditJob?.(dj.id) };
-      case "quoted":    return { label: t("jobs.editSendQuote"), icon: "edit", onClick: () => onEditJob?.(dj.id) };
+      case "lead":      return onEditJob ? { label: t("jobs.buildQuote"), icon: "quote", onClick: () => onEditJob(dj.id) } : null;
+      // Quoted: SEND is the next step (editing stays one tap away in Work /
+      // the Money pencil); once it's out, the next step is a follow-up nudge.
+      case "quoted":
+        if (!onEditJob) return null;
+        return !dj.quote_sent_at
+          ? { label: t("jobs.sendQuote"), icon: "send", onClick: () => { void messageCustomer(dj); } }
+          : { label: t("jobs.followUp"), icon: "send", onClick: () => { void messageCustomer(dj, { followUp: true }); } };
       case "accepted":  return { label: t("jobs.schedule"), icon: "schedule", onClick: () => (onScheduleJob ? onScheduleJob(dj.property, dj.id) : setPage("sched")) };
       case "scheduled": return { label: t("jobs.markActive"), icon: "play", onClick: () => setStatus(dj.id, "active") };
       case "active":    return { label: t("jobs.markComplete"), icon: "check", onClick: () => setStatus(dj.id, "complete") };
       case "complete":  return { label: t("jobs.sendInvoice"), icon: "send", onClick: () => { void sendInvoice(dj); } };
-      case "invoiced":  return { label: t("jobs.recordPayment"), icon: "checkCircle", onClick: () => openRecordPay(dj) };
-      case "paid":      return { label: t("jobs.requestReview"), icon: "star", onClick: () => setReviewJob(dj) };
+      case "invoiced":  return isAdmin ? { label: t("jobs.recordPayment"), icon: "checkCircle", onClick: () => openRecordPay(dj) } : null;
+      case "paid": {
+        // Review already queued/sent (or automation off) → the only thing
+        // left is filing it away.
+        const rr = reviewRequests
+          .filter((r) => r.job_id === dj.id)
+          .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+        const reviewHandled = rr?.status === "scheduled" || rr?.status === "sent" || !!dj.review_requested_at || org?.review_request_enabled === false;
+        if (!reviewHandled) return { label: t("jobs.requestReview"), icon: "star", onClick: () => setReviewJob(dj) };
+        return dj.archived ? null : { label: t("jobs.doneArchive"), icon: "package", onClick: () => { void archiveJob(dj); } };
+      }
       default:          return null;
     }
   };
@@ -1010,6 +1210,32 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               {dj.property || t("jobs.noAddress")}
             </div>
             {dj.client && <div style={{ fontSize: 13.5, color: "#9db4d6", marginTop: 2 }}>{dj.client}</div>}
+            {/* One-tap contact — call / text / email the customer on file. */}
+            {(() => {
+              const cust = dj.customer_id ? customers.find((c) => c.id === dj.customer_id) : undefined;
+              const digits = (cust?.phone || "").replace(/[^\d+]/g, "");
+              if (!digits && !cust?.email) return null;
+              const chip = { fontSize: 13, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none", fontFamily: "var(--font-heading)", textTransform: "uppercase" as const, letterSpacing: ".06em" };
+              return (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  {digits && (
+                    <a className="bo" href={`tel:${digits}`} style={chip}>
+                      <Icon name="phone" size={13} /> {t("jobs.call")}
+                    </a>
+                  )}
+                  {digits && (
+                    <button type="button" className="bo" onClick={() => { void messageCustomer(dj); }} style={chip}>
+                      <Icon name="send" size={13} /> {t("jobs.textCustomer")}
+                    </button>
+                  )}
+                  {cust?.email && (
+                    <a className="bo" href={`mailto:${cust.email}`} style={chip}>
+                      <Icon name="mail" size={13} /> {t("jobs.email")}
+                    </a>
+                  )}
+                </div>
+              );
+            })()}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 8 }}>
               <select
                 value={dj.status || "quoted"}
@@ -1034,7 +1260,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <option value="invoiced"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.invoiced")}</option>
                 <option value="paid"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.paid")}</option>
               </select>
-              <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, color: "var(--color-money)" }}>${(dj.total || 0).toFixed(0)}</div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, color: "var(--color-money)" }}>${(dj.total || 0).toFixed(0)}</div>
+                {/* A deposit is in but the job isn't paid off — say what's left. */}
+                {(dj.amount_paid || 0) > 0 && dj.status !== "paid" && (() => {
+                  const { paid, due } = balanceOf(dj);
+                  return (
+                    <div className="dim" style={{ fontSize: 12, marginTop: -2 }}>
+                      {t("jobs.paidDue").replace("{paid}", paid.toFixed(2)).replace("{due}", due.toFixed(2))}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
             {dj.property && (
               <a
@@ -1053,21 +1290,29 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <Icon name={cta.icon} size={16} /> {cta.label}
             </button>
           )}
+          {/* Crew can't log money — tell them who does instead of a dead end. */}
+          {!cta && dj.status === "invoiced" && !isAdmin && (
+            <div className="dim mb" style={{ fontSize: 13.5, display: "flex", alignItems: "center", gap: 7, padding: "2px 2px 4px" }}>
+              <Icon name="money" size={14} /> {t("jobs.techCashHint")}
+            </div>
+          )}
 
           {/* Approved offline (in person / phone / paper)? Record it — locks the
-              picked option's price + work order like the online approval. */}
-          {(dj.status === "quoted" || dj.status === "accepted") && !dj.client_signature && (
+              picked option's price + work order like the online approval.
+              Owner/manager only (the record-approval API is). */}
+          {isAdmin && (dj.status === "quoted" || dj.status === "accepted") && !dj.client_signature && (
             <button
               className="bo mb"
               onClick={() => setApprovalJob(dj)}
               style={{ width: "100%", padding: "10px", fontFamily: "Oswald", fontSize: 15, letterSpacing: ".3px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
-              <Icon name="checkCircle" size={15} /> Record approval (in person / phone)
+              <Icon name="checkCircle" size={15} /> {t("jobs.recordApprovalBtn")}
             </button>
           )}
 
-          {/* Message the customer — opt-in, status-aware text, editable before send */}
-          {(dj.client || dj.customer_id) && (
+          {/* Message the customer — opt-in, status-aware text, editable before send.
+              Not on an admin's quoted job: Send quote / Follow up above IS it. */}
+          {(dj.client || dj.customer_id) && !(onEditJob && dj.status === "quoted") && (
             <button
               className="bo mb"
               onClick={() => messageCustomer(dj)}
@@ -1081,9 +1326,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             // to the customer — those stamps (quote_sent_at, complete→invoiced)
             // only fire for the client recipient (index 0).
             const toClient = !sendStrip.recipients || (sendStrip.to ?? 0) === 0;
-            const markIfClient = () => { if (toClient) markSent(sendStrip.jobId, sendStrip.kind); };
+            const markIfClient = (quiet?: boolean) => { if (toClient) markSent(sendStrip.jobId, sendStrip.kind, quiet); };
             return (
-            <div style={{ marginBottom: 12, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
+            <div ref={sendStripRef} style={{ marginBottom: 12, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
               {(sendStrip.recipients?.length ?? 0) > 1 && (
                 <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <span className="dim" style={{ fontSize: 12.5, marginRight: 2 }}>{t("jobs.sendTo")}</span>
@@ -1106,7 +1351,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 </div>
               )}
               <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
-                {sendStrip.phone ? `To ${sendStrip.phone} · edit if needed` : "No phone on file — Open Messages and pick a contact, or use Copy."}
+                {sendStrip.phone ? t("jobs.sendToEdit").replace("{phone}", sendStrip.phone) : t("jobs.noPhoneOnFile")}
               </div>
               <textarea
                 value={sendStrip.msg}
@@ -1121,10 +1366,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   className="bb"
                   style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
                 >
-                  <Icon name="send" size={15} color="#fff" /> Open Messages
+                  <Icon name="send" size={15} color="#fff" /> {t("jobs.openMessages")}
                 </a>
-                <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); markIfClient(); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast("Couldn't copy on this device", "error"); } }} style={{ fontSize: 14 }}>Copy</button>
-                <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label="Cancel" style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
+                <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); markIfClient(true); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast(t("jobs.copyFailed"), "error"); } }} style={{ fontSize: 14 }}>{t("common.copy")}</button>
+                <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label={t("common.cancel")} style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
               </div>
             </div>
             );
@@ -1328,11 +1573,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               return (
                 <>
                   <div className="drow">
-                    <span className="l">Paid to date</span>
+                    <span className="l" style={{ textTransform: "capitalize" }}>{t("jobs.alreadyPaid")}</span>
                     <span className="v" style={{ fontFamily: "Oswald", fontSize: 15, color: "var(--color-money)" }}>${paid.toFixed(2)}</span>
                   </div>
                   <div className="drow">
-                    <span className="l">Balance due</span>
+                    <span className="l" style={{ textTransform: "capitalize" }}>{t("jobs.balanceDue")}</span>
                     <span className="v" style={{ fontFamily: "Oswald", fontSize: 15, color: due > 0 ? "var(--color-warning)" : "var(--color-money)" }}>${due.toFixed(2)}</span>
                   </div>
                 </>
@@ -1395,9 +1640,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <button className="bo" onClick={() => generateInvoice(dj)} style={btn}>
                   <Icon name="receipt" size={14} /> {t("jobs.invoicePdf")}
                 </button>
-                {dj.status !== "paid" && balanceDue > 0 && (
+                {/* Complete → Send invoice is the CTA above, so not repeated
+                    here; once invoiced it becomes a reminder. */}
+                {dj.status !== "paid" && dj.status !== "complete" && balanceDue > 0 && (
                   <button className="bo" onClick={() => { void sendInvoice(dj); }} style={btn}>
-                    <Icon name="send" size={14} /> {t("jobs.sendInvoice")}
+                    <Icon name="send" size={14} /> {dj.status === "invoiced" ? t("jobs.sendReminder") : t("jobs.sendInvoice")}
                   </button>
                 )}
                 {dj.status !== "paid" && balanceDue > 0 && org?.stripe_connected && (
@@ -1407,7 +1654,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       try {
                         const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, amount: balanceDue }) });
                         const data = await res.json();
-                        if (data.url) setPayQR({ url: data.url, jobId: dj.id, amount: balanceDue });
+                        if (data.url) setPayQR({ url: data.url, jobId: dj.id, amount: balanceDue, startPaid: dj.amount_paid || 0 });
                         else useStore.getState().showToast(data.error || t("jobs.couldNotCreatePayment"), "error");
                       } catch { useStore.getState().showToast(t("jobs.failedCreatePayment"), "error"); }
                     }}
@@ -1416,7 +1663,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                     <Icon name="qr" size={14} /> {t("jobs.collectNow")}
                   </button>
                 )}
-                {dj.status !== "paid" && balanceDue > 0 && (
+                {/* Owner/manager only; when invoiced it's already the CTA. */}
+                {isAdmin && dj.status !== "paid" && dj.status !== "invoiced" && balanceDue > 0 && (
                   <button className="bg" onClick={() => openRecordPay(dj)} style={btn}>
                     <Icon name="check" size={14} /> {t("jobs.recordPayment")}
                   </button>
@@ -1458,7 +1706,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <span className="lf"><span className="ic"><Icon name="refresh" size={15} /></span> {t("jobs.makeRecurring")}</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
             </div>
-            {(dj.status === "complete" || dj.status === "invoiced" || dj.status === "paid") && (
+            {(dj.status === "complete" || dj.status === "invoiced" || (dj.status === "paid" && cta?.icon !== "star")) && (
               <div style={{ paddingTop: 8 }}>
                 <button
                   className="bo"
@@ -1512,7 +1760,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               {!dj.archived ? (
                 <button
                   className="bo"
-                  onClick={async () => { await db.patch("jobs", dj.id, { archived: true, archived_at: new Date().toISOString() }); loadAll(); }}
+                  onClick={() => { void archiveJob(dj); }}
                   style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 >
                   <Icon name="package" size={14} /> {t("jobs.archive")}
@@ -1520,16 +1768,22 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               ) : (
                 <button
                   className="bo"
-                  onClick={async () => { await db.patch("jobs", dj.id, { archived: false, archived_at: null }); loadAll(); }}
+                  onClick={async () => {
+                    if (!(await db.patch("jobs", dj.id, { archived: false, archived_at: null }))) return;
+                    await loadAll();
+                    useStore.getState().showToast(t("jobs.restoredToast"), "success");
+                  }}
                   style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                 >
                   <Icon name="refresh" size={14} /> {t("jobs.restore")}
                 </button>
               )}
+              {/* Quiet outline, red text — Archive is the everyday choice;
+                  Delete is permanent. */}
               <button
-                className="br"
+                className="bo"
                 onClick={() => deleteJob(dj.id)}
-                style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                style={{ flex: 1, fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: "var(--color-accent-red)" }}
               >
                 <Icon name="delete" size={14} /> {t("common.delete")}
               </button>
@@ -1822,7 +2076,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => { setJobTab(tab.id); setSelectedIds([]); }}
+                onClick={() => { setJobTab(tab.id); setSelectedIds([]); setQuickFilter(null); }}
                 style={{
                   padding: "5px 12px",
                   borderRadius: 6,
@@ -1874,17 +2128,26 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         />
       </div>
 
-      {/* Billing tab header */}
-      {jobTab === "billing" && jobs.some((j) => j.status === "complete" || j.status === "invoiced") && (
+      {/* Billing tab header — two honest numbers: work done but not billed
+          yet, and what invoiced customers still owe after any deposits. */}
+      {jobTab === "billing" && jobs.some((j) => !j.archived && (j.status === "complete" || j.status === "invoiced")) && (
         <div className="cd mb" style={{ borderLeft: "3px solid var(--color-warning)", padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div className="sl">{t("jobs.readyToInvoice")}</div>
-              <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-warning)" }}>
-                ${jobs.filter((j) => j.status === "complete" || j.status === "invoiced").reduce((s, j) => s + (j.total || 0), 0).toLocaleString()}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 18 }}>
+              <div>
+                <div className="sl">{t("dash.toInvoice")}</div>
+                <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: "var(--color-warning)" }}>
+                  ${Math.round(jobs.filter((j) => !j.archived && j.status === "complete").reduce((s, j) => s + (j.total || 0), 0)).toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div className="sl">{t("jobs.awaitingPayment")}</div>
+                <div style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, color: statusColor("invoiced") }}>
+                  ${Math.round(jobs.filter((j) => !j.archived && j.status === "invoiced").reduce((s, j) => s + balanceOf(j).due, 0)).toLocaleString()}
+                </div>
               </div>
             </div>
-            {!org?.stripe_connected && (
+            {!org?.stripe_connected && user.role === "owner" && (
               <button
                 className="bb"
                 disabled={connectingStripe}
@@ -1902,8 +2165,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       }),
                     });
                     if (!res.ok) {
-                      const text = await res.text();
-                      useStore.getState().showToast(t("jobs.stripeError") + " (" + res.status + "): " + text, "error");
+                      // Raw response bodies are for the console, not the owner.
+                      const text = await res.text().catch(() => "");
+                      console.error("[stripe/connect]", res.status, text);
+                      useStore.getState().showToast(t("jobs.couldNotStartStripe"), "error");
                       setConnectingStripe(false);
                       return;
                     }
@@ -1940,26 +2205,78 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           : jobTab === "billing"
           ? jobs.filter((j) => !j.archived && (j.status === "complete" || j.status === "invoiced"))
           : jobs.filter((j) => !j.archived && j.status === "paid");
+        // Home's Needs-attention tiles open a slice of the tab (quickFilter).
+        const quickFiltered = quickFilter ? baseFiltered.filter((j) => quickMatch(j, quickFilter)) : baseFiltered;
         // Apply the typeahead query as an inline filter so the visible
         // list narrows as the user types — keeps the dropdown and the
         // list view in sync.
         const q = searchQuery.toLowerCase();
         const queryFiltered = q
-          ? baseFiltered.filter((j) => `${j.property || ""} ${j.client || ""} ${j.trade || ""}`.toLowerCase().includes(q))
-          : baseFiltered;
+          ? quickFiltered.filter((j) => `${j.property || ""} ${j.client || ""} ${j.trade || ""}`.toLowerCase().includes(q))
+          : quickFiltered;
         // Within the active tab, leads bubble to the top — they're the
         // newest external work and need triage before older quotes.
-        const filtered = jobTab === "active"
+        // Waiting on customer: the longest-waiting quote first (chase it).
+        // Billing: to-invoice before awaiting-payment (stable sort keeps the
+        // existing order inside each group).
+        const filtered = quickFilter === "waiting"
+          ? [...queryFiltered].sort((a, b) => (a.quote_sent_at || "").localeCompare(b.quote_sent_at || ""))
+          : jobTab === "active"
           ? [...queryFiltered].sort((a, b) => {
               const al = a.status === "lead" ? 0 : 1;
               const bl = b.status === "lead" ? 0 : 1;
               if (al !== bl) return al - bl;
               return (b.created_at || "").localeCompare(a.created_at || "");
             })
+          : jobTab === "billing"
+          ? [...queryFiltered].sort((a, b) => (a.status === "complete" ? 0 : 1) - (b.status === "complete" ? 0 : 1))
           : queryFiltered;
+
+        const quickLabel = quickFilter === "lead" ? t("jobs.filterLead")
+          : quickFilter === "toSend" ? t("dash.toSend")
+          : quickFilter === "waiting" ? t("dash.waitingOnCustomer")
+          : quickFilter === "toInvoice" ? t("dash.toInvoice")
+          : quickFilter === "unpaid" ? t("dash.unpaid")
+          : "";
+        const filterChip = quickFilter ? (
+          <div className="mb" style={{ display: "flex" }}>
+            <span className="chip" style={{ background: pillBg, border: "1px solid var(--color-primary)", color: "var(--color-primary)", fontSize: 13 }}>
+              {t("jobs.showing").replace("{label}", quickLabel).replace("{n}", String(quickFiltered.length))}
+              <button
+                type="button"
+                onClick={() => setQuickFilter(null)}
+                aria-label={t("jobs.showAll")}
+                style={{ background: "transparent", border: "none", padding: "0 0 0 2px", color: "inherit", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+              >
+                <Icon name="close" size={13} />
+              </button>
+            </span>
+          </div>
+        ) : null;
+
+        // A filtered slice that's empty means that pile is cleared — say so
+        // calmly and offer a way out, instead of the generic "no jobs".
+        if (quickFilter && !quickFiltered.length) {
+          return (
+            <>
+              {filterChip}
+              <div className="cd" style={{ textAlign: "center", padding: 24 }}>
+                <Icon name="checkCircle" size={30} color="var(--color-success)" />
+                <div style={{ fontFamily: "Oswald", fontSize: 18, marginTop: 8 }}>{t("jobs.filterDone")}</div>
+                <p className="dim" style={{ fontSize: 14, margin: "4px 0 14px" }}>{t("jobs.filterDoneSub")}</p>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                  <button className="bo" onClick={() => setQuickFilter(null)}>{t("jobs.showAll")}</button>
+                  <button className="bb" onClick={() => setPage("dash")}>{t("jobs.backHome")}</button>
+                </div>
+              </div>
+            </>
+          );
+        }
 
         if (!filtered.length) {
           return (
+            <>
+            {filterChip}
             <div className="cd" style={{ textAlign: "center", padding: 24 }}>
               <p className="dim">
                 {jobTab === "active"
@@ -1976,6 +2293,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 </button>
               )}
             </div>
+            </>
           );
         }
 
@@ -1988,7 +2306,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           // from Icon.tsx; an unknown name renders nothing rather than crash.
           const hint: { icon: string; text: string } = (() => {
             switch (j.status) {
-              case "lead":      return { icon: "quote", text: t("jobs.hintNewLead") };
+              // A lead's own words ("Leaky faucet in the…") say more than "New lead".
+              case "lead": {
+                let desc = "";
+                try {
+                  const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+                  desc = typeof d?.leadDescription === "string" ? d.leadDescription.replace(/\s+/g, " ").trim() : "";
+                } catch { desc = ""; }
+                return { icon: "quote", text: desc ? (desc.length > 40 ? `${desc.slice(0, 40).trimEnd()}…` : desc) : t("jobs.hintNewLead") };
+              }
               case "quoted":    return j.quote_sent_at
                 ? { icon: "send", text: t("jobs.hintSentAgo").replace("{ago}", sentAgo(j.quote_sent_at)) }
                 : { icon: "warn", text: t("jobs.hintNotSent") };
@@ -2029,11 +2355,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 17, letterSpacing: ".3px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      {j.status === "lead" && (
-                        <span style={{ fontSize: 11, fontFamily: "Oswald", letterSpacing: ".08em", padding: "2px 6px", borderRadius: 4, background: "#ff3d6e", color: "#fff" }}>
-                          {t("jobs.newLead")}
-                        </span>
-                      )}
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                         {j.property || t("jobs.noAddress")}
                       </span>
@@ -2056,9 +2377,16 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       </div>
                     )}
                   </div>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, whiteSpace: "nowrap", color: "var(--color-money)" }}>
-                    ${(j.total || 0).toFixed(0)}
-                  </div>
+                  {/* A lead has no price yet — show how long it's been waiting. */}
+                  {j.status === "lead" ? (
+                    <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", color: "#ff3d6e", paddingTop: 2 }}>
+                      {t("jobs.leadAge").replace("{ago}", sentAgo(j.created_at))}
+                    </div>
+                  ) : (
+                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, whiteSpace: "nowrap", color: "var(--color-money)" }}>
+                      ${(j.total || 0).toFixed(0)}
+                    </div>
+                  )}
                 </div>
 
                 {/* Row 2 — status chip · next-action hint + chevron */}
@@ -2072,13 +2400,16 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       color: statusColor(j.status),
                       background: statusColor(j.status) + "1f",
                       border: `1px solid ${statusColor(j.status)}66`,
+                      flexShrink: 0,
                     }}
                   >
                     {j.status === "lead" ? t("jobs.lead") : (t(`status.${j.status}`) || j.status)}
                   </span>
-                  <span className="dim" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {/* minWidth 0 + ellipsis: a long hint (a lead's request) trims
+                      instead of pushing the card wider than the phone. */}
+                  <span className="dim" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", minWidth: 0 }}>
                     <Icon name={hint.icon} size={12} />
-                    {hint.text}
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{hint.text}</span>
                     <Icon name="next" size={14} />
                   </span>
                 </div>
@@ -2090,9 +2421,24 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
         const visibleIds = filtered.map((j) => j.id);
         const allSel = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+        // Paid tab: one tap files every paid job away (reversible).
+        const archiveAllPaid = async () => {
+          const ids = baseFiltered.map((j) => j.id);
+          const n = String(ids.length);
+          if (!await useStore.getState().showConfirm(t("jobs.archive"), t("jobs.archiveAllPaidQ").replace("{n}", n))) return;
+          const done = await archiveMany(ids);
+          useStore.getState().showToast(t("jobs.archivedMany").replace("{n}", String(done)), "success");
+        };
         return (
           <>
+            {filterChip}
             {cards}
+            {jobTab === "paid" && !selectMode && baseFiltered.length > 0 && (
+              <div className="linkrow dim" onClick={archiveAllPaid} style={{ cursor: "pointer", fontSize: 14, borderBottom: "none" }}>
+                <span className="lf"><span className="ic"><Icon name="package" size={15} /></span> {t("jobs.archiveAllPaid").replace("{n}", String(baseFiltered.length))}</span>
+                <Icon name="next" size={15} />
+              </div>
+            )}
             {/* Bulk status bar — sticks above the bottom nav while scrolling. */}
             {selectMode && (
               <div
@@ -2110,13 +2456,25 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                   <span style={{ fontFamily: "Oswald", fontSize: 15, letterSpacing: ".3px" }}>
                     {selectedIds.length} {t("jobs.selectedCount")}
                   </span>
-                  <button
-                    className="bo"
-                    onClick={() => setSelectedIds(allSel ? [] : visibleIds)}
-                    style={{ width: "auto", fontSize: 13, padding: "4px 10px" }}
-                  >
-                    {allSel ? t("jobs.clearSelection") : t("jobs.selectAll")}
-                  </button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {jobTab !== "archive" && (
+                      <button
+                        className="bo"
+                        disabled={!selectedIds.length || bulkBusy}
+                        onClick={bulkArchive}
+                        style={{ width: "auto", fontSize: 13, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}
+                      >
+                        <Icon name="package" size={13} /> {t("jobs.archive")}
+                      </button>
+                    )}
+                    <button
+                      className="bo"
+                      onClick={() => setSelectedIds(allSel ? [] : visibleIds)}
+                      style={{ width: "auto", fontSize: 13, padding: "4px 10px" }}
+                    >
+                      {allSel ? t("jobs.clearSelection") : t("jobs.selectAll")}
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <select
@@ -2149,7 +2507,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         <p className="dim" style={{ fontSize: 14 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
             <Icon name="tip" size={14} color="var(--color-highlight)" />
-            {jobTab === "active" ? t("jobs.tipActive") : jobTab === "billing" ? t("jobs.tipBilling") : t("jobs.tipPaid")}
+            {jobTab === "active" ? t("jobs.tipActive") : jobTab === "billing" ? t("jobs.tipBilling") : jobTab === "archive" ? t("jobs.tipArchive") : t("jobs.tipPaid")}
           </span>
         </p>
       </div>
@@ -2160,6 +2518,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       {recordPay && (() => {
         const rj = jobs.find((j) => j.id === recordPay.jobId);
         const { paid, due } = rj ? balanceOf(rj) : { paid: 0, due: 0 };
+        const amt = parseFloat(recordPay.amount);
+        const over = amt > due + 0.009 ? amt - due : 0;
+        const methodLabel = t(`jobs.payMethod.${recordPay.method}`);
         return (
           <div onClick={() => !recordPay.busy && setRecordPay(null)} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
             <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380, padding: 20 }}>
@@ -2170,8 +2531,23 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <label className="sl">{t("jobs.amountReceived")}</label>
               <div className="row" style={{ gap: 6, margin: "4px 0 12px", alignItems: "center" }}>
                 <span>$</span>
-                <input type="number" inputMode="decimal" min="0" step="0.01" value={recordPay.amount} onChange={(e) => setRecordPay({ ...recordPay, amount: e.target.value })} style={{ flex: 1 }} />
+                <input type="number" inputMode="decimal" min="0" step="0.01" value={recordPay.amount} onChange={(e) => setRecordPay({ ...recordPay, amount: e.target.value, confirmOver: false })} style={{ flex: 1 }} />
+                {due > 0 && (
+                  <button
+                    type="button"
+                    className="chip"
+                    onClick={() => setRecordPay({ ...recordPay, amount: due.toFixed(2), confirmOver: false })}
+                    style={{ flexShrink: 0, cursor: "pointer", background: "transparent", border: "1px solid var(--color-success)", color: "var(--color-success)", fontSize: 12 }}
+                  >
+                    {t("jobs.fullBalance")}
+                  </button>
+                )}
               </div>
+              {over > 0 && recordPay.confirmOver && (
+                <div style={{ fontSize: 13, color: "var(--color-warning)", margin: "-6px 0 12px", display: "flex", alignItems: "flex-start", gap: 6 }}>
+                  <Icon name="warn" size={14} color="var(--color-warning)" /> {t("jobs.overBalanceWarn").replace("{over}", over.toFixed(2))}
+                </div>
+              )}
               <label className="sl">{t("jobs.paidBy")}</label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, margin: "4px 0 16px" }}>
                 {(["cash", "check", "card", "other"] as const).map((m) => (
@@ -2182,15 +2558,100 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="bo" onClick={() => setRecordPay(null)} disabled={recordPay.busy} style={{ flex: 1 }}>{t("common.cancel")}</button>
-                <button className="bg" onClick={saveRecordPay} disabled={recordPay.busy} style={{ flex: 2 }}>{recordPay.busy ? t("jobs.savingPayment") : t("jobs.savePayment")}</button>
+                {/* The label says exactly what gets saved: "Save $120.00 · Cash". */}
+                <button className="bg" onClick={saveRecordPay} disabled={recordPay.busy} style={{ flex: 2 }}>
+                  {recordPay.busy
+                    ? t("jobs.savingPayment")
+                    : amt > 0
+                    ? t("jobs.savePaymentAmt").replace("{amt}", amt.toFixed(2)).replace("{method}", methodLabel)
+                    : t("jobs.savePayment")}
+                </button>
               </div>
             </div>
           </div>
         );
       })()}
 
-      {/* Payment QR overlay */}
-      {payQR && (
+      {/* Status → Paid with a balance still owed: record it, or just mark it. */}
+      {paidChoice && (() => {
+        const pj = jobs.find((j) => j.id === paidChoice.jobId);
+        const full = { width: "100%", padding: "10px", fontSize: 15, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 } as const;
+        return (
+          <div onClick={() => setPaidChoice(null)} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380, padding: 20 }}>
+              <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 4 }}>
+                {t("jobs.paidOwedTitle").replace("{due}", paidChoice.due.toFixed(2))}
+              </h3>
+              {pj?.property && <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>{pj.property}</div>}
+              <p style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.45 }}>{t("jobs.paidOwedBody")}</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button className="bg" style={full} onClick={() => { setPaidChoice(null); if (pj) openRecordPay(pj); }}>
+                  <Icon name="checkCircle" size={15} /> {t("jobs.recordPayment")}
+                </button>
+                <button
+                  className="bo"
+                  style={full}
+                  onClick={async () => {
+                    const id = paidChoice.jobId;
+                    setPaidChoice(null);
+                    await applyStatus(id, "paid");
+                    loadAll();
+                  }}
+                >
+                  {t("jobs.justMarkPaid")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaidChoice(null)}
+                  className="dim"
+                  style={{ background: "none", border: "none", fontSize: 13, padding: 6, cursor: "pointer" }}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Bulk → Paid with balances owed: log each job's balance as a payment. */}
+      {bulkPaid && (() => {
+        const owing = jobs.filter((j) => selectedIds.includes(j.id) && j.status !== "paid" && balanceOf(j).due > 0.009);
+        const totalDue = owing.reduce((s, j) => s + balanceOf(j).due, 0);
+        return (
+          <div onClick={() => !bulkPaid.busy && setBulkPaid(null)} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380, padding: 20 }}>
+              <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 6 }}>
+                {t("jobs.bulkPaidTitle").replace("{n}", String(owing.length))}
+              </h3>
+              <p style={{ fontSize: 14, margin: "0 0 10px", lineHeight: 1.45 }}>
+                {t("jobs.bulkPaidBody").replace("{amt}", totalDue.toFixed(2))}
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, margin: "4px 0 16px" }}>
+                {(["cash", "check", "card", "other"] as const).map((m) => (
+                  <button key={m} type="button" className={bulkPaid.method === m ? "bb" : "bo"} disabled={bulkPaid.busy} onClick={() => setBulkPaid({ ...bulkPaid, method: m })} style={{ fontSize: 13, padding: "7px 0" }}>
+                    {t(`jobs.payMethod.${m}`)}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="bo" onClick={() => setBulkPaid(null)} disabled={bulkPaid.busy} style={{ flex: 1 }}>{t("common.cancel")}</button>
+                <button className="bg" onClick={confirmBulkPaid} disabled={bulkPaid.busy} style={{ flex: 2 }}>
+                  {bulkPaid.busy ? t("jobs.savingPayment") : t("jobs.bulkPaidConfirm")}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Payment QR overlay — flips to "Payment received" once the job's
+          paid-to-date rises (the 8s poll above picks it up). */}
+      {payQR && (() => {
+        const live = jobs.find((j) => j.id === payQR.jobId);
+        const received = !!live && ((live.amount_paid || 0) > payQR.startPaid + 0.009 || live.status === "paid");
+        const liveDue = live ? balanceOf(live).due : 0;
+        return (
         <div
           onClick={() => setPayQR(null)}
           style={{
@@ -2204,6 +2665,21 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             onClick={(e) => e.stopPropagation()}
             style={{ textAlign: "center", cursor: "default" }}
           >
+            {received ? (
+              <>
+                <Icon name="checkCircle" size={64} color="var(--color-success)" style={{ margin: "0 auto 10px", display: "block" }} />
+                <div style={{ fontSize: 26, fontFamily: "Oswald", fontWeight: 700, color: "#fff", marginBottom: 6 }}>
+                  {t("jobs.paymentReceived")}
+                </div>
+                <div style={{ fontSize: 15, color: liveDue > 0.009 ? "var(--color-warning)" : "#00cc66", marginBottom: 18 }}>
+                  {liveDue > 0.009 ? t("jobs.stillDue").replace("{due}", liveDue.toFixed(2)) : t("jobs.paidInFull")}
+                </div>
+                <button className="bg" onClick={() => setPayQR(null)} style={{ fontSize: 15, padding: "8px 28px" }}>
+                  {t("common.done")}
+                </button>
+              </>
+            ) : (
+              <>
             <div style={{ fontSize: 16, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>
               {t("jobs.scanToPay")}
             </div>
@@ -2223,9 +2699,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             >
               {t("common.close")}
             </button>
+              </>
+            )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Photo viewer overlay — full-screen lightbox with close button.
           touch-action:pinch-zoom lets the browser handle pinch-to-zoom on

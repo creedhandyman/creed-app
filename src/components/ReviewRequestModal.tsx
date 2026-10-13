@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { residentContact } from "@/lib/resident";
+import { t } from "@/lib/i18n";
+import { Icon } from "./Icon";
 import type { Job, Customer } from "@/lib/types";
 
 interface Props {
@@ -87,10 +89,12 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
 
   const sendSms = () => {
     if (!phone) {
-      useStore.getState().showToast("No phone number on file for this client", "warning");
+      useStore.getState().showToast(t("review.noPhone"), "warning");
       return;
     }
-    const url = `sms:${phone}?body=${encodeURIComponent(message)}`;
+    // Digits-only + "?&body=" — the form that pre-fills on both iOS and
+    // Android (same as SendSheet and the Jobs send strip).
+    const url = `sms:${phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(message)}`;
     window.location.href = url;
     markRequested();
     onClose();
@@ -98,7 +102,7 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
 
   const sendEmail = () => {
     if (!email) {
-      useStore.getState().showToast("No email on file for this client", "warning");
+      useStore.getState().showToast(t("review.noEmail"), "warning");
       return;
     }
     const subject = encodeURIComponent(`Quick favor from ${org?.name || "us"}`);
@@ -112,10 +116,10 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(message);
-      useStore.getState().showToast("Review request copied — paste & send", "success");
+      useStore.getState().showToast(t("review.copied"), "success");
       markRequested();
     } catch {
-      useStore.getState().showToast("Couldn't copy — select the text and copy manually", "error");
+      useStore.getState().showToast(t("review.copyFailed"), "error");
     }
     onClose();
   };
@@ -150,12 +154,15 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
           boxShadow: "0 8px 32px rgba(0,0,0,.5)",
         }}
       >
-        <div style={{ fontSize: 28, textAlign: "center", marginBottom: 4 }}>⭐</div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
+          <Icon name="star" size={28} color="var(--color-highlight)" />
+        </div>
         <h3 style={{ fontSize: 18, color: "var(--color-primary)", textAlign: "center", marginBottom: 4 }}>
-          Ask for a Review?
+          {t("review.askTitle")}
         </h3>
         <p className="dim" style={{ fontSize: 14, textAlign: "center", margin: "0 0 12px" }}>
-          {job.client || "Client"} just had work completed at {job.property}. Send them the review link while it&apos;s fresh.
+          {/* Name whoever actually gets the text — the resident on PM jobs. */}
+          {t("review.askSub").replace("{client}", resident.name || job.client || customer?.name || t("quest.client"))}
         </p>
 
         {/* Editable message preview */}
@@ -181,26 +188,28 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
             className="bb"
             onClick={sendSms}
             disabled={!phone}
-            style={{ fontSize: 15, padding: "8px 12px", opacity: phone ? 1 : 0.5 }}
-            title={phone ? `Text ${phone}` : "No phone number on file"}
+            style={{ fontSize: 15, padding: "8px 12px", opacity: phone ? 1 : 0.5, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+            title={phone || t("review.noPhone")}
           >
-            📱 Send via Text {phone ? `(${phone})` : "(no phone on file)"}
+            <Icon name="send" size={15} /> {t("review.viaText")}{phone ? ` (${phone})` : ""}
           </button>
+          {!phone && <div className="dim" style={{ fontSize: 12, textAlign: "center", marginTop: -2 }}>{t("review.noPhone")}</div>}
           <button
             className="bo"
             onClick={sendEmail}
             disabled={!email}
-            style={{ fontSize: 15, padding: "8px 12px", opacity: email ? 1 : 0.5 }}
-            title={email ? `Email ${email}` : "No email on file"}
+            style={{ fontSize: 15, padding: "8px 12px", opacity: email ? 1 : 0.5, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+            title={email || t("review.noEmail")}
           >
-            ✉ Send via Email {email ? `(${email})` : "(no email on file)"}
+            <Icon name="mail" size={15} /> {t("review.viaEmail")}{email ? ` (${email})` : ""}
           </button>
+          {!email && <div className="dim" style={{ fontSize: 12, textAlign: "center", marginTop: -2 }}>{t("review.noEmail")}</div>}
           <button
             className="bo"
             onClick={copy}
-            style={{ fontSize: 15, padding: "8px 12px" }}
+            style={{ fontSize: 15, padding: "8px 12px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}
           >
-            📋 Copy Message
+            <Icon name="doc" size={15} /> {t("review.copyMsg")}
           </button>
           <button
             onClick={skip}
@@ -211,7 +220,7 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
               color: darkMode ? "#888" : "#666",
             }}
           >
-            Maybe later
+            {t("review.maybeLater")}
           </button>
         </div>
       </div>
