@@ -10,6 +10,8 @@ interface Props {
   onClose: () => void;
   /** Deep-link to a job's detail screen (notification.job_id). */
   onOpenJob?: (jobId: string) => void;
+  /** Open Operations on a sub-tab — join requests → Team, payday alerts → Payroll. */
+  onOpenOps?: (tab?: string) => void;
 }
 
 /** Compact relative time — "just now", "5m", "3h", "2d", else a date. */
@@ -18,7 +20,7 @@ function ago(iso?: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";
   const s = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (s < 60) return "just now";
+  if (s < 60) return t("notif.justNow");
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
@@ -37,7 +39,7 @@ const META: Record<NotificationType, { icon: IconName; color: string }> = {
   quote_approved: { icon: "checkCircle", color: "#ff9f43" },
 };
 
-export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
+export default function NotificationsPanel({ onClose, onOpenJob, onOpenOps }: Props) {
   const notifications = useStore((s) => s.notifications);
   const markRead = useStore((s) => s.markNotificationRead);
   const markAll = useStore((s) => s.markAllNotificationsRead);
@@ -58,8 +60,8 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
     setPushBusy(true);
     const r = await enablePush();
     setPushBusy(false);
-    if (r.ok) { setPushOn(true); useStore.getState().showToast("Push notifications on", "success"); }
-    else useStore.getState().showToast(r.error || "Couldn't enable push", "error");
+    if (r.ok) { setPushOn(true); useStore.getState().showToast(t("notif.pushOn"), "success"); }
+    else useStore.getState().showToast(r.error || t("notif.pushFailed"), "error");
   };
 
   const sorted = [...notifications].sort((a, b) =>
@@ -67,10 +69,20 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
   );
   const unread = sorted.filter((n) => !n.read_at).length;
 
+  // Where a row goes when tapped: its job, else (no job) the Ops area the
+  // alert is about. null = read-only row.
+  const routeOf = (n: AppNotification): (() => void) | null => {
+    if (n.job_id && onOpenJob) return () => onOpenJob(n.job_id!);
+    if (n.type === "join_request" && onOpenOps) return () => onOpenOps("team");
+    if (n.type === "payroll_alert" && onOpenOps) return () => onOpenOps("payroll");
+    return null;
+  };
+
   const tap = (n: AppNotification) => {
     if (!n.read_at) markRead(n.id);
-    if (n.job_id && onOpenJob) {
-      onOpenJob(n.job_id);
+    const go = routeOf(n);
+    if (go) {
+      go();
       onClose();
     }
   };
@@ -113,7 +125,7 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
                 {t("notif.markAll")}
               </button>
             )}
-            <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: "var(--color-dim)", cursor: "pointer", padding: 2, display: "inline-flex" }}>
+            <button onClick={onClose} aria-label={t("common.close")} style={{ background: "none", border: "none", color: "var(--color-dim)", cursor: "pointer", padding: 2, display: "inline-flex" }}>
               <Icon name="close" size={16} />
             </button>
           </div>
@@ -124,17 +136,17 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: "1px solid var(--color-border-dark)", background: "rgba(46,139,255,.08)" }}>
             <Icon name="bell" size={16} color="var(--color-primary)" />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600 }}>Turn on push alerts</div>
-              <div className="dim" style={{ fontSize: 12 }}>Notify this device even when the app is closed</div>
+              <div style={{ fontSize: 13.5, fontWeight: 600 }}>{t("notif.pushTitle")}</div>
+              <div className="dim" style={{ fontSize: 12 }}>{t("notif.pushSub")}</div>
             </div>
             <button className="bb" onClick={enablePushHere} disabled={pushBusy} style={{ flexShrink: 0, padding: "6px 12px", fontSize: 13 }}>
-              {pushBusy ? "…" : "Enable"}
+              {pushBusy ? "…" : t("notif.pushEnable")}
             </button>
           </div>
         )}
         {pushChecked && !pushSupported && (
           <div className="dim" style={{ fontSize: 12, padding: "10px 14px", borderBottom: "1px solid var(--color-border-dark)" }}>
-            Add Creed to your home screen to get push alerts on this device.
+            {t("notif.pushInstall")}
           </div>
         )}
 
@@ -157,7 +169,7 @@ export default function NotificationsPanel({ onClose, onOpenJob }: Props) {
                     display: "flex",
                     gap: 11,
                     padding: "12px 14px",
-                    cursor: n.job_id ? "pointer" : "default",
+                    cursor: routeOf(n) ? "pointer" : "default",
                     borderBottom: "1px solid var(--color-border-dark)",
                     background: isUnread ? `linear-gradient(90deg, ${m.color}18, transparent 70%)` : "transparent",
                     borderLeft: isUnread ? `2px solid ${m.color}` : "2px solid transparent",

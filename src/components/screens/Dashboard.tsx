@@ -5,12 +5,15 @@ import { t } from "@/lib/i18n";
 import { parseEntryDate, formatHours } from "@/lib/dates";
 import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
-import UserGuideModal from "../UserGuideModal";
 import NotificationsPanel from "../NotificationsPanel";
 import GettingStarted from "../GettingStarted";
 import BrandFooter from "../BrandFooter";
+import { OwnerDay, TechDay, fill } from "../DayCards";
 import CountUp from "@/components/CountUp";
 import { useBackLayer } from "@/lib/back-layer";
+import { computeQuests, parseQuestConfig } from "@/lib/quests";
+import { goWithIntent } from "@/lib/nav-intent";
+import { stopsForDay, fmtClock, localYmd } from "@/lib/day-plan";
 
 interface Props {
   setPage: (p: string) => void;
@@ -30,17 +33,12 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   const schedule = useStore((s) => s.schedule);
   const timeEntries = useStore((s) => s.timeEntries);
   const reviews = useStore((s) => s.reviews);
+  const referrals = useStore((s) => s.referrals);
   const payHistory = useStore((s) => s.payHistory);
   const notifications = useStore((s) => s.notifications);
   const unreadCount = notifications.filter((n) => !n.read_at).length;
 
-  // ── Next Job on Schedule ──
   const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const upcoming = schedule
-    .filter((s) => (s.end_date || s.sched_date) >= today)
-    .sort((a, b) => a.sched_date.localeCompare(b.sched_date));
-  const nextJob = upcoming[0];
 
   // ── Your next check (this user) ──
   // Mirrors what Run Payroll actually pays: every UNPAID time entry × rate,
@@ -51,6 +49,9 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   // self-run claim (by id, or legacy name when the row predates the
   // user_id column) so the same entries are counted.
   const rate = user.rate || 55;
+  // No rate on file yet (new joiners start at 0) → show HOURS, never a
+  // made-up $55/hr figure. `rate` above stays for the math.
+  const rateSet = (user.rate || 0) > 0;
   const mine = timeEntries.filter((e) => e.user_id === user.id || (!e.user_id && e.user_name === user.name));
   const unpaidMine = mine.filter((e) => !e.paid_at);
   const checkHrs = unpaidMine.reduce((s, e) => s + (e.hours || 0), 0);
@@ -58,7 +59,10 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   // Most recent payout (store loads pay_history newest-first) labels the
   // period — the unpaid entries are exactly everything since that date.
   const myPays = payHistory.filter((p) => p.user_id === user.id);
-  const lastPayDate = myPays.length ? myPays[0].pay_date : null;
+  const lastPayRaw = myPays.length ? myPays[0].pay_date : null;
+  const lastPayDate = lastPayRaw
+    ? parseEntryDate(lastPayRaw)?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) || lastPayRaw
+    : null;
   // This-week vs last-week pay — the "watch it grow / beat last week" hook.
   // parseEntryDate keeps manual (ISO-dated) entries in the right week.
   const ws = new Date(now); ws.setDate(now.getDate() - now.getDay()); ws.setHours(0, 0, 0, 0);
@@ -66,21 +70,30 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   const hrsBetween = (from: Date, to: Date | null) =>
     mine.filter((e) => { const d = parseEntryDate(e.entry_date); return d ? d >= from && (!to || d < to) : false; })
       .reduce((s, e) => s + (e.hours || 0), 0);
-  const weekPay = hrsBetween(ws, null) * rate;
-  const lastWeekPay = hrsBetween(lastWs, ws) * rate;
+  const weekHrs = hrsBetween(ws, null);
+  const lastWeekHrs = hrsBetween(lastWs, ws);
+  const weekPay = weekHrs * rate;
+  const lastWeekPay = lastWeekHrs * rate;
   const toBeat = Math.max(0, lastWeekPay - weekPay);
   const weekProgress = lastWeekPay > 0 ? Math.min(100, (weekPay / lastWeekPay) * 100) : (weekPay > 0 ? 100 : 0);
 
   // ── Closest Quest ──
-  const completedJobs = jobs.filter((j) => j.status === "complete" || j.status === "invoiced" || j.status === "paid").length;
-  const positiveReviews = reviews.filter((r) => (r.rating || 0) >= 3).length;
-  const fiveStarReviews = reviews.filter((r) => r.rating === 5).length;
-  const quests = [
-    { name: t("dash.questReviewFavor"), p: positiveReviews, g: 15, bonus: "$75" },
-    { name: t("dash.questFiveStarTech"), p: fiveStarReviews, g: 10, bonus: "$100" },
-    { name: t("dash.questSuperHandy"), p: completedJobs, g: 10, bonus: "$50" },
-  ];
-  const closest = quests.filter((q) => q.p < q.g).sort((a, b) => (b.p / b.g) - (a.p / a.g))[0];
+  // The shared quest engine with the Quests screen's exact inputs (this user,
+  // this 6-month cycle, the org's toggles + shop quests), so the card's
+  // progress always matches the Quests tab.
+  const { config: questConfig, custom: customQuests } = parseQuestConfig(org?.quest_config);
+  const cycleStart = new Date(now.getFullYear(), now.getMonth() < 6 ? 0 : 6, 1);
+  const { allQuests } = computeQuests({
+    userId: user.id,
+    userName: user.name,
+    jobs, reviews, referrals, timeEntries,
+    questConfig,
+    cycleStart,
+    customQuests,
+  });
+  const closest = allQuests
+    .filter((q) => q.progress < q.goal && q.key !== "handy_king")
+    .sort((a, b) => (b.progress / (b.goal || 1)) - (a.progress / (a.goal || 1)))[0];
 
   // ── Owner money + pipeline triage ──
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -99,11 +112,8 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
     })
     .reduce((s, j) => s + (j.total || 0), 0);
   const open = jobs.filter((j) => !j.archived);
-  // A quote that already went out is waiting on the customer, not on you.
-  const toSend = open.filter((j) => j.status === "quoted" && !j.quote_sent_at).length;
-  const waiting = open.filter((j) => j.status === "quoted" && !!j.quote_sent_at).length;
-  const toInvoice = open.filter((j) => j.status === "complete").length;
-  const unpaid = open.filter((j) => j.status === "invoiced").length;
+  // The Needs-attention buckets (to send / waiting / to invoice / unpaid)
+  // live in lib/day-plan needMatch, rendered by DayCards' OwnerDay.
   const pipeline = open
     .filter((j) => ["lead", "quoted", "accepted", "scheduled", "active"].includes(j.status))
     .reduce((s, j) => s + (j.total || 0), 0);
@@ -111,7 +121,6 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   const isClocked = (() => { try { return JSON.parse(localStorage.getItem("c_t_on") || "false"); } catch { return false; } })();
   const clockedJob = (() => { try { return localStorage.getItem("c_t_sj") ? JSON.parse(localStorage.getItem("c_t_sj")!) : ""; } catch { return ""; } })();
 
-  const [showUserGuide, setShowUserGuide] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   useBackLayer(showNotifs, () => setShowNotifs(false));
 
@@ -128,45 +137,14 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
       <Icon name="next" size={19} color="#fff" />
     </div>
   );
+  // Off the clock, the Clock-in CTA names the next stop still to do today
+  // (mine first) — "8:00 AM · 12 Oak St" — else the plain prompt.
+  const myNextStop = isClocked ? undefined
+    : stopsForDay({ schedule, jobs, timeEntries, day: localYmd(now), me: user.name }).find((s) => s.state !== "done");
   const quoteCta = <Cta glow="blue" icon="quote" title={t("dash.startQuote")} sub={t("dash.quoteInspectUpload")} onClick={() => setPage("qf")} />;
   const clockCta = isClocked
     ? <Cta glow="green" icon="worker" title={t("wv.workMode")} sub={clockedJob || t("dash.onTheClock")} onClick={() => setPage("workvision")} />
-    : <Cta glow="red" icon="start" title={t("wv.clockIn")} sub={t("wv.startDay")} onClick={() => setPage("workvision")} />;
-
-  const upNext = (
-    <div>
-      <div className="sl" style={{ margin: "0 2px 6px" }}>{t("dash.upNext")}</div>
-      <div className="cd" onClick={() => setPage("sched")} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "12px 13px" }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(255,204,0,.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icon name="schedule" size={19} color="#ffd84d" />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {nextJob ? (
-            <>
-              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16.5, letterSpacing: ".3px" }}>{nextJob.job}</div>
-              <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>
-                {(() => {
-                  const inProgress = nextJob.sched_date < today && nextJob.end_date && nextJob.end_date >= today;
-                  const displayDate = inProgress ? today : nextJob.sched_date;
-                  const d = new Date(displayDate + "T12:00:00");
-                  const dayStr = displayDate === today ? "Today" : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-                  const tm = nextJob.note?.match(/🕐\s*(\d{1,2}:\d{2})/);
-                  const timeStr = tm ? (() => { const [h, m] = tm[1].split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; return `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, "0")} ${ap}`; })() : "";
-                  return `${dayStr}${inProgress ? " · ongoing" : timeStr ? ` · ${timeStr}` : ""}`;
-                })()}
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px" }}>{t("dash.noNextJob")}</div>
-              <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{t("dash.tapToSchedule")}</div>
-            </>
-          )}
-        </div>
-        <Icon name="next" size={16} color="var(--color-dim)" />
-      </div>
-    </div>
-  );
+    : <Cta glow="red" icon="start" title={t("wv.clockIn")} sub={myNextStop ? [fmtClock(myNextStop.time), myNextStop.entry.job].filter(Boolean).join(" · ") : t("wv.startDay")} onClick={() => setPage("workvision")} />;
 
   return (
     <div className="fi" style={{ minHeight: "calc(100dvh - 150px)", display: "flex", flexDirection: "column" }}>
@@ -200,8 +178,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
         </div>
       </div>
 
-      {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} onOpenJob={openJob} />}
-      {showUserGuide && <UserGuideModal onClose={() => setShowUserGuide(false)} />}
+      {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} onOpenJob={openJob} onOpenOps={openOps} />}
 
       {isAdmin && openOps && <GettingStarted setPage={setPage} openOps={openOps} />}
 
@@ -210,33 +187,19 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
         {isAdmin ? (
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{quoteCta}{clockCta}</div>
-            {upNext}
-            <div>
-              <div className="sl" style={{ margin: "0 2px 7px" }}>{t("dash.needsAttention")}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {[
-                  { n: toSend, k: "toSend", l: t("dash.toSend"), c: "#ff5b5b" },
-                  { n: waiting, k: "waiting", l: t("dash.waitingOnCustomer"), c: "#ff9f43" },
-                  { n: toInvoice, k: "toInvoice", l: t("dash.toInvoice"), c: "#2e8bff" },
-                  { n: unpaid, k: "unpaid", l: t("dash.unpaid"), c: "#7b54f0" },
-                ].map((a) => (
-                  <div key={a.k} className="cd statusstrip top" onClick={() => setPage("jobs")} style={{ ["--c" as any]: a.c, padding: "14px 10px 12px", cursor: "pointer", textAlign: "center" }}>
-                    <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, lineHeight: 1, color: a.c }}>{a.n}</div>
-                    <div className="dim" style={{ fontSize: 12, marginTop: 5 }}>{a.l}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Today (or Wrap-up after hours) → Needs you — order never changes */}
+            <OwnerDay setPage={setPage} openJob={openJob} openOps={openOps} />
             <div className="cd" style={{ display: "flex", padding: "13px 0" }}>
               {[
-                { k: "myCheck", l: t("dash.myCheck"), v: `$${checkPay.toFixed(0)}`, green: true },
-                { k: "thisMonth", l: t("dash.thisMonth"), v: `$${earnedMonth.toLocaleString()}`, green: false },
-                { k: "pipeline", l: t("dash.pipeline"), v: pipeline >= 1000 ? `$${(pipeline / 1000).toFixed(1)}k` : `$${pipeline.toFixed(0)}`, green: false },
+                { k: "myCheck", l: t("dash.myCheck"), v: `$${checkPay.toFixed(0)}`, green: true, go: () => setPage("time") },
+                { k: "thisMonth", l: t("dash.thisMonth"), v: `$${earnedMonth.toLocaleString()}`, green: false, go: () => openOps?.("financials") },
+                { k: "pipeline", l: t("dash.pipeline"), v: pipeline >= 1000 ? `$${(pipeline / 1000).toFixed(1)}k` : `$${pipeline.toFixed(0)}`, green: false, go: () => goWithIntent(setPage, { page: "jobs", tab: "active" }) },
               ].map((m, i) => (
-                <div key={m.k} style={{ flex: 1, textAlign: "center", borderLeft: i ? "1px solid var(--color-border-dark)" : "none" }}>
+                // A button that keeps the plain cell look (global button styles reset).
+                <button key={m.k} onClick={m.go} style={{ flex: 1, textAlign: "center", borderTop: "none", borderRight: "none", borderBottom: "none", borderLeft: i ? "1px solid var(--color-border-dark)" : "none", background: "none", borderRadius: 0, padding: 0, color: "inherit", font: "inherit", textTransform: "none", letterSpacing: "normal", cursor: "pointer" }}>
                   <div className="sl" style={{ fontSize: 11.5 }}>{m.l}</div>
                   <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, marginTop: 3, color: m.green ? "var(--color-money)" : "inherit" }}>{m.v}</div>
-                </div>
+                </button>
               ))}
             </div>
             <DashboardCardPreview />
@@ -248,25 +211,37 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontSize: 12, letterSpacing: ".15em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}><CountUp value={checkPay} prefix="$" /></div>
+                  <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 38, color: "#3ee08f", lineHeight: 1, marginTop: 4 }}>{rateSet ? <CountUp value={checkPay} prefix="$" /> : formatHours(checkHrs)}</div>
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.16)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
                   <Icon name="trending" size={12} color="#3ee08f" /> {lastWeekPay > 0 ? (toBeat > 0 ? t("dash.keepGoing") : t("dash.aheadOfLastWeek")) : formatHours(checkHrs)}
                 </span>
               </div>
-              <div className="dim" style={{ fontSize: 13.5, marginTop: 6 }}>{formatHours(checkHrs)} {t("dash.unpaid")} · ${rate}/hr{lastPayDate ? ` · ${t("dash.since")} ${lastPayDate}` : ""}</div>
+              <div className="dim" style={{ fontSize: 13.5, marginTop: 6 }}>
+                {rateSet
+                  ? `${formatHours(checkHrs)} ${t("dash.unpaid")} · $${rate}/hr${lastPayDate ? ` · ${t("dash.since")} ${lastPayDate}` : ""}`
+                  : `${formatHours(checkHrs)} ${t("dash.unpaid")} · ${t("settings.rateNotSet")}`}
+              </div>
               {/* This week vs last week — the come-back-tomorrow incentive */}
               <div style={{ height: 8, background: "rgba(255,255,255,.07)", borderRadius: 5, overflow: "hidden", marginTop: 12 }}>
                 <div style={{ height: "100%", width: `${weekProgress}%`, background: "var(--color-success)", borderRadius: 5, boxShadow: darkMode ? "0 0 12px -1px var(--color-success)" : "none" }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-dim)", marginTop: 5 }}>
-                <span>{t("dash.thisWeek")} ${weekPay.toFixed(0)}</span>
-                <span>{lastWeekPay > 0 ? (toBeat > 0 ? `$${toBeat.toFixed(0)} to beat last week ($${lastWeekPay.toFixed(0)})` : t("dash.beatLastWeek")) : t("dash.buildStreak")}</span>
+                <span>{t("dash.thisWeek")} {rateSet ? `$${weekPay.toFixed(0)}` : formatHours(weekHrs)}</span>
+                <span>
+                  {lastWeekPay > 0
+                    ? (toBeat > 0
+                      ? (rateSet
+                        ? fill(t("dash.toBeatLastWeek"), { amt: toBeat.toFixed(0), last: lastWeekPay.toFixed(0) })
+                        : fill(t("dash.toBeatLastWeekHrs"), { amt: formatHours(Math.max(0, lastWeekHrs - weekHrs)), last: formatHours(lastWeekHrs) }))
+                      : t("dash.beatLastWeek"))
+                    : t("dash.buildStreak")}
+                </span>
               </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{clockCta}{quoteCta}</div>
-            {upNext}
+            <TechDay setPage={setPage} openOps={openOps} />
 
             {closest && (
               <div className="cd" onClick={() => setPage("quests")} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: "12px" }}>
@@ -276,10 +251,10 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 600 }}>{closest.name} · {closest.bonus} {t("dash.bonus")}</div>
                   <div style={{ height: 6, background: "var(--color-card-dark-3)", borderRadius: 4, overflow: "hidden", marginTop: 5 }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, (closest.p / closest.g) * 100)}%`, background: "var(--color-violet)", borderRadius: 4 }} />
+                    <div style={{ height: "100%", width: `${Math.min(100, (closest.progress / (closest.goal || 1)) * 100)}%`, background: "var(--color-violet)", borderRadius: 4 }} />
                   </div>
                 </div>
-                <div style={{ fontFamily: "Oswald", fontWeight: 700, color: "var(--color-violet)", fontSize: 15, whiteSpace: "nowrap" }}>{closest.p}/{closest.g}</div>
+                <div style={{ fontFamily: "Oswald", fontWeight: 700, color: "var(--color-violet)", fontSize: 15, whiteSpace: "nowrap" }}>{closest.progress}/{closest.goal}</div>
               </div>
             )}
           </>
