@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { Icon } from "../Icon";
+import { t } from "@/lib/i18n";
 import type { TimeOffKind, TimeOffRequest } from "@/lib/types";
 
 function num(x: unknown): number {
@@ -21,7 +22,7 @@ function num(x: unknown): number {
  * Settings → Time Off, which split the feature across two surfaces. The
  * Settings panel was retired in favor of one consolidated home here.
  */
-export default function HR() {
+export default function HR({ embedded }: { embedded?: boolean }) {
   const user = useStore((s) => s.user);
   const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   const loadAll = useStore((s) => s.loadAll);
@@ -45,25 +46,26 @@ export default function HR() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16 }}>
-        <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(46,139,255,.14)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icon name="worker" size={19} color="var(--color-primary)" />
-        </span>
-        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>HR &amp; Time Off</span>
-      </div>
+      {/* Inside Ops the back header already names the area — only crew,
+          who land here directly, get this title. */}
+      {!embedded && (
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(46,139,255,.14)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="worker" size={19} color="var(--color-primary)" />
+          </span>
+          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("nav.timeOff")}</span>
+        </div>
+      )}
 
-      <NewRequestForm userId={user.id} userName={user.name} onSubmitted={loadAll} />
-
-      <MyRequests requests={myRequests} />
-
+      {/* Admins: the requests waiting on them come first. */}
       {isAdmin && (
         <div className="cd mb">
           <h4 style={{ fontSize: 15, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Icon name="bell" size={14} color="var(--color-warning)" />
-            Pending Time Off ({pending.length})
+            {t("hr.pendingTitle").replace("{n}", String(pending.length))}
           </h4>
           {pending.length === 0 ? (
-            <p className="dim" style={{ fontSize: 14 }}>No pending requests.</p>
+            <p className="dim" style={{ fontSize: 14 }}>{t("hr.noPending")}</p>
           ) : (
             pending.map((r) => (
               <RequestRow key={r.id} req={r} actor={user.name} onChange={loadAll} />
@@ -72,22 +74,29 @@ export default function HR() {
         </div>
       )}
 
-      <p className="dim" style={{ fontSize: 13 }}>
-        More HR features (employee notes, contacts, documents) coming soon.
-      </p>
+      <NewRequestForm userId={user.id} userName={user.name} requestCount={myRequests.length} onSubmitted={loadAll} />
+
+      <MyRequests requests={myRequests} />
     </div>
   );
 }
 
+// Local calendar date as YYYY-MM-DD (same formula as Schedule.tsx) —
+// toISOString() is UTC, so a US evening defaulted the form to tomorrow.
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 function NewRequestForm({
-  userId, userName, onSubmitted,
+  userId, userName, requestCount, onSubmitted,
 }: {
   userId: string;
   userName: string;
+  /** The user's own request count — none yet means the form starts open. */
+  requestCount: number;
   onSubmitted: () => Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const [open, setOpen] = useState(requestCount === 0);
+  const today = ymd(new Date());
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const [kind, setKind] = useState<TimeOffKind>("vacation");
@@ -253,7 +262,9 @@ function MyRequests({ requests }: { requests: TimeOffRequest[] }) {
               fontFamily: "Oswald",
               letterSpacing: ".05em",
             }}>
-              {(r.status || "").toUpperCase()}
+              {r.status === "approved" ? t("hr.statusApproved")
+                : r.status === "denied" ? t("hr.statusDenied")
+                : t("hr.statusPending")}
             </span>
           </div>
         ))

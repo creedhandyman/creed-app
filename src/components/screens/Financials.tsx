@@ -6,6 +6,7 @@ import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours } from "@/lib/dates";
 import { profitSnapshot, makeInRange, makeEntryPay } from "@/lib/financials";
 import { Icon } from "../Icon";
+import { t } from "@/lib/i18n";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
 
@@ -15,8 +16,7 @@ interface MileageRow {
   total_miles: number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export default function Financials({ setPage: _setPage }: { setPage: (p: string) => void }) {
+export default function Financials({ setPage, embedded }: { setPage: (p: string) => void; embedded?: boolean }) {
   const jobs = useStore((s) => s.jobs);
   const timeEntries = useStore((s) => s.timeEntries);
   const profiles = useStore((s) => s.profiles);
@@ -28,6 +28,18 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
 
   const [range, setRange] = useState<Range>("month");
   const [printing, setPrinting] = useState(false);
+  // The deeper charts (jobs/week, by trade, team, top clients, quick stats)
+  // fold under "More detail" — collapsed by default, remembered per phone.
+  const [showDetail, setShowDetail] = useState<boolean>(() => {
+    try { return localStorage.getItem("c_fin_detail") === "1"; } catch { return false; }
+  });
+  const toggleDetail = () => {
+    setShowDetail((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("c_fin_detail", next ? "1" : "0"); } catch { /* */ }
+      return next;
+    });
+  };
 
   // Date filter
   const now = new Date();
@@ -58,6 +70,30 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
     netProfit: profit,
   } = profitSnapshot({ jobs, timeEntries, receipts, profiles, rangeStart });
   const totalMaterials = materialsCharged;
+
+  // One-sentence headline — always THIS calendar month so far, whatever
+  // period pill is picked (same shared snapshot; reused when the pill IS
+  // month). "Waiting to be paid" = every open invoice, the A/R card's total.
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthSnap = range === "month"
+    ? { completedRevenue, netProfit: profit }
+    : profitSnapshot({ jobs, timeEntries, receipts, profiles, rangeStart: monthStart });
+  const owedNow = jobs
+    .filter((j) => j.status === "invoiced" && !j.archived)
+    .reduce((s, j) => s + (j.total || 0), 0);
+  const roundMoney = (n: number) => Math.round(n).toLocaleString();
+  const headline = t("fin.headline")
+    .replace("{month}", now.toLocaleDateString("en-US", { month: "long" }))
+    .replace("{earned}", roundMoney(monthSnap.completedRevenue))
+    .replace("{kept}", roundMoney(monthSnap.netProfit))
+    .replace("{owed}", roundMoney(owedNow));
+
+  // A/R card → Jobs, Billing tab filtered to unpaid (one-shot handoff Jobs
+  // reads on mount).
+  const openUnpaidJobs = () => {
+    try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "jobs", tab: "billing", filter: "unpaid", at: Date.now() })); } catch { /* */ }
+    setPage("jobs");
+  };
 
   // Status buckets. "Issued quotes" = anything past the lead/inspection
   // intake stage (i.e. an actual estimate was sent or could be). "Accepted"
@@ -288,12 +324,15 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
   return (
     <div className="fi">
       {/* Header — Financials is rendered inside the Ops tabs, so the
-          old "← Dashboard" back button is redundant and removed. */}
-      <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <Icon name="trending" size={22} color="var(--color-primary)" />
-          Financials
-        </h2>
+          old "← Dashboard" back button is redundant and removed. Inside Ops
+          (embedded) the back header already names it: just Print P&L. */}
+      <div className="row mb" style={{ justifyContent: embedded ? "flex-end" : "space-between", alignItems: "center" }}>
+        {!embedded && (
+          <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <Icon name="trending" size={22} color="var(--color-primary)" />
+            Financials
+          </h2>
+        )}
         <button
           className="bo"
           onClick={printPL}
@@ -311,6 +350,11 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
           <Icon name="print" size={14} />
           {printing ? "Building..." : "Print P&L"}
         </button>
+      </div>
+
+      {/* The month in one plain sentence */}
+      <div className="cd mb" style={{ padding: 14, fontSize: 16, lineHeight: 1.45, fontWeight: 500 }}>
+        {headline}
       </div>
 
       {/* Range selector — mock period pills */}
@@ -344,7 +388,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 13 }}>
         {statCard("Revenue", `$${completedRevenue.toLocaleString()}`, "var(--color-success)", `${completed.length} jobs`)}
         {statCard("Crew cost", `$${Math.round(crewCost).toLocaleString()}`, "var(--color-accent-red)", `${rangeEntries.length} entries`)}
-        {statCard("Net profit", `$${profit.toLocaleString()}`, profit >= 0 ? "var(--color-success)" : "var(--color-accent-red)", "after materials")}
+        {statCard("Net profit", `$${Math.round(profit).toLocaleString()}`, profit >= 0 ? "var(--color-success)" : "var(--color-accent-red)", "after materials")}
         {statCard("Margin", `${completedRevenue > 0 ? Math.round((profit / completedRevenue) * 100) : 0}%`, "var(--color-primary)", "of revenue")}
       </div>
 
@@ -459,7 +503,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
             )}
             <div style={{ display: "flex", justifyContent: "space-between", borderTop: `2px solid var(--color-primary)`, paddingTop: 6, marginTop: 6 }}>
               <span style={{ fontWeight: 700, fontSize: 16 }}>Net Profit</span>
-              <span style={{ fontFamily: "Oswald", fontSize: 20, color: profit > 0 ? "var(--color-success)" : "var(--color-accent-red)" }}>${profit.toLocaleString()}</span>
+              <span style={{ fontFamily: "Oswald", fontSize: 20, color: profit > 0 ? "var(--color-success)" : "var(--color-accent-red)" }}>${Math.round(profit).toLocaleString()}</span>
             </div>
           </div>
           <div className="dim" style={{ fontSize: 14, marginTop: 6 }}>
@@ -501,7 +545,14 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
         const grandTotal = buckets.reduce((s, b) => s + b.total, 0);
         const overdueTotal = buckets.slice(1).reduce((s, b) => s + b.total, 0);
         return (
-          <div className="cd mb statusstrip" style={{ padding: 14, ["--c" as any]: overdueTotal > 0 ? "var(--color-warning)" : "var(--color-success)" }}>
+          <div
+            className="cd mb statusstrip"
+            role="button"
+            tabIndex={0}
+            onClick={openUnpaidJobs}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openUnpaidJobs(); } }}
+            style={{ padding: 14, cursor: "pointer", ["--c" as any]: overdueTotal > 0 ? "var(--color-warning)" : "var(--color-success)" }}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
               <h4 style={{ fontSize: 15, color: "var(--color-warning)", margin: 0 }}>
                 A/R Aging — Outstanding Invoices
@@ -526,9 +577,26 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
                 ${overdueTotal.toLocaleString()} past due — worth a follow-up.
               </div>
             )}
+            <div className="dim" style={{ fontSize: 13, marginTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+              {t("fin.chaseOwed")}
+              <Icon name="next" size={14} />
+            </div>
           </div>
         );
       })()}
+
+      {/* Deeper detail — folded by default so the screen stays calm. */}
+      <button
+        className="bo"
+        onClick={toggleDetail}
+        aria-expanded={showDetail}
+        style={{ width: "100%", marginBottom: 12, fontSize: 14, padding: "8px 12px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+      >
+        <Icon name={showDetail ? "collapse" : "expand"} size={14} />
+        {showDetail ? t("fin.lessDetail") : t("fin.moreDetail")}
+      </button>
+
+      {showDetail && (<>
 
       {/* Jobs per week chart */}
       <div className="cd mb" style={{ padding: 14 }}>
@@ -608,6 +676,7 @@ export default function Financials({ setPage: _setPage }: { setPage: (p: string)
         {statCard("Avg Rating", avgRating, "var(--color-highlight)", `${reviews.length} reviews`)}
         {statCard("Quote Value", `$${totalQuoteValue.toLocaleString()}`, "#888", "all quotes")}
       </div>
+      </>)}
     </div>
   );
 }

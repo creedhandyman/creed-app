@@ -75,7 +75,7 @@ export default function BrandingSettings() {
   };
 
   const saveBrand = async (c1: string, c2: string | null) => {
-    await db.patch("organizations", org.id, { brand_color: c1, brand_color_2: c2 });
+    if (!(await db.patch("organizations", org.id, { brand_color: c1, brand_color_2: c2 }))) return;
     await refreshOrg();
     useStore.getState().showToast("Brand color updated", "success");
   };
@@ -85,18 +85,21 @@ export default function BrandingSettings() {
   // the materials/checklist/units defaults. Resolved everywhere via
   // resolvePrimaryTrade(org.primary_trade), so legacy orgs read as handyman.
   const savePrimaryTrade = async (id: string) => {
-    await db.patch("organizations", org.id, tradePatch(id, org.trade_rates));
+    if (!(await db.patch("organizations", org.id, tradePatch(id, org.trade_rates)))) return;
     await refreshOrg();
     useStore.getState().showToast(`Primary trade set to ${tradeConfig(id).name}`, "success");
   };
 
   // Merge a patch into the org's site_content JSON without clobbering the
   // marketing-site fields (whyUs / about / cta / etc.) that live alongside.
-  const saveCardContent = async (patch: { headline?: string; services?: string[]; photoUrl?: string | null; privacyUrl?: string; smsTermsUrl?: string }) => {
+  // Resolves false when the write failed (db.patch already toasted it), so
+  // callers skip their success toast.
+  const saveCardContent = async (patch: { headline?: string; services?: string[]; photoUrl?: string | null; privacyUrl?: string; smsTermsUrl?: string }): Promise<boolean> => {
     let current: Record<string, unknown> = {};
     try { current = org.site_content ? JSON.parse(org.site_content) : {}; } catch { /* */ }
-    await db.patch("organizations", org.id, { site_content: JSON.stringify({ ...current, ...patch }) });
+    if (!(await db.patch("organizations", org.id, { site_content: JSON.stringify({ ...current, ...patch }) }))) return false;
     await refreshOrg();
+    return true;
   };
 
   const normalizeSlug = (raw: string) =>
@@ -135,7 +138,7 @@ export default function BrandingSettings() {
         setSlugDraft(org.site_slug || "");
         return;
       }
-      await db.patch("organizations", org.id, { site_slug: normalized });
+      if (!(await db.patch("organizations", org.id, { site_slug: normalized }))) return;
       setSlugDraft(normalized);
       await refreshOrg();
       useStore.getState().showToast("Public URL updated", "success");
@@ -157,19 +160,19 @@ export default function BrandingSettings() {
         .from("receipts")
         .upload(path, file, { upsert: false, contentType: file.type || undefined });
       if (error) {
-        useStore.getState().showToast("Upload failed: " + error.message, "error");
+        console.error("[Branding] logo upload failed", error);
+        useStore.getState().showToast(t("brand.uploadFailed"), "error");
         return;
       }
       const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
-      await db.patch("organizations", org.id, { logo_url: urlData.publicUrl });
+      if (!(await db.patch("organizations", org.id, { logo_url: urlData.publicUrl }))) return;
       await loadAll();
       await refreshOrg();
       setLogoBust(Date.now());
       useStore.getState().showToast("Logo updated", "success");
     } catch (err) {
-      useStore
-        .getState()
-        .showToast("Logo upload error: " + (err instanceof Error ? err.message : String(err)), "error");
+      console.error("[Branding] logo upload error", err);
+      useStore.getState().showToast(t("brand.uploadFailed"), "error");
     } finally {
       setUploading(false);
     }
@@ -188,14 +191,16 @@ export default function BrandingSettings() {
         .from("receipts")
         .upload(path, file, { upsert: false, contentType: file.type || undefined });
       if (error) {
-        useStore.getState().showToast("Upload failed: " + error.message, "error");
+        console.error("[Branding] card photo upload failed", error);
+        useStore.getState().showToast(t("brand.uploadFailed"), "error");
         return;
       }
       const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
-      await saveCardContent({ photoUrl: urlData.publicUrl });
+      if (!(await saveCardContent({ photoUrl: urlData.publicUrl }))) return;
       useStore.getState().showToast("Card photo updated", "success");
     } catch (err) {
-      useStore.getState().showToast("Photo upload error: " + (err instanceof Error ? err.message : String(err)), "error");
+      console.error("[Branding] card photo upload error", err);
+      useStore.getState().showToast(t("brand.uploadFailed"), "error");
     } finally {
       setPhotoUploading(false);
     }
@@ -273,7 +278,7 @@ export default function BrandingSettings() {
             onClick={async () => {
               if (!await useStore.getState().showConfirm("Remove Logo", "Remove the logo? PDFs will fall back to the org name only."))
                 return;
-              await db.patch("organizations", org.id, { logo_url: null });
+              if (!(await db.patch("organizations", org.id, { logo_url: null }))) return;
               await loadAll();
               await refreshOrg();
               setLogoBust(Date.now());
@@ -449,7 +454,7 @@ export default function BrandingSettings() {
                 onBlur={async (e) => {
                   const val = e.target.value.trim();
                   if (val !== (f.value || "")) {
-                    await db.patch("organizations", org.id, { [f.field]: val });
+                    if (!(await db.patch("organizations", org.id, { [f.field]: val }))) return;
                     await refreshOrg();
                     useStore.getState().showToast(`${f.label} updated`, "success");
                   }
@@ -516,7 +521,7 @@ export default function BrandingSettings() {
               let cur = "";
               try { cur = (org.site_content ? JSON.parse(org.site_content).headline : "") || ""; } catch { /* */ }
               if (v !== cur) {
-                await saveCardContent({ headline: v });
+                if (!(await saveCardContent({ headline: v }))) return;
                 useStore.getState().showToast("Headline updated", "success");
               }
             }}
@@ -558,7 +563,7 @@ export default function BrandingSettings() {
                   className="bo"
                   onClick={async () => {
                     if (!await useStore.getState().showConfirm("Remove Photo", "Remove the photo from your card?")) return;
-                    await saveCardContent({ photoUrl: null });
+                    if (!(await saveCardContent({ photoUrl: null }))) return;
                     useStore.getState().showToast("Photo removed", "success");
                   }}
                   style={{ fontSize: 13 }}
@@ -585,7 +590,7 @@ export default function BrandingSettings() {
                 cur = Array.isArray(c.services) ? c.services : [];
               } catch { /* */ }
               if (JSON.stringify(arr) !== JSON.stringify(cur)) {
-                await saveCardContent({ services: arr });
+                if (!(await saveCardContent({ services: arr }))) return;
                 useStore.getState().showToast("Services updated", "success");
               }
             }}
@@ -626,7 +631,7 @@ export default function BrandingSettings() {
                 let cur = "";
                 try { cur = (org.site_content ? JSON.parse(org.site_content)[f.key] : "") || ""; } catch { /* */ }
                 if (v !== cur) {
-                  await saveCardContent({ [f.key]: v });
+                  if (!(await saveCardContent({ [f.key]: v }))) return;
                   useStore.getState().showToast(`${f.label.replace(" URL", "")} link saved`, "success");
                 }
               }}

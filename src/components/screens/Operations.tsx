@@ -182,6 +182,16 @@ function OpsSettings() {
     if (orgs.length) useStore.getState().setOrg(orgs[0] as never);
   };
 
+  // One save path for every business setting: a quiet "Saved" when the
+  // write lands, then refresh. A failed write already toasted its own
+  // error (db.patch), so it shows only that — never a false "Saved".
+  const saveOrg = async (u: Record<string, unknown>) => {
+    if (await db.patch("organizations", org.id, u)) {
+      useStore.getState().showToast(t("settings.saved"), "success");
+      await refreshOrg();
+    }
+  };
+
   const tradeRates: Record<string, number> = (() => {
     try { return org.trade_rates ? JSON.parse(org.trade_rates) : {}; } catch { return {}; }
   })();
@@ -210,8 +220,7 @@ function OpsSettings() {
                 key={trade}
                 onClick={async () => {
                   const updated = isLicensed ? licensed.filter((t) => t !== trade) : [...licensed, trade];
-                  await db.patch("organizations", org.id, { licensed_trades: JSON.stringify(updated) });
-                  refreshOrg();
+                  await saveOrg({ licensed_trades: JSON.stringify(updated) });
                 }}
                 style={{
                   display: "flex", alignItems: "center", gap: 6, padding: "5px 8px",
@@ -251,8 +260,7 @@ function OpsSettings() {
               onBlur={async (e) => {
                 const v = parseFloat(e.target.value);
                 if (!(v > 0) || v === org.default_rate) return;
-                await db.patch("organizations", org.id, { default_rate: v });
-                refreshOrg();
+                await saveOrg({ default_rate: v });
               }}
             />
             <span style={{ fontSize: 13 }}>/hr</span>
@@ -263,7 +271,11 @@ function OpsSettings() {
           <div>
             <label className="sl">{t("ops.markup")}</label>
             <input type="number" key={`mk-${org.markup_pct}`} defaultValue={org.markup_pct || 0} min="0" step="1" placeholder="0" style={{ marginTop: 4 }}
-              onBlur={async (e) => { await db.patch("organizations", org.id, { markup_pct: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
+              onBlur={async (e) => {
+                const v = parseFloat(e.target.value) || 0;
+                if (v === Number(org.markup_pct || 0)) return;
+                await saveOrg({ markup_pct: v });
+              }} />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.markupHelp")}</div>
           </div>
           <div>
@@ -277,12 +289,16 @@ function OpsSettings() {
                 step="0.1"
                 placeholder="0"
                 style={{ flex: "0 0 80px" }}
-                onBlur={async (e) => { await db.patch("organizations", org.id, { tax_pct: parseFloat(e.target.value) || 0 }); refreshOrg(); }}
+                onBlur={async (e) => {
+                  const v = parseFloat(e.target.value) || 0;
+                  if (v === Number(org.tax_pct || 0)) return;
+                  await saveOrg({ tax_pct: v });
+                }}
               />
               <select
                 key={`txm-${org.tax_mode || "total"}`}
                 defaultValue={org.tax_mode || "total"}
-                onChange={async (e) => { await db.patch("organizations", org.id, { tax_mode: e.target.value }); refreshOrg(); }}
+                onChange={async (e) => { await saveOrg({ tax_mode: e.target.value }); }}
                 style={{ flex: 1, fontSize: 14 }}
                 title={t("ops.taxModeHelp")}
               >
@@ -298,7 +314,11 @@ function OpsSettings() {
           <div>
             <label className="sl">{t("ops.tripFee")}</label>
             <input type="number" key={`tf-${org.trip_fee}`} defaultValue={org.trip_fee || 0} min="0" step="5" placeholder="0" style={{ marginTop: 4 }}
-              onBlur={async (e) => { await db.patch("organizations", org.id, { trip_fee: parseFloat(e.target.value) || 0 }); refreshOrg(); }} />
+              onBlur={async (e) => {
+                const v = parseFloat(e.target.value) || 0;
+                if (v === Number(org.trip_fee || 0)) return;
+                await saveOrg({ trip_fee: v });
+              }} />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.tripFeeHelp")}</div>
           </div>
           <div>
@@ -314,8 +334,8 @@ function OpsSettings() {
               onBlur={async (e) => {
                 const v = parseFloat(e.target.value);
                 const next = Number.isFinite(v) && v >= 0 ? v : 0;
-                await db.patch("organizations", org.id, { min_labor_hours: next });
-                refreshOrg();
+                if (next === Number(org.min_labor_hours ?? 1)) return;
+                await saveOrg({ min_labor_hours: next });
               }}
             />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.minLaborHoursHelp")}</div>
@@ -344,8 +364,9 @@ function OpsSettings() {
               style={{ marginTop: 4 }}
               onBlur={async (e) => {
                 const v = parseFloat(e.target.value);
-                await db.patch("organizations", org.id, { deposit_pct: Number.isFinite(v) && v >= 0 ? Math.min(100, v) : 0 });
-                refreshOrg();
+                const next = Number.isFinite(v) && v >= 0 ? Math.min(100, v) : 0;
+                if (next === Number(org.deposit_pct ?? 50)) return;
+                await saveOrg({ deposit_pct: next });
               }}
             />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>Shown on the quote PDF. 0 = no deposit line.</div>
@@ -362,8 +383,9 @@ function OpsSettings() {
               style={{ marginTop: 4 }}
               onBlur={async (e) => {
                 const v = parseFloat(e.target.value);
-                await db.patch("organizations", org.id, { quote_valid_days: Number.isFinite(v) && v > 0 ? Math.round(v) : 30 });
-                refreshOrg();
+                const next = Number.isFinite(v) && v > 0 ? Math.round(v) : 30;
+                if (next === Number(org.quote_valid_days ?? 30)) return;
+                await saveOrg({ quote_valid_days: next });
               }}
             />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>How long the estimate stays valid.</div>
@@ -377,8 +399,9 @@ function OpsSettings() {
             placeholder={"e.g. Warranty: 1 year on workmanship.\nPrices subject to change after the validity window."}
             style={{ marginTop: 4, minHeight: 70, width: "100%" }}
             onBlur={async (e) => {
-              await db.patch("organizations", org.id, { quote_terms: e.target.value.trim() });
-              refreshOrg();
+              const v = e.target.value.trim();
+              if (v === (org.quote_terms || "").trim()) return;
+              await saveOrg({ quote_terms: v });
             }}
           />
           <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>Added as extra lines at the bottom of every quote PDF.</div>
@@ -401,7 +424,8 @@ function OpsSettings() {
                 const val = parseFloat(e.target.value);
                 const updated = { ...tradeRates };
                 if (val && val > 0) updated[trade] = val; else delete updated[trade];
-                await db.patch("organizations", org.id, { trade_rates: JSON.stringify(updated) }); refreshOrg();
+                if (JSON.stringify(updated) === JSON.stringify(tradeRates)) return;
+                await saveOrg({ trade_rates: JSON.stringify(updated) });
               }} />
             <span style={{ fontSize: 13 }}>/hr</span>
             {tradeRates[trade] ? <Icon name="check" size={14} color="var(--color-success)" /> : null}
@@ -412,7 +436,7 @@ function OpsSettings() {
       {/* Review Automation — auto-schedules a review-request SMS / email
           N hours after a Stripe-paid invoice. Wires the gamification quest
           flywheel without the owner having to remember. */}
-      <ReviewAutomationCard org={org} refreshOrg={refreshOrg} />
+      <ReviewAutomationCard org={org} saveOrg={saveOrg} />
     </div>
   );
 }
@@ -423,10 +447,10 @@ function OpsSettings() {
  *  reads them at send time. Defaults match what the migration sets. */
 function ReviewAutomationCard({
   org,
-  refreshOrg,
+  saveOrg,
 }: {
   org: NonNullable<ReturnType<typeof useStore.getState>["org"]>;
-  refreshOrg: () => Promise<void>;
+  saveOrg: (u: Record<string, unknown>) => Promise<void>;
 }) {
   const enabled = org.review_request_enabled !== false; // default TRUE
   const delayHours = typeof org.review_request_delay_hours === "number" ? org.review_request_delay_hours : 24;
@@ -453,8 +477,7 @@ function ReviewAutomationCard({
           type="checkbox"
           checked={enabled}
           onChange={async (e) => {
-            await db.patch("organizations", org.id, { review_request_enabled: e.target.checked });
-            refreshOrg();
+            await saveOrg({ review_request_enabled: e.target.checked });
           }}
           style={{ width: 16, height: 16, cursor: "pointer" }}
         />
@@ -479,8 +502,8 @@ function ReviewAutomationCard({
                 onBlur={async (e) => {
                   const v = parseInt(e.target.value, 10);
                   const next = Number.isFinite(v) && v >= 1 && v <= 168 ? v : 24;
-                  await db.patch("organizations", org.id, { review_request_delay_hours: next });
-                  refreshOrg();
+                  if (next === delayHours) return;
+                  await saveOrg({ review_request_delay_hours: next });
                 }}
               />
               <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
@@ -492,8 +515,7 @@ function ReviewAutomationCard({
               <select
                 value={channel}
                 onChange={async (e) => {
-                  await db.patch("organizations", org.id, { review_request_channel: e.target.value });
-                  refreshOrg();
+                  await saveOrg({ review_request_channel: e.target.value });
                 }}
                 style={{ marginTop: 4 }}
               >
@@ -516,8 +538,9 @@ function ReviewAutomationCard({
               placeholder="https://g.page/r/..."
               style={{ marginTop: 4 }}
               onBlur={async (e) => {
-                await db.patch("organizations", org.id, { google_review_url: e.target.value.trim() || null });
-                refreshOrg();
+                const v = e.target.value.trim();
+                if (v === reviewUrl.trim()) return;
+                await saveOrg({ google_review_url: v || null });
               }}
             />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
@@ -535,8 +558,8 @@ function ReviewAutomationCard({
               style={{ marginTop: 4, width: "100%", fontSize: 14, fontFamily: "inherit" }}
               onBlur={async (e) => {
                 const v = e.target.value.trim();
-                await db.patch("organizations", org.id, { review_request_message: v || null });
-                refreshOrg();
+                if (v === template.trim()) return;
+                await saveOrg({ review_request_message: v || null });
               }}
             />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
@@ -648,22 +671,26 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
       <div className="fi">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("settings.operations")}</span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4 }}>
             <Icon name="safety" size={12} color="#3ee08f" /> {roleLabel}
           </span>
         </div>
 
-        {/* KPIs */}
+        {/* KPIs — each one opens the area behind its number. */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 13 }}>
-          {[
-            { l: t("ops.payrollDue"), v: fmtMoney(payrollDue), c: "var(--color-money)" },
-            { l: `${t("ops.revenue")} · ${monthLabel}`, v: fmtMoney(revenueMonth), c: "inherit" },
-            { l: t("ops.netProfit"), v: fmtMoney(netProfit), c: netProfit >= 0 ? "var(--color-money)" : "var(--color-accent-red)" },
-          ].map((k) => (
-            <div key={k.l} style={{ background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, borderRadius: 13, padding: "11px 6px", textAlign: "center" }}>
-              <div style={{ fontSize: 8.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--color-dim)" }}>{k.l}</div>
+          {([
+            { l: t("ops.payrollDue"), v: fmtMoney(payrollDue), c: "var(--color-money)", to: "payroll" },
+            { l: `${t("ops.revenue")} · ${monthLabel}`, v: fmtMoney(revenueMonth), c: "inherit", to: "financials" },
+            { l: t("ops.netProfit"), v: fmtMoney(netProfit), c: netProfit >= 0 ? "var(--color-money)" : "var(--color-accent-red)", to: "financials" },
+          ] as { l: string; v: string; c: string; to: OpsTab }[]).map((k) => (
+            <button
+              key={k.l}
+              onClick={() => setTab(k.to)}
+              style={{ background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, borderRadius: 13, padding: "11px 6px", textAlign: "center", width: "100%", minWidth: 0, font: "inherit", textTransform: "none", letterSpacing: "normal", color: "inherit", cursor: "pointer" }}
+            >
+              <div style={{ fontSize: 10.5, lineHeight: 1.25, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--color-dim)" }}>{k.l}</div>
               <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: k.c }}>{k.v}</div>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -679,13 +706,13 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
                 style={{ position: "relative", textAlign: "left", background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, borderRadius: 15, padding: 13, cursor: "pointer", color: "inherit" }}
               >
                 {badge ? (
-                  <span style={{ position: "absolute", top: 11, right: 11, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 9.5, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center" }}>{badge}</span>
+                  <span style={{ position: "absolute", top: 11, right: 11, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "var(--color-accent-red)", color: "#fff", fontSize: 11, fontWeight: 700, fontFamily: "Oswald", display: "flex", alignItems: "center", justifyContent: "center" }}>{badge}</span>
                 ) : null}
                 <div style={{ width: 38, height: 38, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 9, background: st.bg }}>
                   <Icon name={st.icon} size={19} color={st.color} />
                 </div>
                 <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 13.5, letterSpacing: ".3px" }}>{areaLabel(id)}</div>
-                <div style={{ fontSize: 10, color: "var(--color-dim)", marginTop: 2 }}>{tileSub[id]}</div>
+                <div style={{ fontSize: 11.5, color: "var(--color-dim)", marginTop: 2 }}>{tileSub[id]}</div>
               </button>
             );
           })}
@@ -702,7 +729,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
           <button
             onClick={() => (selectedCustomerId ? setSelectedCustomerId(null) : setTab(null))}
             aria-label={t("ops.backToOperations")}
-            style={{ width: 30, height: 30, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit" }}
+            style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit" }}
           >
             <Icon name="back" size={16} />
           </button>
@@ -714,12 +741,24 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
         <SubTabErrorBoundary label="Payroll"><Payroll embedded /></SubTabErrorBoundary>
       )}
       {tab === "financials" && (
-        <SubTabErrorBoundary label="Financials"><Financials setPage={setPage} /></SubTabErrorBoundary>
+        <SubTabErrorBoundary label="Financials"><Financials setPage={setPage} embedded /></SubTabErrorBoundary>
       )}
       {tab === "customers" && (
         <SubTabErrorBoundary label="Customers">
           {selectedCustomerId
-            ? <CustomerDetail customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} />
+            ? (
+              <CustomerDetail
+                customerId={selectedCustomerId}
+                onBack={() => setSelectedCustomerId(null)}
+                embedded
+                // Related-work row → that job's detail in Jobs. The intent is
+                // a one-shot sessionStorage handoff Jobs reads on mount.
+                onOpenJob={(id) => {
+                  try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "jobs", jobId: id, at: Date.now() })); } catch { /* */ }
+                  setPage("jobs");
+                }}
+              />
+            )
             : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />}
         </SubTabErrorBoundary>
       )}
@@ -727,7 +766,9 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
         <SubTabErrorBoundary label="Recurring"><RecurringMemberships /></SubTabErrorBoundary>
       )}
       {tab === "hr" && (
-        <SubTabErrorBoundary label="HR"><HR /></SubTabErrorBoundary>
+        // Admins see it under the Ops back header (no second title); crew
+        // land here directly, so HR shows its own "Time Off" header.
+        <SubTabErrorBoundary label="HR"><HR embedded={isAdmin} /></SubTabErrorBoundary>
       )}
       {tab === "team" && (
         <SubTabErrorBoundary label="Team"><TeamStats /></SubTabErrorBoundary>
