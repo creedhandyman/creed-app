@@ -302,7 +302,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // notify buttons. Scoped by jobId so switching jobs hides a stale draft.
   // kind "invoice": sending (Open Messages / Copy) is what marks the job
   // invoiced — not generating a PDF nobody received.
-  const [sendStrip, setSendStrip] = useState<{ jobId: string; phone: string; msg: string; kind?: "invoice" | "quote" } | null>(null);
+  // PM jobs with a tenant on file get `recipients` (client + tenant, each
+  // with its own pre-addressed message) and a "Send to" chip row; `to` is
+  // the active index. Switching recipients replaces the draft.
+  const [sendStrip, setSendStrip] = useState<{
+    jobId: string; phone: string; msg: string; kind?: "invoice" | "quote";
+    recipients?: { label: string; phone: string; msg: string }[]; to?: number;
+  } | null>(null);
   // Record a payment taken outside Stripe (cash/check/…). `ref` is minted
   // when the sheet opens → the server's idempotency key for this payment.
   const [recordPay, setRecordPay] = useState<{ jobId: string; amount: string; method: "cash" | "check" | "card" | "other"; ref: string; busy?: boolean } | null>(null);
@@ -625,11 +631,48 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     setSelectMode(false);
   };
 
+  // Tenant/resident variant of a status update. Deliberately NO totals and
+  // NO status/pay link — that page shows the quote price, which is between
+  // the contractor and the paying client (the property manager).
+  const tenantUpdateMsg = (job: Job, resName: string): string => {
+    const orgName = org?.name || "us";
+    const prop = job.property || "your home";
+    const hello = resName ? `Hi ${resName.split(/\s+/)[0]}! ` : "Hi! ";
+    switch (job.status) {
+      case "scheduled":
+        return `${hello}This is ${orgName} — repairs at ${prop} are scheduled${job.job_date ? ` for ${job.job_date}` : ""}. See you then!`;
+      case "active":
+        return `${hello}This is ${orgName} — we're on our way to ${prop}.`;
+      case "complete":
+      case "invoiced":
+      case "paid":
+        return `${hello}Work at ${prop} is complete — thanks for having us! — ${orgName}`;
+      default:
+        return `${hello}This is ${orgName} — your property manager has asked us to handle some repairs at ${prop}. We'll be in touch to schedule.`;
+    }
+  };
+
+  // Client + (optional) tenant recipient list for the send strip. The tenant
+  // only becomes a separate chip when they have their OWN phone number.
+  const stripRecipients = (job: Job, clientMsg: string): { label: string; phone: string; msg: string }[] => {
+    const cust = job.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
+    const clientPhone = cust?.phone || "";
+    const list = [{ label: (job.client || cust?.name || "Client").split(/\s+/).slice(0, 2).join(" "), phone: clientPhone, msg: clientMsg }];
+    const res = residentContact(job.rooms);
+    if (res.phone && res.phone.replace(/[^\d]/g, "") !== clientPhone.replace(/[^\d]/g, "")) {
+      list.push({
+        label: res.name ? `${t("jobs.tenantLabel")} · ${res.name.split(/\s+/)[0]}` : t("jobs.tenantLabel"),
+        phone: res.phone,
+        msg: tenantUpdateMsg(job, res.name),
+      });
+    }
+    return list;
+  };
+
   // "Message customer" button under the CTA. Builds a status-aware, editable
   // text and opens the send strip (native SMS / Copy). This is the explicit
   // opt-in that replaced the old auto-copy-to-clipboard on every status change.
   const messageCustomer = async (job: Job) => {
-    const cust = job.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
     const orgName = org?.name || "us";
     const prop = job.property || "your property";
     const name = job.client || "there";
@@ -659,7 +702,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       default:
         msg = `Hi ${name}! Here's an update on your job at ${prop}:${url ? ` ${url}` : ""}`;
     }
-    setSendStrip({ jobId: job.id, phone: cust?.phone || "", msg, kind: job.status === "quoted" ? "quote" : undefined });
+    const recipients = stripRecipients(job, msg);
+    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg, kind: job.status === "quoted" ? "quote" : undefined, recipients, to: 0 });
   };
 
   // Paid-to-date / balance — what the customer actually still owes.
@@ -682,10 +726,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // "Send invoice": a ready-to-send text with the balance + the job link
   // (the customer pays there). The job flips to Invoiced when it's sent.
   const sendInvoice = async (job: Job) => {
-    const cust = job.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
     let url = "";
     try { url = await getStatusLink(job.id); } catch { url = ""; }
-    setSendStrip({ jobId: job.id, phone: cust?.phone || "", msg: invoiceText(job, url), kind: "invoice" });
+    const recipients = stripRecipients(job, invoiceText(job, url));
+    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: "invoice", recipients, to: 0 });
   };
   const markSent = (jobId: string, kind?: "invoice" | "quote") => {
     if (kind === "quote") { void markQuoteSent(jobId).then(() => loadAll()); return; }
@@ -1032,8 +1076,35 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <Icon name="send" size={15} /> {t("jobs.messageCustomer")}
             </button>
           )}
-          {sendStrip && sendStrip.jobId === dj.id && (
+          {sendStrip && sendStrip.jobId === dj.id && (() => {
+            // Sending to the TENANT never counts as sending the quote/invoice
+            // to the customer — those stamps (quote_sent_at, complete→invoiced)
+            // only fire for the client recipient (index 0).
+            const toClient = !sendStrip.recipients || (sendStrip.to ?? 0) === 0;
+            const markIfClient = () => { if (toClient) markSent(sendStrip.jobId, sendStrip.kind); };
+            return (
             <div style={{ marginBottom: 12, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
+              {(sendStrip.recipients?.length ?? 0) > 1 && (
+                <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span className="dim" style={{ fontSize: 12.5, marginRight: 2 }}>{t("jobs.sendTo")}</span>
+                  {sendStrip.recipients!.map((r, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSendStrip({ ...sendStrip, to: i, phone: r.phone, msg: r.msg })}
+                      style={{
+                        padding: "3px 10px", borderRadius: 99, fontSize: 12.5, fontFamily: "Oswald",
+                        background: (sendStrip.to ?? 0) === i ? "var(--color-primary)" : "transparent",
+                        color: (sendStrip.to ?? 0) === i ? "#fff" : "var(--color-dim)",
+                        border: `1px solid ${(sendStrip.to ?? 0) === i ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
                 {sendStrip.phone ? `To ${sendStrip.phone} · edit if needed` : "No phone on file — Open Messages and pick a contact, or use Copy."}
               </div>
@@ -1046,17 +1117,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <a
                   href={`sms:${sendStrip.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(sendStrip.msg)}`}
-                  onClick={() => { markSent(sendStrip.jobId, sendStrip.kind); setSendStrip(null); }}
+                  onClick={() => { markIfClient(); setSendStrip(null); }}
                   className="bb"
                   style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
                 >
                   <Icon name="send" size={15} color="#fff" /> Open Messages
                 </a>
-                <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); markSent(sendStrip.jobId, sendStrip.kind); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast("Couldn't copy on this device", "error"); } }} style={{ fontSize: 14 }}>Copy</button>
+                <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); markIfClient(); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast("Couldn't copy on this device", "error"); } }} style={{ fontSize: 14 }}>Copy</button>
                 <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label="Cancel" style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Lead context — the prospect's request + photos (lead jobs only) */}
           {djLead && (djLead.description || djLead.photos.length > 0) && (

@@ -39,11 +39,14 @@ export default function MarketingShell({ children }: { children: React.ReactNode
   // sets the store user, this fires and routes to "/" → the app gate).
   // Not on "/" itself: HomeGate server-renders the landing there (hidden for
   // signed-in users) and swaps in the app on its own — replacing "/" with "/"
-  // would only re-navigate.
+  // would only re-navigate. Legal pages are exempt: /terms and /privacy must
+  // stay readable while signed in (they're linked from texts and the A2P
+  // registration — a customer or carrier reviewer with an app session would
+  // otherwise land on the dashboard instead of the policy).
   const user = useStore((s) => s.user);
   const router = useRouter();
   useEffect(() => {
-    if (user && path !== "/") router.replace("/");
+    if (user && path !== "/" && path !== "/terms" && path !== "/privacy") router.replace("/");
   }, [user, router, path]);
 
   // Scroll-reveal for marketing cards. We add `.reveal-init` (hidden) only when

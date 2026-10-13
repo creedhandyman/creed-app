@@ -15,9 +15,17 @@
  *
  * The customer's phone comes from the linked Customer (job.customer_id). With
  * no phone on file the buttons disable with an explanatory tooltip.
+ *
+ * Property-manager jobs: when the job has a resident/tenant contact on file
+ * (rooms blob, lib/resident) with their own phone, a "Send to" chip row in
+ * the popup switches the text between the client (PM) and the tenant — each
+ * gets a correctly-addressed message, sent separately. Tenant variants never
+ * include the total or the status/pay link (pricing is the PM's business).
  */
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
+import { residentContact } from "@/lib/resident";
+import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -46,28 +54,36 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
   const showToast = useStore((s) => s.showToast);
 
   const customer = job?.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
-  const phone = customer?.phone || "";
+  const clientPhone = customer?.phone || "";
+  // Tenant/resident contact from the job blob — only a separate recipient
+  // when they have their OWN phone (same number = same person, no chips).
+  const res = job ? residentContact(job.rooms) : { name: "", phone: "", email: "" };
+  const tenantPhone =
+    res.phone && res.phone.replace(/[^\d]/g, "") !== clientPhone.replace(/[^\d]/g, "") ? res.phone : "";
   const orgName = org?.name || "us";
 
   const [open, setOpen] = useState<TemplateKey | null>(null);
   const [lateMinutes, setLateMinutes] = useState<number>(15);
   const [draft, setDraft] = useState("");
+  const [to, setTo] = useState<"client" | "tenant">("client");
+  const phone = to === "tenant" ? tenantPhone : clientPhone;
 
   const statusUrl = useMemo(() => {
     if (typeof window === "undefined" || !job) return "";
     return `${window.location.origin}/status?job=${job.id}`;
   }, [job]);
 
-  const greet = (job?.client || customer?.name || "").split(/\s+/)[0] || "";
-  const helloLine = greet ? `Hi ${greet}! ` : "";
-
-  const buildTemplate = (kind: TemplateKey, minutes: number): string => {
+  const buildTemplate = (kind: TemplateKey, minutes: number, recipient: "client" | "tenant"): string => {
     if (!job) return "";
+    const greet = (recipient === "tenant" ? res.name : job.client || customer?.name || "").split(/\s+/)[0] || "";
+    const helloLine = greet ? `Hi ${greet}! ` : "";
     if (kind === "enroute") {
-      return (
-        `${helloLine}This is ${orgName} — we're on our way to ${job.property}. ` +
-        `Track your job: ${statusUrl}`
-      );
+      // Tenant variant skips the status link — that page shows the quote
+      // total, which is between the contractor and the paying client.
+      return recipient === "tenant"
+        ? `${helloLine}This is ${orgName} — we're on our way to ${job.property}.`
+        : `${helloLine}This is ${orgName} — we're on our way to ${job.property}. ` +
+          `Track your job: ${statusUrl}`;
     }
     if (kind === "late") {
       return (
@@ -75,19 +91,28 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         `${minutes} minutes late to ${job.property}. Thanks for your patience!`
       );
     }
-    return (
-      `${helloLine}Work at ${job.property} is complete. ` +
-      `Total: $${(job.total || 0).toFixed(2)}. View & pay: ${statusUrl}`
-    );
+    return recipient === "tenant"
+      ? `${helloLine}Work at ${job.property} is complete — thanks for having us! — ${orgName}`
+      : `${helloLine}Work at ${job.property} is complete. ` +
+        `Total: $${(job.total || 0).toFixed(2)}. View & pay: ${statusUrl}`;
   };
 
   const openTemplate = (k: TemplateKey) => {
-    if (!phone) {
+    if (!clientPhone && !tenantPhone) {
       showToast("No phone on file for this customer", "warning");
       return;
     }
-    setDraft(buildTemplate(k, lateMinutes));
+    // Keep the current recipient when they have a phone; else fall back to
+    // whichever contact does.
+    const rcpt = phone ? to : clientPhone ? "client" : "tenant";
+    setTo(rcpt);
+    setDraft(buildTemplate(k, lateMinutes, rcpt));
     setOpen((cur) => (cur === k ? null : k));
+  };
+
+  const switchTo = (rcpt: "client" | "tenant") => {
+    setTo(rcpt);
+    if (open) setDraft(buildTemplate(open, lateMinutes, rcpt));
   };
 
   // sms: deep link. "?&body=" is the form that prefills the body on BOTH iOS
@@ -105,7 +130,8 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
 
   if (!job) return null;
 
-  const noPhoneTitle = phone
+  const anyPhone = clientPhone || tenantPhone;
+  const noPhoneTitle = anyPhone
     ? undefined
     : "No phone on file — link a customer with a phone number to enable.";
 
@@ -115,7 +141,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
       <button
         key={a.key}
         type="button"
-        disabled={!phone}
+        disabled={!anyPhone}
         title={noPhoneTitle}
         onClick={(e) => {
           e.stopPropagation();
@@ -133,8 +159,8 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
           background: active ? a.hue + "22" : "var(--color-card-dark-2)",
           border: `1px solid ${active ? a.hue : "var(--color-border-dark-2)"}`,
           color: "inherit",
-          opacity: phone ? 1 : 0.45,
-          cursor: phone ? "pointer" : "not-allowed",
+          opacity: anyPhone ? 1 : 0.45,
+          cursor: anyPhone ? "pointer" : "not-allowed",
         }}
       >
         <span
@@ -185,7 +211,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
               type="button"
               onClick={() => {
                 setLateMinutes(m);
-                setDraft(buildTemplate("late", m));
+                setDraft(buildTemplate("late", m, to));
               }}
               style={{
                 padding: "3px 10px",
@@ -203,6 +229,36 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
           ))}
         </div>
       )}
+      {clientPhone && tenantPhone ? (
+        // PM job with a tenant on file: pick who this update goes to. Each
+        // recipient gets their own correctly-addressed text, sent separately
+        // (never a group thread between the manager and the tenant).
+        <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="dim" style={{ fontSize: 12.5, marginRight: 2 }}>{t("jobs.sendTo")}</span>
+          {([
+            { k: "client" as const, label: (job.client || customer?.name || "Client").split(/\s+/).slice(0, 2).join(" ") },
+            { k: "tenant" as const, label: res.name ? `${t("jobs.tenantLabel")} · ${res.name.split(/\s+/)[0]}` : t("jobs.tenantLabel") },
+          ]).map((r) => (
+            <button
+              key={r.k}
+              type="button"
+              onClick={() => switchTo(r.k)}
+              style={{
+                padding: "3px 10px",
+                borderRadius: 99,
+                fontSize: 12.5,
+                fontFamily: "Oswald",
+                background: to === r.k ? "var(--color-primary)" : "transparent",
+                color: to === r.k ? "#fff" : "var(--color-dim)",
+                border: `1px solid ${to === r.k ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                cursor: "pointer",
+              }}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
         To {phone} · edit before sending if needed
       </div>
