@@ -146,6 +146,24 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `start_time` set, `end_time` empty, `hours: 0`. Clock-out patches
   that same row. The active row's id lives in localStorage as
   `c_t_active_id`. Both Timer.tsx and WorkVision.tsx share this state.
+  **Server check (2026-10-13)**: that local state is reconciled with the
+  server — after each online load `store.reconcileClock` asks "is my active
+  row still open?" (by-id read, signed-in session only; skipped while a
+  close-write for it is queued) and, if it was closed/removed elsewhere (a
+  manager's Force clock-out, another phone), clears the local clock and sets
+  `clockReset {id}`, which Timer/WorkVision/Home follow. Every shift close
+  (clock-out, force-out, Set finish time, ghost delete) goes through the
+  offline queue with `onlyIfOpen` (lands only while `end_time IS NULL`; a
+  conflict keeps the server's times + toasts); clock-ins replay insert-only
+  (`ignoreDuplicates`). Rule when a close finds the row already closed:
+  `lib/clock-sync.ts resolveClose` (tested) — our own retry = done; paid rows
+  never written; the tech's OWN clock-out (`earlierWins`) replaces a LATER
+  office close on an unpaid row, office closes never shrink a real one.
+  Clock-out flips local state off immediately (the write is queued
+  synchronously) and `markLocalClockOut` keeps reconcile from reading our own
+  close as the office's. The 15s poll retries the queue; transient errors
+  (no code, PGRST000-003/303, 57014, 08xxx…) retry for 24h from the first
+  failure. Never add an unconditional end_time patch — pass `onlyIfOpen`.
 - **Quote pricing**: the min-labor-floor → trip-fee → discount → tax →
   grand-total cascade lives in ONE place — `src/lib/pricing.ts`
   `priceCascade()` — consumed by QuoteForge's live preview (headline +
