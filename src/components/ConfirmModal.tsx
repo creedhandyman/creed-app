@@ -1,14 +1,21 @@
 "use client";
 import { useStore } from "@/lib/store";
+import { t } from "@/lib/i18n";
 
 export default function ConfirmModal() {
-  const { title, message, visible } = useStore((s) => s.confirmState);
+  const { title, message, visible, opts } = useStore((s) => s.confirmState);
   const resolveConfirm = useStore((s) => s.resolveConfirm);
 
   if (!visible) return null;
 
-  const isDanger = /delete|remove|cancel|discard/i.test(title + message);
+  // Danger is read from the TITLE only — a message like "Cancel to go take
+  // some photos" must not turn a harmless confirm into a red DELETE.
+  const isDanger = opts?.danger ?? /delete|remove|discard|cancel|eliminar|borrar|quitar|descartar|cancelar/i.test(title);
   const accent = isDanger ? "#C00000" : "#2E75B6";
+  const cancelLabel = opts?.cancelLabel ?? t("common.cancel");
+  // A short danger title doubles as the button ("Delete Job" → DELETE JOB),
+  // so the destructive button names what it does.
+  const confirmLabel = opts?.confirmLabel ?? (isDanger ? (title.length <= 24 ? title : t("common.delete")) : t("common.confirm"));
 
   return (
     <div
@@ -90,7 +97,7 @@ export default function ConfirmModal() {
               e.currentTarget.style.color = "#aaa";
             }}
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             onClick={() => resolveConfirm(true)}
@@ -119,7 +126,7 @@ export default function ConfirmModal() {
               e.currentTarget.style.filter = "brightness(1)";
             }}
           >
-            {isDanger ? "Delete" : "Confirm"}
+            {confirmLabel}
           </button>
         </div>
       </div>

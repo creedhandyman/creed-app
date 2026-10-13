@@ -1,11 +1,12 @@
 "use client";
 import { useStore } from "@/lib/store";
+import { Icon } from "./Icon";
 
 const COLORS = {
-  success: { bg: "rgba(0,204,102,0.14)",  border: "rgba(0,204,102,0.85)",  glow: "rgba(0,204,102,0.5)",  glow2: "rgba(0,204,102,0.45)",  icon: "✅" },
-  error:   { bg: "rgba(192,0,0,0.14)",    border: "rgba(192,0,0,0.85)",    glow: "rgba(255,91,91,0.5)",  glow2: "rgba(255,91,91,0.45)",  icon: "❌" },
-  info:    { bg: "rgba(46,117,182,0.14)", border: "rgba(46,117,182,0.85)", glow: "rgba(46,139,255,0.5)", glow2: "rgba(46,139,255,0.45)", icon: "ℹ️" },
-  warning: { bg: "rgba(255,136,0,0.14)",  border: "rgba(255,136,0,0.85)",  glow: "rgba(255,136,0,0.5)",  glow2: "rgba(255,136,0,0.45)",  icon: "⚠️" },
+  success: { bg: "rgba(0,204,102,0.14)",  border: "rgba(0,204,102,0.85)",  glow: "rgba(0,204,102,0.5)",  glow2: "rgba(0,204,102,0.45)",  icon: "checkCircle", ink: "#00cc66" },
+  error:   { bg: "rgba(192,0,0,0.14)",    border: "rgba(192,0,0,0.85)",    glow: "rgba(255,91,91,0.5)",  glow2: "rgba(255,91,91,0.45)",  icon: "errorCircle", ink: "#ff5b5b" },
+  info:    { bg: "rgba(46,117,182,0.14)", border: "rgba(46,117,182,0.85)", glow: "rgba(46,139,255,0.5)", glow2: "rgba(46,139,255,0.45)", icon: "info",        ink: "#5aa6ff" },
+  warning: { bg: "rgba(255,136,0,0.14)",  border: "rgba(255,136,0,0.85)",  glow: "rgba(255,136,0,0.5)",  glow2: "rgba(255,136,0,0.45)",  icon: "warn",        ink: "#ff9a2e" },
 } as const;
 
 export default function Toast() {
@@ -19,6 +20,8 @@ export default function Toast() {
   return (
     <div
       onClick={hideToast}
+      role="status"
+      aria-live="polite"
       style={{
         position: "fixed",
         top: "max(16px, env(safe-area-inset-top))",
@@ -41,7 +44,7 @@ export default function Toast() {
         animation: "toastIn 0.36s cubic-bezier(0.22,1,0.36,1)",
       }}
     >
-      <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1 }}>{c.icon}</span>
+      <Icon name={c.icon} size={20} color={c.ink} strokeWidth={2} />
       <span style={{ fontSize: 15.5, color: "#e8e8ee", fontFamily: "Source Sans 3, sans-serif", lineHeight: 1.4, letterSpacing: 0.1 }}>
         {message}
       </span>

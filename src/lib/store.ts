@@ -52,6 +52,18 @@ function sv(key: string, value: unknown) {
   localStorage.setItem("c_" + key, JSON.stringify(value));
 }
 
+/* ── Toast timing (module-level so a re-render never resets them) ── */
+// The ONE pending auto-hide. Cleared before every new toast so an earlier
+// toast's timer can never hide a later one mid-read.
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+// When the last error toast went up — a success toast fired right after an
+// ignored failed write must not paper over the error.
+let lastErrorAt = 0;
+
+/** Optional wording/colour for a confirm. Omitted = ConfirmModal guesses
+ *  danger from the title and uses Cancel / Confirm (or the title) labels. */
+export type ConfirmOpts = { confirmLabel?: string; cancelLabel?: string; danger?: boolean };
+
 /* ── Store type ── */
 interface AppState {
   // auth
@@ -78,8 +90,8 @@ interface AppState {
   toast: { message: string; type: "success" | "error" | "info" | "warning"; visible: boolean };
   showToast: (message: string, type?: "success" | "error" | "info" | "warning") => void;
   hideToast: () => void;
-  confirmState: { title: string; message: string; visible: boolean; resolve: ((v: boolean) => void) | null };
-  showConfirm: (title: string, message: string) => Promise<boolean>;
+  confirmState: { title: string; message: string; visible: boolean; resolve: ((v: boolean) => void) | null; opts?: ConfirmOpts };
+  showConfirm: (title: string, message: string, opts?: ConfirmOpts) => Promise<boolean>;
   resolveConfirm: (v: boolean) => void;
 
   // data
@@ -348,23 +360,32 @@ export const useStore = create<AppState>((set, get) => ({
   /* ── Toast + Confirm ── */
   toast: { message: "", type: "info" as const, visible: false },
   showToast: (message, type = "success") => {
+    const cur = get().toast;
+    // Background chatter ("Syncing data…") must not bury a real problem.
+    if (type === "info" && cur.visible && (cur.type === "error" || cur.type === "warning")) return;
+    // A success fired right after an ignored failed write can't hide the error.
+    if (type === "success" && cur.visible && cur.type === "error" && Date.now() - lastErrorAt < 1500) return;
+    if (type === "error") lastErrorAt = Date.now();
     set({ toast: { message, type, visible: true } });
     // Errors get a longer window — they often carry diagnostic detail
-    // (Postgres code/hint) that a 3s flash doesn't give time to read.
-    const ms = type === "error" ? 8000 : 3000;
-    setTimeout(() => get().hideToast(), ms);
+    // (Postgres code/hint) that a 3s flash doesn't give time to read. Long
+    // messages get reading time on top (capped at 10s).
+    const base = type === "error" ? 8000 : type === "warning" ? 6000 : 3000;
+    const ms = Math.min(10000, Math.max(base, 1500 + message.length * 55));
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastTimer = null; get().hideToast(); }, ms);
   },
   hideToast: () => set({ toast: { ...get().toast, visible: false } }),
   confirmState: { title: "", message: "", visible: false, resolve: null },
-  showConfirm: (title, message) => {
+  showConfirm: (title, message, opts) => {
     return new Promise<boolean>((resolve) => {
-      set({ confirmState: { title, message, visible: true, resolve } });
+      set({ confirmState: { title, message, visible: true, resolve, opts } });
     });
   },
   resolveConfirm: (v) => {
     const { confirmState } = get();
     if (confirmState.resolve) confirmState.resolve(v);
-    set({ confirmState: { title: "", message: "", visible: false, resolve: null } });
+    set({ confirmState: { title: "", message: "", visible: false, resolve: null, opts: undefined } });
   },
 
   /* ── Data ── */

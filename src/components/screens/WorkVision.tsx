@@ -6,7 +6,7 @@ import { db, supabase } from "@/lib/supabase";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip } from "@/lib/parser";
-import { formatHours } from "@/lib/dates";
+import { formatHours, parseEntryDate } from "@/lib/dates";
 import { recordJobOutcome, jobActualHours, jobHasOpenEntries } from "@/lib/learning";
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
@@ -84,6 +84,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const user = useStore((s) => s.user)!;
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
+  const timeEntries = useStore((s) => s.timeEntries);
   const loadAll = useStore((s) => s.loadAll);
   const saveTimeEntry = useStore((s) => s.saveTimeEntry);
   const dropTimeEntry = useStore((s) => s.dropTimeEntry);
@@ -122,7 +123,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // reason a tech is taking a photo while inside Work Vision is to
   // document completed work — and the completeJob() gate down below
   // only counts type==="after" photos as completion photos. Tech can
-  // flip this to "before" or "work" before snapping if needed.
+  // flip this to "before" or "work" before snapping if needed. A fresh job
+  // starts on "before" instead (one-time pick per job, further down).
   const [photoType, setPhotoType] = useState<"before" | "work" | "after">("after");
   // Guide tab: tap-to-check tools and shopping items, plus custom additions.
   // Persisted into the job's `rooms` blob (same place workOrder lives) so
@@ -164,12 +166,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   }, [on, st]);
 
   // Find the active job. Prefer the explicit FK we stamped at clock-in so two
-  // jobs at the same address don't collapse to whichever Array.find hits first.
-  // Fall back to address match for legacy clock-ins from before this state
-  // existed.
-  const activeJob =
-    (activeJobId ? jobs.find((j) => j.id === activeJobId) : undefined) ||
-    jobs.find((j) => j.property === sj);
+  // jobs at the same address don't collapse to whichever Array.find hits first
+  // — but only while it still matches the clocked-in address: a clock-in from
+  // the Time tab doesn't touch the pin, so a stale id must not hijack the
+  // checklist / photos / receipts / Complete Job. Fall back to address match
+  // for legacy clock-ins. General time (sj "") never resolves to a job.
+  const pinned = activeJobId ? jobs.find((j) => j.id === activeJobId) : undefined;
+  const activeJob = !sj
+    ? undefined
+    : (pinned && pinned.property === sj ? pinned : jobs.find((j) => j.property === sj) || pinned);
   const jobData = (() => {
     try { return activeJob ? (typeof activeJob.rooms === "string" ? JSON.parse(activeJob.rooms) : activeJob.rooms) : null; }
     catch { return null; }
@@ -196,6 +201,20 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setExtraTools(Array.isArray(jobData.customTools) ? jobData.customTools : []);
     setExtraShop(Array.isArray(jobData.customShop) ? jobData.customShop : []);
     setRemovedGuideShop(Array.isArray(jobData.removedGuideShop) ? jobData.removedGuideShop : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob?.id]);
+
+  // Pick a sensible photo tag ONCE per job: nothing shot and nothing ticked
+  // yet → "before"; every task done → "after"; otherwise leave it. A manual
+  // chip tap wins for the rest of the session (the ref stops a re-pick).
+  const photoTypeJobRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeJob || photoTypeJobRef.current === activeJob.id) return;
+    photoTypeJobRef.current = activeJob.id;
+    const photos: { type?: string }[] = Array.isArray(jobData?.photos) ? jobData.photos : [];
+    const hasBefore = photos.some((p) => p.type === "before");
+    if (!hasBefore && !workOrder.some((w) => w.done)) setPhotoType("before");
+    else if (workOrder.length > 0 && workOrder.every((w) => w.done)) setPhotoType("after");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.id]);
 
@@ -257,6 +276,51 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // just the start day, so a job scheduled across several days still shows in
   // Work Mode on its middle/end days. (Mirrors Schedule.tsx spansDay.)
   const todaySchedule = schedule.filter((s) => todayStr >= s.sched_date && todayStr <= (s.end_date || s.sched_date));
+  // Today's stops for the picker — same rules as Home's day plan / Schedule:
+  // an entry's job is its linked job_id, else the latest non-archived job at
+  // that address; archived or finished jobs drop out; time from the note's
+  // "🕐 HH:MM", crew from "👷 names" + the job's requested tech. My stops
+  // first, then by time (untimed last), then address.
+  const todayStops = (() => {
+    const latestAt = (property?: string) => property
+      ? jobs.filter((j) => j.property === property && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0]
+      : undefined;
+    const minutes = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+    return todaySchedule
+      .map((s) => {
+        const job = (s.job_id ? jobs.find((j) => j.id === s.job_id) : undefined) || latestAt(s.job);
+        const time = s.note?.match(/🕐\s*(\d{1,2}:\d{2})/)?.[1] || "";
+        const named = s.note?.match(/👷\s*([^·]+)/)?.[1]?.split(",").map((n) => n.trim()).filter(Boolean) || [];
+        const crew = job?.requested_tech && !named.includes(job.requested_tech) ? [...named, job.requested_tech] : named;
+        return { s, job, time, crew, mine: !!user.name && crew.includes(user.name) };
+      })
+      .filter((x) => !(x.job && (x.job.archived || ["complete", "invoiced", "paid"].includes(x.job.status))))
+      .sort((a, b) => {
+        if (a.mine !== b.mine) return a.mine ? -1 : 1;
+        if (a.time && b.time && a.time !== b.time) return minutes(a.time) - minutes(b.time);
+        if (!!a.time !== !!b.time) return a.time ? -1 : 1;
+        return (a.s.job || "").localeCompare(b.s.job || "");
+      });
+  })();
+  // "14:05" → "2:05 PM" (the dashboard's Up-next format).
+  const fmtClock = (hhmm: string) => {
+    const [h, m] = hhmm.split(":").map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  };
+
+  // "Nice work" card once a shift is done today: my CLOSED entries dated today
+  // (parseEntryDate keeps M/D/YYYY and ISO dates local) + the next check —
+  // unpaid hours × my rate, the same number Home shows (omitted with no rate).
+  const closedToday = timeEntries.filter((e) => {
+    if (e.user_id !== user.id || !e.end_time) return false;
+    const d = parseEntryDate(e.entry_date);
+    return !!d && d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+  });
+  const hrsToday = closedToday.reduce((sum, e) => sum + (e.hours || 0), 0);
+  const unpaidHrs = timeEntries
+    .filter((e) => (e.user_id === user.id || (!e.user_id && e.user_name === user.name)) && !e.paid_at)
+    .reduce((sum, e) => sum + (e.hours || 0), 0);
+  const nextCheckAmt = user.rate ? Math.round(unpaidHrs * user.rate).toLocaleString("en-US") : "";
 
   // Clock in: create an in-progress time_entries row so admins can see who's
   // clocked in right now (same pattern Timer.tsx uses). When the caller knows
@@ -321,7 +385,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Otherwise a shift past the long-shift limit — a forgotten clock-out —
   // asks for the real finish time instead of booking all of it.
   // Resolves false if the tech cancelled that question (still clocked in).
-  const clockOut = async (endAtArg?: number): Promise<boolean> => {
+  // `quiet` skips the clocked-out toast (Complete Job shows its own, single one).
+  // No confirm in here — the header pill asks; Complete Job must not.
+  const clockOut = async (endAtArg?: number, opts?: { quiet?: boolean }): Promise<boolean> => {
     if (!st) return true;
     let endAt = endAtArg ?? Date.now();
     if (endAtArg === undefined && endAt - st >= LONG_SHIFT_MS) {
@@ -379,7 +445,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setActiveId(null);
     setActiveJobId(null);
     await loadAll();
-    useStore.getState().showToast(`Clocked out — ${formatHours(hrs)} logged`, "success");
+    if (!opts?.quiet) useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");
     return true;
   };
 
@@ -450,7 +516,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         const ok = await enqueueUpload("job-photo", file, { jobId: activeJob.id, path, tag: tag0, ext });
         if (ok) { bumpPendingUploads(); useStore.getState().showToast("Photo saved — uploads when you reconnect", "info"); return; }
       }
-      useStore.getState().showToast("Photo upload failed: " + error.message, "error");
+      console.error("[WorkVision] photo upload failed:", error);
+      useStore.getState().showToast(t("wv.photoUploadFailed"), "error");
       return;
     }
     const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
@@ -515,7 +582,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           });
           if (queued) { bumpPendingUploads(); useStore.getState().showToast("Receipt saved — uploads when you reconnect", "info"); return; }
         }
-        useStore.getState().showToast("Receipt upload failed: " + (e instanceof Error ? e.message : String(e)), "error");
+        console.error("[WorkVision] receipt upload failed:", e);
+        useStore.getState().showToast(t("wv.receiptUploadFailed"), "error");
         return;
       }
 
@@ -541,10 +609,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         });
       }
     } catch (err) {
-      useStore.getState().showToast(
-        "Error saving receipt: " + (err instanceof Error ? err.message : String(err)),
-        "error",
-      );
+      console.error("[WorkVision] saving receipt failed:", err);
+      useStore.getState().showToast(t("wv.receiptUploadFailed"), "error");
     } finally {
       setUploadingReceipt(false);
     }
@@ -562,7 +628,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      useStore.getState().showToast("Receipt scan failed: " + (err?.error || res.statusText), "warning");
+      console.error("[WorkVision] receipt scan failed:", err?.error || res.statusText);
+      // The receipt itself IS saved — say so, so nobody re-uploads (and
+      // double-counts) it; only the AI read-out didn't finish.
+      useStore.getState().showToast(t("wv.receiptScanFailed"), "warning");
       return;
     }
     const { data } = await res.json();
@@ -655,20 +724,26 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Complete job
   const completeJob = async () => {
     if (!activeJob) {
-      useStore.getState().showToast("You're clocked in to General — clock in to a job to complete it.", "warning");
+      useStore.getState().showToast(t("wv.generalNoComplete"), "warning");
       return;
     }
+    // ONE calm check, only when something is missing (unchecked tasks and/or
+    // no after photos). "Go back" lands where the gap is — Photos first,
+    // since after photos make the job report and the portfolio.
     const unchecked = workOrder.filter((w) => !w.done).length;
-    if (unchecked > 0) {
-      if (!await useStore.getState().showConfirm("Incomplete Items", `${unchecked} item${unchecked !== 1 ? "s" : ""} unchecked. Complete anyway?`)) return;
-    }
-    // Remind to take after photos
-    const photoCount = jobData?.photos?.filter((p: { type: string }) => p.type === "after").length || 0;
-    if (photoCount === 0) {
-      // Confirm = finish anyway, Cancel = go take photos. (The old wording
-      // asked "take photos?" — so Confirm finished WITHOUT them, backwards.)
-      if (!await useStore.getState().showConfirm("Finish without after photos?", "There are no after photos yet — they make the job report and your portfolio. Cancel to go take some, or Confirm to finish without them.")) {
-        setSection("photos");
+    const afterCount = jobData?.photos?.filter((p: { type: string }) => p.type === "after").length || 0;
+    if (unchecked > 0 || afterCount === 0) {
+      const parts = [
+        unchecked > 0 ? (unchecked === 1 ? t("wv.tasksUncheckedOne") : t("wv.tasksUncheckedMany").replace("{n}", String(unchecked))) : null,
+        afterCount === 0 ? t("wv.noAfterPhotosYet") : null,
+      ].filter(Boolean);
+      const ok = await useStore.getState().showConfirm(t("wv.finishJobQ"), parts.join(" · "), {
+        confirmLabel: t("wv.finishJob"),
+        cancelLabel: t("wv.goBack"),
+        danger: false,
+      });
+      if (!ok) {
+        setSection(afterCount === 0 ? "photos" : "tasks");
         return;
       }
     }
@@ -689,8 +764,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // that it didn't save, and the tech stays clocked in to try again —
     // instead of a "Job completed!" for a job that never reaches To invoice.
     if (!await db.patch("jobs", activeJob.id, { status: "complete" })) return;
-    // Clock out
-    await clockOut(endAt);
+    // Clock out — quietly; the single "Job complete · Xh logged" toast below
+    // replaces clockOut's own (two stacked toasts hid each other).
+    const hrs = st ? (endAt - st) / 3600000 : 0;
+    await clockOut(endAt, { quiet: true });
     // Teach the AI quoter from this job's real hours. clockOut() refreshed the
     // store, so the final session is now counted. Best-effort — never block
     // completion on a learning write.
@@ -705,7 +782,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         try { await db.patch("equipment", fresh.equipment_id, { last_service_at: new Date().toISOString() }); } catch { /* */ }
       }
     } catch { /* */ }
-    useStore.getState().showToast("Job completed! Great work.", "success");
+    useStore.getState().showToast(t("wv.jobDoneToast").replace("{hrs}", formatHours(hrs)), "success");
     // Pop the review-request modal before navigating away — last chance to
     // capture the client's goodwill while the work is fresh in their mind.
     if (!activeJob.review_requested_at) {
@@ -866,35 +943,63 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             <Icon name="worker" size={22} color="var(--color-primary)" />
             {t("wv.title")}
           </h2>
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px" }}>← Dashboard</button>
+          {/* Work mode is only reached via goToPage (which pushes a history
+              entry), so back retraces to wherever the tech came from. */}
+          <button className="bo" onClick={() => window.history.back()} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <Icon name="back" size={15} /> {t("common.back")}
+          </button>
         </div>
+
+        {/* Done a shift today → a calm wrap-up: hours + next check, then the
+            two things left to do (log drives / call it a day). */}
+        {closedToday.length > 0 && (
+          <div className="cd" style={{ padding: "12px 13px", marginBottom: 14, background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.4)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15.5 }}>
+              <Icon name="checkCircle" size={18} color="var(--color-success)" />
+              <span style={{ minWidth: 0 }}>
+                <b>{t("wv.niceWork").replace("{hrs}", formatHours(hrsToday))}</b>
+                {nextCheckAmt && <span className="dim"> · {t("wv.nextCheckAmt").replace("{amt}", nextCheckAmt)}</span>}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button className="bo" onClick={() => setPage("mileage")} style={{ flex: 1, fontSize: 14 }}>{t("day.logDrives")}</button>
+              <button className="bb" onClick={() => setPage("dash")} style={{ flex: 1, fontSize: 14 }}>{t("day.doneForToday")}</button>
+            </div>
+          </div>
+        )}
 
         <div className="dim" style={{ fontSize: 15, margin: "0 2px 14px" }}>{t("wv.selectJob")}</div>
 
-        {/* Today's schedule — tap a card to clock in */}
-        {todaySchedule.length > 0 && (
+        {/* Today's schedule — tap a card to clock in (mine first, by time) */}
+        {todayStops.length > 0 && (
           <>
             <div className="sl" style={{ margin: "0 2px 7px" }}>{t("wv.todaySchedule")}</div>
-            {todaySchedule.map((s) => (
-              <div key={s.id} onClick={() => clockIn(s.job)} className="cd" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", marginBottom: 8, cursor: "pointer" }}>
+            {todayStops.map(({ s, job, time, crew, mine }) => (
+              <div key={s.id} onClick={() => clockIn(s.job, s.job_id || job?.id || undefined)} className="cd" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", marginBottom: 8, cursor: "pointer" }}>
                 <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <Icon name="start" size={17} color="var(--color-success)" />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 16 }}>{s.job}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    {time && <span style={{ fontFamily: "Oswald", fontSize: 14, color: "var(--color-success)", flexShrink: 0 }}>{fmtClock(time)}</span>}
+                    <span style={{ fontWeight: 600, fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.job}</span>
+                    {mine && (
+                      <span style={{ fontSize: 11.5, padding: "1px 7px", borderRadius: 99, background: "rgba(0,204,102,.14)", color: "#3ee08f", border: "1px solid rgba(0,204,102,.4)", fontFamily: "Oswald", letterSpacing: ".04em", flexShrink: 0 }}>
+                        {t("day.yours")}
+                      </span>
+                    )}
+                  </div>
                   {(() => {
-                    const crewMatch = s.note?.match(/👷\s*([^·\n]+)/);
-                    const crew = crewMatch?.[1]?.trim();
                     const cleanNote = (s.note || "").replace(/👷\s*[^·\n]+·?\s*/g, "").replace(/🕐\s*[\d:]+\s*·?\s*/g, "").trim();
                     return (
                       <>
-                        {crew && (
+                        {crew.length > 0 && (
                           <div className="dim" style={{ fontSize: 12.5, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
                             <Icon name="worker" size={11} color="var(--color-dim)" />
-                            {crew}
+                            {crew.join(", ")}
                           </div>
                         )}
-                        <div className="dim" style={{ fontSize: 13, marginTop: crew ? 1 : 2 }}>{cleanNote || "Scheduled today"}</div>
+                        <div className="dim" style={{ fontSize: 13, marginTop: crew.length > 0 ? 1 : 2 }}>{cleanNote || t("wv.scheduledToday")}</div>
                       </>
                     );
                   })()}
@@ -918,17 +1023,26 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         )}
 
         {/* All active jobs — tap a card to clock in */}
-        <div className="sl" style={{ margin: todaySchedule.length > 0 ? "12px 2px 7px" : "0 2px 7px" }}>{t("wv.allActive")}</div>
+        <div className="sl" style={{ margin: todayStops.length > 0 ? "12px 2px 7px" : "0 2px 7px" }}>{t("wv.allActive")}</div>
         {(() => {
           // Inspections are pre-quote walkthroughs, not billable work — keep
           // them out of the clock-in picker so techs can't clock into one.
           const active = jobs.filter((j) => !j.archived && !["complete", "invoiced", "paid", "inspection"].includes(j.status));
-          if (active.length === 0) return <div className="cd" style={{ textAlign: "center", padding: 20 }}><p className="dim" style={{ fontSize: 14 }}>{t("wv.noActive")}</p></div>;
+          // Never a dead end: with no open jobs, shop / general time is still
+          // one tap away.
+          if (active.length === 0) return (
+            <div className="cd" style={{ textAlign: "center", padding: 20 }}>
+              <p className="dim" style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 12 }}>{t("wv.noActiveHelp")}</p>
+              <button className="bo" onClick={() => clockIn("")} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14 }}>
+                <Icon name="hammer" size={15} /> {t("wv.shopTime")}
+              </button>
+            </div>
+          );
           // Pink dot flags addresses with more than one open job so Bernard
           // notices the ones that need care before clocking in.
           const propCount: Record<string, number> = {};
           active.forEach((j) => { propCount[j.property] = (propCount[j.property] || 0) + 1; });
-          return active.map((j) => (
+          return (<>{active.map((j) => (
             <div key={j.id} onClick={() => clockIn(j.property, j.id)} className="cd" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", marginBottom: 8, cursor: "pointer" }}>
               <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(46,139,255,.12)", border: "1px solid rgba(46,139,255,.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <Icon name="start" size={17} color="var(--color-primary)" />
@@ -957,7 +1071,19 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               </a>
               <Icon name="next" size={16} color="var(--color-primary)" />
             </div>
-          ));
+          ))}
+          {/* Shop / general time — clock in without a job (sj "" = General). */}
+          <div onClick={() => clockIn("")} className="cd" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", marginBottom: 8, cursor: "pointer" }}>
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Icon name="hammer" size={17} color="var(--color-dim)" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 16 }}>{t("wv.shopTime")}</div>
+              <div className="dim" style={{ fontSize: 13.5, marginTop: 2 }}>{t("wv.shopTimeSub")}</div>
+            </div>
+            <Icon name="next" size={16} color="var(--color-dim)" />
+          </div>
+          </>);
         })()}
       </div>
     );
@@ -974,8 +1100,21 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("wv.title")}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={() => { void clockOut(); }} aria-label="Clock out" style={{ fontSize: 12, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 99, padding: "5px 9px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <Icon name="stop" size={11} color="#ff9d9d" /> {t("wv.clockOut")}
+          {/* Small pill, easy to brush — so it asks first. (Complete Job
+              clocks out without asking; the confirm lives only here.) */}
+          <button
+            onClick={async () => {
+              if (!(await useStore.getState().showConfirm(
+                t("wv.clockOutQ"),
+                `${sj || t("timer.general")} · ${t("wv.soFar").replace("{hrs}", formatHours(el / 3600000))}`,
+                { confirmLabel: t("wv.clockOut"), cancelLabel: t("wv.keepWorking"), danger: false },
+              ))) return;
+              void clockOut();
+            }}
+            aria-label={t("wv.clockOut")}
+            style={{ fontSize: 13, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 99, padding: "8px 12px", minHeight: 36, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}
+          >
+            <Icon name="stop" size={12} color="#ff9d9d" /> {t("wv.clockOut")}
           </button>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
@@ -1058,6 +1197,31 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* ── TASKS TAB ── */}
       {section === "tasks" && (
         <div>
+          {/* Every task ticked → point at the two things left: after photos,
+              then Complete Job. */}
+          {workOrder.length > 0 && workOrder.every((w) => w.done) && (
+            <div className="cd" style={{ padding: "12px 13px", marginBottom: 12, background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.4)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 600 }}>
+                <Icon name="checkCircle" size={18} color="var(--color-success)" />
+                <span>{t("wv.allTasksDone").replace("{n}", String(workOrder.length))}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button
+                  className="bo"
+                  onClick={() => {
+                    setPhotoType("after");
+                    setWvCam({ title: t("wv.afterPhoto"), multiple: true, onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f, "after")) });
+                  }}
+                  style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
+                >
+                  <Icon name="camera" size={15} /> {t("wv.afterPhoto")}
+                </button>
+                <button className="bg" onClick={completeJob} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>
+                  <Icon name="check" size={15} color="#fff" strokeWidth={2.5} /> {t("wv.completeJob")}
+                </button>
+              </div>
+            </div>
+          )}
           {workOrder.length > 0 && (
             <>
               {/* Progress — bar + "Work order · X / Y done" row */}
@@ -1065,8 +1229,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                 <div style={{ height: "100%", borderRadius: 5, background: "var(--color-success)", width: `${(workOrder.filter((w) => w.done).length / workOrder.length) * 100}%`, boxShadow: "0 0 12px -2px var(--color-success)", transition: "width .3s" }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--color-dim)", margin: "5px 1px 10px" }}>
-                <span>Work order</span>
-                <span>{workOrder.filter((w) => w.done).length} / {workOrder.length} done</span>
+                <span>{t("wv.workOrder")}</span>
+                <span>{t("wv.doneOf").replace("{done}", String(workOrder.filter((w) => w.done).length)).replace("{total}", String(workOrder.length))}</span>
               </div>
 
               {/* Priority sorted work order — tap body to expand for materials,
@@ -1108,19 +1272,29 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 8px" }}>
                       {/* Checkbox — tap to toggle done. Stops propagation so it
-                          doesn't also expand the task. */}
+                          doesn't also expand the task. 44×44 hit area (gloved
+                          thumbs) around the same 24px box; the negative margin
+                          keeps the layout where it was. */}
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleWO(w._idx); }}
                         aria-label={w.done ? "Mark not done" : "Mark done"}
                         style={{
-                          width: 24, height: 24, borderRadius: 6, flexShrink: 0, marginTop: 1,
-                          border: `2px solid ${w.done ? "var(--color-success)" : "var(--color-dim)"}`,
-                          background: w.done ? "var(--color-success)" : "transparent",
+                          width: 44, height: 44, padding: 10, margin: -10, flexShrink: 0,
+                          background: "transparent", border: "none", cursor: "pointer",
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          color: "#fff", padding: 0, cursor: "pointer",
                         }}
                       >
-                        {w.done && <Icon name="check" size={15} color="#fff" strokeWidth={3} />}
+                        <span
+                          style={{
+                            width: 24, height: 24, borderRadius: 6, marginTop: 1,
+                            border: `2px solid ${w.done ? "var(--color-success)" : "var(--color-dim)"}`,
+                            background: w.done ? "var(--color-success)" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            color: "#fff",
+                          }}
+                        >
+                          {w.done && <Icon name="check" size={15} color="#fff" strokeWidth={3} />}
+                        </span>
                       </button>
                       {/* Task body — tap to expand */}
                       <div
@@ -1135,8 +1309,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                                 {priLabel(w._pri)}
                               </span>
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); setWvCam({ title: "Work photo", multiple: true, onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f, "work")) }); }} title="Add photo" style={{ width: 26, height: 26, borderRadius: 7, background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, border: "none" }}>
-                              <Icon name="camera" size={13} color="#7fb6ff" />
+                            <button onClick={(e) => { e.stopPropagation(); setWvCam({ title: "Work photo", multiple: true, onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f, "work")) }); }} title="Add photo" aria-label="Add photo" style={{ width: 36, height: 36, borderRadius: 9, background: "var(--color-card-dark-2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, border: "none", padding: 0 }}>
+                              <Icon name="camera" size={16} color="#7fb6ff" />
                             </button>
                             <Icon name={isOpen ? "collapse" : "expand"} size={14} color="#888" />
                           </div>
@@ -1564,9 +1738,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               photo is saved as (matches the mock's .ptoggle). */}
           <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
             {([
-              { key: "before" as const, label: "Before", bg: "rgba(255,136,0,.16)", bd: "rgba(255,136,0,.5)", fg: "#ffb15e" },
-              { key: "work" as const, label: "Work", bg: "rgba(46,139,255,.16)", bd: "rgba(46,139,255,.5)", fg: "#9fc4ff" },
-              { key: "after" as const, label: "After", bg: "rgba(0,204,102,.16)", bd: "rgba(0,204,102,.5)", fg: "#3ee08f" },
+              { key: "before" as const, label: t("wv.before"), bg: "rgba(255,136,0,.16)", bd: "rgba(255,136,0,.5)", fg: "#ffb15e" },
+              { key: "work" as const, label: t("wv.work"), bg: "rgba(46,139,255,.16)", bd: "rgba(46,139,255,.5)", fg: "#9fc4ff" },
+              { key: "after" as const, label: t("wv.after"), bg: "rgba(0,204,102,.16)", bd: "rgba(0,204,102,.5)", fg: "#3ee08f" },
             ]).map((opt) => {
               const active = photoType === opt.key;
               return (
@@ -1575,8 +1749,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   onClick={() => setPhotoType(opt.key)}
                   aria-pressed={active}
                   style={{
-                    flex: 1, textAlign: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 10.5, letterSpacing: ".04em",
-                    padding: 7, borderRadius: 9,
+                    flex: 1, textAlign: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".04em",
+                    padding: 10, borderRadius: 9,
                     background: active ? opt.bg : "var(--color-card-dark-3)",
                     border: `1px solid ${active ? opt.bd : "var(--color-border-dark-2)"}`,
                     color: active ? opt.fg : "var(--color-dim)",
@@ -1602,7 +1776,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               : { bg: "rgba(46,139,255,.3)", fg: "#9fc4ff" };
             const pactTile: React.CSSProperties = {
               flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              fontSize: 10.5, fontWeight: 600, padding: "9px 4px", borderRadius: 10,
+              fontSize: 12.5, fontWeight: 600, padding: "9px 4px", borderRadius: 10,
               border: "1px solid var(--color-border-dark-2)", background: "var(--color-card-dark-2)",
               color: "inherit", cursor: "pointer",
             };
@@ -1617,8 +1791,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                       <div key={i} style={{ position: "relative" }}>
                         <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10, border: `1px solid ${border}` }} />
                         {p.type && (
-                          <span style={{ position: "absolute", bottom: 3, left: 3, fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: tint.bg, color: tint.fg, textTransform: "capitalize" }}>
-                            {p.type}
+                          <span style={{ position: "absolute", bottom: 3, left: 3, fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: tint.bg, color: tint.fg, textTransform: "capitalize" }}>
+                            {p.type === "before" ? t("wv.before") : p.type === "work" ? t("wv.work") : p.type === "after" ? t("wv.after") : p.type}
                           </span>
                         )}
                         {/* Per-photo AI render — tap to render the finished look. */}
@@ -1636,7 +1810,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   {/* Add tile → camera with the current tag */}
                   <button
                     onClick={() => setWvCam({ title: camTitle, multiple: true, onFiles: (fs) => fs.forEach((f) => uploadWorkPhoto(f)) })}
-                    style={{ aspectRatio: "1", borderRadius: 10, border: `1.5px dashed ${border}`, background: "none", color: "var(--color-dim)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, fontSize: 9, fontWeight: 600 }}
+                    style={{ aspectRatio: "1", borderRadius: 10, border: `1.5px dashed ${border}`, background: "none", color: "var(--color-dim)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, fontSize: 12.5, fontWeight: 600 }}
                   >
                     <Icon name="add" size={18} color="var(--color-dim)" /> Add
                   </button>
@@ -1685,15 +1859,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     <Icon name="sparkle" size={18} color="#9d4edd" />
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <b style={{ fontSize: 12 }}>AI after-render</b>
-                    <span style={{ fontSize: 10, color: "var(--color-dim)", display: "block" }}>See the finished room</span>
+                    <b style={{ fontSize: 13 }}>AI after-render</b>
+                    <span style={{ fontSize: 13, color: "var(--color-dim)", display: "block" }}>See the finished room</span>
                   </div>
                   <button
                     onClick={() => {
                       if (latest) openRenderModal(latest.url);
                       else useStore.getState().showToast("Add a photo first to generate a render", "info");
                     }}
-                    style={{ marginLeft: "auto", fontFamily: "Oswald", fontWeight: 600, fontSize: 10.5, color: "#c9a6ff", background: "rgba(157,78,221,.18)", border: "1px solid rgba(157,78,221,.45)", padding: "6px 10px", borderRadius: 9, whiteSpace: "nowrap", cursor: "pointer" }}
+                    style={{ marginLeft: "auto", fontFamily: "Oswald", fontWeight: 600, fontSize: 13, color: "#c9a6ff", background: "rgba(157,78,221,.18)", border: "1px solid rgba(157,78,221,.45)", padding: "6px 10px", borderRadius: 9, whiteSpace: "nowrap", cursor: "pointer" }}
                   >
                     Generate
                   </button>
@@ -1826,7 +2000,6 @@ function JobNotesEditor({ jobId }: { jobId: string }) {
 
   const save = async (note: string) => {
     if (note === lastSaved.current) return;
-    lastSaved.current = note;
     try {
       const fresh = useStore.getState().jobs.find((x) => x.id === jobId);
       if (!fresh) return;
@@ -1834,12 +2007,19 @@ function JobNotesEditor({ jobId }: { jobId: string }) {
         ? (JSON.parse(fresh.rooms) || {})
         : (fresh.rooms || {});
       d.jobNotes = note;
-      await db.patch("jobs", jobId, { rooms: JSON.stringify(d) });
+      // Only mark it saved once the write landed — a failed save (no signal)
+      // stays pending and is retried on the next edit/blur or on reconnect.
+      const ok = await db.patch("jobs", jobId, { rooms: JSON.stringify(d) });
+      if (ok) lastSaved.current = note;
     } catch { /* swallow — db helper toasts the error */ }
   };
 
   useEffect(() => {
+    // Back online → push a note that failed to save while offline.
+    const onOnline = () => { if (valueRef.current !== lastSaved.current) void save(valueRef.current); };
+    window.addEventListener("online", onOnline);
     return () => {
+      window.removeEventListener("online", onOnline);
       if (timer.current) {
         clearTimeout(timer.current);
         // Fire-and-forget flush. We don't await on unmount because React
