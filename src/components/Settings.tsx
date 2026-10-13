@@ -279,7 +279,7 @@ export default function Settings({ onClose }: Props) {
               onClick={async () => {
                 if (newPassword.length < 6) { useStore.getState().showToast(t("settings.passwordMin"), "warning"); return; }
                 const { error } = await supabase.auth.updateUser({ password: newPassword });
-                if (error) { console.error(error); useStore.getState().showToast(t("settings.passwordFailed"), "error"); return; }
+                if (error) { console.error(error); useStore.getState().showToast(`${t("settings.passwordFailed")}${error.message ? ` (${error.message})` : ""}`, "error"); return; }
                 setNewPassword("");
                 setShowPassword(false);
                 useStore.getState().showToast(t("settings.passwordUpdated"), "success");
@@ -376,7 +376,8 @@ export default function Settings({ onClose }: Props) {
           if (pending > 0 || onClock) {
             const ok = await s.showConfirm(
               t("settings.logout"),
-              onClock ? t("settings.logoutOnClock") : t("settings.logoutPending").replace("{n}", String(pending)),
+              // Unsynced changes are LOST on sign-out (logout clears the queue) — say so even when also clocked in.
+              [onClock ? t("settings.logoutOnClock") : "", pending > 0 ? t("settings.logoutPending").replace("{n}", String(pending)) : ""].filter(Boolean).join(" "),
             );
             if (!ok) return;
           }

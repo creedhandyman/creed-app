@@ -727,7 +727,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
             const totalHrs = dayEntries.reduce((sum, e) => sum + (jobForEntry(e)?.total_hrs || 0), 0);
             return (
               // Tap a day row → drill into that day in Day view.
-              <div key={i} onClick={() => { setView("day"); setViewDate(new Date(d)); }} style={{ background: darkMode ? "#16161f" : "#fff", border: `1px solid ${isToday ? "rgba(46,139,255,.5)" : "var(--color-border-dark)"}`, boxShadow: isToday ? "0 0 0 1px rgba(46,139,255,.2)" : "none", borderRadius: 13, padding: "10px 11px", marginBottom: 8, opacity: dayEntries.length ? 1 : 0.5, cursor: "pointer" }}>
+              <div key={i} onClick={() => { setView("day"); setViewDate(new Date(d)); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ background: darkMode ? "#16161f" : "#fff", border: `1px solid ${isToday ? "rgba(46,139,255,.5)" : "var(--color-border-dark)"}`, boxShadow: isToday ? "0 0 0 1px rgba(46,139,255,.2)" : "none", borderRadius: 13, padding: "10px 11px", marginBottom: 8, opacity: dayEntries.length ? 1 : 0.5, cursor: "pointer" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: dayEntries.length ? 7 : 0 }}>
                   <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>{DAY_NAMES[d.getDay()]}<span style={{ color: "var(--color-dim)", fontWeight: 400, fontSize: 13, marginLeft: 5 }}>{MONTH_NAMES[d.getMonth()].slice(0, 3)} {d.getDate()}</span></div>
                   {dayEntries.length > 0 && <div style={{ fontSize: 11.5, color: "var(--color-dim)" }}>{dayEntries.length} {dayEntries.length !== 1 ? t("sched.jobsPlural") : t("sched.jobSingular")}{totalHrs ? ` · ${totalHrs.toFixed(1)}h` : ""}</div>}
@@ -864,7 +864,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
 
         {/* Day detail panel */}
         {selectedDay && (() => {
-          const dayItems = schedule.filter((s) => spansDay(s, selectedDay));
+          const dayItems = schedule.filter((s) => spansDay(s, selectedDay) && matchesWorker(s));
           const dayDate = new Date(selectedDay + "T12:00:00");
           const dayLabel = dayDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
           return (

@@ -1413,13 +1413,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           )}
           {workOrder.length === 0 && (
             <div className="cd" style={{ textAlign: "center", padding: 24 }}>
-              <p className="dim">{t("wv.noWorkOrder")}</p>
+              {/* Shop / general time has no job to finish — don't point at Complete Job. */}
+              <p className="dim">{activeJob ? t("wv.noWorkOrder") : t("wv.generalNoComplete")}</p>
             </div>
           )}
           {/* Complete job — full-width green CTA at the bottom of Tasks (mock) */}
-          <button onClick={completeJob} className="bg" style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".4px", textTransform: "uppercase", padding: 12, borderRadius: 13, marginTop: 10, boxShadow: "0 0 26px -6px rgba(0,204,102,.6)" }}>
-            <Icon name="check" size={15} color="#fff" strokeWidth={2.5} /> {t("wv.completeJob")}
-          </button>
+          {activeJob && (
+            <button onClick={completeJob} className="bg" style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".4px", textTransform: "uppercase", padding: 12, borderRadius: 13, marginTop: 10, boxShadow: "0 0 26px -6px rgba(0,204,102,.6)" }}>
+              <Icon name="check" size={15} color="#fff" strokeWidth={2.5} /> {t("wv.completeJob")}
+            </button>
+          )}
         </div>
       )}
 

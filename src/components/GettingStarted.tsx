@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "./Icon";
 import Grizz from "./Grizz";
-import { gsDismissed, dismissGs, tipsEnabled, gsSkipped, skipGs } from "@/lib/grizz";
+import { gsDismissed, dismissGs, finishGs, tipsEnabled, gsSkipped, skipGs } from "@/lib/grizz";
 import { t } from "@/lib/i18n";
 
 /**
@@ -61,7 +61,7 @@ export default function GettingStarted({
   // so it doesn't sit on the dashboard forever for an already-set-up account.
   useEffect(() => {
     if (!allDone || !tipsEnabled(uid) || gsDismissed(uid)) return;
-    dismissGs(uid);
+    finishGs(uid);
     const id = setTimeout(() => setDismissed(true), 4000);
     return () => clearTimeout(id);
   }, [allDone, uid]);
@@ -87,7 +87,7 @@ export default function GettingStarted({
 
       {allDone ? (
         <div style={{ position: "relative", textAlign: "center", padding: "8px 4px" }}>
-          <button onClick={() => { dismissGs(uid); setDismissed(true); }} aria-label="Hide" style={{ position: "absolute", top: -2, right: -2, background: "none", border: "none", color: "var(--color-dim)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4, zIndex: 1 }}>×</button>
+          <button onClick={() => { finishGs(uid); setDismissed(true); }} aria-label="Hide" style={{ position: "absolute", top: -2, right: -2, background: "none", border: "none", color: "var(--color-dim)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4, zIndex: 1 }}>×</button>
           {CONFETTI.map((c, i) => (
             <span key={i} className="gs-conf" style={{ ["--cx"]: c.cx, ["--cy"]: c.cy, background: c.c, left: `${44 + i}%` } as React.CSSProperties} />
           ))}
@@ -123,7 +123,7 @@ export default function GettingStarted({
               {!task.done && task.skip && (
                 <button
                   onClick={(e) => { e.stopPropagation(); skipGs(task.key, uid); setSkipTick((n) => n + 1); }}
-                  style={{ background: "none", border: "none", color: "var(--color-dim)", fontSize: 11.5, textDecoration: "underline", cursor: "pointer", padding: "4px 2px", flexShrink: 0 }}
+                  style={{ background: "none", border: "none", color: "var(--color-dim)", fontSize: 11.5, textDecoration: "underline", cursor: "pointer", padding: "10px 8px", margin: "-6px -4px", flexShrink: 0 }}
                 >
                   {task.skip}
                 </button>

@@ -36,13 +36,20 @@ export function setTipsEnabled(on: boolean, uid?: string | null): void {
 
 /** Dashboard getting-started card dismissed (× tapped, or all tasks complete). */
 export function gsDismissed(uid?: string | null): boolean {
-  return read(key("gs_dismissed", uid)) === "1";
+  const v = read(key("gs_dismissed", uid));
+  return v === "1" || v === "done";
 }
 export function dismissGs(uid?: string | null): void {
   write(key("gs_dismissed", uid), "1");
 }
-/** Bring the card back (tips switched on again) — an unfinished list reappears. */
+/** Every task done — celebrated once; turning tips back on never replays it. */
+export function finishGs(uid?: string | null): void {
+  write(key("gs_dismissed", uid), "done");
+}
+/** Bring the card back (tips switched on again) — an unfinished list reappears.
+ *  A finished list stays finished. */
 export function undismissGs(uid?: string | null): void {
+  if (read(key("gs_dismissed", uid)) === "done") return;
   write(key("gs_dismissed", uid), "0");
 }
 

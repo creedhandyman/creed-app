@@ -1876,6 +1876,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // make this the new baseline.
     if (savedId) {
       dropEditDraft(savedId);
+      leadSeedRef.current = null;
+      setEditDraftOffer(null);
       editBaselineRef.current = { id: savedId, snap: editSnapshot() };
       editLoadedHashRef.current = hashText(jobData.rooms);
     }
@@ -2257,7 +2259,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => {
+          {/* Disabled mid-build: a running AI parse would still land on this screen. */}
+          <button className="bo" disabled={parsing} style={parsing ? { opacity: 0.4 } : undefined} onClick={() => {
             setMode(null); setQuickPhotos([]); setQuickDesc("");
             // Leaving a lead's Quick Quote: detach from the lead like a fresh
             // start, so the next quote doesn't patch the lead's row.
@@ -3532,11 +3535,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           subject={sendSheet.subject}
           message={sendSheet.message}
           onClose={() => setSendSheet(null)}
-          onSent={() => {
+          onSent={(via) => {
             const jobId = sendSheet.jobId;
             void markQuoteSent(jobId).then(async (ok) => {
               await loadAll();
-              if (!ok) return;
+              // Copy keeps its own "Copied — paste it" toast (nothing is sent yet).
+              if (!ok || via === "copy") return;
               // "Waiting on customer" only lists quoted jobs — a re-sent
               // accepted/scheduled/etc. quote stays in its own column.
               const st = useStore.getState();

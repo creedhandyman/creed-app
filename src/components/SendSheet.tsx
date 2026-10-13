@@ -18,7 +18,8 @@ export interface SendSheetProps {
   subject: string;
   message: string;
   onClose: () => void;
-  onSent: () => void;
+  /** How it went out — Copy only puts it on the clipboard (the caller can skip a "sent" toast). */
+  onSent: (via: "text" | "email" | "copy" | "share") => void;
 }
 
 export default function SendSheet({ title, phone = "", email = "", subject, message, onClose, onSent }: SendSheetProps) {
@@ -28,7 +29,7 @@ export default function SendSheet({ title, phone = "", email = "", subject, mess
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   const digits = phone.replace(/[^\d+]/g, "");
 
-  const sent = () => { onSent(); onClose(); };
+  const sent = (via: "text" | "email" | "copy" | "share") => { onSent(via); onClose(); };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -43,17 +44,17 @@ export default function SendSheet({ title, phone = "", email = "", subject, mess
         <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={7}
           style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 10, resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-          <a className="bb" href={`sms:${digits}?&body=${encodeURIComponent(msg)}`} onClick={sent}
+          <a className="bb" href={`sms:${digits}?&body=${encodeURIComponent(msg)}`} onClick={() => sent("text")}
             style={{ textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: 11 }}>
             <Icon name="send" size={15} color="#fff" /> {t("send.text")}
           </a>
-          <a className="bo" href={`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(msg)}`} onClick={sent}
+          <a className="bo" href={`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(msg)}`} onClick={() => sent("email")}
             style={{ textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: 11, color: "inherit" }}>
             <Icon name="mail" size={15} /> {t("send.email")}
           </a>
           <button className="bo" style={{ padding: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
             onClick={async () => {
-              try { await navigator.clipboard.writeText(msg); toast(t("send.copied"), "success"); sent(); }
+              try { await navigator.clipboard.writeText(msg); toast(t("send.copied"), "success"); sent("copy"); }
               catch { toast(t("send.copyFailed"), "error"); }
             }}>
             <Icon name="doc" size={15} /> {t("common.copy")}
@@ -61,7 +62,7 @@ export default function SendSheet({ title, phone = "", email = "", subject, mess
           {canShare ? (
             <button className="bo" style={{ padding: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               onClick={async () => {
-                try { await navigator.share({ title: subject, text: msg }); sent(); }
+                try { await navigator.share({ title: subject, text: msg }); sent("share"); }
                 catch (e) { if ((e as Error)?.name !== "AbortError") toast(t("send.shareFailed"), "error"); }
               }}>
               <Icon name="link" size={15} /> {t("send.share")}
