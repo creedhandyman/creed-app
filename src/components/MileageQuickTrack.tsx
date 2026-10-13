@@ -4,6 +4,8 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { WaypointTracker } from "@/lib/geo";
 import { Icon } from "./Icon";
+// Aliased: start()/restore below use a local `t` for the trip object.
+import { t as tr } from "@/lib/i18n";
 
 /**
  * Continuous-tracking start/stop mileage widget for Work Mode.
@@ -129,14 +131,16 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
     setLiveMiles(0);
 
     if (miles < 0.1) {
-      useStore.getState().showToast("No movement detected — nothing logged", "warning");
+      useStore.getState().showToast(tr("loc.noMovement"), "warning");
       return;
     }
+    // LOCAL YYYY-MM-DD (toISOString is UTC — an evening trip landed on tomorrow).
+    const now = new Date();
     await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: trip.job || job || "General",
-      trip_date: new Date().toISOString().split("T")[0],
+      trip_date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
       start_miles: 0,
       end_miles: 0,
       total_miles: miles,

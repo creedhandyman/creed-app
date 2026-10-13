@@ -660,6 +660,14 @@ button:focus-visible {
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
+  position: relative;
+}
+/* Invisible 5px halo → a ≥44px tap target with the same 34–36px look. Badge
+   children stay absolutely positioned against the button itself. */
+.iconbtn::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
 }
 .light .iconbtn {
   background: var(--color-card-light-2);
@@ -937,7 +945,9 @@ button:focus-visible {
   .mc { padding: 12px 10px; }
   h1 { font-size: 24px; }
   h2 { font-size: 20px; }
-  /* Tap targets: ensure all buttons hit 44px minimum */
+  /* Tap targets: a 36px floor for every button. Not 44px — that would
+     stretch the dense .row button layouts; .iconbtn reaches 44px through
+     its invisible ::after hit area instead. */
   button { min-height: 36px; }
 }
 

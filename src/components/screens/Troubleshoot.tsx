@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 import { aiText } from "@/lib/parser";
 import { Icon } from "../Icon";
+import { t } from "@/lib/i18n";
 
 interface Message {
   role: "user" | "assistant";
@@ -30,7 +31,9 @@ Categories: garage doors, HVAC, electrical, plumbing, appliances, smart home, do
 
 Diagnostic sequence: Identify equipment → Clarify symptom → Check basics (power, connections) → Test isolation → Interpret error codes → Guide fix step by step → Verify fix.`;
 
-export default function Troubleshoot({ setPage }: { setPage: (p: string) => void }) {
+// setPage stays in the props for AppShell's uniform call; Back walks history
+// (back to More, where the Fix-it helper tile lives).
+export default function Troubleshoot(_props: { setPage: (p: string) => void }) {
   const darkMode = useStore((s) => s.darkMode);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -148,7 +151,9 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between", flexShrink: 0 }}>
         <div className="row">
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px" }}>← Back</button>
+          <button className="bo" onClick={() => window.history.back()} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name="back" size={14} /> {t("common.back")}
+          </button>
           <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
             <Icon name="troubleshoot" size={20} color="var(--color-primary)" />
             AI Troubleshooter

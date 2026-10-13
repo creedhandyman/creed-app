@@ -58,7 +58,7 @@ function localYmd(d: Date): string {
 
 type SuggestedLeg = { from: string; to: string; miles: number; added: boolean };
 
-function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
+function SuggestedTrips({ entries, onAdded }: { entries: MileageEntry[]; onAdded: () => void }) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const timeEntries = useStore((s) => s.timeEntries);
@@ -122,6 +122,17 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
         if (!hadCache) await new Promise((r) => setTimeout(r, 1100));
       }
 
+      // A leg already in the log (same day, same destination, ~same miles —
+      // e.g. from an earlier "Add all") shows as logged so re-finding the
+      // day can't double-post it. Each logged trip covers ONE leg.
+      const usedEntries = new Set<string>();
+      const alreadyLogged = (to: string, miles: number) => {
+        const hit = entries.find((e) => !usedEntries.has(e.id) && e.trip_date === date && e.job === to
+          && Math.abs(Number(e.total_miles || 0) - miles) < 0.2);
+        if (hit) usedEntries.add(hit.id);
+        return !!hit;
+      };
+
       const out: SuggestedLeg[] = [];
       let unlocated = 0;
       for (let i = 1; i < deduped.length; i++) {
@@ -130,7 +141,7 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
         if (!a || !b) { unlocated++; continue; }
         const miles = Math.round(haversineMiles(a.lat, a.lng, b.lat, b.lng) * ROAD_FACTOR * 10) / 10;
         if (miles < 0.2) continue; // same block — not a loggable drive
-        out.push({ from: deduped[i - 1].addr, to: deduped[i].addr, miles, added: false });
+        out.push({ from: deduped[i - 1].addr, to: deduped[i].addr, miles, added: alreadyLogged(deduped[i].addr, miles) });
       }
       setLegs(out);
       if (unlocated > 0) setNote(`${unlocated} ${t("loc.legsSkipped")}`);
@@ -140,10 +151,12 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
     }
   };
 
-  const addLeg = async (idx: number) => {
-    if (!legs || legs[idx].added) return;
+  // Resolves true when the trip landed (a failed write is already toasted by
+  // db.post and stays un-logged so it can be retried).
+  const addLeg = async (idx: number): Promise<boolean> => {
+    if (!legs || legs[idx].added) return false;
     const leg = legs[idx];
-    await db.post("mileage", {
+    const saved = await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: leg.to,
@@ -152,14 +165,23 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
       end_miles: 0,
       total_miles: leg.miles,
     });
+    if (!saved) return false;
     setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, added: true } : l)) : prev);
     onAdded();
+    return true;
   };
 
   const addAll = async () => {
     if (!legs) return;
+    let mi = 0;
     for (let i = 0; i < legs.length; i++) {
-      if (!legs[i].added) await addLeg(i);
+      if (legs[i].added) continue;
+      if (!(await addLeg(i))) break; // offline / failed — stop, don't toast-spam
+      mi += legs[i].miles;
+    }
+    if (mi > 0) {
+      const day = new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      useStore.getState().showToast(t("loc.loggedToday").replace("{mi}", mi.toFixed(1)).replace("{date}", day), "success");
     }
   };
 
@@ -212,7 +234,8 @@ interface Props {
   setPage: (p: string) => void;
 }
 
-export default function Mileage({ setPage }: Props) {
+// setPage stays in Props for AppShell's uniform call; Back walks history.
+export default function Mileage(_props: Props) {
   const user = useStore((s) => s.user)!;
   const jobs = useStore((s) => s.jobs);
   const darkMode = useStore((s) => s.darkMode);
@@ -228,7 +251,8 @@ export default function Mileage({ setPage }: Props) {
 
   // Manual entry
   const [mJob, setMJob] = useState("");
-  const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
+  // LOCAL date — toISOString() is UTC, so an evening entry defaulted to tomorrow.
+  const [mDate, setMDate] = useState(() => localYmd(new Date()));
   const [mMiles, setMMiles] = useState("");
 
   // GPS snapshot trip: capture a start fix (+ optional starting odometer), then
@@ -269,7 +293,10 @@ export default function Mileage({ setPage }: Props) {
     ws.setHours(0, 0, 0, 0);
     return entries
       .filter((e) => {
-        try { return new Date(e.trip_date) >= ws; } catch { return false; }
+        // parseEntryDate reads "YYYY-MM-DD" as a LOCAL day (new Date() took it
+        // as UTC midnight, sliding Sunday trips into last week).
+        const d = parseEntryDate(e.trip_date);
+        return d ? d >= ws : false;
       })
       .reduce((s, e) => s + (e.total_miles || 0), 0);
   })();
@@ -290,7 +317,7 @@ export default function Mileage({ setPage }: Props) {
       user_id: user.id,
       user_name: user.name,
       job: tripJob || "General",
-      trip_date: new Date().toISOString().split("T")[0],
+      trip_date: localYmd(new Date()),
       start_miles: start,
       end_miles: end,
       total_miles: total,
@@ -369,14 +396,14 @@ export default function Mileage({ setPage }: Props) {
       start_miles = startNum; // ending odo cleared — keep start, log GPS miles
     }
     if (total_miles < 0.1) {
-      useStore.getState().showToast("No movement detected — nothing logged", "warning");
+      useStore.getState().showToast(t("loc.noMovement"), "warning");
       return;
     }
     await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: gpsTrip.job || "General",
-      trip_date: new Date().toISOString().split("T")[0],
+      trip_date: localYmd(new Date()),
       start_miles,
       end_miles,
       total_miles,
@@ -518,11 +545,17 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
               <Icon name="print" size={14} /> Print
             </button>
           )}
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Icon name="back" size={14} /> Dashboard
+          {/* Back to wherever Mileage was opened from (More) — going to the
+              dashboard pushed a new entry and made system back loop here. */}
+          <button className="bo" onClick={() => window.history.back()} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name="back" size={14} /> {t("common.back")}
           </button>
         </div>
       </div>
+
+      {/* Suggested trips first — end of day, one tap logs the day's
+          drives (auto-built from the day's clocked jobs). */}
+      <SuggestedTrips entries={entries} onAdded={() => setLoaded(false)} />
 
       {/* Stats */}
       <div className="g2 mb">
@@ -752,9 +785,6 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
           </button>
         </div>
       </div>
-
-      {/* Suggested trips — auto-built from the day's clocked jobs */}
-      <SuggestedTrips onAdded={() => setLoaded(false)} />
 
       {/* Mileage Log */}
       <div className="cd">

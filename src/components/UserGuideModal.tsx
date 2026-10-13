@@ -14,6 +14,7 @@ import Grizz from "./Grizz";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "./Icon";
 import { SUPPORT_EMAIL } from "@/lib/platform-admin";
+import { t } from "@/lib/i18n";
 
 interface Props {
   onClose: () => void;
@@ -23,7 +24,7 @@ interface Section {
   id: string;
   icon: IconName;
   title: string;
-  body: { heading: string; lines: string[] }[];
+  body: { heading?: string; lines: string[] }[];
 }
 
 const SECTIONS: Section[] = [
@@ -46,8 +47,8 @@ const SECTIONS: Section[] = [
           "Quote — start a new estimate from three options: Quick Quote, Full Inspection, or Upload Report.",
           "Jobs — every quote and active job in one list. Tap a card to open the full detail screen.",
           "Home — your dashboard: next job, money snapshot, and quick actions.",
-          "Time — clock in/out. Once clocked in, this becomes WorkVision — your in-field cockpit.",
-          "More — Schedule, Quests, Operations, Customers, Mileage, My settings, Business settings and Ask Grizz all live here.",
+          "Time — clock in/out. Once clocked in, this becomes Work Mode — your in-field cockpit.",
+          "More — Schedule, Quests, Operations, Customers, Mileage, Business settings, Fix-it helper and Ask Grizz all live here. Tap your name at the top of More for your own settings.",
         ],
       },
     ],
@@ -99,11 +100,11 @@ const SECTIONS: Section[] = [
         heading: "Clock in",
         lines: [
           "Tap Clock In on the dashboard or pick a job from Today's schedule chip. Time logs against that specific job — callbacks at the same address won't mix up hours.",
-          "WorkVision opens automatically once you're on the clock.",
+          "Work Mode opens automatically once you're on the clock.",
         ],
       },
       {
-        heading: "WorkVision tabs",
+        heading: "Work Mode tabs",
         lines: [
           "Tasks — checklist grouped by trade. Tap a task to snap a photo of your progress.",
           "Guide — step-by-step instructions with a live shopping list you can check off and edit as you go.",
@@ -114,7 +115,7 @@ const SECTIONS: Section[] = [
       {
         heading: "Receipts as you go",
         lines: [
-          "Snap every supply-store receipt in WorkVision → Photos → Scan receipt. The AI reads the line items, feeds them into the quote-learning system, and replaces the estimated material cost with your real cost in the profit math.",
+          "Snap every supply-store receipt in Work Mode → Photos → Scan receipt. The AI reads the line items, feeds them into the quote-learning system, and replaces the estimated material cost with your real cost in the profit math.",
         ],
       },
     ],
@@ -127,7 +128,7 @@ const SECTIONS: Section[] = [
       {
         heading: "Mark complete",
         lines: [
-          "Tap Complete Job at the bottom of the WorkVision Tasks tab, or flip the status in Jobs. A completion report PDF is generated from your checklist and photos.",
+          "Tap Complete Job at the bottom of the Work Mode Tasks tab, or flip the status in Jobs. A completion report PDF is generated from your checklist and photos.",
           "Tap Send invoice to text the bill (with a pay link) — that marks it Invoiced. Took cash, a check or Zelle? Tap Record payment and enter the amount.",
         ],
       },
@@ -141,7 +142,7 @@ const SECTIONS: Section[] = [
       {
         heading: "Automatic review request",
         lines: [
-          "Once a job hits Paid, the app auto-schedules a review-request text for 24 hours later (configurable in Ops → Settings → Review Automation).",
+          "Once a job hits Paid, the app auto-schedules a review-request text for 24 hours later (configurable in More → Business settings → Review automation).",
           "The text links straight to your Google review page. You can also trigger one manually from the job's Manage section.",
         ],
       },
@@ -158,7 +159,7 @@ const SECTIONS: Section[] = [
           "More → Operations opens a tile grid. Tap any tile to go deep: Payroll, Financials, Customers, Recurring, HR, Team, Payments & plan, Business settings.",
           "Payroll — run pay for your crew. Time entries are marked paid (not deleted) so Team Stats keeps lifetime history.",
           "Financials — revenue, profit, A/R aging, by-trade breakdown, top clients. Print a P&L for any period.",
-          "HR — approve time-off requests, adjust PTO and sick balances per employee.",
+          "HR — approve or deny time-off requests.",
           "Recurring — set up automated service schedules (weekly, monthly, etc.) that fire new jobs on their own.",
         ],
       },
@@ -227,7 +228,32 @@ const SECTIONS: Section[] = [
 
 export default function UserGuideModal({ onClose }: Props) {
   const darkMode = useStore((s) => s.darkMode);
-  const [openId, setOpenId] = useState<string | null>("start");
+  const role = useStore((s) => s.user?.role);
+  const isAdmin = role === "owner" || role === "manager";
+  // Crew get a short "For the crew" section first (and open on it); the
+  // owner-only "Running the Business" section is hidden from them. Built at
+  // render so t() follows the current language.
+  const sections: Section[] = isAdmin
+    ? SECTIONS
+    : [
+        {
+          id: "crew",
+          icon: "worker",
+          title: t("guide.crewTitle"),
+          body: [{
+            lines: [
+              t("guide.crewHome"),
+              t("guide.crewTime"),
+              t("guide.crewTimeOff"),
+              t("guide.crewSchedule"),
+              t("guide.crewQuests"),
+              t("guide.crewHelp"),
+            ],
+          }],
+        },
+        ...SECTIONS.filter((sec) => sec.id !== "ops"),
+      ];
+  const [openId, setOpenId] = useState<string | null>(isAdmin ? "start" : "crew");
 
   return (
     <div
@@ -282,7 +308,7 @@ export default function UserGuideModal({ onClose }: Props) {
           <Icon name="mail" size={15} /> Stuck? Email support — a real person will help.
         </a>
 
-        {SECTIONS.map((sec) => {
+        {sections.map((sec) => {
           const open = openId === sec.id;
           return (
             <div
@@ -315,11 +341,13 @@ export default function UserGuideModal({ onClose }: Props) {
               </button>
               {open && (
                 <div style={{ padding: "4px 14px 14px" }}>
-                  {sec.body.map((b) => (
-                    <div key={b.heading} style={{ marginTop: 10 }}>
-                      <h4 style={{ fontSize: 14, marginBottom: 4, color: "var(--color-primary)", fontFamily: "Oswald, sans-serif", letterSpacing: ".04em" }}>
-                        {b.heading}
-                      </h4>
+                  {sec.body.map((b, bi) => (
+                    <div key={b.heading || bi} style={{ marginTop: 10 }}>
+                      {b.heading && (
+                        <h4 style={{ fontSize: 14, marginBottom: 4, color: "var(--color-primary)", fontFamily: "Oswald, sans-serif", letterSpacing: ".04em" }}>
+                          {b.heading}
+                        </h4>
+                      )}
                       <ul style={{ paddingLeft: 18, margin: 0, fontSize: 15, lineHeight: 1.55, color: darkMode ? "#ccc" : "#333" }}>
                         {b.lines.map((line, i) => (
                           <li key={i} style={{ marginBottom: 4 }}>{line}</li>
@@ -334,7 +362,7 @@ export default function UserGuideModal({ onClose }: Props) {
         })}
 
         <p className="dim" style={{ fontSize: 13, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>
-          Stuck? Most workflows have built-in tooltips and toasts that explain what just happened. The Troubleshoot screen on the dashboard is your reset button when something looks off.
+          Stuck on a repair? More → Fix-it helper — snap a photo for a step-by-step diagnosis.
         </p>
       </div>
     </div>

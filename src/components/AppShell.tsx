@@ -19,6 +19,7 @@ import WorkVision from "./screens/WorkVision";
 import MoreHub from "./screens/MoreHub";
 import Coachmark from "./Coachmark";
 import OfflineBanner from "./OfflineBanner";
+import { t } from "@/lib/i18n";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -59,6 +60,12 @@ export default function AppShell() {
     const seed = setTimeout(() => {
       const cur = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
       window.history.replaceState({ ...cur, creedPage: "dash" }, "");
+      // Onboarding can ask to land on the quote screen first (one-shot,
+      // sessionStorage). It goes ON TOP of the dashboard entry, so back
+      // returns Home. Only "qf" is honoured.
+      let sp: string | null = null;
+      try { sp = sessionStorage.getItem("c_start_page"); if (sp) sessionStorage.removeItem("c_start_page"); } catch { /* storage blocked */ }
+      if (sp === "qf") { window.history.pushState({ ...cur, creedPage: "qf" }, ""); setPage("qf"); }
     }, 0);
     const onPop = (e: PopStateEvent) => {
       const st = (e.state || {}) as { creedPage?: string; creedSettings?: boolean };
@@ -178,8 +185,11 @@ export default function AppShell() {
       <div className="mc" key={`${page}:${resetKey}`}>{renderPage()}</div>
       {/* The "quote" tip is mounted inside QuoteForge's hub (not here) so it
           doesn't float over the editor / inspection / Voice Walk sub-screens. */}
-      {page === "sched" && <Coachmark id="schedule_v2" text={<>Tap <b>Dispatch</b> to see all your unscheduled jobs and hit <b>Assign</b> to drop them onto any date.</>} />}
-      {page === "time" && <Coachmark id="workmode" text={<>Tap <b>Clock In</b> to start your shift — your hours roll straight to payroll.</>} />}
+      {/* Crew can't dispatch, so they get their own schedule tip (own id). */}
+      {page === "sched" && (isAdmin
+        ? <Coachmark id="schedule_v2" text={t("tip.scheduleAdmin")} />
+        : <Coachmark id="schedule_crew" text={t("tip.scheduleCrew")} />)}
+      {page === "time" && <Coachmark id="workmode" text={t("tip.workmode")} />}
     </div>
   );
 }

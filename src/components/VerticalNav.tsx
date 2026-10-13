@@ -101,7 +101,8 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
         const label = morph ? t(navPage === "ops" && !isAdmin ? "nav.timeOff" : morph.labelKey) : t(item.labelKey);
         const active = isMore ? onOverflow : navPage === item.id;
         const color = isMore ? (TAB_COLOR[navPage] || TAB_COLOR.more) : (TAB_COLOR[item.id] || TAB_COLOR.dash);
-        const showLeadDot = item.id === "jobs" && leadCount > 0;
+        // Leads are an owner/manager queue — crew can't act on them.
+        const showLeadDot = !!isAdmin && item.id === "jobs" && leadCount > 0;
         const showBellDot = item.id === "dash" && unreadCount > 0;
 
         return (
