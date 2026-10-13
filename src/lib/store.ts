@@ -125,6 +125,11 @@ interface AppState {
   /** Epoch ms of the last successful online load, or the snapshot's own
    *  timestamp when hydrated offline — powers the "last synced" label. */
   lastSyncedAt: number | null;
+  /** Epoch ms of the last load where EVERY table fetched (or the snapshot's
+   *  time offline). A partly-failed first load leaves it null — calm states
+   *  ("all caught up", "everyone's paid up") wait for this, so an empty store
+   *  can never read as "nothing to do". */
+  fullSyncAt: number | null;
   /** Count of offline writes waiting to sync (the offline-queue). Surfaced in
    *  the banner so a tech knows their offline clock-out isn't lost. */
   pendingWrites: number;
@@ -178,6 +183,7 @@ interface AppState {
 // account's session (the offline fast-path in loadAll serves whatever is in
 // memory, so stale collections here would leak across users).
 const EMPTY_COLLECTIONS = {
+  fullSyncAt: null,
   customers: [], addresses: [], profiles: [], pendingMembers: [], jobs: [], timeEntries: [],
   reviews: [], referrals: [], schedule: [], payHistory: [], receipts: [],
   questPayouts: [], timeOffRequests: [], recurringJobs: [], reviewRequests: [],
@@ -362,7 +368,7 @@ export const useStore = create<AppState>((set, get) => ({
   showToast: (message, type = "success") => {
     const cur = get().toast;
     // Background chatter ("Syncing data…") must not bury a real problem.
-    if (type === "info" && cur.visible && (cur.type === "error" || cur.type === "warning")) return;
+    if (type === "info" && message.startsWith("Syncing") && cur.visible && (cur.type === "error" || cur.type === "warning")) return;
     // A success fired right after an ignored failed write can't hide the error.
     if (type === "success" && cur.visible && cur.type === "error" && Date.now() - lastErrorAt < 1500) return;
     if (type === "error") lastErrorAt = Date.now();
@@ -411,6 +417,7 @@ export const useStore = create<AppState>((set, get) => ({
   loading: true,
   usingOfflineData: false,
   lastSyncedAt: null,
+  fullSyncAt: null,
   pendingWrites: pendingCount(),
   pendingUploads: 0, // hydrated from IndexedDB in startAutoRefresh
   bumpPendingUploads: () => set({ pendingUploads: get().pendingUploads + 1 }),
@@ -455,6 +462,7 @@ export const useStore = create<AppState>((set, get) => ({
           loading: false,
           usingOfflineData: true,
           lastSyncedAt: snap.at,
+          fullSyncAt: snap.at,
           pendingWrites: pendingCount(),
         });
       } else {
@@ -562,6 +570,8 @@ export const useStore = create<AppState>((set, get) => ({
       loading: false,
       usingOfflineData: false,
       lastSyncedAt: Date.now(),
+      // A table that failed kept its prior value — only a complete load counts.
+      fullSyncAt: results.some((r) => r === null) ? cur.fullSyncAt : Date.now(),
       pendingWrites: pendingCount(),
     });
 

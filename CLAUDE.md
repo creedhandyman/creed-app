@@ -745,6 +745,45 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Day-rhythm Home + calm polish pass (2026-10-12)**: owner goal = "a
+  reusable flow every day; using the app should relieve stress". Home keeps
+  its layout (CTAs → day card → Needs you → money row → business card); only
+  the DAY CARD changes: "Today" (stops in clock order, crew, "{done} of
+  {total} done", amber row for a shift left open) → after 17:00 (or 15:00 with
+  no stops left) "Wrap up the day" (crew off · tomorrow booked · payday) →
+  "All caught up — enjoy your evening". Techs get "Your day" (own stops
+  first) and "Done for today". **All day logic lives in `src/lib/day-plan.ts`**
+  (pure, tested in `day-plan.test.ts`: stopsForDay, crewStatus, needMatch =
+  the 2x2 predicates, dayPhase; WRAP_HOUR/LATE_HOUR are the knobs);
+  `components/DayCards.tsx` only renders it. "Caught up" never shows before
+  the first successful sync (`dataReady`). **Deep links** use the
+  `c_nav_intent` sessionStorage contract (`src/lib/nav-intent.ts`: `{page,
+  tab?, filter?, jobId?, at}`, 15s TTL, read once on mount) — readers: Jobs
+  (tab + quick filter lead/toSend/waiting/toInvoice/unpaid, or jobId → detail),
+  Schedule (day/week/month/dispatch), Timer (crew tab); several writers inline
+  the same snippet (packages were built in parallel). The 2x2 tiles now open
+  exactly the jobs they count; zero tiles dim. Other parts of the pass: Work
+  mode resolves the job from the clock-in address first (a stale pinned id
+  from a Time-tab clock-in used to show/complete the WRONG job); one calm
+  Complete-Job question instead of up to four dialogs; clock-out confirms;
+  `showConfirm(title, msg, {confirmLabel, cancelLabel, danger})` (danger =
+  title only now — "cancel" in a message no longer paints a red DELETE);
+  toasts can't be buried by "Syncing…" or a success right after an error;
+  Timer uses LOCAL dates (after ~7 PM Central the UTC date showed tomorrow);
+  Jobs: one next-step CTA per status, Follow up for sent quotes, tiered
+  quotes text "Options from $X", pay-at-truck QR flips to "Payment received".
+  **Owner decisions**: picking Paid on a job that still owes money asks
+  "$X still owed" → Record payment / Just mark Paid / Cancel (admins; techs
+  unchanged); bulk "Paid" records each job's remaining balance via
+  `/api/payments/record` with one method pick; **approving a join request
+  requires a pay rate** (TeamStats — one patch {status, rate}); techs keep
+  Dispatch/Assign. Deferred (see the plan's list): server-checked clock state
+  for force clock-out, back-button work in QuoteForge/Home deep links, shared
+  TopBar, portal native dialogs. Local preview recipe used for this: a
+  worktree `.env.local` with a placeholder Supabase URL (127.0.0.1) + a fake
+  local session + an IndexedDB offline snapshot of demo data — loadAll's
+  failed-fetch guard then serves the snapshot, so every screen renders.
+
 - **creedhm.com SEO (2026-10-08)**: Google used to get only "Loading Creed..."
   from `/` (the page was one client component behind a `mounted` gate), with no
   robots/sitemap/canonical. Now `app/page.tsx` is a SERVER page (home metadata +
@@ -916,7 +955,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   action stamps `jobs.quote_sent_at` (`lib/quote-send.ts markQuoteSent`; also
   from the Jobs send strip on a quoted job). Job cards show "Sent 3d ago" /
   "Not sent yet"; dashboard Needs-attention is 2x2: To send (quoted, unsent) ·
-  Waiting on customer (quoted, sent) · To invoice · Unpaid. `/api/jobs/approve`
+  Waiting on customer (quoted, sent) · To invoice · Unpaid (now rendered by
+  DayCards from day-plan `needMatch`; each tile deep-links to exactly those
+  jobs — see "Day-rhythm Home" above). `/api/jobs/approve`
   fires `notifyQuoteApproved` (bell `quote_approved`, deep-links the job) on
   the FIRST approval only. Editing a saved quote no longer resets `job_date`.
 - **Good-Better-Best tiered quotes**: present 3 cumulative options on a quote so

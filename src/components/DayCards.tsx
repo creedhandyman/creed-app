@@ -313,7 +313,8 @@ export function OwnerDay({ setPage, openJob, openOps }: {
         key: "timeOff", n: pendingTimeOff.length, c: "#3ee08f", icon: "leaf", go: () => openOps?.("hr"),
         text: pendingTimeOff.length === 1 ? t("day.timeOffOne") : fill(t("day.timeOffMany"), { n: pendingTimeOff.length }),
       },
-      { key: "toSchedule", n: toSchedule.length, c: "#ff9f43", icon: "schedule", text: toScheduleText, go: goDispatch },
+      // In the evening the Wrap-up card's Tomorrow row already asks for this — don't say it twice.
+      { key: "toSchedule", n: phase === "wrap" ? 0 : toSchedule.length, c: "#ff9f43", icon: "schedule", text: toScheduleText, go: goDispatch },
     ].filter((r) => r.n > 0);
 
     const sum = (list: typeof jobs) => Math.round(list.reduce((s, j) => s + balanceDue(j), 0));
