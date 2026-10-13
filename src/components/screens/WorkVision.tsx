@@ -477,7 +477,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // called — only its sync is awaited, so a slow signal never leaves the
     // header looking stuck. Persisted immediately so a load landing mid-sync
     // already sees this phone as off.
+    // ONCE only: the clock-in picker shows the moment we go off, so a new
+    // shift started while this sync is in flight must never be reset by a
+    // second call after the await.
+    let wentOff = false;
     const goOff = () => {
+      if (wentOff) return;
+      wentOff = true;
       setOn(false); setSt(null); setEl(0); setSj(""); setActiveId(null); setActiveJobId(null);
       sv("t_on", false); sv("t_st", null); sv("t_active_id", null); sv("t_active_job_id", null);
     };
@@ -508,7 +514,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           });
         } else {
           // No open row at all — last-resort: post a completed entry.
-          await saveTimeEntry(newRowId(), {
+          const write = saveTimeEntry(newRowId(), {
             job: sj || "General",
             job_id: resolveActiveJobId(jobs, sj),
             entry_date: new Date().toLocaleDateString("en-US"),
@@ -519,6 +525,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             start_time: fmtTime(st),
             end_time: fmtTime(Date.now()),
           }, "post");
+          goOff();
+          await write;
         }
       }
     } else if (activeId) {
@@ -528,7 +536,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       goOff();
       await write;
     }
-    goOff(); // every other path (no row to close / last-resort post) too — idempotent
+    goOff(); // paths with no write at all (no await happened) — no-op otherwise
     await loadAll();
     if (!landed) closedElsewhereRef.current = true;
     if (!opts?.quiet && landed) useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");

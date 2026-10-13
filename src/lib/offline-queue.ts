@@ -33,6 +33,9 @@ export interface QueuedWrite {
    *  real clock-out. */
   earlierWins?: boolean;
   ts: number;
+  /** First transient-failure time — the 24h retry window counts from here,
+   *  not from when the write was queued (a weekend offline isn't a failure). */
+  failSince?: number;
 }
 
 /** Per-request timeout so one hanging dead-zone request can't stall the queue
@@ -199,6 +202,11 @@ export interface FlushResult {
   conflictRows: string[];
 }
 
+// PostgREST connection/pool/schema-reload (PGRST000-003), JWT expired by clock
+// skew (PGRST303), statement timeout, admin shutdown/restart, serialization
+// failure, deadlock, connection errors, insufficient resources.
+const TRANSIENT_CODE = /^(PGRST00[0-3]|PGRST303|57014|57P0[1-3]|40001|40P01|08\d{3}|53\d{3})$/;
+
 let inflight: Promise<FlushResult> | null = null;
 let followUp: Promise<FlushResult> | null = null;
 
@@ -249,6 +257,13 @@ async function runFlush(): Promise<FlushResult> {
       const q = read();
       if (!q.length) break;
       const item = q[0];
+      // No session (expired token, refresh failed) → supabase-js would send the
+      // anon key, RLS would match nothing, and a clock-out would read as
+      // "already closed" and be dropped. Wait for a session instead.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) break;
+      } catch { break; }
       try {
         if (item.op === "post") {
           // Insert-only: posts always carry a fresh client id, so a replay of
@@ -273,10 +288,18 @@ async function runFlush(): Promise<FlushResult> {
         }
       } catch (err) {
         if (isNetworkish(err)) break; // still offline — retry the whole queue later
-        // A response with no PostgREST / SQL code (a 502/504/520 gateway page)
-        // is transient too — retry it for a day before giving up on it.
+        // Transient server trouble is retried for a day (counted from the first
+        // failure) instead of dropping a clock write: a response with no
+        // PostgREST / SQL code (502/504/520 gateway page, captive portal) or
+        // one of Supabase's own overload / timeout / restart codes.
         const code = err && typeof err === "object" ? (err as { code?: string }).code : undefined;
-        if (!code && Date.now() - item.ts < 24 * 3600000) break;
+        if (!code || TRANSIENT_CODE.test(code)) {
+          const since = item.failSince ?? Date.now();
+          if (Date.now() - since < 24 * 3600000) {
+            if (!item.failSince) write(read().map((i) => (i.qid === item.qid ? { ...i, failSince: since } : i)));
+            break;
+          }
+        }
         // eslint-disable-next-line no-console
         console.error("[offline-queue] dropping un-replayable write:", item, err);
       }

@@ -459,6 +459,7 @@ export default function Timer({ setPage }: Props) {
       // shift LATER (more hours) while this sat queued, the real time wins.
       const write = closedId ? saveTimeEntry(closedId, closePatch, "patch", { onlyIfOpen: true, earlierWins: true }) : null;
       goOff();
+      clockBusyRef.current = false; // Clock In works again right away
       // false = the shift was already closed elsewhere; the store toasts that
       // and the server kept those times.
       const landed = write ? await write : true;
@@ -475,6 +476,7 @@ export default function Timer({ setPage }: Props) {
       // of leaving a zero-hour ghost entry.
       const write = activeId ? dropTimeEntry(activeId, { onlyIfOpen: true }) : null;
       goOff();
+      clockBusyRef.current = false;
       if (write) await write;
     }
     } finally {
