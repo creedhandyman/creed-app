@@ -20,7 +20,8 @@ import { useFinishTime } from "../FinishTimeModal";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
 import { pickReceiptPhoto } from "@/lib/image";
-import { newRowId } from "@/lib/offline-queue";
+import { newRowId, getPending } from "@/lib/offline-queue";
+import { isClosedRow, markLocalClockOut, unmarkLocalClockOut } from "@/lib/clock-sync";
 import { enqueueUpload, isNetworkError } from "@/lib/offline-uploads";
 
 function ld<T>(key: string, fallback: T): T {
@@ -172,6 +173,22 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const rate = user.rate || 55;
 
   // Persist timer
+  // The office (force clock-out) or another phone closed / removed THIS
+  // shift — store.reconcileClock confirmed it with the server and cleared
+  // localStorage; stop the running clock here too. Keyed on the row id so an
+  // old reset can never stop a newer shift.
+  const clockReset = useStore((s) => s.clockReset);
+  useEffect(() => {
+    if (!clockReset || !activeId || clockReset.id !== activeId) return;
+    setOn(false);
+    setSt(null);
+    setEl(0);
+    setSj("");
+    setActiveId(null);
+    setActiveJobId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockReset?.at]);
+
   useEffect(() => sv("t_on", on), [on]);
   useEffect(() => sv("t_st", st), [st]);
   useEffect(() => sv("t_sj", sj), [sj]);
@@ -425,6 +442,20 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // No confirm in here — the header pill asks; Complete Job must not.
   const clockOut = async (endAtArg?: number, opts?: { quiet?: boolean }): Promise<boolean> => {
     if (!st) return true;
+    // While this phone closes its own row, the post-load server check must not
+    // read that close as the office's.
+    const closingId = activeId;
+    markLocalClockOut(closingId);
+    try {
+    // Already closed elsewhere (manager force clock-out / another phone) and
+    // nothing of ours is waiting to sync → keep their times, just stop here.
+    const mine = activeId ? useStore.getState().timeEntries.find((e) => e.id === activeId) : undefined;
+    if (activeId && isClosedRow(mine) && !getPending("time_entries").some((w) => w.rowId === activeId)) {
+      setOn(false); setSt(null); setEl(0); setSj(""); setActiveId(null); setActiveJobId(null);
+      sv("t_on", false); sv("t_st", null); sv("t_active_id", null); sv("t_active_job_id", null);
+      useStore.getState().showToast(t("timer.shiftAlreadyClosed"), "warning");
+      return true;
+    }
     let endAt = endAtArg ?? Date.now();
     if (endAtArg === undefined && endAt - st >= LONG_SHIFT_MS) {
       const picked = await askFinish(st);
@@ -434,13 +465,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     const hrs = (endAt - st) / (1000 * 60 * 60);
     const rounded = Math.round(hrs * 100) / 100;
     const amount = Math.round(hrs * rate * 100) / 100;
+    // false = the shift was already closed elsewhere; the store toasts that
+    // and the server kept those times (onlyIfOpen never overwrites a close).
+    let landed = true;
     if (hrs > 0.01) {
       const closePatch = { hours: rounded, amount, end_time: fmtTime(endAt), job: sj || "General" };
       if (activeId) {
         // Durable — survives offline and replays on reconnect.
-        await saveTimeEntry(activeId, closePatch, "patch");
+        landed = await saveTimeEntry(activeId, closePatch, "patch", { onlyIfOpen: true });
         // GPS stamp at clock-out — fire-and-forget one-shot fix.
-        void getFix(8000).then((fix) => {
+        if (landed) void getFix(8000).then((fix) => {
           if (fix) void saveTimeEntry(activeId, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
         });
       } else {
@@ -450,8 +484,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
         const target = open[open.length - 1];
         if (target) {
-          await saveTimeEntry(target.id, closePatch, "patch");
-          void getFix(8000).then((fix) => {
+          landed = await saveTimeEntry(target.id, closePatch, "patch", { onlyIfOpen: true });
+          if (landed) void getFix(8000).then((fix) => {
             if (fix) void saveTimeEntry(target.id, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
           });
         } else {
@@ -472,7 +506,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     } else if (activeId) {
       // Brief in-and-out — delete the in-progress row instead of leaving a
       // zero-hour ghost entry.
-      await dropTimeEntry(activeId);
+      await dropTimeEntry(activeId, { onlyIfOpen: true });
     }
     setOn(false);
     setSt(null);
@@ -480,9 +514,18 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setSj("");
     setActiveId(null);
     setActiveJobId(null);
+    // Persist now (not on the next render) so the load below already sees this
+    // phone as off the clock.
+    sv("t_on", false);
+    sv("t_st", null);
+    sv("t_active_id", null);
+    sv("t_active_job_id", null);
     await loadAll();
-    if (!opts?.quiet) useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");
+    if (!opts?.quiet && landed) useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");
     return true;
+    } finally {
+      unmarkLocalClockOut(closingId);
+    }
   };
 
   // Toggle work order item. Match by `(room, detail)` against the latest

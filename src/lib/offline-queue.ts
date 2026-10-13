@@ -21,7 +21,36 @@ export interface QueuedWrite {
   op: "post" | "patch" | "del";
   rowId: string; // stable client id of the affected row
   payload?: Record<string, unknown>; // full row (post) or updates (patch)
+  /** Close-a-shift writes (clock-out, force-out, ghost-row delete): land only
+   *  while the row is still OPEN, so a late replay can never overwrite a close
+   *  done elsewhere (a manager's force clock-out, another phone). */
+  onlyIfOpen?: boolean;
   ts: number;
+}
+
+/**
+ * An `onlyIfOpen` write: try it only on an open row (end_time NULL — the
+ * same open test payroll-runner uses). If nothing matched, re-read the row:
+ * one that's still open with a blank finish ("") is written anyway (never
+ * lose a real clock-out over a format quirk); a closed or missing row is a
+ * conflict and nothing is changed.
+ */
+async function writeIfOpen(item: QueuedWrite): Promise<"ok" | "conflict"> {
+  const run = item.op === "del"
+    ? supabase.from(item.table).delete().eq("id", item.rowId).is("end_time", null).select("id")
+    : supabase.from(item.table).update((item.payload || {}) as never).eq("id", item.rowId).is("end_time", null).select("id");
+  const { data, error } = await run;
+  if (error) throw error;
+  if (data && data.length) return "ok";
+  const { data: cur, error: readErr } = await supabase.from(item.table).select("id, end_time").eq("id", item.rowId);
+  if (readErr) throw readErr;
+  const row = (cur as { end_time?: string | null }[] | null)?.[0];
+  if (!row || String(row.end_time ?? "").trim() !== "") return "conflict";
+  const { error: err2 } = item.op === "del"
+    ? await supabase.from(item.table).delete().eq("id", item.rowId)
+    : await supabase.from(item.table).update((item.payload || {}) as never).eq("id", item.rowId);
+  if (err2) throw err2;
+  return "ok";
 }
 
 const KEY = "c_offline_queue";
@@ -67,6 +96,7 @@ export function enqueueWrite(item: {
   op: "post" | "patch" | "del";
   rowId: string;
   payload?: Record<string, unknown>;
+  onlyIfOpen?: boolean;
 }): void {
   const q = read();
   q.push({ qid: newRowId(), ts: Date.now(), ...item });
@@ -124,13 +154,16 @@ function isNetworkish(err: unknown): boolean {
  * (constraint / RLS) can't succeed on retry, so we drop that one item (logged)
  * rather than let it wedge the whole queue forever.
  */
-export async function flushQueue(): Promise<{ flushed: number; remaining: number }> {
-  if (flushing) return { flushed: 0, remaining: pendingCount() };
+export async function flushQueue(): Promise<{ flushed: number; remaining: number; conflicts: number }> {
+  if (flushing) return { flushed: 0, remaining: pendingCount(), conflicts: 0 };
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    return { flushed: 0, remaining: pendingCount() };
+    return { flushed: 0, remaining: pendingCount(), conflicts: 0 };
   }
   flushing = true;
   let flushed = 0;
+  // onlyIfOpen writes that matched no open row — the shift was already closed
+  // (or removed) elsewhere, so the existing times were kept.
+  let conflicts = 0;
   try {
     // Process the head repeatedly (re-reading each round so a concurrent
     // enqueue is picked up), stopping on a network failure.
@@ -145,6 +178,8 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
             .from(item.table)
             .upsert({ id: item.rowId, ...(item.payload || {}) } as never, { onConflict: "id" });
           if (error) throw error;
+        } else if (item.onlyIfOpen) {
+          if ((await writeIfOpen(item)) === "conflict") conflicts += 1;
         } else if (item.op === "patch") {
           const { error } = await supabase
             .from(item.table)
@@ -167,7 +202,7 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
   } finally {
     flushing = false;
   }
-  return { flushed, remaining: pendingCount() };
+  return { flushed, remaining: pendingCount(), conflicts };
 }
 
 /** Wipe the queue (called on logout so a new account starts clean). */

@@ -118,6 +118,9 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
     .filter((j) => ["lead", "quoted", "accepted", "scheduled", "active"].includes(j.status))
     .reduce((s, j) => s + (j.total || 0), 0);
 
+  // Re-render when the office closes this phone's shift (store.reconcileClock
+  // clears c_t_on) so the CTA flips from Work mode back to Clock in.
+  useStore((s) => s.clockReset);
   const isClocked = (() => { try { return JSON.parse(localStorage.getItem("c_t_on") || "false"); } catch { return false; } })();
   const clockedJob = (() => { try { return localStorage.getItem("c_t_sj") ? JSON.parse(localStorage.getItem("c_t_sj")!) : ""; } catch { return ""; } })();
 

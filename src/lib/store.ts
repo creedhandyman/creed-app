@@ -2,7 +2,9 @@
 import { create } from "zustand";
 import { supabase, db } from "./supabase";
 import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
-import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue } from "./offline-queue";
+import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPending } from "./offline-queue";
+import { needsServerCheck, serverVerdict, isLocalClockOut } from "./clock-sync";
+import { t } from "./i18n";
 import { flushUploads, pendingUploadCount, clearUploads } from "./offline-uploads";
 import type {
   Organization,
@@ -36,6 +38,27 @@ let loadAllInFlight: Promise<void> | null = null;
 // full data set that often is wasteful, so we write at most once per 30s.
 // Starts at 0 so the first successful load always snapshots immediately.
 let lastSnapshotAt = 0;
+
+// reconcileClock bookkeeping: one check at a time; a row merely missing from
+// the org list is re-asked at most once a minute.
+let reconcileBusy = false;
+let lastClockCheck = { id: "", at: 0 };
+
+/** "17:12:00" / "05:12 PM" → "5:12 PM" for the clocked-out-by-the-office toast. */
+function clockLabel(v?: string | null): string {
+  const m = String(v || "").match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?/);
+  if (!m) return String(v || "").trim();
+  let h = parseInt(m[1], 10);
+  const ap = m[3]?.toUpperCase();
+  if (!ap) { const pm = h >= 12; h = h % 12 || 12; return `${h}:${m[2]} ${pm ? "PM" : "AM"}`; }
+  return `${h}:${m[2]} ${ap}`;
+}
+
+/** An onlyIfOpen clock write found the shift already closed elsewhere — say so
+ *  (the server kept the existing times; the next load shows them). */
+function noteQueueConflicts(n: number): void {
+  if (n > 0) useStore.getState().showToast(t("timer.shiftAlreadyClosed"), "warning");
+}
 
 /* ── localStorage helpers ── */
 function ld<T>(key: string, fallback: T): T {
@@ -145,8 +168,15 @@ interface AppState {
    *  goes through these so a write survives no-signal (queued + replayed on
    *  reconnect) and updates the store optimistically. `mode` is "post" for a
    *  new row (caller supplies a stable id via newRowId) or "patch" to update. */
-  saveTimeEntry: (rowId: string, patch: Record<string, unknown>, mode: "post" | "patch") => Promise<void>;
-  dropTimeEntry: (rowId: string) => Promise<void>;
+  saveTimeEntry: (rowId: string, patch: Record<string, unknown>, mode: "post" | "patch", opts?: { onlyIfOpen?: boolean }) => Promise<boolean>;
+  dropTimeEntry: (rowId: string, opts?: { onlyIfOpen?: boolean }) => Promise<boolean>;
+  /** Set when the server shows THIS phone's running shift was closed or removed
+   *  elsewhere (manager force clock-out, another phone). Timer / WorkVision
+   *  reset their clock when `id` is their active row. See lib/clock-sync.ts. */
+  clockReset: { at: number; id: string; reason: "closed" | "deleted" } | null;
+  /** Check this phone's "on the clock" state against the server (runs after
+   *  each online load). Only acts on a CONFIRMED close/removal. */
+  reconcileClock: () => Promise<void>;
 
   /** Notifications — the dashboard-bell feed. Rows are written server-side;
    *  the client only reads (in loadAll, scoped to the current user) and
@@ -273,7 +303,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   logout: () => {
     supabase.auth.signOut();
-    set({ user: null, org: null, ...EMPTY_COLLECTIONS, usingOfflineData: false, lastSyncedAt: null });
+    set({ user: null, org: null, ...EMPTY_COLLECTIONS, usingOfflineData: false, lastSyncedAt: null, clockReset: null });
     sv("user", null);
     sv("org", null);
     // Drop the cached offline snapshot + any queued writes so the next account
@@ -420,6 +450,7 @@ export const useStore = create<AppState>((set, get) => ({
   fullSyncAt: null,
   pendingWrites: pendingCount(),
   pendingUploads: 0, // hydrated from IndexedDB in startAutoRefresh
+  clockReset: null,
   bumpPendingUploads: () => set({ pendingUploads: get().pendingUploads + 1 }),
 
   loadAll: async () => {
@@ -575,6 +606,11 @@ export const useStore = create<AppState>((set, get) => ({
       pendingWrites: pendingCount(),
     });
 
+    // Is this phone still really on the clock? (A manager's force clock-out
+    // or another phone may have closed the shift.) Only after a load whose
+    // time entries actually came from the server.
+    if (timeEntries !== null) void get().reconcileClock();
+
     // Persist a fresh snapshot so the next offline load has real data to show.
     // Throttled (loadAll runs every 15s) to avoid churning IndexedDB. Only a
     // COMPLETE load is snapshotted — the offline path trusts the snapshot as a
@@ -604,12 +640,12 @@ export const useStore = create<AppState>((set, get) => ({
      survives no-signal: enqueue → optimistic store update → (if
      online) flush + reconcile. Offline, the queue persists in
      localStorage and replays on the next reconnect. */
-  saveTimeEntry: async (rowId, patch, mode) => {
+  saveTimeEntry: async (rowId, patch, mode, opts) => {
     // Insert needs org_id like db.post would auto-inject (the queue's raw
     // upsert doesn't run that logic).
     const orgId = get().user?.org_id;
     const payload = mode === "post" && orgId ? { org_id: orgId, ...patch } : patch;
-    enqueueWrite({ table: "time_entries", op: mode, rowId, payload });
+    enqueueWrite({ table: "time_entries", op: mode, rowId, payload, onlyIfOpen: mode === "patch" && !!opts?.onlyIfOpen });
     // Optimistic local update so Crew Activity / My Log reflect it immediately.
     // Use `payload` (not `patch`) so the in-store row matches what gets
     // persisted — e.g. the injected org_id on an insert.
@@ -623,17 +659,66 @@ export const useStore = create<AppState>((set, get) => ({
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       const res = await flushQueue();
       set({ pendingWrites: res.remaining });
+      noteQueueConflicts(res.conflicts);
       if (res.flushed > 0) await get().loadAll();
+      // false = an onlyIfOpen close found the shift already closed elsewhere.
+      return res.conflicts === 0;
     }
+    return true; // queued offline — replays later
   },
 
-  dropTimeEntry: async (rowId) => {
-    enqueueWrite({ table: "time_entries", op: "del", rowId });
+  dropTimeEntry: async (rowId, opts) => {
+    enqueueWrite({ table: "time_entries", op: "del", rowId, onlyIfOpen: !!opts?.onlyIfOpen });
     set({ timeEntries: get().timeEntries.filter((e) => e.id !== rowId), pendingWrites: pendingCount() });
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       const res = await flushQueue();
       set({ pendingWrites: res.remaining });
+      noteQueueConflicts(res.conflicts);
       if (res.flushed > 0) await get().loadAll();
+      // false = an onlyIfOpen close found the shift already closed elsewhere.
+      return res.conflicts === 0;
+    }
+    return true; // queued offline — replays later
+  },
+
+  reconcileClock: async () => {
+    if (reconcileBusy) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    if (get().usingOfflineData) return; // a snapshot can't confirm anything
+    const local = { on: ld<boolean>("t_on", false) === true, activeId: ld<string | null>("t_active_id", null), st: ld<number | null>("t_st", null) };
+    const id = local.activeId;
+    if (!local.on || !id || isLocalClockOut(id)) return;
+    const pendingIds = getPending("time_entries").map((w) => w.rowId);
+    const storeRow = get().timeEntries.find((e) => e.id === id);
+    if (!needsServerCheck(local, pendingIds, storeRow, Date.now())) return;
+    // A row merely missing from the org list re-asks at most once a minute.
+    if (!storeRow && lastClockCheck.id === id && Date.now() - lastClockCheck.at < 60000) return;
+    reconcileBusy = true;
+    lastClockCheck = { id, at: Date.now() };
+    try {
+      // Confirm by id — act only on a successful read, never on a guess.
+      let rows: TimeEntry[];
+      try { rows = await db.get<TimeEntry>("time_entries", { id }, { strict: true }); }
+      catch { return; }
+      const verdict = serverVerdict(rows);
+      if (verdict === "keep") return;
+      // The user may have clocked out, or queued a write, while we were reading.
+      if (ld<boolean>("t_on", false) !== true || ld<string | null>("t_active_id", null) !== id) return;
+      if (isLocalClockOut(id) || getPending("time_entries").some((w) => w.rowId === id)) return;
+      sv("t_on", false);
+      sv("t_st", null);
+      sv("t_sj", "");
+      sv("t_active_id", null);
+      sv("t_active_job_id", null);
+      set({ clockReset: { at: Date.now(), id, reason: verdict } });
+      get().showToast(
+        verdict === "closed"
+          ? t("timer.closedByOffice").replace("{time}", clockLabel(rows[0]?.end_time))
+          : t("timer.removedByOffice"),
+        "warning",
+      );
+    } finally {
+      reconcileBusy = false;
     }
   },
 
@@ -783,7 +868,7 @@ export const useStore = create<AppState>((set, get) => ({
     // Replay any writes/uploads queued in a previous session (e.g. clocked out
     // or snapped a photo offline, then closed the app) before/while the first
     // load runs. Also hydrate the pending-upload count from IndexedDB.
-    flushQueue().then((res) => set({ pendingWrites: res.remaining })).catch(() => {});
+    flushQueue().then((res) => { set({ pendingWrites: res.remaining }); noteQueueConflicts(res.conflicts); }).catch(() => {});
     flushUploads().then((res) => set({ pendingUploads: res.remaining })).catch(() => {});
     pendingUploadCount().then((n) => set({ pendingUploads: n })).catch(() => {});
     get().loadAll();
@@ -822,6 +907,7 @@ if (typeof window !== "undefined") {
     void (async () => {
       const res = await flushQueue();
       useStore.setState({ pendingWrites: res.remaining });
+      noteQueueConflicts(res.conflicts);
       // Then replay queued image uploads (rows first so a receipt's row exists
       // before anything references it), and refresh live data.
       const up = await flushUploads();
