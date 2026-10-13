@@ -1,6 +1,6 @@
 import {
   isClosedRow, needsServerCheck, serverVerdict, MISSING_GRACE_MS,
-  markLocalClockOut, unmarkLocalClockOut, isLocalClockOut,
+  markLocalClockOut, unmarkLocalClockOut, isLocalClockOut, isCloseWrite, resolveClose,
 } from "../lib/clock-sync";
 
 const NOW = Date.UTC(2026, 9, 12, 22, 0, 0);
@@ -60,5 +60,46 @@ describe("local clock-out marker", () => {
     expect(isLocalClockOut("x")).toBe(false);
     markLocalClockOut(null);
     expect(isLocalClockOut(null)).toBe(false);
+  });
+});
+
+describe("isCloseWrite", () => {
+  it("inserts, deletes, onlyIfOpen and end_time patches are close writes", () => {
+    expect(isCloseWrite({ op: "post" })).toBe(true);
+    expect(isCloseWrite({ op: "del" })).toBe(true);
+    expect(isCloseWrite({ op: "patch", onlyIfOpen: true, payload: {} })).toBe(true);
+    expect(isCloseWrite({ op: "patch", payload: { end_time: "5:00 PM", hours: 8 } })).toBe(true); // legacy queue item
+  });
+  it("a GPS stamp or an hours tweak is not", () => {
+    expect(isCloseWrite({ op: "patch", payload: { end_lat: 1, end_lng: 2 } })).toBe(false);
+    expect(isCloseWrite({ op: "patch", payload: { hours: 3 } })).toBe(false);
+  });
+});
+
+describe("resolveClose", () => {
+  const close = { end_time: "03:00 PM", hours: 7, amount: 196 };
+  it("an open row (blank finish) is written", () => {
+    expect(resolveClose("patch", close, { end_time: "", hours: 0 })).toBe("write");
+    expect(resolveClose("del", undefined, { end_time: null })).toBe("write");
+  });
+  it("our own close already landed (lost response, retried) = done, not a conflict", () => {
+    expect(resolveClose("patch", close, { end_time: "03:00 PM", hours: 7 })).toBe("done");
+    expect(resolveClose("patch", close, { end_time: "03:00 PM", hours: "7" })).toBe("done");
+  });
+  it("a removal whose row is already gone = done; a close of a removed row = conflict", () => {
+    expect(resolveClose("del", undefined, null)).toBe("done");
+    expect(resolveClose("patch", close, null)).toBe("conflict");
+  });
+  it("never deletes a shift someone else closed", () => {
+    expect(resolveClose("del", undefined, { end_time: "5:00 PM", hours: 8 })).toBe("conflict");
+  });
+  it("the tech's earlier real clock-out beats a later force-out on an unpaid row", () => {
+    expect(resolveClose("patch", close, { end_time: "06:00 PM", hours: 10 })).toBe("write-if-earlier");
+  });
+  it("a later close (forgotten shift) keeps the office's earlier close", () => {
+    expect(resolveClose("patch", { end_time: "09:00 AM", hours: 25 }, { end_time: "06:00 PM", hours: 10 })).toBe("conflict");
+  });
+  it("a paid row is never touched", () => {
+    expect(resolveClose("patch", close, { end_time: "06:00 PM", hours: 10, paid_at: "2026-10-10T00:00:00Z" })).toBe("conflict");
   });
 });

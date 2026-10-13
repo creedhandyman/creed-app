@@ -412,9 +412,8 @@ export default function Timer({ setPage }: Props) {
     if (clockBusyRef.current || !on) return;
     clockBusyRef.current = true;
     // While this phone closes its own row, the post-load server check must not
-    // read that close as the office's.
+    // read that close as the office's (marked right before the write below).
     const closingId = activeId;
-    markLocalClockOut(closingId);
     try {
     // Already closed elsewhere (manager force clock-out / another phone) and
     // nothing of ours is waiting to sync → keep their times, just stop here.
@@ -433,6 +432,7 @@ export default function Timer({ setPage }: Props) {
       endAt = picked;
     }
     const hrs = st ? Math.round((endAt - st) / 3600000 * 100) / 100 : Math.round(el / 3600000 * 100) / 100;
+    markLocalClockOut(closingId);
     if (hrs >= 0.01) {
       const closePatch = {
         hours: hrs,
@@ -989,7 +989,7 @@ export default function Timer({ setPage }: Props) {
                           if (endAt === null) return;
                           const hrs = Math.round((endAt - startMs) / 3600000 * 100) / 100;
                           const r = who?.rate || 55;
-                          await saveTimeEntry(e.id, { hours: hrs, amount: Math.round(hrs * r * 100) / 100, end_time: fmtTime(endAt) }, "patch");
+                          await saveTimeEntry(e.id, { hours: hrs, amount: Math.round(hrs * r * 100) / 100, end_time: fmtTime(endAt) }, "patch", { onlyIfOpen: true });
                         }}
                         className="bo"
                         style={{ fontSize: 12, padding: "5px 10px", flex: "none" }}

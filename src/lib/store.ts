@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { supabase, db } from "./supabase";
 import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
 import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPending } from "./offline-queue";
-import { needsServerCheck, serverVerdict, isLocalClockOut } from "./clock-sync";
+import { needsServerCheck, serverVerdict, isLocalClockOut, isCloseWrite } from "./clock-sync";
 import { t } from "./i18n";
 import { flushUploads, pendingUploadCount, clearUploads } from "./offline-uploads";
 import type {
@@ -659,10 +659,10 @@ export const useStore = create<AppState>((set, get) => ({
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       const res = await flushQueue();
       set({ pendingWrites: res.remaining });
-      noteQueueConflicts(res.conflicts);
+      noteQueueConflicts(res.conflictRows.length);
       if (res.flushed > 0) await get().loadAll();
-      // false = an onlyIfOpen close found the shift already closed elsewhere.
-      return res.conflicts === 0;
+      // false = THIS close found the shift already closed elsewhere.
+      return !res.conflictRows.includes(rowId);
     }
     return true; // queued offline — replays later
   },
@@ -673,10 +673,10 @@ export const useStore = create<AppState>((set, get) => ({
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       const res = await flushQueue();
       set({ pendingWrites: res.remaining });
-      noteQueueConflicts(res.conflicts);
+      noteQueueConflicts(res.conflictRows.length);
       if (res.flushed > 0) await get().loadAll();
-      // false = an onlyIfOpen close found the shift already closed elsewhere.
-      return res.conflicts === 0;
+      // false = THIS close found the shift already closed elsewhere.
+      return !res.conflictRows.includes(rowId);
     }
     return true; // queued offline — replays later
   },
@@ -688,7 +688,9 @@ export const useStore = create<AppState>((set, get) => ({
     const local = { on: ld<boolean>("t_on", false) === true, activeId: ld<string | null>("t_active_id", null), st: ld<number | null>("t_st", null) };
     const id = local.activeId;
     if (!local.on || !id || isLocalClockOut(id)) return;
-    const pendingIds = getPending("time_entries").map((w) => w.rowId);
+    // Only an unsynced open/close/remove of the row holds the check off — a
+    // stuck GPS stamp must not keep a force-closed shift running all day.
+    const pendingIds = getPending("time_entries").filter(isCloseWrite).map((w) => w.rowId);
     const storeRow = get().timeEntries.find((e) => e.id === id);
     if (!needsServerCheck(local, pendingIds, storeRow, Date.now())) return;
     // A row merely missing from the org list re-asks at most once a minute.
@@ -704,7 +706,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (verdict === "keep") return;
       // The user may have clocked out, or queued a write, while we were reading.
       if (ld<boolean>("t_on", false) !== true || ld<string | null>("t_active_id", null) !== id) return;
-      if (isLocalClockOut(id) || getPending("time_entries").some((w) => w.rowId === id)) return;
+      if (isLocalClockOut(id) || getPending("time_entries").some((w) => w.rowId === id && isCloseWrite(w))) return;
       sv("t_on", false);
       sv("t_st", null);
       sv("t_sj", "");
@@ -868,11 +870,24 @@ export const useStore = create<AppState>((set, get) => ({
     // Replay any writes/uploads queued in a previous session (e.g. clocked out
     // or snapped a photo offline, then closed the app) before/while the first
     // load runs. Also hydrate the pending-upload count from IndexedDB.
-    flushQueue().then((res) => { set({ pendingWrites: res.remaining }); noteQueueConflicts(res.conflicts); }).catch(() => {});
+    flushQueue().then((res) => { set({ pendingWrites: res.remaining }); noteQueueConflicts(res.conflictRows.length); }).catch(() => {});
     flushUploads().then((res) => set({ pendingUploads: res.remaining })).catch(() => {});
     pendingUploadCount().then((n) => set({ pendingUploads: n })).catch(() => {});
     get().loadAll();
-    const iv = setInterval(() => get().loadAll(), 15000);
+    // Each poll also retries queued writes: iOS often reports "online" in a
+    // dead zone (no 'online' event ever fires), so a stuck clock-out would
+    // otherwise wait for the next clock action or app restart — long enough
+    // for a manager to force-close the shift in the meantime.
+    const iv = setInterval(() => {
+      if (pendingCount() > 0 && (typeof navigator === "undefined" || navigator.onLine !== false)) {
+        flushQueue()
+          .then((res) => { set({ pendingWrites: res.remaining }); noteQueueConflicts(res.conflictRows.length); })
+          .catch(() => {})
+          .finally(() => { void get().loadAll(); });
+      } else {
+        void get().loadAll();
+      }
+    }, 15000);
     set({ _interval: iv });
   },
 
@@ -907,7 +922,7 @@ if (typeof window !== "undefined") {
     void (async () => {
       const res = await flushQueue();
       useStore.setState({ pendingWrites: res.remaining });
-      noteQueueConflicts(res.conflicts);
+      noteQueueConflicts(res.conflictRows.length);
       // Then replay queued image uploads (rows first so a receipt's row exists
       // before anything references it), and refresh live data.
       const up = await flushUploads();

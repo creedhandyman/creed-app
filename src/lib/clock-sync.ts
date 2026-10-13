@@ -63,6 +63,44 @@ export function serverVerdict(rows: { end_time?: string | null }[]): ClockVerdic
   return isClosedRow(rows[0]) ? "closed" : "keep";
 }
 
+/** A queued write that opens/closes/removes a shift (vs. a GPS stamp or an
+ *  hours tweak). Only these hold off the reconcile and get conflict handling.
+ *  Legacy queue items (from before `onlyIfOpen` existed) that set end_time
+ *  are closes too. */
+export function isCloseWrite(w: { op: string; onlyIfOpen?: boolean; payload?: Record<string, unknown> }): boolean {
+  if (w.op === "post" || w.op === "del") return true;
+  return !!w.onlyIfOpen || (!!w.payload && "end_time" in w.payload);
+}
+
+export type CloseResolution = "done" | "write" | "write-if-earlier" | "conflict";
+
+/**
+ * A close/remove write found its row NOT open. Decide from the row as it is
+ * now (null = the row no longer exists):
+ *  - "done"  — our own write already landed (a retry after a lost response),
+ *              or a removal whose row is already gone
+ *  - "write" — the row is actually still open (blank "" finish) — write it
+ *  - "write-if-earlier" — closed elsewhere, unpaid, and OUR close finishes
+ *              earlier (fewer hours): the tech's real clock-out beats a later
+ *              force-out guess; a forgotten shift still keeps the office's close
+ *  - "conflict" — keep the server's times (paid, later, or removed elsewhere)
+ */
+export function resolveClose(
+  op: "patch" | "del",
+  payload: Record<string, unknown> | undefined,
+  row: { end_time?: string | null; hours?: number | string | null; paid_at?: string | null } | null,
+): CloseResolution {
+  if (!row) return op === "del" ? "done" : "conflict"; // never recreate a removed shift
+  if (!isClosedRow(row)) return "write";
+  if (op === "del") return "conflict"; // don't delete a shift someone closed
+  const wantEnd = payload?.end_time;
+  const wantHrs = payload?.hours;
+  if (typeof wantEnd === "string" && wantEnd === row.end_time && Number(wantHrs) === Number(row.hours)) return "done";
+  if (row.paid_at) return "conflict";
+  if (typeof wantHrs === "number" && Number.isFinite(Number(row.hours)) && Number(row.hours) > wantHrs) return "write-if-earlier";
+  return "conflict";
+}
+
 // ── This phone's own in-flight clock-outs ──────────────────────────────────
 // Set right before Timer/WorkVision close a row and cleared once local state is
 // off, so a load landing mid-clock-out doesn't read our own close as the office's.

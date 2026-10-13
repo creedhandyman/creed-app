@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { LONG_SHIFT_MS } from "@/lib/shift";
 
 // "What time did you finish?" — asked instead of booking a forgotten
@@ -23,6 +23,9 @@ export function useFinishTime(): [(startMs: number, who?: string) => Promise<num
   const [value, setValue] = useState("");
   const [err, setErr] = useState("");
   const pendingRef = useRef<Pending | null>(null);
+  // Leaving the screen with the prompt open (e.g. Android back) = cancelled,
+  // so the awaiting clock-out finishes instead of hanging forever.
+  useEffect(() => () => { pendingRef.current?.resolve(null); pendingRef.current = null; }, []);
 
   const ask = useCallback((startMs: number, who?: string) => {
     // Default guess: an 8-hour day, never later than now.

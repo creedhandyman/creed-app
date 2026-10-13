@@ -178,6 +178,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // localStorage; stop the running clock here too. Keyed on the row id so an
   // old reset can never stop a newer shift.
   const clockReset = useStore((s) => s.clockReset);
+  // Set by clockOut when the shift turned out to be closed elsewhere, so
+  // Complete Job doesn't announce hours the server didn't keep.
+  const closedElsewhereRef = useRef(false);
   useEffect(() => {
     if (!clockReset || !activeId || clockReset.id !== activeId) return;
     setOn(false);
@@ -443,9 +446,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const clockOut = async (endAtArg?: number, opts?: { quiet?: boolean }): Promise<boolean> => {
     if (!st) return true;
     // While this phone closes its own row, the post-load server check must not
-    // read that close as the office's.
+    // read that close as the office's (marked right before the write below).
     const closingId = activeId;
-    markLocalClockOut(closingId);
+    closedElsewhereRef.current = false;
     try {
     // Already closed elsewhere (manager force clock-out / another phone) and
     // nothing of ours is waiting to sync → keep their times, just stop here.
@@ -454,6 +457,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       setOn(false); setSt(null); setEl(0); setSj(""); setActiveId(null); setActiveJobId(null);
       sv("t_on", false); sv("t_st", null); sv("t_active_id", null); sv("t_active_job_id", null);
       useStore.getState().showToast(t("timer.shiftAlreadyClosed"), "warning");
+      closedElsewhereRef.current = true;
       return true;
     }
     let endAt = endAtArg ?? Date.now();
@@ -468,6 +472,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // false = the shift was already closed elsewhere; the store toasts that
     // and the server kept those times (onlyIfOpen never overwrites a close).
     let landed = true;
+    markLocalClockOut(closingId);
     if (hrs > 0.01) {
       const closePatch = { hours: rounded, amount, end_time: fmtTime(endAt), job: sj || "General" };
       if (activeId) {
@@ -521,6 +526,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     sv("t_active_id", null);
     sv("t_active_job_id", null);
     await loadAll();
+    if (!landed) closedElsewhereRef.current = true;
     if (!opts?.quiet && landed) useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");
     return true;
     } finally {
@@ -865,7 +871,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         try { await db.patch("equipment", fresh.equipment_id, { last_service_at: new Date().toISOString() }); } catch { /* */ }
       }
     } catch { /* */ }
-    useStore.getState().showToast(t("wv.jobDoneToast").replace("{hrs}", formatHours(hrs)), "success");
+    useStore.getState().showToast(
+      closedElsewhereRef.current ? t("wv.jobDoneShiftClosed") : t("wv.jobDoneToast").replace("{hrs}", formatHours(hrs)),
+      closedElsewhereRef.current ? "warning" : "success",
+    );
     // Pop the review-request modal before navigating away — last chance to
     // capture the client's goodwill while the work is fresh in their mind.
     if (!activeJob.review_requested_at) {

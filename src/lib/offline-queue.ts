@@ -9,11 +9,13 @@
  *
  * The key trick: every new row gets a CLIENT-generated stable UUID (newRowId),
  * so a queued insert and a later update/delete both reference the same id —
- * no temp-id → real-id remapping, and replay is idempotent (post = upsert by
- * id, patch = update by id, del = delete by id). Replaying twice is safe.
+ * no temp-id → real-id remapping, and replay is idempotent (post = insert by
+ * id, ignored if it already landed; patch = update by id; del = delete by id;
+ * shift closes are conditional — see writeIfOpen). Replaying twice is safe.
  */
 "use client";
 import { supabase } from "./supabase";
+import { isCloseWrite, resolveClose } from "./clock-sync";
 
 export interface QueuedWrite {
   qid: string; // queue-item id
@@ -29,32 +31,46 @@ export interface QueuedWrite {
 }
 
 /**
- * An `onlyIfOpen` write: try it only on an open row (end_time NULL — the
- * same open test payroll-runner uses). If nothing matched, re-read the row:
- * one that's still open with a blank finish ("") is written anyway (never
- * lose a real clock-out over a format quirk); a closed or missing row is a
- * conflict and nothing is changed.
+ * A close/remove write: try it only on an open row (end_time NULL — the same
+ * open test payroll-runner uses). If nothing matched, re-read the row and let
+ * clock-sync's resolveClose decide (our own retry → done; blank "" finish →
+ * write; an earlier real clock-out beats a later force-out on an unpaid row;
+ * otherwise keep the server's times = conflict).
  */
 async function writeIfOpen(item: QueuedWrite): Promise<"ok" | "conflict"> {
-  const run = item.op === "del"
-    ? supabase.from(item.table).delete().eq("id", item.rowId).is("end_time", null).select("id")
-    : supabase.from(item.table).update((item.payload || {}) as never).eq("id", item.rowId).is("end_time", null).select("id");
-  const { data, error } = await run;
+  const op = item.op === "del" ? "del" : "patch";
+  const payload = (item.payload || {}) as never;
+  const { data, error } = op === "del"
+    ? await supabase.from(item.table).delete().eq("id", item.rowId).is("end_time", null).select("id")
+    : await supabase.from(item.table).update(payload).eq("id", item.rowId).is("end_time", null).select("id");
   if (error) throw error;
   if (data && data.length) return "ok";
-  const { data: cur, error: readErr } = await supabase.from(item.table).select("id, end_time").eq("id", item.rowId);
+  const { data: cur, error: readErr } = await supabase.from(item.table).select("id, end_time, hours, paid_at").eq("id", item.rowId);
   if (readErr) throw readErr;
-  const row = (cur as { end_time?: string | null }[] | null)?.[0];
-  if (!row || String(row.end_time ?? "").trim() !== "") return "conflict";
-  const { error: err2 } = item.op === "del"
-    ? await supabase.from(item.table).delete().eq("id", item.rowId)
-    : await supabase.from(item.table).update((item.payload || {}) as never).eq("id", item.rowId);
-  if (err2) throw err2;
-  return "ok";
+  const row = ((cur as { end_time?: string | null; hours?: number | null; paid_at?: string | null }[] | null) || [])[0] || null;
+  const verdict = resolveClose(op, item.payload, row);
+  if (verdict === "done") return "ok";
+  if (verdict === "conflict") return "conflict";
+  if (verdict === "write") {
+    const { error: err2 } = op === "del"
+      ? await supabase.from(item.table).delete().eq("id", item.rowId)
+      : await supabase.from(item.table).update(payload).eq("id", item.rowId);
+    if (err2) throw err2;
+    return "ok";
+  }
+  // write-if-earlier: still unpaid and the stored close is LONGER than ours.
+  const { data: d3, error: err3 } = await supabase
+    .from(item.table)
+    .update(payload)
+    .eq("id", item.rowId)
+    .is("paid_at", null)
+    .gt("hours", Number(item.payload?.hours))
+    .select("id");
+  if (err3) throw err3;
+  return d3 && d3.length ? "ok" : "conflict";
 }
 
 const KEY = "c_offline_queue";
-let flushing = false;
 
 /** RFC4122 v4 id, from crypto when available (falls back to Math.random). */
 export function newRowId(): string {
@@ -154,16 +170,44 @@ function isNetworkish(err: unknown): boolean {
  * (constraint / RLS) can't succeed on retry, so we drop that one item (logged)
  * rather than let it wedge the whole queue forever.
  */
-export async function flushQueue(): Promise<{ flushed: number; remaining: number; conflicts: number }> {
-  if (flushing) return { flushed: 0, remaining: pendingCount(), conflicts: 0 };
-  if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    return { flushed: 0, remaining: pendingCount(), conflicts: 0 };
+export interface FlushResult {
+  flushed: number;
+  remaining: number;
+  /** Row ids whose close/remove found the shift already closed (or removed)
+   *  elsewhere — the server's times were kept. Per row, so a caller can tell
+   *  whether ITS write landed. */
+  conflictRows: string[];
+}
+
+let inflight: Promise<FlushResult> | null = null;
+
+export async function flushQueue(): Promise<FlushResult> {
+  // Already flushing: wait for it (it may be replaying OUR item), then run
+  // once more for anything enqueued meanwhile — and report both, so a
+  // conflict is never swallowed as "0".
+  if (inflight) {
+    const prev = await inflight.catch(() => null);
+    const again = await flushQueue();
+    return {
+      flushed: (prev?.flushed || 0) + again.flushed,
+      remaining: again.remaining,
+      conflictRows: [...(prev?.conflictRows || []), ...again.conflictRows],
+    };
   }
-  flushing = true;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return { flushed: 0, remaining: pendingCount(), conflictRows: [] };
+  }
+  inflight = runFlush();
+  try {
+    return await inflight;
+  } finally {
+    inflight = null;
+  }
+}
+
+async function runFlush(): Promise<FlushResult> {
   let flushed = 0;
-  // onlyIfOpen writes that matched no open row — the shift was already closed
-  // (or removed) elsewhere, so the existing times were kept.
-  let conflicts = 0;
+  const conflictRows: string[] = [];
   try {
     // Process the head repeatedly (re-reading each round so a concurrent
     // enqueue is picked up), stopping on a network failure.
@@ -174,12 +218,16 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
       const item = q[0];
       try {
         if (item.op === "post") {
+          // Insert-only: posts always carry a fresh client id, so a replay of
+          // one that already landed (lost response) must NEVER update the row
+          // — a merge would reset hours/amount to 0 on a shift since closed.
           const { error } = await supabase
             .from(item.table)
-            .upsert({ id: item.rowId, ...(item.payload || {}) } as never, { onConflict: "id" });
+            .upsert({ id: item.rowId, ...(item.payload || {}) } as never, { onConflict: "id", ignoreDuplicates: true });
           if (error) throw error;
-        } else if (item.onlyIfOpen) {
-          if ((await writeIfOpen(item)) === "conflict") conflicts += 1;
+        } else if (item.table === "time_entries" && isCloseWrite(item) && (item.onlyIfOpen || item.op === "patch")) {
+          // onlyIfOpen closes, plus legacy end_time patches queued before it existed.
+          if ((await writeIfOpen(item)) === "conflict") conflictRows.push(item.rowId);
         } else if (item.op === "patch") {
           const { error } = await supabase
             .from(item.table)
@@ -199,10 +247,11 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
       write(read().filter((i) => i.qid !== item.qid));
       flushed += 1;
     }
-  } finally {
-    flushing = false;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[offline-queue] flush aborted:", err);
   }
-  return { flushed, remaining: pendingCount(), conflicts };
+  return { flushed, remaining: pendingCount(), conflictRows };
 }
 
 /** Wipe the queue (called on logout so a new account starts clean). */
