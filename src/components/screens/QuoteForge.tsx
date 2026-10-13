@@ -50,6 +50,7 @@ import { stripAiHrs } from "@/lib/ai-hours";
 import SendSheet from "../SendSheet";
 import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 
 /** A saved, reusable quote-as-template: a name + the line-item rooms blob
  *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
@@ -327,6 +328,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // Set when "Build Quote" on a lead seeds quickDesc/quickPhotos — the effect
   // below fires the AI build once those have committed to state.
   const [leadBuildPending, setLeadBuildPending] = useState(false);
+  // A lead whose AI-built quote is still waiting as an edit draft opens the
+  // Resume / Discard card instead of re-running the AI. Its request is kept
+  // here so Discard can seed Quick Quote the original way.
+  const leadSeedRef = useRef<{ desc: string; photos: string[] } | null>(null);
   const [quickUploading, setQuickUploading] = useState(false);
   const quickPhotoRef = useRef<HTMLInputElement>(null);
   const [quickCam, setQuickCam] = useState(false);
@@ -550,11 +555,22 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         useStore.getState().showToast("Unsaved changes restored — tap Update to save them", "success");
       }
     } catch { /* */ }
+    leadSeedRef.current = null;
     setEditDraftOffer(null);
   };
   const discardEditDraft = () => {
     if (editDraftOffer) dropEditDraft(editDraftOffer.id);
     setEditDraftOffer(null);
+    // A lead's draft thrown away → build from the customer's request again,
+    // exactly as a lead with no draft does.
+    const seed = leadSeedRef.current;
+    if (seed) {
+      leadSeedRef.current = null;
+      setQuickDesc(seed.desc);
+      setQuickPhotos(seed.photos);
+      setMode("quick");
+      setLeadBuildPending(true);
+    }
   };
   // Write the draft as you edit (debounced). Paused while a Resume/Discard
   // choice is pending so the older draft isn't overwritten before you pick.
@@ -625,6 +641,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setCustomerId(job.customer_id || undefined);
     setAddressId(job.address_id || undefined);
     setEditingId(job.id);
+    leadSeedRef.current = null;
 
     try {
       const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
@@ -636,12 +653,27 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // job, so saving promotes the same lead row to a quote.
       const leadPhotos = Array.isArray(data?.leadPhotos) ? data.leadPhotos : [];
       if (!data?.rooms?.length && (data?.leadDescription || leadPhotos.length)) {
-        setQuickDesc(data.leadDescription || "");
-        setQuickPhotos(leadPhotos);
-        setMode("quick");
-        setLeadBuildPending(true);
-        clearEditJob?.();
-        return;
+        // The AI already built this lead once and that quote is still in its
+        // edit draft (left before Save) → don't re-run the AI. Take the normal
+        // edit path below so Resume / Discard is offered; Discard falls back
+        // to the auto-build via leadSeedRef.
+        let leadDraft = false;
+        try {
+          const raw = localStorage.getItem(editDraftKey(job.id));
+          const d = raw ? JSON.parse(raw) : null;
+          leadDraft = !!(d && typeof d.savedAt === "number" && Date.now() - d.savedAt < EDIT_DRAFT_TTL && d.state?.rooms?.length > 0);
+        } catch { /* */ }
+        if (leadDraft) {
+          leadSeedRef.current = { desc: data.leadDescription || "", photos: leadPhotos };
+          setRooms([]);
+        } else {
+          setQuickDesc(data.leadDescription || "");
+          setQuickPhotos(leadPhotos);
+          setMode("quick");
+          setLeadBuildPending(true);
+          clearEditJob?.();
+          return;
+        }
       }
       let loadedRooms: Room[] = [];
       if (data?.rooms?.length) {
@@ -991,12 +1023,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setInspParseFailed(true);
     const aiErr = getLastAiError();
     const interrupted = /failed to fetch|networkerror|network request failed|aborted|load failed|timeout|timed out/i.test(aiErr);
+    // Plain words for the crew; the raw API text only for platform operators.
+    if (aiErr) console.error("AI inspection parse error:", aiErr);
     useStore.getState().showToast(
-      interrupted
-        ? "The AI didn't finish reading the inspection — the app was likely backgrounded or the connection dropped mid-quote. Tap Retry."
-        : aiErr
-          ? `AI couldn't build the quote (${aiErr.slice(0, 140)}). Tap Retry.`
-          : "The AI couldn't build a quote from this inspection. Tap Retry.",
+      t("qf.aiRetryInspection") + (!interrupted && aiErr && isPlatformAdmin(user.email) ? ` (${aiErr.slice(0, 140)})` : ""),
       "error",
     );
   };
@@ -1191,12 +1221,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setParseStatus("");
     const aiErr = getLastAiError();
     const interrupted = /failed to fetch|networkerror|network request failed|aborted|load failed|timeout|timed out/i.test(aiErr);
+    // Plain words for the crew; the raw API text only for platform operators.
+    if (aiErr) console.error("AI parse error:", aiErr);
     useStore.getState().showToast(
       interrupted
-        ? "The AI didn't finish — the app was likely backgrounded or the connection dropped mid-quote. Your details are still here; tap Build to try again."
-        : aiErr
-          ? `AI couldn't build the quote (${aiErr.slice(0, 140)}). Your details are still here — tap Build to try again.`
-          : "The AI couldn't build the quote. Your details are still here — tap Build to try again.",
+        ? t("qf.aiRetry")
+        : t("qf.aiFailed") + (aiErr && isPlatformAdmin(user.email) ? ` (${aiErr.slice(0, 140)})` : ""),
       "error",
     );
   };
@@ -1840,7 +1870,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       if (rows === null) return null;
       savedId = rows[0]?.id ?? null;
     }
-    useStore.getState().showToast((editingId ? "Job updated: " : "Job created: ") + prop, "success");
+    useStore.getState().showToast(t(editingId ? "qf.jobUpdated" : "qf.jobCreated") + ": " + prop, "success");
 
     // Saved: the screen IS the saved version now — drop its edit draft and
     // make this the new baseline.
@@ -1886,6 +1916,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setTieredQuote(false);
     setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     savingRef.current = false;
+    // Land on the job just saved (Jobs opens its detail from this intent).
+    if (savedId) { try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "jobs", jobId: savedId, at: Date.now() })); } catch { /* */ } }
     setPage("jobs");
     return savedId;
   };
@@ -2225,8 +2257,16 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => { setMode(null); setQuickPhotos([]); setQuickDesc(""); }}>←</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-accent-red)" }}>📸 Quick Quote</h2>
+          <button className="bo" onClick={() => {
+            setMode(null); setQuickPhotos([]); setQuickDesc("");
+            // Leaving a lead's Quick Quote: detach from the lead like a fresh
+            // start, so the next quote doesn't patch the lead's row.
+            if (editingId) {
+              setEditingId(null); setProp(""); setClient("");
+              setCustomerId(undefined); setAddressId(undefined); setJobPhotos([]);
+            }
+          }}>←</button>
+          <h2 style={{ fontSize: 20, color: "var(--color-accent-red)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="camera" size={18} color="var(--color-accent-red)" /> {t("qf.quickQuote")}</h2>
         </div>
 
         {/* Property + Client */}
@@ -2362,7 +2402,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-              <Icon name="ai" size={18} />Generate Quote
+              <Icon name="ai" size={18} />{t("qf.generateQuote")}
             </span>
           </button>
         )}
@@ -2372,9 +2412,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           <button
             className="bo"
             onClick={() => { setMode("manual"); }}
-            style={{ fontSize: 15, padding: "6px 14px" }}
+            style={{ fontSize: 15, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
           >
-            ✏️ Build manually instead
+            <Icon name="edit" size={15} /> {t("qf.buildManually")}
           </button>
         </div>
       </div>
@@ -2518,7 +2558,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           setTieredQuote(false);
           setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
         }}>←</button>
-        <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚡ Quote</h2>
+        <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="quote" size={18} color="var(--color-primary)" /> {t("qf.quoteTitle")}</h2>
         <span style={{ fontSize: 12 }} className="dim">
           ${rate}/hr{laborRate && laborRate > 0 ? " (override)" : ""}
         </span>
@@ -3431,7 +3471,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           }
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}
         >
-          <Icon name="doc" size={14} /> PDF
+          <Icon name="doc" size={14} /> {t("qf.pdf")}
         </button>
         <button
           onClick={() => {
@@ -3442,7 +3482,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           title="AI-render the finished look from this quote's photos"
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55, ...(darkMode ? { border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)" } : { border: "1.5px solid #9d4edd", background: "#9d4edd", color: "#fff", boxShadow: "0 0 17px -2px rgba(157,78,221,.6), 0 4px 12px -7px rgba(0,0,0,.22)" }) }}
         >
-          <Icon name="sparkle" size={14} color={darkMode ? "#d8b6ff" : "#fff"} /> Render
+          <Icon name="sparkle" size={14} color={darkMode ? "#d8b6ff" : "#fff"} /> {t("qf.render")}
         </button>
         <button
           onClick={async () => {
@@ -3474,25 +3514,30 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           }}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}
         >
-          <Icon name="send" size={14} /> Send
+          <Icon name="send" size={14} /> {t("qf.send")}
         </button>
         <button
           onClick={() => { void saveJob(); }}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-success)", background: "var(--color-success)", color: "#06371f", boxShadow: "0 0 22px -6px rgba(0,204,102,.6)", cursor: "pointer" }}
         >
-          <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? "Update" : "Save job"}
+          <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? t("qf.update") : t("qf.saveJob")}
         </button>
       </div>
 
       {sendSheet && (
         <SendSheet
-          title="Send quote"
+          title={t("jobs.sendQuote")}
           phone={sendSheet.phone}
           email={sendSheet.email}
           subject={sendSheet.subject}
           message={sendSheet.message}
           onClose={() => setSendSheet(null)}
-          onSent={() => { void markQuoteSent(sendSheet.jobId).then(() => loadAll()); }}
+          onSent={() => {
+            void markQuoteSent(sendSheet.jobId).then(async (ok) => {
+              await loadAll();
+              if (ok) useStore.getState().showToast(t("jobs.quoteMarkedSent"), "success");
+            });
+          }}
         />
       )}
 
