@@ -138,6 +138,28 @@ function fmt(ms: number): string {
   return `${Math.floor(s / 3600).toString().padStart(2, "0")}:${Math.floor((s % 3600) / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 }
 
+// Local calendar date as YYYY-MM-DD (same formula as Schedule.tsx ymd).
+// toISOString() is UTC, so after ~7 PM Central it already read tomorrow —
+// "Today's jobs" listed tomorrow's schedule and today's hours went missing.
+const localYmd = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// One-shot navigation hint another screen leaves in sessionStorage (e.g. the
+// dashboard's "on the clock" line opening Time → Crew). Ignored when it's for
+// another page or older than 15s. Inline copy — kept in sync with nav-intent.
+function peekNavIntent(page: string) { try { const raw = sessionStorage.getItem("c_nav_intent"); if (!raw) return null; const v = JSON.parse(raw); if (!v || v.page !== page || typeof v.at !== "number" || Date.now() - v.at > 15000) return null; return v as { tab?: string }; } catch { return null; } }
+
+// Job statuses the clock-in picker hides (mirrors WorkVision's All-jobs list):
+// finished work and pre-quote inspections aren't clock-into-able.
+const PICKER_HIDDEN = ["complete", "invoiced", "paid", "inspection"];
+
+// Scheduled start time ("🕐 09:30" in the schedule note) as minutes since
+// midnight, for ordering today's chips; untimed entries sort last.
+const schedMinutes = (note?: string): number => {
+  const m = note?.match(/🕐\s*(\d{1,2}):(\d{2})/);
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 24 * 60;
+};
+
 // Composite sort key for a time entry. entry_date may be "YYYY-MM-DD" or
 // "MM/DD/YYYY"; start_time is "HH:MM AM/PM". Higher = more recent.
 function recencyKey(e: { entry_date?: string; start_time?: string }): string {
@@ -191,13 +213,13 @@ export default function Timer({ setPage }: Props) {
   // Server-side active entry so admins can see who is currently clocked in
   // from the Crew Activity tab, not just this browser's localStorage.
   const [activeId, setActiveId] = useState<string | null>(() => ld<string | null>("t_active_id", null));
-  const [tab, setTab] = useState<"time" | "crew">("time");
+  const [tab, setTab] = useState<"time" | "crew">(() => isOwner && peekNavIntent("time")?.tab === "crew" ? "crew" : "time");
 
   const [mHrs, setMHrs] = useState("");
   const [mMin, setMMin] = useState("");
   const [mj, setMj] = useState("");
   const [mUser, setMUser] = useState(user.id);
-  const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
+  const [mDate, setMDate] = useState(() => localYmd());
   const [expandedCrew, setExpandedCrew] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false); // My Log collapsed by default — it grows forever
   const [showManual, setShowManual] = useState(false);
@@ -205,6 +227,9 @@ export default function Timer({ setPage }: Props) {
   const [tick, setTick] = useState(0);
 
   const rate = user.rate || 55;
+  // No pay rate on file (new joiners start at 0) → show hours, not a made-up
+  // $55/hr check. `rate` still drives the stored amount math below.
+  const rateSet = (user.rate || 0) > 0;
 
   // Next check (this user) — unpaid hours × rate, matching the dashboard's
   // "next check" so the two screens agree. Bonuses are added at payout.
@@ -219,6 +244,23 @@ export default function Timer({ setPage }: Props) {
   useEffect(() => sv("t_sj", sj), [sj]);
   useEffect(() => sv("t_active_id", activeId), [activeId]);
 
+  // A remembered picker selection the picker now hides (e.g. the job just
+  // completed) falls back to General, so CLOCK IN never reads "Into" a job
+  // the list can't show. Off the clock only — on it, sj is the live job.
+  useEffect(() => {
+    if (on || !sj || !jobs.length) return;
+    if (!jobs.some((j) => j.property === sj && !j.archived && !PICKER_HIDDEN.includes(j.status))) setSj("");
+  }, [on, sj, jobs]);
+
+  // The nav intent was read once (initial tab) — consume it so a later visit
+  // to Time doesn't reopen Crew.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("c_nav_intent");
+      if (raw && JSON.parse(raw)?.page === "time") sessionStorage.removeItem("c_nav_intent");
+    } catch { /* storage blocked — nothing to clear */ }
+  }, []);
+
   // Tick every 30s on Crew tab so "clocked in 1h 12m ago" stays current
   useEffect(() => {
     if (tab !== "crew") return;
@@ -226,9 +268,11 @@ export default function Timer({ setPage }: Props) {
     return () => clearInterval(iv);
   }, [tab]);
 
+  // Always en-US ("09:30 AM"), matching WorkVision — a Spanish / en-GB phone's
+  // default locale wrote "p.m." / 24h stamps that entryStartMs misread.
   const fmtTime = (ts: number) => {
     const d = new Date(ts);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
   };
 
   const [askFinish, finishModal] = useFinishTime();
@@ -273,11 +317,15 @@ export default function Timer({ setPage }: Props) {
   // Clock in: create an in-progress time_entries row so admins can see who
   // is currently clocked in from the Crew Activity tab (previously clock-in
   // was local-only until the user clocked out).
-  const start = async () => {
+  // `job`/`jobId` come from a tapped today-chip (one-tap clock-in); the CTA
+  // calls start() with no args and uses the picker's selection.
+  const start = async (job: string = sj, jobId?: string) => {
     if (clockBusyRef.current || on) return;
     clockBusyRef.current = true;
     try {
     const startedAt = Date.now();
+    const jid = jobId || resolveActiveJobId(jobs, job);
+    setSj(job);
     setSt(startedAt);
     setOn(true);
     // Stable client id so an offline clock-in + later clock-out reference the
@@ -286,9 +334,11 @@ export default function Timer({ setPage }: Props) {
     const id = newRowId();
     setActiveId(id);
     await saveTimeEntry(id, {
-      job: sj || "General",
-      job_id: resolveActiveJobId(jobs, sj),
-      entry_date: new Date().toLocaleDateString(),
+      job: job || "General",
+      job_id: jid,
+      // en-US (M/D/YYYY) on every phone — parseEntryDate reads a Spanish /
+      // en-GB "12/10/2026" as December 10th.
+      entry_date: new Date().toLocaleDateString("en-US"),
       hours: 0,
       amount: 0,
       user_id: user.id,
@@ -305,13 +355,20 @@ export default function Timer({ setPage }: Props) {
     // Auto-promote the matching job from "scheduled" to "active" so the
     // workload view reflects what's actually happening on site. Skip if the
     // selected entry is "General" or doesn't match a scheduled job — we
-    // don't want to flip "complete" or "paid" backwards.
-    if (sj) {
-      const matched = jobs.find((j) => j.property === sj && j.status === "scheduled");
+    // don't want to flip "complete" or "paid" backwards. The exact job wins
+    // when we know it (mirrors WorkVision.clockInNow).
+    if (jid) {
+      const matched = jobs.find((j) => j.id === jid && j.status === "scheduled");
+      if (matched) await db.patch("jobs", matched.id, { status: "active" });
+    } else if (job) {
+      const matched = jobs.find((j) => j.property === job && j.status === "scheduled");
       if (matched) await db.patch("jobs", matched.id, { status: "active" });
     }
     // Jump to WorkVision so the crew lands on the work order + photo upload
     // flow for their active job instead of staring at the timer screen.
+    // Pin the exact job first — WorkVision reads it on mount, so a shared
+    // address opens THIS job's checklist.
+    sv("t_active_job_id", jid ?? null);
     setPage?.("workvision");
     } finally {
       clockBusyRef.current = false;
@@ -357,6 +414,7 @@ export default function Timer({ setPage }: Props) {
         void getFix(8000).then((fix) => {
           if (fix) void saveTimeEntry(cid, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
         });
+        useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");
       }
     } else if (activeId) {
       // Timer was only running briefly; delete the in-progress row instead
@@ -367,16 +425,19 @@ export default function Timer({ setPage }: Props) {
     setSt(null);
     setEl(0);
     setActiveId(null);
+    sv("t_active_job_id", null);
     } finally {
       clockBusyRef.current = false;
     }
   };
 
-  const addManual = async () => {
+  // Resolves true once the entry is saved; false on a validation miss so the
+  // caller keeps the form open for a fix.
+  const addManual = async (): Promise<boolean> => {
     const h = hmToDecimal(mHrs, mMin);
-    if (!h || h <= 0) { useStore.getState().showToast(t("timer.enterValidHours"), "warning"); return; }
-    if (h > 24) { useStore.getState().showToast(t("timer.maxHoursPerEntry"), "warning"); return; }
-    if (!mDate) { useStore.getState().showToast(t("timer.selectDate"), "warning"); return; }
+    if (!h || h <= 0) { useStore.getState().showToast(t("timer.enterValidHours"), "warning"); return false; }
+    if (h > 24) { useStore.getState().showToast(t("timer.maxHoursPerEntry"), "warning"); return false; }
+    if (!mDate) { useStore.getState().showToast(t("timer.selectDate"), "warning"); return false; }
     const targetUser = profiles.find((p) => p.id === mUser) || user;
     const targetRate = targetUser.rate || 55;
     await saveTimeEntry(newRowId(), {
@@ -388,17 +449,35 @@ export default function Timer({ setPage }: Props) {
       user_id: targetUser.id,
       user_name: targetUser.name,
     }, "post");
+    useStore.getState().showToast(
+      t("timer.entryLogged").replace("{hrs}", formatHours(h)).replace("{job}", mj || t("timer.general")).replace("{date}", mDate),
+      "success",
+    );
     setMHrs("");
     setMMin("");
     setMj("");
+    setLogOpen(true);
+    return true;
   };
 
-  // Today's scheduled jobs
-  const today = new Date().toISOString().split("T")[0];
+  // Today's scheduled jobs (local calendar day)
+  const today = localYmd();
   // Multi-day jobs span sched_date..end_date — match any day in that range so a
   // multi-day job is still clock-into-able on its middle/end days, not only the
   // start day. (Mirrors Schedule.tsx spansDay.)
   const todayJobs = schedule.filter((s) => today >= s.sched_date && today <= (s.end_date || s.sched_date));
+  // One-tap chips: today's visits in start-time order (untimed last), minus
+  // visits whose job is already done or archived. The linked job is the
+  // entry's job_id, else (legacy rows) the newest non-archived job there.
+  const todayChips = todayJobs
+    .filter((s) => {
+      const linked = s.job_id
+        ? jobs.find((j) => j.id === s.job_id)
+        : jobs.filter((j) => j.property === s.job && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+      return !linked || (!linked.archived && !["complete", "invoiced", "paid"].includes(linked.status));
+    })
+    .sort((a, b) => schedMinutes(a.note) - schedMinutes(b.note))
+    .map((s) => ({ key: s.id, label: s.job, val: s.job, jobId: s.job_id || undefined }));
 
   // My time entries — exclude the still-open active row (zero hours, no end_time)
   // from the completed log so a user mid-clock doesn't see a ghost entry.
@@ -413,7 +492,7 @@ export default function Timer({ setPage }: Props) {
   // Only today's rows — stale open rows from prior days (forgot to clock out)
   // must not bleed into the crew activity view.
   const _todayUS  = new Date().toLocaleDateString("en-US");
-  const _todayISO = new Date().toISOString().split("T")[0];
+  const _todayISO = localYmd();
   const _todayPad = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
   const activeSessions = timeEntries.filter((e) => {
     if (e.end_time) return false;
@@ -421,6 +500,11 @@ export default function Timer({ setPage }: Props) {
     const d = e.entry_date || "";
     return d === _todayUS || d === _todayISO || d === _todayPad || d === _todayPad.replace(/^0/, "");
   });
+  // Same "is this today?" test for any stored entry_date format.
+  const isTodayDate = (d?: string) => { const s = d || ""; return s === _todayUS || s === _todayISO || s === _todayPad || s === _todayPad.replace(/^0/, ""); };
+  // Forgotten clock-outs — open shifts from an earlier day or past the
+  // long-shift limit, still unpaid. Feeds the Crew summary + the fix list.
+  const staleOpen = timeEntries.filter((e) => !e.end_time && e.start_time && !e.paid_at && isStaleOpenEntry(e.entry_date, e.start_time));
 
   // Human-readable elapsed time: "2h 14m" / "45m" / "30s"
   const elapsedFrom = (startTimeStr: string, entryDate: string) => {
@@ -517,32 +601,39 @@ export default function Timer({ setPage }: Props) {
       {/* Next check (unpaid × rate) — same number the dashboard shows */}
       <div className="cd mb" style={{ background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.32)", borderRadius: 13, padding: "10px 12px" }}>
         <div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600 }}>{t("dash.nextCheck")}</div>
-        <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, color: "#3ee08f", lineHeight: 1.2 }}>${checkPay.toFixed(0)}</div>
-        <div style={{ fontSize: 12, color: "var(--color-dim)" }}>{formatHours(checkHrs)} unpaid · ${rate}/hr</div>
+        <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, color: "#3ee08f", lineHeight: 1.2 }}>{rateSet ? `$${checkPay.toFixed(0)}` : formatHours(checkHrs)}</div>
+        <div style={{ fontSize: 12, color: "var(--color-dim)" }}>
+          {rateSet
+            ? t("timer.unpaidAt").replace("{hrs}", formatHours(checkHrs)).replace("{rate}", String(rate))
+            : `${formatHours(checkHrs)} ${t("dash.unpaid")} · ${t("settings.rateNotSet")}`}
+        </div>
       </div>
 
       {!on ? (<>
-        {/* Clock into — today's jobs as chips, plus any other property */}
+        {/* Clock into — today's jobs as chips (one tap = clocked in to that
+            job), plus any other property via the picker + CLOCK IN below */}
         <div style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "2px 2px 6px" }}>{t("timer.todaysJobsClockInto")}</div>
         <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 9 }}>
-          {[...todayJobs.map((s) => ({ key: s.id, label: s.job, val: s.job })), { key: "general", label: t("timer.general"), val: "" }].map((c) => {
+          {[...todayChips, { key: "general", label: t("timer.general"), val: "", jobId: undefined as string | undefined }].map((c) => {
             const cOn = sj === c.val;
             return (
-              <button key={c.key} onClick={() => setSj(c.val)} style={{ fontSize: 12.5, padding: "6px 10px", borderRadius: 99, fontWeight: cOn ? 600 : 400, background: cOn ? "rgba(46,139,255,.16)" : soft, border: `1px solid ${cOn ? "var(--color-primary)" : softBorder}`, color: cOn ? "#8cc0ff" : "var(--color-dim)" }}>{c.label}</button>
+              <button key={c.key} onClick={() => start(c.val, c.jobId)} style={{ fontSize: 12.5, padding: "6px 10px", borderRadius: 99, fontWeight: cOn ? 600 : 400, background: cOn ? "rgba(46,139,255,.16)" : soft, border: `1px solid ${cOn ? "var(--color-primary)" : softBorder}`, color: cOn ? "#8cc0ff" : "var(--color-dim)" }}>{c.label}</button>
             );
           })}
         </div>
         <select value={sj} onChange={(e) => setSj(e.target.value)} style={{ width: "100%", marginBottom: 11 }}>
           <option value="">{t("timer.general")}</option>
-          {jobs.filter((j) => !j.archived).map((j) => (
+          {/* Same picker rules as Work Mode: no finished jobs, no inspections. */}
+          {jobs.filter((j) => !j.archived && !PICKER_HIDDEN.includes(j.status)).map((j) => (
             <option key={j.id} value={j.property}>{j.property} ({j.status})</option>
           ))}
         </select>
-        {/* CLOCK IN — banked .cta glow (globals.css). Starts the timer + jumps to WorkVision. */}
-        <div onClick={start} className="cta glow-red" style={{ marginBottom: 12 }}>
+        {/* CLOCK IN — banked .cta glow (globals.css). Starts the timer + jumps to WorkVision.
+            Arrow wrapper: passing `start` directly would hand it the click event as `job`. */}
+        <div onClick={() => start()} className="cta glow-red" style={{ marginBottom: 12 }}>
           <div className="ic"><Icon name="start" size={24} color="#fff" /></div>
           <div className="tx">
-            <b>{t("timer.start")}</b>
+            <b>{t("wv.clockIn")}</b>
             <small><Icon name="mapPin" size={12} color="#ffffffcc" /> {t("timer.into")} {sj || t("timer.general")}</small>
           </div>
           <Icon name="next" size={18} color="#fff" />
@@ -565,8 +656,10 @@ export default function Timer({ setPage }: Props) {
           <button onClick={() => setPage?.("workvision")} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#fff", background: "rgba(46,139,255,.14)", border: "1px solid rgba(46,139,255,.85)", boxShadow: "0 0 22px -4px rgba(46,139,255,.55)" }}>
             <Icon name="list" size={15} color="#fff" /> {t("timer.openWorkOrder")}
           </button>
-          <button onClick={stop} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.45)" }}>
-            <Icon name="stop" size={14} color="#ff9d9d" /> {t("timer.stop")}
+          {/* Confirm lives here, never inside stop() — the stale-shift effect
+              calls stop() and must go straight to the finish-time question. */}
+          <button onClick={async () => { if (!(await useStore.getState().showConfirm(t("wv.clockOutQ"), `${sj || t("timer.general")} · ${t("wv.soFar").replace("{hrs}", formatHours(el / 3600000))}`))) return; await stop(); }} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.45)" }}>
+            <Icon name="stop" size={14} color="#ff9d9d" /> {t("wv.clockOut")}
           </button>
         </div>
       </>)}
@@ -640,7 +733,7 @@ export default function Timer({ setPage }: Props) {
             </div>
             <button
               className="bg"
-              onClick={async () => { await addManual(); setShowManual(false); }}
+              onClick={async () => { if (await addManual()) setShowManual(false); }}
               style={{ fontSize: 15, padding: "7px 12px" }}
             >
               {t("timer.log")}
@@ -652,7 +745,7 @@ export default function Timer({ setPage }: Props) {
       {/* My Log — today summary + entry cards */}
       {(() => {
         const todayUS = new Date().toLocaleDateString("en-US");
-        const todayISO = new Date().toISOString().split("T")[0];
+        const todayISO = localYmd();
         const myTodayHrs = myTime.filter((e) => e.entry_date === todayUS || e.entry_date === todayISO).reduce((s, e) => s + (e.hours || 0), 0);
         const totalHrs = myTime.reduce((s, e) => s + (e.hours || 0), 0);
 
@@ -699,13 +792,16 @@ export default function Timer({ setPage }: Props) {
               />
               <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "var(--color-success)", minWidth: 42, textAlign: "right" }}>${(e.amount || 0).toFixed(0)}</span>
               <button
+                aria-label={t("common.delete")}
                 onClick={async () => {
                   if (e.user_id && e.user_id !== user.id && !isOwner) return;
                   if (!await useStore.getState().showConfirm("Delete Entry", "Delete this time entry?")) return;
                   await dropTimeEntry(e.id);
                 }}
-                style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}
-              >✕</button>
+                style={{ width: 36, height: 36, minHeight: 36, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", padding: 0, margin: "-6px -8px -6px -4px" }}
+              >
+                <Icon name="delete" size={15} color="var(--color-accent-red)" />
+              </button>
             </div>
           </div>
         );
@@ -741,7 +837,7 @@ export default function Timer({ setPage }: Props) {
               ))
             ) : (
               <div onClick={() => setLogOpen(true)} className="cd" style={{ textAlign: "center", padding: "11px", cursor: "pointer" }}>
-                <span className="dim" style={{ fontSize: 13 }}>Tap to view {myTime.length} {myTime.length === 1 ? "entry" : "entries"} · {formatHours(totalHrs)}</span>
+                <span className="dim" style={{ fontSize: 13 }}>{(myTime.length === 1 ? t("timer.tapToViewOne") : t("timer.tapToView")).replace("{n}", String(myTime.length)).replace("{hrs}", formatHours(totalHrs))}</span>
               </div>
             )}
           </>
@@ -751,17 +847,42 @@ export default function Timer({ setPage }: Props) {
 
       {/* ── Crew Activity tab (admin only) ── */}
       {tab === "crew" && isOwner && (<>
+        {/* Summary — the one answer an owner wants at day's end: is everyone
+            out? Open shifts (today's or forgotten ones) name who's still on. */}
+        {(() => {
+          const stillOn = Array.from(new Set([...activeSessions, ...staleOpen].map((e) => {
+            const who = profiles.find((p) => p.id === e.user_id) || profiles.find((p) => p.name === e.user_name);
+            return (who?.name || e.user_name || "Crew").split(" ")[0];
+          })));
+          if (!stillOn.length) {
+            const crewTodayHrs = profiles.reduce((s, p) => s + timeEntries
+              .filter((e) => (e.user_id === p.id || e.user_name === p.name) && isTodayDate(e.entry_date))
+              .reduce((a, e) => a + (e.hours || 0), 0), 0);
+            return (
+              <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.32)" }}>
+                <Icon name="checkCircle" size={17} color="var(--color-success)" />
+                <span style={{ fontSize: 13.5, fontWeight: 600 }}>{t("timer.everyoneOff").replace("{hrs}", formatHours(crewTodayHrs))}</span>
+              </div>
+            );
+          }
+          return (
+            <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "1px solid rgba(255,177,94,.45)" }}>
+              <Icon name="time" size={17} color="#ffb15e" />
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: "#ffb15e" }}>{t("timer.stillOnClock").replace("{names}", stillOn.join(", "))}</span>
+            </div>
+          );
+        })()}
         {/* Forgotten clock-outs — open shifts from an earlier day (hidden from
             the today-only crew cards below) or past the long-shift limit.
             Fix = set the real finish time; unpaid only (payroll never claims
             an open shift, so these are all still owed). */}
         {(() => {
-          const stale = timeEntries.filter((e) => !e.end_time && e.start_time && !e.paid_at && isStaleOpenEntry(e.entry_date, e.start_time));
+          const stale = staleOpen;
           if (!stale.length) return null;
           return (
             <div className="cd mb" style={{ padding: "10px 11px", border: "1px solid rgba(255,177,94,.45)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#ffb15e", marginBottom: 6 }}>
-                <Icon name="warn" size={14} color="#ffb15e" /> Forgot to clock out?
+                <Icon name="warn" size={14} color="#ffb15e" /> {t("timer.forgotClockOut")}
               </div>
               {stale.map((e) => {
                 const startMs = entryStartMs(e.entry_date, e.start_time);
@@ -771,7 +892,7 @@ export default function Timer({ setPage }: Props) {
                   <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid rgba(255,255,255,.06)" }}>
                     <div style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>
                       <b>{name.split(" ")[0]}</b>
-                      <span className="dim"> · {e.job || "General"} · since {e.entry_date} {e.start_time}</span>
+                      <span className="dim"> · {e.job || t("timer.general")} · {t("timer.since").replace("{when}", `${e.entry_date} ${e.start_time}`)}</span>
                     </div>
                     {startMs !== null && (
                       <button
@@ -785,7 +906,7 @@ export default function Timer({ setPage }: Props) {
                         className="bo"
                         style={{ fontSize: 12, padding: "5px 10px", flex: "none" }}
                       >
-                        Set finish time
+                        {t("timer.setFinishTime")}
                       </button>
                     )}
                   </div>
@@ -795,15 +916,12 @@ export default function Timer({ setPage }: Props) {
           );
         })()}
         {(() => {
-          const todayUS = new Date().toLocaleDateString("en-US");
-          const todayISO = new Date().toISOString().split("T")[0];
-          const todayPad = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
           const isOn = (p: { id: string; name: string }) => activeSessions.some((e) => e.user_id === p.id || e.user_name === p.name);
           // On-the-clock crew float to the top, then alphabetical.
           const sorted = [...profiles].sort((a, b) => (isOn(a) === isOn(b) ? a.name.localeCompare(b.name) : isOn(a) ? -1 : 1));
           return sorted.map((p) => {
             const allEntries = timeEntries.filter((e) => e.user_id === p.id || e.user_name === p.name).slice().sort(byRecentDesc);
-            const todayEntries = allEntries.filter((e) => e.entry_date === todayUS || e.entry_date === todayISO || e.entry_date === todayPad || e.entry_date === todayPad.replace(/^0/, ""));
+            const todayEntries = allEntries.filter((e) => isTodayDate(e.entry_date));
             const todayHrs = todayEntries.reduce((s, e) => s + (e.hours || 0), 0);
             const rRate = p.rate || 55;
             const activeEntry = activeSessions.find((e) => e.user_id === p.id || e.user_name === p.name);
@@ -823,7 +941,7 @@ export default function Timer({ setPage }: Props) {
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{p.name}</div>
                     <div className="dim" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {isActive ? (<><Icon name="mapPin" size={11} color="var(--color-dim)" /> {activeEntry!.job || t("timer.general")}</>)
-                        : lastOut ? (<><Icon name="time" size={11} color="var(--color-dim)" /> Last out {lastOut} · {formatHours(todayHrs)} today</>)
+                        : lastOut ? (<><Icon name="time" size={11} color="var(--color-dim)" /> {t("timer.lastOut").replace("{time}", lastOut).replace("{hrs}", formatHours(todayHrs))}</>)
                         : `${p.role} · $${rRate}/hr`}
                     </div>
                   </div>
@@ -832,7 +950,7 @@ export default function Timer({ setPage }: Props) {
                       {isActive && activeElapsed ? activeElapsed : todayHrs > 0 ? formatHours(todayHrs) : "—"}
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 99, display: "inline-block", marginTop: 2, background: isActive ? "rgba(0,204,102,.16)" : soft, color: isActive ? "#3ee08f" : "var(--color-dim)" }}>
-                      {isActive ? "On the clock" : "Off"}
+                      {isActive ? t("timer.onClockChip") : t("timer.offChip")}
                     </span>
                   </div>
                 </div>
@@ -841,11 +959,11 @@ export default function Timer({ setPage }: Props) {
                   <div style={{ borderTop: `1px solid ${softBorder}`, marginTop: 9, paddingTop: 9 }}>
                     {isActive && activeEntry!.start_time && (
                       <div style={{ fontSize: 12.5, color: "#7fb6ff", display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                        <Icon name="mapPin" size={13} color="#7fb6ff" /> Clocked in {activeEntry!.start_time}
+                        <Icon name="mapPin" size={13} color="#7fb6ff" /> {t("timer.clockedInAt").replace("{time}", activeEntry!.start_time)}
                       </div>
                     )}
                     {allEntries.length === 0 ? (
-                      <p className="dim" style={{ fontSize: 13.5 }}>No entries yet</p>
+                      <p className="dim" style={{ fontSize: 13.5 }}>{t("timer.noEntries")}</p>
                     ) : allEntries.slice(0, 8).map((en) => {
                       const running = !en.end_time && !!en.start_time;
                       return (
@@ -865,7 +983,9 @@ export default function Timer({ setPage }: Props) {
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                             <HoursCell hours={en.hours || 0} canEdit onSave={async (nh) => { await saveTimeEntry(en.id, { hours: nh, amount: Math.round(nh * rRate * 100) / 100 }, "patch"); }} />
-                            <button onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await dropTimeEntry(en.id); }} style={{ background: "none", border: "none", color: "var(--color-accent-red)", fontSize: 14, cursor: "pointer", padding: 0 }}>✕</button>
+                            <button aria-label={t("common.delete")} onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await dropTimeEntry(en.id); }} style={{ width: 36, height: 36, minHeight: 36, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", padding: 0, margin: "-7px -7px -7px -4px" }}>
+                              <Icon name="delete" size={15} color="var(--color-accent-red)" />
+                            </button>
                           </div>
                         </div>
                       );
@@ -885,11 +1005,11 @@ export default function Timer({ setPage }: Props) {
                         const hrs = e.start_time ? (() => { const m = e.start_time.match(/(\d+):(\d+)\s*([AP]M)?/i); if (!m) return 0; let h = parseInt(m[1]); const mm = parseInt(m[2]); const ap = m[3]?.toUpperCase(); if (ap === "PM" && h < 12) h += 12; if (ap === "AM" && h === 12) h = 0; const st = new Date(); st.setHours(h, mm, 0, 0); return Math.round((Date.now() - st.getTime()) / 3600000 * 100) / 100; })() : 0;
                         await saveTimeEntry(e.id, { hours: hrs, amount: Math.round(hrs * rRate * 100) / 100, end_time: fmtTime(Date.now()) }, "patch");
                       }} style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 9, padding: "7px", marginBottom: 6, cursor: "pointer" }}>
-                        <Icon name="stop" size={12} color="#ff9d9d" /> Force clock out
+                        <Icon name="stop" size={12} color="#ff9d9d" /> {t("timer.forceClockOut")}
                       </button>
                     )}
                     <div onClick={() => { setMUser(p.id); setTab("time"); setShowManual(true); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 13, color: "#8cc0ff", fontWeight: 600, background: soft, border: `1px dashed ${softBorder}`, borderRadius: 10, padding: 8, cursor: "pointer" }}>
-                      <Icon name="add" size={13} color="#8cc0ff" /> Add entry for {p.name.split(" ")[0]}
+                      <Icon name="add" size={13} color="#8cc0ff" /> {t("timer.addEntryFor").replace("{name}", p.name.split(" ")[0])}
                     </div>
                   </div>
                 )}
@@ -899,14 +1019,23 @@ export default function Timer({ setPage }: Props) {
         })()}
       </>)}
 
-      <div style={{ textAlign: "center", marginTop: 16 }}>
-        <p className="dim" style={{ fontSize: 14 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
-            <Icon name="tip" size={14} color="var(--color-highlight)" />
-            Next: Review hours in Payroll
-          </span>
-        </p>
-      </div>
+      {/* Footer — owners get a real link to Payroll; crew get a calm reminder
+          that the clock is what pays them (Payroll is admin-only). */}
+      {isOwner ? (
+        <div className="section" style={{ marginTop: 16 }}>
+          <button
+            type="button"
+            className="linkrow"
+            onClick={() => setPage?.("payroll")}
+            style={{ width: "100%", background: "none", border: "none", color: "inherit", fontFamily: "inherit", textTransform: "none", letterSpacing: "normal", fontWeight: 400, textAlign: "left" }}
+          >
+            <span className="lf"><span className="ic"><Icon name="pay" size={15} /></span> {t("timer.reviewPayroll")}</span>
+            <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
+          </button>
+        </div>
+      ) : (
+        <p className="dim" style={{ textAlign: "center", fontSize: 13, marginTop: 16 }}>{t("timer.hoursToPayday")}</p>
+      )}
     </div>
   );
 }
