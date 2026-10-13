@@ -101,5 +101,15 @@ describe("resolveClose", () => {
   });
   it("a paid row is never touched", () => {
     expect(resolveClose("patch", close, { end_time: "06:00 PM", hours: 10, paid_at: "2026-10-10T00:00:00Z" })).toBe("conflict");
+    expect(resolveClose("patch", close, { end_time: "", hours: 0, paid_at: "2026-10-10T00:00:00Z" })).toBe("conflict");
+    expect(resolveClose("del", undefined, { end_time: null, paid_at: "2026-10-10T00:00:00Z" })).toBe("conflict");
+  });
+  it("our own close is recognised by its finish time even after the hours were edited", () => {
+    expect(resolveClose("patch", close, { end_time: "03:00 PM", hours: 8.5 })).toBe("done");
+  });
+  it("zero / negative / missing hours never win as 'earlier'", () => {
+    expect(resolveClose("patch", { end_time: "1:00 PM", hours: 0 }, { end_time: "06:00 PM", hours: 10 })).toBe("conflict");
+    expect(resolveClose("patch", { end_time: "1:00 PM", hours: -3 }, { end_time: "06:00 PM", hours: 10 })).toBe("conflict");
+    expect(resolveClose("patch", { end_time: "1:00 PM" }, { end_time: "06:00 PM", hours: 10 })).toBe("conflict");
   });
 });

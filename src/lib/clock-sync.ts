@@ -91,13 +91,17 @@ export function resolveClose(
   row: { end_time?: string | null; hours?: number | string | null; paid_at?: string | null } | null,
 ): CloseResolution {
   if (!row) return op === "del" ? "done" : "conflict"; // never recreate a removed shift
+  // Our own close already landed (a retry after a lost response). The finish
+  // time to the minute identifies it — hours may have been edited since.
+  const wantEnd = payload?.end_time;
+  if (op === "patch" && typeof wantEnd === "string" && wantEnd === row.end_time) return "done";
+  if (row.paid_at) return "conflict"; // a paid shift is never rewritten
   if (!isClosedRow(row)) return "write";
   if (op === "del") return "conflict"; // don't delete a shift someone closed
-  const wantEnd = payload?.end_time;
-  const wantHrs = payload?.hours;
-  if (typeof wantEnd === "string" && wantEnd === row.end_time && Number(wantHrs) === Number(row.hours)) return "done";
-  if (row.paid_at) return "conflict";
-  if (typeof wantHrs === "number" && Number.isFinite(Number(row.hours)) && Number(row.hours) > wantHrs) return "write-if-earlier";
+  // The queue only acts on this for the tech's OWN clock-out (earlierWins);
+  // an office close never shrinks a real one.
+  const wantHrs = Number(payload?.hours);
+  if (Number.isFinite(wantHrs) && wantHrs > 0 && Number.isFinite(Number(row.hours)) && Number(row.hours) > wantHrs) return "write-if-earlier";
   return "conflict";
 }
 

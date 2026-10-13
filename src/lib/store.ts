@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import { supabase, db } from "./supabase";
 import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
-import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPending } from "./offline-queue";
+import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPending, isFlushing } from "./offline-queue";
 import { needsServerCheck, serverVerdict, isLocalClockOut, isCloseWrite } from "./clock-sync";
 import { t } from "./i18n";
 import { flushUploads, pendingUploadCount, clearUploads } from "./offline-uploads";
@@ -168,7 +168,7 @@ interface AppState {
    *  goes through these so a write survives no-signal (queued + replayed on
    *  reconnect) and updates the store optimistically. `mode` is "post" for a
    *  new row (caller supplies a stable id via newRowId) or "patch" to update. */
-  saveTimeEntry: (rowId: string, patch: Record<string, unknown>, mode: "post" | "patch", opts?: { onlyIfOpen?: boolean }) => Promise<boolean>;
+  saveTimeEntry: (rowId: string, patch: Record<string, unknown>, mode: "post" | "patch", opts?: { onlyIfOpen?: boolean; earlierWins?: boolean }) => Promise<boolean>;
   dropTimeEntry: (rowId: string, opts?: { onlyIfOpen?: boolean }) => Promise<boolean>;
   /** Set when the server shows THIS phone's running shift was closed or removed
    *  elsewhere (manager force clock-out, another phone). Timer / WorkVision
@@ -645,7 +645,11 @@ export const useStore = create<AppState>((set, get) => ({
     // upsert doesn't run that logic).
     const orgId = get().user?.org_id;
     const payload = mode === "post" && orgId ? { org_id: orgId, ...patch } : patch;
-    enqueueWrite({ table: "time_entries", op: mode, rowId, payload, onlyIfOpen: mode === "patch" && !!opts?.onlyIfOpen });
+    enqueueWrite({
+      table: "time_entries", op: mode, rowId, payload,
+      onlyIfOpen: mode === "patch" && !!opts?.onlyIfOpen,
+      earlierWins: mode === "patch" && !!opts?.onlyIfOpen && !!opts?.earlierWins,
+    });
     // Optimistic local update so Crew Activity / My Log reflect it immediately.
     // Use `payload` (not `patch`) so the in-store row matches what gets
     // persisted — e.g. the injected org_id on an insert.
@@ -698,6 +702,12 @@ export const useStore = create<AppState>((set, get) => ({
     reconcileBusy = true;
     lastClockCheck = { id, at: Date.now() };
     try {
+      // With no session supabase-js falls back to the anon key and RLS returns
+      // [] — that would read as "deleted". Only trust a signed-in read.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+      } catch { return; }
       // Confirm by id — act only on a successful read, never on a guess.
       let rows: TimeEntry[];
       try { rows = await db.get<TimeEntry>("time_entries", { id }, { strict: true }); }
@@ -879,7 +889,9 @@ export const useStore = create<AppState>((set, get) => ({
     // otherwise wait for the next clock action or app restart — long enough
     // for a manager to force-close the shift in the meantime.
     const iv = setInterval(() => {
-      if (pendingCount() > 0 && (typeof navigator === "undefined" || navigator.onLine !== false)) {
+      // Not while a flush is already running — the poll would just queue up
+      // behind it (and starve its own data refresh in a hanging dead zone).
+      if (pendingCount() > 0 && !isFlushing() && (typeof navigator === "undefined" || navigator.onLine !== false)) {
         flushQueue()
           .then((res) => { set({ pendingWrites: res.remaining }); noteQueueConflicts(res.conflictRows.length); })
           .catch(() => {})

@@ -473,11 +473,22 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // and the server kept those times (onlyIfOpen never overwrites a close).
     let landed = true;
     markLocalClockOut(closingId);
+    // Off the clock NOW. Each write below is queued (durable) the moment it's
+    // called — only its sync is awaited, so a slow signal never leaves the
+    // header looking stuck. Persisted immediately so a load landing mid-sync
+    // already sees this phone as off.
+    const goOff = () => {
+      setOn(false); setSt(null); setEl(0); setSj(""); setActiveId(null); setActiveJobId(null);
+      sv("t_on", false); sv("t_st", null); sv("t_active_id", null); sv("t_active_job_id", null);
+    };
     if (hrs > 0.01) {
       const closePatch = { hours: rounded, amount, end_time: fmtTime(endAt), job: sj || "General" };
       if (activeId) {
-        // Durable — survives offline and replays on reconnect.
-        landed = await saveTimeEntry(activeId, closePatch, "patch", { onlyIfOpen: true });
+        // Durable — survives offline and replays on reconnect. earlierWins:
+        // the tech's own tap beats a LATER office close made while it was queued.
+        const write = saveTimeEntry(activeId, closePatch, "patch", { onlyIfOpen: true, earlierWins: true });
+        goOff();
+        landed = await write;
         // GPS stamp at clock-out — fire-and-forget one-shot fix.
         if (landed) void getFix(8000).then((fix) => {
           if (fix) void saveTimeEntry(activeId, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
@@ -489,7 +500,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
         const target = open[open.length - 1];
         if (target) {
-          landed = await saveTimeEntry(target.id, closePatch, "patch", { onlyIfOpen: true });
+          const write = saveTimeEntry(target.id, closePatch, "patch", { onlyIfOpen: true, earlierWins: true });
+          goOff();
+          landed = await write;
           if (landed) void getFix(8000).then((fix) => {
             if (fix) void saveTimeEntry(target.id, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
           });
@@ -511,20 +524,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     } else if (activeId) {
       // Brief in-and-out — delete the in-progress row instead of leaving a
       // zero-hour ghost entry.
-      await dropTimeEntry(activeId, { onlyIfOpen: true });
+      const write = dropTimeEntry(activeId, { onlyIfOpen: true });
+      goOff();
+      await write;
     }
-    setOn(false);
-    setSt(null);
-    setEl(0);
-    setSj("");
-    setActiveId(null);
-    setActiveJobId(null);
-    // Persist now (not on the next render) so the load below already sees this
-    // phone as off the clock.
-    sv("t_on", false);
-    sv("t_st", null);
-    sv("t_active_id", null);
-    sv("t_active_job_id", null);
+    goOff(); // every other path (no row to close / last-resort post) too — idempotent
     await loadAll();
     if (!landed) closedElsewhereRef.current = true;
     if (!opts?.quiet && landed) useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");

@@ -433,6 +433,14 @@ export default function Timer({ setPage }: Props) {
     }
     const hrs = st ? Math.round((endAt - st) / 3600000 * 100) / 100 : Math.round(el / 3600000 * 100) / 100;
     markLocalClockOut(closingId);
+    // Off the clock NOW. The write is queued (durable) the moment
+    // saveTimeEntry/dropTimeEntry is called — only its sync is awaited below,
+    // so a slow signal never leaves the button looking stuck. Persisted
+    // immediately so a load landing mid-sync already sees this phone as off.
+    const goOff = () => {
+      setOn(false); setSt(null); setEl(0); setActiveId(null);
+      sv("t_on", false); sv("t_st", null); sv("t_active_id", null); sv("t_active_job_id", null);
+    };
     if (hrs >= 0.01) {
       const closePatch = {
         hours: hrs,
@@ -440,23 +448,20 @@ export default function Timer({ setPage }: Props) {
         end_time: fmtTime(endAt),
         job: sj || "General",
       };
-      let closedId: string | null = null;
+      // activeId lost (legacy row from before stable ids) → close this user's
+      // most recent open row. Never post a second entry — that leaves the
+      // original open row showing "still active".
+      const legacyOpen = activeId ? undefined : useStore.getState().timeEntries
+        .filter((e) => e.user_id === user.id && e.start_time && !e.end_time)
+        .sort((a, b) => (b.start_time || "").localeCompare(a.start_time || ""))[0];
+      const closedId = activeId || legacyOpen?.id || null;
+      // earlierWins: this is the tech's own tap — if the office closed the
+      // shift LATER (more hours) while this sat queued, the real time wins.
+      const write = closedId ? saveTimeEntry(closedId, closePatch, "patch", { onlyIfOpen: true, earlierWins: true }) : null;
+      goOff();
       // false = the shift was already closed elsewhere; the store toasts that
-      // and the server kept those times (onlyIfOpen never overwrites a close).
-      let landed = true;
-      if (activeId) {
-        // Close out the existing active row (durable — survives offline).
-        landed = await saveTimeEntry(activeId, closePatch, "patch", { onlyIfOpen: true });
-        closedId = activeId;
-      } else {
-        // activeId lost (legacy row from before stable ids) — find the most
-        // recent open row for this user and close it. Never post a second
-        // entry — that leaves the original open row showing "still active".
-        const open = useStore.getState().timeEntries
-          .filter((e) => e.user_id === user.id && e.start_time && !e.end_time)
-          .sort((a, b) => (b.start_time || "").localeCompare(a.start_time || ""));
-        if (open[0]) { landed = await saveTimeEntry(open[0].id, closePatch, "patch", { onlyIfOpen: true }); closedId = open[0].id; }
-      }
+      // and the server kept those times.
+      const landed = write ? await write : true;
       // GPS stamp at clock-out — same fire-and-forget one-shot as clock-in.
       if (closedId && landed) {
         const cid = closedId;
@@ -465,21 +470,13 @@ export default function Timer({ setPage }: Props) {
         });
         useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");
       }
-    } else if (activeId) {
+    } else {
       // Timer was only running briefly; delete the in-progress row instead
       // of leaving a zero-hour ghost entry.
-      await dropTimeEntry(activeId, { onlyIfOpen: true });
+      const write = activeId ? dropTimeEntry(activeId, { onlyIfOpen: true }) : null;
+      goOff();
+      if (write) await write;
     }
-    setOn(false);
-    setSt(null);
-    setEl(0);
-    setActiveId(null);
-    // Persist now (not on the next render) so a load landing right after the
-    // marker clears already sees this phone as off the clock.
-    sv("t_on", false);
-    sv("t_st", null);
-    sv("t_active_id", null);
-    sv("t_active_job_id", null);
     } finally {
       clockBusyRef.current = false;
       unmarkLocalClockOut(closingId);
@@ -1090,7 +1087,10 @@ export default function Timer({ setPage }: Props) {
                           await saveTimeEntry(e.id, { hours: h, amount: Math.round(h * rRate * 100) / 100, end_time: fmtTime(endAt) }, "patch", { onlyIfOpen: true });
                           return;
                         }
-                        const hrs = e.start_time ? (() => { const m = e.start_time.match(/(\d+):(\d+)\s*([AP]M)?/i); if (!m) return 0; let h = parseInt(m[1]); const mm = parseInt(m[2]); const ap = m[3]?.toUpperCase(); if (ap === "PM" && h < 12) h += 12; if (ap === "AM" && h === 12) h = 0; const st = new Date(); st.setHours(h, mm, 0, 0); return Math.round((Date.now() - st.getTime()) / 3600000 * 100) / 100; })() : 0;
+                        // Hours from the entry's real start (handles overnight) — never a
+                        // 0 / negative guess written over a shift.
+                        const hrs = startMs !== null ? Math.round((Date.now() - startMs) / 3600000 * 100) / 100 : 0;
+                        if (!(hrs > 0)) { useStore.getState().showToast(t("timer.forceOutNoStart"), "warning"); return; }
                         await saveTimeEntry(e.id, { hours: hrs, amount: Math.round(hrs * rRate * 100) / 100, end_time: fmtTime(Date.now()) }, "patch", { onlyIfOpen: true });
                       }} style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#ff9d9d", background: "rgba(255,91,91,.1)", border: "1px solid rgba(255,91,91,.4)", borderRadius: 9, padding: "7px", marginBottom: 6, cursor: "pointer" }}>
                         <Icon name="stop" size={12} color="#ff9d9d" /> {t("timer.forceClockOut")}
