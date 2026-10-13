@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import type { Profile } from "@/lib/types";
@@ -40,6 +40,13 @@ export default function TeamStats() {
   const isOwner = user.role === "owner" || user.role === "manager";
 
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Join requests: the pay rate typed for each pending person (by profile
+  // id). Approving needs one — otherwise they'd sit at $0 ("No rate"), auto
+  // payroll would skip them and manual payroll would guess $55/hr.
+  const [joinRates, setJoinRates] = useState<Record<string, string>>({});
+  const joinRateRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  /** Typed rate → dollars to the cent (NaN when blank / not a number). */
+  const joinRateOf = (id: string) => Math.round(parseFloat(joinRates[id] ?? "") * 100) / 100;
 
   const border = darkMode ? "#1e1e2e" : "#eee";
 
@@ -299,36 +306,70 @@ export default function TeamStats() {
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "#8cc0ff", marginBottom: 6 }}>
             <Icon name="clients" size={14} color="#8cc0ff" /> {t("team.joinRequests")} ({pendingMembers.length})
           </div>
-          {pendingMembers.map((m) => (
-            <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: "1px solid rgba(255,255,255,.06)" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{m.name || m.email}</div>
+          {pendingMembers.map((m) => {
+            const first = (m.name || "They").split(" ")[0];
+            const rateOk = joinRateOf(m.id) > 0;
+            return (
+            <div key={m.id} style={{ padding: "8px 0", borderTop: "1px solid rgba(255,255,255,.06)" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name || m.email}</div>
                 <div className="dim" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}</div>
               </div>
-              <button
-                className="bg"
-                style={{ fontSize: 13, padding: "6px 12px", flex: "none" }}
-                onClick={async () => {
-                  if (!await db.patch("profiles", m.id, { status: "active" })) return;
-                  await loadAll();
-                  useStore.getState().showToast(t("team.approvedToast").replace("{name}", (m.name || "They").split(" ")[0]), "success");
-                }}
-              >
-                {t("team.approve")}
-              </button>
-              <button
-                className="bo"
-                style={{ fontSize: 13, padding: "6px 10px", flex: "none" }}
-                onClick={async () => {
-                  if (!await useStore.getState().showConfirm(t("team.declineTitle"), t("team.declineMsg").replace("{name}", m.name || m.email))) return;
-                  await db.del("profiles", m.id);
-                  await loadAll();
-                }}
-              >
-                {t("team.decline")}
-              </button>
+              {/* Line 2: pay rate + Approve / Decline. The label shrinks
+                  before anything overflows at phone width. Approve is
+                  dimmed until a rate is in, but still tappable so the
+                  toast can say why nothing happened. */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0, fontSize: 13 }}>
+                  <span className="dim" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t("team.rateLabel")}</span>
+                  <input
+                    ref={(el) => { joinRateRefs.current[m.id] = el; }}
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step={0.5}
+                    placeholder={t("team.ratePh")}
+                    value={joinRates[m.id] ?? ""}
+                    onChange={(e) => { const v = e.target.value; setJoinRates((prev) => ({ ...prev, [m.id]: v })); }}
+                    style={{ width: 90, flex: "none", fontSize: 15, height: 38, padding: "4px 8px" }}
+                  />
+                </label>
+                <button
+                  className="bg"
+                  style={{ fontSize: 13, padding: "6px 12px", minHeight: 38, flex: "none", opacity: rateOk ? 1 : 0.55 }}
+                  onClick={async () => {
+                    const rate = joinRateOf(m.id);
+                    if (!(rate > 0)) {
+                      useStore.getState().showToast(t("team.rateRequired").replace("{name}", first), "warning");
+                      joinRateRefs.current[m.id]?.focus();
+                      return;
+                    }
+                    // One write: the person goes active WITH their rate.
+                    if (!await db.patch("profiles", m.id, { status: "active", rate })) return;
+                    await loadAll();
+                    useStore.getState().showToast(
+                      t("team.approvedRateToast").replace("{name}", first).replace("{rate}", rate % 1 ? rate.toFixed(2) : String(rate)),
+                      "success",
+                    );
+                  }}
+                >
+                  {t("team.approve")}
+                </button>
+                <button
+                  className="bo"
+                  style={{ fontSize: 13, padding: "6px 10px", minHeight: 38, flex: "none" }}
+                  onClick={async () => {
+                    if (!await useStore.getState().showConfirm(t("team.declineTitle"), t("team.declineMsg").replace("{name}", m.name || m.email))) return;
+                    await db.del("profiles", m.id);
+                    await loadAll();
+                  }}
+                >
+                  {t("team.decline")}
+                </button>
+              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
