@@ -7,7 +7,7 @@ import { Icon } from "./Icon";
 import Grizz from "./Grizz";
 import { TRADE_IDS, tradeConfig, tradePatch } from "@/lib/trades";
 import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
-import { getLang, setLang } from "@/lib/i18n";
+import { getLang, setLang, t } from "@/lib/i18n";
 
 /**
  * Fast onboarding led by Grizz, the handyman-bear mascot. Owners: 1 business
@@ -152,18 +152,18 @@ export default function Onboarding() {
     const raw = inviteCode.trim();
     const fromLink = raw.match(/[?&]join=([^&\s]+)/)?.[1];
     const code = (fromLink ? decodeURIComponent(fromLink) : raw).trim();
-    if (!code) { setErr("Paste the invite link or code your boss sent you"); return; }
+    if (!code) { setErr(t("ob.inviteCodePh")); return; }
     // A malformed code would hit the DB as a bad uuid and toast a raw
     // Postgres error — catch it here in plain words.
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)) {
-      setErr("That doesn't look like an invite code — ask your boss to send the invite link again.");
+      setErr(t("ob.joinError"));
       return;
     }
     setSaving(true);
     setErr("");
     try {
       const orgs = await db.get<Organization>("organizations", { id: code });
-      if (!orgs.length) { setErr("That invite code didn't match a business — ask your boss to send the invite link again."); setSaving(false); return; }
+      if (!orgs.length) { setErr(t("ob.joinError")); setSaving(false); return; }
       const org = orgs[0];
 
       const profileResult = await db.post<Profile>("profiles", {
@@ -179,14 +179,14 @@ export default function Onboarding() {
         emp_num: String(Math.floor(Math.random() * 900) + 100),
         org_id: org.id,
       });
-      if (!profileResult?.length) { setErr("Failed to join — you may already be a member"); setSaving(false); return; }
+      if (!profileResult?.length) { setErr(t("ob.joinFailed")); setSaving(false); return; }
 
       try { localStorage.removeItem(JOIN_CODE_KEY); } catch { /* */ }
       setCreatedBiz({ org, profile: profileResult[0] });
       setSaving(false);
       setStepIdx(2); // skip the trade picker — joiners inherit the org's trade
     } catch (e) {
-      setErr("Something went wrong");
+      setErr(t("ob.somethingWrong"));
       console.error(e);
       setSaving(false);
     }
@@ -194,8 +194,11 @@ export default function Onboarding() {
 
   // Apply the created rows to the store → the no-org gate now sees an org and
   // renders the app. Never enter the app without having created/joined.
+  // "Start my first quote" lands a new owner on the Quote tab (AppShell reads
+  // c_start_page once) — set BEFORE the store flip mounts the app.
   const finish = () => {
     if (!createdBiz) { setStepIdx(0); return; }
+    if (mode === "create") { try { sessionStorage.setItem("c_start_page", "qf"); } catch { /* */ } }
     setOrg(createdBiz.org);
     setUser(createdBiz.profile);
   };
@@ -210,10 +213,12 @@ export default function Onboarding() {
     return finish();
   };
 
+  // Join-path labels are translated (a Spanish-phone crew member joins in
+  // Spanish); the owner create path stays English for now.
   const primaryLabel =
-    stepIdx === 0 ? (saving ? "Joining…" : mode === "create" ? "Continue" : "Join team")
+    stepIdx === 0 ? (saving ? t("ob.joining") : mode === "create" ? "Continue" : t("ob.joinTeam"))
     : stepIdx === 1 ? (saving ? "Creating…" : "Create my business")
-    : mode === "join" ? "Done" : "Start my first quote";
+    : mode === "join" ? t("ob.done") : "Start my first quote";
 
   const total = mode === "join" ? TOTAL_JOIN : TOTAL_CREATE;
   // Joiners jump 0 → 2, so show their progress as 1 of 2, 2 of 2.
@@ -233,7 +238,7 @@ export default function Onboarding() {
             {(["en", "es"] as const).map((l) => (
               <span key={l} onClick={() => { setLang(l); window.location.reload(); }}
                 style={{ cursor: "pointer", padding: "2px 7px", borderRadius: 6, color: getLang() === l ? "#fff" : "#666", background: getLang() === l ? "rgba(46,117,182,.5)" : "transparent" }}>
-                {l === "en" ? "English" : "Español"}
+                {l === "en" ? t("ob.langEn") : t("ob.langEs")}
               </span>
             ))}
           </span>
@@ -259,13 +264,13 @@ export default function Onboarding() {
                   <p>{mode === "create"
                     ? "Hey, I'm Grizz! Two quick screens and you're in. First — what's your business called?"
                     : pendingJoin
-                      ? "Your invite code is filled in — tap Join team and you're in."
-                      : "Joining a crew? Paste the invite link or code your boss sent you. (Bosses: Ops → Team → Invite a teammate.)"}</p>
+                      ? t("ob.joinSpeechFilled")
+                      : `${t("ob.joinSpeech")} ${t("ob.bossHint")}`}</p>
                 </div>
 
                 <div className="ob-toggle">
-                  <button className={mode === "create" ? "on" : ""} onClick={() => { setMode("create"); setErr(""); }}>Create business</button>
-                  <button className={mode === "join" ? "on" : ""} onClick={() => { setMode("join"); setErr(""); }}>Join a team</button>
+                  <button className={mode === "create" ? "on" : ""} onClick={() => { setMode("create"); setErr(""); }}>{t("ob.tabCreate")}</button>
+                  <button className={mode === "join" ? "on" : ""} onClick={() => { setMode("join"); setErr(""); }}>{t("ob.tabJoin")}</button>
                 </div>
 
                 {mode === "create" ? (
@@ -285,8 +290,8 @@ export default function Onboarding() {
                   </>
                 ) : (
                   <div className="ob-field">
-                    <label>Invite code</label>
-                    <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} placeholder="Paste invite link or code" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+                    <label>{t("ob.inviteCode")}</label>
+                    <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} placeholder={t("ob.inviteCodePh")} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
                   </div>
                 )}
 
@@ -305,7 +310,7 @@ export default function Onboarding() {
 
                 <h2 className="ob-h2" style={{ fontSize: 19, textAlign: "left", marginTop: 14 }}>What&apos;s your trade?</h2>
                 <div style={{ fontSize: 12.5, color: "#9a9aa8", marginTop: 2, marginBottom: 10 }}>
-                  Tunes your rate, materials, checklist, and units. You can change it anytime in Settings.
+                  Tunes your rate, materials, checklist, and units. You can change it anytime in More → Business settings.
                 </div>
 
                 <div className="ob-trades">
@@ -334,7 +339,7 @@ export default function Onboarding() {
                     inputMode="decimal"
                   />
                   <div style={{ fontSize: 11.5, color: "#8b8b99", marginTop: 4 }}>
-                    Every quote is priced from this. Change it anytime in Ops → Settings.
+                    Every quote is priced from this. Change it anytime in More → Business settings.
                   </div>
                 </div>
 
@@ -372,7 +377,7 @@ export default function Onboarding() {
                 <div className="ob-speech">
                   <div className="ob-who">Grizz</div>
                   <p>{mode === "join"
-                    ? <>{"You're in the door — I've asked your boss to approve you. You'll be on the crew as soon as they do."}</>
+                    ? <>{t("ob.joinDoneSpeech")}</>
                     : <>{"You're set up. The whole job runs "}<b>quote → schedule → work → paid</b>{" — and the checklist on your Home screen will walk you through the rest, one tap at a time."}</>}</p>
                 </div>
                 {mode === "create" && (
@@ -382,7 +387,11 @@ export default function Onboarding() {
                     ))}
                   </div>
                 )}
-                <h2 className="ob-h2" style={{ marginTop: "auto", paddingBottom: 10 }}>{"You're "}<span className="ob-g">ready</span> 🎉</h2>
+                <h2 className="ob-h2" style={{ marginTop: "auto", paddingBottom: 10 }}>
+                  {mode === "join"
+                    ? <><span className="ob-g">{t("ob.youreIn")}</span> 🎉</>
+                    : <>{"You're "}<span className="ob-g">ready</span> 🎉</>}
+                </h2>
               </>
             )}
 

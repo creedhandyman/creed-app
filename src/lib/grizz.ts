@@ -6,6 +6,9 @@
  * progress to another. Three things are persisted:
  *   - grizz_tips     global on/off switch for tips + the getting-started card
  *   - gs_dismissed   the dashboard getting-started card has been closed/finished
+ *                    ("0" = brought back by turning tips on again)
+ *   - gs_skip_<task> a getting-started task the owner skipped ("Just me" on
+ *                    crew, "Not now" on Stripe) — counts as done
  *   - tip_<id>       a specific coachmark has been acknowledged ("Got it")
  *
  * Onboarding still runs once for new users regardless of these (it's gated by
@@ -37,6 +40,18 @@ export function gsDismissed(uid?: string | null): boolean {
 }
 export function dismissGs(uid?: string | null): void {
   write(key("gs_dismissed", uid), "1");
+}
+/** Bring the card back (tips switched on again) — an unfinished list reappears. */
+export function undismissGs(uid?: string | null): void {
+  write(key("gs_dismissed", uid), "0");
+}
+
+/** A getting-started task skipped on purpose (solo owner, no Stripe yet). */
+export function gsSkipped(task: string, uid?: string | null): boolean {
+  return read(key(`gs_skip_${task}`, uid)) === "1";
+}
+export function skipGs(task: string, uid?: string | null): void {
+  write(key(`gs_skip_${task}`, uid), "1");
 }
 
 /** A coachmark tip has been acknowledged. */

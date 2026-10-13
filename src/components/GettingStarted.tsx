@@ -3,13 +3,15 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "./Icon";
 import Grizz from "./Grizz";
-import { gsDismissed, dismissGs, tipsEnabled } from "@/lib/grizz";
+import { gsDismissed, dismissGs, tipsEnabled, gsSkipped, skipGs } from "@/lib/grizz";
+import { t } from "@/lib/i18n";
 
 /**
  * Dashboard "Getting Started" card (owner/admin only). Activation tasks
  * whose completion is DERIVED FROM REAL DATA — so it self-checks as the owner
  * actually does the work (no per-task booleans stored). Each row deep-links to
- * the relevant screen.
+ * the relevant screen. Crew and Stripe can be skipped ("Just me" / "Not now"),
+ * so a solo owner who isn't taking cards yet can still finish the list.
  *
  * It disappears for good once (a) the × is tapped, or (b) all of them are done —
  * in which case it shows a one-time "You're rolling!" celebration with confetti,
@@ -40,15 +42,18 @@ export default function GettingStarted({
   // Hidden until the client-side flag check runs (avoids a flash on load).
   const [dismissed, setDismissed] = useState(true);
   useEffect(() => { setDismissed(gsDismissed(uid) || !tipsEnabled(uid)); }, [uid]);
+  // Skips live in localStorage — bump to re-render after "Just me" / "Not now".
+  const [, setSkipTick] = useState(0);
 
+  // An inbound web lead (or a bare inspection) isn't a quote the owner made.
   const tasks = [
-    { key: "phone", label: "Add your business phone (it prints on quotes)", done: !!org?.phone?.trim(), go: () => openOps("settings") },
-    { key: "logo", label: "Add your business logo", done: !!org?.logo_url, go: () => openOps("settings") },
-    { key: "quote", label: "Create your first quote", done: jobs.length >= 1, go: () => setPage("qf") },
-    { key: "stripe", label: "Connect Stripe to get paid", done: org?.stripe_connected === true, go: () => openOps("billing") },
-    { key: "crew", label: "Invite your crew", done: profiles.length >= 2, go: () => openOps("team") },
+    { key: "phone", label: t("gs.phone"), done: !!org?.phone?.trim(), go: () => openOps("settings") },
+    { key: "logo", label: t("gs.logo"), done: !!org?.logo_url, go: () => openOps("settings") },
+    { key: "quote", label: t("gs.quote"), done: jobs.some((j) => j.status !== "lead" && j.status !== "inspection"), go: () => setPage("qf") },
+    { key: "stripe", label: t("gs.stripe"), done: org?.stripe_connected === true || gsSkipped("stripe", uid), go: () => openOps("billing"), skip: t("gs.notNow") },
+    { key: "crew", label: t("gs.crew"), done: profiles.length >= 2 || gsSkipped("crew", uid), go: () => openOps("team"), skip: t("gs.justMe") },
   ];
-  const doneCount = tasks.filter((t) => t.done).length;
+  const doneCount = tasks.filter((x) => x.done).length;
   const allDone = doneCount === tasks.length;
 
   // First time all tasks are done: persist dismissal so it never returns, show
@@ -87,16 +92,16 @@ export default function GettingStarted({
             <span key={i} className="gs-conf" style={{ ["--cx"]: c.cx, ["--cy"]: c.cy, background: c.c, left: `${44 + i}%` } as React.CSSProperties} />
           ))}
           <Grizz pose="cheer" size={52} style={{ margin: "0 auto", display: "block" }} />
-          <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, textTransform: "uppercase", marginTop: 6 }}>You&apos;re rolling! 🎉</div>
-          <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 4 }}>Nice work. I&apos;ll be in <b>Ask Grizz</b> if you need me.</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, textTransform: "uppercase", marginTop: 6 }}>{t("gs.rolling")} 🎉</div>
+          <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 4 }}>{t("gs.rollingSub")}</div>
         </div>
       ) : (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9 }}>
             <Grizz pose="point" size={40} style={{ marginTop: -6, flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".3px", textTransform: "uppercase" }}>Get set up with Grizz</div>
-              <div style={{ fontSize: 11, color: "var(--color-primary)" }}>{doneCount} of {tasks.length} done</div>
+              <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".3px", textTransform: "uppercase" }}>{t("gs.title")}</div>
+              <div style={{ fontSize: 11, color: "var(--color-primary)" }}>{t("gs.doneOf").replace("{done}", String(doneCount)).replace("{total}", String(tasks.length))}</div>
             </div>
             <button onClick={() => { dismissGs(uid); setDismissed(true); }} aria-label="Hide" style={{ background: "none", border: "none", color: "var(--color-dim)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 2 }}>×</button>
           </div>
@@ -115,6 +120,14 @@ export default function GettingStarted({
                 {task.done && <Icon name="check" size={12} color="#fff" />}
               </span>
               <span style={{ fontSize: 13.5, flex: 1, color: task.done ? "var(--color-dim)" : "inherit", textDecoration: task.done ? "line-through" : "none" }}>{task.label}</span>
+              {!task.done && task.skip && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); skipGs(task.key, uid); setSkipTick((n) => n + 1); }}
+                  style={{ background: "none", border: "none", color: "var(--color-dim)", fontSize: 11.5, textDecoration: "underline", cursor: "pointer", padding: "4px 2px", flexShrink: 0 }}
+                >
+                  {task.skip}
+                </button>
+              )}
               {!task.done && <Icon name="next" size={15} color="var(--color-dim)" />}
             </div>
           ))}

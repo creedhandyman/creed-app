@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import Grizz from "./Grizz";
 import { tipsEnabled, tipSeen, markTipSeen, setTipsEnabled } from "@/lib/grizz";
+import { t } from "@/lib/i18n";
 
 /**
  * One-time Grizz coachmark — he peeks from the bottom-left corner with a single
@@ -22,6 +23,14 @@ export default function Coachmark({ id, text }: { id: string; text: ReactNode })
   useEffect(() => {
     setShow(tipsEnabled(uid) && !tipSeen(id, uid));
   }, [id, uid]);
+
+  // Flag the page while a tip is up so other bottom overlays (the install
+  // banner) step aside instead of stacking on top of it.
+  useEffect(() => {
+    if (!show) return;
+    document.documentElement.dataset.coach = "1";
+    return () => { delete document.documentElement.dataset.coach; };
+  }, [show]);
 
   if (!show) return null;
 
@@ -63,8 +72,8 @@ export default function Coachmark({ id, text }: { id: string; text: ReactNode })
         <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffd76b", marginBottom: 3 }}>Grizz</div>
         <div style={{ fontSize: 13.5, lineHeight: 1.45 }}>{text}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
-          <span onClick={turnOff} style={{ fontSize: 11.5, color: "var(--color-dim)", cursor: "pointer" }}>Don&apos;t show tips</span>
-          <button onClick={gotIt} style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12, letterSpacing: ".3px", textTransform: "uppercase", color: "#1a1305", background: "#ffd76b", border: "none", borderRadius: 9, padding: "7px 16px", cursor: "pointer" }}>Got it</button>
+          <span onClick={turnOff} style={{ fontSize: 11.5, color: "var(--color-dim)", cursor: "pointer" }}>{t("tip.dontShow")}</span>
+          <button onClick={gotIt} style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 12, letterSpacing: ".3px", textTransform: "uppercase", color: "#1a1305", background: "#ffd76b", border: "none", borderRadius: 9, padding: "7px 16px", cursor: "pointer" }}>{t("tip.gotIt")}</button>
         </div>
       </div>
     </div>
