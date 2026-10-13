@@ -15,9 +15,13 @@ export const dynamic = "force-dynamic";
  * recordJobPayment as Stripe charges, so paid-to-date, the balance and the
  * "paid only when covered" rule are identical either way.
  *
- * Body: { jobId, amount (dollars), method: cash|check|card|other, ref }
+ * Body: { jobId, amount (dollars), method: cash|check|card|other, ref, skipReview? }
  *   ref = a client-generated uuid per tap → the idempotency key (a retried
  *   or double-tapped save can't record the payment twice).
+ *   skipReview = true → don't schedule the automated review-request text
+ *   when this payment covers the job. The Jobs bulk "Paid" cleanup sends it
+ *   so marking a batch paid can't text every customer in it; the single-job
+ *   Record payment sheet leaves it off (review request scheduled as usual).
  */
 const METHODS = new Set(["cash", "check", "card", "other"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,8 +31,9 @@ export async function POST(req: NextRequest) {
   if (prof instanceof NextResponse) return prof;
 
   const body = (await req.json().catch(() => ({}))) as {
-    jobId?: string; amount?: number; method?: string; ref?: string;
+    jobId?: string; amount?: number; method?: string; ref?: string; skipReview?: boolean;
   };
+  const skipReview = body.skipReview === true;
   const amount = Math.round((Number(body.amount) || 0) * 100) / 100;
   const method = METHODS.has(String(body.method)) ? String(body.method) : "other";
   if (!body.jobId || !UUID.test(body.jobId)) return NextResponse.json({ error: "Missing job" }, { status: 400 });
@@ -59,7 +64,7 @@ export async function POST(req: NextRequest) {
       platformFeeCents: 0,
       kind: method,
     });
-    if (result.fullyPaid) {
+    if (result.fullyPaid && !skipReview) {
       await scheduleReviewRequest(supabase, job.id).catch((e) => {
         console.error("[payments/record] review-request schedule failed:", e);
       });

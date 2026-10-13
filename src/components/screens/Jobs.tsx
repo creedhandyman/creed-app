@@ -156,6 +156,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
   const navBottom = useStore((s) => s.navBottom);
+  // Every table has loaded at least once (or jobs themselves are in) — until
+  // then an empty list is "not loaded yet", never "all done here" / "no jobs".
+  const storeLoading = useStore((s) => s.loading);
+  const fullSyncAt = useStore((s) => s.fullSyncAt);
+  const dataReady = !storeLoading && (fullSyncAt !== null || jobs.length > 0);
   // Owner/manager — money actions (record payment / approval) are their APIs.
   const isAdmin = user.role === "owner" || user.role === "manager";
   // Inline dark tokens are fixed values — the Properties value-pills sit on a
@@ -614,8 +619,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
   // Core status write + completion side effects, shared by the single-job
   // setStatus and the bulk bar. No confirm and no reload — callers own those.
-  const applyStatus = async (id: string, status: string): Promise<void> => {
-    await db.patch("jobs", id, { status });
+  // Resolves true when the status write landed (false = db.patch already
+  // toasted why), so callers only confirm success when it really saved.
+  const applyStatus = async (id: string, status: string): Promise<boolean> => {
+    const ok = await db.patch("jobs", id, { status });
+    if (!ok) return false;
 
     // When a job goes Complete, teach the AI quoter from its real hours
     // (job-level per trade + per item). Shared via recordJobOutcome with
@@ -635,26 +643,29 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         }
       }
     }
+    return true;
   };
 
-  const setStatus = async (id: string, status: string): Promise<void> => {
+  // Resolves true only when the status was written; false when the paid
+  // choice sheet took over, the confirm was cancelled, or the write failed.
+  const setStatus = async (id: string, status: string): Promise<boolean> => {
     // Paid while money is still owed (owner/manager): don't just flip the
     // status — the books would say paid with no payment behind it. Ask how
     // they were paid first; nothing is written until they pick.
     if (status === "paid" && isAdmin) {
       const job = jobs.find((j) => j.id === id);
       const due = job ? balanceOf(job).due : 0;
-      if (due > 0.009) { setPaidChoice({ jobId: id, due }); return; }
+      if (due > 0.009) { setPaidChoice({ jobId: id, due }); return false; }
     }
     // Warn if completing with unchecked work order items
     if (status === "complete") {
       const job = jobs.find((j) => j.id === id);
       const unchecked = job ? uncheckedCount(job) : 0;
       if (unchecked > 0) {
-        if (!await useStore.getState().showConfirm(t("jobs.incompleteItems"), `${unchecked} ${unchecked !== 1 ? t("jobs.workOrderItemsPlural") : t("jobs.workOrderItemSingular")} ${t("jobs.stillUncheckedMarkComplete")}`)) return;
+        if (!await useStore.getState().showConfirm(t("jobs.incompleteItems"), `${unchecked} ${unchecked !== 1 ? t("jobs.workOrderItemsPlural") : t("jobs.workOrderItemSingular")} ${t("jobs.stillUncheckedMarkComplete")}`)) return false;
       }
     }
-    await applyStatus(id, status);
+    const ok = await applyStatus(id, status);
     loadAll();
 
     // Status changes are intentionally SILENT. Previously every flip (a)
@@ -665,6 +676,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     // button under the detail CTA (messageCustomer), and a review is requested
     // from the manual "Request Review" button in Manage plus the post-payment
     // automation — so changing status no longer pops anything up.
+    return ok;
   };
 
   const statusLabel = (s: string) => (s === "lead" ? t("jobs.lead") : (t(`status.${s}`) || s));
@@ -695,13 +707,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     }
     if (!await useStore.getState().showConfirm(t("jobs.bulkConfirmTitle"), msg)) return;
     setBulkBusy(true);
+    let n = 0;
     try {
-      for (const j of targets) await applyStatus(j.id, bulkStatus);
+      for (const j of targets) if (await applyStatus(j.id, bulkStatus)) n++;
     } finally {
       setBulkBusy(false);
       await loadAll();
     }
-    useStore.getState().showToast(`${t("jobs.bulkUpdated")} ${targets.length} → ${label}`, "success");
+    // Nothing landed: db.patch already toasted why — keep the selection so
+    // the owner can retry instead of a green summary over the error.
+    if (n === 0) return;
+    useStore.getState().showToast(`${t("jobs.bulkUpdated")} ${n} → ${label}`, n < targets.length ? "warning" : "success");
     setSelectedIds([]);
     setBulkStatus("");
     setSelectMode(false);
@@ -730,12 +746,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           const res = await apiFetch("/api/payments/record", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ jobId: j.id, amount, method, ref: crypto.randomUUID() }),
+            // skipReview: a bulk cleanup must not text every customer in the
+            // batch a review request (the single-job sheet still schedules it).
+            body: JSON.stringify({ jobId: j.id, amount, method, ref: crypto.randomUUID(), skipReview: true }),
           });
           if (res.ok) { ok++; recorded += amount; } else failed++;
         } catch { failed++; }
       }
-      for (const j of settled) await applyStatus(j.id, "paid");
+      for (const j of settled) {
+        if (await applyStatus(j.id, "paid")) ok++;
+        else failed++;
+      }
     } finally {
       setBulkBusy(false);
       await loadAll();
@@ -773,7 +794,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     setBulkBusy(true);
     let n = 0;
     try { n = await archiveMany(ids); } finally { setBulkBusy(false); }
-    useStore.getState().showToast(t("jobs.archivedMany").replace("{n}", String(n)), "success");
+    // Nothing landed: db.patch already toasted why — keep the selection so
+    // the owner can retry instead of a green "Archived 0" over the error.
+    if (n === 0) return;
+    useStore.getState().showToast(t("jobs.archivedMany").replace("{n}", String(n)), n < ids.length ? "warning" : "success");
     setSelectedIds([]);
     setBulkStatus("");
     setSelectMode(false);
@@ -903,15 +927,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   };
   // A follow-up re-stamps quote_sent_at too — it's the "last contacted" mark.
   // quiet: the caller already toasted (Copy says "copied"; one toast slot).
+  // The success toast only shows when the write landed — on a failure
+  // db.patch's error toast stays up instead of being replaced by "sent".
   const markSent = (jobId: string, kind?: "invoice" | "quote", quiet?: boolean) => {
     const toast = useStore.getState().showToast;
     if (kind === "quote") {
-      void markQuoteSent(jobId).then(() => { loadAll(); if (!quiet) toast(t("jobs.quoteMarkedSent"), "success"); });
+      void markQuoteSent(jobId).then((ok) => { loadAll(); if (ok && !quiet) toast(t("jobs.quoteMarkedSent"), "success"); });
       return;
     }
     if (kind !== "invoice") return;
     const job = jobs.find((j) => j.id === jobId);
-    if (job?.status === "complete") void setStatus(jobId, "invoiced").then(() => { if (!quiet) toast(t("jobs.invoiceMarkedSent"), "success"); });
+    if (job?.status === "complete") void setStatus(jobId, "invoiced").then((ok) => { if (ok && !quiet) toast(t("jobs.invoiceMarkedSent"), "success"); });
   };
 
   const openRecordPay = (job: Job) => {
@@ -1654,7 +1680,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                       try {
                         const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, amount: balanceDue }) });
                         const data = await res.json();
-                        if (data.url) setPayQR({ url: data.url, jobId: dj.id, amount: balanceDue, startPaid: dj.amount_paid || 0 });
+                        if (data.url) {
+                          // Baseline = the server's paid-to-date NOW, not the
+                          // render-time copy (up to 15s old) — otherwise a
+                          // deposit that landed meanwhile would flip the QR to
+                          // "Payment received" before the customer scans it.
+                          await loadAll().catch(() => { /* keep the render-time value */ });
+                          const fresh =useStore.getState().jobs.find((x) => x.id === dj.id);
+                          setPayQR({ url: data.url, jobId: dj.id, amount: balanceDue, startPaid: Number(fresh?.amount_paid ?? dj.amount_paid) || 0 });
+                        }
                         else useStore.getState().showToast(data.error || t("jobs.couldNotCreatePayment"), "error");
                       } catch { useStore.getState().showToast(t("jobs.failedCreatePayment"), "error"); }
                     }}
@@ -2254,6 +2288,18 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           </div>
         ) : null;
 
+        // Nothing to show yet because the data hasn't fully loaded (cold
+        // start, a deep link written at boot, offline with no snapshot) —
+        // say loading, not "all done here" / "no jobs".
+        if (!filtered.length && !dataReady) {
+          return (
+            <>
+              {filterChip}
+              <div className="cd dim" style={{ textAlign: "center", padding: 24 }}>{t("common.loading")}</div>
+            </>
+          );
+        }
+
         // A filtered slice that's empty means that pile is cleared — say so
         // calmly and offer a way out, instead of the generic "no jobs".
         if (quickFilter && !quickFiltered.length) {
@@ -2427,7 +2473,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           const n = String(ids.length);
           if (!await useStore.getState().showConfirm(t("jobs.archive"), t("jobs.archiveAllPaidQ").replace("{n}", n))) return;
           const done = await archiveMany(ids);
-          useStore.getState().showToast(t("jobs.archivedMany").replace("{n}", String(done)), "success");
+          // 0 = every write failed and db.patch already toasted why.
+          if (done === 0) return;
+          useStore.getState().showToast(t("jobs.archivedMany").replace("{n}", String(done)), done < ids.length ? "warning" : "success");
         };
         return (
           <>
