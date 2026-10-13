@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { haversineMiles, getFix, ROAD_FACTOR, geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
@@ -58,7 +58,7 @@ function localYmd(d: Date): string {
 
 type SuggestedLeg = { from: string; to: string; miles: number; added: boolean };
 
-function SuggestedTrips({ entries, onAdded }: { entries: MileageEntry[]; onAdded: () => void }) {
+function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[]; loaded: boolean; onAdded: () => void }) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const timeEntries = useStore((s) => s.timeEntries);
@@ -66,6 +66,24 @@ function SuggestedTrips({ entries, onAdded }: { entries: MileageEntry[]; onAdded
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [legs, setLegs] = useState<SuggestedLeg[] | null>(null);
+  // The log as of NOW, not as of the Find tap — geocoding can take seconds
+  // while the log loads or reloads underneath it.
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  // Legs saved from this card this session. A reload racing the post can
+  // briefly hand back a log without the new row; this keeps re-finding from
+  // offering it again.
+  const postedRef = useRef<{ id?: string; date: string; to: string; miles: number }[]>([]);
+  // One add at a time — a double-tap on Add all used to run two loops over
+  // the same legs and post every trip twice.
+  const addingRef = useRef(false);
+  const [adding, setAdding] = useState(false);
+  // Once the log carries a saved row, the log speaks for it — so deleting
+  // that trip later frees the leg again.
+  useEffect(() => {
+    const ids = new Set(entries.map((e) => e.id));
+    postedRef.current = postedRef.current.filter((p) => !p.id || !ids.has(p.id));
+  }, [entries]);
 
   const normAddr = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
 
@@ -124,12 +142,21 @@ function SuggestedTrips({ entries, onAdded }: { entries: MileageEntry[]; onAdded
 
       // A leg already in the log (same day, same destination, ~same miles —
       // e.g. from an earlier "Add all") shows as logged so re-finding the
-      // day can't double-post it. Each logged trip covers ONE leg.
+      // day can't double-post it. Each logged trip covers ONE leg. Rows this
+      // card just saved count too, unless the log already has them (by id).
+      const logNow = entriesRef.current;
+      const logIds = new Set(logNow.map((e) => e.id));
+      const candidates = [
+        ...logNow.map((e) => ({ key: e.id, date: e.trip_date, to: e.job, miles: Number(e.total_miles || 0) })),
+        ...postedRef.current
+          .filter((p) => !p.id || !logIds.has(p.id))
+          .map((p, i) => ({ key: `posted:${i}`, date: p.date, to: p.to, miles: p.miles })),
+      ];
       const usedEntries = new Set<string>();
       const alreadyLogged = (to: string, miles: number) => {
-        const hit = entries.find((e) => !usedEntries.has(e.id) && e.trip_date === date && e.job === to
-          && Math.abs(Number(e.total_miles || 0) - miles) < 0.2);
-        if (hit) usedEntries.add(hit.id);
+        const hit = candidates.find((e) => !usedEntries.has(e.key) && e.date === date && e.to === to
+          && Math.abs(e.miles - miles) < 0.2);
+        if (hit) usedEntries.add(hit.key);
         return !!hit;
       };
 
@@ -153,10 +180,10 @@ function SuggestedTrips({ entries, onAdded }: { entries: MileageEntry[]; onAdded
 
   // Resolves true when the trip landed (a failed write is already toasted by
   // db.post and stays un-logged so it can be retried).
-  const addLeg = async (idx: number): Promise<boolean> => {
+  const postLeg = async (idx: number): Promise<boolean> => {
     if (!legs || legs[idx].added) return false;
     const leg = legs[idx];
-    const saved = await db.post("mileage", {
+    const saved = await db.post<{ id?: string }>("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: leg.to,
@@ -166,22 +193,45 @@ function SuggestedTrips({ entries, onAdded }: { entries: MileageEntry[]; onAdded
       total_miles: leg.miles,
     });
     if (!saved) return false;
+    postedRef.current.push({ id: saved[0]?.id, date, to: leg.to, miles: leg.miles });
     setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, added: true } : l)) : prev);
     onAdded();
     return true;
   };
 
-  const addAll = async () => {
-    if (!legs) return;
-    let mi = 0;
-    for (let i = 0; i < legs.length; i++) {
-      if (legs[i].added) continue;
-      if (!(await addLeg(i))) break; // offline / failed — stop, don't toast-spam
-      mi += legs[i].miles;
+  const addLeg = async (idx: number) => {
+    if (addingRef.current) return;
+    addingRef.current = true;
+    setAdding(true);
+    try {
+      await postLeg(idx);
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
     }
-    if (mi > 0) {
-      const day = new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-      useStore.getState().showToast(t("loc.loggedToday").replace("{mi}", mi.toFixed(1)).replace("{date}", day), "success");
+  };
+
+  const addAll = async () => {
+    if (!legs || addingRef.current) return;
+    addingRef.current = true;
+    setAdding(true);
+    try {
+      let mi = 0;
+      let failed = false;
+      for (let i = 0; i < legs.length; i++) {
+        if (legs[i].added) continue;
+        // Offline / failed — stop, don't toast-spam. db.post's error toast
+        // stays up (no success toast over it) and the leg keeps its Add button.
+        if (!(await postLeg(i))) { failed = true; break; }
+        mi += legs[i].miles;
+      }
+      if (mi > 0 && !failed) {
+        const day = new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+        useStore.getState().showToast(t("loc.loggedToday").replace("{mi}", mi.toFixed(1)).replace("{date}", day), "success");
+      }
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
     }
   };
 
@@ -198,7 +248,9 @@ function SuggestedTrips({ entries, onAdded }: { entries: MileageEntry[]; onAdded
       </div>
       <div className="row mb" style={{ alignItems: "center" }}>
         <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setLegs(null); setNote(""); }} style={{ fontSize: 14, flex: 1 }} />
-        <button className="bb" onClick={findTrips} disabled={busy} style={{ fontSize: 14, padding: "6px 14px" }}>
+        {/* Find waits for the trip log — matching against an empty log would
+            offer every already-logged leg again. */}
+        <button className="bb" onClick={findTrips} disabled={busy || !loaded} style={{ fontSize: 14, padding: "6px 14px" }}>
           {busy ? t("loc.locating") : t("loc.findTrips")}
         </button>
       </div>
@@ -214,12 +266,12 @@ function SuggestedTrips({ entries, onAdded }: { entries: MileageEntry[]; onAdded
           {leg.added ? (
             <span style={{ fontSize: 13, color: "var(--color-success)", flexShrink: 0 }}>✓ {t("loc.logged")}</span>
           ) : (
-            <button className="bo" onClick={() => addLeg(i)} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0 }}>{t("sched.add")}</button>
+            <button className="bo" onClick={() => addLeg(i)} disabled={adding} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0 }}>{t("sched.add")}</button>
           )}
         </div>
       ))}
       {legs && pending.length > 1 && (
-        <button className="bg" onClick={addAll} style={{ fontSize: 14, padding: "6px 14px", marginTop: 8 }}>
+        <button className="bg" onClick={addAll} disabled={adding} style={{ fontSize: 14, padding: "6px 14px", marginTop: 8 }}>
           {t("loc.addAll")} {pending.length} ({pending.reduce((s, l) => s + l.miles, 0).toFixed(1)} mi)
         </button>
       )}
@@ -242,6 +294,11 @@ export default function Mileage(_props: Props) {
 
   const [entries, setEntries] = useState<MileageEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Bumped after every write; each bump refetches the log and only the newest
+  // fetch may land. (The old render-time fetch fired on every render while
+  // unloaded, and an older response arriving last dropped the newest row.)
+  const [reloadTick, setReloadTick] = useState(0);
+  const reload = () => { setLoaded(false); setReloadTick((n) => n + 1); };
 
   // Trip tracking state
   const [tripActive, setTripActive] = useState(false);
@@ -268,6 +325,7 @@ export default function Mileage(_props: Props) {
   // After End: review/adjust the ending odometer before saving.
   const [gpsReview, setGpsReview] = useState<{ miles: number; endOdo: string } | null>(null);
   const gpsInProgress = !!gpsTrip || !!gpsReview;
+  const savingTripRef = useRef(false);
 
   // Restore an in-progress trip on mount — the whole point: start, leave, return.
   useEffect(() => {
@@ -278,12 +336,15 @@ export default function Mileage(_props: Props) {
   }, []);
 
   // Load entries
-  if (!loaded) {
+  useEffect(() => {
+    let live = true;
     db.get<MileageEntry>("mileage", { user_id: user.id }).then((data) => {
+      if (!live) return;
       setEntries(data);
       setLoaded(true);
     });
-  }
+    return () => { live = false; };
+  }, [user.id, reloadTick]);
 
   const totalMiles = entries.reduce((s, e) => s + (e.total_miles || 0), 0);
   const thisWeek = (() => {
@@ -313,7 +374,7 @@ export default function Mileage(_props: Props) {
     if (end <= start) { useStore.getState().showToast("End miles must be greater than start", "warning"); return; }
     const total = end - start;
 
-    await db.post("mileage", {
+    const saved = await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: tripJob || "General",
@@ -322,12 +383,13 @@ export default function Mileage(_props: Props) {
       end_miles: end,
       total_miles: total,
     });
+    if (!saved) return; // db.post toasted — keep the readings so End can retry
 
     setTripActive(false);
     setStartMiles("");
     setEndMiles("");
     setTripJob("");
-    setLoaded(false);
+    reload();
   };
 
   // ── GPS snapshot trip ──
@@ -384,7 +446,7 @@ export default function Mileage(_props: Props) {
   // Save: prefer the (possibly corrected) odometer delta; fall back to the GPS
   // estimate when no starting odometer was entered.
   const saveGpsTrip = async () => {
-    if (!gpsTrip || !gpsReview) return;
+    if (!gpsTrip || !gpsReview || savingTripRef.current) return;
     const startNum = parseFloat(gpsTrip.startOdo);
     const endNum = parseFloat(gpsReview.endOdo);
     let start_miles = 0, end_miles = 0, total_miles = gpsReview.miles;
@@ -399,22 +461,32 @@ export default function Mileage(_props: Props) {
       useStore.getState().showToast(t("loc.noMovement"), "warning");
       return;
     }
-    await db.post("mileage", {
-      user_id: user.id,
-      user_name: user.name,
-      job: gpsTrip.job || "General",
-      trip_date: localYmd(new Date()),
-      start_miles,
-      end_miles,
-      total_miles,
-    });
-    try { localStorage.removeItem(TRIP_KEY); } catch { /* */ }
-    setGpsTrip(null);
-    setGpsReview(null);
-    setGpsStartOdo("");
-    setGpsJob("");
-    useStore.getState().showToast(`Logged ${total_miles.toFixed(1)} mi`, "success");
-    setLoaded(false);
+    savingTripRef.current = true;
+    setGpsBusy(true);
+    try {
+      const saved = await db.post("mileage", {
+        user_id: user.id,
+        user_name: user.name,
+        job: gpsTrip.job || "General",
+        trip_date: localYmd(new Date()),
+        start_miles,
+        end_miles,
+        total_miles,
+      });
+      // Failed (offline is common on the road) — db.post toasted. Keep the
+      // stored trip and the review up so Save can be tapped again.
+      if (!saved) return;
+      try { localStorage.removeItem(TRIP_KEY); } catch { /* */ }
+      setGpsTrip(null);
+      setGpsReview(null);
+      setGpsStartOdo("");
+      setGpsJob("");
+      useStore.getState().showToast(`Logged ${total_miles.toFixed(1)} mi`, "success");
+      reload();
+    } finally {
+      savingTripRef.current = false;
+      setGpsBusy(false);
+    }
   };
 
   // Cancel an in-progress / to-be-reviewed trip without logging anything.
@@ -427,7 +499,7 @@ export default function Mileage(_props: Props) {
   const addManual = async () => {
     const miles = parseFloat(mMiles);
     if (!miles || miles <= 0) { useStore.getState().showToast("Enter valid miles", "warning"); return; }
-    await db.post("mileage", {
+    const saved = await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: mJob || "General",
@@ -436,9 +508,10 @@ export default function Mileage(_props: Props) {
       end_miles: 0,
       total_miles: miles,
     });
+    if (!saved) return; // db.post toasted — keep what was typed
     setMMiles("");
     setMJob("");
-    setLoaded(false);
+    reload();
   };
 
   const org = useStore((s) => s.org);
@@ -555,7 +628,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 
       {/* Suggested trips first — end of day, one tap logs the day's
           drives (auto-built from the day's clocked jobs). */}
-      <SuggestedTrips entries={entries} onAdded={() => setLoaded(false)} />
+      <SuggestedTrips entries={entries} loaded={loaded} onAdded={reload} />
 
       {/* Stats */}
       <div className="g2 mb">
@@ -688,7 +761,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
               )}
               <div className="row" style={{ gap: 6 }}>
                 <button className="bo" onClick={discardGpsTrip} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Discard</button>
-                <button className="bb" onClick={saveGpsTrip} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Save trip</button>
+                <button className="bb" onClick={saveGpsTrip} disabled={gpsBusy} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Save trip</button>
               </div>
               {gpsErr && <p style={{ fontSize: 12.5, marginTop: 8, color: "var(--color-accent-red)" }}>{gpsErr}</p>}
             </div>
@@ -812,7 +885,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                 onClick={async () => {
                   if (!await useStore.getState().showConfirm("Delete Trip", "Delete this trip?")) return;
                   await db.del("mileage", e.id);
-                  setLoaded(false);
+                  reload();
                 }}
                 style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, marginLeft: 6, display: "inline-flex", alignItems: "center" }}
                 aria-label="Delete trip"

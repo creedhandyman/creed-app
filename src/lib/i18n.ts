@@ -122,6 +122,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.financials": "Money",
     "nav.work": "Work",
     "nav.help": "Help",
+    "nav.fixit": "Fix-it",
 
     // Dashboard
     "dash.welcome": "Welcome",
@@ -1235,6 +1236,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.financials": "Dinero",
     "nav.work": "Trabajo",
     "nav.help": "Ayuda",
+    "nav.fixit": "Arreglos",
 
     // Dashboard
     "dash.welcome": "Bienvenido",

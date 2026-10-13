@@ -26,6 +26,10 @@ export default function HR({ embedded }: { embedded?: boolean }) {
   const user = useStore((s) => s.user);
   const timeOffRequests = useStore((s) => s.timeOffRequests) ?? [];
   const loadAll = useStore((s) => s.loadAll);
+  // Empty lists only mean "nothing" once every table has loaded.
+  const loading = useStore((s) => s.loading);
+  const fullSyncAt = useStore((s) => s.fullSyncAt);
+  const dataReady = !loading && fullSyncAt !== null;
   const isAdmin = user?.role === "owner" || user?.role === "manager";
 
   if (!user) {
@@ -65,7 +69,7 @@ export default function HR({ embedded }: { embedded?: boolean }) {
             {t("hr.pendingTitle").replace("{n}", String(pending.length))}
           </h4>
           {pending.length === 0 ? (
-            <p className="dim" style={{ fontSize: 14 }}>{t("hr.noPending")}</p>
+            <p className="dim" style={{ fontSize: 14 }}>{dataReady ? t("hr.noPending") : t("common.loading")}</p>
           ) : (
             pending.map((r) => (
               <RequestRow key={r.id} req={r} actor={user.name} onChange={loadAll} />
@@ -74,7 +78,9 @@ export default function HR({ embedded }: { embedded?: boolean }) {
         </div>
       )}
 
-      <NewRequestForm userId={user.id} userName={user.name} requestCount={myRequests.length} onSubmitted={loadAll} />
+      {/* Starts open only for crew on a first visit (no requests yet, and the
+          list has actually loaded) — owners come here to approve. */}
+      <NewRequestForm userId={user.id} userName={user.name} startOpen={!isAdmin && dataReady && myRequests.length === 0} onSubmitted={loadAll} />
 
       <MyRequests requests={myRequests} />
     </div>
@@ -87,15 +93,15 @@ const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function NewRequestForm({
-  userId, userName, requestCount, onSubmitted,
+  userId, userName, startOpen, onSubmitted,
 }: {
   userId: string;
   userName: string;
-  /** The user's own request count — none yet means the form starts open. */
-  requestCount: number;
+  /** Crew with no requests yet land on the form already open. */
+  startOpen: boolean;
   onSubmitted: () => Promise<void>;
 }) {
-  const [open, setOpen] = useState(requestCount === 0);
+  const [open, setOpen] = useState(startOpen);
   const today = ymd(new Date());
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);

@@ -156,7 +156,7 @@ export default function Troubleshoot(_props: { setPage: (p: string) => void }) {
           </button>
           <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
             <Icon name="troubleshoot" size={20} color="var(--color-primary)" />
-            AI Troubleshooter
+            {t("more.troubleshoot")}
           </h2>
         </div>
         {messages.length > 0 && (

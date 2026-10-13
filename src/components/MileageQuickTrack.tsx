@@ -126,6 +126,13 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
     if (!trip) return;
     const miles = Math.round((trackerRef.current?.stop() ?? liveMiles) * 10) / 10;
     trackerRef.current = null;
+    // What's stored carries the latest fix — kept so a failed save can put
+    // the trip back instead of losing the miles.
+    let stored: GpsTrip = trip;
+    try {
+      const raw = localStorage.getItem(TRIP_KEY);
+      if (raw) stored = { ...trip, ...(JSON.parse(raw) as Partial<GpsTrip>) };
+    } catch { /* corrupt entry — fall back to the in-memory trip */ }
     try { localStorage.removeItem(TRIP_KEY); } catch { /* */ }
     setTrip(null);
     setLiveMiles(0);
@@ -136,7 +143,7 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
     }
     // LOCAL YYYY-MM-DD (toISOString is UTC — an evening trip landed on tomorrow).
     const now = new Date();
-    await db.post("mileage", {
+    const saved = await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: trip.job || job || "General",
@@ -145,6 +152,20 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
       end_miles: 0,
       total_miles: miles,
     });
+    if (!saved) {
+      // Offline (common while driving) or failed — db.post already toasted.
+      // Put the trip back, stopped at these miles, so Stop saves it again
+      // (unless a new drive was started meanwhile).
+      let free = true;
+      try { free = !localStorage.getItem(TRIP_KEY); } catch { /* */ }
+      if (free) {
+        const kept: GpsTrip = { ...stored, accMiles: miles };
+        try { localStorage.setItem(TRIP_KEY, JSON.stringify(kept)); } catch { /* */ }
+        setTrip(kept);
+        setLiveMiles(miles);
+      }
+      return;
+    }
     useStore.getState().showToast(`Logged ${miles.toFixed(1)} mi`, "success");
   };
 

@@ -37,6 +37,11 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const questPayouts = useStore((s) => s.questPayouts);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+  // "Everyone's paid up" only once every table has loaded — an empty store
+  // (first launch, offline with no snapshot) must not read as "nothing owed".
+  const loading = useStore((s) => s.loading);
+  const fullSyncAt = useStore((s) => s.fullSyncAt);
+  const dataReady = !loading && fullSyncAt !== null;
   // Inline dark tokens are fixed values — they don't flip for light mode.
   // These surface helpers keep rows/avatars readable (no black-on-black)
   // when the theme is light.
@@ -428,9 +433,13 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
             <Icon name="clients" size={13} /> Employees
           </div>
           {empRows.length === 0 ? (
-            <p style={{ fontSize: 14, marginBottom: 12, display: "flex", alignItems: "center", gap: 7, color: "var(--color-success)" }}>
-              <Icon name="checkCircle" size={16} color="var(--color-success)" /> {t("payroll.allPaidUp")}
-            </p>
+            dataReady ? (
+              <p style={{ fontSize: 14, marginBottom: 12, display: "flex", alignItems: "center", gap: 7, color: "var(--color-success)" }}>
+                <Icon name="checkCircle" size={16} color="var(--color-success)" /> {t("payroll.allPaidUp")}
+              </p>
+            ) : (
+              <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>{t("common.loading")}</p>
+            )
           ) : (
             empRows.map((r) => {
               const on = sel === r.id;

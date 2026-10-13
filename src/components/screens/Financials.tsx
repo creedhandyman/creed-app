@@ -78,14 +78,24 @@ export default function Financials({ setPage, embedded }: { setPage: (p: string)
   const monthSnap = range === "month"
     ? { completedRevenue, netProfit: profit }
     : profitSnapshot({ jobs, timeEntries, receipts, profiles, rangeStart: monthStart });
+  // What's still owed on a job = total minus what's already in (a deposit
+  // paid before invoicing) — the same balance Jobs → Billing and Home show,
+  // so the headline, the A/R card and the screen it opens agree.
+  const balanceDue = (j: { total?: number; amount_paid?: number }) =>
+    Math.max(0, Math.round(((j.total || 0) - (Number(j.amount_paid) || 0)) * 100) / 100);
   const owedNow = jobs
     .filter((j) => j.status === "invoiced" && !j.archived)
-    .reduce((s, j) => s + (j.total || 0), 0);
+    .reduce((s, j) => s + balanceDue(j), 0);
   const roundMoney = (n: number) => Math.round(n).toLocaleString();
+  // The template carries the "$" right before {kept}: swap both together so a
+  // loss month reads "-$850", not "$-850". (Function replacer: a "$" in the
+  // replacement string would otherwise be read as a replace pattern.)
+  const keptRounded = Math.round(monthSnap.netProfit);
+  const keptMoney = (keptRounded < 0 ? "-$" : "$") + Math.abs(keptRounded).toLocaleString();
   const headline = t("fin.headline")
     .replace("{month}", now.toLocaleDateString("en-US", { month: "long" }))
     .replace("{earned}", roundMoney(monthSnap.completedRevenue))
-    .replace("{kept}", roundMoney(monthSnap.netProfit))
+    .replace("${kept}", () => keptMoney)
     .replace("{owed}", roundMoney(owedNow));
 
   // A/R card → Jobs, Billing tab filtered to unpaid (one-shot handoff Jobs
@@ -539,7 +549,7 @@ export default function Financials({ setPage, embedded }: { setPage: (p: string)
           const bucket = buckets.find((b) => age >= b.min && age <= b.max);
           if (bucket) {
             bucket.count++;
-            bucket.total += j.total || 0;
+            bucket.total += balanceDue(j);
           }
         });
         const grandTotal = buckets.reduce((s, b) => s + b.total, 0);

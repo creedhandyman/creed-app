@@ -669,6 +669,10 @@ button:focus-visible {
   position: absolute;
   inset: -5px;
 }
+/* Icon buttons packed tight in a .row (gap 4px — Edit/Delete pairs): the
+   later sibling's halo paints on top, so a full 5px reach would cover the
+   gap AND the edge of the button before it. Split the gap instead. */
+.row > .iconbtn + .iconbtn::after { left: -2px; }
 .light .iconbtn {
   background: var(--color-card-light-2);
   border-color: var(--color-border-light-2);
