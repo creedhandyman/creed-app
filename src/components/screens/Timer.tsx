@@ -493,7 +493,10 @@ export default function Timer({ setPage }: Props) {
     .map((s) => {
       const linked = s.job_id
         ? jobs.find((j) => j.id === s.job_id)
-        : jobs.filter((j) => j.property === s.job && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+        // Legacy rows (no job_id): the job start() would rank first among the
+        // ones the picker shows, else the newest at the address.
+        : (jobs.find((j) => j.id === resolveActiveJobId(jobs.filter((x) => !x.archived && !PICKER_HIDDEN.includes(x.status)), s.job))
+          || jobs.filter((j) => j.property === s.job && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0]);
       return { s, linked };
     })
     .filter(({ linked }) => !linked || (!linked.archived && !["complete", "invoiced", "paid"].includes(linked.status)))
@@ -526,6 +529,9 @@ export default function Timer({ setPage }: Props) {
   // Forgotten clock-outs — open shifts from an earlier day or past the
   // long-shift limit, still unpaid. Feeds the Crew summary + the fix list.
   const staleOpen = timeEntries.filter((e) => !e.end_time && e.start_time && !e.paid_at && isStaleOpenEntry(e.entry_date, e.start_time));
+  // Today's open shifts that aren't forgotten ones — what "N on the clock" counts,
+  // so the topbar agrees with the summary's "Forgot to clock out?" line.
+  const liveSessions = activeSessions.filter((e) => !isStaleOpenEntry(e.entry_date, e.start_time));
 
   // Human-readable elapsed time: "2h 14m" / "45m" / "30s"
   const elapsedFrom = (startTimeStr: string, entryDate: string) => {
@@ -573,7 +579,7 @@ export default function Timer({ setPage }: Props) {
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("timer.title")}</span>
         </div>
         {tab === "crew" ? (
-          <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: activeSessions.length ? "#3ee08f" : "var(--color-dim)", fontWeight: 600 }}>{activeSessions.length} {t("timer.onTheClockCount")}</span>
+          <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: liveSessions.length ? "#3ee08f" : "var(--color-dim)", fontWeight: 600 }}>{liveSessions.length} {t("timer.onTheClockCount")}</span>
         ) : on ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
@@ -607,9 +613,9 @@ export default function Timer({ setPage }: Props) {
               >
                 <Icon name={tb.icon} size={14} color={tabOn ? "#fff" : "var(--color-dim)"} />
                 {tb.label}
-                {tb.id === "crew" && activeSessions.length > 0 && (
+                {tb.id === "crew" && liveSessions.length > 0 && (
                   <span style={{ fontSize: 12, padding: "1px 6px", borderRadius: 8, background: "var(--color-success)", color: "#fff", fontFamily: "Oswald" }}>
-                    {activeSessions.length}
+                    {liveSessions.length}
                   </span>
                 )}
               </button>

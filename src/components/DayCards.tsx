@@ -285,9 +285,19 @@ export function OwnerDay({ setPage, openJob, openOps }: {
   let needsYou: React.ReactNode = null;
   if (caughtUp) {
     // A collapsed wrap-up already says it (+ the quotes/invoices-out line). An
-    // open checklist (someone still on the clock, payday owed) doesn't — keep
-    // the caught-up card under it so what's out with customers stays on Home.
-    if (phase !== "wrap" || !wrapCollapsed) {
+    // open checklist (someone still on the clock, payday owed) must not sit
+    // over "You're all caught up" — keep only what's out with customers.
+    if (phase === "wrap" && !wrapCollapsed) {
+      if (outLine) {
+        needsYou = (
+          <div className="cd" onClick={outTap} style={{ ...GREEN_CARD, display: "flex", alignItems: "center", gap: 12, cursor: outTap ? "pointer" : "default" }}>
+            <Icon name="checkCircle" size={20} color="var(--color-success)" />
+            <div style={{ flex: 1, minWidth: 0, fontSize: 14 }}>{outLine}</div>
+            {outTap && <Icon name="next" size={15} color="var(--color-dim)" />}
+          </div>
+        );
+      }
+    } else if (phase !== "wrap") {
       needsYou = (
         <div className="cd" onClick={outTap} style={{ ...GREEN_CARD, display: "flex", alignItems: "center", gap: 12, cursor: outTap ? "pointer" : "default" }}>
           <Icon name="checkCircle" size={24} color="var(--color-success)" />

@@ -338,13 +338,22 @@ export default function Mileage(_props: Props) {
   // Load entries
   useEffect(() => {
     let live = true;
-    db.get<MileageEntry>("mileage", { user_id: user.id }).then((data) => {
+    // strict: a failed fetch must NOT blank the log and mark it loaded —
+    // Suggested trips' "already logged" check would then re-post every leg.
+    db.get<MileageEntry>("mileage", { user_id: user.id }, { strict: true }).then((data) => {
       if (!live) return;
       setEntries(data);
       setLoaded(true);
-    });
+    }).catch(() => { /* keep what we had; Find stays off until the log loads */ });
     return () => { live = false; };
   }, [user.id, reloadTick]);
+
+  // Signal back → reload the log (a failed load leaves Find disabled until then).
+  useEffect(() => {
+    const on = () => setReloadTick((n) => n + 1);
+    window.addEventListener("online", on);
+    return () => window.removeEventListener("online", on);
+  }, []);
 
   const totalMiles = entries.reduce((s, e) => s + (e.total_miles || 0), 0);
   const thisWeek = (() => {

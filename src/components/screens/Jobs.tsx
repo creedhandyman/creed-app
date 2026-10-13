@@ -753,9 +753,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           if (res.ok) { ok++; recorded += amount; } else failed++;
         } catch { failed++; }
       }
+      // Already-covered jobs are status-only flips, not payments — they count
+      // toward failures (so a failed flip warns) but not "Recorded N payments".
       for (const j of settled) {
-        if (await applyStatus(j.id, "paid")) ok++;
-        else failed++;
+        if (!(await applyStatus(j.id, "paid"))) failed++;
       }
     } finally {
       setBulkBusy(false);
@@ -1686,8 +1687,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                           // deposit that landed meanwhile would flip the QR to
                           // "Payment received" before the customer scans it.
                           await loadAll().catch(() => { /* keep the render-time value */ });
-                          const fresh =useStore.getState().jobs.find((x) => x.id === dj.id);
-                          setPayQR({ url: data.url, jobId: dj.id, amount: balanceDue, startPaid: Number(fresh?.amount_paid ?? dj.amount_paid) || 0 });
+                          const fresh = useStore.getState().jobs.find((x) => x.id === dj.id);
+                          // Show what Stripe will actually charge (checkout caps at the live balance).
+                          const freshDue = fresh ? balanceOf(fresh).due : balanceDue;
+                          setPayQR({ url: data.url, jobId: dj.id, amount: Math.min(balanceDue, freshDue), startPaid: Number(fresh?.amount_paid ?? dj.amount_paid) || 0 });
                         }
                         else useStore.getState().showToast(data.error || t("jobs.couldNotCreatePayment"), "error");
                       } catch { useStore.getState().showToast(t("jobs.failedCreatePayment"), "error"); }

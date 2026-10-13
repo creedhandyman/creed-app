@@ -28,6 +28,9 @@ interface GpsTrip {
   // when finishing a trip that was started here.
   startLat: number | null;
   startLng: number | null;
+  /** Stop was tapped but the save failed (offline): the miles are held here,
+   *  NOT tracking — a remount must not resume GPS from the old fix. */
+  stopped?: boolean;
 }
 
 export default function MileageQuickTrack({ job }: { job?: string }) {
@@ -75,9 +78,11 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
         startLng: saved.startLng ?? saved.lastLng ?? null,
         job: saved.job ?? "",
         startedAt: saved.startedAt ?? new Date().toISOString(),
+        stopped: saved.stopped,
       };
       setTrip(t);
       setLiveMiles(t.accMiles);
+      if (t.stopped) return; // held for a retry save — don't track
       const tracker = makeTracker(t);
       tracker.start((msg) => useStore.getState().showToast(msg, "error"));
       trackerRef.current = tracker;
@@ -159,7 +164,7 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
       let free = true;
       try { free = !localStorage.getItem(TRIP_KEY); } catch { /* */ }
       if (free) {
-        const kept: GpsTrip = { ...stored, accMiles: miles };
+        const kept: GpsTrip = { ...stored, accMiles: miles, stopped: true };
         try { localStorage.setItem(TRIP_KEY, JSON.stringify(kept)); } catch { /* */ }
         setTrip(kept);
         setLiveMiles(miles);
@@ -206,7 +211,8 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
       <span style={{
         width: 9, height: 9, borderRadius: "50%",
         background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)",
-        animation: "dotLive 1.8s ease-in-out infinite", flexShrink: 0,
+        animation: trip.stopped ? "none" : "dotLive 1.8s ease-in-out infinite", flexShrink: 0,
+        opacity: trip.stopped ? 0.5 : 1,
       }} />
       {/* live counter */}
       <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600 }}>
@@ -228,7 +234,8 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
           display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
         }}
       >
-        <Icon name="stop" size={12} color="#ff9d9d" /> Stop
+        {/* A held trip (save failed) isn't tracking — the button just retries the save. */}
+        <Icon name={trip.stopped ? "check" : "stop"} size={12} color="#ff9d9d" /> {trip.stopped ? "Save" : "Stop"}
       </button>
       {/* cancel */}
       <button

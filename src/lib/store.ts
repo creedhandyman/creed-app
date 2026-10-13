@@ -576,8 +576,10 @@ export const useStore = create<AppState>((set, get) => ({
     });
 
     // Persist a fresh snapshot so the next offline load has real data to show.
-    // Throttled (loadAll runs every 15s) to avoid churning IndexedDB.
-    if (Date.now() - lastSnapshotAt > 30000) {
+    // Throttled (loadAll runs every 15s) to avoid churning IndexedDB. Only a
+    // COMPLETE load is snapshotted — the offline path trusts the snapshot as a
+    // full sync (fullSyncAt), so a partial one would read as "nothing to do".
+    if (!results.some((r) => r === null) && Date.now() - lastSnapshotAt > 30000) {
       lastSnapshotAt = Date.now();
       void saveSnapshot(userId, orgId, {
         customers: customersF, addresses: addressesF, profiles: profilesF, jobs: jobsF, timeEntries: timeEntriesF,
