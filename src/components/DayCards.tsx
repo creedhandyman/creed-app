@@ -143,6 +143,9 @@ export function OwnerDay({ setPage, openJob, openOps }: {
   const loading = useStore((s) => s.loading);
   const fullSyncAt = useStore((s) => s.fullSyncAt);
   const dataReady = !loading && fullSyncAt !== null;
+  // Offline = a saved snapshot that may be hours old: who's on the clock RIGHT
+  // NOW can't be confirmed (same honesty as Time → Crew).
+  const usingOfflineData = useStore((s) => s.usingOfflineData);
 
   const now = new Date();
   const today = localYmd(now);
@@ -194,7 +197,9 @@ export function OwnerDay({ setPage, openJob, openOps }: {
     const rows: Row[] = [];
     rows.push(onClock.length
       ? { key: "crew", ok: false, text: fill(t("day.stillOn"), { names: firstNames(onClock.map((c) => c.name)) }), go: goCrew }
-      : { key: "crew", ok: true, text: t("day.crewOff") });
+      : usingOfflineData
+        ? { key: "crew", ok: false, text: t("timer.crewNotSynced"), go: goCrew }
+        : { key: "crew", ok: true, text: t("day.crewOff") });
     if (tomorrowStops.length) rows.push({ key: "tomorrow", ok: true, text: tomorrowText });
     if (toSchedule.length) rows.push({ key: "toSchedule", ok: false, text: toScheduleText, go: goDispatch });
     else if (!tomorrowStops.length) rows.push({ key: "tomorrow", ok: true, text: t("day.tomorrowNothing") });
@@ -272,7 +277,7 @@ export function OwnerDay({ setPage, openJob, openOps }: {
                 <span style={{ flex: 1, minWidth: 0 }}>{fill(t("day.onClock"), { names: firstNames(onClock.map((c) => c.name)) })}</span>
               </>
             ) : (
-              <span className="dim" style={{ flex: 1, minWidth: 0 }}>{t("day.noOneOnClock")}</span>
+              <span className="dim" style={{ flex: 1, minWidth: 0 }}>{usingOfflineData ? t("timer.crewNotSynced") : t("day.noOneOnClock")}</span>
             )}
             <Icon name="next" size={14} color="var(--color-dim)" />
           </div>
