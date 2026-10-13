@@ -1,6 +1,7 @@
 import {
   stopsForDay, nextStopFrom, isJobScheduled, needMatch, needsNudge, balanceDue,
   isEntryOnDay, crewStatus, dayPhase, myDay, fmtClock, addDaysYmd, localYmd,
+  parseSchedTime, techDayStops,
   type NeedKey,
 } from "@/lib/day-plan";
 import type { Job, Profile, ScheduleEntry, TimeEntry } from "@/lib/types";
@@ -125,6 +126,80 @@ describe("stopsForDay", () => {
     const next = nextStopFrom({ schedule, jobs, timeEntries: [], fromDay: DAY });
     expect(next?.day).toBe("2026-10-14");
     expect(next?.stop.entry.id).toBe("s2");
+  });
+});
+
+describe("parseSchedTime", () => {
+  test("Schedule's 24h times pass through unchanged", () => {
+    expect(parseSchedTime("🕐 14:05 · 👷 Ann")).toBe("14:05");
+    expect(parseSchedTime("🕐 8:00")).toBe("8:00");
+    expect(parseSchedTime("fix gate")).toBe("");
+    expect(parseSchedTime(null)).toBe("");
+  });
+
+  test("AppFolio am/pm times normalise to 24h HH:MM", () => {
+    expect(parseSchedTime("🕐 2:00pm")).toBe("14:00");
+    expect(parseSchedTime("🕐 10:30am · WO#123")).toBe("10:30");
+    expect(parseSchedTime("🕐 9:00am")).toBe("09:00");
+    expect(parseSchedTime("🕐 12:15am")).toBe("00:15");
+    expect(parseSchedTime("🕐 12:30pm")).toBe("12:30");
+    expect(parseSchedTime("🕐 2:00 PM")).toBe("14:00");
+    expect(parseSchedTime("🕐 2:00 p.m.")).toBe("14:00");
+  });
+
+  test("a word after the time isn't read as am/pm", () => {
+    expect(parseSchedTime("🕐 9:00 Amy's unit")).toBe("9:00");
+    expect(parseSchedTime("🕐 9:00 apartment 4")).toBe("9:00");
+  });
+
+  test("am/pm stops sort and format as clock times", () => {
+    const schedule = [
+      entry("s1", "1 Late St", "🕐 2:00pm"),
+      entry("s2", "2 Early Ave", "🕐 10:30am"),
+      entry("s3", "3 Mid Rd", "🕐 12:30pm"),
+    ];
+    const stops = stopsForDay({ schedule, jobs: [], timeEntries: [], day: DAY });
+    expect(stops.map((s) => s.entry.id)).toEqual(["s2", "s3", "s1"]);
+    expect(stops.map((s) => fmtClock(s.time))).toEqual(["10:30 AM", "12:30 PM", "2:00 PM"]);
+    expect(fmtClock(parseSchedTime("🕐 12:15am"))).toBe("12:15 AM");
+  });
+});
+
+describe("techDayStops", () => {
+  test("my stops when I have any; another crew's todo stop doesn't fill in once mine are done", () => {
+    // Bo's one stop is done (clocked out of it); Ann's 4:00 PM stop is still to do.
+    const schedule = [
+      entry("s1", "1 Main", "🕐 9:00 · 👷 Bo"),
+      entry("s2", "2 Oak", "🕐 16:00 · 👷 Ann"),
+    ];
+    const timeEntries = [te("t1", "1 Main", { user_id: "u2", user_name: "Bo", start_time: "09:00 AM", end_time: "11:00 AM", hours: 2 })];
+    const all = stopsForDay({ schedule, jobs: [], timeEntries, day: DAY, me: "Bo" });
+    expect(all.find((s) => s.entry.id === "s1")!.state).toBe("done");
+    const list = techDayStops(all);
+    expect(list).toEqual([]);
+    expect(dayPhase({ hour: 15.5, clockedIn: false, admin: false, todoStops: list.length, clockedOutToday: true })).toBe("wrap");
+  });
+
+  test("only my todo stops while I still have some", () => {
+    const schedule = [
+      entry("s1", "1 Main", "🕐 9:00 · 👷 Bo"),
+      entry("s2", "2 Oak", "🕐 11:00 · 👷 Bo"),
+      entry("s3", "3 Pine", "🕐 10:00 · 👷 Ann"),
+    ];
+    const timeEntries = [te("t1", "1 Main", { user_id: "u2", user_name: "Bo", start_time: "09:00 AM", end_time: "10:00 AM", hours: 1 })];
+    const list = techDayStops(stopsForDay({ schedule, jobs: [], timeEntries, day: DAY, me: "Bo" }));
+    expect(list.map((s) => s.entry.id)).toEqual(["s2"]);
+  });
+
+  test("nothing assigned to me today → everyone's stops still to do", () => {
+    const jobs = [job("j1", "1 Main", { status: "complete" })];
+    const schedule = [
+      entry("s1", "1 Main", "🕐 9:00 · 👷 Ann", { job_id: "j1" }),
+      entry("s2", "2 Oak", "🕐 13:00 · 👷 Ann"),
+    ];
+    const list = techDayStops(stopsForDay({ schedule, jobs, timeEntries: [], day: DAY, me: "Bo" }));
+    expect(list.map((s) => s.entry.id)).toEqual(["s2"]);
+    expect(list[0].mine).toBe(false);
   });
 });
 

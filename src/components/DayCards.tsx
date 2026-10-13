@@ -1,12 +1,12 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { t } from "@/lib/i18n";
+import { t, getLang } from "@/lib/i18n";
 import { formatHours, parseEntryDate } from "@/lib/dates";
 import { statusColor } from "@/lib/status";
 import { goWithIntent } from "@/lib/nav-intent";
 import {
-  stopsForDay, nextStopFrom, crewStatus, myDay, dayPhase, needMatch, needsNudge,
+  stopsForDay, techDayStops, nextStopFrom, crewStatus, myDay, dayPhase, needMatch, needsNudge,
   balanceDue, isJobScheduled, fmtClock, localYmd, addDaysYmd, NEED_TAB,
   type DayStop, type NeedKey,
 } from "@/lib/day-plan";
@@ -25,8 +25,10 @@ import { Icon, type IconName } from "./Icon";
  * the 2x2) — or one calm "all caught up" card once nothing needs the owner.
  * TechDay: time-off answer → Your day (or Done for today).
  *
- * Nothing claims "caught up" / done counts until the first sync has landed
- * (dataReady) — an empty store mid-load must not read as an empty day.
+ * Nothing claims "caught up" / "nothing today" / done counts until a COMPLETE
+ * sync has landed (dataReady = store.fullSyncAt, set only when every table
+ * loaded) — an empty store mid-load, or a table that failed to fetch, must not
+ * read as an empty day.
  */
 
 /** Replace {placeholders} in a t() string. */
@@ -39,9 +41,11 @@ const firstNames = (names: string[]) => Array.from(new Set(names.map(firstName).
 const stopsPhrase = (n: number) => (n === 1 ? t("day.stopsOne") : fill(t("day.stopsMany"), { n }));
 // Same flag the dashboard's Clock-in CTA reads (Timer/WorkVision write c_t_on).
 const isClockedIn = () => { try { return !!JSON.parse(localStorage.getItem("c_t_on") || "false"); } catch { return false; } };
+/** Date locale for weekday / month names — same rule as Payroll's dates. */
+const dateLocale = () => (getLang() === "es" ? "es" : "en-US");
 /** "Tomorrow" or the short weekday for a YYYY-MM-DD. */
 const dayLabel = (day: string, tomorrow: string) =>
-  day === tomorrow ? t("day.tomorrow") : new Date(day + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+  day === tomorrow ? t("day.tomorrow") : new Date(day + "T12:00:00").toLocaleDateString(dateLocale(), { weekday: "short" });
 /** "Tomorrow · 8:00 AM · 12 Oak St" — the next stop after an empty day. */
 const whenLine = (next: { stop: DayStop; day: string }, tomorrow: string) =>
   [dayLabel(next.day, tomorrow), fmtClock(next.stop.time), next.stop.entry.job].filter(Boolean).join(" · ");
@@ -137,8 +141,8 @@ export function OwnerDay({ setPage, openJob, openOps }: {
   const pendingMembers = useStore((s) => s.pendingMembers);
   const timeOffRequests = useStore((s) => s.timeOffRequests);
   const loading = useStore((s) => s.loading);
-  const lastSyncedAt = useStore((s) => s.lastSyncedAt);
-  const dataReady = !loading && lastSyncedAt !== null;
+  const fullSyncAt = useStore((s) => s.fullSyncAt);
+  const dataReady = !loading && fullSyncAt !== null;
 
   const now = new Date();
   const today = localYmd(now);
@@ -182,6 +186,9 @@ export function OwnerDay({ setPage, openJob, openOps }: {
 
   // ── Day card ──
   let dayCard: React.ReactNode;
+  // True once the wrap-up folds into one calm line — only then does it stand
+  // in for the caught-up card below.
+  let wrapCollapsed = false;
   if (phase === "wrap") {
     type Row = { key: string; ok: boolean; text: string; go?: () => void };
     const rows: Row[] = [];
@@ -204,6 +211,7 @@ export function OwnerDay({ setPage, openJob, openOps }: {
 
     if (rows.every((r) => r.ok) && actionable === 0) {
       // Everything's handled — one calm line instead of a checklist.
+      wrapCollapsed = true;
       dayCard = (
         <div className="cd" onClick={outTap} style={{ ...GREEN_CARD, cursor: outTap ? "pointer" : "default" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -243,29 +251,32 @@ export function OwnerDay({ setPage, openJob, openOps }: {
           n={stops.length}
           right={dataReady && stops.length ? fill(t("day.doneCount"), { done: doneN, total: stops.length }) : undefined}
         />
+        {/* Empty-day copy waits for a complete sync — mid-load the header stands alone. */}
         {stops.length ? (
           <StopList stops={stops} day={today} />
-        ) : (
+        ) : dataReady ? (
           <div style={{ marginTop: 6 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>{t("day.nothingToday")}</div>
             {next && <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{fill(t("day.nextOn"), { when: whenLine(next, tomorrow) })}</div>}
           </div>
-        )}
+        ) : null}
         {/* Crew line — who's out right now (taps through to Time → Crew). */}
-        <div
-          onClick={(e) => { e.stopPropagation(); goCrew(); }}
-          style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--color-border-dark)", fontSize: 13, cursor: "pointer" }}
-        >
-          {onClock.length ? (
-            <>
-              <span style={dot("var(--color-success)")} />
-              <span style={{ flex: 1, minWidth: 0 }}>{fill(t("day.onClock"), { names: firstNames(onClock.map((c) => c.name)) })}</span>
-            </>
-          ) : (
-            <span className="dim" style={{ flex: 1, minWidth: 0 }}>{t("day.noOneOnClock")}</span>
-          )}
-          <Icon name="next" size={14} color="var(--color-dim)" />
-        </div>
+        {(dataReady || onClock.length > 0) && (
+          <div
+            onClick={(e) => { e.stopPropagation(); goCrew(); }}
+            style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--color-border-dark)", fontSize: 13, cursor: "pointer" }}
+          >
+            {onClock.length ? (
+              <>
+                <span style={dot("var(--color-success)")} />
+                <span style={{ flex: 1, minWidth: 0 }}>{fill(t("day.onClock"), { names: firstNames(onClock.map((c) => c.name)) })}</span>
+              </>
+            ) : (
+              <span className="dim" style={{ flex: 1, minWidth: 0 }}>{t("day.noOneOnClock")}</span>
+            )}
+            <Icon name="next" size={14} color="var(--color-dim)" />
+          </div>
+        )}
       </div>
     );
   }
@@ -273,8 +284,10 @@ export function OwnerDay({ setPage, openJob, openOps }: {
   // ── Needs you ──
   let needsYou: React.ReactNode = null;
   if (caughtUp) {
-    // In the wrap-up the collapsed card / checklist already says it.
-    if (phase !== "wrap") {
+    // A collapsed wrap-up already says it (+ the quotes/invoices-out line). An
+    // open checklist (someone still on the clock, payday owed) doesn't — keep
+    // the caught-up card under it so what's out with customers stays on Home.
+    if (phase !== "wrap" || !wrapCollapsed) {
       needsYou = (
         <div className="cd" onClick={outTap} style={{ ...GREEN_CARD, display: "flex", alignItems: "center", gap: 12, cursor: outTap ? "pointer" : "default" }}>
           <Icon name="checkCircle" size={24} color="var(--color-success)" />
@@ -293,7 +306,7 @@ export function OwnerDay({ setPage, openJob, openOps }: {
       {
         key: "stale", n: stale.length, c: "#ffb15e", icon: "warn", go: goCrew,
         text: stale.length === 1
-          ? fill(t("day.openShiftOne"), { name: staleName(stale[0]), day: parseEntryDate(stale[0].entry_date)?.toLocaleDateString("en-US", { weekday: "long" }) || stale[0].entry_date })
+          ? fill(t("day.openShiftOne"), { name: staleName(stale[0]), day: parseEntryDate(stale[0].entry_date)?.toLocaleDateString(dateLocale(), { weekday: "long" }) || stale[0].entry_date })
           : fill(t("day.openShiftMany"), { n: stale.length }),
       },
       {
@@ -382,9 +395,10 @@ function fmtRange(start: string, end?: string): string {
   const s = parseEntryDate(start);
   const e = parseEntryDate(end || start);
   if (!s || !e) return start;
-  const md = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const md = (d: Date) => d.toLocaleDateString(dateLocale(), { month: "short", day: "numeric" });
   if (s.getTime() === e.getTime()) return md(s);
-  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) return `${md(s)}–${e.getDate()}`;
+  // "Oct 20–22" only reads right month-first (Spanish puts the day first).
+  if (getLang() !== "es" && s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) return `${md(s)}–${e.getDate()}`;
   return `${md(s)} – ${md(e)}`;
 }
 
@@ -398,8 +412,8 @@ export function TechDay({ setPage, openOps }: {
   const timeEntries = useStore((s) => s.timeEntries);
   const timeOffRequests = useStore((s) => s.timeOffRequests);
   const loading = useStore((s) => s.loading);
-  const lastSyncedAt = useStore((s) => s.lastSyncedAt);
-  const dataReady = !loading && lastSyncedAt !== null;
+  const fullSyncAt = useStore((s) => s.fullSyncAt);
+  const dataReady = !loading && fullSyncAt !== null;
   const uid = user.id;
   const seenKey = `creed_to_seen_${uid}`;
   // The time-off answer the tech already dismissed (one card per decision).
@@ -409,10 +423,9 @@ export function TechDay({ setPage, openOps }: {
   const now = new Date();
   const today = localYmd(now);
   const tomorrow = addDaysYmd(today, 1);
-  // Today's stops still to do — mine when I have any, else everyone's.
-  const todays = stopsForDay({ schedule, jobs, timeEntries, day: today, me }).filter((s) => s.state !== "done");
-  const mineToday = todays.filter((s) => s.mine);
-  const list = mineToday.length ? mineToday : todays;
+  // Today's stops still to do — mine when I have ANY today (done or not), else
+  // everyone's. Once my own stops are done the list is empty, so the card wraps.
+  const list = techDayStops(stopsForDay({ schedule, jobs, timeEntries, day: today, me }));
   const mine = myDay(timeEntries, user, today);
   const phase = dataReady
     ? dayPhase({ hour: now.getHours(), clockedIn: isClockedIn(), admin: false, todoStops: list.length, clockedOutToday: mine.clockedOutToday })
@@ -469,14 +482,15 @@ export function TechDay({ setPage, openOps }: {
     dayCard = (
       <div className="cd" onClick={() => setPage("workvision")} style={{ cursor: "pointer", padding: "12px 13px" }}>
         <DayHead title={t("day.yourDay")} n={list.length} />
+        {/* Empty-day copy waits for a complete sync — mid-load the header stands alone. */}
         {list.length ? (
           <StopList stops={list} day={today} showMine />
-        ) : (
+        ) : dataReady ? (
           <div style={{ marginTop: 6 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>{t("day.nothingYoursToday")}</div>
             {next && <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{fill(t("day.nextOn"), { when: whenLine(next, tomorrow) })}</div>}
           </div>
-        )}
+        ) : null}
       </div>
     );
   }

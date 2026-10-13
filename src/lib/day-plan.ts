@@ -47,9 +47,20 @@ export function isEntryOnDay(entryDate: string | null | undefined, ymd: string):
 
 // ── Schedule note parsing (Schedule.tsx stores "🕐 14:00 · 👷 Ann, Bo") ──
 
-/** "14:00" from the note's 🕐, or "" when untimed. */
-export const parseSchedTime = (note?: string | null): string =>
-  note?.match(/🕐\s*(\d{1,2}:\d{2})/)?.[1] || "";
+/** "14:00" from the note's 🕐, or "" when untimed. Schedule writes 24h
+ *  ("🕐 14:00", returned as-is); AppFolio imports write "🕐 2:00pm" /
+ *  "🕐 10:30 AM", normalised here to 24h "HH:MM" ("2:00pm" → "14:00",
+ *  "12:15am" → "00:15", "12:30pm" → "12:30") so sorting + fmtClock agree. */
+export function parseSchedTime(note?: string | null): string {
+  const m = note?.match(/🕐\s*(\d{1,2}):(\d{2})(?:\s*([ap])\.?\s?m\b\.?)?/i);
+  if (!m) return "";
+  const ap = m[3]?.toLowerCase();
+  if (!ap) return `${m[1]}:${m[2]}`;
+  let h = Number(m[1]);
+  if (ap === "p" && h < 12) h += 12;
+  else if (ap === "a" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
 
 /** Crew names from the note's 👷 list. */
 export const parseSchedCrew = (note?: string | null): string[] => {
@@ -152,6 +163,19 @@ export function stopsForDay({ schedule, jobs, timeEntries, day, me }: {
     (me ? Number(b.mine) - Number(a.mine) : 0)
     || minutesOf(a.time) - minutesOf(b.time)
     || (a.entry.job || "").localeCompare(b.entry.job || ""));
+}
+
+/**
+ * A tech's "Your day" list from ALL of today's stops (stopsForDay with `me`,
+ * done ones included): their own stops when they have any today — done or not
+ * — else everyone's (nothing assigned → see the crew's day). Then the done
+ * ones drop out. Deciding "have I got stops?" before dropping the done ones is
+ * what lets a tech wrap once THEIR stops are finished, instead of inheriting
+ * another crew's stop that's still to do.
+ */
+export function techDayStops(stops: DayStop[]): DayStop[] {
+  const hasMine = stops.some((s) => s.mine);
+  return (hasMine ? stops.filter((s) => s.mine) : stops).filter((s) => s.state !== "done");
 }
 
 /** The first stop still to do on `fromDay` or a later day (within maxDays). */

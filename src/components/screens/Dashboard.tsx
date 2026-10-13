@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { t } from "@/lib/i18n";
+import { t, getLang } from "@/lib/i18n";
 import { parseEntryDate, formatHours } from "@/lib/dates";
 import { Icon, type IconName } from "../Icon";
 import DashboardCardPreview from "../DashboardCardPreview";
@@ -13,7 +13,7 @@ import CountUp from "@/components/CountUp";
 import { useBackLayer } from "@/lib/back-layer";
 import { computeQuests, parseQuestConfig } from "@/lib/quests";
 import { goWithIntent } from "@/lib/nav-intent";
-import { stopsForDay, fmtClock, localYmd } from "@/lib/day-plan";
+import { stopsForDay, techDayStops, fmtClock, localYmd, type DayStop } from "@/lib/day-plan";
 
 interface Props {
   setPage: (p: string) => void;
@@ -61,7 +61,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   const myPays = payHistory.filter((p) => p.user_id === user.id);
   const lastPayRaw = myPays.length ? myPays[0].pay_date : null;
   const lastPayDate = lastPayRaw
-    ? parseEntryDate(lastPayRaw)?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) || lastPayRaw
+    ? parseEntryDate(lastPayRaw)?.toLocaleDateString(getLang() === "es" ? "es" : "en-US", { month: "short", day: "numeric" }) || lastPayRaw
     : null;
   // This-week vs last-week pay — the "watch it grow / beat last week" hook.
   // parseEntryDate keeps manual (ISO-dated) entries in the right week.
@@ -137,10 +137,16 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
       <Icon name="next" size={19} color="#fff" />
     </div>
   );
-  // Off the clock, the Clock-in CTA names the next stop still to do today
-  // (mine first) — "8:00 AM · 12 Oak St" — else the plain prompt.
-  const myNextStop = isClocked ? undefined
-    : stopsForDay({ schedule, jobs, timeEntries, day: localYmd(now), me: user.name }).find((s) => s.state !== "done");
+  // Off the clock, the Clock-in CTA names MY next stop still to do today —
+  // "8:00 AM · 12 Oak St" — else the plain prompt. Owner/manager: only stops
+  // they're on (a crew member's stop isn't theirs to clock into). Tech: the
+  // same list as TechDay's "Your day" (theirs when they have any today, else
+  // the crew's), so a tech whose own stops are done never gets someone else's.
+  const todayStops: DayStop[] = isClocked ? []
+    : stopsForDay({ schedule, jobs, timeEntries, day: localYmd(now), me: user.name });
+  const myNextStop = isAdmin
+    ? todayStops.find((s) => s.mine && s.state !== "done")
+    : techDayStops(todayStops)[0];
   const quoteCta = <Cta glow="blue" icon="quote" title={t("dash.startQuote")} sub={t("dash.quoteInspectUpload")} onClick={() => setPage("qf")} />;
   const clockCta = isClocked
     ? <Cta glow="green" icon="worker" title={t("wv.workMode")} sub={clockedJob || t("dash.onTheClock")} onClick={() => setPage("workvision")} />
