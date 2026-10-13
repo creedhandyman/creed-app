@@ -68,6 +68,23 @@ function resolveActiveJobId(jobs: Job[], address: string): string | undefined {
   return sorted[0]?.id;
 }
 
+// Job statuses the clock-in pickers hide (finished work + pre-quote
+// inspections). Mirrored in Timer.tsx — keep in sync.
+const PICKER_HIDDEN = ["complete", "invoiced", "paid", "inspection"];
+
+// Scheduled start from a schedule note's "🕐 …" as 24h "HH:MM", or "".
+// Schedule writes "🕐 14:30"; AppFolio imports write "🕐 2:30pm" — an
+// optional am/pm suffix is folded in. Mirrored in Timer.tsx schedMinutes.
+function schedTime24(note?: string): string {
+  const m = note?.match(/🕐\s*(\d{1,2}):(\d{2})\s*(?:([ap])\.?m\.?(?![a-z]))?/i);
+  if (!m) return "";
+  let h = parseInt(m[1], 10);
+  const ap = m[3]?.toLowerCase();
+  if (ap === "p" && h < 12) h += 12;
+  if (ap === "a" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
+
 // Photo entries on a job. The shape was originally {url,label,type} for
 // before/after/work uploads; rendered AI previews extend it with sourceUrl
 // (the photo this was generated from) + the prompt used + createdAt.
@@ -90,6 +107,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const dropTimeEntry = useStore((s) => s.dropTimeEntry);
   const bumpPendingUploads = useStore((s) => s.bumpPendingUploads);
   const darkMode = useStore((s) => s.darkMode);
+  // Every table loaded at least once — the "no open jobs" note waits for it
+  // so an empty store mid-load doesn't read as "nothing to clock into".
+  const loading = useStore((s) => s.loading);
+  const fullSyncAt = useStore((s) => s.fullSyncAt);
+  const dataReady = !loading && fullSyncAt !== null;
 
   const [on, setOn] = useState(() => ld("t_on", false));
   const [st, setSt] = useState(() => ld<number | null>("t_st", null));
@@ -165,16 +187,26 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return () => clearInterval(iv);
   }, [on, st]);
 
-  // Find the active job. Prefer the explicit FK we stamped at clock-in so two
-  // jobs at the same address don't collapse to whichever Array.find hits first
-  // — but only while it still matches the clocked-in address: a clock-in from
-  // the Time tab doesn't touch the pin, so a stale id must not hijack the
-  // checklist / photos / receipts / Complete Job. Fall back to address match
-  // for legacy clock-ins. General time (sj "") never resolves to a job.
+  // Find the active job. The open time entry's job_id comes first — both
+  // clock-in paths stamp it, and it's the job the hours land on, so the
+  // checklist / photos / receipts / Complete Job must follow it. Then the
+  // pin from clock-in, then the address, ranked like the clock-in resolves
+  // it (open jobs before finished ones) — never just the newest job at that
+  // address, which is often a fresh quote at repeat-work properties. Each
+  // only counts while it matches the clocked-in address. General time
+  // (sj "") never resolves to a job.
   const pinned = activeJobId ? jobs.find((j) => j.id === activeJobId) : undefined;
+  const openEntry = activeId ? timeEntries.find((e) => e.id === activeId) : undefined;
+  const stamped = openEntry?.job_id ? jobs.find((j) => j.id === openEntry.job_id) : undefined;
+  const byAddrId = sj
+    ? resolveActiveJobId(jobs.filter((j) => !j.archived && !PICKER_HIDDEN.includes(j.status)), sj) || resolveActiveJobId(jobs, sj)
+    : undefined;
+  const byAddr = byAddrId ? jobs.find((j) => j.id === byAddrId) : undefined;
   const activeJob = !sj
     ? undefined
-    : (pinned && pinned.property === sj ? pinned : jobs.find((j) => j.property === sj) || pinned);
+    : stamped && stamped.property === sj ? stamped
+    : pinned && pinned.property === sj ? pinned
+    : byAddr || pinned;
   const jobData = (() => {
     try { return activeJob ? (typeof activeJob.rooms === "string" ? JSON.parse(activeJob.rooms) : activeJob.rooms) : null; }
     catch { return null; }
@@ -279,8 +311,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Today's stops for the picker — same rules as Home's day plan / Schedule:
   // an entry's job is its linked job_id, else the latest non-archived job at
   // that address; archived or finished jobs drop out; time from the note's
-  // "🕐 HH:MM", crew from "👷 names" + the job's requested tech. My stops
-  // first, then by time (untimed last), then address.
+  // "🕐 HH:MM" (am/pm folded to 24h), crew from "👷 names" + the job's
+  // requested tech. My stops first, then by time (untimed last), then address.
   const todayStops = (() => {
     const latestAt = (property?: string) => property
       ? jobs.filter((j) => j.property === property && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0]
@@ -289,7 +321,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return todaySchedule
       .map((s) => {
         const job = (s.job_id ? jobs.find((j) => j.id === s.job_id) : undefined) || latestAt(s.job);
-        const time = s.note?.match(/🕐\s*(\d{1,2}:\d{2})/)?.[1] || "";
+        const time = schedTime24(s.note);
         const named = s.note?.match(/👷\s*([^·]+)/)?.[1]?.split(",").map((n) => n.trim()).filter(Boolean) || [];
         const crew = job?.requested_tech && !named.includes(job.requested_tech) ? [...named, job.requested_tech] : named;
         return { s, job, time, crew, mine: !!user.name && crew.includes(user.name) };
@@ -342,7 +374,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   };
   const clockInNow = async (job: string, jobId?: string) => {
     const startedAt = Date.now();
-    const resolvedJobId = jobId || resolveActiveJobId(jobs, job);
+    // Open (pickable) jobs first, like Timer.start — across ALL jobs a paid
+    // or archived job at the address can outrank the open one.
+    const resolvedJobId = jobId
+      || resolveActiveJobId(jobs.filter((j) => !j.archived && !PICKER_HIDDEN.includes(j.status)), job)
+      || resolveActiveJobId(jobs, job);
     setSj(job);
     setSt(startedAt);
     setOn(true);
@@ -743,7 +779,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         danger: false,
       });
       if (!ok) {
-        setSection(afterCount === 0 ? "photos" : "tasks");
+        // Missing after photos → land on Photos with the After tag set, so
+        // the next shots count (a fresh job starts on "Before", and those
+        // would never clear this check).
+        if (afterCount === 0) { setPhotoType("after"); setSection("photos"); }
+        else setSection("tasks");
         return;
       }
     }
@@ -934,9 +974,46 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     };
   };
 
+  // Overlays mount in BOTH branches, at the same spot after the screen, so
+  // they survive the switch: Complete Job clocks out (on → false) and only
+  // then opens the review request — when it lived in work mode alone it never
+  // showed, and its close (→ Home) never ran.
+  const overlays = (
+    <>
+      {finishModal}
+      {/* Shared AI render modal — seeded from the job's line items */}
+      <RenderModal
+        open={!!renderTarget}
+        onClose={closeRenderModal}
+        sourcePhotos={(jobData?.photos || []).filter((p: JobPhoto) => p.type !== "rendered")}
+        initialSourceUrl={renderTarget ?? undefined}
+        initialPrompt={buildRenderPrompt(jobData?.rooms || []).prompt}
+        promptMeta={buildRenderPrompt(jobData?.rooms || [])}
+        jobId={activeJob?.id}
+        onSaved={saveRenderedPhoto}
+      />
+      {/* Review-request modal — pops after a successful completeJob to
+          capture the client's goodwill before we navigate away. Closing
+          the modal (any path) finishes the navigation to dashboard. */}
+      <ReviewRequestModal
+        job={reviewJob}
+        onClose={() => { setReviewJob(null); setPage("dash"); }}
+        onSent={() => loadAll()}
+      />
+      <CameraModal
+        open={!!wvCam}
+        onClose={() => setWvCam(null)}
+        onCapture={(fs) => wvCam?.onFiles(fs)}
+        multiple={wvCam?.multiple ?? false}
+        title={wvCam?.title}
+      />
+    </>
+  );
+
   // ── NOT CLOCKED IN ──
   if (!on) {
     return (
+      <>
       <div className="fi">
         <div className="row mb" style={{ justifyContent: "space-between" }}>
           <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -970,27 +1047,34 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
         <div className="dim" style={{ fontSize: 15, margin: "0 2px 14px" }}>{t("wv.selectJob")}</div>
 
-        {/* Today's schedule — tap a card to clock in (mine first, by time) */}
+        {/* Today's schedule — tap a card to clock in (mine first, by time).
+            Clocks into the job the list vetted (linked, else the latest at
+            that address): a schedule row can outlive its job, and a dead
+            job_id would book hours to nothing. No job → address match. */}
         {todayStops.length > 0 && (
           <>
             <div className="sl" style={{ margin: "0 2px 7px" }}>{t("wv.todaySchedule")}</div>
             {todayStops.map(({ s, job, time, crew, mine }) => (
-              <div key={s.id} onClick={() => clockIn(s.job, s.job_id || job?.id || undefined)} className="cd" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", marginBottom: 8, cursor: "pointer" }}>
+              <div key={s.id} onClick={() => clockIn(s.job, job?.id)} className="cd" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", marginBottom: 8, cursor: "pointer" }}>
                 <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <Icon name="start" size={17} color="var(--color-success)" />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    {time && <span style={{ fontFamily: "Oswald", fontSize: 14, color: "var(--color-success)", flexShrink: 0 }}>{fmtClock(time)}</span>}
-                    <span style={{ fontWeight: 600, fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.job}</span>
-                    {mine && (
-                      <span style={{ fontSize: 11.5, padding: "1px 7px", borderRadius: 99, background: "rgba(0,204,102,.14)", color: "#3ee08f", border: "1px solid rgba(0,204,102,.4)", fontFamily: "Oswald", letterSpacing: ".04em", flexShrink: 0 }}>
-                        {t("day.yours")}
-                      </span>
-                    )}
-                  </div>
+                  {/* Time + "Yours" ride a small row above, so the address
+                      keeps the full width on a phone. */}
+                  {(time || mine) && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 1 }}>
+                      {time && <span style={{ fontFamily: "Oswald", fontSize: 13.5, color: "var(--color-success)" }}>{fmtClock(time)}</span>}
+                      {mine && (
+                        <span style={{ fontSize: 11.5, padding: "1px 7px", borderRadius: 99, background: "rgba(0,204,102,.14)", color: "#3ee08f", border: "1px solid rgba(0,204,102,.4)", fontFamily: "Oswald", letterSpacing: ".04em" }}>
+                          {t("day.yours")}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ fontWeight: 600, fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.job}</div>
                   {(() => {
-                    const cleanNote = (s.note || "").replace(/👷\s*[^·\n]+·?\s*/g, "").replace(/🕐\s*[\d:]+\s*·?\s*/g, "").trim();
+                    const cleanNote = (s.note || "").replace(/👷\s*[^·\n]+·?\s*/g, "").replace(/🕐\s*[\d:]+\s*(?:[ap]\.?m\.?(?![a-z]))?\s*·?\s*/gi, "").trim();
                     return (
                       <>
                         {crew.length > 0 && (
@@ -1027,12 +1111,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         {(() => {
           // Inspections are pre-quote walkthroughs, not billable work — keep
           // them out of the clock-in picker so techs can't clock into one.
-          const active = jobs.filter((j) => !j.archived && !["complete", "invoiced", "paid", "inspection"].includes(j.status));
+          const active = jobs.filter((j) => !j.archived && !PICKER_HIDDEN.includes(j.status));
           // Never a dead end: with no open jobs, shop / general time is still
           // one tap away.
           if (active.length === 0) return (
             <div className="cd" style={{ textAlign: "center", padding: 20 }}>
-              <p className="dim" style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 12 }}>{t("wv.noActiveHelp")}</p>
+              {/* "No open jobs" only once the jobs have loaded — mid-load (or
+                  a partial first load) it'd be a false claim. */}
+              {(dataReady || loading) && (
+                <p className="dim" style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 12 }}>{dataReady ? t("wv.noActiveHelp") : t("common.loading")}</p>
+              )}
               <button className="bo" onClick={() => clockIn("")} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14 }}>
                 <Icon name="hammer" size={15} /> {t("wv.shopTime")}
               </button>
@@ -1086,13 +1174,15 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           </>);
         })()}
       </div>
+      {overlays}
+      </>
     );
   }
 
   // ── CLOCKED IN — WORK MODE ──
   return (
+    <>
     <div className="fi">
-      {finishModal}
       {/* Topbar — back + title + live timer chip */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1947,36 +2037,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         </div>
       )}
       </div>{/* end swipeable */}
-
-      {/* AI Render modal — finished-look preview */}
-      {/* Shared AI render modal — seeded from the job's line items */}
-      <RenderModal
-        open={!!renderTarget}
-        onClose={closeRenderModal}
-        sourcePhotos={(jobData?.photos || []).filter((p: JobPhoto) => p.type !== "rendered")}
-        initialSourceUrl={renderTarget ?? undefined}
-        initialPrompt={buildRenderPrompt(jobData?.rooms || []).prompt}
-        promptMeta={buildRenderPrompt(jobData?.rooms || [])}
-        jobId={activeJob?.id}
-        onSaved={saveRenderedPhoto}
-      />
-
-      {/* Review-request modal — pops after a successful completeJob to
-          capture the client's goodwill before we navigate away. Closing
-          the modal (any path) finishes the navigation to dashboard. */}
-      <ReviewRequestModal
-        job={reviewJob}
-        onClose={() => { setReviewJob(null); setPage("dash"); }}
-        onSent={() => loadAll()}
-      />
-      <CameraModal
-        open={!!wvCam}
-        onClose={() => setWvCam(null)}
-        onCapture={(fs) => wvCam?.onFiles(fs)}
-        multiple={wvCam?.multiple ?? false}
-        title={wvCam?.title}
-      />
     </div>
+    {overlays}
+    </>
   );
 }
 
@@ -1986,6 +2049,35 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 // `rooms` blob and merges in the new note so it can't accidentally wipe a
 // concurrent toggle/photo write. Mirrors the pattern in Jobs.tsx
 // JobNotesInput — kept in sync with that component.
+//
+// Notes that haven't reached the server (offline / failed save), by job id.
+// Module-level so they outlive the editor — the Notes tab unmounts on every
+// tab switch — and get pushed by the listener below once back online.
+const pendingNotes = new Map<string, string>();
+// Write one job's note. Resolves true once it landed; a failure stays in
+// pendingNotes. On success the store copy gets the note too (merged into the
+// CURRENT blob), so reopening Notes — or the next toggle/photo write, which
+// spreads the store's blob — doesn't bring the old note back.
+async function saveJobNote(jobId: string, note: string): Promise<boolean> {
+  pendingNotes.set(jobId, note);
+  try {
+    const fresh = useStore.getState().jobs.find((x) => x.id === jobId);
+    if (!fresh) { pendingNotes.delete(jobId); return false; } // job gone / signed out
+    const d = typeof fresh.rooms === "string" ? (JSON.parse(fresh.rooms) || {}) : (fresh.rooms || {});
+    d.jobNotes = note;
+    if (!(await db.patch("jobs", jobId, { rooms: JSON.stringify(d) }))) return false;
+    if (pendingNotes.get(jobId) === note) pendingNotes.delete(jobId);
+    useStore.setState({ jobs: useStore.getState().jobs.map((j) => {
+      if (j.id !== jobId) return j;
+      try { const cur = (typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms) || {}; return { ...j, rooms: JSON.stringify({ ...cur, jobNotes: note }) }; } catch { return j; }
+    }) });
+    return true;
+  } catch { return false; /* db helper toasts the error */ }
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => { pendingNotes.forEach((note, id) => { void saveJobNote(id, note); }); });
+}
+
 function JobNotesEditor({ jobId }: { jobId: string }) {
   const initial = (() => {
     try {
@@ -1995,40 +2087,28 @@ function JobNotesEditor({ jobId }: { jobId: string }) {
       return d?.jobNotes || "";
     } catch { return ""; }
   })();
-  const [value, setValue] = useState(initial);
+  // An unsaved note from an earlier visit comes back — still "unsaved"
+  // against the store copy (lastSaved), so blur / unmount retry it.
+  const [value, setValue] = useState(() => pendingNotes.get(jobId) ?? initial);
   const lastSaved = useRef(initial);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const valueRef = useRef(value);
   valueRef.current = value;
 
   const save = async (note: string) => {
-    if (note === lastSaved.current) return;
-    try {
-      const fresh = useStore.getState().jobs.find((x) => x.id === jobId);
-      if (!fresh) return;
-      const d = typeof fresh.rooms === "string"
-        ? (JSON.parse(fresh.rooms) || {})
-        : (fresh.rooms || {});
-      d.jobNotes = note;
-      // Only mark it saved once the write landed — a failed save (no signal)
-      // stays pending and is retried on the next edit/blur or on reconnect.
-      const ok = await db.patch("jobs", jobId, { rooms: JSON.stringify(d) });
-      if (ok) lastSaved.current = note;
-    } catch { /* swallow — db helper toasts the error */ }
+    if (note === lastSaved.current) { pendingNotes.delete(jobId); return; }
+    // Only mark it saved once the write landed — a failed save (no signal)
+    // stays pending: retried on the next edit/blur/unmount or on reconnect.
+    if (await saveJobNote(jobId, note)) lastSaved.current = note;
   };
 
   useEffect(() => {
-    // Back online → push a note that failed to save while offline.
-    const onOnline = () => { if (valueRef.current !== lastSaved.current) void save(valueRef.current); };
-    window.addEventListener("online", onOnline);
     return () => {
-      window.removeEventListener("online", onOnline);
-      if (timer.current) {
-        clearTimeout(timer.current);
-        // Fire-and-forget flush. We don't await on unmount because React
-        // unmount handlers can't be async and we don't want to block.
-        save(valueRef.current);
-      }
+      if (timer.current) clearTimeout(timer.current);
+      // Anything unsaved (a pending debounce OR a save that failed) flushes —
+      // fire-and-forget; unmount handlers can't await. Still failing → it
+      // sits in pendingNotes for the reconnect retry.
+      if (valueRef.current !== lastSaved.current) void save(valueRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

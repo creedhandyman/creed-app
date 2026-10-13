@@ -154,10 +154,17 @@ function peekNavIntent(page: string) { try { const raw = sessionStorage.getItem(
 const PICKER_HIDDEN = ["complete", "invoiced", "paid", "inspection"];
 
 // Scheduled start time ("🕐 09:30" in the schedule note) as minutes since
-// midnight, for ordering today's chips; untimed entries sort last.
+// midnight, for ordering today's chips; untimed entries sort last. AppFolio
+// imports write "🕐 2:30pm" — an optional am/pm suffix folds to 24h.
+// Mirrored in WorkVision.tsx schedTime24.
 const schedMinutes = (note?: string): number => {
-  const m = note?.match(/🕐\s*(\d{1,2}):(\d{2})/);
-  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 24 * 60;
+  const m = note?.match(/🕐\s*(\d{1,2}):(\d{2})\s*(?:([ap])\.?m\.?(?![a-z]))?/i);
+  if (!m) return 24 * 60;
+  let h = parseInt(m[1], 10);
+  const ap = m[3]?.toLowerCase();
+  if (ap === "p" && h < 12) h += 12;
+  if (ap === "a" && h === 12) h = 0;
+  return h * 60 + parseInt(m[2], 10);
 };
 
 // Composite sort key for a time entry. entry_date may be "YYYY-MM-DD" or
@@ -197,6 +204,12 @@ export default function Timer({ setPage }: Props) {
   const saveTimeEntry = useStore((s) => s.saveTimeEntry);
   const dropTimeEntry = useStore((s) => s.dropTimeEntry);
   const darkMode = useStore((s) => s.darkMode);
+  // Crew's "everyone's off" all-clear needs live, complete data: not the
+  // offline snapshot (could predate this morning's clock-ins), not mid-load.
+  const loading = useStore((s) => s.loading);
+  const fullSyncAt = useStore((s) => s.fullSyncAt);
+  const usingOfflineData = useStore((s) => s.usingOfflineData);
+  const crewSynced = !usingOfflineData && !loading && fullSyncAt !== null;
   // Inline dark tokens are fixed values — they don't flip for light mode.
   // These helpers keep nested fills/avatars/chips readable (no black-on-black)
   // when the theme is light.
@@ -324,7 +337,11 @@ export default function Timer({ setPage }: Props) {
     clockBusyRef.current = true;
     try {
     const startedAt = Date.now();
-    const jid = jobId || resolveActiveJobId(jobs, job);
+    // Resolve from the jobs the picker actually shows first — across ALL jobs
+    // a paid or archived job at the address can outrank the open one picked.
+    const jid = jobId
+      || resolveActiveJobId(jobs.filter((j) => !j.archived && !PICKER_HIDDEN.includes(j.status)), job)
+      || resolveActiveJobId(jobs, job);
     setSj(job);
     setSt(startedAt);
     setOn(true);
@@ -469,15 +486,19 @@ export default function Timer({ setPage }: Props) {
   // One-tap chips: today's visits in start-time order (untimed last), minus
   // visits whose job is already done or archived. The linked job is the
   // entry's job_id, else (legacy rows) the newest non-archived job there.
+  // The chip clocks into exactly the job it vetted; a job_id whose job is
+  // gone (deleted + re-made) carries none, so start() matches the address
+  // instead of booking hours to a dead id.
   const todayChips = todayJobs
-    .filter((s) => {
+    .map((s) => {
       const linked = s.job_id
         ? jobs.find((j) => j.id === s.job_id)
         : jobs.filter((j) => j.property === s.job && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
-      return !linked || (!linked.archived && !["complete", "invoiced", "paid"].includes(linked.status));
+      return { s, linked };
     })
-    .sort((a, b) => schedMinutes(a.note) - schedMinutes(b.note))
-    .map((s) => ({ key: s.id, label: s.job, val: s.job, jobId: s.job_id || undefined }));
+    .filter(({ linked }) => !linked || (!linked.archived && !["complete", "invoiced", "paid"].includes(linked.status)))
+    .sort((a, b) => schedMinutes(a.s.note) - schedMinutes(b.s.note))
+    .map(({ s, linked }) => ({ key: s.id, label: s.job, val: s.job, jobId: linked?.id }));
 
   // My time entries — exclude the still-open active row (zero hours, no end_time)
   // from the completed log so a user mid-clock doesn't see a ghost entry.
@@ -685,7 +706,7 @@ export default function Timer({ setPage }: Props) {
             >
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} (${p.rate}/hr)
+                  {p.name} ({(p.rate || 0) > 0 ? `$${p.rate}/hr` : t("timer.noRate")})
                 </option>
               ))}
             </select>
@@ -848,27 +869,50 @@ export default function Timer({ setPage }: Props) {
       {/* ── Crew Activity tab (admin only) ── */}
       {tab === "crew" && isOwner && (<>
         {/* Summary — the one answer an owner wants at day's end: is everyone
-            out? Open shifts (today's or forgotten ones) name who's still on. */}
+            out? Live shifts name who's still on; forgotten ones (an earlier
+            day / past the long-shift limit — not "on the clock", matching
+            the count above and Home's crew line) get their own wording. */}
         {(() => {
-          const stillOn = Array.from(new Set([...activeSessions, ...staleOpen].map((e) => {
-            const who = profiles.find((p) => p.id === e.user_id) || profiles.find((p) => p.name === e.user_name);
-            return (who?.name || e.user_name || "Crew").split(" ")[0];
-          })));
-          if (!stillOn.length) {
-            const crewTodayHrs = profiles.reduce((s, p) => s + timeEntries
-              .filter((e) => (e.user_id === p.id || e.user_name === p.name) && isTodayDate(e.entry_date))
-              .reduce((a, e) => a + (e.hours || 0), 0), 0);
+          // One name per person (by id, else name): first names, or the full
+          // name when two people share a first name.
+          const namesOf = (rows: typeof timeEntries) => {
+            const people = new Map<string, string>();
+            rows.forEach((e) => {
+              const who = profiles.find((p) => p.id === e.user_id) || profiles.find((p) => p.name === e.user_name);
+              const key = who?.id || e.user_id || e.user_name || e.id;
+              if (!people.has(key)) people.set(key, who?.name || e.user_name || "Crew");
+            });
+            const full = Array.from(people.values());
+            const first = full.map((n) => n.split(" ")[0]);
+            return full.map((n, i) => (first.filter((f) => f === first[i]).length > 1 ? n : first[i])).join(", ");
+          };
+          const live = activeSessions.filter((e) => !isStaleOpenEntry(e.entry_date, e.start_time));
+          if (live.length || staleOpen.length) {
             return (
-              <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.32)" }}>
-                <Icon name="checkCircle" size={17} color="var(--color-success)" />
-                <span style={{ fontSize: 13.5, fontWeight: 600 }}>{t("timer.everyoneOff").replace("{hrs}", formatHours(crewTodayHrs))}</span>
+              <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "1px solid rgba(255,177,94,.45)" }}>
+                <Icon name={live.length ? "time" : "warn"} size={17} color="#ffb15e" />
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: "#ffb15e" }}>
+                  {live.length
+                    ? t("timer.stillOnClock").replace("{names}", namesOf(live))
+                    : `${t("timer.forgotClockOut")} ${namesOf(staleOpen)}`}
+                </span>
               </div>
             );
           }
+          // No open shifts in the store — but offline (an old snapshot) or
+          // before a full load that's not proof everyone's out. Say so plainly.
+          if (!crewSynced) {
+            return (
+              <div className="cd mb dim" style={{ padding: "10px 12px", fontSize: 13.5 }}>{t("timer.crewNotSynced")}</div>
+            );
+          }
+          const crewTodayHrs = profiles.reduce((s, p) => s + timeEntries
+            .filter((e) => (e.user_id === p.id || e.user_name === p.name) && isTodayDate(e.entry_date))
+            .reduce((a, e) => a + (e.hours || 0), 0), 0);
           return (
-            <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "1px solid rgba(255,177,94,.45)" }}>
-              <Icon name="time" size={17} color="#ffb15e" />
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: "#ffb15e" }}>{t("timer.stillOnClock").replace("{names}", stillOn.join(", "))}</span>
+            <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: "rgba(0,204,102,.08)", border: "1px solid rgba(0,204,102,.32)" }}>
+              <Icon name="checkCircle" size={17} color="var(--color-success)" />
+              <span style={{ fontSize: 13.5, fontWeight: 600 }}>{t("timer.everyoneOff").replace("{hrs}", formatHours(crewTodayHrs))}</span>
             </div>
           );
         })()}
@@ -942,7 +986,7 @@ export default function Timer({ setPage }: Props) {
                     <div className="dim" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {isActive ? (<><Icon name="mapPin" size={11} color="var(--color-dim)" /> {activeEntry!.job || t("timer.general")}</>)
                         : lastOut ? (<><Icon name="time" size={11} color="var(--color-dim)" /> {t("timer.lastOut").replace("{time}", lastOut).replace("{hrs}", formatHours(todayHrs))}</>)
-                        : `${p.role} · $${rRate}/hr`}
+                        : `${p.role} · ${(p.rate || 0) > 0 ? `$${p.rate}/hr` : t("timer.noRate")}`}
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
