@@ -3533,9 +3533,15 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           message={sendSheet.message}
           onClose={() => setSendSheet(null)}
           onSent={() => {
-            void markQuoteSent(sendSheet.jobId).then(async (ok) => {
+            const jobId = sendSheet.jobId;
+            void markQuoteSent(jobId).then(async (ok) => {
               await loadAll();
-              if (ok) useStore.getState().showToast(t("jobs.quoteMarkedSent"), "success");
+              if (!ok) return;
+              // "Waiting on customer" only lists quoted jobs — a re-sent
+              // accepted/scheduled/etc. quote stays in its own column.
+              const st = useStore.getState();
+              const isQuoted = st.jobs.find((j) => j.id === jobId)?.status === "quoted";
+              st.showToast(isQuoted ? t("jobs.quoteMarkedSent") : t("qf.quoteSent"), "success");
             });
           }}
         />
