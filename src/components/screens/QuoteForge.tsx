@@ -3563,8 +3563,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         <Icon name="briefcase" size={13} color="#c9a6ff" /> Save as template
       </button>
       {savingTemplate && (
-        <div onClick={() => setSavingTemplate(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
-          <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380 }}>
+        <div onClick={() => setSavingTemplate(false)} className="sheet-overlay" style={{ zIndex: 200 }}>
+          <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxWidth: 420 }}>
             <h4 style={{ fontSize: 16, marginBottom: 8 }}>Save as template</h4>
             <input autoFocus value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Template name (e.g. Water heater swap)" style={{ width: "100%", marginBottom: 10 }} />
             <div className="row" style={{ gap: 6 }}>

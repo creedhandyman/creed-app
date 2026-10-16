@@ -450,15 +450,12 @@ function NewFromJobPicker({
   return (
     <div
       onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 1500,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-      }}
+      className="sheet-overlay"
+      style={{ zIndex: 1500 }}
     >
       <div
-        className="cd"
+        className="cd sheet"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 480 }}
       >
         <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ fontSize: 17 }}>New recurring template</h3>

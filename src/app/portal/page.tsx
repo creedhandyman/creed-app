@@ -474,6 +474,9 @@ const postJson = (path: string, body: object) =>
 
 function MembershipCard({ m, onStatus }: { m: PortalMembership; onStatus: (id: string, status: string) => void }) {
   const [busy, setBusy] = useState<"" | "card" | "pause" | "cancel">("");
+  // In-page confirm + error (replaced the browser's window.confirm/alert).
+  const [ask, setAsk] = useState<null | "pause" | "cancel">(null);
+  const [err, setErr] = useState("");
   const paused = m.status === "paused";
   const chip =
     m.status === "active" ? { bg: "rgba(0,204,102,.18)", c: "#3ee08f", label: "Active" }
@@ -488,41 +491,41 @@ function MembershipCard({ m, onStatus }: { m: PortalMembership; onStatus: (id: s
       : price ? `${price} / ${intervalWord(m.plan?.interval)} · renews automatically` : "";
 
   const updateCard = async () => {
-    setBusy("card");
+    setBusy("card"); setErr("");
     try {
       const res = await postJson("/api/portal/membership-card", { membershipId: m.id });
       const d = await res.json().catch(() => ({}));
       if (res.ok && d.url) { window.location.href = d.url; return; }
-      window.alert(d?.error || "Couldn't open the card update page — please try again.");
-    } catch { window.alert("Network error — please try again."); }
+      setErr(d?.error || "Couldn't open the card update page — please try again.");
+    } catch { setErr("Network error — please try again."); }
     setBusy("");
   };
 
-  const pauseResume = async () => {
+  const pauseResume = async (confirmed = false) => {
     const action = paused ? "resume" : "pause";
-    if (!paused && !window.confirm("Pause your plan? Billing and service visits stop until you resume.")) return;
-    setBusy("pause");
+    if (!paused && !confirmed) { setAsk("pause"); return; }
+    setAsk(null); setBusy("pause"); setErr("");
     try {
       const res = await postJson("/api/portal/membership-pause", { membershipId: m.id, action });
       if (res.ok) {
         onStatus(m.id, action === "pause" ? "paused" : "active");
       } else {
         const d = await res.json().catch(() => ({}));
-        window.alert(d?.error || "Couldn't update the plan — please try again.");
+        setErr(d?.error || "Couldn't update the plan — please try again.");
       }
-    } catch { window.alert("Network error — please try again."); }
+    } catch { setErr("Network error — please try again."); }
     setBusy("");
   };
 
-  const cancel = async () => {
-    if (!window.confirm(`Cancel your ${m.plan?.name || "membership"}? Billing will stop and no more visits will be scheduled.`)) return;
-    setBusy("cancel");
+  const cancel = async (confirmed = false) => {
+    if (!confirmed) { setAsk("cancel"); return; }
+    setAsk(null); setBusy("cancel"); setErr("");
     try {
       const res = await postJson("/api/portal/membership-cancel", { membershipId: m.id });
       if (res.ok) { onStatus(m.id, "cancelled"); return; }
       const d = await res.json().catch(() => ({}));
-      window.alert(d?.error || "Couldn't cancel — please try again or contact your provider.");
-    } catch { window.alert("Network error — please try again."); }
+      setErr(d?.error || "Couldn't cancel — please try again or contact your provider.");
+    } catch { setErr("Network error — please try again."); }
     setBusy("");
   };
 
@@ -578,7 +581,7 @@ function MembershipCard({ m, onStatus }: { m: PortalMembership; onStatus: (id: s
           <Icon name="pay" size={12} color="#acd2ff" /> {busy === "card" ? "Opening…" : "Update card"}
         </button>
         <button
-          onClick={pauseResume}
+          onClick={() => pauseResume()}
           disabled={busy !== ""}
           style={{ ...btnStyle, background: "#1c1c28", border: "1px solid #2a2a3a", color: "#cfd2da", opacity: busy === "pause" ? 0.6 : 1 }}
         >
@@ -586,27 +589,61 @@ function MembershipCard({ m, onStatus }: { m: PortalMembership; onStatus: (id: s
         </button>
       </div>
       <button
-        onClick={cancel}
+        onClick={() => cancel()}
         disabled={busy !== ""}
         style={{ display: "block", width: "100%", textAlign: "center", fontSize: 11.5, color: "#666", marginTop: 10, textDecoration: "underline", cursor: busy === "cancel" ? "wait" : "pointer", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}
       >
         {busy === "cancel" ? "Cancelling…" : "Cancel membership"}
       </button>
+      {err && <div role="alert" style={{ marginTop: 10, fontSize: 12.5, color: "#ff8a8a", textAlign: "center" }}>{err}</div>}
+
+      {ask && (
+        <div className="sheet-overlay" onClick={() => setAsk(null)} style={{ zIndex: 1000 }}>
+          <div
+            className="sheet"
+            role="alertdialog"
+            aria-label={ask === "cancel" ? "Cancel membership" : "Pause plan"}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 420, background: "#12121a", color: "#e8e8ee", borderTop: `3px solid ${ask === "cancel" ? "#e5484d" : "#9d4edd"}` }}
+          >
+            <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 18, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8 }}>
+              {ask === "cancel" ? `Cancel your ${m.plan?.name || "membership"}?` : "Pause your plan?"}
+            </div>
+            <div style={{ fontSize: 14.5, color: "#b5b5c0", lineHeight: 1.5, marginBottom: 16 }}>
+              {ask === "cancel"
+                ? "Billing will stop and no more visits will be scheduled."
+                : "Billing and service visits stop until you resume. You can resume anytime."}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setAsk(null)} style={{ flex: 1, padding: "13px 10px", borderRadius: 10, border: "1px solid #2a2a3a", background: "transparent", color: "#cfd2da", fontFamily: "Oswald, sans-serif", fontSize: 14, textTransform: "uppercase", cursor: "pointer" }}>
+                {ask === "cancel" ? "Keep my plan" : "Not now"}
+              </button>
+              <button
+                onClick={() => (ask === "cancel" ? cancel(true) : pauseResume(true))}
+                style={{ flex: 1, padding: "13px 10px", borderRadius: 10, border: "none", background: ask === "cancel" ? "#c62828" : "#7b3fc4", color: "#fff", fontFamily: "Oswald, sans-serif", fontSize: 14, textTransform: "uppercase", cursor: "pointer" }}
+              >
+                {ask === "cancel" ? "Cancel membership" : "Pause plan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function JoinPlanCard({ plan }: { plan: PortalPlan }) {
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
   const perks = perkList(plan);
   const join = async () => {
-    setBusy(true);
+    setBusy(true); setErr("");
     try {
       const res = await postJson("/api/portal/membership-checkout", { planId: plan.id });
       const d = await res.json().catch(() => ({}));
       if (res.ok && d.url) { window.location.href = d.url; return; }
-      window.alert(d?.error || "Couldn't start checkout — please try again.");
-    } catch { window.alert("Network error — please try again."); }
+      setErr(d?.error || "Couldn't start checkout — please try again.");
+    } catch { setErr("Network error — please try again."); }
     setBusy(false);
   };
   return (
@@ -632,6 +669,7 @@ function JoinPlanCard({ plan }: { plan: PortalPlan }) {
       >
         <Icon name="sparkle" size={14} color="#d8b6ff" /> {busy ? "Opening…" : "Join now"}
       </button>
+      {err && <div role="alert" style={{ marginTop: 8, fontSize: 12.5, color: "#ff8a8a", textAlign: "center" }}>{err}</div>}
     </div>
   );
 }

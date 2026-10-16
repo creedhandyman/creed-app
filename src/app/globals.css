@@ -1138,3 +1138,30 @@ button:focus-visible {
 .home-boot { display: none; }
 html[data-session] .home-landing { display: none; }
 html[data-session] .home-boot { display: block; }
+
+/* ── Pop-ups: ONE style app-wide ──────────────────────────────────────
+   .sheet-overlay = the dimmed backdrop; .sheet = the panel. Phones: the
+   panel slides up from the bottom, full width, thumb-reachable (like the
+   quote MaterialsSheet / SendSheet). ≥700px: a centered card. Inline
+   styles on a modal must not set the overlay's alignItems/padding or the
+   panel's width/maxWidth/borderRadius, or they'll override this. */
+.sheet-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(5, 5, 12, .72);
+}
+/* .dark/.light prefixes match the specificity of `.dark .cd` so a modal that
+   is also a .cd still gets the sheet's corners + padding. */
+.sheet, .dark .sheet, .light .sheet {
+  width: 100%; max-width: 520px; max-height: 88dvh; overflow-y: auto;
+  border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  animation: sheet-up .22s cubic-bezier(.22, 1, .36, 1);
+}
+@media (min-width: 700px) {
+  .sheet-overlay { align-items: center; padding: 20px; }
+  .sheet, .dark .sheet, .light .sheet { border-radius: 16px; padding-bottom: 16px; animation-name: sheet-pop; }
+}
+@keyframes sheet-up { from { transform: translateY(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sheet-pop { from { transform: scale(.97); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }

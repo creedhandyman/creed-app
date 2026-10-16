@@ -97,11 +97,13 @@ export default function RenderModal({
   return (
     <div
       onClick={() => { if (!busy) onClose(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(5,5,12,.8)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      className="sheet-overlay"
+      style={{ zIndex: 9998, background: "rgba(5,5,12,.8)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: "linear-gradient(180deg,#14141e,#12121a)", border: "1px solid rgba(157,78,221,.25)", borderTop: `3px solid ${VIOLET}`, borderRadius: 16, padding: "18px 18px 16px", width: "100%", maxWidth: 460, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(0,0,0,.6), 0 0 32px rgba(157,78,221,.18)" }}
+        className="sheet"
+        style={{ background: "linear-gradient(180deg,#14141e,#12121a)", border: "1px solid rgba(157,78,221,.25)", borderTop: `3px solid ${VIOLET}`, maxHeight: "92dvh", boxShadow: "0 24px 64px rgba(0,0,0,.6), 0 0 32px rgba(157,78,221,.18)" }}
       >
         {/* Title */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>

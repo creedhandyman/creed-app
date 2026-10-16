@@ -1484,10 +1484,11 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             room to a custom description before recording it. */}
         {showVoicePicker && (
           <div
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+            className="sheet-overlay"
+            style={{ background: "rgba(0,0,0,.78)", zIndex: 1000 }}
             onClick={() => { setShowVoicePicker(false); setEditingRoomIdx(null); }}
           >
-            <div className="cd" style={{ width: "100%", maxWidth: 420, maxHeight: "80vh", overflowY: "auto", padding: 14 }} onClick={(e) => e.stopPropagation()}>
+            <div className="cd sheet" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <h3 style={{ fontSize: 17, fontFamily: "Oswald", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <Icon name="mic" size={15} color="var(--color-success)" /> {tr("insp.chooseNextArea")}

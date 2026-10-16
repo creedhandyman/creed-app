@@ -2573,8 +2573,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         const over = amt > due + 0.009 ? amt - due : 0;
         const methodLabel = t(`jobs.payMethod.${recordPay.method}`);
         return (
-          <div onClick={() => !recordPay.busy && setRecordPay(null)} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380, padding: 20 }}>
+          <div onClick={() => !recordPay.busy && setRecordPay(null)} className="sheet-overlay">
+            <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxWidth: 420, paddingTop: 20 }}>
               <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 4 }}>{t("jobs.recordPayment")}</h3>
               <div className="dim" style={{ fontSize: 13, marginBottom: 12 }}>
                 {rj?.property}{paid > 0 ? ` · ${t("jobs.alreadyPaid")} $${paid.toFixed(2)}` : ""} · {t("jobs.balanceDue")} ${due.toFixed(2)}
@@ -2628,8 +2628,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         const pj = jobs.find((j) => j.id === paidChoice.jobId);
         const full = { width: "100%", padding: "10px", fontSize: 15, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 } as const;
         return (
-          <div onClick={() => setPaidChoice(null)} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380, padding: 20 }}>
+          <div onClick={() => setPaidChoice(null)} className="sheet-overlay">
+            <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxWidth: 420, paddingTop: 20 }}>
               <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 4 }}>
                 {t("jobs.paidOwedTitle").replace("{due}", paidChoice.due.toFixed(2))}
               </h3>
@@ -2670,8 +2670,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         const owing = jobs.filter((j) => selectedIds.includes(j.id) && j.status !== "paid" && balanceOf(j).due > 0.009);
         const totalDue = owing.reduce((s, j) => s + balanceOf(j).due, 0);
         return (
-          <div onClick={() => !bulkPaid.busy && setBulkPaid(null)} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380, padding: 20 }}>
+          <div onClick={() => !bulkPaid.busy && setBulkPaid(null)} className="sheet-overlay">
+            <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxWidth: 420, paddingTop: 20 }}>
               <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 6 }}>
                 {t("jobs.bulkPaidTitle").replace("{n}", String(owing.length))}
               </h3>
@@ -2918,15 +2918,12 @@ function MakeRecurringModal({
   return (
     <div
       onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 1500,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-      }}
+      className="sheet-overlay"
+      style={{ zIndex: 1500 }}
     >
       <div
-        className="cd"
+        className="cd sheet"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 480 }}
       >
         <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ fontSize: 17 }}>{t("jobs.makeRecurring")}</h3>
