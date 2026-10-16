@@ -206,8 +206,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   validating. (The token is a stable HMAC of the job id — no expiry — so
   "expired" in that error really means "no/!matching token".)
 - `NEXT_PUBLIC_SITE_URL` — canonical app origin. `src/lib/site-url.ts`
-  defaults to `https://www.creedhm.com` (the **apex `creedhm.com` has no TLS
-  cert** — `www` is the served origin, matching the Stripe routes' hardcoded
+  defaults to `https://www.creedhm.com` (the apex `creedhm.com` once had no TLS
+  cert; it serves fine as of 2026-10-15 — the live Stripe webhook
+  `we_1TLVCV…` posts to `https://creedhm.com/api/stripe/webhook` and listens to
+  7 events: checkout.session.completed, customer.subscription.created/updated/
+  deleted, invoice.paid, invoice.payment_failed, charge.refunded — `www` is the served origin, matching the Stripe routes' hardcoded
   fallback). SEO metadata does NOT follow this env var: `app/layout.tsx`'s
   `metadataBase`, every marketing page's canonical, robots.txt and the sitemap
   use `src/lib/seo.ts` `SEO_ORIGIN` (hardcoded `https://www.creedhm.com`).
