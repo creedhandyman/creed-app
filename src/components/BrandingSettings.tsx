@@ -6,7 +6,7 @@ import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 import type { Organization } from "@/lib/types";
 import { DEFAULT_BRAND, isHex, normHex, shade, brandGrad, brandInk, isExtremeLuminance } from "@/lib/brand";
-import { TRADE_IDS, tradeConfig, tradePatch, resolvePrimaryTrade } from "@/lib/trades";
+import { TRADE_IDS, tradeConfig, tradePatch, resolvePrimaryTrade, tradeName } from "@/lib/trades";
 
 const BRAND_PRESETS = ["#2E75B6", "#0E9F6E", "#C0392B", "#7C3AED", "#E8772E", "#0891B2", "#D6336C", "#475569", "#B45309", "#1E40AF", "#15803D", "#9D174D"];
 
@@ -87,7 +87,7 @@ export default function BrandingSettings() {
   const savePrimaryTrade = async (id: string) => {
     if (!(await db.patch("organizations", org.id, tradePatch(id, org.trade_rates)))) return;
     await refreshOrg();
-    useStore.getState().showToast(`Primary trade set to ${tradeConfig(id).name}`, "success");
+    useStore.getState().showToast(`Primary trade set to ${tradeName(id)}`, "success");
   };
 
   // Merge a patch into the org's site_content JSON without clobbering the
@@ -413,7 +413,7 @@ export default function BrandingSettings() {
           style={{ width: "100%", fontSize: 15 }}
         >
           {TRADE_IDS.map((id) => (
-            <option key={id} value={id}>{tradeConfig(id).name}</option>
+            <option key={id} value={id}>{tradeName(id)}</option>
           ))}
         </select>
         <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.5 }}>

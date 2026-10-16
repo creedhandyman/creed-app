@@ -17,6 +17,7 @@
 // per-trade rate writes the key the quote engine actually reads.
 
 import type { IconName } from "@/components/Icon";
+import { t, getLang } from "@/lib/i18n";
 
 export interface TradeConfig {
   /** primary_trade id — the org-level key. */
@@ -256,6 +257,17 @@ export const TRADE_CONFIG: Record<string, TradeConfig> = {
  *  never crashes on a legacy org with no primary_trade. */
 export function tradeConfig(id?: string | null): TradeConfig {
   return (id && TRADE_CONFIG[id]) || TRADE_CONFIG[DEFAULT_TRADE];
+}
+
+/** Display name for a trade, in the app language (Spanish via `trade.name.<id>`;
+ *  falls back to the English `name` if a key is missing). Use this for anything
+ *  the user reads — `tradeConfig().name` stays the English canonical label. */
+export function tradeName(id?: string | null): string {
+  const cfg = tradeConfig(id);
+  if (getLang() !== "es") return cfg.name;
+  const key = `trade.name.${cfg.id}`;
+  const v = t(key);
+  return v === key ? cfg.name : v;
 }
 
 /** Resolve an org's primary trade id, coalescing to handyman. */

@@ -5,7 +5,7 @@ import { db } from "@/lib/supabase";
 import type { Organization, Profile } from "@/lib/types";
 import { Icon } from "./Icon";
 import Grizz from "./Grizz";
-import { TRADE_IDS, tradeConfig, tradePatch } from "@/lib/trades";
+import { TRADE_IDS, tradeConfig, tradePatch, tradeName } from "@/lib/trades";
 import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
 import { getLang, setLang, t } from "@/lib/i18n";
 
@@ -322,7 +322,7 @@ export default function Onboarding() {
                         onClick={() => setSelectedTrade(id)}
                       >
                         <span className="ic"><Icon name={tc.icon} size={18} color="#7fb6ff" /></span>
-                        <span className="nm">{tc.name}</span>
+                        <span className="nm">{tradeName(id)}</span>
                       </button>
                     );
                   })}
@@ -333,7 +333,7 @@ export default function Onboarding() {
                   <input
                     value={rateDraft}
                     onChange={(e) => setRateDraft(e.target.value.replace(/[^0-9.]/g, ""))}
-                    placeholder={t("ob.ratePh").replace("{rate}", String(trade.defaultRate)).replace("{trade}", trade.name.toLowerCase())}
+                    placeholder={t("ob.ratePh").replace("{rate}", String(trade.defaultRate)).replace("{trade}", tradeName(selectedTrade).toLowerCase())}
                     inputMode="decimal"
                   />
                   <div style={{ fontSize: 11.5, color: "#8b8b99", marginTop: 4 }}>
@@ -348,7 +348,7 @@ export default function Onboarding() {
                   <div className="ob-chips">
                     <span className="ob-chip">{t("ob.rate")} <b>${parseFloat(rateDraft) > 0 ? parseFloat(rateDraft) : trade.defaultRate}/hr</b></span>
                     <span className="ob-chip">{t("ob.units")} <b>{trade.units}</b></span>
-                    <span className="ob-chip">{t("ob.checklist").replace("{trade}", trade.name)} <b>✓</b></span>
+                    <span className="ob-chip">{t("ob.checklist").replace("{trade}", tradeName(selectedTrade))} <b>✓</b></span>
                   </div>
                   <div className="ob-starter">
                     {trade.starterItems.map((it) => (
