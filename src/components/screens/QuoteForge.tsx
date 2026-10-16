@@ -6,7 +6,6 @@ import type { CSSProperties } from "react";
 import RenderModal from "../RenderModal";
 import Coachmark from "../Coachmark";
 import { buildRenderPrompt } from "@/lib/render-prompt";
-import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material, JobDiscount } from "@/lib/types";
@@ -43,6 +42,7 @@ import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import AiNote from "../AiNote";
+import MaterialsSheet from "../MaterialsSheet";
 import CameraModal from "../CameraModal";
 import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
@@ -3988,152 +3988,17 @@ function QuoteTab({
                       >
                         ${it.materials.reduce((s, m) => s + (m.c || 0), 0).toFixed(0)}
                       </div>
-                      {/* Portal the overlay+panel to <body> so position:fixed
-                          escapes the parent .fi animation's transform — without
-                          this, top:50% lands at the middle of the room list
-                          (not the viewport) and the modal can open below the
-                          fold. */}
-                      {expandedMat === it.id && typeof document !== "undefined" && createPortal(
-                        <>
-                        <div onClick={() => { logItemEdit(rm.name, it.id); setExpandedMat(null); }} style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.4)" }} />
-                        <div onClick={(e) => e.stopPropagation()} style={{
-                          position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-                          zIndex: 200, width: "90%", maxWidth: 360, maxHeight: "70vh", overflowY: "auto",
-                          background: darkMode ? "#12121a" : "#fff", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-                          borderRadius: 12, padding: 14, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
-                        }}>
-                          <div style={{ display: "flex", gap: 4, marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
-                            <span style={{ flex: 1 }}>Material</span>
-                            <span style={{ width: 32, textAlign: "center" }}>Qty</span>
-                            <span style={{ width: 55, textAlign: "right" }}>Price</span>
-                            <span style={{ width: 16 }}></span>
-                          </div>
-                          {it.materials.map((mat, mi) => {
-                            const qtyVal = mat.qty;
-                            const unitVal = mat.unitPrice;
-                            return (
-                              <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 14 }}>
-                                <input
-                                  value={mat.n}
-                                  onChange={(e) => {
-                                    const mats = [...it.materials];
-                                    mats[mi] = { ...mats[mi], n: e.target.value };
-                                    upItem(rm.name, it.id, "materials", mats);
-                                  }}
-                                  style={{ flex: 1, fontSize: 13, padding: 2 }}
-                                />
-                                <input
-                                  type="number"
-                                  // Allow the field to clear to empty — previously `|| 1` snapped
-                                  // back to 1 every keystroke, so typing "3" over "1" became "13".
-                                  value={qtyVal === undefined || qtyVal === null ? "" : qtyVal}
-                                  placeholder="1"
-                                  min="0"
-                                  step="1"
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const mats = [...it.materials];
-                                    const next: Material = { ...mats[mi] };
-                                    if (raw === "") delete next.qty;
-                                    else next.qty = parseInt(raw) || 0;
-                                    // If unitPrice is set, recompute total = qty × unit
-                                    if (next.unitPrice !== undefined && next.qty !== undefined) {
-                                      next.c = Math.round(next.qty * next.unitPrice * 100) / 100;
-                                    }
-                                    mats[mi] = next;
-                                    upItem(rm.name, it.id, "materials", mats);
-                                  }}
-                                  onBlur={(e) => {
-                                    const v = parseInt(e.target.value);
-                                    if (!v || v < 1) {
-                                      const mats = [...it.materials];
-                                      const next: Material = { ...mats[mi], qty: 1 };
-                                      if (next.unitPrice !== undefined) {
-                                        next.c = Math.round(next.unitPrice * 100) / 100;
-                                      }
-                                      mats[mi] = next;
-                                      upItem(rm.name, it.id, "materials", mats);
-                                    }
-                                  }}
-                                  style={{ width: 36, fontSize: 13, padding: 2, textAlign: "center" }}
-                                  title="Quantity"
-                                />
-                                <span style={{ fontSize: 12, color: "#888" }}>×$</span>
-                                <input
-                                  type="number"
-                                  value={unitVal === undefined || unitVal === null ? "" : unitVal}
-                                  placeholder="unit"
-                                  min="0"
-                                  step="0.01"
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const mats = [...it.materials];
-                                    const next: Material = { ...mats[mi] };
-                                    if (raw === "") {
-                                      delete next.unitPrice;
-                                    } else {
-                                      const u = parseFloat(raw) || 0;
-                                      next.unitPrice = u;
-                                      const q = next.qty && next.qty > 0 ? next.qty : 1;
-                                      next.c = Math.round(q * u * 100) / 100;
-                                      if (next.qty === undefined) next.qty = q;
-                                    }
-                                    mats[mi] = next;
-                                    upItem(rm.name, it.id, "materials", mats);
-                                  }}
-                                  style={{ width: 52, fontSize: 13, padding: 2, textAlign: "right" }}
-                                  title="Unit price"
-                                />
-                                <span style={{ fontSize: 13 }}>=$</span>
-                                <input
-                                  type="number"
-                                  value={mat.c === 0 ? "" : mat.c}
-                                  placeholder="total"
-                                  min="0"
-                                  step="0.01"
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const nextC = raw === "" ? 0 : (parseFloat(raw) || 0);
-                                    const mats = [...it.materials];
-                                    const next: Material = { ...mats[mi], c: nextC };
-                                    // If user types a total directly, recompute unitPrice
-                                    // from qty so the row stays internally consistent.
-                                    if (next.qty && next.qty > 0) {
-                                      next.unitPrice = Math.round((nextC / next.qty) * 100) / 100;
-                                    }
-                                    mats[mi] = next;
-                                    upItem(rm.name, it.id, "materials", mats);
-                                  }}
-                                  style={{ width: 56, fontSize: 13, padding: 2, textAlign: "right" }}
-                                  title="Line total"
-                                />
-                                <button
-                                  onClick={() => {
-                                    const mats = it.materials.filter((_, i) => i !== mi);
-                                    upItem(rm.name, it.id, "materials", mats.length ? mats : [{ n: "Materials", c: 0 }]);
-                                  }}
-                                  style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: 0 }}
-                                >✕</button>
-                              </div>
-                            );
-                          })}
-                          <button
-                            onClick={() => {
-                              upItem(rm.name, it.id, "materials", [...it.materials, { n: "New material", c: 0 }]);
-                            }}
-                            style={{ fontSize: 13, background: "none", color: "var(--color-primary)", padding: "2px 0", width: "100%", textAlign: "center", marginTop: 4 }}
-                          >+ Add Material</button>
-                          <button
-                            onClick={() => setExpandedMat(null)}
-                            className="bo"
-                            style={{ fontSize: 14, padding: "4px 0", width: "100%", marginTop: 8 }}
-                          >Done</button>
-                        </div>
-                        </>,
-                        document.body,
+                      {/* Bottom-sheet materials editor for this line (MaterialsSheet:
+                          name type-ahead from the materials list, qty stepper,
+                          unit price → total). Portaled to <body> inside the sheet. */}
+                      {expandedMat === it.id && (
+                        <MaterialsSheet
+                          title={it.detail}
+                          materials={it.materials}
+                          darkMode={darkMode}
+                          onChange={(mats) => upItem(rm.name, it.id, "materials", mats)}
+                          onClose={() => { logItemEdit(rm.name, it.id); setExpandedMat(null); }}
+                        />
                       )}
                     </div>
                     <div style={{ minWidth: 50, textAlign: "right" }}>
