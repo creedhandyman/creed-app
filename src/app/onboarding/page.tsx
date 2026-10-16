@@ -28,6 +28,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase, db } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import type { Organization, Profile } from "@/lib/types";
+import { isTwa, TWA_BILLING_NOTE } from "@/lib/twa";
 
 const PRIMARY = "#2E75B6";
 const ACCENT = "#00cc66";
@@ -220,6 +221,20 @@ export default function OnboardingPage() {
   };
 
   const currentIdx = STEPS.findIndex((s) => s.id === step);
+
+  // Google Play build: this wizard ends in Stripe Checkout, which the Play
+  // payments policy forbids steering to in-app. Show the web note instead.
+  if (isTwa()) {
+    return (
+      <div style={{ minHeight: "100vh", background: BG, color: "#e2e2e8", padding: "28px 18px 60px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ maxWidth: 440, background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 12, padding: 24, textAlign: "center" }}>
+          <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, textTransform: "uppercase", marginBottom: 10 }}>Plans &amp; billing</div>
+          <p style={{ color: "#aab", fontSize: 15, lineHeight: 1.55 }}>{TWA_BILLING_NOTE}</p>
+          <button onClick={() => { window.location.href = "/"; }} style={{ ...btnGhost, marginTop: 16 }}>Back to the app</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: BG, color: "#e2e2e8", padding: "28px 18px 60px" }}>

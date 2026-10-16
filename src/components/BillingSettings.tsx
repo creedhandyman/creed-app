@@ -9,6 +9,7 @@ import { applyPromoCode } from "@/lib/promo-codes";
 import { getUsage, getCap, type UsageInfo } from "@/lib/inspection-usage";
 import type { Organization } from "@/lib/types";
 import { trialEndFromStart } from "@/lib/trial";
+import { isTwa, TWA_BILLING_NOTE } from "@/lib/twa";
 
 /**
  * Billing & Payments — Stripe Connect (accept payments from clients) plus
@@ -187,7 +188,12 @@ export default function BillingSettings() {
                   </div>
                 )}
 
-                <div className="row">
+                {/* Google Play build: no subscription purchase/management
+                    CTAs in-app (Play payments policy) — web note instead. */}
+                {isTwa() && (
+                  <div className="dim" style={{ fontSize: 14, lineHeight: 1.5 }}>{TWA_BILLING_NOTE}</div>
+                )}
+                <div className="row" style={isTwa() ? { display: "none" } : undefined}>
                   {/* "Subscribe Now" — only shown when there's no Stripe
                       customer yet (i.e. a pre-Stripe trial that never
                       hit Checkout). Bounces back through /onboarding so

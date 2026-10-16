@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { applyPromoCode } from "@/lib/promo-codes";
 import { TRIAL_DAYS, trialEndFromStart, daysLeftUntil } from "@/lib/trial";
+import { isTwa, TWA_BILLING_NOTE } from "@/lib/twa";
 
 // localStorage key for trial-banner dismissal. Keyed by the days-remaining
 // count so a dismiss at "7 days left" doesn't suppress the banner once we
@@ -110,7 +111,17 @@ export default function BillingGate({ children }: { children: React.ReactNode })
             : `Your ${TRIAL_DAYS}-day free trial has ended. Pick a plan to keep using Creed HM — everything you set up is still here.`}
         </p>
 
-        {isOwner ? (
+        {isOwner && isTwa() ? (
+          // Google Play build: no purchase flow in-app (Play payments
+          // policy). The owner subscribes on the web; promo codes stay
+          // available (not a purchase).
+          <>
+            <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 10, padding: 20 }}>
+              <p style={{ color: "#aab", fontSize: 15, lineHeight: 1.5 }}>{TWA_BILLING_NOTE}</p>
+            </div>
+            <PaywallPromoCode orgId={org.id} />
+          </>
+        ) : isOwner ? (
           <>
             {/* Plan cards */}
             <div style={{ display: "flex", gap: 10, marginBottom: 20, justifyContent: "center" }}>
@@ -293,6 +304,10 @@ function TrialBanner({
           fontSize: 14, fontFamily: "Source Sans 3, sans-serif",
         }}>
           ⏳ Trial ends in {daysLeft} day{daysLeft !== 1 ? "s" : ""} —{" "}
+          {isTwa() ? (
+            // Play build: no checkout link (Play payments policy).
+            <span style={{ fontWeight: 600 }}>subscribe at creedhm.com</span>
+          ) : (
           <span
             onClick={async () => {
               if (loading) return;
@@ -316,6 +331,7 @@ function TrialBanner({
           >
             Subscribe now
           </span>
+          )}
           <button
             onClick={() => {
               try { localStorage.setItem(trialDismissKey(daysLeft), "1"); } catch { /* */ }
