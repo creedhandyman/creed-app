@@ -270,6 +270,29 @@ export function tradeName(id?: string | null): string {
   return v === key ? cfg.name : v;
 }
 
+/** Starter quote items for display in the app language (Spanish via
+ *  `trade.starter.<id>.<n>`; falls back per item to the English text). Display
+ *  only — the QuoteForge quick-add chips still use the English `starterItems`
+ *  because tapping one writes that text into the customer-facing quote line. */
+export function tradeStarterItems(id?: string | null): string[] {
+  const cfg = tradeConfig(id);
+  if (getLang() !== "es") return cfg.starterItems;
+  return cfg.starterItems.map((en, i) => {
+    const key = `trade.starter.${cfg.id}.${i}`;
+    const v = t(key);
+    return v === key ? en : v;
+  });
+}
+
+/** Units label ("Hours · sq ft") in the app language; falls back to English. */
+export function tradeUnits(id?: string | null): string {
+  const cfg = tradeConfig(id);
+  if (getLang() !== "es") return cfg.units;
+  const key = `trade.units.${cfg.id}`;
+  const v = t(key);
+  return v === key ? cfg.units : v;
+}
+
 /** Resolve an org's primary trade id, coalescing to handyman. */
 export function resolvePrimaryTrade(primaryTrade?: string | null): string {
   return primaryTrade && TRADE_CONFIG[primaryTrade] ? primaryTrade : DEFAULT_TRADE;

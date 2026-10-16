@@ -5,7 +5,7 @@ import { db } from "@/lib/supabase";
 import type { Organization, Profile } from "@/lib/types";
 import { Icon } from "./Icon";
 import Grizz from "./Grizz";
-import { TRADE_IDS, tradeConfig, tradePatch, tradeName } from "@/lib/trades";
+import { TRADE_IDS, tradeConfig, tradePatch, tradeName, tradeStarterItems, tradeUnits } from "@/lib/trades";
 import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
 import { getLang, setLang, t } from "@/lib/i18n";
 
@@ -347,11 +347,11 @@ export default function Onboarding() {
                   </div>
                   <div className="ob-chips">
                     <span className="ob-chip">{t("ob.rate")} <b>${parseFloat(rateDraft) > 0 ? parseFloat(rateDraft) : trade.defaultRate}/hr</b></span>
-                    <span className="ob-chip">{t("ob.units")} <b>{trade.units}</b></span>
+                    <span className="ob-chip">{t("ob.units")} <b>{tradeUnits(selectedTrade)}</b></span>
                     <span className="ob-chip">{t("ob.checklist").replace("{trade}", tradeName(selectedTrade))} <b>✓</b></span>
                   </div>
                   <div className="ob-starter">
-                    {trade.starterItems.map((it) => (
+                    {tradeStarterItems(selectedTrade).map((it) => (
                       <div className="it" key={it}><span className="d" />{it}</div>
                     ))}
                   </div>
