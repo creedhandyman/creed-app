@@ -184,7 +184,11 @@ export default function BillingSettings() {
 
                 {(status === "trial" || status === "trialing") && (
                   <div className="dim" style={{ fontSize: 15, marginBottom: 10, lineHeight: 1.45 }}>
-                    Your free trial {daysLeft > 0 ? `ends ${trialEnd.toLocaleDateString()}` : "has ended"}. Subscribe to keep all features.
+                    {/* "trialing" = Stripe has a subscription + card on file
+                        (checkout done); plain "trial" = no subscription yet. */}
+                    {status === "trialing"
+                      ? `You're all set — your plan starts automatically ${daysLeft > 0 ? `on ${trialEnd.toLocaleDateString()}` : "now"}, and the card on file is charged then. Cancel anytime before that at no charge.`
+                      : `Your free trial ${daysLeft > 0 ? `ends ${trialEnd.toLocaleDateString()}` : "has ended"}. Subscribe to keep all features.`}
                   </div>
                 )}
 
