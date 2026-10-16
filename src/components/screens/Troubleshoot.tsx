@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 import { aiText } from "@/lib/parser";
 import { Icon } from "../Icon";
+import AiNote from "../AiNote";
 import { t } from "@/lib/i18n";
 
 interface Message {
@@ -267,6 +268,8 @@ export default function Troubleshoot(_props: { setPage: (p: string) => void }) {
           ))}
         </div>
       )}
+
+      <AiNote text={t("ai.noteFixit")} style={{ marginBottom: 6, flexShrink: 0 }} />
 
       {/* Input area */}
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>

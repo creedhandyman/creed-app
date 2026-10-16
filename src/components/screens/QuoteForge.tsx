@@ -42,6 +42,7 @@ import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import AiNote from "../AiNote";
 import CameraModal from "../CameraModal";
 import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
@@ -2988,6 +2989,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             <Icon name="ai" size={14} color="var(--color-primary)" />AI Assist
           </h4>
         </div>
+        <AiNote text={t("ai.noteAssist")} style={{ marginBottom: 6 }} />
         <div className="row">
           <input
             value={quickDesc}
@@ -3396,6 +3398,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           );
         })}
       </div>
+
+      <AiNote text={t("ai.noteQuote")} style={{ marginBottom: 6 }} />
 
       {/* Action bar — PDF / Send / Save (Save = green primary) */}
       <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>

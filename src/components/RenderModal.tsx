@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
+import AiNote from "./AiNote";
 
 type SourcePhoto = { url: string; type?: string };
 
@@ -187,6 +188,8 @@ export default function RenderModal({
             })}
           </div>
         )}
+
+        <AiNote text={t("ai.noteRender")} style={{ marginBottom: 8 }} />
 
         {/* Generate / Save */}
         {!result ? (

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import CustomerPicker from "../CustomerPicker";
 import { Icon } from "../Icon";
+import AiNote from "../AiNote";
 import CameraModal from "../CameraModal";
 import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../VoiceWalk";
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
@@ -1579,6 +1580,10 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           <div style={{ fontSize: 14, color: "var(--color-primary)", textAlign: "center", marginBottom: 6 }}>
             📤 Uploading {uploadCount} photo{uploadCount > 1 ? "s" : ""}...
           </div>
+        )}
+
+        {voiceProcessingStatus[roomData[currentRoomIdx]?.name] === "done" && (
+          <AiNote text={tr("ai.noteVoice")} style={{ marginBottom: 8 }} />
         )}
 
         {/* Room jump — tap any room to jump to it. Voice processing
