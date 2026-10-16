@@ -486,6 +486,26 @@ function ReviewAutomationCard({
         </span>
       </label>
 
+      {/* Always shown (also feeds the Quests → Reviews QR), not just while automation is on. */}
+      <div className="mb">
+        <label className="sl">{t("ops.googleReviewUrl")}</label>
+        <input
+          type="url"
+          key={`gr-${reviewUrl}`}
+          defaultValue={reviewUrl}
+          placeholder="https://g.page/r/..."
+          style={{ marginTop: 4 }}
+          onBlur={async (e) => {
+            const v = e.target.value.trim();
+            if (v === reviewUrl.trim()) return;
+            await saveOrg({ google_review_url: v || null });
+          }}
+        />
+        <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
+          {t("ops.googleReviewUrlHelp")}
+        </div>
+      </div>
+
       {enabled && (
         <>
           <div className="g2 mb">
@@ -526,25 +546,6 @@ function ReviewAutomationCard({
               <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
                 {t("ops.channelEmailHelp")}
               </div>
-            </div>
-          </div>
-
-          <div className="mb">
-            <label className="sl">{t("ops.googleReviewUrl")}</label>
-            <input
-              type="url"
-              key={`gr-${reviewUrl}`}
-              defaultValue={reviewUrl}
-              placeholder="https://g.page/r/..."
-              style={{ marginTop: 4 }}
-              onBlur={async (e) => {
-                const v = e.target.value.trim();
-                if (v === reviewUrl.trim()) return;
-                await saveOrg({ google_review_url: v || null });
-              }}
-            />
-            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>
-              {t("ops.googleReviewUrlHelp")}
             </div>
           </div>
 

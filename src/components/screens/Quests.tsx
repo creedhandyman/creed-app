@@ -26,6 +26,8 @@ export default function Quests({ openOps }: { openOps?: (tab?: string) => void }
   const [rn, setRn] = useState("");
   // Review-link card: Google listing (default) or the in-app /review page.
   const [reviewSrc, setReviewSrc] = useState<"google" | "app">("google");
+  const [glDraft, setGlDraft] = useState("");
+  const [glBusy, setGlBusy] = useState(false);
   const [rt, setRt] = useState("");
   const [rr, setRr] = useState(5);
 
@@ -508,8 +510,40 @@ export default function Quests({ openOps }: { openOps?: (tab?: string) => void }
                   </>
                 ) : (
                   <div style={{ textAlign: "center", padding: "6px 4px 2px" }}>
-                    <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>{t("quest.noGoogleLink")}</div>
-                    <button className="bb" onClick={() => openOps?.("settings")} style={{ fontSize: 13, padding: "7px 14px" }}>{t("quest.addGoogleLink")}</button>
+                    <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>{isAdmin ? t("quest.noGoogleLink") : t("quest.askOwnerLink")}</div>
+                    {isAdmin && (
+                      <>
+                        {/* Save right here — the field also lives in Ops → Settings → Review Automation. */}
+                        <input
+                          type="url"
+                          inputMode="url"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          value={glDraft}
+                          onChange={(e) => setGlDraft(e.target.value)}
+                          placeholder="https://g.page/r/..."
+                          style={{ width: "100%", marginBottom: 8 }}
+                        />
+                        <button className="bb" disabled={glBusy || !glDraft.trim()} style={{ fontSize: 13, padding: "7px 14px" }}
+                          onClick={async () => {
+                            const v = glDraft.trim();
+                            if (!/^https?:\/\/\S+\.\S+/i.test(v)) { useStore.getState().showToast(t("quest.linkInvalid"), "warning"); return; }
+                            if (!org) return;
+                            setGlBusy(true);
+                            const ok = await db.patch("organizations", org.id, { google_review_url: v });
+                            if (ok) {
+                              const orgs = await db.get("organizations", { id: org.id });
+                              if (orgs.length) useStore.getState().setOrg(orgs[0] as never);
+                              useStore.getState().showToast(t("settings.saved"), "success");
+                              setGlDraft("");
+                            }
+                            setGlBusy(false);
+                          }}>
+                          {glBusy ? "…" : t("quest.saveGoogleLink")}
+                        </button>
+                        <div className="dim" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.45 }}>{t("quest.googleLinkHelp")}</div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
