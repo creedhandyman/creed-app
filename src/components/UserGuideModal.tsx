@@ -9,7 +9,7 @@
  * follow the natural order of a job (quote → schedule → work → bill →
  * paid) so a new user can read top-to-bottom.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Grizz from "./Grizz";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "./Icon";
@@ -227,6 +227,39 @@ const SECTIONS: Section[] = [
   },
 ];
 
+// ── Ask Grizz: local keyword search over the guide (free — no AI call) ──
+const STOP = new Set([
+  "the","a","an","to","do","i","my","me","how","can","is","it","of","in","on","and","or","for","what","where","when","get","does","you","your","with","this","that",
+  "el","la","los","las","un","una","de","del","en","y","o","que","como","cómo","mi","mis","para","por","con","se","es","lo","al","donde","dónde","cuando","puedo","hago","poner",
+]);
+const fold = (x: string) => x.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const stem = (w: string) => (w.length <= 4 ? w : w.slice(0, Math.max(4, w.length - 2)));
+
+interface Hit { sec: string; heading?: string; line: string; score: number }
+
+function searchGuide(sections: Section[], query: string): Hit[] {
+  const toks = fold(query).split(/[^a-z0-9ñ]+/).filter((w) => w.length > 1 && !STOP.has(w)).map(stem);
+  if (!toks.length) return [];
+  const need = Math.ceil(toks.length / 2);
+  const hits: Hit[] = [];
+  for (const sec of sections) {
+    for (const b of sec.body) {
+      const head = fold(b.heading || "");
+      for (const line of b.lines) {
+        const hay = fold(line);
+        let matched = 0, score = 0;
+        for (const tk of toks) {
+          const inLine = hay.includes(tk), inHead = head.includes(tk);
+          if (inLine || inHead) matched++;
+          score += (inLine ? 1 : 0) + (inHead ? 2 : 0);
+        }
+        if (matched >= need) hits.push({ sec: sec.title, heading: b.heading, line, score });
+      }
+    }
+  }
+  return hits.sort((a, c) => c.score - a.score).slice(0, 5);
+}
+
 export default function UserGuideModal({ onClose }: Props) {
   const darkMode = useStore((s) => s.darkMode);
   const role = useStore((s) => s.user?.role);
@@ -259,6 +292,16 @@ export default function UserGuideModal({ onClose }: Props) {
         ...guide.filter((sec) => sec.id !== "ops"),
       ];
   const [openId, setOpenId] = useState<string | null>(isAdmin ? "start" : "crew");
+  const [q, setQ] = useState("");
+  const query = q.trim();
+  const hits = useMemo(() => (query ? searchGuide(sections, query) : []), [sections, query]);
+  // Grizz's reply: greeting → how many he found (3 phrasings, picked by the
+  // query so it doesn't flicker on re-render) → a shrug when there's nothing.
+  const reply = !query
+    ? t("guide.greet")
+    : hits.length
+      ? t(`guide.found${1 + (query.length % 3)}`).replace("{n}", String(hits.length))
+      : t("guide.miss");
 
   return (
     <div
@@ -305,15 +348,69 @@ export default function UserGuideModal({ onClose }: Props) {
           </button>
         </div>
 
-        <p className="dim" style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.5 }}>
-          {t("guide.intro")}
-        </p>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 10 }}>
+          <Grizz pose={query && !hits.length ? "point" : "wave"} size={58} chatty bubbleAlign="left" style={{ flexShrink: 0 }} />
+          <div
+            role="status"
+            style={{ position: "relative", flex: 1, background: darkMode ? "rgba(245,180,0,.1)" : "rgba(245,180,0,.16)", border: "1px solid rgba(245,180,0,.4)", borderRadius: 12, padding: "9px 12px", fontSize: 14, lineHeight: 1.45 }}
+          >
+            {reply}
+          </div>
+        </div>
+
+        <div style={{ position: "relative", marginBottom: 8 }}>
+          <span style={{ position: "absolute", left: 11, top: 11, display: "flex" }}><Icon name="search" size={16} color="var(--color-dim)" /></span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("guide.askPh")}
+            aria-label={t("more.askGrizz")}
+            enterKeyHint="search"
+            style={{ width: "100%", boxSizing: "border-box", padding: "10px 64px 10px 34px", fontSize: 15 }}
+          />
+          {q && (
+            <button onClick={() => setQ("")} style={{ position: "absolute", right: 6, top: 6, background: "none", border: "none", color: "var(--color-dim)", fontSize: 12.5, cursor: "pointer", padding: "5px 8px" }}>
+              {t("guide.clear")}
+            </button>
+          )}
+        </div>
+
+        {!query && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+            {[1, 2, 3, 4].map((n) => (
+              <button
+                key={n}
+                onClick={() => setQ(t(`guide.chip${n}`))}
+                style={{ background: "transparent", border: "1px solid var(--color-border-dark-2)", color: "var(--color-primary)", borderRadius: 999, padding: "6px 12px", fontSize: 13, cursor: "pointer" }}
+              >
+                {t(`guide.chip${n}`)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {query ? (
+          <div style={{ marginBottom: 14 }}>
+            {hits.map((h, i) => (
+              <div key={i} style={{ padding: "10px 12px", marginBottom: 6, borderRadius: 10, border: `1px solid ${darkMode ? "var(--color-border-dark)" : "var(--color-border-light)"}` }}>
+                <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 12, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--color-primary)", marginBottom: 3 }}>
+                  {h.heading ? `${h.heading} · ` : ""}{t("guide.inSection").replace("{section}", h.sec)}
+                </div>
+                <div style={{ fontSize: 14.5, lineHeight: 1.5, color: darkMode ? "#ccc" : "#333" }}>{h.line}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="dim" style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.5 }}>
+            {t("guide.intro")}
+          </p>
+        )}
         <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Creed app help")}`}
           style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--color-border-dark-2)", color: "var(--color-primary)", textDecoration: "none" }}>
           <Icon name="mail" size={15} /> {t("guide.stuck")}
         </a>
 
-        {sections.map((sec) => {
+        {!query && sections.map((sec) => {
           const open = openId === sec.id;
           return (
             <div

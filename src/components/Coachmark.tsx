@@ -68,7 +68,7 @@ export default function Coachmark({ id, text }: { id: string; text: ReactNode })
           boxShadow: "0 12px 34px -12px rgba(0,0,0,.7)",
         }}
       >
-        <Grizz pose="point" size={76} style={{ position: "absolute", left: -64, bottom: -8 }} />
+        <Grizz pose="point" size={76} chatty bubbleAlign="left" style={{ position: "absolute", left: -64, bottom: -8 }} />
         <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffd76b", marginBottom: 3 }}>Grizz</div>
         <div style={{ fontSize: 13.5, lineHeight: 1.45 }}>{text}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>

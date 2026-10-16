@@ -256,7 +256,7 @@ export default function Onboarding() {
             {/* 0 — BASICS / JOIN */}
             {stepIdx === 0 && (
               <>
-                <Grizz pose="point" size={118} style={{ margin: "2px auto 0", display: "block" }} />
+                <Grizz pose="point" size={118} chatty style={{ margin: "2px auto 0", display: "block" }} />
                 <div className="ob-speech">
                   <div className="ob-who">Grizz</div>
                   <p>{mode === "create"
@@ -300,7 +300,7 @@ export default function Onboarding() {
             {/* 1 — TRADE + RATE (create flow only) */}
             {stepIdx === 1 && (
               <>
-                <Grizz pose="point" size={92} style={{ margin: "2px auto 0", display: "block" }} />
+                <Grizz pose="point" size={92} chatty style={{ margin: "2px auto 0", display: "block" }} />
                 <div className="ob-speech">
                   <div className="ob-who">Grizz</div>
                   <p>{getLang() === "es" ? t(`ob.grizz.${selectedTrade}`) : trade.grizzLine}</p>
@@ -362,7 +362,7 @@ export default function Onboarding() {
             {/* 2 — DONE */}
             {stepIdx === 2 && (
               <>
-                <Grizz pose="cheer" bob style={{ margin: "2px auto 0", display: "block" }} />
+                <Grizz pose="cheer" bob chatty style={{ margin: "2px auto 0", display: "block" }} />
                 {[
                   { bx: "-70px", by: "90px", c: "#ffd76b" },
                   { bx: "60px", by: "80px", c: "#9d4edd" },

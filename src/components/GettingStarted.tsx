@@ -91,7 +91,7 @@ export default function GettingStarted({
           {CONFETTI.map((c, i) => (
             <span key={i} className="gs-conf" style={{ ["--cx"]: c.cx, ["--cy"]: c.cy, background: c.c, left: `${44 + i}%` } as React.CSSProperties} />
           ))}
-          <Grizz pose="cheer" size={52} style={{ margin: "0 auto", display: "block" }} />
+          <Grizz pose="cheer" size={52} chatty style={{ margin: "0 auto", display: "block" }} />
           <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, textTransform: "uppercase", marginTop: 6 }}>{t("gs.rolling")} 🎉</div>
           <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 4 }}>{t("gs.rollingSub")}</div>
         </div>

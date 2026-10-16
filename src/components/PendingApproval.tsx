@@ -19,11 +19,18 @@ export default function PendingApproval() {
   const initAuth = useStore((s) => s.initAuth);
   const logout = useStore((s) => s.logout);
   const [checking, setChecking] = useState(false);
+  // A fresh Grizz one-liner every few seconds so the waiting room isn't a dead page.
+  const [joke, setJoke] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => { void initAuth(); }, 15000);
     return () => clearInterval(id);
   }, [initAuth]);
+
+  useEffect(() => {
+    const id = setInterval(() => setJoke((j) => (j + 1) % 4), 7000);
+    return () => clearInterval(id);
+  }, []);
 
   const checkNow = async () => {
     setChecking(true);
@@ -41,7 +48,7 @@ export default function PendingApproval() {
   return (
     <div style={{ minHeight: "100dvh", background: "radial-gradient(900px 520px at 50% -6%,#13284c 0%,#0a0a0f 60%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, color: "#f1f2f6" }}>
       <div style={{ width: "100%", maxWidth: 400, textAlign: "center" }}>
-        <Grizz pose="wave" bob style={{ margin: "0 auto", display: "block" }} />
+        <Grizz pose="wave" bob chatty style={{ margin: "0 auto", display: "block" }} />
         <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, textTransform: "uppercase", margin: "14px 0 8px", letterSpacing: ".04em" }}>
           {t("pa.title")}
         </h2>
@@ -50,6 +57,9 @@ export default function PendingApproval() {
         </p>
         <p style={{ fontSize: 14, color: "#8b8b99", lineHeight: 1.55, marginBottom: 22 }}>
           {t("pa.body")}
+        </p>
+        <p key={joke} style={{ fontSize: 13.5, color: "#d9b44a", fontStyle: "italic", lineHeight: 1.5, margin: "-10px 0 20px" }}>
+          “{t(`pa.joke${joke + 1}`)}”
         </p>
         <button className="bb" onClick={checkNow} disabled={checking} style={{ width: "100%", padding: 13, fontSize: 15, marginBottom: 10 }}>
           {checking ? t("pa.checking") : t("pa.checkAgain")}
