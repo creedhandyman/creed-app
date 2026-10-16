@@ -11,6 +11,7 @@ import { recordJobOutcome, jobActualHours, jobHasOpenEntries } from "@/lib/learn
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
+import ShopItemSheet, { type ShopDraft } from "../ShopItemSheet";
 import MileageQuickTrack from "../MileageQuickTrack";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
@@ -159,17 +160,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [checkedTools, setCheckedTools] = useState<string[]>([]);
   const [checkedShop, setCheckedShop] = useState<string[]>([]);
   const [extraTools, setExtraTools] = useState<string[]>([]);
-  const [extraShop, setExtraShop] = useState<{ n: string; c: number; room?: string; trade?: string }[]>([]);
+  const [extraShop, setExtraShop] = useState<{ n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }[]>([]);
   const [newTool, setNewTool] = useState("");
-  const [newShopName, setNewShopName] = useState("");
-  const [newShopCost, setNewShopCost] = useState("");
   // Quote-derived shop items the user has edited/removed (hidden from the
   // auto list; an edited copy lives in customShop). Keyed by shopKey.
   const [removedGuideShop, setRemovedGuideShop] = useState<string[]>([]);
   // Inline shopping-item editor: the shopKey being edited + draft name/cost.
-  const [editShopKey, setEditShopKey] = useState<string | null>(null);
-  const [editShopName, setEditShopName] = useState("");
-  const [editShopCost, setEditShopCost] = useState("");
+  // Shopping-list add/edit sheet (ShopItemSheet). item null = adding.
+  const [shopSheet, setShopSheet] = useState<{ item: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string } | null } | null>(null);
   const rate = user.rate || 55;
 
   // Persist timer
@@ -301,7 +299,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     checkedTools?: string[];
     checkedShop?: string[];
     customTools?: string[];
-    customShop?: { n: string; c: number; room?: string; trade?: string }[];
+    customShop?: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }[];
     removedGuideShop?: string[];
   }) => {
     if (!activeJob) return;
@@ -1588,7 +1586,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           const roomsData = jobData?.rooms || [];
           const guide = makeGuide(roomsData);
           const allTools = [...guide.tools, ...extraTools];
-          const allShop: { n: string; c: number; room?: string; trade?: string }[] = [
+          const allShop: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }[] = [
             ...guide.shop.filter((gs) => !removedGuideShop.includes(shopKey(gs))),
             ...extraShop,
           ];
@@ -1607,7 +1605,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             setCheckedTools(next);
             persistGuide({ checkedTools: next });
           };
-          const toggleShop = (item: { n: string; c: number; room?: string; trade?: string }) => {
+          const toggleShop = (item: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }) => {
             const key = shopKey(item);
             const next = checkedShop.includes(key)
               ? checkedShop.filter((k) => k !== key)
@@ -1621,7 +1619,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             setExtraTools(next);
             persistGuide({ customTools: next });
           };
-          const addCustomShop = (item: { n: string; c: number; room?: string; trade?: string }) => {
+          const addCustomShop = (item: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }) => {
             const next = [...extraShop, item];
             setExtraShop(next);
             persistGuide({ customShop: next });
@@ -1630,17 +1628,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           // derived items are "adopted" into customShop and their original key
           // hidden via removedGuideShop. Checked state migrates if the name
           // (and thus shopKey) changed.
-          type ShopItem = { n: string; c: number; room?: string; trade?: string };
+          type ShopItem = { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string };
           const isCustomShop = (item: ShopItem) => extraShop.some((x) => shopKey(x) === shopKey(item));
-          const startEditShop = (item: ShopItem) => {
-            setEditShopKey(shopKey(item));
-            setEditShopName(item.n);
-            setEditShopCost(item.c != null ? String(item.c) : "");
-          };
-          const cancelEditShop = () => { setEditShopKey(null); setEditShopName(""); setEditShopCost(""); };
-          const saveEditShop = (item: ShopItem) => {
+          const startEditShop = (item: ShopItem) => setShopSheet({ item });
+          const cancelEditShop = () => setShopSheet(null);
+          const saveEditShop = (item: ShopItem, draft: ShopDraft) => {
             const key = shopKey(item);
-            const updated: ShopItem = { n: editShopName.trim() || item.n, c: parseFloat(editShopCost) || 0, room: item.room, trade: item.trade };
+            const updated: ShopItem = { ...draft, n: draft.n || item.n, room: item.room, trade: item.trade };
             const newKey = shopKey(updated);
             const nextChecked = checkedShop.includes(key) && newKey !== key
               ? [...checkedShop.filter((k) => k !== key), newKey]
@@ -1783,15 +1777,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                           {curTrade}
                         </div>
                       )}
-                      {editShopKey === shopKey(s) ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 6px 4px", borderBottom: `1px solid ${border}` }}>
-                          <input value={editShopName} onChange={(e) => setEditShopName(e.target.value)} autoFocus style={{ flex: 1, fontSize: 15, padding: "5px 8px", minWidth: 0 }} />
-                          <input type="number" value={editShopCost} onChange={(e) => setEditShopCost(e.target.value)} placeholder="$" style={{ width: 58, fontSize: 15, padding: "5px 6px" }} />
-                          <button onClick={() => saveEditShop(s)} aria-label="Save" style={{ background: "none", border: "none", color: "var(--color-success)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="check" size={18} /></button>
-                          <button onClick={() => deleteShop(s)} aria-label="Delete" style={{ background: "none", border: "none", color: "var(--color-accent-red)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="delete" size={16} /></button>
-                          <button onClick={cancelEditShop} aria-label="Cancel" style={{ background: "none", border: "none", color: "var(--color-dim)", padding: "0 3px", display: "inline-flex", cursor: "pointer" }}><Icon name="close" size={16} /></button>
-                        </div>
-                      ) : (
+                      {(
                         <div
                           style={{
                             display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -1816,7 +1802,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                             >
                               {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
                             </button>
-                            <span onClick={() => startEditShop(s)} style={{ flex: 1, minWidth: 0, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.n}</span>
+                            <span onClick={() => startEditShop(s)} style={{ flex: 1, minWidth: 0, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.qty && s.qty > 1 ? <b style={{ color: "var(--color-warning)", marginRight: 4 }}>{s.qty}×</b> : null}{s.n}</span>
                           </span>
                           <span onClick={() => startEditShop(s)} style={{ color: done ? "#888" : "var(--color-success)", fontFamily: "Oswald", cursor: "pointer", flexShrink: 0, marginLeft: 8 }}>
                             ${(s.c || 0).toFixed(0)}
@@ -1827,52 +1813,26 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   );
                 })}
                 {/* Add custom shop item */}
-                <div className="row" style={{ marginTop: 8 }}>
-                  <input
-                    value={newShopName}
-                    onChange={(e) => setNewShopName(e.target.value)}
-                    placeholder="Item name…"
-                    style={{ flex: 1, fontSize: 15, padding: "6px 10px" }}
-                  />
-                  <input
-                    type="number"
-                    value={newShopCost}
-                    onChange={(e) => setNewShopCost(e.target.value)}
-                    placeholder="$"
-                    style={{ width: 64, fontSize: 15, padding: "6px 8px" }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && newShopName.trim()) {
-                        addCustomShop({
-                          n: newShopName.trim(),
-                          c: parseFloat(newShopCost) || 0,
-                          room: "Custom",
-                          trade: "Added on site",
-                        });
-                        setNewShopName("");
-                        setNewShopCost("");
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (newShopName.trim()) {
-                        addCustomShop({
-                          n: newShopName.trim(),
-                          c: parseFloat(newShopCost) || 0,
-                          room: "Custom",
-                          trade: "Added on site",
-                        });
-                        setNewShopName("");
-                        setNewShopCost("");
-                      }
-                    }}
-                    aria-label="Add shopping item"
-                    style={{ background: "none", color: "var(--color-warning)", padding: "0 6px", display: "inline-flex" }}
-                  >
-                    <Icon name="add" size={18} />
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShopSheet({ item: null })}
+                  className="bo"
+                  style={{ width: "100%", marginTop: 10, padding: "10px 0", fontSize: 15, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: "var(--color-warning)", borderColor: "rgba(255,170,0,.45)" }}
+                >
+                  <Icon name="add" size={16} /> Add item
+                </button>
               </div>
+              {shopSheet && (
+                <ShopItemSheet
+                  item={shopSheet.item}
+                  darkMode={darkMode}
+                  onClose={cancelEditShop}
+                  onDelete={shopSheet.item ? () => deleteShop(shopSheet.item!) : undefined}
+                  onSave={(draft) => {
+                    if (shopSheet.item) saveEditShop(shopSheet.item, draft);
+                    else { addCustomShop({ ...draft, room: "Custom", trade: "Added on site" }); cancelEditShop(); }
+                  }}
+                />
+              )}
             </div>
           );
         } catch { return <div className="cd dim" style={{ padding: 20, textAlign: "center" }}>Guide unavailable</div>; }

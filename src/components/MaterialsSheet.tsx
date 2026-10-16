@@ -169,7 +169,7 @@ export default function MaterialsSheet({ title, materials, darkMode, onChange, o
                       key={s.name}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => pick(i, s.name, s.price)}
-                      style={{ display: "flex", width: "100%", justifyContent: "space-between", gap: 8, padding: "9px 10px", background: darkMode ? "#0d0d14" : "#fff", border: 0, borderBottom: `1px solid ${border}`, color: ink, fontSize: 14, textAlign: "left", cursor: "pointer" }}
+                      style={{ display: "flex", width: "100%", justifyContent: "space-between", gap: 8, padding: "9px 10px", background: darkMode ? "#0d0d14" : "#fff", border: 0, borderBottom: `1px solid ${border}`, color: ink, fontSize: 14, textAlign: "left", textTransform: "none", fontFamily: "inherit", cursor: "pointer" }}
                     >
                       <span>{s.name}</span>
                       <span style={{ color: "var(--color-warning)", fontFamily: "Oswald" }}>${s.price}</span>
