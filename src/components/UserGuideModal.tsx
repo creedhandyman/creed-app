@@ -14,7 +14,8 @@ import Grizz from "./Grizz";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "./Icon";
 import { SUPPORT_EMAIL } from "@/lib/platform-admin";
-import { t } from "@/lib/i18n";
+import { t, getLang } from "@/lib/i18n";
+import { SECTIONS_ES } from "./user-guide-es";
 
 interface Props {
   onClose: () => void;
@@ -233,8 +234,12 @@ export default function UserGuideModal({ onClose }: Props) {
   // Crew get a short "For the crew" section first (and open on it); the
   // owner-only "Running the Business" section is hidden from them. Built at
   // render so t() follows the current language.
+  // Spanish copy lives in user-guide-es.ts, keyed by section id (icons stay here).
+  const guide: Section[] = getLang() === "es"
+    ? SECTIONS.map((s) => ({ ...s, ...(SECTIONS_ES[s.id] || {}) }))
+    : SECTIONS;
   const sections: Section[] = isAdmin
-    ? SECTIONS
+    ? guide
     : [
         {
           id: "crew",
@@ -251,7 +256,7 @@ export default function UserGuideModal({ onClose }: Props) {
             ],
           }],
         },
-        ...SECTIONS.filter((sec) => sec.id !== "ops"),
+        ...guide.filter((sec) => sec.id !== "ops"),
       ];
   const [openId, setOpenId] = useState<string | null>(isAdmin ? "start" : "crew");
 
@@ -260,7 +265,7 @@ export default function UserGuideModal({ onClose }: Props) {
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="User guide"
+      aria-label={t("guide.aria")}
       style={{
         position: "fixed", inset: 0, zIndex: 999,
         background: "rgba(0,0,0,.7)",
@@ -284,11 +289,11 @@ export default function UserGuideModal({ onClose }: Props) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center", gap: 8 }}>
             <Grizz pose="point" size={28} />
-            Ask Grizz
+            {t("more.askGrizz")}
           </h3>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("guide.close")}
             style={{
               background: "transparent", border: "none",
               color: darkMode ? "#888" : "#555",
@@ -301,11 +306,11 @@ export default function UserGuideModal({ onClose }: Props) {
         </div>
 
         <p className="dim" style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.5 }}>
-          A quick walkthrough of the app, in the order you'll use it on a real job. Tap any section to expand.
+          {t("guide.intro")}
         </p>
         <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Creed app help")}`}
           style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--color-border-dark-2)", color: "var(--color-primary)", textDecoration: "none" }}>
-          <Icon name="mail" size={15} /> Stuck? Email support — a real person will help.
+          <Icon name="mail" size={15} /> {t("guide.stuck")}
         </a>
 
         {sections.map((sec) => {
@@ -362,7 +367,7 @@ export default function UserGuideModal({ onClose }: Props) {
         })}
 
         <p className="dim" style={{ fontSize: 13, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>
-          Stuck on a repair? More → Fix-it helper — snap a photo for a step-by-step diagnosis.
+          {t("guide.footer")}
         </p>
       </div>
     </div>
