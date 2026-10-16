@@ -123,6 +123,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `.tx small` (sub) inside — used by the dashboard Quote/Clock CTAs and the
   Time clock-in; don't re-inline the glow. Layout helpers `.row`, `.g2`,
   `.g4`, `.mt`, `.mb`, `.fi`.
+- **Pop-ups**: use `className="sheet-overlay"` (backdrop) + `className="sheet"`
+  (panel, add `cd` for card colors) from globals.css — bottom sheet on phones,
+  centered card ≥700px. Don't inline the overlay's alignItems/padding or the
+  panel's width/borderRadius (they'd override the classes). Never use
+  `window.alert/confirm/prompt` — `store.showConfirm` / `showToast` in the app,
+  an in-page sheet on public pages. Full-screen viewers (photo lightbox, quest
+  confetti, the help guide) stay as they are.
 - **Icons**: import from `<Icon name="..." />`. Curated set in
   `Icon.tsx`. Inline emoji in flowing copy (✅ status, ⭐ ratings) is
   fine; UI affordances should be Lucide.
