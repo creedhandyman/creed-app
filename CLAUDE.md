@@ -928,7 +928,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   gives an in-screen level its own history entry so Android back closes it
   (Jobs detail + sub-screen, Ops area + customer, Dashboard notifications).
   In-app close consumes the entry; unmount (navigating away) leaves it; the
-  close/unmount/StrictMode-remount decision is deferred a tick. Browser-tested
+  close/unmount/StrictMode-remount decision is deferred a tick. QuoteForge
+  (2026-10-16): one layer while any mode is open = that screen's ← (exitQuick /
+  exitEditor / exitBuilding; Inspector registers `leaveWalkthrough` via
+  `exitRef`); back is swallowed + re-armed mid AI build and inside a Voice
+  Walk (its Cancel discards the recording); Inspector adds room/review/picker
+  layers armed a tick after mount (parent effects run after child ones).
+  Browser-tested
   (10-step harness, incl. StrictMode). GOTCHA found doing it: Next's app
   router HARD-RELOADS on popstate to an entry without its `__NA` state —
   AppShell's seed replaceState used to wipe it (back to the dashboard reloaded

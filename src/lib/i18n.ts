@@ -49,6 +49,7 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // Inspector — types, conditions, setup + voice-picker/areas/notes
     "insp.newInspection": "New Inspection",
+    "insp.backInVoiceWalk": "Use Cancel or Done to leave the voice walk — back won't throw away your recording.",
     "insp.editInspection": "Edit Inspection",
     "insp.inspectionType": "Inspection Type",
     "insp.selectAreas": "Select Areas to Inspect",
@@ -148,6 +149,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "qf.pasteInspection": "Paste Inspection",
     "qf.manual": "Manual Build",
     "qf.quickQuote": "Quick Quote",
+    "qf.backWhileBuilding": "Hang on — the quote is still being built.",
     "qf.fullInspection": "Full Inspection",
     "qf.property": "Property address",
     "qf.saveJob": "Save job",
@@ -1309,6 +1311,7 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // Inspector — tipos, condiciones, configuración + áreas/notas/voz
     "insp.newInspection": "Nueva Inspección",
+    "insp.backInVoiceWalk": "Usa Cancelar o Listo para salir del recorrido por voz — atrás no borra tu grabación.",
     "insp.editInspection": "Editar Inspección",
     "insp.inspectionType": "Tipo de Inspección",
     "insp.selectAreas": "Selecciona Áreas a Inspeccionar",
@@ -1408,6 +1411,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "qf.pasteInspection": "Pegar Inspecci\u00f3n",
     "qf.manual": "Crear Manual",
     "qf.quickQuote": "Cotizaci\u00f3n R\u00e1pida",
+    "qf.backWhileBuilding": "Espera \u2014 la cotizaci\u00f3n todav\u00eda se est\u00e1 armando.",
     "qf.fullInspection": "Inspecci\u00f3n Completa",
     "qf.property": "Direcci\u00f3n de la propiedad",
     "qf.saveJob": "Guardar trabajo",

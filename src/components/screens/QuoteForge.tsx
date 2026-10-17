@@ -37,6 +37,7 @@ import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom } from "@/lib/pricing";
 import Inspector from "./Inspector";
+import { useBackLayer } from "@/lib/back-layer";
 import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
@@ -2072,6 +2073,62 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     }
   };
 
+  // ── Leaving a mode (the ← buttons AND the phone's back button) ──────────
+  const exitQuick = () => {
+    setMode(null); setQuickPhotos([]); setQuickDesc("");
+    // Leaving a lead's Quick Quote: detach from the lead like a fresh
+    // start, so the next quote doesn't patch the lead's row.
+    if (editingId) {
+      setEditingId(null); setProp(""); setClient("");
+      setCustomerId(undefined); setAddressId(undefined); setJobPhotos([]);
+    }
+  };
+  const exitBuilding = () => { setMode(null); setParsing(false); setParseStatus(""); setInspParseFailed(false); };
+  const exitEditor = () => {
+    setMode(null);
+    setRooms([]);
+    setCustomWorkOrder(null);
+    woKnownIdsRef.current = new Set();
+    setJobPhotos([]);
+    setInspectionData(null);
+    setEditingId(null);
+    setCustomTools([]);
+    setCustomShop([]);
+    setCheckedTools([]);
+    setCheckedShop([]);
+    setDiscount(null);
+    setLaborRate(null);
+    setMinLaborHours(null);
+    setTieredQuote(false);
+    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
+  };
+  // Inspector registers its own "leave the walkthrough" (keeps findings in the
+  // Resume slot) so back from its room list behaves like its ← button.
+  const inspectorExitRef = useRef<(() => void) | null>(null);
+  // Phone back inside a mode = that screen's ← (Android PWA). It used to skip
+  // every mode and leave QuoteForge. Unsaved work is still kept by the drafts
+  // (c_qf_draft / c_qf_edit), exactly as with the ← buttons.
+  const [backRearm, setBackRearm] = useState(false);
+  useEffect(() => { if (backRearm) setBackRearm(false); }, [backRearm]);
+  useBackLayer(!!mode && !backRearm, () => {
+    // Mid AI build: leaving now would let the finishing parse land on a
+    // reset screen — stay put (re-arm the layer so back keeps working).
+    if (parsing) {
+      useStore.getState().showToast(t("qf.backWhileBuilding"), "info");
+      setBackRearm(true);
+      return;
+    }
+    if (mode === "inspect" || mode === "inspect-edit") {
+      if (inspectorExitRef.current) inspectorExitRef.current();
+      else { setEditingInspection(null); setMode(null); }
+      return;
+    }
+    if (mode === "quick") return exitQuick();
+    if (inspParseFailed && rooms.length === 0) return exitBuilding();
+    if (mode === "edit" || (mode === "manual" && rooms.length > 0)) return exitEditor();
+    setMode(null); // paste · empty manual · template
+  });
+
   if (!mode) {
     return (
       <div className="fi">
@@ -2240,6 +2297,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         darkMode={darkMode}
         onCancel={() => setMode(null)}
         onComplete={handleInspectionComplete}
+        exitRef={inspectorExitRef}
       />
     );
 
@@ -2250,6 +2308,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         onCancel={() => { setEditingInspection(null); setMode(null); }}
         onComplete={handleInspectionEditSave}
         editing={editingInspection}
+        exitRef={inspectorExitRef}
       />
     );
 
@@ -2261,15 +2320,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       <div className="fi">
         <div className="row mb">
           {/* Disabled mid-build: a running AI parse would still land on this screen. */}
-          <button className="bo" disabled={parsing} style={parsing ? { opacity: 0.4 } : undefined} onClick={() => {
-            setMode(null); setQuickPhotos([]); setQuickDesc("");
-            // Leaving a lead's Quick Quote: detach from the lead like a fresh
-            // start, so the next quote doesn't patch the lead's row.
-            if (editingId) {
-              setEditingId(null); setProp(""); setClient("");
-              setCustomerId(undefined); setAddressId(undefined); setJobPhotos([]);
-            }
-          }}>←</button>
+          <button className="bo" disabled={parsing} style={parsing ? { opacity: 0.4 } : undefined} onClick={exitQuick}>←</button>
           <h2 style={{ fontSize: 20, color: "var(--color-accent-red)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="camera" size={18} color="var(--color-accent-red)" /> {t("qf.quickQuote")}</h2>
         </div>
 
@@ -2515,7 +2566,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => { setMode(null); setParsing(false); setParseStatus(""); setInspParseFailed(false); }}>←</button>
+          <button className="bo" onClick={exitBuilding}>←</button>
           <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="sparkle" size={18} color="var(--color-primary)" /> Building Quote</h2>
         </div>
         <div className="cd">
@@ -2544,24 +2595,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     <div className="fi">
       {/* Header */}
       <div className="row mb">
-        <button className="bo" onClick={() => {
-          setMode(null);
-          setRooms([]);
-          setCustomWorkOrder(null);
-          woKnownIdsRef.current = new Set();
-          setJobPhotos([]);
-          setInspectionData(null);
-          setEditingId(null);
-          setCustomTools([]);
-          setCustomShop([]);
-          setCheckedTools([]);
-          setCheckedShop([]);
-          setDiscount(null);
-          setLaborRate(null);
-          setMinLaborHours(null);
-          setTieredQuote(false);
-          setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
-        }}>←</button>
+        <button className="bo" onClick={exitEditor}>←</button>
         <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="quote" size={18} color="var(--color-primary)" /> {t("qf.quoteTitle")}</h2>
         <span style={{ fontSize: 12 }} className="dim">
           ${rate}/hr{laborRate && laborRate > 0 ? " (override)" : ""}
