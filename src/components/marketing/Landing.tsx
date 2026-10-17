@@ -174,7 +174,9 @@ export default function Landing() {
         <div className="lead" style={{ marginTop: 18 }}>Built by a handyman, for handymen. Start free today.</div>
         <div className="hbtns" style={{ justifyContent: "center", marginTop: 30 }}>
           <Link className="btn btn-glow btn-lg" href="/signin?mode=signup"><Icon name="rocket" size={18} /> Get Started Free</Link>
-          <Link className="btn btn-ghost btn-lg" href="/signin?mode=signup"><Icon name="download" size={18} /> Get the App</Link>
+          {/* Not a link until the Play listing is live (in Google review since
+              2026-10-15) — then point Android at the store. */}
+          <span className="btn btn-ghost btn-lg" aria-disabled="true" style={{ cursor: "default", filter: "none", transform: "none", opacity: 0.75 }}><Icon name="download" size={18} /> Android App Coming Soon</span>
         </div>
       </div></section>
     </MarketingShell>
