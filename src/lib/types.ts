@@ -264,6 +264,9 @@ export interface Job {
    *  Set from the Jobs detail; completing the job stamps that unit's
    *  `last_service_at`. Absent = no linked equipment. */
   equipment_id?: string | null;
+  /** Optional FK into `flip_projects` — set when this job is work on one of
+   *  the org's own flips. Absent = a normal service job (Flip Mode ignores it). */
+  flip_project_id?: string | null;
 }
 
 /** One row per Stripe charge (or refund) against a job — the payment ledger.
@@ -486,6 +489,48 @@ export interface Equipment {
   notes?: string;
   photos?: { url: string; label?: string }[];
   last_service_at?: string | null; // TIMESTAMPTZ — stamped when a linked job completes
+  created_at?: string;
+}
+
+/**
+ * Flip Mode — a house the org is buying to renovate and resell. No paying
+ * customer (the org is the client), so the P&L is PROFIT, not Job.total.
+ * Only the underwriting INPUTS are stored; every derived number (all-in,
+ * profit, ROI, 70%-rule max offer, verdict) comes from `analyzeFlip()` in
+ * `src/lib/flip.ts`. Field names match the SQL columns 1:1.
+ */
+export type FlipStatus =
+  | "analyzing" | "acquired" | "active" | "listed" | "sold" | "dead";
+
+export interface FlipComp {
+  address?: string;
+  price?: number;
+  sqft?: number;
+  sold_at?: string;
+  note?: string;
+}
+
+export interface FlipProject {
+  id: string;
+  org_id: string;
+  address: string;
+  beds?: number | null;
+  baths?: number | null;
+  sqft?: number | null;
+  status: FlipStatus;
+  purchase_price?: number;
+  rehab_budget?: number;
+  arv?: number;                    // after-repair value
+  down_pct?: number;               // % of purchase paid in cash
+  holding_monthly?: number;        // taxes + insurance + utilities + interest / month
+  holding_months?: number;
+  financing_cost?: number;         // points / origination / lump loan fees
+  selling_pct?: number;            // agent + closing, % of ARV
+  contingency?: number;
+  comps?: FlipComp[] | null;
+  acquired_at?: string | null;     // TIMESTAMPTZ — starts the holding clock (Phase 2)
+  sold_at?: string | null;
+  sold_price?: number | null;
   created_at?: string;
 }
 

@@ -39,6 +39,7 @@ const OVERFLOW_TABS: Record<string, { icon: IconName; labelKey: string }> = {
   payroll: { icon: "pay", labelKey: "nav.pay" },
   workvision: { icon: "worker", labelKey: "nav.work" },
   troubleshoot: { icon: "troubleshoot", labelKey: "nav.fixit" },
+  flip: { icon: "trending", labelKey: "nav.flip" },
 };
 
 // Per-tab signature color, shown only when that tab is the active one.
@@ -59,6 +60,7 @@ const TAB_COLOR: Record<string, string> = {
   payroll: "#22c55e",     // Payroll — green
   workvision: "#13c06a",  // Work mode — green
   troubleshoot: "#94a3b8",// Fix-it — slate
+  flip: "#ffcc00",        // Flip Mode — gold
 };
 
 interface Props {

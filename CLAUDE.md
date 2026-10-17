@@ -590,6 +590,47 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   runs, saving a unit / linking a job toasts a "table/column does not exist"
   error (best-effort) but nothing else breaks; existing orgs see no Equipment
   card until they add one.
+- Flip Mode (the org's own buy → renovate → resell deals; plan in
+  `.claude/plans/flip-mode.md`):
+  ```sql
+  CREATE TABLE IF NOT EXISTS flip_projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    address TEXT NOT NULL,
+    beds NUMERIC, baths NUMERIC, sqft NUMERIC,
+    status TEXT NOT NULL DEFAULT 'analyzing'
+      CHECK (status IN ('analyzing','acquired','active','listed','sold','dead')),
+    purchase_price NUMERIC DEFAULT 0,
+    rehab_budget NUMERIC DEFAULT 0,
+    arv NUMERIC DEFAULT 0,               -- after-repair value
+    down_pct NUMERIC DEFAULT 15,
+    holding_monthly NUMERIC DEFAULT 0,   -- taxes + ins + utilities + interest / month
+    holding_months NUMERIC DEFAULT 5,
+    financing_cost NUMERIC DEFAULT 0,    -- points / origination
+    selling_pct NUMERIC DEFAULT 6,       -- agent + closing, % of ARV
+    contingency NUMERIC DEFAULT 0,
+    comps JSONB,                         -- [{address, price, sqft, sold_at, note}] (Phase 2)
+    acquired_at TIMESTAMPTZ,             -- starts the holding-cost clock (Phase 2)
+    sold_at TIMESTAMPTZ,
+    sold_price NUMERIC,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_flip_projects_org ON flip_projects(org_id);
+  ALTER TABLE flip_projects ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY flip_projects_admin ON flip_projects FOR ALL TO authenticated
+    USING (org_id = auth_org_id() AND auth_role() IN ('owner','manager'))
+    WITH CHECK (org_id = auth_org_id() AND auth_role() IN ('owner','manager'));
+  ALTER TABLE jobs ADD COLUMN IF NOT EXISTS flip_project_id UUID;  -- Phase 2 job linking
+  ```
+  Owner/manager only (investor money) — same posture as `recurring_jobs`
+  writes; crew get no rows. The client writes it directly (db.post/patch), so
+  RLS needs the policy above, NOT service-role-only (RLS on + no policy =
+  nothing ever saves). Until this runs, starting a flip toasts a "table does
+  not exist" error; nothing else breaks — `loadAll` fetches flip_projects
+  OUTSIDE the main batch (strict + settle → silent null, not counted toward
+  `fullSyncAt` / the snapshot gate), so a missing table can't toast every 15s
+  or block the offline snapshot. Deliberately NOT in preflight `DB_CHECKS`
+  (optional feature, like brand_color).
 - Payments ledger / partial payments (deposits). Before this, `/api/verify-payment`
   set `status:'paid'` on ANY completed Stripe session — a 50% deposit marked the
   whole job paid, and nothing recorded how much was paid, so the balance could
@@ -776,6 +817,30 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 "column does not exist" error so the user notices.)
 
 ## Big systems shipped recently (for context)
+
+- **Flip Mode — Phase 1 Deal Analyzer (2026-10-17)**: "should I buy this
+  house?" for owners who flip their own properties. More hub → **Flip Mode**
+  tile (owner/manager only; AppShell route `flip` is admin-gated too) →
+  `screens/FlipAnalyzer.tsx`. ALL deal math is `src/lib/flip.ts`
+  `analyzeFlip()` (pure, tested in `src/__tests__/flip.test.ts`): all-in =
+  purchase + rehab + holding(×months) + loan fees + contingency; net sale =
+  ARV − selling %; profit; cash-in = down % of purchase + everything else;
+  ROI = profit ÷ cash-in; 70% rule max offer = ARV × 0.70 − rehab; verdict
+  good / warn (profit < $20k OR over the 70% max) / bad (≤ $0). `RULE_70` /
+  `THIN_PROFIT` are the knobs. Derived numbers are NEVER stored — only the
+  inputs on `flip_projects` (`store.flipProjects`, `upsertFlipProject` /
+  `deleteFlipProject`, in the offline snapshot). A new analysis is a
+  phone-only draft (`c_flip_draft_<uid>`) until **Start this flip project**;
+  saved projects autosave (700ms debounce, serialized writes, flushed on
+  leave/switch). Rehab can be seeded from a saved quote's total ("Fill rehab
+  from a quote…", quotes at that address listed first). Gold is Flip Mode's
+  hue: `--flip-gold` (#ffcc00 dark / #a37800 light) + `.ipill` / `.track` /
+  `.fill` / `.over` / `.bgold` in globals.css. The `Creed_Flip_Mode.html`
+  mockup was not in the repo when this was built — the layout follows the
+  plan doc + the app's section/drow style. **Phase 2 (not built)**: dashboard
+  (budget vs actual from receipts + time entries of jobs with
+  `jobs.flip_project_id`, holding clock from `acquired_at`, comps), the Jobs
+  detail picker to link a job, compare two flips. Phase 3: resale PDF.
 
 - **Day-rhythm Home + calm polish pass (2026-10-12)**: owner goal = "a
   reusable flow every day; using the app should relieve stress". Home keeps

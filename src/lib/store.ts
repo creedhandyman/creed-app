@@ -25,6 +25,7 @@ import type {
   MembershipPlan,
   CustomerMembership,
   Equipment,
+  FlipProject,
   ReviewRequest,
   AppNotification,
 } from "./types";
@@ -140,6 +141,8 @@ interface AppState {
   membershipPlans: MembershipPlan[];
   customerMemberships: CustomerMembership[];
   equipment: Equipment[];
+  /** Flip Mode projects (owner/manager only — RLS returns none to crew). */
+  flipProjects: FlipProject[];
   notifications: AppNotification[];
   loading: boolean;
   /** True when the UI is showing the last cached snapshot because the network
@@ -202,6 +205,10 @@ interface AppState {
     row: Partial<Equipment> & { kind: string }
   ) => Promise<Equipment | null>;
   deleteEquipment: (id: string) => Promise<boolean>;
+  upsertFlipProject: (
+    row: Partial<FlipProject> & { address: string }
+  ) => Promise<FlipProject | null>;
+  deleteFlipProject: (id: string) => Promise<boolean>;
 
   // auto-refresh
   _interval: ReturnType<typeof setInterval> | null;
@@ -218,7 +225,7 @@ const EMPTY_COLLECTIONS = {
   customers: [], addresses: [], profiles: [], pendingMembers: [], jobs: [], timeEntries: [],
   reviews: [], referrals: [], schedule: [], payHistory: [], receipts: [],
   questPayouts: [], timeOffRequests: [], recurringJobs: [], reviewRequests: [],
-  membershipPlans: [], customerMemberships: [], equipment: [], notifications: [],
+  membershipPlans: [], customerMemberships: [], equipment: [], flipProjects: [], notifications: [],
 };
 
 /** Placeholder user for a signed-in account that has no profile row yet.
@@ -445,6 +452,7 @@ export const useStore = create<AppState>((set, get) => ({
   membershipPlans: [],
   customerMemberships: [],
   equipment: [],
+  flipProjects: [],
   notifications: [],
   loading: true,
   usingOfflineData: false,
@@ -527,6 +535,14 @@ export const useStore = create<AppState>((set, get) => ({
         console.error("[store] loadAll fetch failed for a table:", err);
         return null;
       });
+    // Flip Mode is optional + owner/manager-only, so it's fetched beside the
+    // batch, not in it: a missing flip_projects table (migration not run) must
+    // not count as a failed load (that would block the offline snapshot) or
+    // toast every 15s — strict + settle turns it into a silent null.
+    const role = get().user?.role;
+    const flipP: Promise<FlipProject[] | null> = orgFilter && (role === "owner" || role === "manager")
+      ? settle(db.get<FlipProject>("flip_projects", orgFilter, { strict: true }))
+      : Promise.resolve([]);
     const results = await Promise.all([
       settle(db.get<Customer>("customers", orgFilter, { strict: true })),
       settle(db.get<Address>("addresses", orgFilter, { strict: true })),
@@ -590,6 +606,8 @@ export const useStore = create<AppState>((set, get) => ({
     const membershipPlansF = membershipPlans ?? cur.membershipPlans;
     const customerMembershipsF = customerMemberships ?? cur.customerMemberships;
     const equipmentF = equipment ?? cur.equipment;
+    const flipProjects = await flipP;
+    const flipProjectsF = flipProjects ?? cur.flipProjects;
     const notificationsF = notifications ?? cur.notifications;
 
     set({
@@ -600,6 +618,7 @@ export const useStore = create<AppState>((set, get) => ({
       timeEntries: applyPending("time_entries", timeEntriesF),
       reviews: reviewsF, referrals: referralsF, schedule: scheduleF, payHistory: payHistoryF, receipts: receiptsF, questPayouts: questPayoutsF, timeOffRequests: timeOffRequestsF, recurringJobs: recurringJobsF, reviewRequests: reviewRequestsF,
       membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF,
+      flipProjects: flipProjectsF,
       notifications: notificationsF,
       loading: false,
       usingOfflineData: false,
@@ -623,7 +642,7 @@ export const useStore = create<AppState>((set, get) => ({
       void saveSnapshot(userId, orgId, {
         customers: customersF, addresses: addressesF, profiles: profilesF, jobs: jobsF, timeEntries: timeEntriesF,
         reviews: reviewsF, referrals: referralsF, schedule: scheduleF, payHistory: payHistoryF, receipts: receiptsF, questPayouts: questPayoutsF, timeOffRequests: timeOffRequestsF, recurringJobs: recurringJobsF, reviewRequests: reviewRequestsF,
-        membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF, notifications: notificationsF,
+        membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF, flipProjects: flipProjectsF, notifications: notificationsF,
       });
     }
     // Also refresh org data (picks up Stripe changes, site updates, etc.).
@@ -847,6 +866,36 @@ export const useStore = create<AppState>((set, get) => ({
   deleteEquipment: async (id) => {
     await db.del("equipment", id);
     set({ equipment: get().equipment.filter((e) => e.id !== id) });
+    return true;
+  },
+
+  upsertFlipProject: async (row) => {
+    const isUpdate = !!row.id;
+    if (isUpdate) {
+      const updates = { ...row };
+      delete (updates as { id?: string }).id;
+      const ok = await db.patch("flip_projects", row.id!, updates);
+      if (!ok) return null;
+      const updated = { ...get().flipProjects.find((f) => f.id === row.id), ...updates, id: row.id! } as FlipProject;
+      set({ flipProjects: get().flipProjects.map((f) => (f.id === row.id ? updated : f)) });
+      return updated;
+    }
+    const orgId = get().user?.org_id;
+    const payload = { ...row, ...(orgId ? { org_id: orgId } : {}) };
+    const inserted = await db.post<FlipProject>("flip_projects", payload as Record<string, unknown>);
+    if (inserted === null) return null;
+    if (inserted.length > 0) {
+      const created = inserted[0];
+      set({ flipProjects: [created, ...get().flipProjects] });
+      return created;
+    }
+    await get().loadAll();
+    return null;
+  },
+
+  deleteFlipProject: async (id) => {
+    await db.del("flip_projects", id);
+    set({ flipProjects: get().flipProjects.filter((f) => f.id !== id) });
     return true;
   },
 

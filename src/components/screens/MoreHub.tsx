@@ -57,6 +57,11 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     ...(isAdmin
       ? [{ id: "map", icon: "map" as IconName, name: t("more.crewMap"), sub: t("more.crewMapSub"), color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") }]
       : []),
+    // Flip Mode — the org's own buy/renovate/resell deals. Owner/manager only
+    // (investor money; flip_projects RLS is owner/manager too).
+    ...(isAdmin
+      ? [{ id: "flip", icon: "trending" as IconName, name: t("more.flip"), sub: t("more.flipSub"), color: "var(--flip-gold)", tint: "rgba(255,204,0,.14)", onClick: () => setPage("flip") }]
+      : []),
     // Personal settings open from the profile card above (no duplicate tile).
     ...(isAdmin
       ? [{ id: "biz", icon: "settings" as IconName, name: t("more.businessSettings"), sub: t("more.businessSettingsSub"), color: "#06b6d4", tint: "rgba(6,182,212,.14)", onClick: () => openOps("settings") }]

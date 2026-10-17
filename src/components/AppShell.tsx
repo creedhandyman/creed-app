@@ -17,6 +17,7 @@ import Financials from "./screens/Financials";
 import Operations from "./screens/Operations";
 import WorkVision from "./screens/WorkVision";
 import MoreHub from "./screens/MoreHub";
+import FlipAnalyzer from "./screens/FlipAnalyzer";
 import Coachmark from "./Coachmark";
 import OfflineBanner from "./OfflineBanner";
 import { t } from "@/lib/i18n";
@@ -171,6 +172,9 @@ export default function AppShell() {
         return <Troubleshoot setPage={goToPage} />;
       case "financials":
         return isAdmin ? <Financials setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
+      case "flip":
+        // Flip Mode deals are investor money — owners/managers only.
+        return isAdmin ? <FlipAnalyzer setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
       case "more":
         return <MoreHub setPage={goToPage} openSettings={openSettingsNav} openOps={goToOps} />;
       default:

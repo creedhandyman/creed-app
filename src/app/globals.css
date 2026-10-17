@@ -647,6 +647,62 @@ button:focus-visible {
   border-radius: var(--r-pill);
 }
 
+/* ─── FLIP MODE ─────────────────────────────────────────
+   Gold is Flip Mode's hue (service jobs are blue). `.ipill` = a labeled
+   input tile (label on top, value below); `.track`/`.fill` = a thin
+   progress bar (the fill's width + color are set inline); `.over` paints an
+   over-budget value red; `.bgold` = the gold primary button. */
+:root { --flip-gold: #ffcc00; }
+.light { --flip-gold: #a37800; }  /* readable gold on white */
+.ipill {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  background: var(--color-card-dark-3);
+  border: 1px solid var(--color-border-dark-2);
+  border-radius: var(--r-md);
+  padding: 7px 10px 6px;
+}
+.ipill:focus-within { border-color: var(--flip-gold); box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.16); }
+.light .ipill { background: var(--color-card-light); border-color: var(--color-border-light); }
+.ipill > span {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ipill .ipv { display: flex; align-items: center; gap: 3px; font-family: var(--font-heading); font-weight: 600; font-size: 17px; }
+.ipill .ipv i { font-style: normal; color: var(--color-dim); font-size: 14px; }
+.ipill input,
+.ipill input:hover:not(:focus):not(:disabled),
+.ipill input:focus {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+}
+.track { height: 7px; border-radius: 99px; background: var(--color-card-dark-3); overflow: hidden; }
+.light .track { background: var(--color-border-light); }
+.track .fill { height: 100%; border-radius: 99px; background: var(--flip-gold); transition: width var(--t-base) var(--ease-out); }
+.over { color: var(--color-accent-red) !important; }
+.bgold {
+  background: linear-gradient(135deg, #ffcc00 0%, #f5a800 100%);
+  color: #1a1400;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+.bgold:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 6px 18px rgba(255, 204, 0, 0.3); transform: translateY(-1px); }
+.bgold:active:not(:disabled) { transform: translateY(0) scale(0.98); filter: brightness(0.95); }
+
 /* Compact rounded icon button — dashboard / hub topbars. */
 .iconbtn {
   width: 34px;
