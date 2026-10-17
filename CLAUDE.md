@@ -932,7 +932,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   gives an in-screen level its own history entry so Android back closes it
   (Jobs detail + sub-screen, Ops area + customer, Dashboard notifications).
   In-app close consumes the entry; unmount (navigating away) leaves it; the
-  close/unmount/StrictMode-remount decision is deferred a tick. QuoteForge
+  close/unmount/StrictMode-remount decision is deferred a tick. Deep links
+  (2026-10-16): a Jobs detail opened straight onto a job (bell, Home row,
+  Schedule "Open job") and an Ops area opened straight in (More → Customers /
+  Business settings, Home rows) get NO layer — the page entry is their back
+  step, and their in-app ← calls history.back() — so back returns to where you
+  came from, not to a list/hub you never saw. QuoteForge
   (2026-10-16): one layer while any mode is open = that screen's ← (exitQuick /
   exitEditor / exitBuilding; Inspector registers `leaveWalkthrough` via
   `exitRef`); back is swallowed + re-armed mid AI build and inside a Voice

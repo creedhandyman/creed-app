@@ -1,5 +1,5 @@
 "use client";
-import { Component, useEffect, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { profitSnapshot } from "@/lib/financials";
@@ -636,8 +636,16 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   useEffect(() => {
     if (tab !== "customers") setSelectedCustomerId(null);
   }, [tab]);
+  // Opened straight into an area (More → Customers / Business settings, a
+  // Home row): back returns to where you came from, not to the Ops hub you
+  // never saw. That area gets no layer (the page entry is its back step).
+  const deepAreaRef = useRef<OpsTab | null>(initialTab && isAdmin ? tab : null);
+  const isDeepArea = tab !== null && tab === deepAreaRef.current;
+  useEffect(() => {
+    if (tab !== deepAreaRef.current) deepAreaRef.current = null;
+  }, [tab]);
   // System back: customer → customer list → Ops hub (instead of leaving Ops).
-  useBackLayer(isAdmin && tab !== null, () => setTab(null));
+  useBackLayer(isAdmin && tab !== null && !isDeepArea, () => setTab(null));
   useBackLayer(!!selectedCustomerId, () => setSelectedCustomerId(null));
 
   // ── Hub KPIs + tile subs. Payroll due is exact (unpaid hours × each
@@ -728,7 +736,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
       {isAdmin && tab && (
         <TopBar
           title={areaLabel(tab)}
-          onBack={() => (selectedCustomerId ? setSelectedCustomerId(null) : setTab(null))}
+          onBack={() => (selectedCustomerId ? setSelectedCustomerId(null) : isDeepArea ? window.history.back() : setTab(null))}
           backLabel={t("ops.backToOperations")}
         />
       )}

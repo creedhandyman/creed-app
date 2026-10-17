@@ -340,8 +340,20 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Phase 3: sub-screen opened from the detail's Work section (work order /
   // receipts). null = show the detail (or the list). Back clears it.
   const [subScreen, setSubScreen] = useState<{ id: string; kind: "workorder" | "receipts" } | null>(null);
+  // Opened straight onto a job (bell, a Home row, Schedule's "Open job"):
+  // back returns to where you came from, not to a job list you never saw.
+  // That detail gets no layer of its own (the page entry IS its back step).
+  const deepLinkedJobRef = useRef<string | null>(detailJobId);
+  const isDeepLinkedDetail = !!detailJobId && detailJobId === deepLinkedJobRef.current;
+  useEffect(() => {
+    if (detailJobId !== deepLinkedJobRef.current) deepLinkedJobRef.current = null;
+  }, [detailJobId]);
+  const closeDetail = () => {
+    if (isDeepLinkedDetail) window.history.back();
+    else setDetailJobId(null);
+  };
   // System back closes the sub-screen, then the detail — instead of leaving Jobs.
-  useBackLayer(!!detailJobId, () => setDetailJobId(null));
+  useBackLayer(!!detailJobId && !isDeepLinkedDetail, () => setDetailJobId(null));
   useBackLayer(!!subScreen, () => setSubScreen(null));
   // "Send to client" SMS strip — once the (tokenized) status link is minted we
   // open an editable strip that fires a native sms: deep link, matching the
@@ -1202,8 +1214,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         <>
           {/* Topbar — back · JOB · print */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
-            <button className="bo" onClick={() => setDetailJobId(null)} style={{ fontSize: 14, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Icon name="back" size={15} /> {t("nav.jobs")}
+            <button className="bo" onClick={closeDetail} style={{ fontSize: 14, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <Icon name="back" size={15} /> {isDeepLinkedDetail ? t("common.back") : t("nav.jobs")}
             </button>
             <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px" }}>{t("jobs.jobUpper")}</div>
             <button className="bo" onClick={() => generateInvoice(dj)} title={t("jobs.printInvoice")} style={{ padding: "6px 9px", display: "inline-flex", alignItems: "center" }}>
