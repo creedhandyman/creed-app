@@ -22,6 +22,7 @@ import { useFinishTime } from "../FinishTimeModal";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
 import { pickReceiptPhoto } from "@/lib/image";
+import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
 import { newRowId, getPending } from "@/lib/offline-queue";
 import { isClosedRow, markLocalClockOut, unmarkLocalClockOut } from "@/lib/clock-sync";
 import { enqueueUpload, isNetworkError } from "@/lib/offline-uploads";
@@ -567,24 +568,12 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       wo[mi] = { ...wo[mi], done: nextDone };
       return { ...data, workOrder: wo };
     });
-    enqueueRoomsWrite(async () => {
-      const fresh = useStore.getState().jobs.find((j) => j.id === activeJob.id);
-      if (!fresh) return;
-      let freshData: Record<string, unknown> = {};
-      try {
-        freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
-      } catch { return; }
-      const freshWO = Array.isArray(freshData.workOrder)
-        ? (freshData.workOrder as { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean }[])
-        : [];
-      const matchIdx = freshWO.findIndex((w) => woStableKey(w) === targetKey);
-      if (matchIdx < 0) return; // task no longer exists in current blob — drop the toggle
-      const updatedWO = [...freshWO];
-      updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
-      await db.patch("jobs", activeJob.id, {
-        rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }),
-      });
-    });
+    // Durable: queued first (survives no signal / closing the app), then
+    // synced against the job's current server blob. Offline it replays on
+    // reconnect; until then loadAll keeps the tick on screen.
+    const jobId = activeJob.id;
+    enqueueWoToggle(jobId, targetKey, nextDone);
+    enqueueRoomsWrite(async () => { await flushWoQueue(jobId); });
   };
 
   // Upload work photo. Same fresh-read + queue pattern so a photo upload

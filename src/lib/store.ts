@@ -6,6 +6,7 @@ import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPe
 import { needsServerCheck, serverVerdict, isLocalClockOut, isCloseWrite } from "./clock-sync";
 import { t } from "./i18n";
 import { flushUploads, pendingUploadCount, clearUploads } from "./offline-uploads";
+import { flushWoQueue, applyWoPending, woPendingCount, clearWoQueue } from "./wo-queue";
 import type {
   Organization,
   Profile,
@@ -311,6 +312,7 @@ export const useStore = create<AppState>((set, get) => ({
     // reads; the queue is unconditionally wiped).
     void clearSnapshot();
     clearQueue();
+    clearWoQueue();
     void clearUploads();
     set({ pendingWrites: 0, pendingUploads: 0 });
     get().stopAutoRefresh();
@@ -448,7 +450,7 @@ export const useStore = create<AppState>((set, get) => ({
   usingOfflineData: false,
   lastSyncedAt: null,
   fullSyncAt: null,
-  pendingWrites: pendingCount(),
+  pendingWrites: pendingCount() + woPendingCount(),
   pendingUploads: 0, // hydrated from IndexedDB in startAutoRefresh
   clockReset: null,
   bumpPendingUploads: () => set({ pendingUploads: get().pendingUploads + 1 }),
@@ -478,7 +480,7 @@ export const useStore = create<AppState>((set, get) => ({
       // on every 15s poll while the network stays down. (In-memory timeEntries
       // already reflect optimistic offline writes.)
       if (get().profiles.length > 0 || get().jobs.length > 0) {
-        set({ loading: false, usingOfflineData: true, pendingWrites: pendingCount() });
+        set({ loading: false, usingOfflineData: true, pendingWrites: pendingCount() + woPendingCount() });
         return;
       }
       const snap = await loadSnapshot(userId, orgId);
@@ -486,6 +488,7 @@ export const useStore = create<AppState>((set, get) => ({
         const data = snap.data as unknown as Partial<AppState>;
         set({
           ...data,
+          jobs: applyWoPending((data.jobs as Job[]) || []),
           // Materialize queued offline writes on top of the snapshot so a
           // reload mid-airplane-mode still shows the clock-out that hasn't
           // synced yet.
@@ -494,7 +497,7 @@ export const useStore = create<AppState>((set, get) => ({
           usingOfflineData: true,
           lastSyncedAt: snap.at,
           fullSyncAt: snap.at,
-          pendingWrites: pendingCount(),
+          pendingWrites: pendingCount() + woPendingCount(),
         });
       } else {
         set({ loading: false }); // nothing cached — stop the spinner, leave as-is
@@ -590,7 +593,7 @@ export const useStore = create<AppState>((set, get) => ({
     const notificationsF = notifications ?? cur.notifications;
 
     set({
-      customers: customersF, addresses: addressesF, profiles: profilesF, pendingMembers: pendingMembersF, jobs: jobsF,
+      customers: customersF, addresses: addressesF, profiles: profilesF, pendingMembers: pendingMembersF, jobs: applyWoPending(jobsF),
       // Materialize any not-yet-synced offline writes on top of server truth so
       // an optimistic clock-out isn't clobbered by a poll that lands before the
       // queue flushes. Once flushed, the queue is empty and this is a no-op.
@@ -603,7 +606,7 @@ export const useStore = create<AppState>((set, get) => ({
       lastSyncedAt: Date.now(),
       // A table that failed kept its prior value — only a complete load counts.
       fullSyncAt: results.some((r) => r === null) ? cur.fullSyncAt : Date.now(),
-      pendingWrites: pendingCount(),
+      pendingWrites: pendingCount() + woPendingCount(),
     });
 
     // Is this phone still really on the clock? (A manager's force clock-out
@@ -658,11 +661,11 @@ export const useStore = create<AppState>((set, get) => ({
     const next = idx >= 0
       ? cur.map((e) => (e.id === rowId ? ({ ...e, ...payload, id: rowId } as unknown as TimeEntry) : e))
       : [({ id: rowId, ...payload } as unknown as TimeEntry), ...cur];
-    set({ timeEntries: next, pendingWrites: pendingCount() });
+    set({ timeEntries: next, pendingWrites: pendingCount() + woPendingCount() });
     // Try to sync now when online, then reconcile against server truth.
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       const res = await flushQueue();
-      set({ pendingWrites: res.remaining });
+      set({ pendingWrites: res.remaining + woPendingCount() });
       noteQueueConflicts(res.conflictRows.length);
       if (res.flushed > 0) await get().loadAll();
       // false = THIS close found the shift already closed elsewhere.
@@ -673,10 +676,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   dropTimeEntry: async (rowId, opts) => {
     enqueueWrite({ table: "time_entries", op: "del", rowId, onlyIfOpen: !!opts?.onlyIfOpen });
-    set({ timeEntries: get().timeEntries.filter((e) => e.id !== rowId), pendingWrites: pendingCount() });
+    set({ timeEntries: get().timeEntries.filter((e) => e.id !== rowId), pendingWrites: pendingCount() + woPendingCount() });
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       const res = await flushQueue();
-      set({ pendingWrites: res.remaining });
+      set({ pendingWrites: res.remaining + woPendingCount() });
       noteQueueConflicts(res.conflictRows.length);
       if (res.flushed > 0) await get().loadAll();
       // false = THIS close found the shift already closed elsewhere.
@@ -880,7 +883,8 @@ export const useStore = create<AppState>((set, get) => ({
     // Replay any writes/uploads queued in a previous session (e.g. clocked out
     // or snapped a photo offline, then closed the app) before/while the first
     // load runs. Also hydrate the pending-upload count from IndexedDB.
-    flushQueue().then((res) => { set({ pendingWrites: res.remaining }); noteQueueConflicts(res.conflictRows.length); }).catch(() => {});
+    flushQueue().then((res) => { set({ pendingWrites: res.remaining + woPendingCount() }); noteQueueConflicts(res.conflictRows.length); }).catch(() => {});
+    flushWoQueue().then(() => set({ pendingWrites: pendingCount() + woPendingCount() })).catch(() => {});
     flushUploads().then((res) => set({ pendingUploads: res.remaining })).catch(() => {});
     pendingUploadCount().then((n) => set({ pendingUploads: n })).catch(() => {});
     get().loadAll();
@@ -889,11 +893,14 @@ export const useStore = create<AppState>((set, get) => ({
     // otherwise wait for the next clock action or app restart — long enough
     // for a manager to force-close the shift in the meantime.
     const iv = setInterval(() => {
+      if (woPendingCount() > 0 && (typeof navigator === "undefined" || navigator.onLine !== false)) {
+        void flushWoQueue().then(() => set({ pendingWrites: pendingCount() + woPendingCount() })).catch(() => {});
+      }
       // Not while a flush is already running — the poll would just queue up
       // behind it (and starve its own data refresh in a hanging dead zone).
       if (pendingCount() > 0 && !isFlushing() && (typeof navigator === "undefined" || navigator.onLine !== false)) {
         flushQueue()
-          .then((res) => { set({ pendingWrites: res.remaining }); noteQueueConflicts(res.conflictRows.length); })
+          .then((res) => { set({ pendingWrites: res.remaining + woPendingCount() }); noteQueueConflicts(res.conflictRows.length); })
           .catch(() => {})
           .finally(() => { void get().loadAll(); });
       } else {
@@ -933,8 +940,10 @@ if (typeof window !== "undefined") {
     if (!useStore.getState().user) return;
     void (async () => {
       const res = await flushQueue();
-      useStore.setState({ pendingWrites: res.remaining });
+      useStore.setState({ pendingWrites: res.remaining + woPendingCount() });
       noteQueueConflicts(res.conflictRows.length);
+      await flushWoQueue().catch(() => 0);
+      useStore.setState({ pendingWrites: pendingCount() + woPendingCount() });
       // Then replay queued image uploads (rows first so a receipt's row exists
       // before anything references it), and refresh live data.
       const up = await flushUploads();

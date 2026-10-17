@@ -909,7 +909,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   pending writes over server/snapshot so a poll can't clobber an unsynced
   clock-out; queue cleared on logout; `pendingWrites` drives the banner's
   "· N change(s) will sync when you reconnect". A non-network (RLS/constraint)
-  replay error drops just that item so it can't wedge the queue. **P3 image
+  replay error drops just that item so it can't wedge the queue. **Work-order
+  ticks (2026-10-16)**: `src/lib/wo-queue.ts` — a tick lives in the job's rooms
+  blob, so it gets its own localStorage queue ({jobId, key=room|||detail, done},
+  latest tap per task wins) replayed as read-current-blob → set done by key →
+  write (other blob edits kept; a task/job that's gone drops its ticks).
+  `applyWoPending` overlays unsynced ticks in loadAll + the offline snapshot;
+  flushed on tap, at start, every 15s poll that has some, and on `online`;
+  counted in the banner. WorkVision toggleWO + the Jobs work-order screen both
+  use it. **P3 image
   uploads** (`src/lib/offline-uploads.ts`): photos/receipts snapped offline are
   no longer lost. Binary can't live in localStorage, so the pending File is
   stashed in an **IndexedDB** queue (`creed-uploads` DB) and replayed on

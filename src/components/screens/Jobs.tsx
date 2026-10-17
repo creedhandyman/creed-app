@@ -33,6 +33,7 @@ import {
 } from "@/lib/recurring";
 import { stripAiHrsFromBlob } from "@/lib/ai-hours";
 import { useBackLayer } from "@/lib/back-layer";
+import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
    Under the Requested-tech picker: ranks the crew by distance from
@@ -1912,18 +1913,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                         } catch { return x; }
                       }),
                     });
-                    enqueueRoomsWrite(async () => {
-                      const fresh = useStore.getState().jobs.find((x) => x.id === sj.id);
-                      if (!fresh) return;
-                      let freshData: Record<string, unknown> = {};
-                      try { freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {}); } catch { return; }
-                      const freshWO: WOItem[] = Array.isArray(freshData.workOrder) ? (freshData.workOrder as WOItem[]) : [];
-                      const matchIdx = freshWO.findIndex((x) => woStableKey(x) === targetKey);
-                      if (matchIdx < 0) return;
-                      const updatedWO = [...freshWO];
-                      updatedWO[matchIdx] = { ...updatedWO[matchIdx], done: nextDone };
-                      await db.patch("jobs", sj.id, { rooms: JSON.stringify({ ...freshData, workOrder: updatedWO }) });
-                    });
+                    // Durable: queued first, then synced against the job's
+                    // current server blob (replays on reconnect when offline).
+                    enqueueWoToggle(sj.id, targetKey, nextDone);
+                    enqueueRoomsWrite(async () => { await flushWoQueue(sj.id); });
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark)", borderRadius: 12, padding: "9px 10px", marginBottom: 7, cursor: "pointer", opacity: w.done ? 0.6 : 1 }}
                 >
