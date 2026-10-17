@@ -476,133 +476,111 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
         />
       </div>
 
-      {/* Quick-Schedule Modal — opens from a job's "Assign" button. Shared
-          .sheet-overlay/.sheet: it sits above the nav (z 999 vs the nav's
-          200 — the old inline z 199 let a side nav draw over the form). */}
-      {armedJob && dropTarget && (
-        <div
-          onClick={() => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
-          className="sheet-overlay"
-        >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="cd sheet"
-          style={{ boxShadow: "0 8px 32px rgba(0,0,0,.5)" }}
-        >
-          <h4 style={{ fontSize: 16, color: "var(--color-primary)", marginBottom: 6 }}>{editSched ? t("sched.editMoveJob") : t("sched.scheduleJob")}</h4>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{armedJob}</div>
-          <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 13 }}>{t("sched.day")}</label>
-            {/* One-tap days: Today · Tomorrow · the day after (by name). */}
-            <div className="row" style={{ marginTop: 4, gap: 6 }}>
-              {[0, 1, 2].map((n) => {
-                const d = new Date();
-                d.setDate(d.getDate() + n);
-                const ds = ymd(d);
-                const sel = dropTarget === ds;
-                return (
+      {/* Quick-Schedule sheet — opens from a job's "Assign" / a calendar entry.
+          Shared pop-up style (.sheet-overlay / .sheet): bottom sheet on phones,
+          centered card on wide screens. */}
+      {armedJob && dropTarget && (() => {
+        const close = () => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); };
+        // Pill toggle — same look for day chips and crew chips.
+        const pill = (sel: boolean): React.CSSProperties => ({
+          minHeight: 36, padding: "6px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600,
+          display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+          background: sel ? "color-mix(in srgb, var(--color-primary) 18%, transparent)" : "transparent",
+          color: sel ? "var(--color-primary)" : "var(--color-dim)",
+          border: `1px solid ${sel ? "var(--color-primary)" : "var(--color-border-dark)"}`,
+        });
+        const field: React.CSSProperties = { marginTop: 4, width: "100%", fontWeight: 600 };
+        return (
+          <div onClick={close} className="sheet-overlay">
+            <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxWidth: 440, paddingTop: 18 }}>
+              {/* Header — title + close, the job underneath */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "color-mix(in srgb, var(--color-primary) 16%, transparent)" }}>
+                  <Icon name="schedule" size={19} color="var(--color-primary)" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", lineHeight: 1.15 }}>
+                    {editSched ? t("sched.editMoveJob") : t("sched.scheduleJob")}
+                  </h3>
+                  <div className="dim" style={{ fontSize: 13.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{armedJob}</div>
+                </div>
+                <button className="iconbtn" onClick={close} aria-label={t("common.close")}><Icon name="close" size={16} /></button>
+              </div>
+
+              {/* Day — one-tap Today · Tomorrow · the day after, or pick a date */}
+              <div className="section" style={{ marginBottom: 12 }}>
+                <label className="sl" style={{ fontSize: 12.5 }}>{t("sched.day")}</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                  {[0, 1, 2].map((n) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + n);
+                    const ds = ymd(d);
+                    return (
+                      <button key={n} type="button" onClick={() => setDropTarget(ds)} style={pill(dropTarget === ds)}>
+                        {n === 0 ? t("sched.chipToday") : n === 1 ? t("sched.chipTomorrow") : DAY_NAMES[d.getDay()]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                  <div>
+                    <div className="dim" style={{ fontSize: 12 }}>{t("sched.day")}</div>
+                    <input type="date" value={dropTarget || ""} onChange={(e) => setDropTarget(e.target.value)} style={{ ...field, color: "var(--color-primary)" }} />
+                  </div>
+                  <div>
+                    <div className="dim" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={t("sched.endDayOptional")}>{t("sched.endDay")} · {t("sched.optional").toLowerCase()}</div>
+                    <input type="date" value={endTarget || ""} min={dropTarget || undefined} onChange={(e) => setEndTarget(e.target.value || null)} style={field} />
+                  </div>
+                </div>
+                {suggestion && suggestion.date !== dropTarget && (
                   <button
-                    key={n}
-                    onClick={() => setDropTarget(ds)}
-                    style={{
-                      padding: "3px 10px", borderRadius: 16, fontSize: 13,
-                      background: sel ? "color-mix(in srgb, var(--color-primary) 20%, transparent)" : "transparent",
-                      color: sel ? "var(--color-primary)" : "#888",
-                      border: `1px solid ${sel ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
-                    }}
+                    type="button"
+                    onClick={() => setDropTarget(suggestion.date)}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 7, background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.35)", borderRadius: 10, padding: "9px 11px", marginTop: 10, fontSize: 13, color: "#c9a6ff", cursor: "pointer", textAlign: "left" }}
                   >
-                    {n === 0 ? t("sched.chipToday") : n === 1 ? t("sched.chipTomorrow") : DAY_NAMES[d.getDay()]}
+                    <Icon name="sparkle" size={14} color="#c9a6ff" /> {t("sched.nearbyUse")} {new Date(suggestion.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                   </button>
-                );
-              })}
-            </div>
-            <input
-              type="date"
-              value={dropTarget || ""}
-              onChange={(e) => setDropTarget(e.target.value)}
-              style={{ marginTop: 6, color: "var(--color-primary)", fontWeight: 600 }}
-            />
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 13 }}>
-              {t("sched.endDay")} <span className="dim" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>· {t("sched.endDayOptional")}</span>
-            </label>
-            <input
-              type="date"
-              value={endTarget || ""}
-              min={dropTarget || undefined}
-              onChange={(e) => setEndTarget(e.target.value || null)}
-              style={{ marginTop: 4, color: "var(--color-primary)", fontWeight: 600 }}
-            />
-          </div>
-          {suggestion && suggestion.date !== dropTarget && (
-            <div
-              onClick={() => setDropTarget(suggestion.date)}
-              style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.35)", borderRadius: 10, padding: "7px 10px", marginBottom: 10, fontSize: 12.5, color: "#c9a6ff", cursor: "pointer" }}
-            >
-              <Icon name="sparkle" size={14} color="#c9a6ff" /> {t("sched.nearbyUse")} {new Date(suggestion.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-            </div>
-          )}
-          <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 13 }}>{t("sched.time")}</label>
-            <input
-              type="time"
-              value={qsTime}
-              onChange={(e) => setQsTime(e.target.value)}
-              style={{ marginTop: 4, color: "var(--color-primary)", fontWeight: 600 }}
-            />
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <label className="sl" style={{ fontSize: 13 }}>{t("sched.workers")}</label>
-            <div className="row" style={{ marginTop: 4 }}>
-              {profiles.map((p) => {
-                const sel = qsWorkers.includes(p.name);
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => setQsWorkers((prev) => sel ? prev.filter((n) => n !== p.name) : [...prev, p.name])}
-                    style={{
-                      padding: "3px 10px", borderRadius: 16, fontSize: 14,
-                      background: sel ? "var(--color-primary)" + "33" : "transparent",
-                      color: sel ? "var(--color-primary)" : "#888",
-                      border: `1px solid ${sel ? "var(--color-primary)" : darkMode ? "#1e1e2e" : "#ddd"}`,
-                    }}
-                  >
-                    {p.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label className="sl" style={{ fontSize: 13 }}>{t("sched.notes")}</label>
-            <input
-              value={qsNote}
-              onChange={(e) => setQsNote(e.target.value)}
-              placeholder={t("sched.optional")}
-              style={{ marginTop: 4 }}
-            />
-          </div>
-          <div className="row" style={{ gap: 8 }}>
-            {editSched && (
-              <button onClick={deleteSched} className="br" style={{ flex: 1, fontSize: 14 }}>
-                {t("sched.unschedule")}
+                )}
+              </div>
+
+              {/* Time + crew */}
+              <div className="section" style={{ marginBottom: 12 }}>
+                <label className="sl" style={{ fontSize: 12.5 }}>{t("sched.time")}</label>
+                <input type="time" value={qsTime} onChange={(e) => setQsTime(e.target.value)} style={{ ...field, color: "var(--color-primary)" }} />
+                <label className="sl" style={{ fontSize: 12.5, display: "block", marginTop: 12 }}>{t("sched.workers")}</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                  {profiles.map((p) => {
+                    const sel = qsWorkers.includes(p.name);
+                    return (
+                      <button key={p.id} type="button" onClick={() => setQsWorkers((prev) => sel ? prev.filter((n) => n !== p.name) : [...prev, p.name])} style={pill(sel)}>
+                        {sel && <Icon name="check" size={13} />}{p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label className="sl" style={{ fontSize: 12.5 }}>{t("sched.notes")}</label>
+                <input value={qsNote} onChange={(e) => setQsNote(e.target.value)} placeholder={t("sched.optional")} style={{ marginTop: 4, width: "100%" }} />
+              </div>
+
+              {/* Actions — primary full width, secondary underneath */}
+              <button onClick={quickAdd} className="bg" style={{ width: "100%", fontSize: 15, padding: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                {editSched ? t("sched.saveChanges") : t("sched.scheduleAction")}
               </button>
-            )}
-            <button
-              onClick={() => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
-              className="bo"
-              style={{ flex: 1, fontSize: 14 }}
-            >
-              {t("common.cancel")}
-            </button>
-            <button onClick={quickAdd} className="bg" style={{ flex: 2, fontSize: 15 }}>
-              {editSched ? t("sched.saveChanges") : t("sched.scheduleAction")}
-            </button>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                {editSched && (
+                  <button onClick={deleteSched} className="bo" style={{ flex: 1, fontSize: 14, color: "var(--color-accent-red)" }}>
+                    {t("sched.unschedule")}
+                  </button>
+                )}
+                <button onClick={close} className="bo" style={{ flex: 1, fontSize: 14 }}>{t("common.cancel")}</button>
+              </div>
+            </div>
           </div>
-        </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* View toggle (Day / Week / Month) */}
       <div style={{ display: "flex", gap: 5, marginBottom: 11 }}>
