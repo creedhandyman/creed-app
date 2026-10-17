@@ -837,10 +837,29 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   hue: `--flip-gold` (#ffcc00 dark / #a37800 light) + `.ipill` / `.track` /
   `.fill` / `.over` / `.bgold` in globals.css. The `Creed_Flip_Mode.html`
   mockup was not in the repo when this was built — the layout follows the
-  plan doc + the app's section/drow style. **Phase 2 (not built)**: dashboard
-  (budget vs actual from receipts + time entries of jobs with
-  `jobs.flip_project_id`, holding clock from `acquired_at`, comps), the Jobs
-  detail picker to link a job, compare two flips. Phase 3: resale PDF.
+  plan doc + the app's section/drow style. **Phase 2 — project dashboard
+  (2026-10-17)**: a saved flip gets a Deal / Dashboard switch (owned statuses
+  open on Dashboard; `screens/FlipDashboard.tsx`). Jobs join a flip via
+  `jobs.flip_project_id` — the Jobs detail **Flip project** picker
+  (owner/manager, only once a flip exists; mirrors Serviced unit) or the
+  dashboard's "Link a job…" select. All math is pure in `lib/flip.ts`
+  (tested): `flipActuals` = per linked job, budget = its quote total vs
+  actual = receipts + time entries (`makeEntryPay` from financials.ts:
+  recorded amount, else hrs × CURRENT rate; rate ≤ 0 = $0 and surfaced as
+  "N h with no pay rate", never a fallback rate; legacy no-job_id entries go
+  to the OLDEST job at the address, same as Jobs' hours card). Lines are
+  named by the job's work-order areas (every flip job shares one address).
+  Receipts/time entries carry no trade, so budget-vs-actual is per JOB, not
+  per trade. `holdingClock` = days (acquired_at → sold_at|now) × monthly ÷ 30.
+  `analyzeFlipActuals` = analyzeFlip with spend swapped in: rehab = actual
+  only once every linked job is complete (until then max(budget, spent) — no
+  banking unfinished savings), holding = max(planned, to date) until sold,
+  sold_price replaces ARV. Status changes stamp `acquired_at` (owned) and
+  `sold_at` (sold; cleared when moved off sold); both dates + sold price are
+  editable in the Project section. **Comps** (Deal view, `FlipComps`): 3 rows
+  on `flip_projects.comps` (address, price, sqft, `status` sold|pending —
+  JSONB, no migration), avg $/sq ft × the house's sq ft → "Use as ARV".
+  Still to do: compare two flips; Phase 3 resale PDF.
 
 - **Day-rhythm Home + calm polish pass (2026-10-12)**: owner goal = "a
   reusable flow every day; using the app should relieve stress". Home keeps

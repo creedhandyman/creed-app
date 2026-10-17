@@ -155,6 +155,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const reviewRequests = useStore((s) => s.reviewRequests);
   const customers = useStore((s) => s.customers);
   const equipment = useStore((s) => s.equipment);
+  const flipProjects = useStore((s) => s.flipProjects);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
   const navBottom = useStore((s) => s.navBottom);
@@ -1580,6 +1581,34 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
                 {linked?.last_service_at && (
                   <div className="drow"><span className="l">Last serviced</span><span className="v">{new Date(linked.last_service_at).toLocaleDateString()}</span></div>
                 )}
+              </div>
+            );
+          })()}
+
+          {/* Flip project — link this job to one of the org's own flips so its
+              receipts + hours roll into that flip's budget vs actual. Owner/manager
+              only, and only once a flip exists (crew get no flip_projects rows). */}
+          {isAdmin && flipProjects.length > 0 && (() => {
+            const linked = flipProjects.find((f) => f.id === dj.flip_project_id);
+            return (
+              <div className="section">
+                <div className="seclabel"><Icon name="trending" size={13} /> {t("flip.title")}</div>
+                <div className="drow">
+                  <span className="l">{t("flip.jobLink")}</span>
+                  <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: pillBg, border: `1px solid ${linked ? "var(--flip-gold)" : pillBorder}`, maxWidth: "60%" }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linked ? linked.address : t("flip.jobLinkNone")}</span>
+                    <Icon name="expand" size={12} color="var(--color-dim)" />
+                    <select
+                      value={dj.flip_project_id || ""}
+                      aria-label={t("flip.jobLink")}
+                      onChange={async (e) => { await db.patch("jobs", dj.id, { flip_project_id: e.target.value || null }); loadAll(); }}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", WebkitAppearance: "none", appearance: "none" }}
+                    >
+                      <option value="">{t("flip.jobLinkNone")}</option>
+                      {flipProjects.map((f) => <option key={f.id} value={f.id}>{f.address}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
             );
           })()}

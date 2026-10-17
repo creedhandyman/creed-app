@@ -506,6 +506,8 @@ export interface FlipComp {
   address?: string;
   price?: number;
   sqft?: number;
+  /** "sold" (closed) or "pending" (under contract). Absent = sold. */
+  status?: "sold" | "pending";
   sold_at?: string;
   note?: string;
 }

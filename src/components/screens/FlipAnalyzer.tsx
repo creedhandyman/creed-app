@@ -6,6 +6,7 @@ import type { FlipProject, FlipStatus } from "@/lib/types";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
+import FlipDashboard, { FlipComps } from "./FlipDashboard";
 
 interface Props {
   setPage: (p: string) => void;
@@ -40,6 +41,13 @@ const FIELDS: { key: NumKey; label: string; unit: "$" | "%" | "mo" }[] = [
 ];
 
 const STATUSES: FlipStatus[] = ["analyzing", "acquired", "active", "listed", "sold", "dead"];
+// Once a house is bought, opening it lands on the dashboard (budget vs actual).
+const OWNED: FlipStatus[] = ["acquired", "active", "listed", "sold"];
+
+// A stored TIMESTAMPTZ <-> the date input's local YYYY-MM-DD (noon, so a
+// timezone shift can't move it a day).
+const toDateInput = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("en-CA") : "");
+const fromDateInput = (v: string) => (v ? new Date(`${v}T12:00:00`).toISOString() : null);
 
 const VERDICT_STYLE: Record<FlipVerdict | "empty", { c: string; tint: string; icon: "checkCircle" | "warn" | "errorCircle" | "calc"; label: string }> = {
   empty: { c: "var(--color-dim)", tint: "transparent", icon: "calc", label: "flip.enterNumbers" },
@@ -72,6 +80,7 @@ export default function FlipAnalyzer({ setPage }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(() => readDraft(user?.id));
   const [saving, setSaving] = useState(false);
+  const [view, setView] = useState<"deal" | "dash">("deal");
 
   // ── Autosave for saved projects: one pending patch, flushed after a pause,
   //    each flush chained behind the last so writes land in order.
@@ -120,6 +129,7 @@ export default function FlipAnalyzer({ setPage }: Props) {
     if (id === null) { setDraft(readDraft(user?.id)); return; }
     const row = flipProjects.find((f) => f.id === id);
     if (row) setDraft({ ...row, comps: row.comps ?? undefined });
+    setView(row && OWNED.includes(row.status) ? "dash" : "deal");
   };
 
   const a = useMemo(() => analyzeFlip(draft), [draft]);
@@ -152,6 +162,17 @@ export default function FlipAnalyzer({ setPage }: Props) {
   };
 
   const markBought = () => update({ status: "acquired", acquired_at: draft.acquired_at || new Date().toISOString() });
+
+  // Status drives the holding clock: owning it starts the clock (if no buy
+  // date yet), "sold" stops it, moving off "sold" restarts it.
+  const changeStatus = (status: FlipStatus) => {
+    const patch: Partial<FlipProject> = { status };
+    const now = new Date().toISOString();
+    if (OWNED.includes(status) && !draft.acquired_at) patch.acquired_at = now;
+    if (status === "sold" && !draft.sold_at) patch.sold_at = now;
+    if (status !== "sold" && draft.sold_at) patch.sold_at = null;
+    update(patch);
+  };
 
   const removeProject = async () => {
     if (!activeId) { setDraft({ ...NEW_DRAFT }); return; }
@@ -194,6 +215,23 @@ export default function FlipAnalyzer({ setPage }: Props) {
         </div>
       )}
 
+      {activeId && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: 3, borderRadius: 12, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", marginBottom: 12 }}>
+          {([["deal", "calc", t("flip.viewDeal")], ["dash", "trending", t("flip.viewDash")]] as const).map(([k, icon, label]) => (
+            <button
+              key={k}
+              onClick={() => setView(k)}
+              style={{ padding: "8px 6px", borderRadius: 9, fontSize: 14, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, background: view === k ? "rgba(255,204,0,.14)" : "transparent", color: view === k ? "var(--flip-gold)" : "var(--color-dim)", border: view === k ? "1px solid var(--flip-gold)" : "1px solid transparent" }}
+            >
+              <Icon name={icon} size={15} /> {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeId && view === "dash" ? (
+        <FlipDashboard project={draft as FlipProject} setPage={setPage} />
+      ) : (<>
       {/* Property */}
       <div className="section">
         <div className="seclabel"><Icon name="home" size={14} /> {t("flip.property")}</div>
@@ -302,6 +340,13 @@ export default function FlipAnalyzer({ setPage }: Props) {
         )}
       </div>
 
+      <FlipComps
+        comps={draft.comps}
+        sqft={draft.sqft}
+        onChange={(comps) => update({ comps })}
+        onUseArv={(arv) => { update({ arv }); showToast(t("flip.arvFilled")); }}
+      />
+
       {/* Cost breakdown */}
       <div className="section">
         <div className="seclabel"><Icon name="list" size={14} /> {t("flip.breakdown")}</div>
@@ -318,6 +363,7 @@ export default function FlipAnalyzer({ setPage }: Props) {
         <div className="drow"><span className="l">{t("flip.arv")} − {t("flip.sellingCosts")} ({draft.selling_pct || 0}%)</span><span className="v">{money(a.netSale)}</span></div>
         <div className="drow"><span className="l" style={{ fontWeight: 600, color: "inherit" }}>{t("flip.projectedProfit")}</span><span className="v" style={{ fontFamily: "Oswald", fontSize: 16, color: v.c }}>{money(a.profit)}</span></div>
       </div>
+      </>)}
 
       {/* Actions */}
       {activeId === null ? (
@@ -329,16 +375,31 @@ export default function FlipAnalyzer({ setPage }: Props) {
           <div className="seclabel"><Icon name="briefcase" size={14} /> {t("flip.project")}</div>
           <div className="drow">
             <span className="l">{t("flip.status")}</span>
-            <select value={draft.status || "analyzing"} onChange={(e) => update({ status: e.target.value as FlipStatus })} style={{ width: "auto", fontSize: 14, padding: "5px 10px" }}>
+            <select value={draft.status || "analyzing"} onChange={(e) => changeStatus(e.target.value as FlipStatus)} style={{ width: "auto", fontSize: 14, padding: "5px 10px" }}>
               {STATUSES.map((s) => <option key={s} value={s}>{t(`flip.st_${s}`)}</option>)}
             </select>
           </div>
           {draft.acquired_at ? (
-            <div className="drow"><span className="l">{t("flip.boughtOn")}</span><span className="v">{new Date(draft.acquired_at).toLocaleDateString()}</span></div>
+            <div className="drow">
+              <span className="l">{t("flip.boughtOn")}</span>
+              <input type="date" value={toDateInput(draft.acquired_at)} max={toDateInput(new Date().toISOString())} onChange={(e) => { const d = fromDateInput(e.target.value); if (d) update({ acquired_at: d }); }} aria-label={t("flip.boughtOn")} style={{ width: "auto", fontSize: 14, padding: "5px 8px" }} />
+            </div>
           ) : (
             <button className="bgold" onClick={markBought} style={{ width: "100%", margin: "8px 0 4px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <Icon name="check" size={15} /> {t("flip.markBought")}
             </button>
+          )}
+          {draft.status === "sold" && (
+            <>
+              <div className="drow">
+                <span className="l">{t("flip.soldOn")}</span>
+                <input type="date" value={toDateInput(draft.sold_at)} onChange={(e) => { const d = fromDateInput(e.target.value); if (d) update({ sold_at: d }); }} aria-label={t("flip.soldOn")} style={{ width: "auto", fontSize: 14, padding: "5px 8px" }} />
+              </div>
+              <label className="ipill" style={{ margin: "6px 0 2px" }}>
+                <span>{t("flip.soldPrice")}</span>
+                <div className="ipv"><i>$</i><input type="number" inputMode="decimal" min={0} value={draft.sold_price ?? ""} onChange={(e) => update({ sold_price: e.target.value === "" ? null : Number(e.target.value) })} /></div>
+              </label>
+            </>
           )}
           <div style={{ fontSize: 12, color: "var(--color-dim)", padding: "6px 0 2px" }}>{t("flip.autosaves")}</div>
         </div>
