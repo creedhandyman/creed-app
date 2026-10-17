@@ -25,6 +25,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
 import { geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
@@ -230,15 +231,11 @@ export default function CrewMap(_props: Props) {
 
   return (
     <div className="fi">
-      <div className="row mb" style={{ alignItems: "center" }}>
-        <button className="bo" onClick={() => window.history.back()} aria-label={t("common.back")} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>
-        <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 7, flex: 1 }}>
-          <Icon name="map" size={18} color="var(--color-primary)" /> {t("loc.crewMap")}
-        </h2>
+      <TopBar title={t("loc.crewMap")} icon="map" color="#3ee08f" onBack={() => window.history.back()} right={
         <button className="bo" onClick={() => setRefreshKey((k) => k + 1)} style={{ fontSize: 13, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
           <Icon name="refresh" size={13} /> {t("loc.refresh")}
         </button>
-      </div>
+      } />
 
       {/* Date lookback — the whole map re-renders for the chosen day. */}
       <div className="row mb" style={{ alignItems: "center", gap: 6 }}>

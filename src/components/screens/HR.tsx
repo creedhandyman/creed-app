@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
 import type { TimeOffKind, TimeOffRequest } from "@/lib/types";
 
@@ -53,12 +54,7 @@ export default function HR({ embedded }: { embedded?: boolean }) {
       {/* Inside Ops the back header already names the area — only crew,
           who land here directly, get this title. */}
       {!embedded && (
-        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(46,139,255,.14)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="worker" size={19} color="var(--color-primary)" />
-          </span>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("nav.timeOff")}</span>
-        </div>
+        <TopBar title={t("nav.timeOff")} icon="leaf" color="#06b6d4" />
       )}
 
       {/* Admins: the requests waiting on them come first. */}

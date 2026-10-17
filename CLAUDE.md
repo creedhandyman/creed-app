@@ -130,6 +130,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `window.alert/confirm/prompt` — `store.showConfirm` / `showToast` in the app,
   an in-page sheet on public pages. Full-screen viewers (photo lightbox, quest
   confetti, the help guide) stay as they are.
+- **Screen headers**: every main screen starts with `<TopBar title icon color onBack? right? />`
+  (`components/TopBar.tsx`, styles `.topbar*` in globals.css): [back] [icon tile] TITLE … [right
+  slot]. `color` = the screen's nav hue (VerticalNav TAB_COLOR); `onBack` only on screens reached
+  from More / a deep link. Don't hand-roll a new title row.
 - **Icons**: import from `<Icon name="..." />`. Curated set in
   `Icon.tsx`. Inline emoji in flowing copy (✅ status, ⭐ ratings) is
   fine; UI affordances should be Lucide.

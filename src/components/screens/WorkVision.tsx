@@ -11,6 +11,7 @@ import { recordJobOutcome, jobActualHours, jobHasOpenEntries } from "@/lib/learn
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import ShopItemSheet, { type ShopDraft } from "../ShopItemSheet";
 import MileageQuickTrack from "../MileageQuickTrack";
 import RenderModal from "../RenderModal";
@@ -1077,17 +1078,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return (
       <>
       <div className="fi">
-        <div className="row mb" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Icon name="worker" size={22} color="var(--color-primary)" />
-            {t("wv.title")}
-          </h2>
-          {/* Work mode is only reached via goToPage (which pushes a history
-              entry), so back retraces to wherever the tech came from. */}
-          <button className="bo" onClick={() => window.history.back()} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <Icon name="back" size={15} /> {t("common.back")}
-          </button>
-        </div>
+        {/* Work mode is only reached via goToPage (which pushes a history
+            entry), so back retraces to wherever the tech came from. */}
+        <TopBar title={t("wv.title")} icon="worker" color="#13c06a" onBack={() => window.history.back()} />
 
         {/* Done a shift today → a calm wrap-up: hours + next check, then the
             two things left to do (log drives / call it a day). */}
@@ -1246,12 +1239,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     <>
     <div className="fi">
       {/* Topbar — back + title + live timer chip */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button className="iconbtn" onClick={() => setPage("dash")} aria-label="Back"><Icon name="back" size={18} /></button>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("wv.title")}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <TopBar title={t("wv.title")} onBack={() => setPage("dash")} right={<>
           {/* Small pill, easy to brush — so it asks first. (Complete Job
               clocks out without asking; the confirm lives only here.) */}
           <button
@@ -1271,8 +1259,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
           </span>
-        </div>
-      </div>
+      </>} />
       {/* Job row + Map */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
         <div className="dim" style={{ fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

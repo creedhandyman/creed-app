@@ -13,6 +13,7 @@ import { t } from "@/lib/i18n";
 import { extractZip } from "@/lib/parser";
 import { recordJobOutcome, jobHasOpenEntries } from "@/lib/learning";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
 import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
@@ -2076,11 +2077,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     <div className="fi">
       {subScreenJsx || detailScreen || (
         <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <h2 style={{ fontSize: 24, color: "var(--color-primary)", margin: 0, display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <Icon name="jobs" size={22} color="var(--color-primary)" />
-          {t("nav.jobs")}
-        </h2>
+      <TopBar title={t("nav.jobs")} icon="jobs" color="#ef4444" right={
         <button
           className="bo"
           onClick={() => { setSelectMode((m) => !m); setSelectedIds([]); setBulkStatus(""); }}
@@ -2089,7 +2086,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           <Icon name={selectMode ? "close" : "checkCircle"} size={14} />
           {selectMode ? t("common.cancel") : t("jobs.select")}
         </button>
-      </div>
+      } />
 
       {/* Job tabs */}
       {(() => {

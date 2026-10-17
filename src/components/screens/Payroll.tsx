@@ -5,6 +5,7 @@ import { db, supabase } from "@/lib/supabase";
 import { t, getLang } from "@/lib/i18n";
 import { formatHours } from "@/lib/dates";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { openPrint } from "@/lib/print-template";
 import { buildStubHtml, runPayrollForUser, type StubInput } from "@/lib/payroll-runner";
 import { computeQuests, parseQuestConfig } from "@/lib/quests";
@@ -376,10 +377,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   return (
     <div className="fi">
       {!embedded && (
-        <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <Icon name="money" size={22} color="var(--color-primary)" />
-          {t("pay.title")}
-        </h2>
+        <TopBar title={t("pay.title")} icon="money" color="#22c55e" />
       )}
 
       {/* Auto Payroll — server-side scheduled run (cron hits

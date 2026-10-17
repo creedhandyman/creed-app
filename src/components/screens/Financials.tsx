@@ -6,6 +6,7 @@ import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours } from "@/lib/dates";
 import { profitSnapshot, makeInRange, makeEntryPay } from "@/lib/financials";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
@@ -336,13 +337,8 @@ export default function Financials({ setPage, embedded }: { setPage: (p: string)
       {/* Header — Financials is rendered inside the Ops tabs, so the
           old "← Dashboard" back button is redundant and removed. Inside Ops
           (embedded) the back header already names it: just Print P&L. */}
-      <div className="row mb" style={{ justifyContent: embedded ? "flex-end" : "space-between", alignItems: "center" }}>
-        {!embedded && (
-          <h2 style={{ fontSize: 24, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Icon name="trending" size={22} color="var(--color-primary)" />
-            Financials
-          </h2>
-        )}
+      {(() => {
+        const printBtn = (
         <button
           className="bo"
           onClick={printPL}
@@ -360,7 +356,11 @@ export default function Financials({ setPage, embedded }: { setPage: (p: string)
           <Icon name="print" size={14} />
           {printing ? "Building..." : "Print P&L"}
         </button>
-      </div>
+        );
+        return embedded
+          ? <div className="row mb" style={{ justifyContent: "flex-end", alignItems: "center" }}>{printBtn}</div>
+          : <TopBar title="Financials" icon="trending" color="#10b981" right={printBtn} />;
+      })()}
 
       {/* The month in one plain sentence */}
       <div className="cd mb" style={{ padding: 14, fontSize: 16, lineHeight: 1.45, fontWeight: 500 }}>

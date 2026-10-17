@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import type { Job } from "@/lib/types";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { parseEntryDate, formatHours } from "@/lib/dates";
 import { newRowId, getPending } from "@/lib/offline-queue";
 import { isClosedRow, markLocalClockOut, unmarkLocalClockOut } from "@/lib/clock-sync";
@@ -610,11 +611,7 @@ export default function Timer({ setPage }: Props) {
     <div className="fi">
       {finishModal}
       {/* Topbar — clock + TIME; right shows the date (off) or a live chip (on) */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon name="time" size={19} color="#8cc0ff" />
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 22, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("timer.title")}</span>
-        </div>
+      <TopBar title={t("timer.title")} icon="time" color="#13c06a" right={<>
         {tab === "crew" ? (
           <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: liveSessions.length ? "#3ee08f" : "var(--color-dim)", fontWeight: 600 }}>{liveSessions.length} {t("timer.onTheClockCount")}</span>
         ) : on ? (
@@ -626,7 +623,7 @@ export default function Timer({ setPage }: Props) {
             {`${new Date().toLocaleDateString("en-US", { weekday: "short" })} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
           </span>
         )}
-      </div>
+      </>} />
 
       {/* Tab switcher (Crew tab is admin-only) — segmented icon control */}
       {isOwner && (

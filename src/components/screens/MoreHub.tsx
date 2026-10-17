@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "@/components/Icon";
+import TopBar from "@/components/TopBar";
 import UserGuideModal from "@/components/UserGuideModal";
 import Grizz from "@/components/Grizz";
 import { t } from "@/lib/i18n";
@@ -67,9 +68,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <Icon name="menu" size={22} color="var(--color-primary)" /> {t("nav.more")}
-      </h2>
+      <TopBar title={t("nav.more")} icon="menu" color="#14b8a6" />
 
       {/* Profile -> Settings (Account) */}
       <div className="cd mb" onClick={openSettings} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: 13 }}>

@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 import { aiText } from "@/lib/parser";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import AiNote from "../AiNote";
 import { t } from "@/lib/i18n";
 
@@ -150,17 +151,8 @@ export default function Troubleshoot(_props: { setPage: (p: string) => void }) {
   return (
     <div className="fi" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 80px)" }}>
       {/* Header */}
-      <div className="row mb" style={{ justifyContent: "space-between", flexShrink: 0 }}>
-        <div className="row">
-          <button className="bo" onClick={() => window.history.back()} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Icon name="back" size={14} /> {t("common.back")}
-          </button>
-          <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Icon name="troubleshoot" size={20} color="var(--color-primary)" />
-            {t("more.troubleshoot")}
-          </h2>
-        </div>
-        {messages.length > 0 && (
+      <div style={{ flexShrink: 0 }}>
+      <TopBar title={t("more.troubleshoot")} icon="troubleshoot" color="#94a3b8" onBack={() => window.history.back()} right={messages.length > 0 && (
           <button
             className="bo"
             onClick={() => setMessages([])}
@@ -168,7 +160,7 @@ export default function Troubleshoot(_props: { setPage: (p: string) => void }) {
           >
             New Session
           </button>
-        )}
+        )} />
       </div>
 
       {/* Chat area */}

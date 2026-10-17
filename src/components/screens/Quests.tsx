@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { QRCodeSVG } from "qrcode.react";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { computeQuests, parseQuestConfig, type QuestDef as Quest } from "@/lib/quests";
 import ShopQuestsManager from "../ShopQuestsManager";
 
@@ -200,14 +201,7 @@ export default function Quests({ openOps }: { openOps?: (tab?: string) => void }
   return (
     <div className="fi">
       {/* Topbar — QUEST HUB + trophy */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <h2 style={{ fontSize: 22, fontFamily: "Oswald", fontWeight: 700, letterSpacing: ".5px", margin: 0, textTransform: "uppercase" }}>
-          {t("quest.title")}
-        </h2>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(157,78,221,.14)", border: "1px solid rgba(157,78,221,.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Icon name="trophy" size={17} color={VIOLET} />
-        </div>
-      </div>
+      <TopBar title={t("quest.title")} icon="trophy" color="#9d4edd" />
 
       {/* Sub-tabs (violet-active) */}
       <div style={{ display: "flex", gap: 5, marginBottom: 12 }}>

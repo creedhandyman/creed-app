@@ -6,6 +6,7 @@ import { haversineMiles, getFix, ROAD_FACTOR, geocodeAddress, hasGeocodeCache, c
 import { parseEntryDate } from "@/lib/dates";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import CountUp from "@/components/CountUp";
 
 interface MileageEntry {
@@ -614,26 +615,17 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 
   return (
     <div className="fi">
-      <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(46,139,255,.14)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="mileage" size={19} color="var(--color-primary)" />
-          </span>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>Mileage</span>
-        </div>
+      {/* Back to wherever Mileage was opened from (More) — going to the
+          dashboard pushed a new entry and made system back loop here. */}
+      <TopBar title={t("nav.mileage")} icon="mileage" color="#14b8a6" onBack={() => window.history.back()} right={
         <div className="row">
           {entries.length > 0 && (
             <button className="bo" onClick={exportMileagePdf} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
               <Icon name="print" size={14} /> Print
             </button>
           )}
-          {/* Back to wherever Mileage was opened from (More) — going to the
-              dashboard pushed a new entry and made system back loop here. */}
-          <button className="bo" onClick={() => window.history.back()} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Icon name="back" size={14} /> {t("common.back")}
-          </button>
         </div>
-      </div>
+      } />
 
       {/* Suggested trips first — end of day, one tap logs the day's
           drives (auto-built from the day's clocked jobs). */}

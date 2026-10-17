@@ -669,6 +669,21 @@ button:focus-visible {
   position: absolute;
   inset: -5px;
 }
+/* ── Screen header (components/TopBar.tsx) — one look on every screen ──── */
+.topbar { display: flex; align-items: center; gap: 9px; min-height: 38px; margin-bottom: 12px; }
+.topbar-ic {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--c, var(--color-primary)) 15%, transparent);
+}
+.topbar-title {
+  flex: 1; min-width: 0; margin: 0;
+  font-family: Oswald, sans-serif; font-weight: 700; font-size: 21px; line-height: 1.15;
+  letter-spacing: .5px; text-transform: uppercase; color: inherit;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
 /* Icon buttons packed tight in a .row (gap 4px — Edit/Delete pairs): the
    later sibling's halo paints on top, so a full 5px reach would cover the
    gap AND the edge of the button before it. Split the gap instead. */

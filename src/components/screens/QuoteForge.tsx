@@ -42,6 +42,7 @@ import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import AiNote from "../AiNote";
 import MaterialsSheet from "../MaterialsSheet";
 import CameraModal from "../CameraModal";
@@ -2136,10 +2137,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             the editor / inspection / Voice Walk sub-screens (it's fixed-position). */}
         <Coachmark id="quote" text={<>Start here — tap <b>Quick Quote</b>, snap a couple photos, and I&apos;ll price the job for you.</>} />
         {/* Topbar — title + eyebrow */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>QuoteForge</span>
-          <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>New quote</span>
-        </div>
+        <TopBar title="QuoteForge" icon="quote" color="#f5b400"
+          right={<span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>New quote</span>} />
         {draftAvailable && (
           <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--color-primary)" }}>
             <Icon name="edit" size={18} color="var(--color-primary)" />

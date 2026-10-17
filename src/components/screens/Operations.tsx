@@ -13,6 +13,7 @@ import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
 import { Icon, type IconName } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
@@ -670,12 +671,11 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   if (isAdmin && tab === null) {
     return (
       <div className="fi">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("settings.operations")}</span>
+        <TopBar title={t("settings.operations")} icon="ops" color="#06b6d4" right={
           <span style={{ fontSize: 11, fontWeight: 600, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 4 }}>
             <Icon name="safety" size={12} color="#3ee08f" /> {roleLabel}
           </span>
-        </div>
+        } />
 
         {/* KPIs — each one opens the area behind its number. */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 13 }}>
@@ -726,16 +726,11 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
   return (
     <div className="fi">
       {isAdmin && tab && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <button
-            onClick={() => (selectedCustomerId ? setSelectedCustomerId(null) : setTab(null))}
-            aria-label={t("ops.backToOperations")}
-            style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit" }}
-          >
-            <Icon name="back" size={16} />
-          </button>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 18, letterSpacing: ".5px", textTransform: "uppercase" }}>{areaLabel(tab)}</span>
-        </div>
+        <TopBar
+          title={areaLabel(tab)}
+          onBack={() => (selectedCustomerId ? setSelectedCustomerId(null) : setTab(null))}
+          backLabel={t("ops.backToOperations")}
+        />
       )}
 
       {tab === "payroll" && (

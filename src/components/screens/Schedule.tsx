@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import PropertySearch from "../PropertySearch";
 import SmsNotifyButtons from "../SmsNotifyButtons";
@@ -428,14 +429,13 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
   return (
     <div className="fi">
       {/* Topbar — title + date nav (tap label = today) */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
-        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("sched.title")}</span>
+      <TopBar title={t("sched.title")} icon="schedule" color="#ff8a3d" right={
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>
           <button onClick={() => stepView(-1)} aria-label={t("sched.previous")} style={{ width: 34, height: 34, borderRadius: 8, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", color: "var(--color-dim)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Icon name="back" size={14} /></button>
           <span onClick={goToday} title={t("sched.jumpToToday")} style={{ cursor: "pointer", minWidth: 96, textAlign: "center" }}>{periodLabel}</span>
           <button onClick={() => stepView(1)} aria-label={t("sched.next")} style={{ width: 34, height: 34, borderRadius: 8, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", color: "var(--color-dim)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Icon name="next" size={14} /></button>
         </div>
-      </div>
+      } />
 
       {/* Property typeahead — searches scheduled entries by job address.
           Selecting a suggestion jumps the calendar to that entry's date
