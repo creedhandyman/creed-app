@@ -591,7 +591,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   error (best-effort) but nothing else breaks; existing orgs see no Equipment
   card until they add one.
 - Flip Mode (the org's own buy → renovate → resell deals; plan in
-  `.claude/plans/flip-mode.md`):
+  `.claude/plans/flip-mode.md`) (**ALREADY RUN in prod 2026-10-17** via the
+  Supabase MCP, migration `flip_projects` — RLS rehearsed in a rolled-back txn:
+  owner writes, cross-org insert blocked, tech sees 0 rows / can't write):
   ```sql
   CREATE TABLE IF NOT EXISTS flip_projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
