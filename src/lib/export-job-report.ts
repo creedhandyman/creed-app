@@ -1,5 +1,6 @@
 import type { Job } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
+import { useStore } from "./store";
 
 interface ReportOptions {
   job: Job;
@@ -195,5 +196,5 @@ ${photoHtml}
     },
     body,
   );
-  if (!openPrint(html)) alert("Allow popups to export report");
+  if (!openPrint(html)) useStore.getState().showToast("Allow pop-ups to export the report", "error");
 }

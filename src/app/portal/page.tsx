@@ -591,7 +591,8 @@ function MembershipCard({ m, onStatus }: { m: PortalMembership; onStatus: (id: s
       <button
         onClick={() => cancel()}
         disabled={busy !== ""}
-        style={{ display: "block", width: "100%", textAlign: "center", fontSize: 11.5, color: "#666", marginTop: 10, textDecoration: "underline", cursor: busy === "cancel" ? "wait" : "pointer", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}
+        // Click-to-cancel: plainly visible and easy to tap (not a faint footnote).
+        style={{ display: "block", width: "100%", textAlign: "center", fontSize: 13.5, color: "#c9c9d4", marginTop: 8, minHeight: 40, textDecoration: "underline", cursor: busy === "cancel" ? "wait" : "pointer", background: "none", border: "none", padding: "8px 0", fontFamily: "inherit" }}
       >
         {busy === "cancel" ? "Cancelling…" : "Cancel membership"}
       </button>
