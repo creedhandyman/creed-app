@@ -476,35 +476,18 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
         />
       </div>
 
-      {/* Quick-Schedule Modal — opens from a job's "Assign" button. Centered
-          via a flex container so it's reliable on mobile regardless of any
-          ancestor transform. */}
+      {/* Quick-Schedule Modal — opens from a job's "Assign" button. Shared
+          .sheet-overlay/.sheet: it sits above the nav (z 999 vs the nav's
+          200 — the old inline z 199 let a side nav draw over the form). */}
       {armedJob && dropTarget && (
         <div
           onClick={() => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 199,
-            background: "rgba(0,0,0,.5)",
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "center",
-            padding: "8vh 16px",
-            overflowY: "auto",
-            WebkitOverflowScrolling: "touch",
-          }}
+          className="sheet-overlay"
         >
         <div
           onClick={(e) => e.stopPropagation()}
-          style={{
-            zIndex: 200,
-            width: "100%",
-            maxWidth: 380,
-            background: darkMode ? "#12121a" : "#fff",
-            border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-            borderRadius: 12, padding: 18, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
-          }}
+          className="cd sheet"
+          style={{ boxShadow: "0 8px 32px rgba(0,0,0,.5)" }}
         >
           <h4 style={{ fontSize: 16, color: "var(--color-primary)", marginBottom: 6 }}>{editSched ? t("sched.editMoveJob") : t("sched.scheduleJob")}</h4>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{armedJob}</div>

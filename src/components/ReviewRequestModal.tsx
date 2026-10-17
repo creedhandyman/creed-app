@@ -129,30 +129,12 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
   return (
     <div
       onClick={skip}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 199,
-        background: "rgba(0,0,0,.55)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "10vh 16px",
-        overflowY: "auto",
-        WebkitOverflowScrolling: "touch",
-      }}
+      className="sheet-overlay"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%",
-          maxWidth: 420,
-          background: darkMode ? "#12121a" : "#fff",
-          border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-          borderRadius: 12,
-          padding: 18,
-          boxShadow: "0 8px 32px rgba(0,0,0,.5)",
-        }}
+        className="cd sheet"
+        style={{ boxShadow: "0 8px 32px rgba(0,0,0,.5)" }}
       >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
           <Icon name="star" size={28} color="var(--color-highlight)" />

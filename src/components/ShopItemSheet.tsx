@@ -83,13 +83,13 @@ export default function ShopItemSheet({ item, darkMode, onSave, onDelete, onClos
   if (typeof document === "undefined") return null;
   return createPortal(
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.5)" }} />
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,.5)" }} />
       <div
         role="dialog"
         aria-label={item ? "Edit shopping item" : "Add shopping item"}
         onClick={(e) => e.stopPropagation()}
         style={{
-          position: "fixed", left: 0, right: 0, bottom: 0, margin: "0 auto", zIndex: 200,
+          position: "fixed", left: 0, right: 0, bottom: 0, margin: "0 auto", zIndex: 1000,
           width: "100%", maxWidth: 520, maxHeight: "88dvh", overflowY: "auto",
           background: surface, color: ink, borderTop: `1px solid ${border}`, borderRadius: "18px 18px 0 0",
           boxShadow: "0 -10px 40px rgba(0,0,0,.45)",

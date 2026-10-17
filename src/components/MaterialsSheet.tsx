@@ -116,13 +116,13 @@ export default function MaterialsSheet({ title, materials, darkMode, onChange, o
   if (typeof document === "undefined") return null;
   return createPortal(
     <>
-      <div onClick={close} style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.5)" }} />
+      <div onClick={close} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,.5)" }} />
       <div
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Materials"
         style={{
-          position: "fixed", left: 0, right: 0, bottom: 0, margin: "0 auto", zIndex: 200,
+          position: "fixed", left: 0, right: 0, bottom: 0, margin: "0 auto", zIndex: 1000,
           width: "100%", maxWidth: 520, maxHeight: "88dvh", display: "flex", flexDirection: "column",
           background: surface, color: ink, borderTop: `1px solid ${border}`, borderRadius: "18px 18px 0 0",
           boxShadow: "0 -10px 40px rgba(0,0,0,.45)",
