@@ -8,6 +8,7 @@ import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import CountUp from "@/components/CountUp";
+import { groupTripsByDay, dayLabel } from "@/lib/mileage-days";
 
 interface MileageEntry {
   id: string;
@@ -17,6 +18,7 @@ interface MileageEntry {
   end_miles: number;
   total_miles: number;
   user_name: string;
+  created_at?: string;
 }
 
 // localStorage key for an in-progress GPS snapshot trip — persisted so the trip
@@ -543,11 +545,20 @@ export default function Mileage(_props: Props) {
 
     const totalDeduction = (totalMiles * IRS_RATE).toFixed(2);
 
-    const rows = entries
-      .sort((a, b) => (a.trip_date || "").localeCompare(b.trip_date || ""))
-      .map((e) =>
-        `<tr><td>${e.trip_date}</td><td>${e.job}</td>${e.start_miles > 0 ? `<td style="text-align:right">${e.start_miles}</td><td style="text-align:right">${e.end_miles}</td>` : `<td style="text-align:right">—</td><td style="text-align:right">—</td>`}<td style="text-align:right;font-weight:600">${e.total_miles.toFixed(1)}</td></tr>`
-      ).join("");
+    const esc = (v: string) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const tripDays = groupTripsByDay(entries, org?.address, true);
+    const rows = tripDays.map((day) => {
+      const multi = day.legs.length > 1;
+      const legRows = day.legs.map((leg, i) => {
+        const e = leg.trip;
+        const odo = e.start_miles > 0 ? `${e.start_miles} → ${e.end_miles}` : "—";
+        return `<tr${multi && i > 0 ? ' class="leg"' : ""}><td>${i === 0 ? dayLabel(day.date, true) : ""}</td><td>${multi ? `${i + 1}. ` : ""}${esc(leg.from || "—")}</td><td>${leg.toBase ? "Back to shop — " : ""}${esc(e.job)}</td><td style="text-align:right">${odo}</td><td style="text-align:right;font-weight:600">${Number(e.total_miles || 0).toFixed(1)}</td></tr>`;
+      }).join("");
+      const subtotal = multi
+        ? `<tr class="daytot"><td></td><td colspan="3">${dayLabel(day.date)} — ${day.legs.length} trips · $${(day.miles * IRS_RATE).toFixed(2)}</td><td style="text-align:right">${day.miles.toFixed(1)}</td></tr>`
+        : "";
+      return legRows + subtotal;
+    }).join("");
 
     const monthSummary = Object.entries(byMonth)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -572,6 +583,8 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 .totals{background:#f0f4f8;border-radius:8px;padding:16px;margin:16px 0;display:flex;justify-content:space-around;text-align:center}
 .totals .num{font-family:Oswald;font-size:28px;font-weight:700;color:#2E75B6}
 .totals .lbl{font-family:Oswald;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.08em}
+tr.leg td{border-top:none}
+tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px solid #d6e2ee}
 .footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:24px}
 .sig-row{display:flex;gap:40px;margin-top:30px}
 .sig-line{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;font-size:12px;color:#666}
@@ -585,6 +598,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 <div class="totals">
   <div><div class="num">${totalMiles.toFixed(1)}</div><div class="lbl">Total Miles</div></div>
   <div><div class="num">${entries.length}</div><div class="lbl">Total Trips</div></div>
+  <div><div class="num">${tripDays.length}</div><div class="lbl">Days Driven</div></div>
   <div><div class="num" style="color:#00cc66">$${totalDeduction}</div><div class="lbl">Tax Deduction (@ $${IRS_RATE}/mi)</div></div>
 </div>
 
@@ -592,9 +606,10 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 <table><thead><tr><th>Month</th><th style="text-align:right">Trips</th><th style="text-align:right">Miles</th><th style="text-align:right">Deduction</th></tr></thead><tbody>${monthSummary}</tbody></table>
 
 <h2>Trip Details</h2>
-<table><thead><tr><th>Date</th><th>Job</th><th style="text-align:right">Start</th><th style="text-align:right">End</th><th style="text-align:right">Miles</th></tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr><th>Date</th><th>From</th><th>To</th><th style="text-align:right">Odometer</th><th style="text-align:right">Miles</th></tr></thead><tbody>${rows}</tbody></table>
 
 <div style="font-size:12px;color:#666;margin-top:12px;padding:10px;background:#f5f7fa;border-radius:6px">
+  "From" is the previous stop that day (the first trip starts at the business address when one is set).<br/>
   <b>IRS Standard Mileage Rate:</b> $${IRS_RATE}/mile (2025). This report is for record-keeping purposes. Consult your tax professional for deduction eligibility.
 </div>
 
@@ -860,41 +875,64 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
         </div>
       </div>
 
-      {/* Mileage Log */}
+      {/* Mileage Log — grouped by day so a multi-stop day reads as a route:
+          numbered legs, where each one started, and the day's total. */}
       <div className="cd">
         <h4 style={{ fontSize: 15, marginBottom: 6 }}>Trip Log ({entries.length})</h4>
         {!entries.length ? (
           <p className="dim" style={{ fontSize: 14 }}>No trips logged</p>
         ) : (
-          entries.map((e) => (
-            <div
-              key={e.id}
-              className="sep"
-              style={{ display: "flex", justifyContent: "space-between", fontSize: 14, alignItems: "center" }}
-            >
-              <span style={{ minWidth: 70 }}>{e.trip_date}</span>
-              <span style={{ color: "var(--color-primary)", flex: 1 }}>{e.job}</span>
-              {e.start_miles > 0 && (
-                <span className="dim" style={{ fontSize: 14, marginRight: 6 }}>
-                  {e.start_miles}→{e.end_miles}
-                </span>
-              )}
-              <span style={{ fontFamily: "Oswald", color: "var(--color-success)", minWidth: 50, textAlign: "right" }}>
-                {e.total_miles.toFixed(1)} mi
-              </span>
-              <button
-                onClick={async () => {
-                  if (!await useStore.getState().showConfirm("Delete Trip", "Delete this trip?")) return;
-                  await db.del("mileage", e.id);
-                  reload();
-                }}
-                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, marginLeft: 6, display: "inline-flex", alignItems: "center" }}
-                aria-label="Delete trip"
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-          ))
+          groupTripsByDay(entries, org?.address).map((day) => {
+            const multi = day.legs.length > 1;
+            return (
+              <div key={day.date} className="sep" style={{ paddingTop: 8, paddingBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+                  <b style={{ fontSize: 14.5, flex: 1 }}>{dayLabel(day.date)}</b>
+                  {multi && <span className="dim" style={{ fontSize: 12.5 }}>{day.legs.length} trips</span>}
+                  <span style={{ fontFamily: "Oswald", color: "var(--color-success)", fontSize: 15 }}>{day.miles.toFixed(1)} mi</span>
+                  <span className="dim" style={{ fontSize: 12.5, minWidth: 48, textAlign: "right" }}>${(day.miles * IRS_RATE).toFixed(2)}</span>
+                </div>
+                {day.legs.map((leg, i) => {
+                  const e = leg.trip;
+                  return (
+                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: i === 0 ? "none" : "1px dashed var(--color-border-dark, #1e1e2e)" }}>
+                      {multi && (
+                        <span style={{ width: 20, height: 20, borderRadius: 10, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11.5, fontWeight: 700, background: "rgba(20,184,166,.16)", color: "#14b8a6" }}>{i + 1}</span>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, color: "var(--color-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {leg.toBase ? <>Back to shop <span className="dim">· {e.job}</span></> : e.job}
+                        </div>
+                        {(leg.from || e.start_miles > 0) && (
+                          <div className="dim" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {leg.from && <>from {leg.from}</>}
+                            {leg.from && e.start_miles > 0 && " · "}
+                            {e.start_miles > 0 && <>odometer {e.start_miles}→{e.end_miles}</>}
+                          </div>
+                        )}
+                      </div>
+                      {multi && (
+                        <span style={{ fontFamily: "Oswald", fontSize: 14, minWidth: 50, textAlign: "right", flexShrink: 0 }}>
+                          {Number(e.total_miles || 0).toFixed(1)} mi
+                        </span>
+                      )}
+                      <button
+                        onClick={async () => {
+                          if (!await useStore.getState().showConfirm("Delete Trip", `Delete the ${Number(e.total_miles || 0).toFixed(1)} mi trip to ${e.job} on ${dayLabel(day.date)}?`)) return;
+                          await db.del("mileage", e.id);
+                          reload();
+                        }}
+                        style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, display: "inline-flex", alignItems: "center", flexShrink: 0 }}
+                        aria-label="Delete trip"
+                      >
+                        <Icon name="close" size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
