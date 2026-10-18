@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { WaypointTracker } from "@/lib/geo";
+import { clockOf } from "@/lib/mileage-days";
 import { Icon } from "./Icon";
 // Aliased: start()/restore below use a local `t` for the trip object.
 import { t as tr } from "@/lib/i18n";
@@ -153,6 +154,7 @@ export default function MileageQuickTrack({ job }: { job?: string }) {
       user_name: user.name,
       job: trip.job || job || "General",
       trip_date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+      start_time: trip.startedAt ? clockOf(new Date(trip.startedAt)) : null,
       start_miles: 0,
       end_miles: 0,
       total_miles: miles,

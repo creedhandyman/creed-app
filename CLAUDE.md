@@ -303,6 +303,14 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   exist" error — but the write is best-effort/try-caught so completing a job
   still works, and the read side (parser.ts) is migration-safe (undefined
   fields fall through). `lib/learning.ts` `recordJobOutcome` writes the rows.
+- Mileage start times (**ALREADY RUN in prod 2026-10-17**, migration
+  `mileage_start_time`): `ALTER TABLE mileage ADD COLUMN IF NOT EXISTS start_time TEXT;`
+  ("8:05 AM", time-entry format). GPS / odometer / Work-mode tracker trips and
+  manual entries with a time store it; older + Suggested-trip rows get an
+  estimate ("~") from that day's clock-ins (`lib/mileage-days.ts`
+  `legStartTimes`: leaving a job = its clock-out, leaving the shop = next
+  arrival − drive time). The trip log groups by day with numbered legs and an
+  inferred "from" (previous stop; first leg = org address).
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
 - Primary trade (per-trade tailoring — picked in onboarding + Ops → Settings):

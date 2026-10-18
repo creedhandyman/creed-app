@@ -1,4 +1,4 @@
-import { groupTripsByDay, dayLabel } from "@/lib/mileage-days";
+import { groupTripsByDay, dayLabel, legStartTimes, clockMinutes, formatClock } from "@/lib/mileage-days";
 
 const trip = (id: string, date: string, job: string, mi: number, at: string) =>
   ({ id, job, trip_date: date, start_miles: 0, end_miles: 0, total_miles: mi, created_at: at });
@@ -36,5 +36,42 @@ describe("groupTripsByDay", () => {
 
   it("labels days locally", () => {
     expect(dayLabel("2026-10-16")).toBe("Fri, Oct 16");
+  });
+});
+
+describe("legStartTimes", () => {
+  const trips = [
+    { ...trip("a", "2026-10-16", "6807 E Rodeo St", 14, "2026-10-16T14:00:00Z") },
+    { ...trip("b", "2026-10-16", "827 S Sunset Cir", 12.5, "2026-10-16T18:00:00Z") },
+    { ...trip("c", "2026-10-16", "Wichita, KS", 8, "2026-10-16T22:00:00Z") },
+  ];
+  const clock = [
+    { job: "827 S Sunset Cir", start_time: "01:30 PM", end_time: "04:45 PM" },
+    { job: "6807 E Rodeo St", start_time: "08:30 AM", end_time: "12:10 PM" },
+    { job: "General", start_time: "06:00 AM", end_time: "07:00 AM" },
+  ];
+
+  it("estimates from clock-ins: shop → arrival minus drive, then each clock-out", () => {
+    const [day] = groupTripsByDay(trips, "Wichita, KS");
+    expect(legStartTimes(day, clock, "Wichita, KS")).toEqual([
+      { time: "8:00 AM", estimated: true }, // 14 mi ≈ 30 min before 8:30
+      { time: "12:10 PM", estimated: true },
+      { time: "4:45 PM", estimated: true },
+    ]);
+  });
+
+  it("a stored start time wins and isn't marked estimated", () => {
+    const [day] = groupTripsByDay([{ ...trips[0], start_time: "7:52 AM" }], "Wichita, KS");
+    expect(legStartTimes(day, clock, "Wichita, KS")[0]).toEqual({ time: "7:52 AM", estimated: false });
+  });
+
+  it("no clock data → unknown", () => {
+    const [day] = groupTripsByDay(trips, "Wichita, KS");
+    expect(legStartTimes(day, [], "Wichita, KS")).toEqual([null, null, null]);
+  });
+
+  it("formats clock times", () => {
+    expect(clockMinutes("12:05 AM")).toBe(5);
+    expect(formatClock(clockMinutes("12:05 PM")!)).toBe("12:05 PM");
   });
 });

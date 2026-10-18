@@ -64,3 +64,88 @@ export function dayLabel(ymd: string, withYear = false): string {
   const d = new Date(+m[1], +m[2] - 1, +m[3]);
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...(withYear ? { year: "numeric" } : {}) });
 }
+
+/* ── Start times ───────────────────────────────────────────────────
+   Trips started in the app (GPS / odometer / Work-mode tracker) or given a
+   time by hand store `start_time` ("8:05 AM", same format as time entries).
+   Older rows and Suggested trips have none, so the start is estimated from
+   that day's clock-ins: leaving a job = its last clock-out; leaving the shop
+   (or an unknown start) = arriving at the next job minus the drive time. */
+
+/** "8:05 AM" / "08:05 PM" / "20:05" → minutes since midnight, or null. */
+export function clockMinutes(s?: string | null): number | null {
+  const m = (s || "").match(/(\d{1,2}):(\d{2})\s*([AP]M)?/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const ap = (m[3] || "").toUpperCase();
+  if (ap === "PM" && h < 12) h += 12;
+  if (ap === "AM" && h === 12) h = 0;
+  return h * 60 + parseInt(m[2], 10);
+}
+
+/** minutes since midnight → "8:05 AM". */
+export function formatClock(min: number): string {
+  const m = ((Math.round(min) % 1440) + 1440) % 1440;
+  const h = Math.floor(m / 60);
+  return `${h % 12 || 12}:${String(m % 60).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** A Date → "8:05 AM" (local). */
+export function clockOf(d: Date): string {
+  return formatClock(d.getHours() * 60 + d.getMinutes());
+}
+
+export interface DayClockEntry { job?: string; start_time?: string; end_time?: string }
+export interface LegStart { time: string; estimated: boolean }
+
+/** One start per leg of the day (null = can't tell). */
+export function legStartTimes<T extends MileageTrip & { start_time?: string | null }>(
+  day: TripDay<T>,
+  clockEntries: DayClockEntry[],
+  base?: string | null,
+): (LegStart | null)[] {
+  // The day's job stops in clock order; back-to-back entries at one place merge.
+  type Stop = { key: string; arrive: number | null; leave: number | null };
+  const stops: Stop[] = [];
+  const timed = clockEntries
+    .filter((e) => e.job && e.job !== "General" && clockMinutes(e.start_time) != null)
+    .sort((a, b) => clockMinutes(a.start_time)! - clockMinutes(b.start_time)!);
+  for (const e of timed) {
+    const key = norm(e.job!);
+    const out = clockMinutes(e.end_time);
+    const last = stops[stops.length - 1];
+    if (last && last.key === key) {
+      last.leave = out == null || last.leave == null ? null : Math.max(last.leave, out);
+    } else {
+      stops.push({ key, arrive: clockMinutes(e.start_time), leave: out });
+    }
+  }
+  const baseKey = norm(base || "");
+  const chain: (Stop & { isBase?: boolean })[] = [];
+  if (baseKey) chain.push({ key: baseKey, arrive: null, leave: null, isBase: true });
+  chain.push(...stops);
+  if (baseKey && stops.length) chain.push({ key: baseKey, arrive: null, leave: null, isBase: true });
+
+  const used = new Set<number>();
+  const drive = (mi: number) => Math.max(1, Math.round((mi / 28) * 60)); // = geo.driveMinutes
+
+  return day.legs.map((leg) => {
+    const own = (leg.trip.start_time || "").trim();
+    if (own) return { time: own, estimated: false };
+    const to = norm(leg.trip.job);
+    const from = leg.from ? norm(leg.from) : null;
+    const miles = Number(leg.trip.total_miles || 0);
+    const arriveBy = (s: Stop | undefined) =>
+      s && s.arrive != null ? { time: formatClock(s.arrive - drive(miles)), estimated: true } : null;
+    for (let k = 0; k + 1 < chain.length; k++) {
+      if (used.has(k) || chain[k + 1].key !== to) continue;
+      if (from != null && chain[k].key !== from) continue;
+      used.add(k);
+      const a = chain[k];
+      if (!a.isBase && a.leave != null) return { time: formatClock(a.leave), estimated: true };
+      return arriveBy(chain[k + 1]);
+    }
+    // Not part of the clocked chain — fall back to arriving at that job.
+    return arriveBy(stops.find((s) => s.key === to));
+  });
+}

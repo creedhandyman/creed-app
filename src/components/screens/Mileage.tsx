@@ -8,7 +8,7 @@ import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import CountUp from "@/components/CountUp";
-import { groupTripsByDay, dayLabel } from "@/lib/mileage-days";
+import { groupTripsByDay, dayLabel, legStartTimes, clockOf, formatClock, clockMinutes, type LegStart, type TripDay } from "@/lib/mileage-days";
 
 interface MileageEntry {
   id: string;
@@ -19,6 +19,7 @@ interface MileageEntry {
   total_miles: number;
   user_name: string;
   created_at?: string;
+  start_time?: string | null;
 }
 
 // localStorage key for an in-progress GPS snapshot trip — persisted so the trip
@@ -305,6 +306,7 @@ export default function Mileage(_props: Props) {
 
   // Trip tracking state
   const [tripActive, setTripActive] = useState(false);
+  const [tripStartedAt, setTripStartedAt] = useState("");
   const [tripJob, setTripJob] = useState("");
   const [startMiles, setStartMiles] = useState("");
   const [endMiles, setEndMiles] = useState("");
@@ -314,6 +316,7 @@ export default function Mileage(_props: Props) {
   // LOCAL date — toISOString() is UTC, so an evening entry defaulted to tomorrow.
   const [mDate, setMDate] = useState(() => localYmd(new Date()));
   const [mMiles, setMMiles] = useState("");
+  const [mTime, setMTime] = useState(""); // optional "HH:MM" (24h, from <input type=time>)
 
   // GPS snapshot trip: capture a start fix (+ optional starting odometer), then
   // an end fix when you arrive — no continuous tracking, so the screen can lock
@@ -376,6 +379,7 @@ export default function Mileage(_props: Props) {
 
   const startTrip = () => {
     if (!startMiles) { useStore.getState().showToast("Enter starting odometer", "warning"); return; }
+    setTripStartedAt(clockOf(new Date()));
     setTripActive(true);
   };
 
@@ -391,6 +395,7 @@ export default function Mileage(_props: Props) {
       user_name: user.name,
       job: tripJob || "General",
       trip_date: localYmd(new Date()),
+      start_time: tripStartedAt || null,
       start_miles: start,
       end_miles: end,
       total_miles: total,
@@ -481,6 +486,7 @@ export default function Mileage(_props: Props) {
         user_name: user.name,
         job: gpsTrip.job || "General",
         trip_date: localYmd(new Date()),
+        start_time: clockOf(new Date(gpsTrip.startedAt)),
         start_miles,
         end_miles,
         total_miles,
@@ -516,6 +522,7 @@ export default function Mileage(_props: Props) {
       user_name: user.name,
       job: mJob || "General",
       trip_date: mDate,
+      start_time: mTime ? formatClock(clockMinutes(mTime)!) : null,
       start_miles: 0,
       end_miles: 0,
       total_miles: miles,
@@ -523,10 +530,19 @@ export default function Mileage(_props: Props) {
     if (!saved) return; // db.post toasted — keep what was typed
     setMMiles("");
     setMJob("");
+    setMTime("");
     reload();
   };
 
   const org = useStore((s) => s.org);
+  const timeEntries = useStore((s) => s.timeEntries);
+  // Each leg's start: its own stored time, else estimated from that day's clock-ins.
+  const startsFor = (day: TripDay<MileageEntry>): (LegStart | null)[] =>
+    legStartTimes(day, timeEntries.filter((e) => {
+      if (e.user_id !== user.id) return false;
+      const d = parseEntryDate(e.entry_date);
+      return d ? localYmd(d) === day.date : false;
+    }), org?.address);
   const IRS_RATE = 0.70; // 2025 IRS standard mileage rate
 
   const exportMileagePdf = () => {
@@ -547,15 +563,18 @@ export default function Mileage(_props: Props) {
 
     const esc = (v: string) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const tripDays = groupTripsByDay(entries, org?.address, true);
+    let anyEstimate = false;
     const rows = tripDays.map((day) => {
       const multi = day.legs.length > 1;
+      const starts = startsFor(day);
+      if (starts.some((st) => st?.estimated)) anyEstimate = true;
       const legRows = day.legs.map((leg, i) => {
         const e = leg.trip;
         const odo = e.start_miles > 0 ? `${e.start_miles} → ${e.end_miles}` : "—";
-        return `<tr${multi && i > 0 ? ' class="leg"' : ""}><td>${i === 0 ? dayLabel(day.date, true) : ""}</td><td>${multi ? `${i + 1}. ` : ""}${esc(leg.from || "—")}</td><td>${leg.toBase ? "Back to shop — " : ""}${esc(e.job)}</td><td style="text-align:right">${odo}</td><td style="text-align:right;font-weight:600">${Number(e.total_miles || 0).toFixed(1)}</td></tr>`;
+        return `<tr${multi && i > 0 ? ' class="leg"' : ""}><td>${i === 0 ? dayLabel(day.date, true) : ""}</td><td style="white-space:nowrap">${starts[i] ? `${starts[i]!.estimated ? "~" : ""}${starts[i]!.time}` : "—"}</td><td>${multi ? `${i + 1}. ` : ""}${esc(leg.from || "—")}</td><td>${leg.toBase ? "Back to shop — " : ""}${esc(e.job)}</td><td style="text-align:right">${odo}</td><td style="text-align:right;font-weight:600">${Number(e.total_miles || 0).toFixed(1)}</td></tr>`;
       }).join("");
       const subtotal = multi
-        ? `<tr class="daytot"><td></td><td colspan="3">${dayLabel(day.date)} — ${day.legs.length} trips · $${(day.miles * IRS_RATE).toFixed(2)}</td><td style="text-align:right">${day.miles.toFixed(1)}</td></tr>`
+        ? `<tr class="daytot"><td></td><td></td><td colspan="3">${dayLabel(day.date)} — ${day.legs.length} trips · $${(day.miles * IRS_RATE).toFixed(2)}</td><td style="text-align:right">${day.miles.toFixed(1)}</td></tr>`
         : "";
       return legRows + subtotal;
     }).join("");
@@ -606,10 +625,10 @@ tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px 
 <table><thead><tr><th>Month</th><th style="text-align:right">Trips</th><th style="text-align:right">Miles</th><th style="text-align:right">Deduction</th></tr></thead><tbody>${monthSummary}</tbody></table>
 
 <h2>Trip Details</h2>
-<table><thead><tr><th>Date</th><th>From</th><th>To</th><th style="text-align:right">Odometer</th><th style="text-align:right">Miles</th></tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr><th>Date</th><th>Start</th><th>From</th><th>To</th><th style="text-align:right">Odometer</th><th style="text-align:right">Miles</th></tr></thead><tbody>${rows}</tbody></table>
 
 <div style="font-size:12px;color:#666;margin-top:12px;padding:10px;background:#f5f7fa;border-radius:6px">
-  "From" is the previous stop that day (the first trip starts at the business address when one is set).<br/>
+  ${anyEstimate ? "Times marked ~ are estimated from that day's clock-ins and clock-outs. " : ""}"From" is the previous stop that day (the first trip starts at the business address when one is set).<br/>
   <b>IRS Standard Mileage Rate:</b> $${IRS_RATE}/mile (2025). This report is for record-keeping purposes. Consult your tax professional for deduction eligibility.
 </div>
 
@@ -869,6 +888,14 @@ tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px 
             placeholder="Miles"
             style={{ width: 80 }}
           />
+          <input
+            type="time"
+            value={mTime}
+            onChange={(e) => setMTime(e.target.value)}
+            aria-label="Start time (optional)"
+            title="Start time (optional)"
+            style={{ flex: 1, minWidth: 0 }}
+          />
           <button className="bg" onClick={addManual} style={{ fontSize: 15, padding: "7px 12px" }}>
             Log
           </button>
@@ -884,6 +911,7 @@ tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px 
         ) : (
           groupTripsByDay(entries, org?.address).map((day) => {
             const multi = day.legs.length > 1;
+            const starts = startsFor(day);
             return (
               <div key={day.date} className="sep" style={{ paddingTop: 8, paddingBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
@@ -894,6 +922,7 @@ tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px 
                 </div>
                 {day.legs.map((leg, i) => {
                   const e = leg.trip;
+                  const st = starts[i];
                   return (
                     <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: i === 0 ? "none" : "1px dashed var(--color-border-dark, #1e1e2e)" }}>
                       {multi && (
@@ -903,8 +932,14 @@ tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px 
                         <div style={{ fontSize: 14, color: "var(--color-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {leg.toBase ? <>Back to shop <span className="dim">· {e.job}</span></> : e.job}
                         </div>
-                        {(leg.from || e.start_miles > 0) && (
+                        {(st || leg.from || e.start_miles > 0) && (
                           <div className="dim" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {st && (
+                              <b style={{ color: "#14b8a6", fontWeight: 600 }} title={st.estimated ? "Estimated from your clock-ins" : undefined}>
+                                {st.estimated ? "~" : ""}{st.time}
+                              </b>
+                            )}
+                            {st && (leg.from || e.start_miles > 0) && " · "}
                             {leg.from && <>from {leg.from}</>}
                             {leg.from && e.start_miles > 0 && " · "}
                             {e.start_miles > 0 && <>odometer {e.start_miles}→{e.end_miles}</>}
@@ -933,6 +968,11 @@ tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px 
               </div>
             );
           })
+        )}
+        {entries.length > 0 && (
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
+            Times with ~ are estimated from your clock-ins and clock-outs.
+          </div>
         )}
       </div>
     </div>
