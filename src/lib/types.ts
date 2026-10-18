@@ -512,6 +512,30 @@ export interface FlipComp {
   note?: string;
 }
 
+/** Permit state for a subcontracted trade on a flip. "none" = no permit needed. */
+export type FlipPermitStatus = "none" | "needed" | "applied" | "issued" | "final";
+
+/** One subcontractor's bid for a trade. `picked` marks the hired one (one per
+ *  trade); `paid` is what has been paid to that sub so far. */
+export interface FlipBid {
+  id: string;
+  company?: string;
+  phone?: string;
+  amount?: number;
+  note?: string;
+  picked?: boolean;
+  paid?: number;
+}
+
+/** A trade on a flip that's subbed out (roof, electrical, HVAC…): up to 3 bids
+ *  and its permit. Stored in flip_projects.subs (JSONB). */
+export interface FlipSub {
+  id: string;
+  trade: string;
+  permit?: { status: FlipPermitStatus; number?: string };
+  bids: FlipBid[];
+}
+
 export interface FlipProject {
   id: string;
   org_id: string;
@@ -530,6 +554,7 @@ export interface FlipProject {
   selling_pct?: number;            // agent + closing, % of ARV
   contingency?: number;
   comps?: FlipComp[] | null;
+  subs?: FlipSub[] | null;          // subcontracted trades: bids + permits (Phase 3)
   acquired_at?: string | null;     // TIMESTAMPTZ — starts the holding clock (Phase 2)
   sold_at?: string | null;
   sold_price?: number | null;

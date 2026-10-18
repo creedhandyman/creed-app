@@ -230,7 +230,7 @@ export default function FlipAnalyzer({ setPage }: Props) {
       )}
 
       {activeId && view === "dash" ? (
-        <FlipDashboard project={draft as FlipProject} setPage={setPage} />
+        <FlipDashboard project={draft as FlipProject} setPage={setPage} onSubsChange={(subs) => update({ subs })} />
       ) : (<>
       {/* Property */}
       <div className="section">

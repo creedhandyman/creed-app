@@ -1,13 +1,17 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
-import { analyzeFlipActuals, compsArv, flipActuals } from "@/lib/flip";
-import type { FlipComp, FlipProject } from "@/lib/types";
+import { analyzeFlipActuals, compsArv, flipActuals, resaleData, subsSummary } from "@/lib/flip";
+import { buildResaleHtml, type ResaleOptions } from "@/lib/export-flip-resale";
+import { openPrint } from "@/lib/print-template";
+import { useBackLayer } from "@/lib/back-layer";
+import type { FlipComp, FlipProject, FlipSub } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { goWithIntent } from "@/lib/nav-intent";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import FlipSubs from "./FlipSubs";
 
 /* Flip Mode — Phase 2 project dashboard for ONE saved flip: budget vs actual,
    the holding-cost clock and projected profit with actual spend swapped in.
@@ -37,24 +41,49 @@ const OverChip = ({ over }: { over: number }) => (
   </span>
 );
 
-export default function FlipDashboard({ project, setPage }: { project: FlipProject; setPage: (p: string) => void }) {
+export default function FlipDashboard({ project, setPage, onSubsChange }: {
+  project: FlipProject;
+  setPage: (p: string) => void;
+  onSubsChange: (subs: FlipSub[]) => void;
+}) {
   const jobs = useStore((s) => s.jobs);
   const receipts = useStore((s) => s.receipts);
   const timeEntries = useStore((s) => s.timeEntries);
   const profiles = useStore((s) => s.profiles);
   const loadAll = useStore((s) => s.loadAll);
+  const org = useStore((s) => s.org);
+  const showToast = useStore((s) => s.showToast);
 
   const act = useMemo(
     () => flipActuals({ flipId: project.id, jobs, receipts, timeEntries, profiles }),
     [project.id, jobs, receipts, timeEntries, profiles],
   );
+  // Subs are paid outside the app's receipts/time entries — what's been paid
+  // to hired subs counts as real rehab spend. The rehab is only "done" once
+  // the linked jobs are done AND every hired sub is paid their bid.
+  const sub = useMemo(() => subsSummary(project.subs), [project.subs]);
+  const spent = act.spent + sub.paid;
+  const rehabDone = (act.lines.length > 0 ? act.allDone : sub.hired > 0) && sub.paid >= sub.picked;
   const a = useMemo(
-    () => analyzeFlipActuals(project, { spent: act.spent, rehabDone: act.allDone }),
-    [project, act.spent, act.allDone],
+    () => analyzeFlipActuals(project, { spent, rehabDone }),
+    [project, spent, rehabDone],
   );
 
   const budget = project.rehab_budget || 0;
-  const overall = Math.max(0, act.spent - budget);
+  const overall = Math.max(0, spent - budget);
+
+  // Resale package — a printable sheet for the agent / buyers / appraiser.
+  const [resaleOpen, setResaleOpen] = useState(false);
+  useBackLayer(resaleOpen, () => setResaleOpen(false));
+  const resale = useMemo(() => resaleData(project.id, jobs), [project.id, jobs]);
+  const hasPermits = (project.subs || []).some((x) => x.trade && x.permit && x.permit.status !== "none");
+  const hasComps = (project.comps || []).some((c) => c && (c.address || c.price));
+  const [opts, setOpts] = useState<ResaleOptions>({ photos: true, renders: false, permits: true, comps: true, invested: false });
+  const makeResale = () => {
+    const html = buildResaleHtml({ project, data: resale, spent, org, opts });
+    if (!openPrint(html)) showToast(t("flip.allowPopups"), "error");
+    setResaleOpen(false);
+  };
   const vc = VERDICT_C[a.verdict];
   const delta = a.profit - a.plan.profit;
   const sold = !!project.sold_at;
@@ -127,14 +156,14 @@ export default function FlipDashboard({ project, setPage }: { project: FlipProje
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
             <span style={{ fontWeight: 600 }}>{t("flip.rehab")}</span>
             <span style={{ fontFamily: "Oswald", fontSize: 16 }}>
-              <span className={overall > 0 ? "over" : undefined}>{money(act.spent)}</span>
+              <span className={overall > 0 ? "over" : undefined}>{money(spent)}</span>
               <span className="dim" style={{ fontSize: 13 }}> / {money(budget)}</span>
             </span>
           </div>
-          <Bar actual={act.spent} budget={budget} />
+          <Bar actual={spent} budget={budget} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12.5, color: "var(--color-dim)" }}>
-            <span>{t("flip.materials")} {money(act.materials)} · {t("flip.labor")} {money(act.labor)}</span>
-            {overall > 0 ? <OverChip over={overall} /> : budget > 0 && <span>{money(budget - act.spent)} {t("flip.left")}</span>}
+            <span>{t("flip.materials")} {money(act.materials)} · {t("flip.labor")} {money(act.labor)}{sub.paid > 0 && <> · {t("flip.subsShort")} {money(sub.paid)}</>}</span>
+            {overall > 0 ? <OverChip over={overall} /> : budget > 0 && <span>{money(budget - spent)} {t("flip.left")}</span>}
           </div>
           {act.unratedHrs > 0 && (
             <div style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, color: "var(--flip-gold)", marginTop: 6 }}>
@@ -170,6 +199,20 @@ export default function FlipDashboard({ project, setPage }: { project: FlipProje
           </button>
         ))}
 
+        {sub.hired > 0 && (
+          <div style={{ padding: "10px 0 6px", borderTop: "1px solid var(--color-border-dark-2)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Icon name="worker" size={14} color="var(--color-dim)" />
+              <span style={{ flex: 1, minWidth: 0, fontWeight: 600 }}>{t("flip.subsHired")} ({sub.hired})</span>
+              <span style={{ fontFamily: "Oswald", fontSize: 15, flex: "none" }}>
+                {money(sub.paid)}<span className="dim" style={{ fontSize: 12.5 }}> / {money(sub.picked)}</span>
+              </span>
+            </div>
+            <Bar actual={sub.paid} budget={sub.picked} />
+            <div style={{ fontSize: 12, color: "var(--color-dim)" }}>{t("flip.subsBarNote")}</div>
+          </div>
+        )}
+
         {linkable.length > 0 && (
           <select value="" onChange={(e) => linkJob(e.target.value)} style={{ marginTop: 8, fontSize: 14 }}>
             <option value="">{t("flip.linkJob")}</option>
@@ -178,6 +221,8 @@ export default function FlipDashboard({ project, setPage }: { project: FlipProje
         )}
         <div className="dim" style={{ fontSize: 12, padding: "6px 0 2px" }}>{t("flip.budgetNote")}</div>
       </div>
+
+      <FlipSubs subs={project.subs} onChange={onSubsChange} />
 
       {/* Projected P&L with actuals */}
       <div className="section">
@@ -198,6 +243,51 @@ export default function FlipDashboard({ project, setPage }: { project: FlipProje
         <div className="drow"><span className="l">{sold ? t("flip.soldPrice") : t("flip.arv")} − {t("flip.sellingCosts")} ({project.selling_pct || 0}%)</span><span className="v">{money(a.netSale)}</span></div>
         <div className="drow"><span className="l" style={{ fontWeight: 600, color: "inherit" }}>{sold ? t("flip.finalProfit") : t("flip.projectedNow")}</span><span className="v" style={{ fontFamily: "Oswald", fontSize: 16, color: vc }}>{money(a.profit)}</span></div>
       </div>
+
+      {/* Resale package */}
+      <div className="section">
+        <div className="seclabel"><Icon name="doc" size={14} /> {t("flip.sellIt")}</div>
+        <div className="dim" style={{ fontSize: 13, padding: "6px 0 8px" }}>{t("flip.resaleSub")}</div>
+        <button className="bgold" onClick={() => setResaleOpen(true)} style={{ width: "100%", marginBottom: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+          <Icon name="print" size={16} /> {t("flip.resalePackage")}
+        </button>
+      </div>
+
+      {resaleOpen && (
+        <div className="sheet-overlay" onClick={() => setResaleOpen(false)}>
+          <div className="cd sheet" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, paddingTop: 20 }}>
+            <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 4 }}>{t("flip.resalePackage")}</h3>
+            <div className="dim" style={{ fontSize: 13, marginBottom: 10 }}>{project.address}</div>
+            <div style={{ fontSize: 13.5, marginBottom: 10 }}>
+              {fill(t("flip.resaleCounts"), {
+                a: resale.areas.length,
+                i: resale.areas.reduce((n, x) => n + x.items.length, 0),
+                p: resale.before.length + resale.after.length,
+              })}
+            </div>
+            {([
+              ["photos", t("flip.optPhotos"), resale.before.length + resale.after.length > 0],
+              ["permits", t("flip.optPermits"), hasPermits],
+              ["comps", t("flip.optComps"), hasComps],
+              ["renders", t("flip.optRenders"), resale.renders.length > 0],
+              ["invested", t("flip.optInvested"), spent > 0],
+            ] as [keyof ResaleOptions, string, boolean][]).filter(([, , has]) => has).map(([k, label]) => (
+              <label key={k} className="drow" style={{ cursor: "pointer" }}>
+                <span className="l" style={{ color: "inherit" }}>{label}</span>
+                <input type="checkbox" checked={opts[k]} onChange={(e) => setOpts((o) => ({ ...o, [k]: e.target.checked }))} style={{ width: 20, height: 20, minHeight: 0, padding: 0, flexShrink: 0 }} />
+              </label>
+            ))}
+            {opts.invested && spent > 0 && <div style={{ fontSize: 12, color: "var(--flip-gold)", padding: "4px 0" }}>{t("flip.investedWarn")}</div>}
+            {opts.renders && resale.renders.length > 0 && <div className="dim" style={{ fontSize: 12, padding: "4px 0" }}>{t("flip.rendersNote")}</div>}
+            <button className="bgold" onClick={makeResale} style={{ width: "100%", marginTop: 12, padding: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+              <Icon name="print" size={16} /> {t("flip.makePdf")}
+            </button>
+            <button type="button" onClick={() => setResaleOpen(false)} className="dim" style={{ background: "none", border: "none", fontSize: 13, padding: 8, width: "100%", cursor: "pointer" }}>
+              {t("flip.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

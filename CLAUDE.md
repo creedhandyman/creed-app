@@ -633,6 +633,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `fullSyncAt` / the snapshot gate), so a missing table can't toast every 15s
   or block the offline snapshot. Deliberately NOT in preflight `DB_CHECKS`
   (optional feature, like brand_color).
+  Phase 3 adds one column (subcontractor bids + permits, JSONB; **ALREADY
+  RUN in prod 2026-10-17** via the Supabase MCP, migration `flip_projects_subs`):
+  `ALTER TABLE flip_projects ADD COLUMN IF NOT EXISTS subs JSONB;`
+  Until it runs, editing a flip's subs toasts "column does not exist" — and
+  because the analyzer batches edits into one patch, other edits made in the
+  same ~0.7s are lost with it.
 - Payments ledger / partial payments (deposits). Before this, `/api/verify-payment`
   set `status:'paid'` on ANY completed Stripe session — a 50% deposit marked the
   whole job paid, and nothing recorded how much was paid, so the balance could
@@ -861,7 +867,24 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   editable in the Project section. **Comps** (Deal view, `FlipComps`): 3 rows
   on `flip_projects.comps` (address, price, sqft, `status` sold|pending —
   JSONB, no migration), avg $/sq ft × the house's sq ft → "Use as ARV".
-  Still to do: compare two flips; Phase 3 resale PDF.
+  **Phase 3 — subs, permits + resale package (2026-10-17)**: Dashboard view
+  gets **Subcontractors & permits** (`screens/FlipSubs.tsx`, stored on
+  `flip_projects.subs`): per trade a permit (none / needed / applied / issued /
+  final + permit #) and up to 3 bids (company, amount, phone); **Hire** picks
+  one (one per trade). `subsSummary` (lib/flip.ts, tested): sub budget = the
+  hired bids; spend = what's been paid to ANY bid (money paid to a sub you
+  later replaced is still spent). The dashboard adds sub payments to the
+  rehab spend (so projected profit sees them), and "rehab done" also needs
+  every hired sub paid in full. **Resale package** (Sell it → sheet →
+  Create PDF; `lib/export-flip-resale.ts` over `resaleData`): facts,
+  "What Was Done" = linked jobs' FINISHED work only (ticked work-order
+  tasks, every task of a complete/invoiced/paid job, or a done job's quote
+  lines when it has no work order; grouped by area, deduped), permits,
+  before/after photos (job `rooms.photos` type before/after), nearby sales
+  + avg $/sq ft. Off by default: AI renders (printed as "Design Concepts —
+  not photographs") and the amount invested (buyers negotiate against it).
+  Still to do: compare two flips; lender draw schedule (skipped — owner
+  hasn't said they finance).
 
 - **Day-rhythm Home + calm polish pass (2026-10-12)**: owner goal = "a
   reusable flow every day; using the app should relieve stress". Home keeps

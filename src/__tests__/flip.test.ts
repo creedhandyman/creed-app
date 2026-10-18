@@ -1,5 +1,6 @@
-import { analyzeFlip, analyzeFlipActuals, compsArv, flipActuals, holdingClock, RULE_70, THIN_PROFIT } from "@/lib/flip";
-import type { Job, Profile, Receipt, TimeEntry } from "@/lib/types";
+import { analyzeFlip, analyzeFlipActuals, compsArv, flipActuals, holdingClock, resaleData, RULE_70, subsSummary, THIN_PROFIT } from "@/lib/flip";
+import { buildResaleHtml } from "@/lib/export-flip-resale";
+import type { FlipProject, FlipSub, Job, Profile, Receipt, TimeEntry } from "@/lib/types";
 
 const base = {
   arv: 300000,
@@ -223,5 +224,104 @@ describe("compsArv", () => {
     expect(compsArv([], 1000)).toBeNull();
     expect(compsArv(null, 1000)).toBeNull();
     expect(compsArv([{ price: 100000, sqft: 1000 }], null)?.arv).toBe(0);
+  });
+});
+
+describe("subsSummary", () => {
+  const subs: FlipSub[] = [
+    { id: "a", trade: "Roofing", permit: { status: "final", number: "R-1" }, bids: [
+      { id: "1", company: "Top Roof", amount: 12000, picked: true, paid: 6000 },
+      { id: "2", company: "Cheap Roof", amount: 9000 },
+    ] },
+    { id: "b", trade: "Electrical", permit: { status: "applied" }, bids: [{ id: "3", amount: 4000 }] },
+    { id: "c", trade: "", bids: [] }, // blank row is ignored
+  ];
+  it("sums only the hired bids and what they've been paid", () => {
+    const s = subsSummary(subs);
+    expect(s.trades).toBe(2);
+    expect(s.hired).toBe(1);
+    expect(s.picked).toBe(12000);
+    expect(s.paid).toBe(6000);
+  });
+  it("splits open permits from finaled ones", () => {
+    const s = subsSummary(subs);
+    expect(s.permitOpen.map((x) => x.trade)).toEqual(["Electrical"]);
+    expect(s.permitFinal.map((x) => x.trade)).toEqual(["Roofing"]);
+  });
+  it("keeps money paid to a sub that was later replaced", () => {
+    const swapped: FlipSub[] = [{ id: "a", trade: "Roofing", bids: [
+      { id: "1", amount: 12000, paid: 2000 },
+      { id: "2", amount: 9000, picked: true, paid: 1000 },
+    ] }];
+    expect(subsSummary(swapped)).toMatchObject({ hired: 1, picked: 9000, paid: 3000 });
+  });
+  it("handles null / empty", () => {
+    expect(subsSummary(null)).toMatchObject({ trades: 0, hired: 0, picked: 0, paid: 0 });
+  });
+});
+
+describe("resaleData", () => {
+  const rooms = (o: object) => JSON.stringify(o);
+  const jobs = [
+    job({ id: "j1", flip_project_id: "F", status: "active", rooms: rooms({
+      workOrder: [
+        { room: "Kitchen", detail: "New cabinets", done: true },
+        { room: "Kitchen", detail: "Backsplash", done: false },
+        { room: "Bath", detail: "New vanity", done: true },
+      ],
+      photos: [
+        { url: "b1", type: "before" }, { url: "a1", type: "after", label: "Kitchen" },
+        { url: "r1", type: "rendered" }, { url: "w1", type: "work" },
+      ],
+    }) }),
+    // done job: every work-order task counts even when not ticked
+    job({ id: "j2", flip_project_id: "F", status: "complete", rooms: rooms({
+      workOrder: [{ room: "Kitchen", detail: "new cabinets", done: false }, { room: "Exterior", detail: "Paint siding", done: false }],
+    }) }),
+    // done job with no work order: falls back to quote lines
+    job({ id: "j3", flip_project_id: "F", status: "paid", rooms: rooms({ rooms: [{ name: "Yard", items: [{ detail: "Sod front yard" }] }] }) }),
+    // not on this flip
+    job({ id: "j4", flip_project_id: "OTHER", status: "complete", rooms: rooms({ workOrder: [{ room: "X", detail: "Nope", done: true }] }) }),
+  ];
+  const d = resaleData("F", jobs);
+  it("claims only finished work, grouped by area, deduped", () => {
+    expect(d.areas).toEqual([
+      { area: "Kitchen", items: ["New cabinets"] },
+      { area: "Bath", items: ["New vanity"] },
+      { area: "Exterior", items: ["Paint siding"] },
+      { area: "Yard", items: ["Sod front yard"] },
+    ]);
+  });
+  it("sorts photos into before / after / renders (work photos left out)", () => {
+    expect(d.before.map((p) => p.url)).toEqual(["b1"]);
+    expect(d.after.map((p) => p.url)).toEqual(["a1"]);
+    expect(d.renders.map((p) => p.url)).toEqual(["r1"]);
+  });
+  it("survives a bad rooms blob", () => {
+    expect(resaleData("F", [job({ id: "x", flip_project_id: "F", rooms: "{not json" })]).areas).toEqual([]);
+  });
+});
+
+describe("buildResaleHtml", () => {
+  const project = {
+    id: "F", org_id: "o", address: "12 Elm <St>", status: "listed", beds: 3, baths: 2, sqft: 1500,
+    comps: [{ address: "14 Elm", price: 240000, sqft: 1500 }],
+    subs: [{ id: "a", trade: "Roofing", permit: { status: "final", number: "R-1" }, bids: [] }],
+  } as FlipProject;
+  const data = { areas: [{ area: "Kitchen", items: ["New cabinets"] }], before: [{ url: "b1" }], after: [], renders: [{ url: "r1" }] };
+  const all = { photos: true, renders: true, permits: true, comps: true, invested: true };
+  it("escapes the address and includes the chosen sections", () => {
+    const html = buildResaleHtml({ project, data, spent: 30000, org: { name: "Creed" }, opts: all });
+    expect(html).toContain("12 Elm &lt;St&gt;");
+    expect(html).toContain("New cabinets");
+    expect(html).toContain("Final inspection passed");
+    expect(html).toContain("$160/sq ft");
+    expect(html).toContain("not photographs");
+    expect(html).toContain("$30,000");
+  });
+  it("leaves out renders and the invested amount when off", () => {
+    const html = buildResaleHtml({ project, data, spent: 30000, org: { name: "Creed" }, opts: { ...all, renders: false, invested: false } });
+    expect(html).not.toContain("Design Concepts");
+    expect(html).not.toContain("$30,000");
   });
 });

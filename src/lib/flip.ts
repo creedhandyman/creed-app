@@ -3,7 +3,7 @@
 // screens. Only the inputs live on the flip_projects row; everything returned
 // here is derived and never stored.
 
-import type { FlipComp, FlipProject, Job, Profile, Receipt, TimeEntry } from "./types";
+import type { FlipComp, FlipProject, FlipSub, Job, Profile, Receipt, TimeEntry } from "./types";
 import { makeEntryPay } from "./financials";
 
 export const RULE_70 = 0.70;        // classic 70% rule ceiling (of ARV, minus rehab)
@@ -225,4 +225,85 @@ export function compsArv(comps: FlipComp[] | null | undefined, sqft: number | nu
   if (!usable.length) return null;
   const ppsf = usable.reduce((s, c) => s + num(c.price) / num(c.sqft), 0) / usable.length;
   return { ppsf, count: usable.length, arv: num(sqft) > 0 ? ppsf * num(sqft) : 0 };
+}
+
+// ── Phase 3: subcontractors + permits, and the resale package ─────────────
+
+export const MAX_BIDS = 3;
+
+/** The picked bid of a trade (first one marked picked), else null. */
+export function pickedBid(sub: FlipSub) {
+  return (sub.bids || []).find((b) => b.picked) || null;
+}
+
+/** Roll-up of the subbed-out trades: what the hired subs were bid (the sub
+ *  budget), what's been paid to ANY sub (real spend — counts toward the rehab
+ *  actuals, even if that sub was later replaced), and which permits are
+ *  still open. */
+export function subsSummary(subs: FlipSub[] | null | undefined) {
+  const list = (subs || []).filter((s) => s && (s.trade || s.bids?.length));
+  let picked = 0;
+  let paid = 0;
+  let hired = 0;
+  for (const s of list) {
+    const b = pickedBid(s);
+    if (b) { hired++; picked += num(b.amount); }
+    for (const x of s.bids || []) paid += num(x.paid);
+  }
+  const permitOpen = list.filter((s) => ["needed", "applied", "issued"].includes(s.permit?.status || ""));
+  const permitFinal = list.filter((s) => s.permit?.status === "final");
+  return { trades: list.length, hired, picked, paid, permitOpen, permitFinal };
+}
+
+export interface ResalePhoto { url: string; label?: string; sourceUrl?: string }
+
+export interface ResaleData {
+  /** Finished work, grouped by area, in the order the jobs list it. */
+  areas: { area: string; items: string[] }[];
+  before: ResalePhoto[];
+  after: ResalePhoto[];
+  /** AI "proposed finish" renders — NOT photos of the finished house. */
+  renders: ResalePhoto[];
+}
+
+/** What the resale package says was done: the linked jobs' finished work.
+ *  A task counts when it's ticked on the work order, or when its whole job is
+ *  done (crews don't always tick every box). A done job with no work order
+ *  falls back to its quote lines. Unfinished work is never claimed. */
+export function resaleData(flipId: string, jobs: Job[]): ResaleData {
+  const areas = new Map<string, string[]>();
+  const add = (area: string, item: string) => {
+    const a = area.trim() || "General";
+    const it = item.trim();
+    if (!it) return;
+    const list = areas.get(a) || [];
+    if (!list.some((x) => x.toLowerCase() === it.toLowerCase())) list.push(it);
+    areas.set(a, list);
+  };
+  const out: ResaleData = { areas: [], before: [], after: [], renders: [] };
+  const seen = new Set<string>();
+  for (const j of jobs.filter((x) => x.flip_project_id === flipId)) {
+    let blob: Record<string, unknown> | null = null;
+    try { blob = typeof j.rooms === "string" ? JSON.parse(j.rooms) : (j.rooms as unknown as Record<string, unknown>); } catch { /* */ }
+    const jobDone = DONE_STATUSES.includes(j.status);
+    const wo = Array.isArray(blob?.workOrder) ? (blob!.workOrder as { room?: string; detail?: string; done?: boolean }[]) : [];
+    if (wo.length) {
+      for (const w of wo) if (w && (w.done || jobDone)) add(String(w.room || ""), String(w.detail || ""));
+    } else if (jobDone && Array.isArray(blob?.rooms)) {
+      for (const r of blob!.rooms as { name?: string; items?: { detail?: string }[] }[]) {
+        for (const it of r?.items || []) add(String(r?.name || ""), String(it?.detail || ""));
+      }
+    }
+    const photos = Array.isArray(blob?.photos) ? (blob!.photos as { url?: string; label?: string; type?: string; sourceUrl?: string }[]) : [];
+    for (const ph of photos) {
+      if (!ph?.url || seen.has(ph.url)) continue;
+      seen.add(ph.url);
+      const p = { url: ph.url, label: ph.label, sourceUrl: ph.sourceUrl };
+      if (ph.type === "before") out.before.push(p);
+      else if (ph.type === "after") out.after.push(p);
+      else if (ph.type === "rendered") out.renders.push(p);
+    }
+  }
+  out.areas = [...areas].map(([area, items]) => ({ area, items }));
+  return out;
 }
