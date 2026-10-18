@@ -636,6 +636,8 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Phase 3 adds one column (subcontractor bids + permits, JSONB; **ALREADY
   RUN in prod 2026-10-17** via the Supabase MCP, migration `flip_projects_subs`):
   `ALTER TABLE flip_projects ADD COLUMN IF NOT EXISTS subs JSONB;`
+  Lender draws add one more (lender + draw schedule, JSONB):
+  `ALTER TABLE flip_projects ADD COLUMN IF NOT EXISTS loan JSONB;`
   Until it runs, editing a flip's subs toasts "column does not exist" — and
   because the analyzer batches edits into one patch, other edits made in the
   same ~0.7s are lost with it.
@@ -883,8 +885,25 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   before/after photos (job `rooms.photos` type before/after), nearby sales
   + avg $/sq ft. Off by default: AI renders (printed as "Design Concepts —
   not photographs") and the amount invested (buyers negotiate against it).
-  Still to do: compare two flips; lender draw schedule (skipped — owner
-  hasn't said they finance).
+  **Lender draws (2026-10-17)**: Dashboard → **Lender & draws**
+  (`screens/FlipDraws.tsx`, stored on `flip_projects.loan` = {lender,
+  loan_no, contact, holdback, rate, draw_fee, draws[]}). Each draw: milestone,
+  amount, status planned → requested → inspected → funded (`setDrawStatus`
+  stamps requested_at/funded_at as YYYY-MM-DD, clears them moving back), fee
+  override, note. Schedule seeds: one draw per linked job, or the holdback
+  split into 4 standard milestones. `drawSummary` (tested): funded / waiting /
+  left to draw, fees (on draws sent to the lender), interest on funded draws,
+  "floating" (your cash covering rehab the lender hasn't paid back = min(spent,
+  holdback) − funded) and "ready to draw" (spent not yet funded or
+  requested). Money rules: `analyzeFlip` cash-in subtracts the financed rehab
+  (min(holdback, rehab)) so ROI is on your own cash — the Deal view has a
+  **Rehab financed** pill bound to `loan.holdback`; draw fees charged count as
+  financing in `analyzeFlipActuals` (`drawFees`). **Draw request PDF**
+  (`lib/export-flip-draw.ts`, per draw; printing a planned draw marks it
+  requested): loan facts, holdback / funded to date / other unfunded requests
+  / this request / fee / remaining, progress per linked job, finished work,
+  recent after + in-progress photos, borrower + inspector signature lines.
+  Still to do: compare two flips.
 
 - **Day-rhythm Home + calm polish pass (2026-10-12)**: owner goal = "a
   reusable flow every day; using the app should relieve stress". Home keeps

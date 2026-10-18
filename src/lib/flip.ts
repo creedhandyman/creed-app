@@ -3,7 +3,7 @@
 // screens. Only the inputs live on the flip_projects row; everything returned
 // here is derived and never stored.
 
-import type { FlipComp, FlipProject, FlipSub, Job, Profile, Receipt, TimeEntry } from "./types";
+import type { FlipComp, FlipLoan, FlipProject, FlipSub, Job, Profile, Receipt, TimeEntry } from "./types";
 import { makeEntryPay } from "./financials";
 
 export const RULE_70 = 0.70;        // classic 70% rule ceiling (of ARV, minus rehab)
@@ -38,7 +38,10 @@ export function analyzeFlip(p: Partial<FlipProject>): FlipAnalysis {
   const allIn = purchase + rehab + holding + financing + contingency;
   const netSale = arv - selling;
   const profit = netSale - allIn;
-  const cashIn = rehab + holding + financing + contingency
+  // Rehab the lender pays for (its holdback, released in draws) isn't your
+  // cash — so it comes out of cash-in, and ROI is on what you actually put in.
+  const financedRehab = Math.min(Math.max(0, num(p.loan?.holdback)), rehab);
+  const cashIn = rehab - financedRehab + holding + financing + contingency
     + purchase * (num(p.down_pct) / 100);
   const roi = cashIn > 0 ? profit / cashIn : 0;
   const maxBuy = arv * RULE_70 - rehab;
@@ -188,7 +191,7 @@ export interface FlipProgress extends FlipAnalysis {
  *  holding runs at least the planned months unless the house has sold. */
 export function analyzeFlipActuals(
   p: Partial<FlipProject>,
-  actual: { spent: number; rehabDone: boolean },
+  actual: { spent: number; rehabDone: boolean; drawFees?: number },
   now: Date = new Date(),
 ): FlipProgress {
   const plan = analyzeFlip(p);
@@ -204,6 +207,8 @@ export function analyzeFlipActuals(
     rehab_budget: rehabProjected,
     arv: salePrice,
     holding_months: monthly > 0 ? holdingProjected / monthly : 0,
+    // Lender draw fees actually charged are financing cost on top of the plan's.
+    financing_cost: num(p.financing_cost) + num(actual.drawFees),
   });
   return {
     ...a,
@@ -264,6 +269,8 @@ export interface ResaleData {
   after: ResalePhoto[];
   /** AI "proposed finish" renders — NOT photos of the finished house. */
   renders: ResalePhoto[];
+  /** In-progress photos (type "work") — for draw requests, not the resale sheet. */
+  work: ResalePhoto[];
 }
 
 /** What the resale package says was done: the linked jobs' finished work.
@@ -280,7 +287,7 @@ export function resaleData(flipId: string, jobs: Job[]): ResaleData {
     if (!list.some((x) => x.toLowerCase() === it.toLowerCase())) list.push(it);
     areas.set(a, list);
   };
-  const out: ResaleData = { areas: [], before: [], after: [], renders: [] };
+  const out: ResaleData = { areas: [], before: [], after: [], renders: [], work: [] };
   const seen = new Set<string>();
   for (const j of jobs.filter((x) => x.flip_project_id === flipId)) {
     let blob: Record<string, unknown> | null = null;
@@ -302,8 +309,68 @@ export function resaleData(flipId: string, jobs: Job[]): ResaleData {
       if (ph.type === "before") out.before.push(p);
       else if (ph.type === "after") out.after.push(p);
       else if (ph.type === "rendered") out.renders.push(p);
+      else if (ph.type === "work") out.work.push(p);
     }
   }
   out.areas = [...areas].map(([area, items]) => ({ area, items }));
   return out;
+}
+
+// ── Lender draws ──────────────────────────────────────────────────────────
+// Hard-money / rehab lenders hold the rehab money back and release it in
+// draws after inspecting finished work. You pay first and get reimbursed, so
+// the numbers that matter are: what's funded, what's still in the holdback,
+// how much of your own cash is floating the rehab right now, and how much
+// finished work hasn't been drawn on yet.
+
+export const DRAW_STEPS = ["planned", "requested", "inspected", "funded"] as const;
+
+/** A draw's fee: its own, else the loan's per-draw fee. */
+export const drawFee = (loan: FlipLoan | null | undefined, d: { fee?: number }) =>
+  d.fee !== undefined && d.fee !== null ? num(d.fee) : num(loan?.draw_fee);
+
+export function drawSummary(loan: FlipLoan | null | undefined, spent: number) {
+  const draws = loan?.draws || [];
+  const holdback = Math.max(0, num(loan?.holdback));
+  const sum = (pred: (s: string) => boolean) =>
+    draws.filter((d) => pred(d.status)).reduce((s, d) => s + num(d.amount), 0);
+  const funded = sum((s) => s === "funded");
+  const pending = sum((s) => s === "requested" || s === "inspected");
+  const planned = sum((s) => s === "planned");
+  const scheduled = funded + pending + planned;
+  // Fees are charged on draws that have gone to the lender.
+  const fees = draws.filter((d) => d.status !== "planned").reduce((s, d) => s + drawFee(loan, d), 0);
+  const cost = Math.max(0, num(spent));
+  return {
+    holdback,
+    funded,
+    pending,
+    planned,
+    scheduled,
+    remaining: Math.max(0, holdback - funded - pending),
+    overScheduled: holdback > 0 && scheduled > holdback + 0.5,
+    fees,
+    /** Your own cash currently covering rehab that the lender hasn't paid back. */
+    floating: Math.max(0, Math.min(cost, holdback || cost) - funded),
+    /** Spent (up to the holdback) that isn't funded or already requested. */
+    readyToDraw: holdback > 0 ? Math.max(0, Math.min(cost, holdback) - funded - pending) : 0,
+    /** Interest on the funded draws, per month (lenders that charge on drawn funds). */
+    interestMonthly: (funded * num(loan?.rate)) / 100 / 12,
+    count: draws.length,
+  };
+}
+
+/** Next state when a draw's status changes: stamps today's date on the step
+ *  it reaches (keeping dates already set), clears dates if moved back. */
+export function setDrawStatus<T extends { status: string; requested_at?: string; funded_at?: string }>(
+  d: T,
+  status: T["status"],
+  today: string,
+): T {
+  const rank = (s: string) => DRAW_STEPS.indexOf(s as (typeof DRAW_STEPS)[number]);
+  const r = rank(status);
+  const next = { ...d, status };
+  next.requested_at = r >= 1 ? d.requested_at || today : undefined;
+  next.funded_at = r >= 3 ? d.funded_at || today : undefined;
+  return next;
 }

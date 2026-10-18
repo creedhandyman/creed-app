@@ -1,17 +1,18 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
-import { analyzeFlipActuals, compsArv, flipActuals, resaleData, subsSummary } from "@/lib/flip";
+import { analyzeFlipActuals, compsArv, drawSummary, flipActuals, resaleData, subsSummary } from "@/lib/flip";
 import { buildResaleHtml, type ResaleOptions } from "@/lib/export-flip-resale";
 import { openPrint } from "@/lib/print-template";
 import { useBackLayer } from "@/lib/back-layer";
-import type { FlipComp, FlipProject, FlipSub } from "@/lib/types";
+import type { FlipComp, FlipLoan, FlipProject, FlipSub } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { goWithIntent } from "@/lib/nav-intent";
 import { db } from "@/lib/supabase";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import FlipSubs from "./FlipSubs";
+import FlipDraws from "./FlipDraws";
 
 /* Flip Mode — Phase 2 project dashboard for ONE saved flip: budget vs actual,
    the holding-cost clock and projected profit with actual spend swapped in.
@@ -41,10 +42,11 @@ const OverChip = ({ over }: { over: number }) => (
   </span>
 );
 
-export default function FlipDashboard({ project, setPage, onSubsChange }: {
+export default function FlipDashboard({ project, setPage, onSubsChange, onLoanChange }: {
   project: FlipProject;
   setPage: (p: string) => void;
   onSubsChange: (subs: FlipSub[]) => void;
+  onLoanChange: (loan: FlipLoan) => void;
 }) {
   const jobs = useStore((s) => s.jobs);
   const receipts = useStore((s) => s.receipts);
@@ -64,9 +66,11 @@ export default function FlipDashboard({ project, setPage, onSubsChange }: {
   const sub = useMemo(() => subsSummary(project.subs), [project.subs]);
   const spent = act.spent + sub.paid;
   const rehabDone = (act.lines.length > 0 ? act.allDone : sub.hired > 0) && sub.paid >= sub.picked;
+  // Lender draw fees charged so far are financing cost on top of the plan.
+  const drawFees = useMemo(() => drawSummary(project.loan, spent).fees, [project.loan, spent]);
   const a = useMemo(
-    () => analyzeFlipActuals(project, { spent, rehabDone }),
-    [project, spent, rehabDone],
+    () => analyzeFlipActuals(project, { spent, rehabDone, drawFees }),
+    [project, spent, rehabDone, drawFees],
   );
 
   const budget = project.rehab_budget || 0;
@@ -224,6 +228,8 @@ export default function FlipDashboard({ project, setPage, onSubsChange }: {
 
       <FlipSubs subs={project.subs} onChange={onSubsChange} />
 
+      <FlipDraws project={project} loan={project.loan} onChange={onLoanChange} spent={spent} lines={act.lines} work={resale} />
+
       {/* Projected P&L with actuals */}
       <div className="section">
         <div className="seclabel"><Icon name="list" size={14} /> {t("flip.projectedPnl")}</div>
@@ -231,7 +237,7 @@ export default function FlipDashboard({ project, setPage, onSubsChange }: {
           { l: t("flip.purchase"), n: project.purchase_price || 0, plan: project.purchase_price || 0 },
           { l: act.allDone ? t("flip.rehabActual") : t("flip.rehabProjected"), n: a.rehabProjected, plan: budget },
           { l: t("flip.holding"), n: a.holdingProjected, plan: a.plan.holding },
-          { l: t("flip.financing"), n: project.financing_cost || 0, plan: project.financing_cost || 0 },
+          { l: drawFees > 0 ? `${t("flip.financing")} + ${t("flip.drawFees").toLowerCase()}` : t("flip.financing"), n: (project.financing_cost || 0) + drawFees, plan: project.financing_cost || 0 },
           { l: t("flip.contingency"), n: project.contingency || 0, plan: project.contingency || 0 },
         ].map((r) => (
           <div key={r.l} className="drow">

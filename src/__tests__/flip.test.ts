@@ -1,6 +1,7 @@
-import { analyzeFlip, analyzeFlipActuals, compsArv, flipActuals, holdingClock, resaleData, RULE_70, subsSummary, THIN_PROFIT } from "@/lib/flip";
+import { analyzeFlip, analyzeFlipActuals, compsArv, drawSummary, flipActuals, holdingClock, resaleData, RULE_70, setDrawStatus, subsSummary, THIN_PROFIT } from "@/lib/flip";
 import { buildResaleHtml } from "@/lib/export-flip-resale";
-import type { FlipProject, FlipSub, Job, Profile, Receipt, TimeEntry } from "@/lib/types";
+import { buildDrawRequestHtml } from "@/lib/export-flip-draw";
+import type { FlipDraw, FlipLoan, FlipProject, FlipSub, Job, Profile, Receipt, TimeEntry } from "@/lib/types";
 
 const base = {
   arv: 300000,
@@ -292,10 +293,11 @@ describe("resaleData", () => {
       { area: "Yard", items: ["Sod front yard"] },
     ]);
   });
-  it("sorts photos into before / after / renders (work photos left out)", () => {
+  it("sorts photos into before / after / renders / work", () => {
     expect(d.before.map((p) => p.url)).toEqual(["b1"]);
     expect(d.after.map((p) => p.url)).toEqual(["a1"]);
     expect(d.renders.map((p) => p.url)).toEqual(["r1"]);
+    expect(d.work.map((p) => p.url)).toEqual(["w1"]);
   });
   it("survives a bad rooms blob", () => {
     expect(resaleData("F", [job({ id: "x", flip_project_id: "F", rooms: "{not json" })]).areas).toEqual([]);
@@ -308,7 +310,7 @@ describe("buildResaleHtml", () => {
     comps: [{ address: "14 Elm", price: 240000, sqft: 1500 }],
     subs: [{ id: "a", trade: "Roofing", permit: { status: "final", number: "R-1" }, bids: [] }],
   } as FlipProject;
-  const data = { areas: [{ area: "Kitchen", items: ["New cabinets"] }], before: [{ url: "b1" }], after: [], renders: [{ url: "r1" }] };
+  const data = { areas: [{ area: "Kitchen", items: ["New cabinets"] }], before: [{ url: "b1" }], after: [], renders: [{ url: "r1" }], work: [] };
   const all = { photos: true, renders: true, permits: true, comps: true, invested: true };
   it("escapes the address and includes the chosen sections", () => {
     const html = buildResaleHtml({ project, data, spent: 30000, org: { name: "Creed" }, opts: all });
@@ -323,5 +325,99 @@ describe("buildResaleHtml", () => {
     const html = buildResaleHtml({ project, data, spent: 30000, org: { name: "Creed" }, opts: { ...all, renders: false, invested: false } });
     expect(html).not.toContain("Design Concepts");
     expect(html).not.toContain("$30,000");
+  });
+});
+
+describe("lender draws", () => {
+  const loan: FlipLoan = {
+    lender: "Wheat State Capital", loan_no: "L-99", holdback: 40000, rate: 12, draw_fee: 150,
+    draws: [
+      { id: "d1", label: "Demo", amount: 10000, status: "funded", requested_at: "2026-09-01", funded_at: "2026-09-05" },
+      { id: "d2", label: "Rough-ins", amount: 10000, status: "requested", requested_at: "2026-09-20", fee: 0 },
+      { id: "d3", label: "Finishes", amount: 15000, status: "planned" },
+    ],
+  };
+
+  it("splits funded / waiting / planned and what's left in the holdback", () => {
+    const s = drawSummary(loan, 26000);
+    expect(s).toMatchObject({ holdback: 40000, funded: 10000, pending: 10000, planned: 15000, scheduled: 35000, remaining: 20000 });
+    expect(s.overScheduled).toBe(false);
+  });
+  it("charges fees only on draws sent to the lender, honoring a per-draw override", () => {
+    expect(drawSummary(loan, 0).fees).toBe(150); // d1 = loan fee 150, d2 = override 0, d3 planned
+  });
+  it("floating = your cash covering rehab the lender hasn't funded; ready = spent not yet drawn", () => {
+    const s = drawSummary(loan, 26000);
+    expect(s.floating).toBe(16000);
+    expect(s.readyToDraw).toBe(6000);
+    // spend beyond the holdback is never drawable
+    expect(drawSummary(loan, 90000).readyToDraw).toBe(20000);
+  });
+  it("interest runs on funded draws only", () => {
+    expect(drawSummary(loan, 0).interestMonthly).toBeCloseTo(100);
+  });
+  it("flags a schedule bigger than the holdback", () => {
+    const over = { ...loan, draws: [...(loan.draws || []), { id: "d4", amount: 9000, status: "planned" as const }] };
+    expect(drawSummary(over, 0).overScheduled).toBe(true);
+  });
+  it("handles no loan", () => {
+    expect(drawSummary(null, 5000)).toMatchObject({ holdback: 0, funded: 0, readyToDraw: 0, count: 0 });
+  });
+
+  it("stamps dates as a draw moves forward and clears them moving back", () => {
+    const d0: FlipDraw = { id: "x", status: "planned" };
+    const req = setDrawStatus(d0, "requested", "2026-10-01");
+    expect(req).toMatchObject({ requested_at: "2026-10-01", funded_at: undefined });
+    const fund = setDrawStatus(req, "funded", "2026-10-09");
+    expect(fund).toMatchObject({ requested_at: "2026-10-01", funded_at: "2026-10-09" });
+    const back = setDrawStatus(fund, "planned", "2026-10-10");
+    expect(back.requested_at).toBeUndefined();
+    expect(back.funded_at).toBeUndefined();
+  });
+
+  it("financed rehab comes out of cash-in (ROI on your own cash)", () => {
+    const cash = analyzeFlip(base);
+    const lent = analyzeFlip({ ...base, loan: { holdback: 30000 } });
+    expect(cash.cashIn - lent.cashIn).toBe(30000);
+    expect(lent.profit).toBe(cash.profit); // financing the rehab doesn't change profit
+    // a holdback bigger than the rehab can't make cash-in negative
+    expect(analyzeFlip({ ...base, loan: { holdback: 999999 } }).cashIn).toBe(cash.cashIn - 40000);
+  });
+
+  it("draw fees charged count as financing in the actuals", () => {
+    const p = { ...base, acquired_at: "2026-09-01T12:00:00Z" };
+    const now = new Date("2026-10-01T12:00:00Z");
+    const without = analyzeFlipActuals(p, { spent: 0, rehabDone: false }, now);
+    const withFees = analyzeFlipActuals(p, { spent: 0, rehabDone: false, drawFees: 300 }, now);
+    expect(without.profit - withFees.profit).toBeCloseTo(300);
+  });
+
+  it("draw request PDF shows the draw against the holdback", () => {
+    const project = { id: "F", org_id: "o", address: "9 Oak", status: "active", loan } as FlipProject;
+    const html = buildDrawRequestHtml({
+      project,
+      draw: loan.draws![1],
+      lines: [{ jobId: "j", label: "Kitchen", status: "active", done: false, budget: 1, materials: 0, labor: 0, actual: 0, over: 0, tasksDone: 3, tasksTotal: 4 }],
+      work: { areas: [{ area: "Kitchen", items: ["Cabinets set"] }], before: [], after: [{ url: "a1" }], renders: [], work: [{ url: "w1" }] },
+      org: { name: "Creed" },
+    });
+    expect(html).toContain("Draw #2");
+    expect(html).toContain("Wheat State Capital");
+    expect(html).toContain("$10,000.00"); // prior funded + this request
+    expect(html).toContain("$20,000.00"); // holdback left after this draw
+    expect(html).toContain("3 of 4 (75%)");
+    expect(html).toContain("Cabinets set");
+    expect(html).toContain("(1 draw)");
+  });
+
+  it("draw request subtracts other unfunded requests from the holdback left", () => {
+    const project = { id: "F", org_id: "o", address: "9 Oak", status: "active", loan } as FlipProject;
+    const html = buildDrawRequestHtml({
+      project, draw: loan.draws![2], lines: [], org: null,
+      work: { areas: [], before: [], after: [], renders: [], work: [] },
+    });
+    // 40k holdback − 10k funded − 10k requested (d2) − 15k this draw = 5k
+    expect(html).toContain("Other requests not yet funded");
+    expect(html).toContain("$5,000.00");
   });
 });

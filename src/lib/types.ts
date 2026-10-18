@@ -536,6 +536,32 @@ export interface FlipSub {
   bids: FlipBid[];
 }
 
+/** A lender draw: rehab money released from the holdback after a milestone.
+ *  Dates are YYYY-MM-DD, stamped when the status moves forward. */
+export type FlipDrawStatus = "planned" | "requested" | "inspected" | "funded";
+export interface FlipDraw {
+  id: string;
+  label?: string;          // milestone ("Demo + rough-ins")
+  amount?: number;
+  status: FlipDrawStatus;
+  requested_at?: string;
+  funded_at?: string;
+  /** Lender's fee for this draw; absent = the loan's draw_fee. */
+  fee?: number;
+  note?: string;
+}
+
+/** The flip's lender + its draw schedule. Stored in flip_projects.loan (JSONB). */
+export interface FlipLoan {
+  lender?: string;
+  loan_no?: string;
+  contact?: string;        // name / phone / email of the draw contact
+  holdback?: number;       // rehab funds the lender holds and releases in draws
+  rate?: number;           // annual interest %
+  draw_fee?: number;       // $ per draw (inspection / wire fee)
+  draws?: FlipDraw[];
+}
+
 export interface FlipProject {
   id: string;
   org_id: string;
@@ -555,6 +581,7 @@ export interface FlipProject {
   contingency?: number;
   comps?: FlipComp[] | null;
   subs?: FlipSub[] | null;          // subcontracted trades: bids + permits (Phase 3)
+  loan?: FlipLoan | null;          // lender + draw schedule (Phase 3)
   acquired_at?: string | null;     // TIMESTAMPTZ — starts the holding clock (Phase 2)
   sold_at?: string | null;
   sold_price?: number | null;

@@ -230,7 +230,7 @@ export default function FlipAnalyzer({ setPage }: Props) {
       )}
 
       {activeId && view === "dash" ? (
-        <FlipDashboard project={draft as FlipProject} setPage={setPage} onSubsChange={(subs) => update({ subs })} />
+        <FlipDashboard project={draft as FlipProject} setPage={setPage} onSubsChange={(subs) => update({ subs })} onLoanChange={(loan) => update({ loan })} />
       ) : (<>
       {/* Property */}
       <div className="section">
@@ -322,6 +322,21 @@ export default function FlipAnalyzer({ setPage }: Props) {
               </div>
             </label>
           ))}
+          {/* Rehab the lender pays (its holdback, released in draws) — comes
+              out of cash-in. Same value as the dashboard's Lender & draws. */}
+          <label className="ipill">
+            <span>{t("flip.rehabFinanced")}</span>
+            <div className="ipv">
+              <i>$</i>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                value={draft.loan?.holdback ?? ""}
+                onChange={(e) => update({ loan: { ...draft.loan, holdback: e.target.value === "" ? undefined : Number(e.target.value) } })}
+              />
+            </div>
+          </label>
         </div>
         {quoteOptions.length > 0 && (
           <select
