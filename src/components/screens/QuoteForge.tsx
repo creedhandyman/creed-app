@@ -6,7 +6,6 @@ import type { CSSProperties } from "react";
 import RenderModal from "../RenderModal";
 import Coachmark from "../Coachmark";
 import { buildRenderPrompt } from "@/lib/render-prompt";
-import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material, JobDiscount } from "@/lib/types";
@@ -38,10 +37,14 @@ import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom } from "@/lib/pricing";
 import Inspector from "./Inspector";
+import { useBackLayer } from "@/lib/back-layer";
 import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
+import AiNote from "../AiNote";
+import MaterialsSheet from "../MaterialsSheet";
 import CameraModal from "../CameraModal";
 import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
@@ -50,6 +53,7 @@ import { stripAiHrs } from "@/lib/ai-hours";
 import SendSheet from "../SendSheet";
 import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 
 /** A saved, reusable quote-as-template: a name + the line-item rooms blob
  *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
@@ -327,6 +331,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // Set when "Build Quote" on a lead seeds quickDesc/quickPhotos — the effect
   // below fires the AI build once those have committed to state.
   const [leadBuildPending, setLeadBuildPending] = useState(false);
+  // A lead whose AI-built quote is still waiting as an edit draft opens the
+  // Resume / Discard card instead of re-running the AI. Its request is kept
+  // here so Discard can seed Quick Quote the original way.
+  const leadSeedRef = useRef<{ desc: string; photos: string[] } | null>(null);
   const [quickUploading, setQuickUploading] = useState(false);
   const quickPhotoRef = useRef<HTMLInputElement>(null);
   const [quickCam, setQuickCam] = useState(false);
@@ -550,11 +558,22 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         useStore.getState().showToast("Unsaved changes restored — tap Update to save them", "success");
       }
     } catch { /* */ }
+    leadSeedRef.current = null;
     setEditDraftOffer(null);
   };
   const discardEditDraft = () => {
     if (editDraftOffer) dropEditDraft(editDraftOffer.id);
     setEditDraftOffer(null);
+    // A lead's draft thrown away → build from the customer's request again,
+    // exactly as a lead with no draft does.
+    const seed = leadSeedRef.current;
+    if (seed) {
+      leadSeedRef.current = null;
+      setQuickDesc(seed.desc);
+      setQuickPhotos(seed.photos);
+      setMode("quick");
+      setLeadBuildPending(true);
+    }
   };
   // Write the draft as you edit (debounced). Paused while a Resume/Discard
   // choice is pending so the older draft isn't overwritten before you pick.
@@ -625,6 +644,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setCustomerId(job.customer_id || undefined);
     setAddressId(job.address_id || undefined);
     setEditingId(job.id);
+    leadSeedRef.current = null;
 
     try {
       const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
@@ -636,12 +656,27 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // job, so saving promotes the same lead row to a quote.
       const leadPhotos = Array.isArray(data?.leadPhotos) ? data.leadPhotos : [];
       if (!data?.rooms?.length && (data?.leadDescription || leadPhotos.length)) {
-        setQuickDesc(data.leadDescription || "");
-        setQuickPhotos(leadPhotos);
-        setMode("quick");
-        setLeadBuildPending(true);
-        clearEditJob?.();
-        return;
+        // The AI already built this lead once and that quote is still in its
+        // edit draft (left before Save) → don't re-run the AI. Take the normal
+        // edit path below so Resume / Discard is offered; Discard falls back
+        // to the auto-build via leadSeedRef.
+        let leadDraft = false;
+        try {
+          const raw = localStorage.getItem(editDraftKey(job.id));
+          const d = raw ? JSON.parse(raw) : null;
+          leadDraft = !!(d && typeof d.savedAt === "number" && Date.now() - d.savedAt < EDIT_DRAFT_TTL && d.state?.rooms?.length > 0);
+        } catch { /* */ }
+        if (leadDraft) {
+          leadSeedRef.current = { desc: data.leadDescription || "", photos: leadPhotos };
+          setRooms([]);
+        } else {
+          setQuickDesc(data.leadDescription || "");
+          setQuickPhotos(leadPhotos);
+          setMode("quick");
+          setLeadBuildPending(true);
+          clearEditJob?.();
+          return;
+        }
       }
       let loadedRooms: Room[] = [];
       if (data?.rooms?.length) {
@@ -991,12 +1026,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setInspParseFailed(true);
     const aiErr = getLastAiError();
     const interrupted = /failed to fetch|networkerror|network request failed|aborted|load failed|timeout|timed out/i.test(aiErr);
+    // Plain words for the crew; the raw API text only for platform operators.
+    if (aiErr) console.error("AI inspection parse error:", aiErr);
     useStore.getState().showToast(
-      interrupted
-        ? "The AI didn't finish reading the inspection — the app was likely backgrounded or the connection dropped mid-quote. Tap Retry."
-        : aiErr
-          ? `AI couldn't build the quote (${aiErr.slice(0, 140)}). Tap Retry.`
-          : "The AI couldn't build a quote from this inspection. Tap Retry.",
+      t("qf.aiRetryInspection") + (!interrupted && aiErr && isPlatformAdmin(user.email) ? ` (${aiErr.slice(0, 140)})` : ""),
       "error",
     );
   };
@@ -1191,12 +1224,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setParseStatus("");
     const aiErr = getLastAiError();
     const interrupted = /failed to fetch|networkerror|network request failed|aborted|load failed|timeout|timed out/i.test(aiErr);
+    // Plain words for the crew; the raw API text only for platform operators.
+    if (aiErr) console.error("AI parse error:", aiErr);
     useStore.getState().showToast(
       interrupted
-        ? "The AI didn't finish — the app was likely backgrounded or the connection dropped mid-quote. Your details are still here; tap Build to try again."
-        : aiErr
-          ? `AI couldn't build the quote (${aiErr.slice(0, 140)}). Your details are still here — tap Build to try again.`
-          : "The AI couldn't build the quote. Your details are still here — tap Build to try again.",
+        ? t("qf.aiRetry")
+        : t("qf.aiFailed") + (aiErr && isPlatformAdmin(user.email) ? ` (${aiErr.slice(0, 140)})` : ""),
       "error",
     );
   };
@@ -1840,12 +1873,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       if (rows === null) return null;
       savedId = rows[0]?.id ?? null;
     }
-    useStore.getState().showToast((editingId ? "Job updated: " : "Job created: ") + prop, "success");
+    useStore.getState().showToast(t(editingId ? "qf.jobUpdated" : "qf.jobCreated") + ": " + prop, "success");
 
     // Saved: the screen IS the saved version now — drop its edit draft and
     // make this the new baseline.
     if (savedId) {
       dropEditDraft(savedId);
+      leadSeedRef.current = null;
+      setEditDraftOffer(null);
       editBaselineRef.current = { id: savedId, snap: editSnapshot() };
       editLoadedHashRef.current = hashText(jobData.rooms);
     }
@@ -1886,6 +1921,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setTieredQuote(false);
     setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     savingRef.current = false;
+    // Land on the job just saved (Jobs opens its detail from this intent).
+    if (savedId) { try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "jobs", jobId: savedId, at: Date.now() })); } catch { /* */ } }
     setPage("jobs");
     return savedId;
   };
@@ -2037,6 +2074,62 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     }
   };
 
+  // ── Leaving a mode (the ← buttons AND the phone's back button) ──────────
+  const exitQuick = () => {
+    setMode(null); setQuickPhotos([]); setQuickDesc("");
+    // Leaving a lead's Quick Quote: detach from the lead like a fresh
+    // start, so the next quote doesn't patch the lead's row.
+    if (editingId) {
+      setEditingId(null); setProp(""); setClient("");
+      setCustomerId(undefined); setAddressId(undefined); setJobPhotos([]);
+    }
+  };
+  const exitBuilding = () => { setMode(null); setParsing(false); setParseStatus(""); setInspParseFailed(false); };
+  const exitEditor = () => {
+    setMode(null);
+    setRooms([]);
+    setCustomWorkOrder(null);
+    woKnownIdsRef.current = new Set();
+    setJobPhotos([]);
+    setInspectionData(null);
+    setEditingId(null);
+    setCustomTools([]);
+    setCustomShop([]);
+    setCheckedTools([]);
+    setCheckedShop([]);
+    setDiscount(null);
+    setLaborRate(null);
+    setMinLaborHours(null);
+    setTieredQuote(false);
+    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
+  };
+  // Inspector registers its own "leave the walkthrough" (keeps findings in the
+  // Resume slot) so back from its room list behaves like its ← button.
+  const inspectorExitRef = useRef<(() => void) | null>(null);
+  // Phone back inside a mode = that screen's ← (Android PWA). It used to skip
+  // every mode and leave QuoteForge. Unsaved work is still kept by the drafts
+  // (c_qf_draft / c_qf_edit), exactly as with the ← buttons.
+  const [backRearm, setBackRearm] = useState(false);
+  useEffect(() => { if (backRearm) setBackRearm(false); }, [backRearm]);
+  useBackLayer(!!mode && !backRearm, () => {
+    // Mid AI build: leaving now would let the finishing parse land on a
+    // reset screen — stay put (re-arm the layer so back keeps working).
+    if (parsing) {
+      useStore.getState().showToast(t("qf.backWhileBuilding"), "info");
+      setBackRearm(true);
+      return;
+    }
+    if (mode === "inspect" || mode === "inspect-edit") {
+      if (inspectorExitRef.current) inspectorExitRef.current();
+      else { setEditingInspection(null); setMode(null); }
+      return;
+    }
+    if (mode === "quick") return exitQuick();
+    if (inspParseFailed && rooms.length === 0) return exitBuilding();
+    if (mode === "edit" || (mode === "manual" && rooms.length > 0)) return exitEditor();
+    setMode(null); // paste · empty manual · template
+  });
+
   if (!mode) {
     return (
       <div className="fi">
@@ -2044,10 +2137,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             the editor / inspection / Voice Walk sub-screens (it's fixed-position). */}
         <Coachmark id="quote" text={<>Start here — tap <b>Quick Quote</b>, snap a couple photos, and I&apos;ll price the job for you.</>} />
         {/* Topbar — title + eyebrow */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>QuoteForge</span>
-          <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>New quote</span>
-        </div>
+        <TopBar title="QuoteForge" icon="quote" color="#f5b400"
+          right={<span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>New quote</span>} />
         {draftAvailable && (
           <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--color-primary)" }}>
             <Icon name="edit" size={18} color="var(--color-primary)" />
@@ -2205,6 +2296,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         darkMode={darkMode}
         onCancel={() => setMode(null)}
         onComplete={handleInspectionComplete}
+        exitRef={inspectorExitRef}
       />
     );
 
@@ -2215,6 +2307,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         onCancel={() => { setEditingInspection(null); setMode(null); }}
         onComplete={handleInspectionEditSave}
         editing={editingInspection}
+        exitRef={inspectorExitRef}
       />
     );
 
@@ -2225,8 +2318,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => { setMode(null); setQuickPhotos([]); setQuickDesc(""); }}>←</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-accent-red)" }}>📸 Quick Quote</h2>
+          {/* Disabled mid-build: a running AI parse would still land on this screen. */}
+          <button className="bo" disabled={parsing} style={parsing ? { opacity: 0.4 } : undefined} onClick={exitQuick}>←</button>
+          <h2 style={{ fontSize: 20, color: "var(--color-accent-red)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="camera" size={18} color="var(--color-accent-red)" /> {t("qf.quickQuote")}</h2>
         </div>
 
         {/* Property + Client */}
@@ -2362,7 +2456,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
-              <Icon name="ai" size={18} />Generate Quote
+              <Icon name="ai" size={18} />{t("qf.generateQuote")}
             </span>
           </button>
         )}
@@ -2372,9 +2466,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           <button
             className="bo"
             onClick={() => { setMode("manual"); }}
-            style={{ fontSize: 15, padding: "6px 14px" }}
+            style={{ fontSize: 15, padding: "6px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
           >
-            ✏️ Build manually instead
+            <Icon name="edit" size={15} /> {t("qf.buildManually")}
           </button>
         </div>
       </div>
@@ -2471,7 +2565,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => { setMode(null); setParsing(false); setParseStatus(""); setInspParseFailed(false); }}>←</button>
+          <button className="bo" onClick={exitBuilding}>←</button>
           <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="sparkle" size={18} color="var(--color-primary)" /> Building Quote</h2>
         </div>
         <div className="cd">
@@ -2500,25 +2594,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     <div className="fi">
       {/* Header */}
       <div className="row mb">
-        <button className="bo" onClick={() => {
-          setMode(null);
-          setRooms([]);
-          setCustomWorkOrder(null);
-          woKnownIdsRef.current = new Set();
-          setJobPhotos([]);
-          setInspectionData(null);
-          setEditingId(null);
-          setCustomTools([]);
-          setCustomShop([]);
-          setCheckedTools([]);
-          setCheckedShop([]);
-          setDiscount(null);
-          setLaborRate(null);
-          setMinLaborHours(null);
-          setTieredQuote(false);
-          setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
-        }}>←</button>
-        <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>⚡ Quote</h2>
+        <button className="bo" onClick={exitEditor}>←</button>
+        <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="quote" size={18} color="var(--color-primary)" /> {t("qf.quoteTitle")}</h2>
         <span style={{ fontSize: 12 }} className="dim">
           ${rate}/hr{laborRate && laborRate > 0 ? " (override)" : ""}
         </span>
@@ -2945,6 +3022,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             <Icon name="ai" size={14} color="var(--color-primary)" />AI Assist
           </h4>
         </div>
+        <AiNote text={t("ai.noteAssist")} style={{ marginBottom: 6 }} />
         <div className="row">
           <input
             value={quickDesc}
@@ -3354,6 +3432,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         })}
       </div>
 
+      <AiNote text={t("ai.noteQuote")} style={{ marginBottom: 6 }} />
+
       {/* Action bar — PDF / Send / Save (Save = green primary) */}
       <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
         <button
@@ -3431,7 +3511,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           }
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}
         >
-          <Icon name="doc" size={14} /> PDF
+          <Icon name="doc" size={14} /> {t("qf.pdf")}
         </button>
         <button
           onClick={() => {
@@ -3442,7 +3522,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           title="AI-render the finished look from this quote's photos"
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, cursor: "pointer", opacity: editingId && jobPhotos.length ? 1 : 0.55, ...(darkMode ? { border: "1px solid rgba(157,78,221,.6)", background: "rgba(157,78,221,.16)", color: "#d8b6ff", boxShadow: "0 0 20px -6px rgba(157,78,221,.6)" } : { border: "1.5px solid #9d4edd", background: "#9d4edd", color: "#fff", boxShadow: "0 0 17px -2px rgba(157,78,221,.6), 0 4px 12px -7px rgba(0,0,0,.22)" }) }}
         >
-          <Icon name="sparkle" size={14} color={darkMode ? "#d8b6ff" : "#fff"} /> Render
+          <Icon name="sparkle" size={14} color={darkMode ? "#d8b6ff" : "#fff"} /> {t("qf.render")}
         </button>
         <button
           onClick={async () => {
@@ -3474,25 +3554,37 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           }}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}
         >
-          <Icon name="send" size={14} /> Send
+          <Icon name="send" size={14} /> {t("qf.send")}
         </button>
         <button
           onClick={() => { void saveJob(); }}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: "1px solid var(--color-success)", background: "var(--color-success)", color: "#06371f", boxShadow: "0 0 22px -6px rgba(0,204,102,.6)", cursor: "pointer" }}
         >
-          <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? "Update" : "Save job"}
+          <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? t("qf.update") : t("qf.saveJob")}
         </button>
       </div>
 
       {sendSheet && (
         <SendSheet
-          title="Send quote"
+          title={t("jobs.sendQuote")}
           phone={sendSheet.phone}
           email={sendSheet.email}
           subject={sendSheet.subject}
           message={sendSheet.message}
           onClose={() => setSendSheet(null)}
-          onSent={() => { void markQuoteSent(sendSheet.jobId).then(() => loadAll()); }}
+          onSent={(via) => {
+            const jobId = sendSheet.jobId;
+            void markQuoteSent(jobId).then(async (ok) => {
+              await loadAll();
+              // Copy keeps its own "Copied — paste it" toast (nothing is sent yet).
+              if (!ok || via === "copy") return;
+              // "Waiting on customer" only lists quoted jobs — a re-sent
+              // accepted/scheduled/etc. quote stays in its own column.
+              const st = useStore.getState();
+              const isQuoted = st.jobs.find((j) => j.id === jobId)?.status === "quoted";
+              st.showToast(isQuoted ? t("jobs.quoteMarkedSent") : t("qf.quoteSent"), "success");
+            });
+          }}
         />
       )}
 
@@ -3504,8 +3596,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         <Icon name="briefcase" size={13} color="#c9a6ff" /> Save as template
       </button>
       {savingTemplate && (
-        <div onClick={() => setSavingTemplate(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
-          <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 380 }}>
+        <div onClick={() => setSavingTemplate(false)} className="sheet-overlay">
+          <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxWidth: 420 }}>
             <h4 style={{ fontSize: 16, marginBottom: 8 }}>Save as template</h4>
             <input autoFocus value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Template name (e.g. Water heater swap)" style={{ width: "100%", marginBottom: 10 }} />
             <div className="row" style={{ gap: 6 }}>
@@ -3929,152 +4021,17 @@ function QuoteTab({
                       >
                         ${it.materials.reduce((s, m) => s + (m.c || 0), 0).toFixed(0)}
                       </div>
-                      {/* Portal the overlay+panel to <body> so position:fixed
-                          escapes the parent .fi animation's transform — without
-                          this, top:50% lands at the middle of the room list
-                          (not the viewport) and the modal can open below the
-                          fold. */}
-                      {expandedMat === it.id && typeof document !== "undefined" && createPortal(
-                        <>
-                        <div onClick={() => { logItemEdit(rm.name, it.id); setExpandedMat(null); }} style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,.4)" }} />
-                        <div onClick={(e) => e.stopPropagation()} style={{
-                          position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-                          zIndex: 200, width: "90%", maxWidth: 360, maxHeight: "70vh", overflowY: "auto",
-                          background: darkMode ? "#12121a" : "#fff", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`,
-                          borderRadius: 12, padding: 14, boxShadow: "0 8px 32px rgba(0,0,0,.5)",
-                        }}>
-                          <div style={{ display: "flex", gap: 4, marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
-                            <span style={{ flex: 1 }}>Material</span>
-                            <span style={{ width: 32, textAlign: "center" }}>Qty</span>
-                            <span style={{ width: 55, textAlign: "right" }}>Price</span>
-                            <span style={{ width: 16 }}></span>
-                          </div>
-                          {it.materials.map((mat, mi) => {
-                            const qtyVal = mat.qty;
-                            const unitVal = mat.unitPrice;
-                            return (
-                              <div key={mi} style={{ display: "flex", gap: 4, alignItems: "center", marginBottom: 4, fontSize: 14 }}>
-                                <input
-                                  value={mat.n}
-                                  onChange={(e) => {
-                                    const mats = [...it.materials];
-                                    mats[mi] = { ...mats[mi], n: e.target.value };
-                                    upItem(rm.name, it.id, "materials", mats);
-                                  }}
-                                  style={{ flex: 1, fontSize: 13, padding: 2 }}
-                                />
-                                <input
-                                  type="number"
-                                  // Allow the field to clear to empty — previously `|| 1` snapped
-                                  // back to 1 every keystroke, so typing "3" over "1" became "13".
-                                  value={qtyVal === undefined || qtyVal === null ? "" : qtyVal}
-                                  placeholder="1"
-                                  min="0"
-                                  step="1"
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const mats = [...it.materials];
-                                    const next: Material = { ...mats[mi] };
-                                    if (raw === "") delete next.qty;
-                                    else next.qty = parseInt(raw) || 0;
-                                    // If unitPrice is set, recompute total = qty × unit
-                                    if (next.unitPrice !== undefined && next.qty !== undefined) {
-                                      next.c = Math.round(next.qty * next.unitPrice * 100) / 100;
-                                    }
-                                    mats[mi] = next;
-                                    upItem(rm.name, it.id, "materials", mats);
-                                  }}
-                                  onBlur={(e) => {
-                                    const v = parseInt(e.target.value);
-                                    if (!v || v < 1) {
-                                      const mats = [...it.materials];
-                                      const next: Material = { ...mats[mi], qty: 1 };
-                                      if (next.unitPrice !== undefined) {
-                                        next.c = Math.round(next.unitPrice * 100) / 100;
-                                      }
-                                      mats[mi] = next;
-                                      upItem(rm.name, it.id, "materials", mats);
-                                    }
-                                  }}
-                                  style={{ width: 36, fontSize: 13, padding: 2, textAlign: "center" }}
-                                  title="Quantity"
-                                />
-                                <span style={{ fontSize: 12, color: "#888" }}>×$</span>
-                                <input
-                                  type="number"
-                                  value={unitVal === undefined || unitVal === null ? "" : unitVal}
-                                  placeholder="unit"
-                                  min="0"
-                                  step="0.01"
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const mats = [...it.materials];
-                                    const next: Material = { ...mats[mi] };
-                                    if (raw === "") {
-                                      delete next.unitPrice;
-                                    } else {
-                                      const u = parseFloat(raw) || 0;
-                                      next.unitPrice = u;
-                                      const q = next.qty && next.qty > 0 ? next.qty : 1;
-                                      next.c = Math.round(q * u * 100) / 100;
-                                      if (next.qty === undefined) next.qty = q;
-                                    }
-                                    mats[mi] = next;
-                                    upItem(rm.name, it.id, "materials", mats);
-                                  }}
-                                  style={{ width: 52, fontSize: 13, padding: 2, textAlign: "right" }}
-                                  title="Unit price"
-                                />
-                                <span style={{ fontSize: 13 }}>=$</span>
-                                <input
-                                  type="number"
-                                  value={mat.c === 0 ? "" : mat.c}
-                                  placeholder="total"
-                                  min="0"
-                                  step="0.01"
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const nextC = raw === "" ? 0 : (parseFloat(raw) || 0);
-                                    const mats = [...it.materials];
-                                    const next: Material = { ...mats[mi], c: nextC };
-                                    // If user types a total directly, recompute unitPrice
-                                    // from qty so the row stays internally consistent.
-                                    if (next.qty && next.qty > 0) {
-                                      next.unitPrice = Math.round((nextC / next.qty) * 100) / 100;
-                                    }
-                                    mats[mi] = next;
-                                    upItem(rm.name, it.id, "materials", mats);
-                                  }}
-                                  style={{ width: 56, fontSize: 13, padding: 2, textAlign: "right" }}
-                                  title="Line total"
-                                />
-                                <button
-                                  onClick={() => {
-                                    const mats = it.materials.filter((_, i) => i !== mi);
-                                    upItem(rm.name, it.id, "materials", mats.length ? mats : [{ n: "Materials", c: 0 }]);
-                                  }}
-                                  style={{ background: "none", color: "var(--color-accent-red)", fontSize: 13, padding: 0 }}
-                                >✕</button>
-                              </div>
-                            );
-                          })}
-                          <button
-                            onClick={() => {
-                              upItem(rm.name, it.id, "materials", [...it.materials, { n: "New material", c: 0 }]);
-                            }}
-                            style={{ fontSize: 13, background: "none", color: "var(--color-primary)", padding: "2px 0", width: "100%", textAlign: "center", marginTop: 4 }}
-                          >+ Add Material</button>
-                          <button
-                            onClick={() => setExpandedMat(null)}
-                            className="bo"
-                            style={{ fontSize: 14, padding: "4px 0", width: "100%", marginTop: 8 }}
-                          >Done</button>
-                        </div>
-                        </>,
-                        document.body,
+                      {/* Bottom-sheet materials editor for this line (MaterialsSheet:
+                          name type-ahead from the materials list, qty stepper,
+                          unit price → total). Portaled to <body> inside the sheet. */}
+                      {expandedMat === it.id && (
+                        <MaterialsSheet
+                          title={it.detail}
+                          materials={it.materials}
+                          darkMode={darkMode}
+                          onChange={(mats) => upItem(rm.name, it.id, "materials", mats)}
+                          onClose={() => { logItemEdit(rm.name, it.id); setExpandedMat(null); }}
+                        />
                       )}
                     </div>
                     <div style={{ minWidth: 50, textAlign: "right" }}>

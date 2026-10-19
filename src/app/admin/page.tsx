@@ -125,7 +125,7 @@ export default function AdminPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
         {statCard("Quote Value", `$${data.totalQuoteValue.toLocaleString()}`, "#2E75B6", "all quotes")}
         {statCard("Paid Revenue", `$${data.totalRevenue.toLocaleString()}`, "#00cc66", "completed jobs")}
-        {statCard("Platform Fees", `$${data.platformFees.toFixed(0)}`, "#ff8800", "2% of paid")}
+        {statCard("Platform Fees", `$${data.platformFees.toFixed(2)}`, "#ff8800", "collected · 0.5%")}
         {statCard("Subscriptions", data.activeSubscriptions, "#00cc66", `${data.trialOrgs} on trial`)}
       </div>
 

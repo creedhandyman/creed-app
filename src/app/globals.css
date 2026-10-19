@@ -647,6 +647,62 @@ button:focus-visible {
   border-radius: var(--r-pill);
 }
 
+/* ─── FLIP MODE ─────────────────────────────────────────
+   Gold is Flip Mode's hue (service jobs are blue). `.ipill` = a labeled
+   input tile (label on top, value below); `.track`/`.fill` = a thin
+   progress bar (the fill's width + color are set inline); `.over` paints an
+   over-budget value red; `.bgold` = the gold primary button. */
+:root { --flip-gold: #ffcc00; }
+.light { --flip-gold: #a37800; }  /* readable gold on white */
+.ipill {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  background: var(--color-card-dark-3);
+  border: 1px solid var(--color-border-dark-2);
+  border-radius: var(--r-md);
+  padding: 7px 10px 6px;
+}
+.ipill:focus-within { border-color: var(--flip-gold); box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.16); }
+.light .ipill { background: var(--color-card-light); border-color: var(--color-border-light); }
+.ipill > span {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ipill .ipv { display: flex; align-items: center; gap: 3px; font-family: var(--font-heading); font-weight: 600; font-size: 17px; }
+.ipill .ipv i { font-style: normal; color: var(--color-dim); font-size: 14px; }
+.ipill input,
+.ipill input:hover:not(:focus):not(:disabled),
+.ipill input:focus {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+}
+.track { height: 7px; border-radius: 99px; background: var(--color-card-dark-3); overflow: hidden; }
+.light .track { background: var(--color-border-light); }
+.track .fill { height: 100%; border-radius: 99px; background: var(--flip-gold); transition: width var(--t-base) var(--ease-out); }
+.over { color: var(--color-accent-red) !important; }
+.bgold {
+  background: linear-gradient(135deg, #ffcc00 0%, #f5a800 100%);
+  color: #1a1400;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: var(--r-md);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+.bgold:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 6px 18px rgba(255, 204, 0, 0.3); transform: translateY(-1px); }
+.bgold:active:not(:disabled) { transform: translateY(0) scale(0.98); filter: brightness(0.95); }
+
 /* Compact rounded icon button — dashboard / hub topbars. */
 .iconbtn {
   width: 34px;
@@ -660,7 +716,34 @@ button:focus-visible {
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
+  position: relative;
 }
+/* Invisible 5px halo → a ≥44px tap target with the same 34–36px look. Badge
+   children stay absolutely positioned against the button itself. */
+.iconbtn::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+/* ── Screen header (components/TopBar.tsx) — one look on every screen ──── */
+.topbar { display: flex; align-items: center; gap: 9px; min-height: 38px; margin-bottom: 12px; }
+.topbar-ic {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--c, var(--color-primary)) 15%, transparent);
+}
+.topbar-title {
+  flex: 1; min-width: 0; margin: 0;
+  font-family: Oswald, sans-serif; font-weight: 700; font-size: 21px; line-height: 1.15;
+  letter-spacing: .5px; text-transform: uppercase; color: inherit;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Icon buttons packed tight in a .row (gap 4px — Edit/Delete pairs): the
+   later sibling's halo paints on top, so a full 5px reach would cover the
+   gap AND the edge of the button before it. Split the gap instead. */
+.row > .iconbtn + .iconbtn::after { left: -2px; }
 .light .iconbtn {
   background: var(--color-card-light-2);
   border-color: var(--color-border-light-2);
@@ -937,7 +1020,9 @@ button:focus-visible {
   .mc { padding: 12px 10px; }
   h1 { font-size: 24px; }
   h2 { font-size: 20px; }
-  /* Tap targets: ensure all buttons hit 44px minimum */
+  /* Tap targets: a 36px floor for every button. Not 44px — that would
+     stretch the dense .row button layouts; .iconbtn reaches 44px through
+     its invisible ::after hit area instead. */
   button { min-height: 36px; }
 }
 
@@ -1124,3 +1209,30 @@ button:focus-visible {
 .home-boot { display: none; }
 html[data-session] .home-landing { display: none; }
 html[data-session] .home-boot { display: block; }
+
+/* ── Pop-ups: ONE style app-wide ──────────────────────────────────────
+   .sheet-overlay = the dimmed backdrop; .sheet = the panel. Phones: the
+   panel slides up from the bottom, full width, thumb-reachable (like the
+   quote MaterialsSheet / SendSheet). ≥700px: a centered card. Inline
+   styles on a modal must not set the overlay's alignItems/padding or the
+   panel's width/maxWidth/borderRadius, or they'll override this. */
+.sheet-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(5, 5, 12, .72);
+}
+/* .dark/.light prefixes match the specificity of `.dark .cd` so a modal that
+   is also a .cd still gets the sheet's corners + padding. */
+.sheet, .dark .sheet, .light .sheet {
+  width: 100%; max-width: 520px; max-height: 88dvh; overflow-y: auto;
+  border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  animation: sheet-up .22s cubic-bezier(.22, 1, .36, 1);
+}
+@media (min-width: 700px) {
+  .sheet-overlay { align-items: center; padding: 20px; }
+  .sheet, .dark .sheet, .light .sheet { border-radius: 16px; padding-bottom: 16px; animation-name: sheet-pop; }
+}
+@keyframes sheet-up { from { transform: translateY(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sheet-pop { from { transform: scale(.97); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }

@@ -5,9 +5,9 @@ import { db } from "@/lib/supabase";
 import type { Organization, Profile } from "@/lib/types";
 import { Icon } from "./Icon";
 import Grizz from "./Grizz";
-import { TRADE_IDS, tradeConfig, tradePatch } from "@/lib/trades";
+import { TRADE_IDS, tradeConfig, tradePatch, tradeName, tradeStarterItems, tradeUnits } from "@/lib/trades";
 import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
-import { getLang, setLang } from "@/lib/i18n";
+import { getLang, setLang, t } from "@/lib/i18n";
 
 /**
  * Fast onboarding led by Grizz, the handyman-bear mascot. Owners: 1 business
@@ -96,14 +96,14 @@ export default function Onboarding() {
 
   // Step 0 → 1: just validate; nothing is written yet.
   const nextFromBasics = () => {
-    if (!bizName.trim()) { setErr("Enter your business name"); return; }
+    if (!bizName.trim()) { setErr(t("ob.errName")); return; }
     setErr("");
     setStepIdx(1);
   };
 
   // Step 1: ONE insert with the trade + rate already applied.
   const createBusiness = async () => {
-    if (!bizName.trim()) { setErr("Enter your business name"); setStepIdx(0); return; }
+    if (!bizName.trim()) { setErr(t("ob.errName")); setStepIdx(0); return; }
     setSaving(true);
     setErr("");
     try {
@@ -122,7 +122,7 @@ export default function Onboarding() {
         trial_start: new Date().toISOString(),
         subscription_status: "trial",
       });
-      if (!orgResult?.length) { setErr("Couldn't create your business — check your connection and try again."); setSaving(false); return; }
+      if (!orgResult?.length) { setErr(t("ob.errCreate")); setSaving(false); return; }
       const org = orgResult[0];
 
       const profileResult = await db.post<Profile>("profiles", {
@@ -135,13 +135,13 @@ export default function Onboarding() {
         emp_num: "001",
         org_id: org.id,
       });
-      if (!profileResult?.length) { setErr("Couldn't finish setting up your account — try again."); setSaving(false); return; }
+      if (!profileResult?.length) { setErr(t("ob.errProfile")); setSaving(false); return; }
 
       setCreatedBiz({ org: { ...org, ...tp }, profile: profileResult[0] });
       setSaving(false);
       setStepIdx(2);
     } catch (e) {
-      setErr("Something went wrong");
+      setErr(t("ob.errGeneric"));
       console.error(e);
       setSaving(false);
     }
@@ -152,18 +152,18 @@ export default function Onboarding() {
     const raw = inviteCode.trim();
     const fromLink = raw.match(/[?&]join=([^&\s]+)/)?.[1];
     const code = (fromLink ? decodeURIComponent(fromLink) : raw).trim();
-    if (!code) { setErr("Paste the invite link or code your boss sent you"); return; }
+    if (!code) { setErr(t("ob.inviteCodePh")); return; }
     // A malformed code would hit the DB as a bad uuid and toast a raw
     // Postgres error — catch it here in plain words.
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)) {
-      setErr("That doesn't look like an invite code — ask your boss to send the invite link again.");
+      setErr(t("ob.joinError"));
       return;
     }
     setSaving(true);
     setErr("");
     try {
       const orgs = await db.get<Organization>("organizations", { id: code });
-      if (!orgs.length) { setErr("That invite code didn't match a business — ask your boss to send the invite link again."); setSaving(false); return; }
+      if (!orgs.length) { setErr(t("ob.joinError")); setSaving(false); return; }
       const org = orgs[0];
 
       const profileResult = await db.post<Profile>("profiles", {
@@ -179,14 +179,14 @@ export default function Onboarding() {
         emp_num: String(Math.floor(Math.random() * 900) + 100),
         org_id: org.id,
       });
-      if (!profileResult?.length) { setErr("Failed to join — you may already be a member"); setSaving(false); return; }
+      if (!profileResult?.length) { setErr(t("ob.joinFailed")); setSaving(false); return; }
 
       try { localStorage.removeItem(JOIN_CODE_KEY); } catch { /* */ }
       setCreatedBiz({ org, profile: profileResult[0] });
       setSaving(false);
       setStepIdx(2); // skip the trade picker — joiners inherit the org's trade
     } catch (e) {
-      setErr("Something went wrong");
+      setErr(t("ob.somethingWrong"));
       console.error(e);
       setSaving(false);
     }
@@ -194,8 +194,11 @@ export default function Onboarding() {
 
   // Apply the created rows to the store → the no-org gate now sees an org and
   // renders the app. Never enter the app without having created/joined.
+  // "Start my first quote" lands a new owner on the Quote tab (AppShell reads
+  // c_start_page once) — set BEFORE the store flip mounts the app.
   const finish = () => {
     if (!createdBiz) { setStepIdx(0); return; }
+    if (mode === "create") { try { sessionStorage.setItem("c_start_page", "qf"); } catch { /* */ } }
     setOrg(createdBiz.org);
     setUser(createdBiz.profile);
   };
@@ -211,9 +214,9 @@ export default function Onboarding() {
   };
 
   const primaryLabel =
-    stepIdx === 0 ? (saving ? "Joining…" : mode === "create" ? "Continue" : "Join team")
-    : stepIdx === 1 ? (saving ? "Creating…" : "Create my business")
-    : mode === "join" ? "Done" : "Start my first quote";
+    stepIdx === 0 ? (saving ? t("ob.joining") : mode === "create" ? t("ob.continue") : t("ob.joinTeam"))
+    : stepIdx === 1 ? (saving ? t("ob.creating") : t("ob.createBiz"))
+    : mode === "join" ? t("ob.done") : t("ob.startQuote");
 
   const total = mode === "join" ? TOTAL_JOIN : TOTAL_CREATE;
   // Joiners jump 0 → 2, so show their progress as 1 of 2, 2 of 2.
@@ -233,7 +236,7 @@ export default function Onboarding() {
             {(["en", "es"] as const).map((l) => (
               <span key={l} onClick={() => { setLang(l); window.location.reload(); }}
                 style={{ cursor: "pointer", padding: "2px 7px", borderRadius: 6, color: getLang() === l ? "#fff" : "#666", background: getLang() === l ? "rgba(46,117,182,.5)" : "transparent" }}>
-                {l === "en" ? "English" : "Español"}
+                {l === "en" ? t("ob.langEn") : t("ob.langEs")}
               </span>
             ))}
           </span>
@@ -253,40 +256,40 @@ export default function Onboarding() {
             {/* 0 — BASICS / JOIN */}
             {stepIdx === 0 && (
               <>
-                <Grizz pose="point" size={118} style={{ margin: "2px auto 0", display: "block" }} />
+                <Grizz pose="point" size={118} chatty style={{ margin: "2px auto 0", display: "block" }} />
                 <div className="ob-speech">
                   <div className="ob-who">Grizz</div>
                   <p>{mode === "create"
-                    ? "Hey, I'm Grizz! Two quick screens and you're in. First — what's your business called?"
+                    ? t("ob.speechCreate")
                     : pendingJoin
-                      ? "Your invite code is filled in — tap Join team and you're in."
-                      : "Joining a crew? Paste the invite link or code your boss sent you. (Bosses: Ops → Team → Invite a teammate.)"}</p>
+                      ? t("ob.joinSpeechFilled")
+                      : `${t("ob.joinSpeech")} ${t("ob.bossHint")}`}</p>
                 </div>
 
                 <div className="ob-toggle">
-                  <button className={mode === "create" ? "on" : ""} onClick={() => { setMode("create"); setErr(""); }}>Create business</button>
-                  <button className={mode === "join" ? "on" : ""} onClick={() => { setMode("join"); setErr(""); }}>Join a team</button>
+                  <button className={mode === "create" ? "on" : ""} onClick={() => { setMode("create"); setErr(""); }}>{t("ob.tabCreate")}</button>
+                  <button className={mode === "join" ? "on" : ""} onClick={() => { setMode("join"); setErr(""); }}>{t("ob.tabJoin")}</button>
                 </div>
 
                 {mode === "create" ? (
                   <>
                     <div className="ob-field">
-                      <label>Business name *</label>
-                      <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="e.g. Creed Handyman LLC" />
+                      <label>{t("ob.bizName")}</label>
+                      <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder={t("ob.bizNamePh")} />
                     </div>
                     <div className="ob-field">
-                      <label>Phone <span className="ob-opt">· optional</span></label>
+                      <label>{t("ob.phone")} <span className="ob-opt">{t("ob.optional")}</span></label>
                       <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 123-4567" inputMode="tel" />
                     </div>
                     <div className="ob-field">
-                      <label>City <span className="ob-opt">· optional</span></label>
+                      <label>{t("ob.city")} <span className="ob-opt">{t("ob.optional")}</span></label>
                       <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Wichita, KS" />
                     </div>
                   </>
                 ) : (
                   <div className="ob-field">
-                    <label>Invite code</label>
-                    <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} placeholder="Paste invite link or code" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+                    <label>{t("ob.inviteCode")}</label>
+                    <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} placeholder={t("ob.inviteCodePh")} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
                   </div>
                 )}
 
@@ -297,15 +300,15 @@ export default function Onboarding() {
             {/* 1 — TRADE + RATE (create flow only) */}
             {stepIdx === 1 && (
               <>
-                <Grizz pose="point" size={92} style={{ margin: "2px auto 0", display: "block" }} />
+                <Grizz pose="point" size={92} chatty style={{ margin: "2px auto 0", display: "block" }} />
                 <div className="ob-speech">
                   <div className="ob-who">Grizz</div>
-                  <p>{trade.grizzLine}</p>
+                  <p>{getLang() === "es" ? t(`ob.grizz.${selectedTrade}`) : trade.grizzLine}</p>
                 </div>
 
-                <h2 className="ob-h2" style={{ fontSize: 19, textAlign: "left", marginTop: 14 }}>What&apos;s your trade?</h2>
+                <h2 className="ob-h2" style={{ fontSize: 19, textAlign: "left", marginTop: 14 }}>{t("ob.whatTrade")}</h2>
                 <div style={{ fontSize: 12.5, color: "#9a9aa8", marginTop: 2, marginBottom: 10 }}>
-                  Tunes your rate, materials, checklist, and units. You can change it anytime in Settings.
+                  {t("ob.tradeSub")}
                 </div>
 
                 <div className="ob-trades">
@@ -319,36 +322,36 @@ export default function Onboarding() {
                         onClick={() => setSelectedTrade(id)}
                       >
                         <span className="ic"><Icon name={tc.icon} size={18} color="#7fb6ff" /></span>
-                        <span className="nm">{tc.name}</span>
+                        <span className="nm">{tradeName(id)}</span>
                       </button>
                     );
                   })}
                 </div>
 
                 <div className="ob-field" style={{ marginTop: 12 }}>
-                  <label>Your hourly labor rate</label>
+                  <label>{t("ob.hourlyRate")}</label>
                   <input
                     value={rateDraft}
                     onChange={(e) => setRateDraft(e.target.value.replace(/[^0-9.]/g, ""))}
-                    placeholder={`$${trade.defaultRate} — typical ${trade.name.toLowerCase()} rate`}
+                    placeholder={t("ob.ratePh").replace("{rate}", String(trade.defaultRate)).replace("{trade}", tradeName(selectedTrade).toLowerCase())}
                     inputMode="decimal"
                   />
                   <div style={{ fontSize: 11.5, color: "#8b8b99", marginTop: 4 }}>
-                    Every quote is priced from this. Change it anytime in Ops → Settings.
+                    {t("ob.rateHint")}
                   </div>
                 </div>
 
                 <div className="ob-tpreview">
                   <div className="ob-who" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <Icon name="sparkle" size={13} color="#7fb6ff" /> I&apos;ll set up for you
+                    <Icon name="sparkle" size={13} color="#7fb6ff" /> {t("ob.setUp")}
                   </div>
                   <div className="ob-chips">
-                    <span className="ob-chip">Rate <b>${parseFloat(rateDraft) > 0 ? parseFloat(rateDraft) : trade.defaultRate}/hr</b></span>
-                    <span className="ob-chip">Units <b>{trade.units}</b></span>
-                    <span className="ob-chip">{trade.name} checklist <b>✓</b></span>
+                    <span className="ob-chip">{t("ob.rate")} <b>${parseFloat(rateDraft) > 0 ? parseFloat(rateDraft) : trade.defaultRate}/hr</b></span>
+                    <span className="ob-chip">{t("ob.units")} <b>{tradeUnits(selectedTrade)}</b></span>
+                    <span className="ob-chip">{t("ob.checklist").replace("{trade}", tradeName(selectedTrade))} <b>✓</b></span>
                   </div>
                   <div className="ob-starter">
-                    {trade.starterItems.map((it) => (
+                    {tradeStarterItems(selectedTrade).map((it) => (
                       <div className="it" key={it}><span className="d" />{it}</div>
                     ))}
                   </div>
@@ -359,7 +362,7 @@ export default function Onboarding() {
             {/* 2 — DONE */}
             {stepIdx === 2 && (
               <>
-                <Grizz pose="cheer" bob style={{ margin: "2px auto 0", display: "block" }} />
+                <Grizz pose="cheer" bob chatty style={{ margin: "2px auto 0", display: "block" }} />
                 {[
                   { bx: "-70px", by: "90px", c: "#ffd76b" },
                   { bx: "60px", by: "80px", c: "#9d4edd" },
@@ -372,17 +375,21 @@ export default function Onboarding() {
                 <div className="ob-speech">
                   <div className="ob-who">Grizz</div>
                   <p>{mode === "join"
-                    ? <>{"You're in the door — I've asked your boss to approve you. You'll be on the crew as soon as they do."}</>
-                    : <>{"You're set up. The whole job runs "}<b>quote → schedule → work → paid</b>{" — and the checklist on your Home screen will walk you through the rest, one tap at a time."}</>}</p>
+                    ? <>{t("ob.joinDoneSpeech")}</>
+                    : <>{t("ob.doneA")}<b>{t("ob.doneLoop")}</b>{t("ob.doneB")}</>}</p>
                 </div>
                 {mode === "create" && (
                   <div className="ob-loop">
-                    {[["sparkle", "Quote"], ["schedule", "Schedule"], ["list", "Work"], ["money", "Paid"]].map(([ic, nm]) => (
+                    {[["sparkle", t("ob.loopQuote")], ["schedule", t("ob.loopSchedule")], ["list", t("ob.loopWork")], ["money", t("ob.loopPaid")]].map(([ic, nm]) => (
                       <div key={nm} className="lp"><span className="b"><Icon name={ic} size={16} color="#7fb6ff" /></span>{nm}</div>
                     ))}
                   </div>
                 )}
-                <h2 className="ob-h2" style={{ marginTop: "auto", paddingBottom: 10 }}>{"You're "}<span className="ob-g">ready</span> 🎉</h2>
+                <h2 className="ob-h2" style={{ marginTop: "auto", paddingBottom: 10 }}>
+                  {mode === "join"
+                    ? <><span className="ob-g">{t("ob.youreIn")}</span> 🎉</>
+                    : <>{t("ob.readyA")}<span className="ob-g">{t("ob.readyB")}</span> 🎉</>}
+                </h2>
               </>
             )}
 
@@ -392,7 +399,7 @@ export default function Onboarding() {
         {/* Footer */}
         <div style={{ padding: "14px 22px calc(22px + env(safe-area-inset-bottom,0px))", display: "flex", gap: 10 }}>
           {stepIdx > minStep && (
-            <button className="ob-btn ob-back" onClick={back} aria-label="Back">
+            <button className="ob-btn ob-back" onClick={back} aria-label={t("ob.back")}>
               <Icon name="back" size={18} color="#9a9aa8" />
             </button>
           )}

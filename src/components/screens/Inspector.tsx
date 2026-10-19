@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 import CustomerPicker from "../CustomerPicker";
 import { Icon } from "../Icon";
+import AiNote from "../AiNote";
 import CameraModal from "../CameraModal";
 import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../VoiceWalk";
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
@@ -12,6 +13,7 @@ import { tradeConfig, resolvePrimaryTrade } from "@/lib/trades";
 import VoiceWalkTip from "../VoiceWalkTip";
 // Aliased: the inspection-type chip loop already uses `t` as its param name.
 import { t as tr } from "@/lib/i18n";
+import { useBackLayer } from "@/lib/back-layer";
 
 /* ── Preset rooms and items ── */
 
@@ -561,6 +563,9 @@ export interface InspectionData {
 interface Props {
   onComplete: (data: InspectionData) => void;
   onCancel: () => void;
+  /** QuoteForge's phone-back calls this when the room list is showing — the
+   *  same "leave the walkthrough" as the ← button (keeps findings for Resume). */
+  exitRef?: { current: (() => void) | null };
   darkMode: boolean;
   /** When set, Inspector mounts in edit mode for a saved inspection:
    *  state is seeded from `editing.initialData` instead of localStorage,
@@ -580,7 +585,7 @@ interface Props {
 
 type Step = "rooms" | "inspect" | "review";
 
-export default function Inspector({ onComplete, onCancel, darkMode, editing }: Props) {
+export default function Inspector({ onComplete, onCancel, darkMode, editing, exitRef }: Props) {
   const isEditing = !!editing;
   // Load saved state from localStorage — but ONLY for fresh inspections.
   // Edit mode seeds state from editing.initialData and never touches the
@@ -657,6 +662,15 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
   // (Whisper + AI) — the user is auto-advanced to the next room while
   // the previous one transcribes/categorizes in the background.
   const [voiceRoomIdx, setVoiceRoomIdx] = useState<number | null>(null);
+  // Phone back walks the walkthrough's own levels (review → room → room list)
+  // before QuoteForge's layer leaves the inspection. During a Voice Walk it's
+  // ignored (re-armed) — its Cancel throws away the recording in progress.
+  const [voiceBackRearm, setVoiceBackRearm] = useState(false);
+  useEffect(() => { if (voiceBackRearm) setVoiceBackRearm(false); }, [voiceBackRearm]);
+  useBackLayer(voiceRoomIdx !== null && !voiceBackRearm, () => {
+    useStore.getState().showToast(tr("insp.backInVoiceWalk"), "info");
+    setVoiceBackRearm(true);
+  });
   // Per-room background processing status, keyed by room NAME (since
   // VoiceWalk's strip is keyed that way). Drives the ⏳/✓ chip badges.
   const [voiceProcessingStatus, setVoiceProcessingStatus] =
@@ -737,6 +751,27 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
       (k) => localStorage.removeItem("c_inspect_" + k)
     );
   };
+
+  // Leaving the walkthrough from the room list (the ← button, or phone back
+  // via QuoteForge). Findings already entered stay in the resume slot
+  // (QuoteForge offers "Resume") — two taps on ← used to throw it all away.
+  const leaveWalkthrough = () => {
+    const hasFindings = roomData.some((r) => r.items.some((it) => (it.notes || "").trim() || it.photos.length));
+    if (!isEditing && !hasFindings) clearSaved();
+    else if (!isEditing) useStore.getState().showToast("Inspection saved — open Full Inspection and tap Resume to keep going.", "info");
+    onCancel();
+  };
+  if (exitRef) exitRef.current = leaveWalkthrough;
+  useEffect(() => () => { if (exitRef) exitRef.current = null; }, [exitRef]);
+  // review → room, room → room list; the area picker closes first.
+  // Armed a tick after mount: QuoteForge pushes its own entry in the same
+  // commit (parent effects run after child effects), and a resumed
+  // walkthrough that opens straight on a room must sit ABOVE it.
+  const [stepLayersArmed, setStepLayersArmed] = useState(false);
+  useEffect(() => { const id = setTimeout(() => setStepLayersArmed(true), 0); return () => clearTimeout(id); }, []);
+  useBackLayer(stepLayersArmed && step !== "rooms", () => setStep("rooms"));
+  useBackLayer(stepLayersArmed && step === "review", () => setStep("inspect"));
+  useBackLayer(showVoicePicker, () => setShowVoicePicker(false));
 
   const border = darkMode ? "#1e1e2e" : "#eee";
 
@@ -1123,15 +1158,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => {
-            // Leaving with findings already entered keeps them in the resume
-            // slot (QuoteForge offers "Resume") instead of wiping the whole
-            // walkthrough — two taps on this arrow used to throw it all away.
-            const hasFindings = roomData.some((r) => r.items.some((it) => (it.notes || "").trim() || it.photos.length));
-            if (!isEditing && !hasFindings) clearSaved();
-            else if (!isEditing) useStore.getState().showToast("Inspection saved — open Full Inspection and tap Resume to keep going.", "info");
-            onCancel();
-          }}>←</button>
+          <button className="bo" onClick={leaveWalkthrough}>←</button>
           <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Icon name="search" size={18} color="var(--color-primary)" />{isEditing ? tr("insp.editInspection") : tr("insp.newInspection")}
           </h2>
@@ -1483,10 +1510,11 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
             room to a custom description before recording it. */}
         {showVoicePicker && (
           <div
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+            className="sheet-overlay"
+            style={{ background: "rgba(0,0,0,.78)", zIndex: 1000 }}
             onClick={() => { setShowVoicePicker(false); setEditingRoomIdx(null); }}
           >
-            <div className="cd" style={{ width: "100%", maxWidth: 420, maxHeight: "80vh", overflowY: "auto", padding: 14 }} onClick={(e) => e.stopPropagation()}>
+            <div className="cd sheet" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <h3 style={{ fontSize: 17, fontFamily: "Oswald", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <Icon name="mic" size={15} color="var(--color-success)" /> {tr("insp.chooseNextArea")}
@@ -1579,6 +1607,10 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing }: P
           <div style={{ fontSize: 14, color: "var(--color-primary)", textAlign: "center", marginBottom: 6 }}>
             📤 Uploading {uploadCount} photo{uploadCount > 1 ? "s" : ""}...
           </div>
+        )}
+
+        {voiceProcessingStatus[roomData[currentRoomIdx]?.name] === "done" && (
+          <AiNote text={tr("ai.noteVoice")} style={{ marginBottom: 8 }} />
         )}
 
         {/* Room jump — tap any room to jump to it. Voice processing

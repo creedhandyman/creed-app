@@ -123,6 +123,17 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `.tx small` (sub) inside — used by the dashboard Quote/Clock CTAs and the
   Time clock-in; don't re-inline the glow. Layout helpers `.row`, `.g2`,
   `.g4`, `.mt`, `.mb`, `.fi`.
+- **Pop-ups**: use `className="sheet-overlay"` (backdrop) + `className="sheet"`
+  (panel, add `cd` for card colors) from globals.css — bottom sheet on phones,
+  centered card ≥700px. Don't inline the overlay's alignItems/padding or the
+  panel's width/borderRadius (they'd override the classes). Never use
+  `window.alert/confirm/prompt` — `store.showConfirm` / `showToast` in the app,
+  an in-page sheet on public pages. Full-screen viewers (photo lightbox, quest
+  confetti, the help guide) stay as they are.
+- **Screen headers**: every main screen starts with `<TopBar title icon color onBack? right? />`
+  (`components/TopBar.tsx`, styles `.topbar*` in globals.css): [back] [icon tile] TITLE … [right
+  slot]. `color` = the screen's nav hue (VerticalNav TAB_COLOR); `onBack` only on screens reached
+  from More / a deep link. Don't hand-roll a new title row.
 - **Icons**: import from `<Icon name="..." />`. Curated set in
   `Icon.tsx`. Inline emoji in flowing copy (✅ status, ⭐ ratings) is
   fine; UI affordances should be Lucide.
@@ -146,6 +157,24 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `start_time` set, `end_time` empty, `hours: 0`. Clock-out patches
   that same row. The active row's id lives in localStorage as
   `c_t_active_id`. Both Timer.tsx and WorkVision.tsx share this state.
+  **Server check (2026-10-13)**: that local state is reconciled with the
+  server — after each online load `store.reconcileClock` asks "is my active
+  row still open?" (by-id read, signed-in session only; skipped while a
+  close-write for it is queued) and, if it was closed/removed elsewhere (a
+  manager's Force clock-out, another phone), clears the local clock and sets
+  `clockReset {id}`, which Timer/WorkVision/Home follow. Every shift close
+  (clock-out, force-out, Set finish time, ghost delete) goes through the
+  offline queue with `onlyIfOpen` (lands only while `end_time IS NULL`; a
+  conflict keeps the server's times + toasts); clock-ins replay insert-only
+  (`ignoreDuplicates`). Rule when a close finds the row already closed:
+  `lib/clock-sync.ts resolveClose` (tested) — our own retry = done; paid rows
+  never written; the tech's OWN clock-out (`earlierWins`) replaces a LATER
+  office close on an unpaid row, office closes never shrink a real one.
+  Clock-out flips local state off immediately (the write is queued
+  synchronously) and `markLocalClockOut` keeps reconcile from reading our own
+  close as the office's. The 15s poll retries the queue; transient errors
+  (no code, PGRST000-003/303, 57014, 08xxx…) retry for 24h from the first
+  failure. Never add an unconditional end_time patch — pass `onlyIfOpen`.
 - **Quote pricing**: the min-labor-floor → trip-fee → discount → tax →
   grand-total cascade lives in ONE place — `src/lib/pricing.ts`
   `priceCascade()` — consumed by QuoteForge's live preview (headline +
@@ -188,8 +217,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   validating. (The token is a stable HMAC of the job id — no expiry — so
   "expired" in that error really means "no/!matching token".)
 - `NEXT_PUBLIC_SITE_URL` — canonical app origin. `src/lib/site-url.ts`
-  defaults to `https://www.creedhm.com` (the **apex `creedhm.com` has no TLS
-  cert** — `www` is the served origin, matching the Stripe routes' hardcoded
+  defaults to `https://www.creedhm.com` (the apex `creedhm.com` once had no TLS
+  cert; it serves fine as of 2026-10-15 — the live Stripe webhook
+  `we_1TLVCV…` posts to `https://creedhm.com/api/stripe/webhook` and listens to
+  7 events: checkout.session.completed, customer.subscription.created/updated/
+  deleted, invoice.paid, invoice.payment_failed, charge.refunded — `www` is the served origin, matching the Stripe routes' hardcoded
   fallback). SEO metadata does NOT follow this env var: `app/layout.tsx`'s
   `metadataBase`, every marketing page's canonical, robots.txt and the sitemap
   use `src/lib/seo.ts` `SEO_ORIGIN` (hardcoded `https://www.creedhm.com`).
@@ -271,6 +303,23 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   exist" error — but the write is best-effort/try-caught so completing a job
   still works, and the read side (parser.ts) is migration-safe (undefined
   fields fall through). `lib/learning.ts` `recordJobOutcome` writes the rows.
+- Mileage start times (**ALREADY RUN in prod 2026-10-17**, migration
+  `mileage_start_time`): `ALTER TABLE mileage ADD COLUMN IF NOT EXISTS start_time TEXT;`
+  ("8:05 AM", time-entry format). GPS / odometer / Work-mode tracker trips and
+  manual entries with a time store it; older + Suggested-trip rows get an
+  estimate ("~") from that day's clock-ins (`lib/mileage-days.ts`
+  `legStartTimes`: leaving a job = its clock-out, leaving the shop = next
+  arrival − drive time). The trip log groups by day with numbered legs and an
+  inferred "from" (previous stop; first leg = org address).
+- Pay stub paid-out status (**ALREADY RUN in prod 2026-10-19**, migration
+  `pay_history_paid_status`, RLS rehearsed in a rolled-back txn: owner 1 row,
+  tech 0): `pay_history.paid_at TIMESTAMPTZ` + `paid_method TEXT`
+  (cash|check|deposit|app) and policy "Admins update pay_history" (owner/
+  manager UPDATE — the table had NO update policy, so any patch silently hit 0
+  rows). Payroll → Payment history: each stub has **Mark paid** (method sheet)
+  / a Paid chip (tap to undo); crew see Paid / Not paid yet on their own stubs;
+  the employee list shows "N to pay · $X" for unpaid stubs from the last 30
+  days. Stubs from before this are unpaid in the data (not backfilled).
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
 - Primary trade (per-trade tailoring — picked in onboarding + Ops → Settings):
@@ -558,6 +607,57 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   runs, saving a unit / linking a job toasts a "table/column does not exist"
   error (best-effort) but nothing else breaks; existing orgs see no Equipment
   card until they add one.
+- Flip Mode (the org's own buy → renovate → resell deals; plan in
+  `.claude/plans/flip-mode.md`) (**ALREADY RUN in prod 2026-10-17** via the
+  Supabase MCP, migration `flip_projects` — RLS rehearsed in a rolled-back txn:
+  owner writes, cross-org insert blocked, tech sees 0 rows / can't write):
+  ```sql
+  CREATE TABLE IF NOT EXISTS flip_projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    address TEXT NOT NULL,
+    beds NUMERIC, baths NUMERIC, sqft NUMERIC,
+    status TEXT NOT NULL DEFAULT 'analyzing'
+      CHECK (status IN ('analyzing','acquired','active','listed','sold','dead')),
+    purchase_price NUMERIC DEFAULT 0,
+    rehab_budget NUMERIC DEFAULT 0,
+    arv NUMERIC DEFAULT 0,               -- after-repair value
+    down_pct NUMERIC DEFAULT 15,
+    holding_monthly NUMERIC DEFAULT 0,   -- taxes + ins + utilities + interest / month
+    holding_months NUMERIC DEFAULT 5,
+    financing_cost NUMERIC DEFAULT 0,    -- points / origination
+    selling_pct NUMERIC DEFAULT 6,       -- agent + closing, % of ARV
+    contingency NUMERIC DEFAULT 0,
+    comps JSONB,                         -- [{address, price, sqft, sold_at, note}] (Phase 2)
+    acquired_at TIMESTAMPTZ,             -- starts the holding-cost clock (Phase 2)
+    sold_at TIMESTAMPTZ,
+    sold_price NUMERIC,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_flip_projects_org ON flip_projects(org_id);
+  ALTER TABLE flip_projects ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY flip_projects_admin ON flip_projects FOR ALL TO authenticated
+    USING (org_id = auth_org_id() AND auth_role() IN ('owner','manager'))
+    WITH CHECK (org_id = auth_org_id() AND auth_role() IN ('owner','manager'));
+  ALTER TABLE jobs ADD COLUMN IF NOT EXISTS flip_project_id UUID;  -- Phase 2 job linking
+  ```
+  Owner/manager only (investor money) — same posture as `recurring_jobs`
+  writes; crew get no rows. The client writes it directly (db.post/patch), so
+  RLS needs the policy above, NOT service-role-only (RLS on + no policy =
+  nothing ever saves). Until this runs, starting a flip toasts a "table does
+  not exist" error; nothing else breaks — `loadAll` fetches flip_projects
+  OUTSIDE the main batch (strict + settle → silent null, not counted toward
+  `fullSyncAt` / the snapshot gate), so a missing table can't toast every 15s
+  or block the offline snapshot. Deliberately NOT in preflight `DB_CHECKS`
+  (optional feature, like brand_color).
+  Phase 3 adds one column (subcontractor bids + permits, JSONB; **ALREADY
+  RUN in prod 2026-10-17** via the Supabase MCP, migration `flip_projects_subs`):
+  `ALTER TABLE flip_projects ADD COLUMN IF NOT EXISTS subs JSONB;`
+  Lender draws add one more (lender + draw schedule, JSONB):
+  `ALTER TABLE flip_projects ADD COLUMN IF NOT EXISTS loan JSONB;`
+  Until it runs, editing a flip's subs toasts "column does not exist" — and
+  because the analyzer batches edits into one patch, other edits made in the
+  same ~0.7s are lost with it.
 - Payments ledger / partial payments (deposits). Before this, `/api/verify-payment`
   set `status:'paid'` on ANY completed Stripe session — a 50% deposit marked the
   whole job paid, and nothing recorded how much was paid, so the balance could
@@ -745,6 +845,122 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Flip Mode — Phase 1 Deal Analyzer (2026-10-17)**: "should I buy this
+  house?" for owners who flip their own properties. More hub → **Flip Mode**
+  tile (owner/manager only; AppShell route `flip` is admin-gated too) →
+  `screens/FlipAnalyzer.tsx`. ALL deal math is `src/lib/flip.ts`
+  `analyzeFlip()` (pure, tested in `src/__tests__/flip.test.ts`): all-in =
+  purchase + rehab + holding(×months) + loan fees + contingency; net sale =
+  ARV − selling %; profit; cash-in = down % of purchase + everything else;
+  ROI = profit ÷ cash-in; 70% rule max offer = ARV × 0.70 − rehab; verdict
+  good / warn (profit < $20k OR over the 70% max) / bad (≤ $0). `RULE_70` /
+  `THIN_PROFIT` are the knobs. Derived numbers are NEVER stored — only the
+  inputs on `flip_projects` (`store.flipProjects`, `upsertFlipProject` /
+  `deleteFlipProject`, in the offline snapshot). A new analysis is a
+  phone-only draft (`c_flip_draft_<uid>`) until **Start this flip project**;
+  saved projects autosave (700ms debounce, serialized writes, flushed on
+  leave/switch). Rehab can be seeded from a saved quote's total ("Fill rehab
+  from a quote…", quotes at that address listed first). Gold is Flip Mode's
+  hue: `--flip-gold` (#ffcc00 dark / #a37800 light) + `.ipill` / `.track` /
+  `.fill` / `.over` / `.bgold` in globals.css. The `Creed_Flip_Mode.html`
+  mockup was not in the repo when this was built — the layout follows the
+  plan doc + the app's section/drow style. **Phase 2 — project dashboard
+  (2026-10-17)**: a saved flip gets a Deal / Dashboard switch (owned statuses
+  open on Dashboard; `screens/FlipDashboard.tsx`). Jobs join a flip via
+  `jobs.flip_project_id` — the Jobs detail **Flip project** picker
+  (owner/manager, only once a flip exists; mirrors Serviced unit) or the
+  dashboard's "Link a job…" select. All math is pure in `lib/flip.ts`
+  (tested): `flipActuals` = per linked job, budget = its quote total vs
+  actual = receipts + time entries (`makeEntryPay` from financials.ts:
+  recorded amount, else hrs × CURRENT rate; rate ≤ 0 = $0 and surfaced as
+  "N h with no pay rate", never a fallback rate; legacy no-job_id entries go
+  to the OLDEST job at the address, same as Jobs' hours card). Lines are
+  named by the job's work-order areas (every flip job shares one address).
+  Receipts/time entries carry no trade, so budget-vs-actual is per JOB, not
+  per trade. `holdingClock` = days (acquired_at → sold_at|now) × monthly ÷ 30.
+  `analyzeFlipActuals` = analyzeFlip with spend swapped in: rehab = actual
+  only once every linked job is complete (until then max(budget, spent) — no
+  banking unfinished savings), holding = max(planned, to date) until sold,
+  sold_price replaces ARV. Status changes stamp `acquired_at` (owned) and
+  `sold_at` (sold; cleared when moved off sold); both dates + sold price are
+  editable in the Project section. **Comps** (Deal view, `FlipComps`): 3 rows
+  on `flip_projects.comps` (address, price, sqft, `status` sold|pending —
+  JSONB, no migration), avg $/sq ft × the house's sq ft → "Use as ARV".
+  **Phase 3 — subs, permits + resale package (2026-10-17)**: Dashboard view
+  gets **Subcontractors & permits** (`screens/FlipSubs.tsx`, stored on
+  `flip_projects.subs`): per trade a permit (none / needed / applied / issued /
+  final + permit #) and up to 3 bids (company, amount, phone); **Hire** picks
+  one (one per trade). `subsSummary` (lib/flip.ts, tested): sub budget = the
+  hired bids; spend = what's been paid to ANY bid (money paid to a sub you
+  later replaced is still spent). The dashboard adds sub payments to the
+  rehab spend (so projected profit sees them), and "rehab done" also needs
+  every hired sub paid in full. **Resale package** (Sell it → sheet →
+  Create PDF; `lib/export-flip-resale.ts` over `resaleData`): facts,
+  "What Was Done" = linked jobs' FINISHED work only (ticked work-order
+  tasks, every task of a complete/invoiced/paid job, or a done job's quote
+  lines when it has no work order; grouped by area, deduped), permits,
+  before/after photos (job `rooms.photos` type before/after), nearby sales
+  + avg $/sq ft. Off by default: AI renders (printed as "Design Concepts —
+  not photographs") and the amount invested (buyers negotiate against it).
+  **Lender draws (2026-10-17)**: Dashboard → **Lender & draws**
+  (`screens/FlipDraws.tsx`, stored on `flip_projects.loan` = {lender,
+  loan_no, contact, holdback, rate, draw_fee, draws[]}). Each draw: milestone,
+  amount, status planned → requested → inspected → funded (`setDrawStatus`
+  stamps requested_at/funded_at as YYYY-MM-DD, clears them moving back), fee
+  override, note. Schedule seeds: one draw per linked job, or the holdback
+  split into 4 standard milestones. `drawSummary` (tested): funded / waiting /
+  left to draw, fees (on draws sent to the lender), interest on funded draws,
+  "floating" (your cash covering rehab the lender hasn't paid back = min(spent,
+  holdback) − funded) and "ready to draw" (spent not yet funded or
+  requested). Money rules: `analyzeFlip` cash-in subtracts the financed rehab
+  (min(holdback, rehab)) so ROI is on your own cash — the Deal view has a
+  **Rehab financed** pill bound to `loan.holdback`; draw fees charged count as
+  financing in `analyzeFlipActuals` (`drawFees`). **Draw request PDF**
+  (`lib/export-flip-draw.ts`, per draw; printing a planned draw marks it
+  requested): loan facts, holdback / funded to date / other unfunded requests
+  / this request / fee / remaining, progress per linked job, finished work,
+  recent after + in-progress photos, borrower + inspector signature lines.
+  Still to do: compare two flips.
+
+- **Day-rhythm Home + calm polish pass (2026-10-12)**: owner goal = "a
+  reusable flow every day; using the app should relieve stress". Home keeps
+  its layout (CTAs → day card → Needs you → money row → business card); only
+  the DAY CARD changes: "Today" (stops in clock order, crew, "{done} of
+  {total} done", amber row for a shift left open) → after 17:00 (or 15:00 with
+  no stops left) "Wrap up the day" (crew off · tomorrow booked · payday) →
+  "All caught up — enjoy your evening". Techs get "Your day" (own stops
+  first) and "Done for today". **All day logic lives in `src/lib/day-plan.ts`**
+  (pure, tested in `day-plan.test.ts`: stopsForDay, crewStatus, needMatch =
+  the 2x2 predicates, dayPhase; WRAP_HOUR/LATE_HOUR are the knobs);
+  `components/DayCards.tsx` only renders it. "Caught up" never shows before
+  the first successful sync (`dataReady`). **Deep links** use the
+  `c_nav_intent` sessionStorage contract (`src/lib/nav-intent.ts`: `{page,
+  tab?, filter?, jobId?, at}`, 15s TTL, read once on mount) — readers: Jobs
+  (tab + quick filter lead/toSend/waiting/toInvoice/unpaid, or jobId → detail),
+  Schedule (day/week/month/dispatch), Timer (crew tab); several writers inline
+  the same snippet (packages were built in parallel). The 2x2 tiles now open
+  exactly the jobs they count; zero tiles dim. Other parts of the pass: Work
+  mode resolves the job from the clock-in address first (a stale pinned id
+  from a Time-tab clock-in used to show/complete the WRONG job); one calm
+  Complete-Job question instead of up to four dialogs; clock-out confirms;
+  `showConfirm(title, msg, {confirmLabel, cancelLabel, danger})` (danger =
+  title only now — "cancel" in a message no longer paints a red DELETE);
+  toasts can't be buried by "Syncing…" or a success right after an error;
+  Timer uses LOCAL dates (after ~7 PM Central the UTC date showed tomorrow);
+  Jobs: one next-step CTA per status, Follow up for sent quotes, tiered
+  quotes text "Options from $X", pay-at-truck QR flips to "Payment received".
+  **Owner decisions**: picking Paid on a job that still owes money asks
+  "$X still owed" → Record payment / Just mark Paid / Cancel (admins; techs
+  unchanged); bulk "Paid" records each job's remaining balance via
+  `/api/payments/record` with one method pick; **approving a join request
+  requires a pay rate** (TeamStats — one patch {status, rate}); techs keep
+  Dispatch/Assign. Deferred (see the plan's list): server-checked clock state
+  for force clock-out, back-button work in QuoteForge/Home deep links, shared
+  TopBar, portal native dialogs. Local preview recipe used for this: a
+  worktree `.env.local` with a placeholder Supabase URL (127.0.0.1) + a fake
+  local session + an IndexedDB offline snapshot of demo data — loadAll's
+  failed-fetch guard then serves the snapshot, so every screen renders.
+
 - **creedhm.com SEO (2026-10-08)**: Google used to get only "Loading Creed..."
   from `/` (the page was one client component behind a `mounted` gate), with no
   robots/sitemap/canonical. Now `app/page.tsx` is a SERVER page (home metadata +
@@ -838,7 +1054,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   pending writes over server/snapshot so a poll can't clobber an unsynced
   clock-out; queue cleared on logout; `pendingWrites` drives the banner's
   "· N change(s) will sync when you reconnect". A non-network (RLS/constraint)
-  replay error drops just that item so it can't wedge the queue. **P3 image
+  replay error drops just that item so it can't wedge the queue. **Work-order
+  ticks (2026-10-16)**: `src/lib/wo-queue.ts` — a tick lives in the job's rooms
+  blob, so it gets its own localStorage queue ({jobId, key=room|||detail, done},
+  latest tap per task wins) replayed as read-current-blob → set done by key →
+  write (other blob edits kept; a task/job that's gone drops its ticks).
+  `applyWoPending` overlays unsynced ticks in loadAll + the offline snapshot;
+  flushed on tap, at start, every 15s poll that has some, and on `online`;
+  counted in the banner. WorkVision toggleWO + the Jobs work-order screen both
+  use it. **P3 image
   uploads** (`src/lib/offline-uploads.ts`): photos/receipts snapped offline are
   no longer lost. Binary can't live in localStorage, so the pending File is
   stashed in an **IndexedDB** queue (`creed-uploads` DB) and replayed on
@@ -861,7 +1085,18 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   gives an in-screen level its own history entry so Android back closes it
   (Jobs detail + sub-screen, Ops area + customer, Dashboard notifications).
   In-app close consumes the entry; unmount (navigating away) leaves it; the
-  close/unmount/StrictMode-remount decision is deferred a tick. Browser-tested
+  close/unmount/StrictMode-remount decision is deferred a tick. Deep links
+  (2026-10-16): a Jobs detail opened straight onto a job (bell, Home row,
+  Schedule "Open job") and an Ops area opened straight in (More → Customers /
+  Business settings, Home rows) get NO layer — the page entry is their back
+  step, and their in-app ← calls history.back() — so back returns to where you
+  came from, not to a list/hub you never saw. QuoteForge
+  (2026-10-16): one layer while any mode is open = that screen's ← (exitQuick /
+  exitEditor / exitBuilding; Inspector registers `leaveWalkthrough` via
+  `exitRef`); back is swallowed + re-armed mid AI build and inside a Voice
+  Walk (its Cancel discards the recording); Inspector adds room/review/picker
+  layers armed a tick after mount (parent effects run after child ones).
+  Browser-tested
   (10-step harness, incl. StrictMode). GOTCHA found doing it: Next's app
   router HARD-RELOADS on popstate to an entry without its `__NA` state —
   AppShell's seed replaceState used to wipe it (back to the dashboard reloaded
@@ -916,7 +1151,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   action stamps `jobs.quote_sent_at` (`lib/quote-send.ts markQuoteSent`; also
   from the Jobs send strip on a quoted job). Job cards show "Sent 3d ago" /
   "Not sent yet"; dashboard Needs-attention is 2x2: To send (quoted, unsent) ·
-  Waiting on customer (quoted, sent) · To invoice · Unpaid. `/api/jobs/approve`
+  Waiting on customer (quoted, sent) · To invoice · Unpaid (now rendered by
+  DayCards from day-plan `needMatch`; each tile deep-links to exactly those
+  jobs — see "Day-rhythm Home" above). `/api/jobs/approve`
   fires `notifyQuoteApproved` (bell `quote_approved`, deep-links the job) on
   the FIRST approval only. Editing a saved quote no longer resets `job_date`.
 - **Good-Better-Best tiered quotes**: present 3 cumulative options on a quote so
@@ -999,9 +1236,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   picker's per-job map buttons start a drive too (shown via
   `<MileageQuickTrack hideIdle />`). Mileage screen: the GPS review lets you
   type miles + start/end odometer; Suggested trips has per-leg **Odo**
-  readings and **Add a trip that's not listed** (from/to, miles or odometer —
-  replaced the old Manual Entry card); Trip Log rows have an edit pencil to
-  add odometer readings later. `WaypointTracker` (geo.ts) was removed.
+  readings and **Add a trip that's not listed** (from/to, miles or odometer,
+  for the picked date); Trip Log rows have an edit pencil to add odometer
+  readings later. A save that fails offline `holdDrive`s the trip (`stopped`,
+  never resumes GPS) so the miles survive closing the app and the next
+  Stop/End saves them. `WaypointTracker` (geo.ts) was removed.
 
 - **Edit-draft autosave for SAVED quotes (2026-10-12)**: the new-quote draft
   (`c_qf_draft_<uid>`) never covered editing an existing job — edits lived

@@ -5,6 +5,9 @@ import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 import { aiText } from "@/lib/parser";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
+import AiNote from "../AiNote";
+import { t } from "@/lib/i18n";
 
 interface Message {
   role: "user" | "assistant";
@@ -30,7 +33,9 @@ Categories: garage doors, HVAC, electrical, plumbing, appliances, smart home, do
 
 Diagnostic sequence: Identify equipment → Clarify symptom → Check basics (power, connections) → Test isolation → Interpret error codes → Guide fix step by step → Verify fix.`;
 
-export default function Troubleshoot({ setPage }: { setPage: (p: string) => void }) {
+// setPage stays in the props for AppShell's uniform call; Back walks history
+// (back to More, where the Fix-it helper tile lives).
+export default function Troubleshoot(_props: { setPage: (p: string) => void }) {
   const darkMode = useStore((s) => s.darkMode);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -146,15 +151,8 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
   return (
     <div className="fi" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 80px)" }}>
       {/* Header */}
-      <div className="row mb" style={{ justifyContent: "space-between", flexShrink: 0 }}>
-        <div className="row">
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px" }}>← Back</button>
-          <h2 style={{ fontSize: 22, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Icon name="troubleshoot" size={20} color="var(--color-primary)" />
-            AI Troubleshooter
-          </h2>
-        </div>
-        {messages.length > 0 && (
+      <div style={{ flexShrink: 0 }}>
+      <TopBar title={t("more.troubleshoot")} icon="troubleshoot" color="#94a3b8" onBack={() => window.history.back()} right={messages.length > 0 && (
           <button
             className="bo"
             onClick={() => setMessages([])}
@@ -162,7 +160,7 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
           >
             New Session
           </button>
-        )}
+        )} />
       </div>
 
       {/* Chat area */}
@@ -262,6 +260,8 @@ export default function Troubleshoot({ setPage }: { setPage: (p: string) => void
           ))}
         </div>
       )}
+
+      <AiNote text={t("ai.noteFixit")} style={{ marginBottom: 6, flexShrink: 0 }} />
 
       {/* Input area */}
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>

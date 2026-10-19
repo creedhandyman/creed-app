@@ -97,6 +97,7 @@ export default function TermsPage() {
               ["#term",     "Termination"],
               ["#changes",  "Changes"],
               ["#law",      "Governing law"],
+              ["#sms",      "Text messaging"],
               ["#contact",  "Contact"],
             ].map(([href, label], i) => (
               <li key={href} style={{ marginBottom: 4 }}>
@@ -364,7 +365,34 @@ export default function TermsPage() {
         </p>
 
         {/* 17 */}
-        <h2 id="contact" style={h2Style}>17. Contact</h2>
+        <h2 id="sms" style={h2Style}>17. Text messaging (SMS) program</h2>
+        <p style={pStyle}>
+          <strong style={{ color: "#d6d8df" }}>Creed Handyman SMS Notifications.</strong>{" "}
+          Businesses using the Service (including Creed Handyman LLC) may send
+          service-related text messages to customers who have provided their mobile
+          number and consented to be contacted — for example: appointment and job
+          updates, links to view and approve estimates, invoice and payment
+          confirmations, secure one-time sign-in links, and requests for feedback
+          after a completed job. Messages are transactional; this is not a marketing
+          list. Message frequency varies based on your service activity.{" "}
+          <strong style={{ color: "#fff" }}>Message and data rates may apply.</strong>{" "}
+          Carriers are not liable for delayed or undelivered messages.
+        </p>
+        <p style={pStyle}>
+          <strong style={{ color: "#fff" }}>Reply STOP to cancel</strong> text messages
+          at any time — you will receive no further messages after a confirmation.{" "}
+          <strong style={{ color: "#fff" }}>Reply HELP for help</strong>, or contact
+          support at{" "}
+          <a href="mailto:creedhandyman@gmail.com" style={{ color: "var(--mlink, #7fb6ff)" }}>
+            creedhandyman@gmail.com
+          </a>{" "}
+          or (316) 400-7414. Our handling of mobile numbers is described in the{" "}
+          <Link href="/privacy" style={{ color: "var(--mlink, #7fb6ff)" }}>Privacy Policy</Link>;
+          mobile information is never shared with third parties for marketing.
+        </p>
+
+        {/* 18 */}
+        <h2 id="contact" style={h2Style}>18. Contact</h2>
         <p style={pStyle}>
           Questions about these Terms? Contact Creed Handyman LLC at{" "}
           <a

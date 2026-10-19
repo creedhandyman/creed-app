@@ -6,6 +6,9 @@
  * progress to another. Three things are persisted:
  *   - grizz_tips     global on/off switch for tips + the getting-started card
  *   - gs_dismissed   the dashboard getting-started card has been closed/finished
+ *                    ("0" = brought back by turning tips on again)
+ *   - gs_skip_<task> a getting-started task the owner skipped ("Just me" on
+ *                    crew, "Not now" on Stripe) — counts as done
  *   - tip_<id>       a specific coachmark has been acknowledged ("Got it")
  *
  * Onboarding still runs once for new users regardless of these (it's gated by
@@ -33,10 +36,29 @@ export function setTipsEnabled(on: boolean, uid?: string | null): void {
 
 /** Dashboard getting-started card dismissed (× tapped, or all tasks complete). */
 export function gsDismissed(uid?: string | null): boolean {
-  return read(key("gs_dismissed", uid)) === "1";
+  const v = read(key("gs_dismissed", uid));
+  return v === "1" || v === "done";
 }
 export function dismissGs(uid?: string | null): void {
   write(key("gs_dismissed", uid), "1");
+}
+/** Every task done — celebrated once; turning tips back on never replays it. */
+export function finishGs(uid?: string | null): void {
+  write(key("gs_dismissed", uid), "done");
+}
+/** Bring the card back (tips switched on again) — an unfinished list reappears.
+ *  A finished list stays finished. */
+export function undismissGs(uid?: string | null): void {
+  if (read(key("gs_dismissed", uid)) === "done") return;
+  write(key("gs_dismissed", uid), "0");
+}
+
+/** A getting-started task skipped on purpose (solo owner, no Stripe yet). */
+export function gsSkipped(task: string, uid?: string | null): boolean {
+  return read(key(`gs_skip_${task}`, uid)) === "1";
+}
+export function skipGs(task: string, uid?: string | null): void {
+  write(key(`gs_skip_${task}`, uid), "1");
 }
 
 /** A coachmark tip has been acknowledged. */

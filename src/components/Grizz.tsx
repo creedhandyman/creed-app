@@ -1,16 +1,23 @@
 "use client";
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { t } from "@/lib/i18n";
 
 /**
  * Grizz — Creed's handyman-bear mascot. Pure inline SVG (no images), so it
  * scales crisply at ~zero cost. Three poses; the wave pose animates only the
  * right-arm group (pinned at the shoulder via transform-box:view-box). Colors:
  * brown fur #5f452c, blue shirt #2E75B6, red beanie #e2342f/#b5251f, navy
- * hammer #1d4e7d. Used only in onboarding (welcome / setup / done) for now.
+ * hammer #1d4e7d. He blinks on his own, and with `chatty` he's tappable: a hop,
+ * a grin and a one-liner from the `grizz.quip*` pool (a few too many taps and
+ * he gets grumpy — `grizz.annoyed*`).
  */
 export type GrizzPose = "wave" | "point" | "cheer";
 
 const FUR = "#5f452c";
+
+const QUIPS = 12;
+const ANNOYED = 3;
+const ANNOYED_EVERY = 7;
 
 const HAMMER = (
   <>
@@ -49,7 +56,9 @@ const beanie = (
 // Eyes sit BELOW the beanie band — don't raise them or the hat clips them.
 const faceNeutral = (
   <>
-    <circle cx="49" cy="67" r="3.6" fill="#23252c" /><circle cx="71" cy="67" r="3.6" fill="#23252c" />
+    <g className="grizz-eyes">
+      <circle cx="49" cy="67" r="3.6" fill="#23252c" /><circle cx="71" cy="67" r="3.6" fill="#23252c" />
+    </g>
     <ellipse cx="60" cy="76" rx="5.5" ry="4" fill="#2a1c10" />
     <path d="M60 80 L60 84 M52 87 Q60 93 68 87" stroke="#2a1c10" strokeWidth="2.6" fill="none" strokeLinecap="round" />
   </>
@@ -73,31 +82,71 @@ export default function Grizz({
   pose,
   size = 166,
   bob = false,
+  chatty = false,
+  bubbleAlign = "center",
   style,
 }: {
   pose: GrizzPose;
   size?: number;
   bob?: boolean;
+  /** Tap him for a hop + a one-liner. */
+  chatty?: boolean;
+  /** Which edge of Grizz the speech bubble hugs (use "left" near the left screen edge). */
+  bubbleAlign?: "left" | "center" | "right";
   style?: CSSProperties;
 }) {
-  return (
+  const [hop, setHop] = useState(0); // bumps every tap to restart the CSS animation
+  const [line, setLine] = useState<string | null>(null);
+  const taps = useRef(0);
+  const lastQuip = useRef(-1);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const poke = () => {
+    taps.current += 1;
+    let text: string;
+    if (taps.current % ANNOYED_EVERY === 0) {
+      text = t(`grizz.annoyed${1 + Math.floor(Math.random() * ANNOYED)}`);
+    } else {
+      let n = lastQuip.current;
+      while (n === lastQuip.current) n = Math.floor(Math.random() * QUIPS);
+      lastQuip.current = n;
+      text = t(`grizz.quip${n + 1}`);
+    }
+    setLine(text);
+    setHop((h) => h + 1);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setLine(null), 3600);
+  };
+
+  const grin = chatty && line !== null;
+  const face = (p: GrizzPose) => (p === "cheer" || grin ? faceHappy : faceNeutral);
+
+  const svg = (
     <svg
       viewBox="0 0 130 170"
       width={size}
       height={Math.round(size * (170 / 130))}
       className={bob ? "grizz-bob" : undefined}
-      style={style}
-      role="img"
-      aria-label="Grizz the handyman bear"
+      style={chatty ? { display: "block", overflow: "visible" } : style}
+      role={chatty ? undefined : "img"}
+      aria-label={chatty ? undefined : "Grizz the handyman bear"}
+      aria-hidden={chatty ? true : undefined}
     >
       <style>{`
         .grizz-armw{transform-box:view-box;transform-origin:80px 110px;animation:grizzWave 1.6s ease-in-out infinite}
         @keyframes grizzWave{0%,100%{transform:rotate(0)}25%{transform:rotate(-16deg)}50%{transform:rotate(6deg)}75%{transform:rotate(-9deg)}}
         .grizz-bob{animation:grizzBob 3.2s ease-in-out infinite}
         @keyframes grizzBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-        @media (prefers-reduced-motion:reduce){.grizz-armw,.grizz-bob{animation:none}}
+        .grizz-eyes{transform-box:fill-box;transform-origin:center;animation:grizzBlink 5.2s infinite}
+        @keyframes grizzBlink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+        .grizz-hop{transform-box:view-box;transform-origin:65px 154px;animation:grizzHop .5s cubic-bezier(.3,1.6,.5,1)}
+        @keyframes grizzHop{0%{transform:scale(1.08,.9)}35%{transform:translateY(-12px) rotate(-5deg) scale(.96,1.05)}65%{transform:translateY(-3px) rotate(4deg)}100%{transform:none}}
+        @media (prefers-reduced-motion:reduce){.grizz-armw,.grizz-bob,.grizz-eyes,.grizz-hop{animation:none}}
       `}</style>
 
+      <g key={hop} className={chatty && hop > 0 ? "grizz-hop" : undefined}>
       {pose === "wave" && (
         <>
           {ears}{body}{leftArmRest}
@@ -106,7 +155,7 @@ export default function Grizz({
             <path d="M80 110 Q94 90 100 76" stroke={FUR} strokeWidth="13" fill="none" strokeLinecap="round" />
             <circle cx="100" cy="74" r="8" fill={FUR} />
           </g>
-          {head}{faceNeutral}{beanie}
+          {head}{face(pose)}{beanie}
         </>
       )}
 
@@ -116,7 +165,7 @@ export default function Grizz({
           <g transform="translate(31 96) scale(.8)">{HAMMER}</g>
           <path d="M82 114 Q98 110 110 108" stroke={FUR} strokeWidth="13" fill="none" strokeLinecap="round" />
           <circle cx="110" cy="108" r="7.5" fill={FUR} />
-          {head}{faceNeutral}{beanie}
+          {head}{face(pose)}{beanie}
         </>
       )}
 
@@ -128,9 +177,44 @@ export default function Grizz({
           <path d="M80 112 Q92 94 98 80" stroke={FUR} strokeWidth="13" fill="none" strokeLinecap="round" />
           <g transform="translate(92 36) scale(.85)">{HAMMER}</g>
           <circle cx="98" cy="80" r="7.5" fill={FUR} />
-          {head}{faceHappy}{beanie}
+          {head}{face(pose)}{beanie}
         </>
       )}
+      </g>
     </svg>
+  );
+
+  if (!chatty) return svg;
+
+  const edge: CSSProperties =
+    bubbleAlign === "left" ? { left: 0 } : bubbleAlign === "right" ? { right: 0 } : { left: "50%", transform: "translateX(-50%)" };
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label="Grizz the handyman bear — tap to chat"
+      onClick={poke}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); poke(); } }}
+      style={{ position: "relative", display: "block", width: size, cursor: "pointer", WebkitTapHighlightColor: "transparent", outline: "none", ...style }}
+    >
+      {line && (
+        <span
+          role="status"
+          className="grizz-say"
+          style={{
+            position: "absolute", bottom: "92%", zIndex: 5, width: "max-content", maxWidth: 210,
+            padding: "8px 11px", borderRadius: 12, textAlign: "left",
+            background: "#fff", color: "#1a1a22", fontSize: 12.5, lineHeight: 1.35, fontWeight: 600,
+            boxShadow: "0 8px 22px -8px rgba(0,0,0,.6)", pointerEvents: "none",
+            ...edge,
+          }}
+        >
+          <style>{`.grizz-say{animation:grizzSay .22s ease-out both}@keyframes grizzSay{from{opacity:0;margin-bottom:-6px}to{opacity:1;margin-bottom:0}}@media (prefers-reduced-motion:reduce){.grizz-say{animation:none}}`}</style>
+          {line}
+        </span>
+      )}
+      {svg}
+    </span>
   );
 }

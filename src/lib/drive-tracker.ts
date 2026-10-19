@@ -51,6 +51,9 @@ export interface DriveTrip {
   lastAt?: number | null;
   /** fixes accepted so far — 0 = still looking for the start */
   fixes?: number;
+  /** Stopped, but the save failed (offline is common on the road): the miles
+   *  are held in accMiles for a retry. Not tracking — never resumes GPS. */
+  stopped?: boolean;
 }
 
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
@@ -158,6 +161,7 @@ function load() {
         lastAcc: s.lastAcc ?? null,
         lastAt: s.lastAt ?? null,
         fixes: s.fixes ?? (s.startLat != null || s.lastLat != null ? 1 : 0),
+        ...(s.stopped ? { stopped: true } : {}),
       },
     };
   } catch { /* corrupt entry — ignore */ }
@@ -167,7 +171,7 @@ function onPosition(p: GeolocationPosition) {
   const fix: DriveFix = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, at: Date.now() };
   warm = fix;
   const cur = state.trip;
-  if (!cur) return;
+  if (!cur || cur.stopped) return;
   const next = applyFix(cur, fix);
   if (next === cur && !state.error) return;
   persist(next);
@@ -180,7 +184,7 @@ function onError(err: GeolocationPositionError) {
 }
 
 function checkNow() {
-  if (!hasGeo() || !state.trip) return;
+  if (!hasGeo() || !state.trip || state.trip.stopped) return;
   navigator.geolocation.getCurrentPosition(onPosition, onError, { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 });
 }
 
@@ -189,7 +193,7 @@ function onVisible() {
 }
 
 function watch() {
-  if (!hasGeo() || watchId !== null || !state.trip) return;
+  if (!hasGeo() || watchId !== null || !state.trip || state.trip.stopped) return;
   watchId = navigator.geolocation.watchPosition(onPosition, onError, { enableHighAccuracy: true, maximumAge: 5_000, timeout: 30_000 });
   pollId = setInterval(checkNow, POLL_MS);
   document.addEventListener("visibilitychange", onVisible);
@@ -268,6 +272,12 @@ export async function finishDrive(timeoutMs = 10_000): Promise<{ trip: DriveTrip
   load();
   const trip = state.trip;
   if (!trip) return null;
+  if (trip.stopped) {
+    // A held trip — its miles are already final.
+    persist(null);
+    emit({ trip: null, error: null });
+    return { trip, miles: trip.accMiles, hadStart: trip.startLat != null };
+  }
   const end = await new Promise<DriveFix | null>((resolve) => {
     if (!hasGeo()) return resolve(null);
     navigator.geolocation.getCurrentPosition(
@@ -282,6 +292,17 @@ export async function finishDrive(timeoutMs = 10_000): Promise<{ trip: DriveTrip
   persist(null);
   emit({ trip: null, error: null });
   return { trip: latest, ...finalMiles(latest, end) };
+}
+
+/** Put a finished trip back, stopped at `miles`, when saving it failed — so
+ *  the miles survive closing the app and the next Stop/End saves them. Skipped
+ *  if a new drive was started meanwhile. */
+export function holdDrive(trip: DriveTrip, miles: number) {
+  load();
+  if (state.trip && !state.trip.stopped) return; // a new drive is running
+  const held: DriveTrip = { ...trip, accMiles: miles, stopped: true };
+  persist(held);
+  emit({ trip: held, error: null });
 }
 
 export function cancelDrive() {

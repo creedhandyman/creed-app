@@ -2,12 +2,15 @@
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
-import { t } from "@/lib/i18n";
+import { t, getLang } from "@/lib/i18n";
 import { formatHours } from "@/lib/dates";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import { openPrint } from "@/lib/print-template";
 import { buildStubHtml, runPayrollForUser, type StubInput } from "@/lib/payroll-runner";
 import { computeQuests, parseQuestConfig } from "@/lib/quests";
+import { isStaleOpenEntry } from "@/lib/shift";
+import type { PayHistory } from "@/lib/types";
 
 /** Trigger a browser download of an HTML string as a .html file. Used by
  *  the per-entry Download button so the employee can save the stub
@@ -24,6 +27,8 @@ function downloadHtmlFile(html: string, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+const STUB_PAY_METHODS = ["cash", "check", "deposit", "app"] as const;
+
 export default function Payroll({ embedded }: { embedded?: boolean }) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
@@ -36,6 +41,11 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const questPayouts = useStore((s) => s.questPayouts);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+  // "Everyone's paid up" only once every table has loaded — an empty store
+  // (first launch, offline with no snapshot) must not read as "nothing owed".
+  const loading = useStore((s) => s.loading);
+  const fullSyncAt = useStore((s) => s.fullSyncAt);
+  const dataReady = !loading && fullSyncAt !== null;
   // Inline dark tokens are fixed values — they don't flip for light mode.
   // These surface helpers keep rows/avatars readable (no black-on-black)
   // when the theme is light.
@@ -107,6 +117,24 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const [processingAll, setProcessingAll] = useState(false);
   const [openPay, setOpenPay] = useState<string | number | null>(null);
   const processGuard = useRef(false);
+
+  // ── Stub paid-out status ──
+  // Processing pay writes the stub; "Mark paid" records that the money
+  // actually went out (pay_history.paid_at / paid_method, owner/manager only).
+  const [markStub, setMarkStub] = useState<PayHistory | null>(null);
+  const setStubPaid = async (p: PayHistory, method: string | null) => {
+    const patch = method ? { paid_at: new Date().toISOString(), paid_method: method } : { paid_at: null, paid_method: null };
+    const prev = useStore.getState().payHistory;
+    useStore.setState({ payHistory: prev.map((h) => (h.id === p.id ? { ...h, ...patch } : h)) });
+    const ok = await db.patch("pay_history", String(p.id), patch);
+    if (ok === false) useStore.setState({ payHistory: prev });
+    else if (method) useStore.getState().showToast(`${p.name || "Stub"} marked paid · $${(p.amount || 0).toFixed(2)}`, "success");
+  };
+  const unpaidRecentStubs = (userId: string) => {
+    const cutoff = Date.now() - 30 * 86400000;
+    return payHistory.filter((h) => h.user_id === userId && !h.paid_at
+      && (h.created_at ? Date.parse(h.created_at) >= cutoff : false));
+  };
 
   // Build the StubInput for the *current* unpaid cycle. Used both to save
   // the stub HTML at process-pay time and to populate the pre-pay
@@ -266,14 +294,62 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const teamUnpaidHours = empRows.reduce((s, r) => s + r.hrs, 0);
   const processAllTotal = empRows.filter((r) => r.hasRate).reduce((s, r) => s + r.amount, 0);
   const teamCycleTotal = processAllTotal;
-  // Crew on the clock right now — their running shift is never claimed by a
-  // pay run (payroll-runner skips open rows), so it lands in NEXT payroll.
+  // Earned-but-unreviewed quest bonuses per person — the same per-cycle
+  // engine + "not already paid this cycle" filter as the selected person's
+  // approval list below, so the chip and the list always agree.
+  const bonusToReview = (uid: string, name: string): number => {
+    const paidKeys = questPayouts
+      .filter((qp) => {
+        if (qp.user_id !== uid) return false;
+        try { return new Date(qp.created_at || qp.paid_date) >= cycleStart; } catch { return false; }
+      })
+      .map((qp) => qp.quest_key);
+    return computeQuests({
+      userId: uid,
+      userName: name || "",
+      jobs, reviews, referrals, timeEntries,
+      questConfig,
+      cycleStart,
+      customQuests,
+    }).allQuests
+      .filter((q) => q.progress >= q.goal && !paidKeys.includes(q.key))
+      .reduce((s, q) => s + (q.bonusAmount || 0), 0);
+  };
+  // Open (still-clocked-in) entries — never claimed by a pay run
+  // (payroll-runner skips open rows), so they land in NEXT payroll. Split:
+  // a shift running today is normal; one from an earlier day (or past the
+  // long-shift limit) is a forgotten clock-out that needs a finish time.
+  const openEntriesOf = (p: { id: string; name: string }) =>
+    timeEntries.filter((e) => !e.paid_at && e.start_time && !e.end_time && (e.user_id === p.id || (!e.user_id && e.user_name === p.name)));
   const onClockNames = profiles
-    .filter((p) => timeEntries.some((e) => !e.paid_at && e.start_time && !e.end_time && (e.user_id === p.id || (!e.user_id && e.user_name === p.name))))
+    .filter((p) => openEntriesOf(p).some((e) => !isStaleOpenEntry(e.entry_date, e.start_time)))
     .map((p) => p.name.split(/\s+/)[0]);
   const onClockNote = onClockNames.length
     ? `${onClockNames.join(", ")} ${onClockNames.length === 1 ? "is" : "are"} still clocked in — the running shift goes in next payroll.`
     : "";
+  const staleShiftLines = profiles.flatMap((p) => {
+    const stale = openEntriesOf(p).filter((e) => isStaleOpenEntry(e.entry_date, e.start_time));
+    if (!stale.length) return [];
+    // One line per person, naming their oldest forgotten shift.
+    const oldest = stale.reduce((a, b) => (shiftDayMs(b.entry_date) < shiftDayMs(a.entry_date) ? b : a));
+    const ms = shiftDayMs(oldest.entry_date);
+    const day = Number.isFinite(ms)
+      ? new Date(ms).toLocaleDateString(getLang() === "es" ? "es" : "en-US", { weekday: "long", month: "short", day: "numeric" })
+      : oldest.entry_date || "";
+    return [{ id: p.id, text: t("payroll.staleShift").replace("{name}", p.name.split(/\s+/)[0]).replace("{day}", day) }];
+  });
+
+  // Last pay run — the newest pay_history date and the total paid that day.
+  const lastRunLine = (() => {
+    const last = payHistory[0];
+    if (!last?.pay_date) return "";
+    const amt = payHistory.filter((p) => p.pay_date === last.pay_date).reduce((s, p) => s + (p.amount || 0), 0);
+    const ms = shiftDayMs(last.pay_date);
+    const date = Number.isFinite(ms)
+      ? new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : last.pay_date;
+    return t("payroll.lastRun").replace("{date}", date).replace("{amt}", Math.round(amt).toLocaleString());
+  })();
 
   // Process All — pays everyone with a rate for their unpaid base hours via
   // the safe, tested auto-run endpoint (same path Auto Payroll uses). Quest
@@ -292,8 +368,11 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
       const res = await fetch("/api/payroll/auto-run?force=1", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      const j = await res.json();
+      // A gateway timeout comes back as an HTML page — never surface the
+      // JSON parse error ("Unexpected token <"), just a plain retry note.
+      const j = await res.json().catch(() => null);
       const toast = useStore.getState().showToast;
+      if (!j || typeof j !== "object") { toast(t("payroll.unreachable"), "error"); return; }
       if (!res.ok || j.error) { toast(j.hint || j.error || `Process failed (${res.status})`, "error"); return; }
       const mine = (j.fired || []).find((f: { id: string }) => f.id === org?.id);
       if (mine) {
@@ -309,7 +388,8 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
       }
       await loadAll();
     } catch (e) {
-      useStore.getState().showToast(e instanceof Error ? e.message : "Process failed", "error");
+      console.error("[Payroll] process all failed", e);
+      useStore.getState().showToast(t("payroll.unreachable"), "error");
     } finally {
       setProcessingAll(false);
     }
@@ -318,10 +398,28 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   return (
     <div className="fi">
       {!embedded && (
-        <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <Icon name="money" size={22} color="var(--color-primary)" />
-          {t("pay.title")}
-        </h2>
+        <TopBar title={t("pay.title")} icon="money" color="#22c55e" />
+      )}
+
+      {markStub && (
+        <div className="sheet-overlay" onClick={() => setMarkStub(null)}>
+          <div className="cd sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={t("payroll.markPaidTitle")}>
+            <h4 style={{ fontSize: 17, marginBottom: 4 }}>{t("payroll.markPaidTitle")}</h4>
+            <div className="dim" style={{ fontSize: 14, marginBottom: 12 }}>
+              {markStub.name} · {markStub.pay_date} · <b style={{ color: "var(--color-success)" }}>${(markStub.amount || 0).toFixed(2)}</b>
+            </div>
+            <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>{t("payroll.paidHow")}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {STUB_PAY_METHODS.map((m) => (
+                <button key={m} className="bo" style={{ padding: "12px 8px", fontSize: 15 }}
+                  onClick={() => { const st = markStub; setMarkStub(null); void setStubPaid(st, m); }}>
+                  {t(`payroll.method.${m}`)}
+                </button>
+              ))}
+            </div>
+            <button className="bo" onClick={() => setMarkStub(null)} style={{ width: "100%", marginTop: 10, fontSize: 14 }}>{t("common.cancel")}</button>
+          </div>
+        </div>
       )}
 
       {/* Auto Payroll — server-side scheduled run (cron hits
@@ -347,7 +445,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   <div style={{ width: 40, height: 40, borderRadius: "50%", margin: "0 auto 4px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 12, background: avatarBg, color: darkMode ? (on ? "#fff" : "#cdd6e6") : "#5a6175", border: `2px solid ${on ? "var(--color-primary)" : "transparent"}`, boxShadow: on ? "0 0 14px -4px rgba(46,139,255,.85)" : "none" }}>
                     {u.photo_url ? <img src={u.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
                   </div>
-                  <div style={{ fontSize: 8.5, color: on ? "inherit" : "var(--color-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(u.name || "").split(/\s+/)[0]}</div>
+                  <div style={{ fontSize: 11, color: on ? "inherit" : "var(--color-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(u.name || "").split(/\s+/)[0]}</div>
                 </button>
               );
             })}
@@ -361,21 +459,31 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
               { l: "Cycle total", v: "$" + Math.round(teamCycleTotal).toLocaleString(), c: "var(--color-money)" },
             ].map((s) => (
               <div key={s.l} style={{ flex: 1, textAlign: "center" }}>
-                <div style={{ fontSize: 8.5, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--color-dim)" }}>{s.l}</div>
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--color-dim)" }}>{s.l}</div>
                 <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 17, marginTop: 3, color: s.c || (darkMode ? "inherit" : "#fff") }}>{s.v}</div>
               </div>
             ))}
           </div>
+          {lastRunLine && (
+            <p className="dim" style={{ fontSize: 13, margin: "-5px 2px 12px" }}>{lastRunLine}</p>
+          )}
 
           {/* Employees — unpaid pay per person + status, tap to drill in. */}
           <div className="sl" style={{ display: "inline-flex", alignItems: "center", gap: 6, margin: "2px 1px 8px" }}>
             <Icon name="clients" size={13} /> Employees
           </div>
           {empRows.length === 0 ? (
-            <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>No unpaid hours this cycle.</p>
+            dataReady ? (
+              <p style={{ fontSize: 14, marginBottom: 12, display: "flex", alignItems: "center", gap: 7, color: "var(--color-success)" }}>
+                <Icon name="checkCircle" size={16} color="var(--color-success)" /> {t("payroll.allPaidUp")}
+              </p>
+            ) : (
+              <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>{t("common.loading")}</p>
+            )
           ) : (
             empRows.map((r) => {
               const on = sel === r.id;
+              const bonus = bonusToReview(r.id, r.name);
               return (
                 <button
                   key={r.id}
@@ -385,11 +493,29 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   <span style={{ width: 30, height: 30, borderRadius: "50%", background: avatarBg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 11, color: avatarFg, flex: "none" }}>{r.initials}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600 }}>{r.name}</div>
-                    <div style={{ fontSize: 9.5, color: "var(--color-dim)" }}>{formatHours(r.hrs)} · ${r.rate}/hr</div>
+                    <div style={{ fontSize: 11, color: "var(--color-dim)" }}>{formatHours(r.hrs)} · ${r.rate}/hr</div>
+                    {/* Bonus waiting on review — tapping the row (this chip
+                        included) opens their approval list below. */}
+                    {bonus > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 99, marginTop: 3, display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,180,0,.16)", color: "#f5b400" }}>
+                        <Icon name="trophy" size={11} color="#f5b400" /> {t("payroll.bonusToReview").replace("{amt}", Math.round(bonus).toLocaleString())}
+                      </span>
+                    )}
+                    {(() => {
+                      // Processed in the last 30 days but not marked paid out yet.
+                      const owed = unpaidRecentStubs(r.id);
+                      if (!owed.length) return null;
+                      const amt = owed.reduce((s2, h) => s2 + (h.amount || 0), 0);
+                      return (
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 99, marginTop: 3, marginLeft: bonus > 0 ? 4 : 0, display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(46,139,255,.16)", color: "#6fb0ff" }}>
+                          <Icon name="money" size={11} color="#6fb0ff" /> {t("payroll.stubsToPay").replace("{n}", String(owed.length)).replace("{amt}", Math.round(amt).toLocaleString())}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 14 }}>${Math.round(r.amount).toLocaleString()}</div>
-                    <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 6px", borderRadius: 99, marginTop: 3, display: "inline-block", background: r.hasRate ? "rgba(0,204,102,.16)" : "rgba(255,136,0,.16)", color: r.hasRate ? "#3ee08f" : "#ffb15e" }}>{r.hasRate ? "Ready" : "No rate"}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 6px", borderRadius: 99, marginTop: 3, display: "inline-block", background: r.hasRate ? "rgba(0,204,102,.16)" : "rgba(255,136,0,.16)", color: r.hasRate ? "#3ee08f" : "#ffb15e" }}>{r.hasRate ? "Ready" : "No rate"}</span>
                   </div>
                 </button>
               );
@@ -401,6 +527,13 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
               <Icon name="time" size={13} /> {onClockNote}
             </p>
           )}
+          {/* Forgotten clock-outs — fixed in Time → Crew (Set finish time). */}
+          {staleShiftLines.map((l) => (
+            <p key={l.id} style={{ fontSize: 13, margin: "0 2px 8px", display: "flex", alignItems: "flex-start", gap: 6, color: "#ffb15e" }}>
+              <span style={{ flexShrink: 0, marginTop: 1, display: "inline-flex" }}><Icon name="warn" size={14} color="#ffb15e" /></span>
+              {l.text}
+            </p>
+          ))}
           {/* Process All — base pay for everyone with a rate (no bonuses). */}
           <button
             onClick={processAll}
@@ -663,10 +796,38 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
                     ${(p.amount || 0).toFixed(2)}
                   </span>
+                  {p.paid_at ? (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!isOwner) return;
+                        if (await useStore.getState().showConfirm(t("payroll.unmarkPaidTitle"), t("payroll.unmarkPaidBody").replace("{date}", p.pay_date), { confirmLabel: t("payroll.unmarkPaid") })) void setStubPaid(p, null);
+                      }}
+                      title={new Date(p.paid_at).toLocaleDateString()}
+                      style={{ fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 99, border: "none", background: "rgba(0,204,102,.16)", color: "#3ee08f", display: "inline-flex", alignItems: "center", gap: 4, cursor: isOwner ? "pointer" : "default" }}
+                    >
+                      <Icon name="check" size={12} color="#3ee08f" /> {t("payroll.paidChip")}
+                    </button>
+                  ) : isOwner ? (
+                    <button
+                      className="bg"
+                      onClick={(e) => { e.stopPropagation(); setMarkStub(p); }}
+                      style={{ fontSize: 12.5, padding: "4px 10px" }}
+                    >
+                      {t("payroll.markPaid")}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 99, background: "rgba(255,136,0,.16)", color: "#ffb15e" }}>{t("payroll.notPaidYet")}</span>
+                  )}
                   <span style={{ fontSize: 14, color: "#888" }}>{isOpen ? "▲" : "▼"}</span>
                 </div>
                 {isOpen && (
                   <div className="statusstrip" style={{ padding: "6px 0 6px 12px", ["--c" as any]: "var(--color-primary)" }}>
+                    {p.paid_at && (
+                      <div style={{ fontSize: 13, color: "#3ee08f", marginBottom: 4 }}>
+                        {t("payroll.paidOn").replace("{date}", new Date(p.paid_at).toLocaleDateString()).replace("{method}", p.paid_method ? t(`payroll.method.${p.paid_method}`) : "")}
+                      </div>
+                    )}
                     {jobDetails.length > 0 ? (
                       jobDetails.map((d, i) => (
                         <div
@@ -737,6 +898,19 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
       )}
     </div>
   );
+}
+
+/** Local midnight (ms) of an entry_date / pay_date — "M/D/YYYY" (how the
+ *  app and the pay runner write them) or "YYYY-MM-DD". NaN if unparseable. */
+function shiftDayMs(d?: string | null): number {
+  if (!d) return NaN;
+  if (d.includes("/")) {
+    const [m, day, y] = d.split("/").map((n) => parseInt(n, 10));
+    return new Date(y, m - 1, day).getTime();
+  }
+  const iso = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]).getTime();
+  return NaN;
 }
 
 /* ── Auto Payroll Panel ─────────────────────────────────────────────
@@ -813,8 +987,13 @@ function AutoPayrollPanel() {
       const res = await fetch("/api/payroll/auto-run?force=1", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      const j = await res.json();
+      // Gateway timeout = an HTML page, not JSON → plain retry note.
+      const j = await res.json().catch(() => null);
       const toast = useStore.getState().showToast;
+      if (!j || typeof j !== "object") {
+        toast(t("payroll.unreachable"), "error");
+        return;
+      }
       if (!res.ok || j.error) {
         toast(j.hint || j.error || `Run failed (${res.status})`, "error");
         return;
@@ -836,7 +1015,8 @@ function AutoPayrollPanel() {
       }
       await loadAll();
     } catch (e) {
-      useStore.getState().showToast(e instanceof Error ? e.message : "Run failed", "error");
+      console.error("[Payroll] run now failed", e);
+      useStore.getState().showToast(t("payroll.unreachable"), "error");
     } finally {
       setBusy(false);
     }
@@ -994,7 +1174,7 @@ function AutoPayrollPanel() {
                 style={{ width: "100%", marginTop: 12, fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
               >
                 <Icon name="pay" size={14} />
-                {busy ? "Running…" : "Run now (test)"}
+                {busy ? "Running…" : t("payroll.runNow")}
               </button>
               <div className="dim" style={{ fontSize: 12.5, marginTop: 5, lineHeight: 1.5 }}>
                 Runs the scheduled job immediately and reports who got paid or skipped. If this pays the crew but the schedule doesn&apos;t, the day/cadence is the issue. If crew are skipped for &quot;no pay rate&quot;, set their hourly rate in Team.

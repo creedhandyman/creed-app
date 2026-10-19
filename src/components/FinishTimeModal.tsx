@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { LONG_SHIFT_MS } from "@/lib/shift";
 
 // "What time did you finish?" — asked instead of booking a forgotten
@@ -23,6 +23,9 @@ export function useFinishTime(): [(startMs: number, who?: string) => Promise<num
   const [value, setValue] = useState("");
   const [err, setErr] = useState("");
   const pendingRef = useRef<Pending | null>(null);
+  // Leaving the screen with the prompt open (e.g. Android back) = cancelled,
+  // so the awaiting clock-out finishes instead of hanging forever.
+  useEffect(() => () => { pendingRef.current?.resolve(null); pendingRef.current = null; }, []);
 
   const ask = useCallback((startMs: number, who?: string) => {
     // Default guess: an 8-hour day, never later than now.
@@ -57,11 +60,13 @@ export function useFinishTime(): [(startMs: number, who?: string) => Promise<num
   const modal = pending ? (
     <div
       onClick={() => close(null)}
-      style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(5,5,12,.72)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      className="sheet-overlay"
+      style={{ zIndex: 9998, backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: "linear-gradient(180deg,#14141e 0%,#12121a 100%)", borderTop: "3px solid #2E75B6", borderRadius: 16, padding: "24px 24px 20px", width: "100%", maxWidth: 380, boxShadow: "0 24px 64px rgba(0,0,0,.6)", color: "#e8e8ee" }}
+        className="sheet"
+        style={{ background: "linear-gradient(180deg,#14141e 0%,#12121a 100%)", borderTop: "3px solid #2E75B6", maxWidth: 420, paddingTop: 22, boxShadow: "0 24px 64px rgba(0,0,0,.6)", color: "#e8e8ee" }}
       >
         <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, textTransform: "uppercase", color: "#5aa2e6", marginBottom: 10, letterSpacing: ".05em", fontWeight: 600 }}>
           What time did you finish?

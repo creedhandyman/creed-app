@@ -14,7 +14,7 @@ import { supabase, db } from "@/lib/supabase";
 import { t, getLang } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
 import { Icon } from "./Icon";
-import { tipsEnabled, setTipsEnabled } from "@/lib/grizz";
+import { tipsEnabled, setTipsEnabled, undismissGs } from "@/lib/grizz";
 import { isPushSupported, isSubscribed, enablePush, disablePush } from "@/lib/push";
 import { SUPPORT_EMAIL } from "@/lib/platform-admin";
 import { apiFetch } from "@/lib/api";
@@ -157,7 +157,7 @@ export default function Settings({ onClose }: Props) {
       <div className="section">
         <div className="seclabel"><Icon name="worker" size={13} /> {t("settings.yourProfile")}</div>
         <div className="drow">
-          <span className="l">Name</span>
+          <span className="l">{t("settings.name")}</span>
           {editingName ? (
             <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
               <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
@@ -171,8 +171,8 @@ export default function Settings({ onClose }: Props) {
             </span>
           )}
         </div>
-        <div className="drow"><span className="l">Email</span><span className="v" style={{ fontSize: 12.5 }}>{user.email || "—"}</span></div>
-        <div className="drow"><span className="l">Role · Emp #</span><span className="v">{roleLabel || "—"}{user.emp_num ? ` · ${user.emp_num}` : ""}</span></div>
+        <div className="drow"><span className="l">{t("settings.email")}</span><span className="v" style={{ fontSize: 12.5 }}>{user.email || "—"}</span></div>
+        <div className="drow"><span className="l">{t("settings.roleEmp")}</span><span className="v">{roleLabel || "—"}{user.emp_num ? ` · ${user.emp_num}` : ""}</span></div>
         <div className="drow"><span className="l">Rate · started</span><span className="v">{user.rate ? `$${user.rate}/hr` : t("settings.rateNotSet")}{startYear ? ` · ${startYear}` : ""}</span></div>
       </div>
 
@@ -209,8 +209,8 @@ export default function Settings({ onClose }: Props) {
         {pushSupported ? (
           <div className="drow">
             <span className="l">
-              Push notifications
-              <span className="dim" style={{ display: "block", fontSize: 11.5 }}>Alerts on this device, even when the app is closed</span>
+              {t("settings.pushTitle")}
+              <span className="dim" style={{ display: "block", fontSize: 11.5 }}>{t("settings.pushSub")}</span>
             </span>
             <button className={pushOn ? "bo" : "bb"} disabled={pushBusy} onClick={togglePush} style={{ flexShrink: 0, fontSize: 13, padding: "4px 12px" }}>
               {pushBusy ? "…" : pushOn ? "On" : "Enable"}
@@ -218,7 +218,7 @@ export default function Settings({ onClose }: Props) {
           </div>
         ) : (
           <div className="dim" style={{ fontSize: 12.5, padding: "8px 0 2px" }}>
-            To get push alerts on this device, add Creed to your home screen, then reopen and check here.
+            {t("settings.pushInstallHint")}
           </div>
         )}
       </div>
@@ -233,7 +233,7 @@ export default function Settings({ onClose }: Props) {
         <div className="drow">
           <span className="l">{t("settings.navigation")}</span>
           <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
-            {[{ key: "right", label: "Right" }, { key: "left", label: "Left" }, { key: "bottom", label: "Bottom" }].map((opt) => {
+            {[{ key: "right", label: t("settings.navRight") }, { key: "left", label: t("settings.navLeft") }, { key: "bottom", label: t("settings.navBottom") }].map((opt) => {
               const isActive = opt.key === "bottom" ? navBottom : opt.key === "left" ? navLeft && !navBottom : !navLeft && !navBottom;
               return (<button key={opt.key} onClick={() => { if (opt.key === "bottom") toggleNavBottom(); else if (opt.key === "left") { if (navBottom) toggleNavBottom(); toggleNavSide(); } else { if (navBottom) toggleNavBottom(); if (navLeft) toggleNavSide(); } }} style={{ padding: "4px 10px", fontSize: 13, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
             })}
@@ -249,8 +249,9 @@ export default function Settings({ onClose }: Props) {
           </div>
         </div>
         <div className="drow">
-          <span className="l">Show Grizz tips</span>
-          <Sw on={grizzTips} onTap={() => { const next = !grizzTips; setTipsEnabled(next, user.id); setGrizzTips(next); }} />
+          <span className="l">{t("settings.showTips")}</span>
+          {/* Turning tips back ON also brings back an unfinished setup checklist. */}
+          <Sw on={grizzTips} onTap={() => { const next = !grizzTips; setTipsEnabled(next, user.id); if (next) undismissGs(user.id); setGrizzTips(next); }} />
         </div>
       </div>
 
@@ -261,7 +262,7 @@ export default function Settings({ onClose }: Props) {
           <div className="drow" onClick={() => setShowPassword(true)} style={{ cursor: "pointer" }}>
             <span className="l">{t("settings.changePassword")}</span>
             <span className="v" style={{ color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 4 }}>
-              Update <Icon name="next" size={13} color="var(--color-primary)" />
+              {t("settings.update")} <Icon name="next" size={13} color="var(--color-primary)" />
             </span>
           </div>
         ) : (
@@ -276,12 +277,12 @@ export default function Settings({ onClose }: Props) {
             <button
               className="bb"
               onClick={async () => {
-                if (newPassword.length < 6) { useStore.getState().showToast("Min 6 characters", "warning"); return; }
+                if (newPassword.length < 6) { useStore.getState().showToast(t("settings.passwordMin"), "warning"); return; }
                 const { error } = await supabase.auth.updateUser({ password: newPassword });
-                if (error) { useStore.getState().showToast(error.message, "error"); return; }
+                if (error) { console.error(error); useStore.getState().showToast(`${t("settings.passwordFailed")}${error.message ? ` (${error.message})` : ""}`, "error"); return; }
                 setNewPassword("");
                 setShowPassword(false);
-                useStore.getState().showToast("Password updated", "success");
+                useStore.getState().showToast(t("settings.passwordUpdated"), "success");
               }}
             >
               {t("settings.save")}
@@ -294,7 +295,7 @@ export default function Settings({ onClose }: Props) {
           kept here until it gets a home in Ops → Settings). */}
       {isOwner && (
         <div className="section">
-          <div className="seclabel"><Icon name="quest" size={13} /> Quest Bonuses</div>
+          <div className="seclabel"><Icon name="quest" size={13} /> {t("settings.questBonuses")}</div>
           <div className="dim" style={{ fontSize: 13, margin: "2px 0 8px" }}>Toggle quests on/off and set custom bonus amounts for your team.</div>
           {(() => {
             const defaultQuests = [
@@ -363,10 +364,26 @@ export default function Settings({ onClose }: Props) {
         </div>
       )}
 
-      {/* Sign out + version + delete */}
+      {/* Sign out + version + delete. Logout wipes the offline queues, so
+          ask first when changes haven't synced or the user is on the clock. */}
       <button
         className="br"
-        onClick={() => { logout(); onClose(); }}
+        onClick={async () => {
+          const s = useStore.getState();
+          const pending = (s.pendingWrites || 0) + (s.pendingUploads || 0);
+          let onClock = false;
+          try { onClock = JSON.parse(localStorage.getItem("c_t_on") || "false") === true; } catch { /* */ }
+          if (pending > 0 || onClock) {
+            const ok = await s.showConfirm(
+              t("settings.logout"),
+              // Unsynced changes are LOST on sign-out (logout clears the queue) — say so even when also clocked in.
+              [onClock ? t("settings.logoutOnClock") : "", pending > 0 ? t("settings.logoutPending").replace("{n}", String(pending)) : ""].filter(Boolean).join(" "),
+            );
+            if (!ok) return;
+          }
+          logout();
+          onClose();
+        }}
         style={{ width: "100%", marginTop: 4, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}
       >
         {t("settings.logout")}

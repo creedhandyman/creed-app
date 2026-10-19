@@ -16,6 +16,7 @@ import { apiFetch } from "@/lib/api";
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "../Icon";
+import { t } from "@/lib/i18n";
 import type { CustomerType, Address, Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { INTERVAL_LABEL } from "@/lib/memberships";
@@ -24,6 +25,10 @@ import EquipmentSection from "./EquipmentSection";
 interface Props {
   customerId: string;
   onBack: () => void;
+  /** Rendered under the Ops back header — hide this screen's own ← button. */
+  embedded?: boolean;
+  /** Opens a related job's detail (Ops wires it to Jobs). */
+  onOpenJob?: (id: string) => void;
 }
 
 const TYPE_LABEL: Record<CustomerType, string> = {
@@ -49,7 +54,7 @@ const fmtDate = (s: string | undefined) => {
   return d || "";
 };
 
-export default function CustomerDetail({ customerId, onBack }: Props) {
+export default function CustomerDetail({ customerId, onBack, embedded, onOpenJob }: Props) {
   const customer = useStore((s) => s.customers.find((c) => c.id === customerId));
   const allAddresses = useStore((s) => s.addresses);
   const jobs = useStore((s) => s.jobs);
@@ -88,7 +93,8 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
         showToast(data?.error || "Couldn't start enrollment", "error");
       }
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Network error", "error");
+      console.error("[CustomerDetail] enroll failed", e);
+      showToast(t("cust.actionFailed"), "error");
     }
     setMembershipBusy(false);
   };
@@ -106,7 +112,8 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       if (res.ok) { await loadAll(); showToast("Membership updated", "success"); }
       else showToast(data?.error || "Couldn't update membership", "error");
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Network error", "error");
+      console.error("[CustomerDetail] membership update failed", e);
+      showToast(t("cust.actionFailed"), "error");
     }
     setMembershipBusy(false);
   };
@@ -139,7 +146,8 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       setPortalLink(link);
       return link;
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Network error", "error");
+      console.error("[CustomerDetail] portal link failed", e);
+      showToast(t("cust.actionFailed"), "error");
       return null;
     } finally {
       setPortalBusy(false);
@@ -165,14 +173,16 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       if (!res.ok) {
         // Twilio fail-open — fall back to opening the native SMS app
         // so Bernard can still get the link to the customer.
+        console.error("[CustomerDetail] portal SMS failed", res.status, data?.error);
         window.location.href = `sms:${customer.phone}?body=${encodeURIComponent(message)}`;
-        showToast(data?.error || "Twilio send failed — opening SMS app", "warning");
+        showToast(t("cust.textFailed"), "warning");
         return;
       }
       showToast(`Texted ${customer.name}`, "success");
     } catch (e) {
+      console.error("[CustomerDetail] portal SMS failed", e);
       window.location.href = `sms:${customer.phone}?body=${encodeURIComponent(message)}`;
-      showToast(e instanceof Error ? e.message : "Falling back to SMS app", "warning");
+      showToast(t("cust.textFailed"), "warning");
     }
   };
 
@@ -255,7 +265,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
     if (!customer) return;
     const confirmed = await showConfirm(
       "Delete Customer",
-      `Delete "${customer.name}"? Their addresses will be removed too. Linked jobs are kept (FK is set to NULL on delete).`,
+      t("cust.deleteBody").replace("{name}", customer.name),
     );
     if (!confirmed) return;
     await deleteCustomer(customer.id);
@@ -348,7 +358,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
   const removeAddress = async (a: Address) => {
     const confirmed = await showConfirm(
       "Delete Address",
-      `Remove "${a.label || a.street || "this address"}"? Linked jobs are kept (FK is set to NULL on delete).`,
+      t("cust.removeAddressBody").replace("{label}", a.label || a.street || "this address"),
     );
     if (!confirmed) return;
     await deleteAddress(a.id);
@@ -389,7 +399,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={onBack} style={{ fontSize: 14, padding: "4px 8px" }}>← Back</button>
+          {!embedded && <button className="bo" onClick={onBack} style={{ fontSize: 14, padding: "4px 8px" }}>← Back</button>}
           <h2 style={{ fontSize: 20, color: "var(--color-warning)" }}>Customer not found</h2>
         </div>
         <p className="dim" style={{ fontSize: 15 }}>
@@ -407,7 +417,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       {/* Header */}
       <div className="row mb" style={{ justifyContent: "space-between" }}>
         <div className="row" style={{ minWidth: 0 }}>
-          <button className="bo" onClick={onBack} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>
+          {!embedded && <button className="bo" onClick={onBack} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>}
           <h2 style={{
             fontSize: 20, color: typeColor,
             display: "inline-flex", alignItems: "center", gap: 6,
@@ -731,8 +741,9 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
       {/* Related work */}
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <h4 style={{ fontSize: 15, margin: 0 }}>
-            🧰 Related Work ({allRelated.length})
+          <h4 style={{ fontSize: 15, margin: 0, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Icon name="doc" size={15} color="var(--color-primary)" />
+            {t("cust.relatedWork").replace("{n}", String(allRelated.length))}
           </h4>
           {totalRevenue > 0 && (
             <span className="dim" style={{ fontSize: 13 }}>
@@ -748,7 +759,7 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
             background: "var(--color-warning)11",
             borderRadius: 4, marginBottom: 8,
           }}>
-            <b>{relatedJobs.fuzzy.length}</b> job(s) matched by name only — they pre-date the customer link. Use the backfill tool (Step 1.5) to attach them to this customer.
+            {t("cust.nameMatched").replace("{n}", String(relatedJobs.fuzzy.length))}
           </div>
         )}
 
@@ -769,10 +780,14 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
               {statusJobs.map((j) => (
                 <div
                   key={j.id}
+                  // Tap a row → that job's detail (only when the parent wires it).
+                  onClick={onOpenJob ? () => onOpenJob(j.id) : undefined}
+                  role={onOpenJob ? "button" : undefined}
                   style={{
-                    display: "flex", justifyContent: "space-between",
-                    fontSize: 14, padding: "4px 0",
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    fontSize: 14, padding: onOpenJob ? "8px 0" : "4px 0",
                     borderBottom: `1px solid ${border}`,
+                    cursor: onOpenJob ? "pointer" : undefined,
                   }}
                 >
                   <span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -782,6 +797,11 @@ export default function CustomerDetail({ customerId, onBack }: Props) {
                   {j.total > 0 && (
                     <span style={{ marginLeft: 8, color: "var(--color-success)", fontFamily: "Oswald" }}>
                       ${j.total.toFixed(0)}
+                    </span>
+                  )}
+                  {onOpenJob && (
+                    <span style={{ marginLeft: 6, display: "inline-flex", flexShrink: 0, color: "var(--color-dim)" }}>
+                      <Icon name="next" size={14} />
                     </span>
                   )}
                 </div>

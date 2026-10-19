@@ -4,8 +4,9 @@ import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import {
   subscribeDrive, getDriveState, getServerDriveState, startDrive, finishDrive,
-  cancelDrive, warmUpLocation, directionsUrl,
+  cancelDrive, holdDrive, warmUpLocation, directionsUrl, type DriveTrip,
 } from "@/lib/drive-tracker";
+import { clockOf } from "@/lib/mileage-days";
 import { Icon } from "./Icon";
 
 /**
@@ -14,14 +15,15 @@ import { Icon } from "./Icon";
  * (lib/drive-tracker.ts), so it keeps its start point while Maps is in front
  * and picks the trip back up when you return. If GPS still couldn't measure
  * the drive, Stop asks for the miles (or odometer readings) instead of
- * silently logging nothing.
+ * silently logging nothing. A save that fails (no signal on the road) holds
+ * the trip at its miles so the next tap saves it.
  */
 export default function MileageQuickTrack({ job, address, hideIdle }: { job?: string; address?: string; hideIdle?: boolean }) {
   const user = useStore((s) => s.user)!;
   const { trip, error } = useSyncExternalStore(subscribeDrive, getDriveState, getServerDriveState);
   const [busy, setBusy] = useState(false);
   // Shown when Stop couldn't measure anything: log it by hand.
-  const [manual, setManual] = useState<{ job: string; miles: string; startOdo: string; endOdo: string } | null>(null);
+  const [manual, setManual] = useState<{ trip: DriveTrip; miles: string; startOdo: string; endOdo: string } | null>(null);
 
   // Have a fresh position ready, so Start has a start point even if Maps
   // takes over the screen before the next fix arrives.
@@ -34,17 +36,23 @@ export default function MileageQuickTrack({ job, address, hideIdle }: { job?: st
     }
   };
 
-  const log = async (jobName: string, miles: number, startOdo = 0, endOdo = 0) => {
-    await db.post("mileage", {
+  /** true when the trip landed; a failed write was toasted by db.post. */
+  const log = async (t: DriveTrip, miles: number, startOdo = 0, endOdo = 0): Promise<boolean> => {
+    // LOCAL YYYY-MM-DD (toISOString is UTC — an evening trip landed on tomorrow).
+    const now = new Date();
+    const saved = await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
-      job: jobName || "General",
-      trip_date: new Date().toISOString().split("T")[0],
+      job: t.job || job || "General",
+      trip_date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+      start_time: t.startedAt ? clockOf(new Date(t.startedAt)) : null,
       start_miles: startOdo,
       end_miles: endOdo,
       total_miles: miles,
     });
+    if (!saved) return false;
     useStore.getState().showToast(`Logged ${miles.toFixed(1)} mi`, "success");
+    return true;
   };
 
   const stop = async () => {
@@ -54,10 +62,11 @@ export default function MileageQuickTrack({ job, address, hideIdle }: { job?: st
     setBusy(false);
     if (!res) return;
     if (res.miles < 0.1) {
-      setManual({ job: res.trip.job || job || "", miles: "", startOdo: "", endOdo: "" });
+      setManual({ trip: res.trip, miles: "", startOdo: "", endOdo: "" });
       return;
     }
-    await log(res.trip.job || job || "", res.miles);
+    // Offline / failed: hold the trip at these miles so Save can retry.
+    if (!(await log(res.trip, res.miles))) holdDrive(res.trip, res.miles);
   };
 
   const saveManual = async () => {
@@ -66,8 +75,7 @@ export default function MileageQuickTrack({ job, address, hideIdle }: { job?: st
     const odo = !isNaN(s) && !isNaN(e) && e > s;
     const miles = odo ? Math.round((e - s) * 10) / 10 : parseFloat(manual.miles);
     if (!miles || miles <= 0) { useStore.getState().showToast("Enter the miles, or both odometer readings", "warning"); return; }
-    await log(manual.job, miles, odo ? s : 0, odo ? e : 0);
-    setManual(null);
+    if (await log(manual.trip, miles, odo ? s : 0, odo ? e : 0)) setManual(null);
   };
 
   const mapLink = (children: React.ReactNode, style: React.CSSProperties, onClick?: () => void) =>
@@ -117,6 +125,7 @@ export default function MileageQuickTrack({ job, address, hideIdle }: { job?: st
   }
 
   const located = (trip.fixes || 0) > 0;
+  const held = !!trip.stopped;
   return (
     <div style={{
       padding: "8px 11px", borderRadius: 11,
@@ -127,18 +136,19 @@ export default function MileageQuickTrack({ job, address, hideIdle }: { job?: st
         <span style={{
           width: 9, height: 9, borderRadius: "50%",
           background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)",
-          animation: "dotLive 1.8s ease-in-out infinite", flexShrink: 0,
+          animation: held ? "none" : "dotLive 1.8s ease-in-out infinite", flexShrink: 0,
+          opacity: held ? 0.5 : 1,
         }} />
         {/* live counter */}
         <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {trip.accMiles >= 0.1
-            ? <>{trip.accMiles.toFixed(1)} <span style={{ fontWeight: 400, opacity: .7 }}>mi</span></>
+          {held || trip.accMiles >= 0.1
+            ? <>{trip.accMiles.toFixed(1)} <span style={{ fontWeight: 400, opacity: .7 }}>mi{held ? " · not saved yet" : ""}</span></>
             : <span style={{ opacity: .7 }}>{located ? "Tracking…" : "Finding your location…"}</span>}
           {trip.job
             ? <span style={{ fontWeight: 400, color: "var(--color-dim)", marginLeft: 5 }}>· {trip.job}</span>
             : null}
         </span>
-        {address && mapLink(
+        {address && !held && mapLink(
           <><Icon name="mapPin" size={12} color="#7fb6ff" /> Map</>,
           {
             fontSize: 12.5, fontWeight: 600, color: "#7fb6ff",
@@ -158,7 +168,8 @@ export default function MileageQuickTrack({ job, address, hideIdle }: { job?: st
             display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
           }}
         >
-          <Icon name={busy ? "refresh" : "stop"} size={12} color="#ff9d9d" /> {busy ? "Saving…" : "Stop"}
+          {/* A held trip (save failed) isn't tracking — the button retries the save. */}
+          <Icon name={busy ? "refresh" : held ? "check" : "stop"} size={12} color="#ff9d9d" /> {busy ? "Saving…" : held ? "Save" : "Stop"}
         </button>
         {/* cancel */}
         <button

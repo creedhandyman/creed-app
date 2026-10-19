@@ -9,6 +9,7 @@ import BillingGate from "@/components/BillingGate";
 import Toast from "@/components/Toast";
 import ConfirmModal from "@/components/ConfirmModal";
 import InstallPrompt from "@/components/InstallPrompt";
+import { markTwaFromUrl } from "@/lib/twa";
 import BrandFooter from "@/components/BrandFooter";
 
 /** Full-screen app loading state, shared by the pre-mount and data-loading
@@ -86,6 +87,9 @@ export default function HomeGate() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
+    // Persist the Google Play (TWA) flag when launched from the Android
+    // wrapper (start_url "/?src=twa") — hides purchase CTAs per Play policy.
+    markTwaFromUrl();
   }, []);
 
   // Handle Stripe redirect — refresh org data when returning from Stripe

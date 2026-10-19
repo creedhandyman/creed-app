@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import Grizz from "./Grizz";
+import { t } from "@/lib/i18n";
 
 /**
  * Shown to someone who asked to join a business (invite link → Join a team)
@@ -10,7 +11,7 @@ import Grizz from "./Grizz";
  * nothing to show yet. Re-checks every 15s and on "Check again"; the root
  * page swaps to the app the moment their status flips to active. If the
  * owner declines, the profile is deleted and initAuth routes them back to
- * onboarding.
+ * onboarding. Translated (pa.*) — joiners are often Spanish-phone crew.
  */
 export default function PendingApproval() {
   const user = useStore((s) => s.user)!;
@@ -18,44 +19,56 @@ export default function PendingApproval() {
   const initAuth = useStore((s) => s.initAuth);
   const logout = useStore((s) => s.logout);
   const [checking, setChecking] = useState(false);
+  // A fresh Grizz one-liner every few seconds so the waiting room isn't a dead page.
+  const [joke, setJoke] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => { void initAuth(); }, 15000);
     return () => clearInterval(id);
   }, [initAuth]);
 
+  useEffect(() => {
+    const id = setInterval(() => setJoke((j) => (j + 1) % 4), 7000);
+    return () => clearInterval(id);
+  }, []);
+
   const checkNow = async () => {
     setChecking(true);
     await initAuth();
     setChecking(false);
     if (useStore.getState().user?.status === "pending") {
-      useStore.getState().showToast("Still waiting — your boss hasn't approved you yet.", "info");
+      useStore.getState().showToast(t("pa.stillWaiting"), "info");
     }
   };
 
-  const biz = org?.name || "the business";
+  const biz = org?.name || t("pa.theBusiness");
+  // "Thanks, {name}! We let {biz} know…" — split on {biz} so it can be bold.
+  const [thanksPre, thanksPost = ""] = t("pa.thanks").replace("{name}", user.name.split(" ")[0]).split("{biz}");
 
   return (
     <div style={{ minHeight: "100dvh", background: "radial-gradient(900px 520px at 50% -6%,#13284c 0%,#0a0a0f 60%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, color: "#f1f2f6" }}>
       <div style={{ width: "100%", maxWidth: 400, textAlign: "center" }}>
-        <Grizz pose="wave" bob style={{ margin: "0 auto", display: "block" }} />
+        <Grizz pose="wave" bob chatty style={{ margin: "0 auto", display: "block" }} />
         <h2 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, textTransform: "uppercase", margin: "14px 0 8px", letterSpacing: ".04em" }}>
-          Waiting for approval
+          {t("pa.title")}
         </h2>
         <p style={{ fontSize: 15.5, color: "#b5b5c0", lineHeight: 1.55, marginBottom: 6 }}>
-          Thanks, {user.name.split(" ")[0]}! We let <b style={{ color: "#f1f2f6" }}>{biz}</b> know you want to join.
+          {thanksPre}<b style={{ color: "#f1f2f6" }}>{biz}</b>{thanksPost}
         </p>
         <p style={{ fontSize: 14, color: "#8b8b99", lineHeight: 1.55, marginBottom: 22 }}>
-          As soon as the owner approves you, the app opens right here — you can leave this screen open or come back later.
+          {t("pa.body")}
+        </p>
+        <p key={joke} style={{ fontSize: 13.5, color: "#d9b44a", fontStyle: "italic", lineHeight: 1.5, margin: "-10px 0 20px" }}>
+          “{t(`pa.joke${joke + 1}`)}”
         </p>
         <button className="bb" onClick={checkNow} disabled={checking} style={{ width: "100%", padding: 13, fontSize: 15, marginBottom: 10 }}>
-          {checking ? "Checking…" : "Check again"}
+          {checking ? t("pa.checking") : t("pa.checkAgain")}
         </button>
         <button className="bo" onClick={() => { logout(); }} style={{ width: "100%", padding: 11, fontSize: 14 }}>
-          Sign out
+          {t("pa.signOut")}
         </button>
         <p style={{ fontSize: 12.5, color: "#666", marginTop: 16 }}>
-          Joined the wrong business? Sign out and ask your boss for a new invite link.
+          {t("pa.wrongBiz")}
         </p>
       </div>
     </div>

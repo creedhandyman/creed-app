@@ -1,44 +1,45 @@
 "use client";
 import { useStore } from "@/lib/store";
+import { t } from "@/lib/i18n";
 
 export default function ConfirmModal() {
-  const { title, message, visible } = useStore((s) => s.confirmState);
+  const { title, message, visible, opts } = useStore((s) => s.confirmState);
   const resolveConfirm = useStore((s) => s.resolveConfirm);
 
   if (!visible) return null;
 
-  const isDanger = /delete|remove|cancel|discard/i.test(title + message);
+  // Danger is read from the TITLE only — a message like "Cancel to go take
+  // some photos" must not turn a harmless confirm into a red DELETE.
+  const isDanger = opts?.danger ?? /delete|remove|discard|cancel|eliminar|borrar|quitar|descartar|cancelar/i.test(title);
   const accent = isDanger ? "#C00000" : "#2E75B6";
+  const cancelLabel = opts?.cancelLabel ?? t("common.cancel");
+  // A short danger title doubles as the button ("Delete Job" → DELETE JOB),
+  // so the destructive button names what it does.
+  const confirmLabel = opts?.confirmLabel ?? (isDanger ? (title.length <= 24 ? title : t("common.delete")) : t("common.confirm"));
 
   return (
     <div
+      className="sheet-overlay"
       style={{
-        position: "fixed",
-        inset: 0,
         zIndex: 9998,
-        background: "rgba(5, 5, 12, 0.72)",
         backdropFilter: "blur(8px) saturate(120%)",
         WebkitBackdropFilter: "blur(8px) saturate(120%)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
         animation: "fadeIn 0.22s cubic-bezier(0.22, 1, 0.36, 1)",
       }}
       onClick={() => resolveConfirm(false)}
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="sheet"
+        role="alertdialog"
+        aria-label={title}
         style={{
           background: "linear-gradient(180deg, #14141e 0%, #12121a 100%)",
           border: `1px solid ${accent}22`,
           borderTop: `3px solid ${accent}`,
-          borderRadius: 16,
-          padding: "26px 28px 22px",
-          width: "100%",
-          maxWidth: 380,
+          maxWidth: 420,
+          paddingTop: 22,
           boxShadow: `0 24px 64px rgba(0, 0, 0, 0.6), 0 0 32px ${accent}22`,
-          animation: "modalIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}
       >
         <h3
@@ -65,11 +66,12 @@ export default function ConfirmModal() {
         >
           {message}
         </p>
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 10 }}>
           <button
             onClick={() => resolveConfirm(false)}
             style={{
-              padding: "9px 20px",
+              flex: 1,
+              padding: "13px 12px",
               borderRadius: 10,
               fontSize: 15,
               fontFamily: "Oswald, sans-serif",
@@ -90,12 +92,13 @@ export default function ConfirmModal() {
               e.currentTarget.style.color = "#aaa";
             }}
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             onClick={() => resolveConfirm(true)}
             style={{
-              padding: "9px 22px",
+              flex: 1,
+              padding: "13px 12px",
               borderRadius: 10,
               fontSize: 15,
               fontFamily: "Oswald, sans-serif",
@@ -119,7 +122,7 @@ export default function ConfirmModal() {
               e.currentTarget.style.filter = "brightness(1)";
             }}
           >
-            {isDanger ? "Delete" : "Confirm"}
+            {confirmLabel}
           </button>
         </div>
       </div>

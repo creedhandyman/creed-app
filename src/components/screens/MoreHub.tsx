@@ -2,9 +2,11 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "@/components/Icon";
+import TopBar from "@/components/TopBar";
 import UserGuideModal from "@/components/UserGuideModal";
 import Grizz from "@/components/Grizz";
 import { t } from "@/lib/i18n";
+import { useBackLayer } from "@/lib/back-layer";
 
 interface Props {
   setPage: (p: string) => void;
@@ -17,13 +19,16 @@ interface Props {
 /**
  * The "More" hub — the overflow destination for the 5-tab nav. Holds the
  * tabs that came off the bar (Schedule, Quests, Operations) plus Customers,
- * Mileage, Settings, and Help. Reached via the menu (three-lines) tab.
+ * Mileage, Business settings, the Fix-it helper and Ask Grizz (personal
+ * settings = the profile card). Reached via the menu (three-lines) tab.
  */
 export default function MoreHub({ setPage, openSettings, openOps }: Props) {
   const user = useStore((s) => s.user);
   const org = useStore((s) => s.org);
   const darkMode = useStore((s) => s.darkMode);
   const [showGuide, setShowGuide] = useState(false);
+  // Android back closes Ask Grizz instead of leaving More.
+  useBackLayer(showGuide, () => setShowGuide(false));
 
   const name = user?.name || "—";
   const initials =
@@ -43,7 +48,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     { id: "quests", icon: "trophy", name: t("more.quests"), sub: t("more.questsSub"), color: "var(--color-violet)", tint: "rgba(157,78,221,.16)", onClick: () => setPage("quests") },
     isAdmin
       ? { id: "ops", icon: "ops", name: t("more.operations"), sub: t("more.operationsSub"), color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() }
-      : { id: "ops", icon: "schedule", name: t("nav.timeOff"), sub: t("more.timeOffSub"), color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() },
+      : { id: "ops", icon: "leaf", name: t("nav.timeOff"), sub: t("more.timeOffSub"), color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() },
     ...(isAdmin
       ? [{ id: "clients", icon: "clients" as IconName, name: t("more.customers"), sub: t("more.customersSub"), color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => openOps("customers") }]
       : []),
@@ -52,19 +57,23 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     ...(isAdmin
       ? [{ id: "map", icon: "map" as IconName, name: t("more.crewMap"), sub: t("more.crewMapSub"), color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") }]
       : []),
-    // Personal settings only — business settings live in Ops → Business settings.
-    { id: "settings", icon: "settings", name: t("more.mySettings"), sub: t("more.mySettingsSub"), color: "#aab", tint: "rgba(138,138,153,.18)", onClick: openSettings },
+    // Flip Mode — the org's own buy/renovate/resell deals. Owner/manager only
+    // (investor money; flip_projects RLS is owner/manager too).
     ...(isAdmin
-      ? [{ id: "biz", icon: "ops" as IconName, name: t("more.businessSettings"), sub: t("more.businessSettingsSub"), color: "#06b6d4", tint: "rgba(6,182,212,.14)", onClick: () => openOps("settings") }]
+      ? [{ id: "flip", icon: "trending" as IconName, name: t("more.flip"), sub: t("more.flipSub"), color: "var(--flip-gold)", tint: "rgba(255,204,0,.14)", onClick: () => setPage("flip") }]
       : []),
+    // Personal settings open from the profile card above (no duplicate tile).
+    ...(isAdmin
+      ? [{ id: "biz", icon: "settings" as IconName, name: t("more.businessSettings"), sub: t("more.businessSettingsSub"), color: "#06b6d4", tint: "rgba(6,182,212,.14)", onClick: () => openOps("settings") }]
+      : []),
+    // AI repair helper (photo → step-by-step) — everyone, crew included.
+    { id: "fixit", icon: "troubleshoot", name: t("more.troubleshoot"), sub: t("more.troubleshootSub"), color: "#94a3b8", tint: "rgba(148,163,184,.16)", onClick: () => setPage("troubleshoot") },
     { id: "grizz", icon: "info", name: t("more.askGrizz"), sub: t("more.askGrizzSub"), color: "#f5b400", tint: "rgba(245,180,0,.14)", onClick: () => setShowGuide(true) },
   ];
 
   return (
     <div className="fi">
-      <h2 style={{ fontSize: 24, color: "var(--color-primary)", marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <Icon name="menu" size={22} color="var(--color-primary)" /> {t("nav.more")}
-      </h2>
+      <TopBar title={t("nav.more")} icon="menu" color="#14b8a6" />
 
       {/* Profile -> Settings (Account) */}
       <div className="cd mb" onClick={openSettings} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: 13 }}>
@@ -76,7 +85,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
         <Icon name="next" size={18} color="var(--color-dim)" />
       </div>
 
-      {/* Relocated tabs + Customers / Mileage / Settings */}
+      {/* Relocated tabs + Customers / Mileage / Fix-it helper / Ask Grizz */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 11, marginBottom: 11 }}>
         {tiles.map((tile, i) => {
           // An odd tile count leaves the last tile alone with an empty cell

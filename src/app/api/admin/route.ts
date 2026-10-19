@@ -32,11 +32,15 @@ export async function POST(req: NextRequest) {
       { data: profiles },
       { data: jobs },
       { data: reviews },
+      { data: payments },
     ] = await Promise.all([
       supabase.from("organizations").select("id, name, created_at, subscription_status, plan, stripe_connected, trial_start, site_slug"),
       supabase.from("profiles").select("id, name, email, role, org_id, created_at"),
       supabase.from("jobs").select("id, status, total, created_at, org_id"),
       supabase.from("reviews").select("id, rating, created_at, org_id"),
+      // The ledger records the platform fee Stripe actually took on each charge
+      // (application_fee_amount: 0.5% on Solo/Crew, capped $100/org/month, 0 on Pro).
+      supabase.from("payments").select("platform_fee_cents"),
     ]);
 
     const allOrgs = orgs || [];
@@ -54,7 +58,8 @@ export async function POST(req: NextRequest) {
     const totalQuoteValue = allJobs.reduce((s, j) => s + (j.total || 0), 0);
     const paidJobs = allJobs.filter((j) => j.status === "paid");
     const totalRevenue = paidJobs.reduce((s, j) => s + (j.total || 0), 0);
-    const platformFees = totalRevenue * 0.02; // 2% platform fee
+    // Real fees collected (payments ledger), not an estimate off job totals.
+    const platformFees = (payments || []).reduce((s, p) => s + (Number(p.platform_fee_cents) || 0), 0) / 100;
 
     // Subscription stats
     const activeSubscriptions = allOrgs.filter((o) => o.subscription_status === "active").length;

@@ -2,8 +2,11 @@
 import { create } from "zustand";
 import { supabase, db } from "./supabase";
 import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
-import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue } from "./offline-queue";
+import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPending, isFlushing } from "./offline-queue";
+import { needsServerCheck, serverVerdict, isLocalClockOut, isCloseWrite } from "./clock-sync";
+import { t } from "./i18n";
 import { flushUploads, pendingUploadCount, clearUploads } from "./offline-uploads";
+import { flushWoQueue, applyWoPending, woPendingCount, clearWoQueue } from "./wo-queue";
 import type {
   Organization,
   Profile,
@@ -22,6 +25,7 @@ import type {
   MembershipPlan,
   CustomerMembership,
   Equipment,
+  FlipProject,
   ReviewRequest,
   AppNotification,
 } from "./types";
@@ -37,6 +41,27 @@ let loadAllInFlight: Promise<void> | null = null;
 // Starts at 0 so the first successful load always snapshots immediately.
 let lastSnapshotAt = 0;
 
+// reconcileClock bookkeeping: one check at a time; a row merely missing from
+// the org list is re-asked at most once a minute.
+let reconcileBusy = false;
+let lastClockCheck = { id: "", at: 0 };
+
+/** "17:12:00" / "05:12 PM" → "5:12 PM" for the clocked-out-by-the-office toast. */
+function clockLabel(v?: string | null): string {
+  const m = String(v || "").match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?/);
+  if (!m) return String(v || "").trim();
+  let h = parseInt(m[1], 10);
+  const ap = m[3]?.toUpperCase();
+  if (!ap) { const pm = h >= 12; h = h % 12 || 12; return `${h}:${m[2]} ${pm ? "PM" : "AM"}`; }
+  return `${h}:${m[2]} ${ap}`;
+}
+
+/** An onlyIfOpen clock write found the shift already closed elsewhere — say so
+ *  (the server kept the existing times; the next load shows them). */
+function noteQueueConflicts(n: number): void {
+  if (n > 0) useStore.getState().showToast(t("timer.shiftAlreadyClosed"), "warning");
+}
+
 /* ── localStorage helpers ── */
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -51,6 +76,18 @@ function sv(key: string, value: unknown) {
   if (typeof window === "undefined") return;
   localStorage.setItem("c_" + key, JSON.stringify(value));
 }
+
+/* ── Toast timing (module-level so a re-render never resets them) ── */
+// The ONE pending auto-hide. Cleared before every new toast so an earlier
+// toast's timer can never hide a later one mid-read.
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+// When the last error toast went up — a success toast fired right after an
+// ignored failed write must not paper over the error.
+let lastErrorAt = 0;
+
+/** Optional wording/colour for a confirm. Omitted = ConfirmModal guesses
+ *  danger from the title and uses Cancel / Confirm (or the title) labels. */
+export type ConfirmOpts = { confirmLabel?: string; cancelLabel?: string; danger?: boolean };
 
 /* ── Store type ── */
 interface AppState {
@@ -78,8 +115,8 @@ interface AppState {
   toast: { message: string; type: "success" | "error" | "info" | "warning"; visible: boolean };
   showToast: (message: string, type?: "success" | "error" | "info" | "warning") => void;
   hideToast: () => void;
-  confirmState: { title: string; message: string; visible: boolean; resolve: ((v: boolean) => void) | null };
-  showConfirm: (title: string, message: string) => Promise<boolean>;
+  confirmState: { title: string; message: string; visible: boolean; resolve: ((v: boolean) => void) | null; opts?: ConfirmOpts };
+  showConfirm: (title: string, message: string, opts?: ConfirmOpts) => Promise<boolean>;
   resolveConfirm: (v: boolean) => void;
 
   // data
@@ -104,6 +141,8 @@ interface AppState {
   membershipPlans: MembershipPlan[];
   customerMemberships: CustomerMembership[];
   equipment: Equipment[];
+  /** Flip Mode projects (owner/manager only — RLS returns none to crew). */
+  flipProjects: FlipProject[];
   notifications: AppNotification[];
   loading: boolean;
   /** True when the UI is showing the last cached snapshot because the network
@@ -113,6 +152,11 @@ interface AppState {
   /** Epoch ms of the last successful online load, or the snapshot's own
    *  timestamp when hydrated offline — powers the "last synced" label. */
   lastSyncedAt: number | null;
+  /** Epoch ms of the last load where EVERY table fetched (or the snapshot's
+   *  time offline). A partly-failed first load leaves it null — calm states
+   *  ("all caught up", "everyone's paid up") wait for this, so an empty store
+   *  can never read as "nothing to do". */
+  fullSyncAt: number | null;
   /** Count of offline writes waiting to sync (the offline-queue). Surfaced in
    *  the banner so a tech knows their offline clock-out isn't lost. */
   pendingWrites: number;
@@ -128,8 +172,15 @@ interface AppState {
    *  goes through these so a write survives no-signal (queued + replayed on
    *  reconnect) and updates the store optimistically. `mode` is "post" for a
    *  new row (caller supplies a stable id via newRowId) or "patch" to update. */
-  saveTimeEntry: (rowId: string, patch: Record<string, unknown>, mode: "post" | "patch") => Promise<void>;
-  dropTimeEntry: (rowId: string) => Promise<void>;
+  saveTimeEntry: (rowId: string, patch: Record<string, unknown>, mode: "post" | "patch", opts?: { onlyIfOpen?: boolean; earlierWins?: boolean }) => Promise<boolean>;
+  dropTimeEntry: (rowId: string, opts?: { onlyIfOpen?: boolean }) => Promise<boolean>;
+  /** Set when the server shows THIS phone's running shift was closed or removed
+   *  elsewhere (manager force clock-out, another phone). Timer / WorkVision
+   *  reset their clock when `id` is their active row. See lib/clock-sync.ts. */
+  clockReset: { at: number; id: string; reason: "closed" | "deleted" } | null;
+  /** Check this phone's "on the clock" state against the server (runs after
+   *  each online load). Only acts on a CONFIRMED close/removal. */
+  reconcileClock: () => Promise<void>;
 
   /** Notifications — the dashboard-bell feed. Rows are written server-side;
    *  the client only reads (in loadAll, scoped to the current user) and
@@ -154,6 +205,10 @@ interface AppState {
     row: Partial<Equipment> & { kind: string }
   ) => Promise<Equipment | null>;
   deleteEquipment: (id: string) => Promise<boolean>;
+  upsertFlipProject: (
+    row: Partial<FlipProject> & { address: string }
+  ) => Promise<FlipProject | null>;
+  deleteFlipProject: (id: string) => Promise<boolean>;
 
   // auto-refresh
   _interval: ReturnType<typeof setInterval> | null;
@@ -166,10 +221,11 @@ interface AppState {
 // account's session (the offline fast-path in loadAll serves whatever is in
 // memory, so stale collections here would leak across users).
 const EMPTY_COLLECTIONS = {
+  fullSyncAt: null,
   customers: [], addresses: [], profiles: [], pendingMembers: [], jobs: [], timeEntries: [],
   reviews: [], referrals: [], schedule: [], payHistory: [], receipts: [],
   questPayouts: [], timeOffRequests: [], recurringJobs: [], reviewRequests: [],
-  membershipPlans: [], customerMemberships: [], equipment: [], notifications: [],
+  membershipPlans: [], customerMemberships: [], equipment: [], flipProjects: [], notifications: [],
 };
 
 /** Placeholder user for a signed-in account that has no profile row yet.
@@ -255,7 +311,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   logout: () => {
     supabase.auth.signOut();
-    set({ user: null, org: null, ...EMPTY_COLLECTIONS, usingOfflineData: false, lastSyncedAt: null });
+    set({ user: null, org: null, ...EMPTY_COLLECTIONS, usingOfflineData: false, lastSyncedAt: null, clockReset: null });
     sv("user", null);
     sv("org", null);
     // Drop the cached offline snapshot + any queued writes so the next account
@@ -263,6 +319,7 @@ export const useStore = create<AppState>((set, get) => ({
     // reads; the queue is unconditionally wiped).
     void clearSnapshot();
     clearQueue();
+    clearWoQueue();
     void clearUploads();
     set({ pendingWrites: 0, pendingUploads: 0 });
     get().stopAutoRefresh();
@@ -348,23 +405,32 @@ export const useStore = create<AppState>((set, get) => ({
   /* ── Toast + Confirm ── */
   toast: { message: "", type: "info" as const, visible: false },
   showToast: (message, type = "success") => {
+    const cur = get().toast;
+    // Background chatter ("Syncing data…") must not bury a real problem.
+    if (type === "info" && message.startsWith("Syncing") && cur.visible && (cur.type === "error" || cur.type === "warning")) return;
+    // A success fired right after an ignored failed write can't hide the error.
+    if (type === "success" && cur.visible && cur.type === "error" && Date.now() - lastErrorAt < 1500) return;
+    if (type === "error") lastErrorAt = Date.now();
     set({ toast: { message, type, visible: true } });
     // Errors get a longer window — they often carry diagnostic detail
-    // (Postgres code/hint) that a 3s flash doesn't give time to read.
-    const ms = type === "error" ? 8000 : 3000;
-    setTimeout(() => get().hideToast(), ms);
+    // (Postgres code/hint) that a 3s flash doesn't give time to read. Long
+    // messages get reading time on top (capped at 10s).
+    const base = type === "error" ? 8000 : type === "warning" ? 6000 : 3000;
+    const ms = Math.min(10000, Math.max(base, 1500 + message.length * 55));
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastTimer = null; get().hideToast(); }, ms);
   },
   hideToast: () => set({ toast: { ...get().toast, visible: false } }),
   confirmState: { title: "", message: "", visible: false, resolve: null },
-  showConfirm: (title, message) => {
+  showConfirm: (title, message, opts) => {
     return new Promise<boolean>((resolve) => {
-      set({ confirmState: { title, message, visible: true, resolve } });
+      set({ confirmState: { title, message, visible: true, resolve, opts } });
     });
   },
   resolveConfirm: (v) => {
     const { confirmState } = get();
     if (confirmState.resolve) confirmState.resolve(v);
-    set({ confirmState: { title: "", message: "", visible: false, resolve: null } });
+    set({ confirmState: { title: "", message: "", visible: false, resolve: null, opts: undefined } });
   },
 
   /* ── Data ── */
@@ -386,12 +452,15 @@ export const useStore = create<AppState>((set, get) => ({
   membershipPlans: [],
   customerMemberships: [],
   equipment: [],
+  flipProjects: [],
   notifications: [],
   loading: true,
   usingOfflineData: false,
   lastSyncedAt: null,
-  pendingWrites: pendingCount(),
+  fullSyncAt: null,
+  pendingWrites: pendingCount() + woPendingCount(),
   pendingUploads: 0, // hydrated from IndexedDB in startAutoRefresh
+  clockReset: null,
   bumpPendingUploads: () => set({ pendingUploads: get().pendingUploads + 1 }),
 
   loadAll: async () => {
@@ -419,7 +488,7 @@ export const useStore = create<AppState>((set, get) => ({
       // on every 15s poll while the network stays down. (In-memory timeEntries
       // already reflect optimistic offline writes.)
       if (get().profiles.length > 0 || get().jobs.length > 0) {
-        set({ loading: false, usingOfflineData: true, pendingWrites: pendingCount() });
+        set({ loading: false, usingOfflineData: true, pendingWrites: pendingCount() + woPendingCount() });
         return;
       }
       const snap = await loadSnapshot(userId, orgId);
@@ -427,6 +496,7 @@ export const useStore = create<AppState>((set, get) => ({
         const data = snap.data as unknown as Partial<AppState>;
         set({
           ...data,
+          jobs: applyWoPending((data.jobs as Job[]) || []),
           // Materialize queued offline writes on top of the snapshot so a
           // reload mid-airplane-mode still shows the clock-out that hasn't
           // synced yet.
@@ -434,7 +504,8 @@ export const useStore = create<AppState>((set, get) => ({
           loading: false,
           usingOfflineData: true,
           lastSyncedAt: snap.at,
-          pendingWrites: pendingCount(),
+          fullSyncAt: snap.at,
+          pendingWrites: pendingCount() + woPendingCount(),
         });
       } else {
         set({ loading: false }); // nothing cached — stop the spinner, leave as-is
@@ -464,6 +535,14 @@ export const useStore = create<AppState>((set, get) => ({
         console.error("[store] loadAll fetch failed for a table:", err);
         return null;
       });
+    // Flip Mode is optional + owner/manager-only, so it's fetched beside the
+    // batch, not in it: a missing flip_projects table (migration not run) must
+    // not count as a failed load (that would block the offline snapshot) or
+    // toast every 15s — strict + settle turns it into a silent null.
+    const role = get().user?.role;
+    const flipP: Promise<FlipProject[] | null> = orgFilter && (role === "owner" || role === "manager")
+      ? settle(db.get<FlipProject>("flip_projects", orgFilter, { strict: true }))
+      : Promise.resolve([]);
     const results = await Promise.all([
       settle(db.get<Customer>("customers", orgFilter, { strict: true })),
       settle(db.get<Address>("addresses", orgFilter, { strict: true })),
@@ -517,7 +596,10 @@ export const useStore = create<AppState>((set, get) => ({
     const timeEntriesF = timeEntries ?? cur.timeEntries;
     const reviewsF = reviews ?? cur.reviews;
     const referralsF = referrals ?? cur.referrals;
-    const scheduleF = schedule ?? cur.schedule;
+    // A visit linked to a job that no longer exists (deleted elsewhere, or
+    // before Jobs' delete cleaned up its visits) drops off every schedule view.
+    const jobIdsF = new Set(jobsF.map((j) => j.id));
+    const scheduleF = (schedule ?? cur.schedule).filter((e) => !e.job_id || jobsF.length === 0 || jobIdsF.has(e.job_id));
     const payHistoryF = payHistory ?? cur.payHistory;
     const receiptsF = receipts ?? cur.receipts;
     const questPayoutsF = questPayouts ?? cur.questPayouts;
@@ -527,31 +609,43 @@ export const useStore = create<AppState>((set, get) => ({
     const membershipPlansF = membershipPlans ?? cur.membershipPlans;
     const customerMembershipsF = customerMemberships ?? cur.customerMemberships;
     const equipmentF = equipment ?? cur.equipment;
+    const flipProjects = await flipP;
+    const flipProjectsF = flipProjects ?? cur.flipProjects;
     const notificationsF = notifications ?? cur.notifications;
 
     set({
-      customers: customersF, addresses: addressesF, profiles: profilesF, pendingMembers: pendingMembersF, jobs: jobsF,
+      customers: customersF, addresses: addressesF, profiles: profilesF, pendingMembers: pendingMembersF, jobs: applyWoPending(jobsF),
       // Materialize any not-yet-synced offline writes on top of server truth so
       // an optimistic clock-out isn't clobbered by a poll that lands before the
       // queue flushes. Once flushed, the queue is empty and this is a no-op.
       timeEntries: applyPending("time_entries", timeEntriesF),
       reviews: reviewsF, referrals: referralsF, schedule: scheduleF, payHistory: payHistoryF, receipts: receiptsF, questPayouts: questPayoutsF, timeOffRequests: timeOffRequestsF, recurringJobs: recurringJobsF, reviewRequests: reviewRequestsF,
       membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF,
+      flipProjects: flipProjectsF,
       notifications: notificationsF,
       loading: false,
       usingOfflineData: false,
       lastSyncedAt: Date.now(),
-      pendingWrites: pendingCount(),
+      // A table that failed kept its prior value — only a complete load counts.
+      fullSyncAt: results.some((r) => r === null) ? cur.fullSyncAt : Date.now(),
+      pendingWrites: pendingCount() + woPendingCount(),
     });
 
+    // Is this phone still really on the clock? (A manager's force clock-out
+    // or another phone may have closed the shift.) Only after a load whose
+    // time entries actually came from the server.
+    if (timeEntries !== null) void get().reconcileClock();
+
     // Persist a fresh snapshot so the next offline load has real data to show.
-    // Throttled (loadAll runs every 15s) to avoid churning IndexedDB.
-    if (Date.now() - lastSnapshotAt > 30000) {
+    // Throttled (loadAll runs every 15s) to avoid churning IndexedDB. Only a
+    // COMPLETE load is snapshotted — the offline path trusts the snapshot as a
+    // full sync (fullSyncAt), so a partial one would read as "nothing to do".
+    if (!results.some((r) => r === null) && Date.now() - lastSnapshotAt > 30000) {
       lastSnapshotAt = Date.now();
       void saveSnapshot(userId, orgId, {
         customers: customersF, addresses: addressesF, profiles: profilesF, jobs: jobsF, timeEntries: timeEntriesF,
         reviews: reviewsF, referrals: referralsF, schedule: scheduleF, payHistory: payHistoryF, receipts: receiptsF, questPayouts: questPayoutsF, timeOffRequests: timeOffRequestsF, recurringJobs: recurringJobsF, reviewRequests: reviewRequestsF,
-        membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF, notifications: notificationsF,
+        membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF, flipProjects: flipProjectsF, notifications: notificationsF,
       });
     }
     // Also refresh org data (picks up Stripe changes, site updates, etc.).
@@ -571,12 +665,16 @@ export const useStore = create<AppState>((set, get) => ({
      survives no-signal: enqueue → optimistic store update → (if
      online) flush + reconcile. Offline, the queue persists in
      localStorage and replays on the next reconnect. */
-  saveTimeEntry: async (rowId, patch, mode) => {
+  saveTimeEntry: async (rowId, patch, mode, opts) => {
     // Insert needs org_id like db.post would auto-inject (the queue's raw
     // upsert doesn't run that logic).
     const orgId = get().user?.org_id;
     const payload = mode === "post" && orgId ? { org_id: orgId, ...patch } : patch;
-    enqueueWrite({ table: "time_entries", op: mode, rowId, payload });
+    enqueueWrite({
+      table: "time_entries", op: mode, rowId, payload,
+      onlyIfOpen: mode === "patch" && !!opts?.onlyIfOpen,
+      earlierWins: mode === "patch" && !!opts?.onlyIfOpen && !!opts?.earlierWins,
+    });
     // Optimistic local update so Crew Activity / My Log reflect it immediately.
     // Use `payload` (not `patch`) so the in-store row matches what gets
     // persisted — e.g. the injected org_id on an insert.
@@ -585,22 +683,79 @@ export const useStore = create<AppState>((set, get) => ({
     const next = idx >= 0
       ? cur.map((e) => (e.id === rowId ? ({ ...e, ...payload, id: rowId } as unknown as TimeEntry) : e))
       : [({ id: rowId, ...payload } as unknown as TimeEntry), ...cur];
-    set({ timeEntries: next, pendingWrites: pendingCount() });
+    set({ timeEntries: next, pendingWrites: pendingCount() + woPendingCount() });
     // Try to sync now when online, then reconcile against server truth.
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       const res = await flushQueue();
-      set({ pendingWrites: res.remaining });
+      set({ pendingWrites: res.remaining + woPendingCount() });
+      noteQueueConflicts(res.conflictRows.length);
       if (res.flushed > 0) await get().loadAll();
+      // false = THIS close found the shift already closed elsewhere.
+      return !res.conflictRows.includes(rowId);
     }
+    return true; // queued offline — replays later
   },
 
-  dropTimeEntry: async (rowId) => {
-    enqueueWrite({ table: "time_entries", op: "del", rowId });
-    set({ timeEntries: get().timeEntries.filter((e) => e.id !== rowId), pendingWrites: pendingCount() });
+  dropTimeEntry: async (rowId, opts) => {
+    enqueueWrite({ table: "time_entries", op: "del", rowId, onlyIfOpen: !!opts?.onlyIfOpen });
+    set({ timeEntries: get().timeEntries.filter((e) => e.id !== rowId), pendingWrites: pendingCount() + woPendingCount() });
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       const res = await flushQueue();
-      set({ pendingWrites: res.remaining });
+      set({ pendingWrites: res.remaining + woPendingCount() });
+      noteQueueConflicts(res.conflictRows.length);
       if (res.flushed > 0) await get().loadAll();
+      // false = THIS close found the shift already closed elsewhere.
+      return !res.conflictRows.includes(rowId);
+    }
+    return true; // queued offline — replays later
+  },
+
+  reconcileClock: async () => {
+    if (reconcileBusy) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    if (get().usingOfflineData) return; // a snapshot can't confirm anything
+    const local = { on: ld<boolean>("t_on", false) === true, activeId: ld<string | null>("t_active_id", null), st: ld<number | null>("t_st", null) };
+    const id = local.activeId;
+    if (!local.on || !id || isLocalClockOut(id)) return;
+    // Only an unsynced open/close/remove of the row holds the check off — a
+    // stuck GPS stamp must not keep a force-closed shift running all day.
+    const pendingIds = getPending("time_entries").filter(isCloseWrite).map((w) => w.rowId);
+    const storeRow = get().timeEntries.find((e) => e.id === id);
+    if (!needsServerCheck(local, pendingIds, storeRow, Date.now())) return;
+    // A row merely missing from the org list re-asks at most once a minute.
+    if (!storeRow && lastClockCheck.id === id && Date.now() - lastClockCheck.at < 60000) return;
+    reconcileBusy = true;
+    lastClockCheck = { id, at: Date.now() };
+    try {
+      // With no session supabase-js falls back to the anon key and RLS returns
+      // [] — that would read as "deleted". Only trust a signed-in read.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+      } catch { return; }
+      // Confirm by id — act only on a successful read, never on a guess.
+      let rows: TimeEntry[];
+      try { rows = await db.get<TimeEntry>("time_entries", { id }, { strict: true }); }
+      catch { return; }
+      const verdict = serverVerdict(rows);
+      if (verdict === "keep") return;
+      // The user may have clocked out, or queued a write, while we were reading.
+      if (ld<boolean>("t_on", false) !== true || ld<string | null>("t_active_id", null) !== id) return;
+      if (isLocalClockOut(id) || getPending("time_entries").some((w) => w.rowId === id && isCloseWrite(w))) return;
+      sv("t_on", false);
+      sv("t_st", null);
+      sv("t_sj", "");
+      sv("t_active_id", null);
+      sv("t_active_job_id", null);
+      set({ clockReset: { at: Date.now(), id, reason: verdict } });
+      get().showToast(
+        verdict === "closed"
+          ? t("timer.closedByOffice").replace("{time}", clockLabel(rows[0]?.end_time))
+          : t("timer.removedByOffice"),
+        "warning",
+      );
+    } finally {
+      reconcileBusy = false;
     }
   },
 
@@ -717,6 +872,36 @@ export const useStore = create<AppState>((set, get) => ({
     return true;
   },
 
+  upsertFlipProject: async (row) => {
+    const isUpdate = !!row.id;
+    if (isUpdate) {
+      const updates = { ...row };
+      delete (updates as { id?: string }).id;
+      const ok = await db.patch("flip_projects", row.id!, updates);
+      if (!ok) return null;
+      const updated = { ...get().flipProjects.find((f) => f.id === row.id), ...updates, id: row.id! } as FlipProject;
+      set({ flipProjects: get().flipProjects.map((f) => (f.id === row.id ? updated : f)) });
+      return updated;
+    }
+    const orgId = get().user?.org_id;
+    const payload = { ...row, ...(orgId ? { org_id: orgId } : {}) };
+    const inserted = await db.post<FlipProject>("flip_projects", payload as Record<string, unknown>);
+    if (inserted === null) return null;
+    if (inserted.length > 0) {
+      const created = inserted[0];
+      set({ flipProjects: [created, ...get().flipProjects] });
+      return created;
+    }
+    await get().loadAll();
+    return null;
+  },
+
+  deleteFlipProject: async (id) => {
+    await db.del("flip_projects", id);
+    set({ flipProjects: get().flipProjects.filter((f) => f.id !== id) });
+    return true;
+  },
+
   /* ── Notifications ── */
   markNotificationRead: async (id) => {
     const now = new Date().toISOString();
@@ -750,11 +935,30 @@ export const useStore = create<AppState>((set, get) => ({
     // Replay any writes/uploads queued in a previous session (e.g. clocked out
     // or snapped a photo offline, then closed the app) before/while the first
     // load runs. Also hydrate the pending-upload count from IndexedDB.
-    flushQueue().then((res) => set({ pendingWrites: res.remaining })).catch(() => {});
+    flushQueue().then((res) => { set({ pendingWrites: res.remaining + woPendingCount() }); noteQueueConflicts(res.conflictRows.length); }).catch(() => {});
+    flushWoQueue().then(() => set({ pendingWrites: pendingCount() + woPendingCount() })).catch(() => {});
     flushUploads().then((res) => set({ pendingUploads: res.remaining })).catch(() => {});
     pendingUploadCount().then((n) => set({ pendingUploads: n })).catch(() => {});
     get().loadAll();
-    const iv = setInterval(() => get().loadAll(), 15000);
+    // Each poll also retries queued writes: iOS often reports "online" in a
+    // dead zone (no 'online' event ever fires), so a stuck clock-out would
+    // otherwise wait for the next clock action or app restart — long enough
+    // for a manager to force-close the shift in the meantime.
+    const iv = setInterval(() => {
+      if (woPendingCount() > 0 && (typeof navigator === "undefined" || navigator.onLine !== false)) {
+        void flushWoQueue().then(() => set({ pendingWrites: pendingCount() + woPendingCount() })).catch(() => {});
+      }
+      // Not while a flush is already running — the poll would just queue up
+      // behind it (and starve its own data refresh in a hanging dead zone).
+      if (pendingCount() > 0 && !isFlushing() && (typeof navigator === "undefined" || navigator.onLine !== false)) {
+        flushQueue()
+          .then((res) => { set({ pendingWrites: res.remaining + woPendingCount() }); noteQueueConflicts(res.conflictRows.length); })
+          .catch(() => {})
+          .finally(() => { void get().loadAll(); });
+      } else {
+        void get().loadAll();
+      }
+    }, 15000);
     set({ _interval: iv });
   },
 
@@ -788,7 +992,10 @@ if (typeof window !== "undefined") {
     if (!useStore.getState().user) return;
     void (async () => {
       const res = await flushQueue();
-      useStore.setState({ pendingWrites: res.remaining });
+      useStore.setState({ pendingWrites: res.remaining + woPendingCount() });
+      noteQueueConflicts(res.conflictRows.length);
+      await flushWoQueue().catch(() => 0);
+      useStore.setState({ pendingWrites: pendingCount() + woPendingCount() });
       // Then replay queued image uploads (rows first so a receipt's row exists
       // before anything references it), and refresh live data.
       const up = await flushUploads();

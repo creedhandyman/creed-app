@@ -9,11 +9,13 @@
  * follow the natural order of a job (quote → schedule → work → bill →
  * paid) so a new user can read top-to-bottom.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Grizz from "./Grizz";
 import { useStore } from "@/lib/store";
 import { Icon, type IconName } from "./Icon";
 import { SUPPORT_EMAIL } from "@/lib/platform-admin";
+import { t, getLang } from "@/lib/i18n";
+import { SECTIONS_ES } from "./user-guide-es";
 
 interface Props {
   onClose: () => void;
@@ -23,7 +25,7 @@ interface Section {
   id: string;
   icon: IconName;
   title: string;
-  body: { heading: string; lines: string[] }[];
+  body: { heading?: string; lines: string[] }[];
 }
 
 const SECTIONS: Section[] = [
@@ -46,8 +48,8 @@ const SECTIONS: Section[] = [
           "Quote — start a new estimate from three options: Quick Quote, Full Inspection, or Upload Report.",
           "Jobs — every quote and active job in one list. Tap a card to open the full detail screen.",
           "Home — your dashboard: next job, money snapshot, and quick actions.",
-          "Time — clock in/out. Once clocked in, this becomes WorkVision — your in-field cockpit.",
-          "More — Schedule, Quests, Operations, Customers, Mileage, My settings, Business settings and Ask Grizz all live here.",
+          "Time — clock in/out. Once clocked in, this becomes Work Mode — your in-field cockpit.",
+          "More — Schedule, Quests, Operations, Customers, Mileage, Business settings, Fix-it helper and Ask Grizz all live here. Tap your name at the top of More for your own settings.",
         ],
       },
     ],
@@ -99,11 +101,11 @@ const SECTIONS: Section[] = [
         heading: "Clock in",
         lines: [
           "Tap Clock In on the dashboard or pick a job from Today's schedule chip. Time logs against that specific job — callbacks at the same address won't mix up hours.",
-          "WorkVision opens automatically once you're on the clock.",
+          "Work Mode opens automatically once you're on the clock.",
         ],
       },
       {
-        heading: "WorkVision tabs",
+        heading: "Work Mode tabs",
         lines: [
           "Tasks — checklist grouped by trade. Tap a task to snap a photo of your progress.",
           "Guide — step-by-step instructions with a live shopping list you can check off and edit as you go.",
@@ -114,7 +116,7 @@ const SECTIONS: Section[] = [
       {
         heading: "Receipts as you go",
         lines: [
-          "Snap every supply-store receipt in WorkVision → Photos → Scan receipt. The AI reads the line items, feeds them into the quote-learning system, and replaces the estimated material cost with your real cost in the profit math.",
+          "Snap every supply-store receipt in Work Mode → Photos → Scan receipt. The AI reads the line items, feeds them into the quote-learning system, and replaces the estimated material cost with your real cost in the profit math.",
         ],
       },
     ],
@@ -127,7 +129,7 @@ const SECTIONS: Section[] = [
       {
         heading: "Mark complete",
         lines: [
-          "Tap Complete Job at the bottom of the WorkVision Tasks tab, or flip the status in Jobs. A completion report PDF is generated from your checklist and photos.",
+          "Tap Complete Job at the bottom of the Work Mode Tasks tab, or flip the status in Jobs. A completion report PDF is generated from your checklist and photos.",
           "Tap Send invoice to text the bill (with a pay link) — that marks it Invoiced. Took cash, a check or Zelle? Tap Record payment and enter the amount.",
         ],
       },
@@ -141,7 +143,7 @@ const SECTIONS: Section[] = [
       {
         heading: "Automatic review request",
         lines: [
-          "Once a job hits Paid, the app auto-schedules a review-request text for 24 hours later (configurable in Ops → Settings → Review Automation).",
+          "Once a job hits Paid, the app auto-schedules a review-request text for 24 hours later (configurable in More → Business settings → Review automation).",
           "The text links straight to your Google review page. You can also trigger one manually from the job's Manage section.",
         ],
       },
@@ -158,7 +160,7 @@ const SECTIONS: Section[] = [
           "More → Operations opens a tile grid. Tap any tile to go deep: Payroll, Financials, Customers, Recurring, HR, Team, Payments & plan, Business settings.",
           "Payroll — run pay for your crew. Time entries are marked paid (not deleted) so Team Stats keeps lifetime history.",
           "Financials — revenue, profit, A/R aging, by-trade breakdown, top clients. Print a P&L for any period.",
-          "HR — approve time-off requests, adjust PTO and sick balances per employee.",
+          "HR — approve or deny time-off requests.",
           "Recurring — set up automated service schedules (weekly, monthly, etc.) that fire new jobs on their own.",
         ],
       },
@@ -225,16 +227,88 @@ const SECTIONS: Section[] = [
   },
 ];
 
+// ── Ask Grizz: local keyword search over the guide (free — no AI call) ──
+const STOP = new Set([
+  "the","a","an","to","do","i","my","me","how","can","is","it","of","in","on","and","or","for","what","where","when","get","does","you","your","with","this","that",
+  "el","la","los","las","un","una","de","del","en","y","o","que","como","cómo","mi","mis","para","por","con","se","es","lo","al","donde","dónde","cuando","puedo","hago","poner",
+]);
+const fold = (x: string) => x.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const stem = (w: string) => (w.length <= 4 ? w : w.slice(0, Math.max(4, w.length - 2)));
+
+interface Hit { sec: string; heading?: string; line: string; score: number }
+
+function searchGuide(sections: Section[], query: string): Hit[] {
+  const toks = fold(query).split(/[^a-z0-9ñ]+/).filter((w) => w.length > 1 && !STOP.has(w)).map(stem);
+  if (!toks.length) return [];
+  const need = Math.ceil(toks.length / 2);
+  const hits: Hit[] = [];
+  for (const sec of sections) {
+    for (const b of sec.body) {
+      const head = fold(b.heading || "");
+      for (const line of b.lines) {
+        const hay = fold(line);
+        let matched = 0, score = 0;
+        for (const tk of toks) {
+          const inLine = hay.includes(tk), inHead = head.includes(tk);
+          if (inLine || inHead) matched++;
+          score += (inLine ? 1 : 0) + (inHead ? 2 : 0);
+        }
+        if (matched >= need) hits.push({ sec: sec.title, heading: b.heading, line, score });
+      }
+    }
+  }
+  return hits.sort((a, c) => c.score - a.score).slice(0, 5);
+}
+
 export default function UserGuideModal({ onClose }: Props) {
   const darkMode = useStore((s) => s.darkMode);
-  const [openId, setOpenId] = useState<string | null>("start");
+  const role = useStore((s) => s.user?.role);
+  const isAdmin = role === "owner" || role === "manager";
+  // Crew get a short "For the crew" section first (and open on it); the
+  // owner-only "Running the Business" section is hidden from them. Built at
+  // render so t() follows the current language.
+  // Spanish copy lives in user-guide-es.ts, keyed by section id (icons stay here).
+  const guide: Section[] = getLang() === "es"
+    ? SECTIONS.map((s) => ({ ...s, ...(SECTIONS_ES[s.id] || {}) }))
+    : SECTIONS;
+  const sections: Section[] = isAdmin
+    ? guide
+    : [
+        {
+          id: "crew",
+          icon: "worker",
+          title: t("guide.crewTitle"),
+          body: [{
+            lines: [
+              t("guide.crewHome"),
+              t("guide.crewTime"),
+              t("guide.crewTimeOff"),
+              t("guide.crewSchedule"),
+              t("guide.crewQuests"),
+              t("guide.crewHelp"),
+            ],
+          }],
+        },
+        ...guide.filter((sec) => sec.id !== "ops"),
+      ];
+  const [openId, setOpenId] = useState<string | null>(isAdmin ? "start" : "crew");
+  const [q, setQ] = useState("");
+  const query = q.trim();
+  const hits = useMemo(() => (query ? searchGuide(sections, query) : []), [sections, query]);
+  // Grizz's reply: greeting → how many he found (3 phrasings, picked by the
+  // query so it doesn't flicker on re-render) → a shrug when there's nothing.
+  const reply = !query
+    ? t("guide.greet")
+    : hits.length
+      ? t(`guide.found${1 + (query.length % 3)}`).replace("{n}", String(hits.length))
+      : t("guide.miss");
 
   return (
     <div
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="User guide"
+      aria-label={t("guide.aria")}
       style={{
         position: "fixed", inset: 0, zIndex: 999,
         background: "rgba(0,0,0,.7)",
@@ -258,11 +332,11 @@ export default function UserGuideModal({ onClose }: Props) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h3 style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, color: "var(--color-primary)", margin: 0, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center", gap: 8 }}>
             <Grizz pose="point" size={28} />
-            Ask Grizz
+            {t("more.askGrizz")}
           </h3>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("guide.close")}
             style={{
               background: "transparent", border: "none",
               color: darkMode ? "#888" : "#555",
@@ -274,15 +348,69 @@ export default function UserGuideModal({ onClose }: Props) {
           </button>
         </div>
 
-        <p className="dim" style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.5 }}>
-          A quick walkthrough of the app, in the order you'll use it on a real job. Tap any section to expand.
-        </p>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 10 }}>
+          <Grizz pose={query && !hits.length ? "point" : "wave"} size={58} chatty bubbleAlign="left" style={{ flexShrink: 0 }} />
+          <div
+            role="status"
+            style={{ position: "relative", flex: 1, background: darkMode ? "rgba(245,180,0,.1)" : "rgba(245,180,0,.16)", border: "1px solid rgba(245,180,0,.4)", borderRadius: 12, padding: "9px 12px", fontSize: 14, lineHeight: 1.45 }}
+          >
+            {reply}
+          </div>
+        </div>
+
+        <div style={{ position: "relative", marginBottom: 8 }}>
+          <span style={{ position: "absolute", left: 11, top: 11, display: "flex" }}><Icon name="search" size={16} color="var(--color-dim)" /></span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("guide.askPh")}
+            aria-label={t("more.askGrizz")}
+            enterKeyHint="search"
+            style={{ width: "100%", boxSizing: "border-box", padding: "10px 64px 10px 34px", fontSize: 15 }}
+          />
+          {q && (
+            <button onClick={() => setQ("")} style={{ position: "absolute", right: 6, top: 6, background: "none", border: "none", color: "var(--color-dim)", fontSize: 12.5, cursor: "pointer", padding: "5px 8px" }}>
+              {t("guide.clear")}
+            </button>
+          )}
+        </div>
+
+        {!query && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+            {[1, 2, 3, 4].map((n) => (
+              <button
+                key={n}
+                onClick={() => setQ(t(`guide.chip${n}`))}
+                style={{ background: "transparent", border: "1px solid var(--color-border-dark-2)", color: "var(--color-primary)", borderRadius: 999, padding: "6px 12px", fontSize: 13, cursor: "pointer" }}
+              >
+                {t(`guide.chip${n}`)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {query ? (
+          <div style={{ marginBottom: 14 }}>
+            {hits.map((h, i) => (
+              <div key={i} style={{ padding: "10px 12px", marginBottom: 6, borderRadius: 10, border: `1px solid ${darkMode ? "var(--color-border-dark)" : "var(--color-border-light)"}` }}>
+                <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 12, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--color-primary)", marginBottom: 3 }}>
+                  {h.heading ? `${h.heading} · ` : ""}{t("guide.inSection").replace("{section}", h.sec)}
+                </div>
+                <div style={{ fontSize: 14.5, lineHeight: 1.5, color: darkMode ? "#ccc" : "#333" }}>{h.line}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="dim" style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.5 }}>
+            {t("guide.intro")}
+          </p>
+        )}
         <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Creed app help")}`}
           style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 14, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--color-border-dark-2)", color: "var(--color-primary)", textDecoration: "none" }}>
-          <Icon name="mail" size={15} /> Stuck? Email support — a real person will help.
+          <Icon name="mail" size={15} /> {t("guide.stuck")}
         </a>
 
-        {SECTIONS.map((sec) => {
+        {!query && sections.map((sec) => {
           const open = openId === sec.id;
           return (
             <div
@@ -315,11 +443,13 @@ export default function UserGuideModal({ onClose }: Props) {
               </button>
               {open && (
                 <div style={{ padding: "4px 14px 14px" }}>
-                  {sec.body.map((b) => (
-                    <div key={b.heading} style={{ marginTop: 10 }}>
-                      <h4 style={{ fontSize: 14, marginBottom: 4, color: "var(--color-primary)", fontFamily: "Oswald, sans-serif", letterSpacing: ".04em" }}>
-                        {b.heading}
-                      </h4>
+                  {sec.body.map((b, bi) => (
+                    <div key={b.heading || bi} style={{ marginTop: 10 }}>
+                      {b.heading && (
+                        <h4 style={{ fontSize: 14, marginBottom: 4, color: "var(--color-primary)", fontFamily: "Oswald, sans-serif", letterSpacing: ".04em" }}>
+                          {b.heading}
+                        </h4>
+                      )}
                       <ul style={{ paddingLeft: 18, margin: 0, fontSize: 15, lineHeight: 1.55, color: darkMode ? "#ccc" : "#333" }}>
                         {b.lines.map((line, i) => (
                           <li key={i} style={{ marginBottom: 4 }}>{line}</li>
@@ -334,7 +464,7 @@ export default function UserGuideModal({ onClose }: Props) {
         })}
 
         <p className="dim" style={{ fontSize: 13, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>
-          Stuck? Most workflows have built-in tooltips and toasts that explain what just happened. The Troubleshoot screen on the dashboard is your reset button when something looks off.
+          {t("guide.footer")}
         </p>
       </div>
     </div>

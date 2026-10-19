@@ -1,13 +1,15 @@
 "use client";
-import { useState, useSyncExternalStore } from "react";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
-import { subscribeDrive, getDriveState, getServerDriveState, startDrive, finishDrive, cancelDrive, type DriveTrip } from "@/lib/drive-tracker";
+import { subscribeDrive, getDriveState, getServerDriveState, startDrive, finishDrive, cancelDrive, holdDrive, type DriveTrip } from "@/lib/drive-tracker";
 import { parseEntryDate } from "@/lib/dates";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
+import TopBar from "@/components/TopBar";
 import CountUp from "@/components/CountUp";
+import { groupTripsByDay, dayLabel, legStartTimes, clockOf, formatClock, clockMinutes, type LegStart, type TripDay } from "@/lib/mileage-days";
 
 interface MileageEntry {
   id: string;
@@ -17,6 +19,8 @@ interface MileageEntry {
   end_miles: number;
   total_miles: number;
   user_name: string;
+  created_at?: string;
+  start_time?: string | null;
 }
 
 /** Odometer readings → miles, or null unless both are numbers and end > start. */
@@ -57,17 +61,35 @@ type SuggestedLeg = {
   odo?: { start: string; end: string };
 };
 
-function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
+function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[]; loaded: boolean; onAdded: () => void }) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const timeEntries = useStore((s) => s.timeEntries);
-  const jobs = useStore((s) => s.jobs);
   const [date, setDate] = useState(() => localYmd(new Date()));
-  // A trip the suggestions missed (or a day with no clocked jobs).
-  const [extra, setExtra] = useState<{ from: string; to: string; miles: string; startOdo: string; endOdo: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [legs, setLegs] = useState<SuggestedLeg[] | null>(null);
+  const jobs = useStore((s) => s.jobs);
+  // A trip the suggestions missed (or a day with no clocked jobs).
+  const [extra, setExtra] = useState<{ from: string; to: string; miles: string; startOdo: string; endOdo: string } | null>(null);
+  // The log as of NOW, not as of the Find tap — geocoding can take seconds
+  // while the log loads or reloads underneath it.
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  // Legs saved from this card this session. A reload racing the post can
+  // briefly hand back a log without the new row; this keeps re-finding from
+  // offering it again.
+  const postedRef = useRef<{ id?: string; date: string; to: string; miles: number }[]>([]);
+  // One add at a time — a double-tap on Add all used to run two loops over
+  // the same legs and post every trip twice.
+  const addingRef = useRef(false);
+  const [adding, setAdding] = useState(false);
+  // Once the log carries a saved row, the log speaks for it — so deleting
+  // that trip later frees the leg again.
+  useEffect(() => {
+    const ids = new Set(entries.map((e) => e.id));
+    postedRef.current = postedRef.current.filter((p) => !p.id || !ids.has(p.id));
+  }, [entries]);
 
   const normAddr = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
 
@@ -124,6 +146,26 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
         if (!hadCache) await new Promise((r) => setTimeout(r, 1100));
       }
 
+      // A leg already in the log (same day, same destination, ~same miles —
+      // e.g. from an earlier "Add all") shows as logged so re-finding the
+      // day can't double-post it. Each logged trip covers ONE leg. Rows this
+      // card just saved count too, unless the log already has them (by id).
+      const logNow = entriesRef.current;
+      const logIds = new Set(logNow.map((e) => e.id));
+      const candidates = [
+        ...logNow.map((e) => ({ key: e.id, date: e.trip_date, to: e.job, miles: Number(e.total_miles || 0) })),
+        ...postedRef.current
+          .filter((p) => !p.id || !logIds.has(p.id))
+          .map((p, i) => ({ key: `posted:${i}`, date: p.date, to: p.to, miles: p.miles })),
+      ];
+      const usedEntries = new Set<string>();
+      const alreadyLogged = (to: string, miles: number) => {
+        const hit = candidates.find((e) => !usedEntries.has(e.key) && e.date === date && e.to === to
+          && Math.abs(e.miles - miles) < 0.2);
+        if (hit) usedEntries.add(hit.key);
+        return !!hit;
+      };
+
       const out: SuggestedLeg[] = [];
       let unlocated = 0;
       for (let i = 1; i < deduped.length; i++) {
@@ -132,7 +174,7 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
         if (!a || !b) { unlocated++; continue; }
         const miles = Math.round(haversineMiles(a.lat, a.lng, b.lat, b.lng) * ROAD_FACTOR * 10) / 10;
         if (miles < 0.2) continue; // same block — not a loggable drive
-        out.push({ from: deduped[i - 1].addr, to: deduped[i].addr, miles, added: false });
+        out.push({ from: deduped[i - 1].addr, to: deduped[i].addr, miles, added: alreadyLogged(deduped[i].addr, miles) });
       }
       setLegs(out);
       if (unlocated > 0) setNote(`${unlocated} ${t("loc.legsSkipped")}`);
@@ -142,15 +184,17 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
     }
   };
 
-  const addLeg = async (idx: number) => {
-    if (!legs || legs[idx].added) return;
+  // Resolves true when the trip landed (a failed write is already toasted by
+  // db.post and stays un-logged so it can be retried).
+  const postLeg = async (idx: number): Promise<boolean> => {
+    if (!legs || legs[idx].added) return false;
     const leg = legs[idx];
     const odo = leg.odo ? odoMiles(leg.odo.start, leg.odo.end) : null;
     if (leg.odo && (leg.odo.start || leg.odo.end) && odo == null) {
       useStore.getState().showToast("Ending odometer must be more than the starting one", "warning");
-      return;
+      return false;
     }
-    await db.post("mileage", {
+    const saved = await db.post<{ id?: string }>("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: leg.to,
@@ -159,14 +203,47 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
       end_miles: odo != null ? parseFloat(leg.odo!.end) : 0,
       total_miles: odo ?? leg.miles,
     });
+    if (!saved) return false;
+    postedRef.current.push({ id: saved[0]?.id, date, to: leg.to, miles: leg.miles });
     setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, added: true } : l)) : prev);
     onAdded();
+    return true;
+  };
+
+  const addLeg = async (idx: number) => {
+    if (addingRef.current) return;
+    addingRef.current = true;
+    setAdding(true);
+    try {
+      await postLeg(idx);
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
+    }
   };
 
   const addAll = async () => {
-    if (!legs) return;
-    for (let i = 0; i < legs.length; i++) {
-      if (!legs[i].added) await addLeg(i);
+    if (!legs || addingRef.current) return;
+    addingRef.current = true;
+    setAdding(true);
+    try {
+      let mi = 0;
+      let failed = false;
+      for (let i = 0; i < legs.length; i++) {
+        if (legs[i].added) continue;
+        // Offline / failed — stop, don't toast-spam. db.post's error toast
+        // stays up (no success toast over it) and the leg keeps its Add button.
+        if (!(await postLeg(i))) { failed = true; break; }
+        const o = legs[i].odo ? odoMiles(legs[i].odo!.start, legs[i].odo!.end) : null;
+        mi += o ?? legs[i].miles;
+      }
+      if (mi > 0 && !failed) {
+        const day = new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+        useStore.getState().showToast(t("loc.loggedToday").replace("{mi}", mi.toFixed(1)).replace("{date}", day), "success");
+      }
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
     }
   };
 
@@ -174,7 +251,7 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
     setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, odo } : l)) : prev);
 
   const addExtra = async () => {
-    if (!extra) return;
+    if (!extra || addingRef.current) return;
     const odo = odoMiles(extra.startOdo, extra.endOdo);
     const miles = odo ?? parseFloat(extra.miles);
     if (!miles || miles <= 0) {
@@ -182,18 +259,26 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
       return;
     }
     const to = extra.to.trim(), from = extra.from.trim();
-    await db.post("mileage", {
-      user_id: user.id,
-      user_name: user.name,
-      job: (from && to ? `${from} → ${to}` : to || from) || "General",
-      trip_date: date,
-      start_miles: odo != null ? parseFloat(extra.startOdo) : 0,
-      end_miles: odo != null ? parseFloat(extra.endOdo) : 0,
-      total_miles: miles,
-    });
-    useStore.getState().showToast(`Logged ${miles.toFixed(1)} mi`, "success");
-    setExtra(null);
-    onAdded();
+    addingRef.current = true;
+    setAdding(true);
+    try {
+      const saved = await db.post("mileage", {
+        user_id: user.id,
+        user_name: user.name,
+        job: (from && to ? `${from} → ${to}` : to || from) || "General",
+        trip_date: date,
+        start_miles: odo != null ? parseFloat(extra.startOdo) : 0,
+        end_miles: odo != null ? parseFloat(extra.endOdo) : 0,
+        total_miles: Math.round(miles * 10) / 10,
+      });
+      if (!saved) return; // db.post toasted — keep what was typed
+      useStore.getState().showToast(`Logged ${miles.toFixed(1)} mi`, "success");
+      setExtra(null);
+      onAdded();
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
+    }
   };
 
   const pending = (legs || []).filter((l) => !l.added);
@@ -209,7 +294,9 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
       </div>
       <div className="row mb" style={{ alignItems: "center" }}>
         <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setLegs(null); setNote(""); }} style={{ fontSize: 14, flex: 1 }} />
-        <button className="bb" onClick={findTrips} disabled={busy} style={{ fontSize: 14, padding: "6px 14px" }}>
+        {/* Find waits for the trip log — matching against an empty log would
+            offer every already-logged leg again. */}
+        <button className="bb" onClick={findTrips} disabled={busy || !loaded} style={{ fontSize: 14, padding: "6px 14px" }}>
           {busy ? t("loc.locating") : t("loc.findTrips")}
         </button>
       </div>
@@ -246,13 +333,13 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
               >
                 <Icon name="mileage" size={13} /> {leg.odo ? "Est." : "Odo"}
               </button>
-              <button className="bo" onClick={() => addLeg(i)} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0, alignSelf: "flex-start" }}>{t("sched.add")}</button>
+              <button className="bo" onClick={() => addLeg(i)} disabled={adding} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0, alignSelf: "flex-start" }}>{t("sched.add")}</button>
             </>
           )}
         </div>
       ))}
       {legs && pending.length > 1 && (
-        <button className="bg" onClick={addAll} style={{ fontSize: 14, padding: "6px 14px", marginTop: 8 }}>
+        <button className="bg" onClick={addAll} disabled={adding} style={{ fontSize: 14, padding: "6px 14px", marginTop: 8 }}>
           {t("loc.addAll")} {pending.length} ({pending.reduce((s, l) => s + l.miles, 0).toFixed(1)} mi)
         </button>
       )}
@@ -272,18 +359,17 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
             {jobs.filter((j) => !j.archived).map((j) => <option key={j.id} value={j.property} />)}
           </datalist>
           <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
-            <input type="number" inputMode="decimal" value={extra.miles} onChange={(e) => setExtra({ ...extra, miles: e.target.value })} placeholder="Miles" style={{ flex: 1, minWidth: 0 }} />
+            <input type="number" inputMode="decimal" value={extra.miles} onChange={(e) => setExtra({ ...extra, miles: e.target.value })} placeholder="Miles" disabled={odoMiles(extra.startOdo, extra.endOdo) != null} style={{ flex: 1, minWidth: 0 }} />
             <span className="dim" style={{ fontSize: 12 }}>or</span>
             <input type="number" inputMode="numeric" value={extra.startOdo} onChange={(e) => setExtra({ ...extra, startOdo: e.target.value })} placeholder="Odo start" style={{ flex: 1, minWidth: 0 }} />
             <input type="number" inputMode="numeric" value={extra.endOdo} onChange={(e) => setExtra({ ...extra, endOdo: e.target.value })} placeholder="Odo end" style={{ flex: 1, minWidth: 0 }} />
           </div>
-          {(() => {
-            const odo = odoMiles(extra.startOdo, extra.endOdo);
-            return odo != null ? <div style={{ fontSize: 12.5, color: "var(--color-success)", marginBottom: 6 }}>{odo.toFixed(1)} mi from the odometer</div> : null;
-          })()}
+          {odoMiles(extra.startOdo, extra.endOdo) != null && (
+            <div style={{ fontSize: 12.5, color: "var(--color-success)", marginBottom: 6 }}>{odoMiles(extra.startOdo, extra.endOdo)!.toFixed(1)} mi from the odometer</div>
+          )}
           <div style={{ display: "flex", gap: 6 }}>
             <button className="bo" onClick={() => setExtra(null)} style={{ flex: 1, fontSize: 13.5, padding: "7px 0" }}>Cancel</button>
-            <button className="bg" onClick={addExtra} style={{ flex: 1, fontSize: 13.5, padding: "7px 0" }}>Log trip</button>
+            <button className="bg" onClick={addExtra} disabled={adding} style={{ flex: 1, fontSize: 13.5, padding: "7px 0" }}>Log trip</button>
           </div>
         </div>
       )}
@@ -298,26 +384,40 @@ interface Props {
   setPage: (p: string) => void;
 }
 
-export default function Mileage({ setPage }: Props) {
+// setPage stays in Props for AppShell's uniform call; Back walks history.
+export default function Mileage(_props: Props) {
   const user = useStore((s) => s.user)!;
   const jobs = useStore((s) => s.jobs);
   const darkMode = useStore((s) => s.darkMode);
 
   const [entries, setEntries] = useState<MileageEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Bumped after every write; each bump refetches the log and only the newest
+  // fetch may land. (The old render-time fetch fired on every render while
+  // unloaded, and an older response arriving last dropped the newest row.)
+  const [reloadTick, setReloadTick] = useState(0);
+  const reload = () => { setLoaded(false); setReloadTick((n) => n + 1); };
 
   // Trip tracking state
   const [tripActive, setTripActive] = useState(false);
+  const [tripStartedAt, setTripStartedAt] = useState("");
   const [tripJob, setTripJob] = useState("");
   const [startMiles, setStartMiles] = useState("");
   const [endMiles, setEndMiles] = useState("");
+
+  // Manual entry
+  const [mJob, setMJob] = useState("");
+  // LOCAL date — toISOString() is UTC, so an evening entry defaulted to tomorrow.
+  const [mDate, setMDate] = useState(() => localYmd(new Date()));
+  const [mMiles, setMMiles] = useState("");
+  const [mTime, setMTime] = useState(""); // optional "HH:MM" (24h, from <input type=time>)
 
   // Log-entry edit (add odometer readings / fix the miles after the fact)
   const [editing, setEditing] = useState<{ id: string; startOdo: string; endOdo: string; miles: string } | null>(null);
 
   // GPS trip — the shared drive tracker (same one as Work Mode's Start
-  // drive): start point + fixes while open + a fix on every return, so the
-  // screen can lock and Maps can take over.
+  // drive): a saved start point + fixes while open + a fix on every return,
+  // so the screen can lock and Maps can take over. Survives closing the app.
   const [trackMode, setTrackMode] = useState<"gps" | "manual">("gps");
   const [gpsJob, setGpsJob] = useState("");
   const [gpsStartOdo, setGpsStartOdo] = useState("");
@@ -328,14 +428,27 @@ export default function Mileage({ setPage }: Props) {
   // the odometer / by hand) before saving.
   const [gpsReview, setGpsReview] = useState<{ trip: DriveTrip; miles: string; endOdo: string } | null>(null);
   const gpsInProgress = !!gpsTrip || !!gpsReview;
+  const savingTripRef = useRef(false);
 
   // Load entries
-  if (!loaded) {
-    db.get<MileageEntry>("mileage", { user_id: user.id }).then((data) => {
+  useEffect(() => {
+    let live = true;
+    // strict: a failed fetch must NOT blank the log and mark it loaded —
+    // Suggested trips' "already logged" check would then re-post every leg.
+    db.get<MileageEntry>("mileage", { user_id: user.id }, { strict: true }).then((data) => {
+      if (!live) return;
       setEntries(data);
       setLoaded(true);
-    });
-  }
+    }).catch(() => { /* keep what we had; Find stays off until the log loads */ });
+    return () => { live = false; };
+  }, [user.id, reloadTick]);
+
+  // Signal back → reload the log (a failed load leaves Find disabled until then).
+  useEffect(() => {
+    const on = () => setReloadTick((n) => n + 1);
+    window.addEventListener("online", on);
+    return () => window.removeEventListener("online", on);
+  }, []);
 
   const totalMiles = entries.reduce((s, e) => s + (e.total_miles || 0), 0);
   const thisWeek = (() => {
@@ -345,13 +458,17 @@ export default function Mileage({ setPage }: Props) {
     ws.setHours(0, 0, 0, 0);
     return entries
       .filter((e) => {
-        try { return new Date(e.trip_date) >= ws; } catch { return false; }
+        // parseEntryDate reads "YYYY-MM-DD" as a LOCAL day (new Date() took it
+        // as UTC midnight, sliding Sunday trips into last week).
+        const d = parseEntryDate(e.trip_date);
+        return d ? d >= ws : false;
       })
       .reduce((s, e) => s + (e.total_miles || 0), 0);
   })();
 
   const startTrip = () => {
     if (!startMiles) { useStore.getState().showToast("Enter starting odometer", "warning"); return; }
+    setTripStartedAt(clockOf(new Date()));
     setTripActive(true);
   };
 
@@ -362,21 +479,23 @@ export default function Mileage({ setPage }: Props) {
     if (end <= start) { useStore.getState().showToast("End miles must be greater than start", "warning"); return; }
     const total = end - start;
 
-    await db.post("mileage", {
+    const saved = await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: tripJob || "General",
-      trip_date: new Date().toISOString().split("T")[0],
+      trip_date: localYmd(new Date()),
+      start_time: tripStartedAt || null,
       start_miles: start,
       end_miles: end,
       total_miles: total,
     });
+    if (!saved) return; // db.post toasted — keep the readings so End can retry
 
     setTripActive(false);
     setStartMiles("");
     setEndMiles("");
     setTripJob("");
-    setLoaded(false);
+    reload();
   };
 
   // ── GPS trip ──
@@ -407,29 +526,42 @@ export default function Mileage({ setPage }: Props) {
 
   // Save: the odometer delta when both readings are there, else the miles.
   const saveGpsTrip = async () => {
-    if (!gpsReview) return;
-    const startOdo = gpsReview.trip.startOdo || "";
-    const odo = odoMiles(startOdo, gpsReview.endOdo);
-    const total_miles = odo ?? (Math.round((parseFloat(gpsReview.miles) || 0) * 10) / 10);
+    if (!gpsReview || savingTripRef.current) return;
+    const r = gpsReview;
+    const startOdo = r.trip.startOdo || "";
+    const odo = odoMiles(startOdo, r.endOdo);
+    const total_miles = odo ?? (Math.round((parseFloat(r.miles) || 0) * 10) / 10);
     if (total_miles < 0.1) {
       useStore.getState().showToast("Enter the miles (or the ending odometer) to log this trip", "warning");
       return;
     }
-    const startNum = parseFloat(startOdo);
-    await db.post("mileage", {
-      user_id: user.id,
-      user_name: user.name,
-      job: gpsReview.trip.job || "General",
-      trip_date: new Date().toISOString().split("T")[0],
-      start_miles: odo != null ? startNum : 0,
-      end_miles: odo != null ? parseFloat(gpsReview.endOdo) : 0,
-      total_miles,
-    });
-    setGpsReview(null);
-    setGpsStartOdo("");
-    setGpsJob("");
-    useStore.getState().showToast(`Logged ${total_miles.toFixed(1)} mi`, "success");
-    setLoaded(false);
+    savingTripRef.current = true;
+    setGpsBusy(true);
+    try {
+      const saved = await db.post("mileage", {
+        user_id: user.id,
+        user_name: user.name,
+        job: r.trip.job || "General",
+        trip_date: localYmd(new Date()),
+        start_time: clockOf(new Date(r.trip.startedAt)),
+        start_miles: odo != null ? parseFloat(startOdo) : 0,
+        end_miles: odo != null ? parseFloat(r.endOdo) : 0,
+        total_miles,
+      });
+      // Failed (offline is common on the road) — db.post toasted. Keep the
+      // review up for another Save, and hold the trip so closing the app
+      // doesn't lose it.
+      if (!saved) { holdDrive(r.trip, total_miles); return; }
+      cancelDrive(); // drop a hold left by an earlier failed save
+      setGpsReview(null);
+      setGpsStartOdo("");
+      setGpsJob("");
+      useStore.getState().showToast(`Logged ${total_miles.toFixed(1)} mi`, "success");
+      reload();
+    } finally {
+      savingTripRef.current = false;
+      setGpsBusy(false);
+    }
   };
 
   // Cancel an in-progress / to-be-reviewed trip without logging anything.
@@ -453,10 +585,38 @@ export default function Mileage({ setPage }: Props) {
       total_miles: Math.round(miles * 10) / 10,
     });
     setEditing(null);
-    setLoaded(false);
+    reload();
+  };
+
+  const addManual = async () => {
+    const miles = parseFloat(mMiles);
+    if (!miles || miles <= 0) { useStore.getState().showToast("Enter valid miles", "warning"); return; }
+    const saved = await db.post("mileage", {
+      user_id: user.id,
+      user_name: user.name,
+      job: mJob || "General",
+      trip_date: mDate,
+      start_time: mTime ? formatClock(clockMinutes(mTime)!) : null,
+      start_miles: 0,
+      end_miles: 0,
+      total_miles: miles,
+    });
+    if (!saved) return; // db.post toasted — keep what was typed
+    setMMiles("");
+    setMJob("");
+    setMTime("");
+    reload();
   };
 
   const org = useStore((s) => s.org);
+  const timeEntries = useStore((s) => s.timeEntries);
+  // Each leg's start: its own stored time, else estimated from that day's clock-ins.
+  const startsFor = (day: TripDay<MileageEntry>): (LegStart | null)[] =>
+    legStartTimes(day, timeEntries.filter((e) => {
+      if (e.user_id !== user.id) return false;
+      const d = parseEntryDate(e.entry_date);
+      return d ? localYmd(d) === day.date : false;
+    }), org?.address);
   const IRS_RATE = 0.70; // 2025 IRS standard mileage rate
 
   const exportMileagePdf = () => {
@@ -475,11 +635,23 @@ export default function Mileage({ setPage }: Props) {
 
     const totalDeduction = (totalMiles * IRS_RATE).toFixed(2);
 
-    const rows = entries
-      .sort((a, b) => (a.trip_date || "").localeCompare(b.trip_date || ""))
-      .map((e) =>
-        `<tr><td>${e.trip_date}</td><td>${e.job}</td>${e.start_miles > 0 ? `<td style="text-align:right">${e.start_miles}</td><td style="text-align:right">${e.end_miles}</td>` : `<td style="text-align:right">—</td><td style="text-align:right">—</td>`}<td style="text-align:right;font-weight:600">${e.total_miles.toFixed(1)}</td></tr>`
-      ).join("");
+    const esc = (v: string) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const tripDays = groupTripsByDay(entries, org?.address, true);
+    let anyEstimate = false;
+    const rows = tripDays.map((day) => {
+      const multi = day.legs.length > 1;
+      const starts = startsFor(day);
+      if (starts.some((st) => st?.estimated)) anyEstimate = true;
+      const legRows = day.legs.map((leg, i) => {
+        const e = leg.trip;
+        const odo = e.start_miles > 0 ? `${e.start_miles} → ${e.end_miles}` : "—";
+        return `<tr${multi && i > 0 ? ' class="leg"' : ""}><td>${i === 0 ? dayLabel(day.date, true) : ""}</td><td style="white-space:nowrap">${starts[i] ? `${starts[i]!.estimated ? "~" : ""}${starts[i]!.time}` : "—"}</td><td>${multi ? `${i + 1}. ` : ""}${esc(leg.from || "—")}</td><td>${leg.toBase ? "Back to shop — " : ""}${esc(e.job)}</td><td style="text-align:right">${odo}</td><td style="text-align:right;font-weight:600">${Number(e.total_miles || 0).toFixed(1)}</td></tr>`;
+      }).join("");
+      const subtotal = multi
+        ? `<tr class="daytot"><td></td><td></td><td colspan="3">${dayLabel(day.date)} — ${day.legs.length} trips · $${(day.miles * IRS_RATE).toFixed(2)}</td><td style="text-align:right">${day.miles.toFixed(1)}</td></tr>`
+        : "";
+      return legRows + subtotal;
+    }).join("");
 
     const monthSummary = Object.entries(byMonth)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -504,6 +676,8 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 .totals{background:#f0f4f8;border-radius:8px;padding:16px;margin:16px 0;display:flex;justify-content:space-around;text-align:center}
 .totals .num{font-family:Oswald;font-size:28px;font-weight:700;color:#2E75B6}
 .totals .lbl{font-family:Oswald;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.08em}
+tr.leg td{border-top:none}
+tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px solid #d6e2ee}
 .footer{border-top:1px solid #ddd;padding-top:8px;text-align:center;font-size:11px;color:#888;margin-top:24px}
 .sig-row{display:flex;gap:40px;margin-top:30px}
 .sig-line{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;font-size:12px;color:#666}
@@ -517,6 +691,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 <div class="totals">
   <div><div class="num">${totalMiles.toFixed(1)}</div><div class="lbl">Total Miles</div></div>
   <div><div class="num">${entries.length}</div><div class="lbl">Total Trips</div></div>
+  <div><div class="num">${tripDays.length}</div><div class="lbl">Days Driven</div></div>
   <div><div class="num" style="color:#00cc66">$${totalDeduction}</div><div class="lbl">Tax Deduction (@ $${IRS_RATE}/mi)</div></div>
 </div>
 
@@ -524,9 +699,10 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 <table><thead><tr><th>Month</th><th style="text-align:right">Trips</th><th style="text-align:right">Miles</th><th style="text-align:right">Deduction</th></tr></thead><tbody>${monthSummary}</tbody></table>
 
 <h2>Trip Details</h2>
-<table><thead><tr><th>Date</th><th>Job</th><th style="text-align:right">Start</th><th style="text-align:right">End</th><th style="text-align:right">Miles</th></tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr><th>Date</th><th>Start</th><th>From</th><th>To</th><th style="text-align:right">Odometer</th><th style="text-align:right">Miles</th></tr></thead><tbody>${rows}</tbody></table>
 
 <div style="font-size:12px;color:#666;margin-top:12px;padding:10px;background:#f5f7fa;border-radius:6px">
+  ${anyEstimate ? "Times marked ~ are estimated from that day's clock-ins and clock-outs. " : ""}"From" is the previous stop that day (the first trip starts at the business address when one is set).<br/>
   <b>IRS Standard Mileage Rate:</b> $${IRS_RATE}/mile (2025). This report is for record-keeping purposes. Consult your tax professional for deduction eligibility.
 </div>
 
@@ -547,24 +723,21 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
 
   return (
     <div className="fi">
-      <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(46,139,255,.14)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Icon name="mileage" size={19} color="var(--color-primary)" />
-          </span>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>Mileage</span>
-        </div>
+      {/* Back to wherever Mileage was opened from (More) — going to the
+          dashboard pushed a new entry and made system back loop here. */}
+      <TopBar title={t("nav.mileage")} icon="mileage" color="#14b8a6" onBack={() => window.history.back()} right={
         <div className="row">
           {entries.length > 0 && (
             <button className="bo" onClick={exportMileagePdf} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
               <Icon name="print" size={14} /> Print
             </button>
           )}
-          <button className="bo" onClick={() => setPage("dash")} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Icon name="back" size={14} /> Dashboard
-          </button>
         </div>
-      </div>
+      } />
+
+      {/* Suggested trips first — end of day, one tap logs the day's
+          drives (auto-built from the day's clocked jobs). */}
+      <SuggestedTrips entries={entries} loaded={loaded} onAdded={reload} />
 
       {/* Stats */}
       <div className="g2 mb">
@@ -648,11 +821,11 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                 </span>
               </div>
               <div style={{ fontFamily: "Oswald", fontSize: 30, fontWeight: 700, color: "var(--color-success)", lineHeight: 1.1, marginBottom: 4 }}>
-                {gpsTrip.accMiles.toFixed(1)} <span style={{ fontSize: 14 }}>mi so far</span>
+                {gpsTrip.accMiles.toFixed(1)} <span style={{ fontSize: 14 }}>{gpsTrip.stopped ? "mi · not saved yet" : "mi so far"}</span>
               </div>
               <div className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
                 {gpsTrip.startOdo ? `Started at ${gpsTrip.startOdo} mi · ` : ""}
-                {(gpsTrip.fixes || 0) > 0 ? "start point saved · phone can stay locked" : "finding your start point…"}
+                {gpsTrip.stopped ? "tap End to save it" : (gpsTrip.fixes || 0) > 0 ? "start point saved · phone can stay locked" : "finding your start point…"}
               </div>
               {driveErr && <p style={{ fontSize: 12.5, margin: "-6px 0 10px", color: "var(--color-accent-red)" }}>{driveErr}</p>}
               <button className="br" onClick={endGpsTrip} disabled={gpsBusy} style={{ fontSize: 15, padding: "10px 28px", display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -690,9 +863,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                       disabled={odo != null}
                       style={{ width: "100%", marginBottom: 8, opacity: odo != null ? 0.5 : 1 }}
                     />
-                    <div className="dim" style={{ fontSize: 12.5, marginBottom: 4 }}>
-                      Odometer (optional){startOdo ? ` — started at ${startOdo}` : ""}
-                    </div>
+                    <div className="dim" style={{ fontSize: 12.5, marginBottom: 4 }}>Odometer (optional)</div>
                     <div className="row" style={{ gap: 6, marginBottom: 10 }}>
                       <input
                         type="number"
@@ -716,7 +887,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
               })()}
               <div className="row" style={{ gap: 6 }}>
                 <button className="bo" onClick={discardGpsTrip} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Discard</button>
-                <button className="bb" onClick={saveGpsTrip} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Save trip</button>
+                <button className="bb" onClick={saveGpsTrip} disabled={gpsBusy} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Save trip</button>
               </div>
               {gpsErr && <p style={{ fontSize: 12.5, marginTop: 8, color: "var(--color-accent-red)" }}>{gpsErr}</p>}
             </div>
@@ -783,77 +954,148 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
         )}
       </div>
 
-      {/* Suggested trips — auto-built from the day's clocked jobs */}
-      <SuggestedTrips onAdded={() => setLoaded(false)} />
+      {/* Manual Entry */}
+      <div className="cd mb">
+        <h4 style={{ fontSize: 15, marginBottom: 6 }}>Manual Entry</h4>
+        <div className="row" style={{ marginBottom: 6 }}>
+          <input
+            type="date"
+            value={mDate}
+            onChange={(e) => setMDate(e.target.value)}
+            style={{ width: 130, color: "var(--color-accent-red)", fontWeight: 600 }}
+          />
+          <select value={mJob} onChange={(e) => setMJob(e.target.value)} style={{ flex: 1 }}>
+            <option value="">Select job</option>
+            {jobs.map((j) => (
+              <option key={j.id} value={j.property}>{j.property}</option>
+            ))}
+          </select>
+        </div>
+        <div className="row">
+          <input
+            type="number"
+            value={mMiles}
+            onChange={(e) => setMMiles(e.target.value)}
+            placeholder="Miles"
+            style={{ width: 80 }}
+          />
+          <input
+            type="time"
+            value={mTime}
+            onChange={(e) => setMTime(e.target.value)}
+            aria-label="Start time (optional)"
+            title="Start time (optional)"
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          <button className="bg" onClick={addManual} style={{ fontSize: 15, padding: "7px 12px" }}>
+            Log
+          </button>
+        </div>
+      </div>
 
-      {/* Mileage Log */}
+      {/* Mileage Log — grouped by day so a multi-stop day reads as a route:
+          numbered legs, where each one started, and the day's total. */}
       <div className="cd">
         <h4 style={{ fontSize: 15, marginBottom: 6 }}>Trip Log ({entries.length})</h4>
         {!entries.length ? (
           <p className="dim" style={{ fontSize: 14 }}>No trips logged</p>
         ) : (
-          entries.map((e) => editing?.id === e.id ? (
-            <div key={e.id} className="sep" style={{ fontSize: 14 }}>
-              <div style={{ marginBottom: 6 }}>
-                <span style={{ marginRight: 8 }}>{e.trip_date}</span>
-                <span style={{ color: "var(--color-primary)" }}>{e.job}</span>
-              </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-                <input type="number" inputMode="numeric" value={editing.startOdo} onChange={(ev) => setEditing({ ...editing, startOdo: ev.target.value })} placeholder="Odo start" style={{ flex: 1, minWidth: 0 }} />
-                <input type="number" inputMode="numeric" value={editing.endOdo} onChange={(ev) => setEditing({ ...editing, endOdo: ev.target.value })} placeholder="Odo end" style={{ flex: 1, minWidth: 0 }} />
-                <span className="dim" style={{ fontSize: 12 }}>or</span>
-                <input type="number" inputMode="decimal" value={editing.miles} onChange={(ev) => setEditing({ ...editing, miles: ev.target.value })} placeholder="Miles" disabled={odoMiles(editing.startOdo, editing.endOdo) != null} style={{ width: 70 }} />
-              </div>
-              {odoMiles(editing.startOdo, editing.endOdo) != null && (
-                <div style={{ fontSize: 12.5, color: "var(--color-success)", marginBottom: 6 }}>{odoMiles(editing.startOdo, editing.endOdo)!.toFixed(1)} mi from the odometer</div>
-              )}
-              <div style={{ display: "flex", gap: 6 }}>
-                <button className="bo" onClick={() => setEditing(null)} style={{ flex: 1, fontSize: 13, padding: "5px 0" }}>Cancel</button>
-                <button className="bg" onClick={saveEdit} style={{ flex: 1, fontSize: 13, padding: "5px 0" }}>Save</button>
-              </div>
-            </div>
-          ) : (
-            <div
-              key={e.id}
-              className="sep"
-              style={{ display: "flex", justifyContent: "space-between", fontSize: 14, alignItems: "center" }}
-            >
-              <span style={{ minWidth: 70 }}>{e.trip_date}</span>
-              <span style={{ color: "var(--color-primary)", flex: 1 }}>{e.job}</span>
-              {e.start_miles > 0 && (
-                <span className="dim" style={{ fontSize: 14, marginRight: 6 }}>
-                  {e.start_miles}→{e.end_miles}
-                </span>
-              )}
-              <span style={{ fontFamily: "Oswald", color: "var(--color-success)", minWidth: 50, textAlign: "right" }}>
-                {e.total_miles.toFixed(1)} mi
-              </span>
-              <button
-                onClick={() => setEditing({
-                  id: e.id,
-                  startOdo: e.start_miles > 0 ? String(e.start_miles) : "",
-                  endOdo: e.end_miles > 0 ? String(e.end_miles) : "",
-                  miles: String(e.total_miles ?? ""),
+          groupTripsByDay(entries, org?.address).map((day) => {
+            const multi = day.legs.length > 1;
+            const starts = startsFor(day);
+            return (
+              <div key={day.date} className="sep" style={{ paddingTop: 8, paddingBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+                  <b style={{ fontSize: 14.5, flex: 1 }}>{dayLabel(day.date)}</b>
+                  {multi && <span className="dim" style={{ fontSize: 12.5 }}>{day.legs.length} trips</span>}
+                  <span style={{ fontFamily: "Oswald", color: "var(--color-success)", fontSize: 15 }}>{day.miles.toFixed(1)} mi</span>
+                  <span className="dim" style={{ fontSize: 12.5, minWidth: 48, textAlign: "right" }}>${(day.miles * IRS_RATE).toFixed(2)}</span>
+                </div>
+                {day.legs.map((leg, i) => {
+                  const e = leg.trip;
+                  const st = starts[i];
+                  if (editing?.id === e.id) {
+                    const odo = odoMiles(editing.startOdo, editing.endOdo);
+                    return (
+                      <div key={e.id} style={{ padding: "6px 0", borderTop: i === 0 ? "none" : "1px dashed var(--color-border-dark, #1e1e2e)" }}>
+                        <div style={{ fontSize: 14, color: "var(--color-primary)", marginBottom: 6 }}>{e.job}</div>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                          <input type="number" inputMode="numeric" value={editing.startOdo} onChange={(ev) => setEditing({ ...editing, startOdo: ev.target.value })} placeholder="Odo start" style={{ flex: 1, minWidth: 0 }} />
+                          <input type="number" inputMode="numeric" value={editing.endOdo} onChange={(ev) => setEditing({ ...editing, endOdo: ev.target.value })} placeholder="Odo end" style={{ flex: 1, minWidth: 0 }} />
+                          <span className="dim" style={{ fontSize: 12 }}>or</span>
+                          <input type="number" inputMode="decimal" value={editing.miles} onChange={(ev) => setEditing({ ...editing, miles: ev.target.value })} placeholder="Miles" disabled={odo != null} style={{ width: 70 }} />
+                        </div>
+                        {odo != null && <div style={{ fontSize: 12.5, color: "var(--color-success)", marginBottom: 6 }}>{odo.toFixed(1)} mi from the odometer</div>}
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button className="bo" onClick={() => setEditing(null)} style={{ flex: 1, fontSize: 13, padding: "5px 0" }}>Cancel</button>
+                          <button className="bg" onClick={saveEdit} style={{ flex: 1, fontSize: 13, padding: "5px 0" }}>Save</button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: i === 0 ? "none" : "1px dashed var(--color-border-dark, #1e1e2e)" }}>
+                      {multi && (
+                        <span style={{ width: 20, height: 20, borderRadius: 10, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11.5, fontWeight: 700, background: "rgba(20,184,166,.16)", color: "#14b8a6" }}>{i + 1}</span>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, color: "var(--color-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {leg.toBase ? <>Back to shop <span className="dim">· {e.job}</span></> : e.job}
+                        </div>
+                        {(st || leg.from || e.start_miles > 0) && (
+                          <div className="dim" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {st && (
+                              <b style={{ color: "#14b8a6", fontWeight: 600 }} title={st.estimated ? "Estimated from your clock-ins" : undefined}>
+                                {st.estimated ? "~" : ""}{st.time}
+                              </b>
+                            )}
+                            {st && (leg.from || e.start_miles > 0) && " · "}
+                            {leg.from && <>from {leg.from}</>}
+                            {leg.from && e.start_miles > 0 && " · "}
+                            {e.start_miles > 0 && <>odometer {e.start_miles}→{e.end_miles}</>}
+                          </div>
+                        )}
+                      </div>
+                      {multi && (
+                        <span style={{ fontFamily: "Oswald", fontSize: 14, minWidth: 50, textAlign: "right", flexShrink: 0 }}>
+                          {Number(e.total_miles || 0).toFixed(1)} mi
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setEditing({
+                          id: e.id,
+                          startOdo: e.start_miles > 0 ? String(e.start_miles) : "",
+                          endOdo: e.end_miles > 0 ? String(e.end_miles) : "",
+                          miles: String(e.total_miles ?? ""),
+                        })}
+                        style={{ background: "none", color: "var(--color-dim)", fontSize: 14, display: "inline-flex", alignItems: "center", flexShrink: 0 }}
+                        aria-label="Edit trip — miles or odometer"
+                        title="Add odometer readings / fix miles"
+                      >
+                        <Icon name="edit" size={14} />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!await useStore.getState().showConfirm("Delete Trip", `Delete the ${Number(e.total_miles || 0).toFixed(1)} mi trip to ${e.job} on ${dayLabel(day.date)}?`)) return;
+                          await db.del("mileage", e.id);
+                          reload();
+                        }}
+                        style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, display: "inline-flex", alignItems: "center", flexShrink: 0 }}
+                        aria-label="Delete trip"
+                      >
+                        <Icon name="close" size={14} />
+                      </button>
+                    </div>
+                  );
                 })}
-                style={{ background: "none", color: "var(--color-dim)", fontSize: 14, marginLeft: 6, display: "inline-flex", alignItems: "center" }}
-                aria-label="Edit trip — miles or odometer"
-                title="Add odometer readings / fix miles"
-              >
-                <Icon name="edit" size={14} />
-              </button>
-              <button
-                onClick={async () => {
-                  if (!await useStore.getState().showConfirm("Delete Trip", "Delete this trip?")) return;
-                  await db.del("mileage", e.id);
-                  setLoaded(false);
-                }}
-                style={{ background: "none", color: "var(--color-accent-red)", fontSize: 14, marginLeft: 6, display: "inline-flex", alignItems: "center" }}
-                aria-label="Delete trip"
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-          ))
+              </div>
+            );
+          })
+        )}
+        {entries.length > 0 && (
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
+            Times with ~ are estimated from your clock-ins and clock-outs.
+          </div>
         )}
       </div>
     </div>

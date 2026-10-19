@@ -264,6 +264,9 @@ export interface Job {
    *  Set from the Jobs detail; completing the job stamps that unit's
    *  `last_service_at`. Absent = no linked equipment. */
   equipment_id?: string | null;
+  /** Optional FK into `flip_projects` — set when this job is work on one of
+   *  the org's own flips. Absent = a normal service job (Flip Mode ignores it). */
+  flip_project_id?: string | null;
 }
 
 /** One row per Stripe charge (or refund) against a job — the payment ledger.
@@ -390,6 +393,10 @@ export interface PayHistory {
   entries: number;
   created_at?: string;
   details?: string;
+  /** When the owner actually paid this stub out (null = processed, not paid yet). */
+  paid_at?: string | null;
+  /** cash | check | deposit | app */
+  paid_method?: string | null;
 }
 
 export interface Receipt {
@@ -486,6 +493,102 @@ export interface Equipment {
   notes?: string;
   photos?: { url: string; label?: string }[];
   last_service_at?: string | null; // TIMESTAMPTZ — stamped when a linked job completes
+  created_at?: string;
+}
+
+/**
+ * Flip Mode — a house the org is buying to renovate and resell. No paying
+ * customer (the org is the client), so the P&L is PROFIT, not Job.total.
+ * Only the underwriting INPUTS are stored; every derived number (all-in,
+ * profit, ROI, 70%-rule max offer, verdict) comes from `analyzeFlip()` in
+ * `src/lib/flip.ts`. Field names match the SQL columns 1:1.
+ */
+export type FlipStatus =
+  | "analyzing" | "acquired" | "active" | "listed" | "sold" | "dead";
+
+export interface FlipComp {
+  address?: string;
+  price?: number;
+  sqft?: number;
+  /** "sold" (closed) or "pending" (under contract). Absent = sold. */
+  status?: "sold" | "pending";
+  sold_at?: string;
+  note?: string;
+}
+
+/** Permit state for a subcontracted trade on a flip. "none" = no permit needed. */
+export type FlipPermitStatus = "none" | "needed" | "applied" | "issued" | "final";
+
+/** One subcontractor's bid for a trade. `picked` marks the hired one (one per
+ *  trade); `paid` is what has been paid to that sub so far. */
+export interface FlipBid {
+  id: string;
+  company?: string;
+  phone?: string;
+  amount?: number;
+  note?: string;
+  picked?: boolean;
+  paid?: number;
+}
+
+/** A trade on a flip that's subbed out (roof, electrical, HVAC…): up to 3 bids
+ *  and its permit. Stored in flip_projects.subs (JSONB). */
+export interface FlipSub {
+  id: string;
+  trade: string;
+  permit?: { status: FlipPermitStatus; number?: string };
+  bids: FlipBid[];
+}
+
+/** A lender draw: rehab money released from the holdback after a milestone.
+ *  Dates are YYYY-MM-DD, stamped when the status moves forward. */
+export type FlipDrawStatus = "planned" | "requested" | "inspected" | "funded";
+export interface FlipDraw {
+  id: string;
+  label?: string;          // milestone ("Demo + rough-ins")
+  amount?: number;
+  status: FlipDrawStatus;
+  requested_at?: string;
+  funded_at?: string;
+  /** Lender's fee for this draw; absent = the loan's draw_fee. */
+  fee?: number;
+  note?: string;
+}
+
+/** The flip's lender + its draw schedule. Stored in flip_projects.loan (JSONB). */
+export interface FlipLoan {
+  lender?: string;
+  loan_no?: string;
+  contact?: string;        // name / phone / email of the draw contact
+  holdback?: number;       // rehab funds the lender holds and releases in draws
+  rate?: number;           // annual interest %
+  draw_fee?: number;       // $ per draw (inspection / wire fee)
+  draws?: FlipDraw[];
+}
+
+export interface FlipProject {
+  id: string;
+  org_id: string;
+  address: string;
+  beds?: number | null;
+  baths?: number | null;
+  sqft?: number | null;
+  status: FlipStatus;
+  purchase_price?: number;
+  rehab_budget?: number;
+  arv?: number;                    // after-repair value
+  down_pct?: number;               // % of purchase paid in cash
+  holding_monthly?: number;        // taxes + insurance + utilities + interest / month
+  holding_months?: number;
+  financing_cost?: number;         // points / origination / lump loan fees
+  selling_pct?: number;            // agent + closing, % of ARV
+  contingency?: number;
+  comps?: FlipComp[] | null;
+  subs?: FlipSub[] | null;          // subcontracted trades: bids + permits (Phase 3)
+  loan?: FlipLoan | null;          // lender + draw schedule (Phase 3)
+  acquired_at?: string | null;     // TIMESTAMPTZ — starts the holding clock (Phase 2)
+  sold_at?: string | null;
+  sold_price?: number | null;
   created_at?: string;
 }
 

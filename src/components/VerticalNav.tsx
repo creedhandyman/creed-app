@@ -38,7 +38,8 @@ const OVERFLOW_TABS: Record<string, { icon: IconName; labelKey: string }> = {
   financials: { icon: "money", labelKey: "nav.financials" },
   payroll: { icon: "pay", labelKey: "nav.pay" },
   workvision: { icon: "worker", labelKey: "nav.work" },
-  troubleshoot: { icon: "troubleshoot", labelKey: "nav.help" },
+  troubleshoot: { icon: "troubleshoot", labelKey: "nav.fixit" },
+  flip: { icon: "trending", labelKey: "nav.flip" },
 };
 
 // Per-tab signature color, shown only when that tab is the active one.
@@ -58,7 +59,8 @@ const TAB_COLOR: Record<string, string> = {
   financials: "#10b981",  // Money — emerald
   payroll: "#22c55e",     // Payroll — green
   workvision: "#13c06a",  // Work mode — green
-  troubleshoot: "#94a3b8",// Help — slate
+  troubleshoot: "#94a3b8",// Fix-it — slate
+  flip: "#ffcc00",        // Flip Mode — gold
 };
 
 interface Props {
@@ -101,7 +103,8 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
         const label = morph ? t(navPage === "ops" && !isAdmin ? "nav.timeOff" : morph.labelKey) : t(item.labelKey);
         const active = isMore ? onOverflow : navPage === item.id;
         const color = isMore ? (TAB_COLOR[navPage] || TAB_COLOR.more) : (TAB_COLOR[item.id] || TAB_COLOR.dash);
-        const showLeadDot = item.id === "jobs" && leadCount > 0;
+        // Leads are an owner/manager queue — crew can't act on them.
+        const showLeadDot = !!isAdmin && item.id === "jobs" && leadCount > 0;
         const showBellDot = item.id === "dash" && unreadCount > 0;
 
         return (

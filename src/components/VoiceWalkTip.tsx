@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import Grizz from "./Grizz";
 import { tipsEnabled, tipSeen, markTipSeen, setTipsEnabled } from "@/lib/grizz";
+import { t } from "@/lib/i18n";
 
 interface Props {
   show: boolean;
@@ -59,15 +60,15 @@ export default function VoiceWalkTip({ show }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <Grizz pose="wave" size={88} style={{ position: "absolute", right: -44, top: -12 }} />
-        <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffd76b", marginBottom: 6 }}>Voice Walk Tip</div>
+        <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffd76b", marginBottom: 6 }}>{t("vw.tipTitle")}</div>
         <div style={{ fontSize: 14.5, lineHeight: 1.5, marginBottom: 12 }}>
-          <strong>📸 Take photos of all damage and problem areas.</strong>
+          <strong>{t("vw.tipHead")}</strong>
           <br />
           <br />
-          Then <strong>talk through what's wrong</strong> — describe each issue, the damage type, location, and any observations. The AI will listen and automatically fill in your inspection notes.
+          {t("vw.tipThen")} <strong>{t("vw.tipBold")}</strong> {t("vw.tipBody")}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <span onClick={turnOff} style={{ fontSize: 11.5, color: "var(--color-dim)", cursor: "pointer", userSelect: "none" }}>Don&apos;t show tips</span>
+          <span onClick={turnOff} style={{ fontSize: 11.5, color: "var(--color-dim)", cursor: "pointer", userSelect: "none" }}>{t("tip.dontShow")}</span>
           <button
             onClick={gotIt}
             style={{
@@ -84,7 +85,7 @@ export default function VoiceWalkTip({ show }: Props) {
               cursor: "pointer",
             }}
           >
-            Got it
+            {t("tip.gotIt")}
           </button>
         </div>
       </div>

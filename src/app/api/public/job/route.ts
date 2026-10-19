@@ -72,6 +72,12 @@ export async function GET(req: NextRequest) {
           if (typeof c?.privacyUrl === "string" && /^https:\/\//.test(c.privacyUrl)) privacy_url = c.privacyUrl;
           if (typeof c?.smsTermsUrl === "string" && /^https:\/\//.test(c.smsTermsUrl)) sms_terms_url = c.smsTermsUrl;
         } catch { /* malformed site_content — no links */ }
+        // Fallback: the platform's own policy pages (both carry the SMS
+        // program disclosures) so the consent box never renders without its
+        // Privacy/Terms links — A2P reviewers and carriers expect them at the
+        // point of collection, and most orgs never set custom URLs.
+        if (!privacy_url) privacy_url = "https://www.creedhm.com/privacy";
+        if (!sms_terms_url) sms_terms_url = "https://www.creedhm.com/terms";
         org = { ...rest, privacy_url, sms_terms_url };
       }
     }

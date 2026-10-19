@@ -27,6 +27,7 @@ import {
 } from "@/lib/recurring";
 import type { Job, RecurringJob } from "@/lib/types";
 import { stripAiHrsFromBlob } from "@/lib/ai-hours";
+import { isPlatformAdmin } from "@/lib/platform-admin";
 
 export default function Recurring() {
   const user = useStore((s) => s.user)!;
@@ -38,6 +39,9 @@ export default function Recurring() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [firingId, setFiringId] = useState<string | null>(null);
+  // "Fire now" hits an admin-token route (a test hook for the cron) — show
+  // it to the platform operator only; owners just see the schedule.
+  const canFire = isPlatformAdmin(user?.email);
 
   const border = darkMode ? "#1e1e2e" : "#eee";
 
@@ -82,16 +86,19 @@ export default function Recurring() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         useStore.getState().showToast(
-          `Fire failed: ${err?.error || res.statusText}. Tip: set window.__adminPw="<pw>" first.`,
+          `Couldn't fire this template (${res.status}${err?.error ? ` · ${err.error}` : ""}).`,
           "warning",
         );
         setFiringId(null);
         return;
       }
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       const count = Array.isArray(json?.fired) ? json.fired.length : 0;
+      const firstError: string | undefined = Array.isArray(json?.errors) ? json.errors[0]?.error : undefined;
       useStore.getState().showToast(
-        count > 0 ? `Created ${count} job — check Jobs` : "No job was created — see console",
+        count > 0
+          ? `Created ${count} job — it's in Jobs as scheduled.`
+          : `No job was created${firstError ? ` — ${firstError}` : "."}`,
         count > 0 ? "success" : "warning",
       );
       await loadAll();
@@ -141,7 +148,7 @@ export default function Recurring() {
               isEditing={editingId === r.id}
               onEdit={() => setEditingId(editingId === r.id ? null : r.id)}
               onTogglePause={() => togglePause(r)}
-              onFire={() => fireNow(r)}
+              onFire={canFire ? () => fireNow(r) : undefined}
               onDelete={() => deleteOne(r)}
               onSavedEdit={() => setEditingId(null)}
             />
@@ -163,7 +170,7 @@ export default function Recurring() {
               isEditing={editingId === r.id}
               onEdit={() => setEditingId(editingId === r.id ? null : r.id)}
               onTogglePause={() => togglePause(r)}
-              onFire={() => fireNow(r)}
+              onFire={canFire ? () => fireNow(r) : undefined}
               onDelete={() => deleteOne(r)}
               onSavedEdit={() => setEditingId(null)}
             />
@@ -203,7 +210,8 @@ function RowCard({
   isEditing: boolean;
   onEdit: () => void;
   onTogglePause: () => void;
-  onFire: () => void;
+  /** Omitted for everyone but the platform operator — hides "Fire now". */
+  onFire?: () => void;
   onDelete: () => void;
   onSavedEdit: () => void;
 }) {
@@ -247,14 +255,16 @@ function RowCard({
         </div>
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: 10, borderTop: `1px solid ${border}`, paddingTop: 8 }}>
-        <button
-          className="bb"
-          onClick={onFire}
-          disabled={isFiring}
-          style={{ fontSize: 13, padding: "4px 10px", opacity: isFiring ? 0.6 : 1 }}
-        >
-          <Icon name="rocket" size={12} /> {isFiring ? "Firing…" : "Fire now"}
-        </button>
+        {onFire && (
+          <button
+            className="bb"
+            onClick={onFire}
+            disabled={isFiring}
+            style={{ fontSize: 13, padding: "4px 10px", opacity: isFiring ? 0.6 : 1 }}
+          >
+            <Icon name="rocket" size={12} /> {isFiring ? "Firing…" : "Fire now"}
+          </button>
+        )}
         <button className="br" onClick={onDelete} style={{ fontSize: 13, padding: "4px 10px", marginLeft: "auto" }}>
           <Icon name="delete" size={12} /> Delete
         </button>
@@ -440,15 +450,12 @@ function NewFromJobPicker({
   return (
     <div
       onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 1500,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-      }}
+      className="sheet-overlay"
+      style={{ zIndex: 1500 }}
     >
       <div
-        className="cd"
+        className="cd sheet"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 480 }}
       >
         <div className="row mb" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ fontSize: 17 }}>New recurring template</h3>

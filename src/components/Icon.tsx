@@ -90,6 +90,8 @@ import {
   Mic,
   Layers,
   Leaf,
+  Share2,
+  ExternalLink,
   type LucideIcon,
 } from "lucide-react";
 
@@ -176,6 +178,8 @@ const ICONS: Record<string, LucideIcon> = {
   // Extras for the deeper sweep
   print: Printer,
   link: LinkIcon,
+  share: Share2,
+  external: ExternalLink,
   checkCircle: CheckCircle2,
   alert: AlertCircle,
   errorCircle: XCircle,

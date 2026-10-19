@@ -106,6 +106,15 @@
 .mkt .fcard .ic svg { width: 25px; height: 25px; }
 .mkt .fcard h3 { font-family: Oswald, sans-serif; font-weight: 600; font-size: 21px; letter-spacing: .3px; margin-bottom: 8px; }
 .mkt .fcard p { font-size: 15px; color: var(--mmuted); line-height: 1.55; }
+/* Real app screens (Landing "See the real app") */
+.mkt .appshots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 44px; }
+.mkt .appshot { margin: 0; text-align: center; }
+.mkt .appshotphone { background: linear-gradient(180deg, #1a1a24, #0e0e14); border: 1px solid #2a2a3a; border-radius: 30px; padding: 7px; box-shadow: 0 30px 70px -30px rgba(46, 117, 182, .55), 0 20px 50px -24px rgba(0, 0, 0, .85); }
+.mkt .appshotphone img { display: block; width: 100%; height: auto; border-radius: 24px; }
+.mkt .appshot figcaption { margin-top: 16px; }
+.mkt .appshot figcaption b { display: block; font-family: Oswald, sans-serif; font-weight: 600; font-size: 19px; letter-spacing: .3px; }
+.mkt .appshot figcaption span { display: block; margin-top: 6px; font-size: 14.5px; color: var(--mmuted); line-height: 1.5; }
+.mkt .appshotnote { margin-top: 22px; text-align: center; font-size: 12.5px; color: var(--mdim); }
 .mkt .replaces { text-align: center; padding: 66px 0; background: radial-gradient(700px 360px at 50% 50%, rgba(157, 78, 221, .1), transparent 70%); }
 .mkt .repchips { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 30px; }
 .mkt .repchip { font-family: Oswald, sans-serif; font-weight: 600; font-size: clamp(15px, 2vw, 22px); letter-spacing: .4px; text-transform: uppercase; padding: 13px 20px; border-radius: 13px; background: var(--mcard); border: 1px solid var(--mline2); }
@@ -276,6 +285,9 @@
   .mkt .signbrand { display: none; }
   .mkt .nlinks .hide { display: none; }
   .mkt .stats { gap: 28px; }
+  /* Swipeable row of phones; the row scrolls, never the page. */
+  .mkt .appshots { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 16px; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
+  .mkt .appshot { flex: 0 0 64%; scroll-snap-align: center; }
 }
 
 /* ── Phones: tighten the nav so the wordmark + Get Started fit on one row ── */

@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import MarketingShell from "./MarketingShell";
@@ -20,6 +21,15 @@ const STEPS = [
   { h: "Walk the job", p: "Snap photos room by room, or talk it through with Voice Walk while the app listens and takes notes." },
   { h: "AI writes the quote", p: "An itemized estimate by trade with hours, materials and your rates — plus optional Good / Better / Best options. Tweak it in minutes." },
   { h: "Send it, sign it, get paid", p: "Text the customer a link. They sign and pay a deposit by card; you schedule the crew, and the invoice follows the work." },
+];
+
+// Real app screens, captured on a made-up demo business (marketing-shots/
+// shoot.js) — no customer data. Re-shoot after UI changes so they stay true.
+const SHOTS = [
+  { src: "/marketing/app-quote-options.webp", h: "Quote with three options", p: "AI builds the quote from your photos. Customers pick Good, Better or Best.", alt: "Creed quote editor showing Good, Better and Best option prices" },
+  { src: "/marketing/app-sign.webp", h: "They sign on the spot", p: "Approve online from a link, or in person on your phone.", alt: "Recording an in-person quote approval with the customer's signature" },
+  { src: "/marketing/app-home.webp", h: "Your whole day, one screen", p: "Today's stops, who's working, and what needs you.", alt: "Creed home screen with today's jobs and the jobs that need attention" },
+  { src: "/marketing/app-crew.webp", h: "Crew clocks in at the job", p: "One tap, even without signal. See who's on the clock.", alt: "Crew activity screen showing who is on the clock" },
 ];
 
 const STATS = [
@@ -74,6 +84,23 @@ export default function Landing() {
           ))}
         </div>
       </div>
+
+      {/* Real screens */}
+      <section className="feat"><div className="wrap">
+        <div className="kick">See the real app</div>
+        <h2 className="h2">Real screens.<br /><span className="g">Real crew software.</span></h2>
+        <div className="appshots">
+          {SHOTS.map((s) => (
+            <figure className="appshot" key={s.src}>
+              <div className="appshotphone">
+                <Image src={s.src} alt={s.alt} width={780} height={1688} sizes="(max-width: 820px) 64vw, 240px" />
+              </div>
+              <figcaption><b>{s.h}</b><span>{s.p}</span></figcaption>
+            </figure>
+          ))}
+        </div>
+        <p className="appshotnote">Shown with a demo business.</p>
+      </div></section>
 
       {/* Feature grid */}
       <section className="feat"><div className="wrap">
@@ -147,7 +174,9 @@ export default function Landing() {
         <div className="lead" style={{ marginTop: 18 }}>Built by a handyman, for handymen. Start free today.</div>
         <div className="hbtns" style={{ justifyContent: "center", marginTop: 30 }}>
           <Link className="btn btn-glow btn-lg" href="/signin?mode=signup"><Icon name="rocket" size={18} /> Get Started Free</Link>
-          <Link className="btn btn-ghost btn-lg" href="/signin?mode=signup"><Icon name="download" size={18} /> Get the App</Link>
+          {/* Not a link until the Play listing is live (in Google review since
+              2026-10-15) — then point Android at the store. */}
+          <span className="btn btn-ghost btn-lg" aria-disabled="true" style={{ cursor: "default", filter: "none", transform: "none", opacity: 0.75 }}><Icon name="download" size={18} /> Android App Coming Soon</span>
         </div>
       </div></section>
     </MarketingShell>
