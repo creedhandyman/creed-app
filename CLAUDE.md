@@ -311,6 +311,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `legStartTimes`: leaving a job = its clock-out, leaving the shop = next
   arrival − drive time). The trip log groups by day with numbered legs and an
   inferred "from" (previous stop; first leg = org address).
+- Pay stub paid-out status (**ALREADY RUN in prod 2026-10-19**, migration
+  `pay_history_paid_status`, RLS rehearsed in a rolled-back txn: owner 1 row,
+  tech 0): `pay_history.paid_at TIMESTAMPTZ` + `paid_method TEXT`
+  (cash|check|deposit|app) and policy "Admins update pay_history" (owner/
+  manager UPDATE — the table had NO update policy, so any patch silently hit 0
+  rows). Payroll → Payment history: each stub has **Mark paid** (method sheet)
+  / a Paid chip (tap to undo); crew see Paid / Not paid yet on their own stubs;
+  the employee list shows "N to pay · $X" for unpaid stubs from the last 30
+  days. Stubs from before this are unpaid in the data (not backfilled).
 - `ALTER TABLE profiles ADD COLUMN photo_url TEXT;`
 - `ALTER TABLE organizations ADD COLUMN trip_fee NUMERIC DEFAULT 0;`
 - Primary trade (per-trade tailoring — picked in onboarding + Ops → Settings):

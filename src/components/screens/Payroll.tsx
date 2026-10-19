@@ -10,6 +10,7 @@ import { openPrint } from "@/lib/print-template";
 import { buildStubHtml, runPayrollForUser, type StubInput } from "@/lib/payroll-runner";
 import { computeQuests, parseQuestConfig } from "@/lib/quests";
 import { isStaleOpenEntry } from "@/lib/shift";
+import type { PayHistory } from "@/lib/types";
 
 /** Trigger a browser download of an HTML string as a .html file. Used by
  *  the per-entry Download button so the employee can save the stub
@@ -25,6 +26,8 @@ function downloadHtmlFile(html: string, filename: string) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
+
+const STUB_PAY_METHODS = ["cash", "check", "deposit", "app"] as const;
 
 export default function Payroll({ embedded }: { embedded?: boolean }) {
   const user = useStore((s) => s.user)!;
@@ -114,6 +117,24 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const [processingAll, setProcessingAll] = useState(false);
   const [openPay, setOpenPay] = useState<string | number | null>(null);
   const processGuard = useRef(false);
+
+  // ── Stub paid-out status ──
+  // Processing pay writes the stub; "Mark paid" records that the money
+  // actually went out (pay_history.paid_at / paid_method, owner/manager only).
+  const [markStub, setMarkStub] = useState<PayHistory | null>(null);
+  const setStubPaid = async (p: PayHistory, method: string | null) => {
+    const patch = method ? { paid_at: new Date().toISOString(), paid_method: method } : { paid_at: null, paid_method: null };
+    const prev = useStore.getState().payHistory;
+    useStore.setState({ payHistory: prev.map((h) => (h.id === p.id ? { ...h, ...patch } : h)) });
+    const ok = await db.patch("pay_history", String(p.id), patch);
+    if (ok === false) useStore.setState({ payHistory: prev });
+    else if (method) useStore.getState().showToast(`${p.name || "Stub"} marked paid · $${(p.amount || 0).toFixed(2)}`, "success");
+  };
+  const unpaidRecentStubs = (userId: string) => {
+    const cutoff = Date.now() - 30 * 86400000;
+    return payHistory.filter((h) => h.user_id === userId && !h.paid_at
+      && (h.created_at ? Date.parse(h.created_at) >= cutoff : false));
+  };
 
   // Build the StubInput for the *current* unpaid cycle. Used both to save
   // the stub HTML at process-pay time and to populate the pre-pay
@@ -380,6 +401,27 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
         <TopBar title={t("pay.title")} icon="money" color="#22c55e" />
       )}
 
+      {markStub && (
+        <div className="sheet-overlay" onClick={() => setMarkStub(null)}>
+          <div className="cd sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={t("payroll.markPaidTitle")}>
+            <h4 style={{ fontSize: 17, marginBottom: 4 }}>{t("payroll.markPaidTitle")}</h4>
+            <div className="dim" style={{ fontSize: 14, marginBottom: 12 }}>
+              {markStub.name} · {markStub.pay_date} · <b style={{ color: "var(--color-success)" }}>${(markStub.amount || 0).toFixed(2)}</b>
+            </div>
+            <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>{t("payroll.paidHow")}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {STUB_PAY_METHODS.map((m) => (
+                <button key={m} className="bo" style={{ padding: "12px 8px", fontSize: 15 }}
+                  onClick={() => { const st = markStub; setMarkStub(null); void setStubPaid(st, m); }}>
+                  {t(`payroll.method.${m}`)}
+                </button>
+              ))}
+            </div>
+            <button className="bo" onClick={() => setMarkStub(null)} style={{ width: "100%", marginTop: 10, fontSize: 14 }}>{t("common.cancel")}</button>
+          </div>
+        </div>
+      )}
+
       {/* Auto Payroll — server-side scheduled run (cron hits
           /api/payroll/auto-run). Toggle, day/hour pickers, cadence. */}
       {isOwner && <AutoPayrollPanel />}
@@ -459,6 +501,17 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                         <Icon name="trophy" size={11} color="#f5b400" /> {t("payroll.bonusToReview").replace("{amt}", Math.round(bonus).toLocaleString())}
                       </span>
                     )}
+                    {(() => {
+                      // Processed in the last 30 days but not marked paid out yet.
+                      const owed = unpaidRecentStubs(r.id);
+                      if (!owed.length) return null;
+                      const amt = owed.reduce((s2, h) => s2 + (h.amount || 0), 0);
+                      return (
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 99, marginTop: 3, marginLeft: bonus > 0 ? 4 : 0, display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(46,139,255,.16)", color: "#6fb0ff" }}>
+                          <Icon name="money" size={11} color="#6fb0ff" /> {t("payroll.stubsToPay").replace("{n}", String(owed.length)).replace("{amt}", Math.round(amt).toLocaleString())}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 14 }}>${Math.round(r.amount).toLocaleString()}</div>
@@ -743,10 +796,38 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   <span style={{ color: "var(--color-success)", fontFamily: "Oswald" }}>
                     ${(p.amount || 0).toFixed(2)}
                   </span>
+                  {p.paid_at ? (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!isOwner) return;
+                        if (await useStore.getState().showConfirm(t("payroll.unmarkPaidTitle"), t("payroll.unmarkPaidBody").replace("{date}", p.pay_date), { confirmLabel: t("payroll.unmarkPaid") })) void setStubPaid(p, null);
+                      }}
+                      title={new Date(p.paid_at).toLocaleDateString()}
+                      style={{ fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 99, border: "none", background: "rgba(0,204,102,.16)", color: "#3ee08f", display: "inline-flex", alignItems: "center", gap: 4, cursor: isOwner ? "pointer" : "default" }}
+                    >
+                      <Icon name="check" size={12} color="#3ee08f" /> {t("payroll.paidChip")}
+                    </button>
+                  ) : isOwner ? (
+                    <button
+                      className="bg"
+                      onClick={(e) => { e.stopPropagation(); setMarkStub(p); }}
+                      style={{ fontSize: 12.5, padding: "4px 10px" }}
+                    >
+                      {t("payroll.markPaid")}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 99, background: "rgba(255,136,0,.16)", color: "#ffb15e" }}>{t("payroll.notPaidYet")}</span>
+                  )}
                   <span style={{ fontSize: 14, color: "#888" }}>{isOpen ? "▲" : "▼"}</span>
                 </div>
                 {isOpen && (
                   <div className="statusstrip" style={{ padding: "6px 0 6px 12px", ["--c" as any]: "var(--color-primary)" }}>
+                    {p.paid_at && (
+                      <div style={{ fontSize: 13, color: "#3ee08f", marginBottom: 4 }}>
+                        {t("payroll.paidOn").replace("{date}", new Date(p.paid_at).toLocaleDateString()).replace("{method}", p.paid_method ? t(`payroll.method.${p.paid_method}`) : "")}
+                      </div>
+                    )}
                     {jobDetails.length > 0 ? (
                       jobDetails.map((d, i) => (
                         <div

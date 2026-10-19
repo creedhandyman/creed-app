@@ -393,6 +393,10 @@ export interface PayHistory {
   entries: number;
   created_at?: string;
   details?: string;
+  /** When the owner actually paid this stub out (null = processed, not paid yet). */
+  paid_at?: string | null;
+  /** cash | check | deposit | app */
+  paid_method?: string | null;
 }
 
 export interface Receipt {
