@@ -1009,25 +1009,27 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const escapeHtml = (s: string) =>
     String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  // After photos on the invoice — a per-job choice (rooms.invoiceAfterPhotos,
-  // default off) toggled next to the Invoice PDF button.
+  // Before / after photos on the invoice — per-job choices (rooms.
+  // invoiceBeforePhotos / invoiceAfterPhotos, default off) toggled next to the
+  // Invoice PDF button.
+  type InvoicePhotoKey = "invoiceBeforePhotos" | "invoiceAfterPhotos";
   const jobRoomsOf = (j: Job): Record<string, unknown> => {
     try { return (typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms) || {}; } catch { return {}; }
   };
-  const afterPhotosOf = (j: Job): { url: string; label?: string }[] => {
+  const jobPhotosOf = (j: Job, type: "before" | "after"): { url: string; label?: string }[] => {
     const ph = jobRoomsOf(j).photos;
     return Array.isArray(ph) ? (ph as { url?: string; label?: string; type?: string }[])
-      .filter((p) => p && p.type === "after" && typeof p.url === "string" && p.url)
+      .filter((p) => p && p.type === type && typeof p.url === "string" && p.url)
       .map((p) => ({ url: p.url as string, label: p.label })) : [];
   };
-  const setInvoiceAfterPhotos = (j: Job, on: boolean) => {
+  const setInvoicePhotos = (j: Job, key: InvoicePhotoKey, on: boolean) => {
     // Optimistic: flip it in the store now, then write the blob in the queue.
     useStore.setState((st) => ({
-      jobs: st.jobs.map((x) => (x.id === j.id ? { ...x, rooms: JSON.stringify({ ...jobRoomsOf(x), invoiceAfterPhotos: on }) } : x)),
+      jobs: st.jobs.map((x) => (x.id === j.id ? { ...x, rooms: JSON.stringify({ ...jobRoomsOf(x), [key]: on }) } : x)),
     }));
     void enqueueRoomsWrite(async () => {
       const fresh = useStore.getState().jobs.find((x) => x.id === j.id) || j;
-      await db.patch("jobs", j.id, { rooms: JSON.stringify({ ...jobRoomsOf(fresh), invoiceAfterPhotos: on }) });
+      await db.patch("jobs", j.id, { rooms: JSON.stringify({ ...jobRoomsOf(fresh), [key]: on }) });
     });
   };
 
@@ -1089,16 +1091,23 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       (discountAmount > 0 ? `<tr style="color:#C00000"><td>${escapeHtml(discountLabel)}</td><td class="r">-$${discountAmount.toFixed(2)}</td></tr>` : "") +
       (feeAmt > 0.005 ? `<tr><td>${feeLabel}</td><td class="r">$${feeAmt.toFixed(2)}</td></tr>` : "");
 
-    const afterPics = jobRoomsOf(j).invoiceAfterPhotos === true ? afterPhotosOf(j) : [];
-    const invoicePhotosHtml = afterPics.length
-      ? `<h2>Completed Work</h2>
-<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px">
-${afterPics.map((p) => `  <figure style="margin:0;break-inside:avoid;page-break-inside:avoid">
+    const jr = jobRoomsOf(j);
+    const beforePics = jr.invoiceBeforePhotos === true ? jobPhotosOf(j, "before") : [];
+    const afterPics = jr.invoiceAfterPhotos === true ? jobPhotosOf(j, "after") : [];
+    const photoGrid = (pics: { url: string; label?: string }[]) => `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px">
+${pics.map((p) => `  <figure style="margin:0;break-inside:avoid;page-break-inside:avoid">
     <img src="${escapeHtml(p.url).replace(/"/g, "%22")}" alt="" style="width:100%;height:220px;object-fit:cover;border-radius:6px;border:1px solid #ddd;display:block"/>
     ${p.label ? `<figcaption style="font-size:11px;color:#555;margin-top:4px">${escapeHtml(p.label)}</figcaption>` : ""}
   </figure>`).join("")}
-</div>`
-      : "";
+</div>`;
+    const sub = (txt: string) => `<div style="font-family:Oswald,sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#666;margin:4px 0 6px">${txt}</div>`;
+    const invoicePhotosHtml = beforePics.length && afterPics.length
+      ? `<h2>Before &amp; After</h2>${sub("Before")}${photoGrid(beforePics)}${sub("After")}${photoGrid(afterPics)}`
+      : afterPics.length
+        ? `<h2>Completed Work</h2>${photoGrid(afterPics)}`
+        : beforePics.length
+          ? `<h2>Before Photos</h2>${photoGrid(beforePics)}`
+          : "";
 
     const body = `
 <section class="grid-2" style="margin-bottom:18px">
@@ -1747,17 +1756,17 @@ ${invoicePhotosHtml}
               const btn = { fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 } as const;
               return (
               <>
-              {(() => {
-                const nAfter = afterPhotosOf(dj).length;
-                if (!nAfter) return null;
-                const on = jobRoomsOf(dj).invoiceAfterPhotos === true;
+              {([["before", "invoiceBeforePhotos", "jobs.invoiceBeforePhotos"], ["after", "invoiceAfterPhotos", "jobs.invoiceAfterPhotos"]] as const).map(([type, key, label]) => {
+                const n = jobPhotosOf(dj, type).length;
+                if (!n) return null;
+                const on = jobRoomsOf(dj)[key] === true;
                 return (
-                  <label style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 10, fontSize: 14, cursor: "pointer" }}>
-                    <input type="checkbox" checked={on} onChange={(e) => setInvoiceAfterPhotos(dj, e.target.checked)} style={{ width: 18, height: 18, accentColor: "var(--color-success)" }} />
-                    <span style={{ flex: 1 }}>{t("jobs.invoiceAfterPhotos").replace("{n}", String(nAfter))}</span>
+                  <label key={key} style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 10, fontSize: 14, cursor: "pointer" }}>
+                    <input type="checkbox" checked={on} onChange={(e) => setInvoicePhotos(dj, key, e.target.checked)} style={{ width: 18, height: 18, accentColor: "var(--color-success)" }} />
+                    <span style={{ flex: 1 }}>{t(label).replace("{n}", String(n))}</span>
                   </label>
                 );
-              })()}
+              })}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
                 {/* Printing is just a PDF — it no longer marks the job invoiced. */}
                 <button className="bo" onClick={() => generateInvoice(dj)} style={btn}>
