@@ -1236,8 +1236,8 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   picker's per-job map buttons start a drive too (shown via
   `<MileageQuickTrack hideIdle />`). Mileage screen: the GPS review lets you
   type miles + start/end odometer; Suggested trips has per-leg **Odo**
-  readings and **Add a trip that's not listed** (from/to, miles or odometer,
-  for the picked date); Trip Log rows have an edit pencil to add odometer
+  readings and **Add a trip that's not listed** (from/to, optional start time,
+  miles or odometer, for the picked date — the old Manual Entry card is gone); Trip Log rows have an edit pencil to add odometer
   readings later. A save that fails offline `holdDrive`s the trip (`stopped`,
   never resumes GPS) so the miles survive closing the app and the next
   Stop/End saves them. `WaypointTracker` (geo.ts) was removed.
@@ -1562,6 +1562,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `customShop` with their original key recorded in a new `removedGuideShop`
   array on the rooms blob (so the auto list hides the original). Checked
   state migrates when a rename changes the `shopKey`.
+  List order (both Guides) = `lib/guide-shop.ts` `orderShopList`: an
+  edited copy carries `replaces` (the original's key) and takes its exact
+  spot; other custom items join their trade's section; general / "Added on
+  site" / no-trade items go last. Materials list renders above Tools.
 - **Nav per-tab colors + morphing More slot; dashboard "next check"**:
   `VerticalNav.tsx` colors the active tab in its signature hue (Home blue,
   Quote yellow/gold, Jobs red, Time green, Quests purple, … — `TAB_COLOR`

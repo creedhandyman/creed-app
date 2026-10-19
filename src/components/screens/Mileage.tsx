@@ -71,7 +71,7 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
   const [legs, setLegs] = useState<SuggestedLeg[] | null>(null);
   const jobs = useStore((s) => s.jobs);
   // A trip the suggestions missed (or a day with no clocked jobs).
-  const [extra, setExtra] = useState<{ from: string; to: string; miles: string; startOdo: string; endOdo: string } | null>(null);
+  const [extra, setExtra] = useState<{ from: string; to: string; miles: string; startOdo: string; endOdo: string; time: string } | null>(null);
   // The log as of NOW, not as of the Find tap — geocoding can take seconds
   // while the log loads or reloads underneath it.
   const entriesRef = useRef(entries);
@@ -267,6 +267,7 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
         user_name: user.name,
         job: (from && to ? `${from} → ${to}` : to || from) || "General",
         trip_date: date,
+        start_time: extra.time ? formatClock(clockMinutes(extra.time)!) : null,
         start_miles: odo != null ? parseFloat(extra.startOdo) : 0,
         end_miles: odo != null ? parseFloat(extra.endOdo) : 0,
         total_miles: Math.round(miles * 10) / 10,
@@ -347,7 +348,7 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
       {/* Trips the suggestions don't know about — another stop, a supply
           run, a day without clock-ins. Miles or odometer readings. */}
       {!extra ? (
-        <button className="bo" onClick={() => setExtra({ from: "", to: "", miles: "", startOdo: "", endOdo: "" })} style={{ width: "100%", fontSize: 13.5, padding: "7px 0", marginTop: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+        <button className="bo" onClick={() => setExtra({ from: "", to: "", miles: "", startOdo: "", endOdo: "", time: "" })} style={{ width: "100%", fontSize: 13.5, padding: "7px 0", marginTop: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <Icon name="add" size={14} /> Add a trip that&apos;s not listed
         </button>
       ) : (
@@ -355,6 +356,7 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
           <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>Add a trip · {date}</div>
           <input value={extra.from} onChange={(e) => setExtra({ ...extra, from: e.target.value })} placeholder="From (optional) — shop, supply house…" style={{ width: "100%", marginBottom: 6 }} />
           <input list="mileage-trip-jobs" value={extra.to} onChange={(e) => setExtra({ ...extra, to: e.target.value })} placeholder="To — job address or place" style={{ width: "100%", marginBottom: 6 }} />
+          <input type="time" value={extra.time} onChange={(e) => setExtra({ ...extra, time: e.target.value })} aria-label="Start time (optional)" title="Start time (optional)" style={{ width: "100%", marginBottom: 6 }} />
           <datalist id="mileage-trip-jobs">
             {jobs.filter((j) => !j.archived).map((j) => <option key={j.id} value={j.property} />)}
           </datalist>
@@ -405,12 +407,6 @@ export default function Mileage(_props: Props) {
   const [startMiles, setStartMiles] = useState("");
   const [endMiles, setEndMiles] = useState("");
 
-  // Manual entry
-  const [mJob, setMJob] = useState("");
-  // LOCAL date — toISOString() is UTC, so an evening entry defaulted to tomorrow.
-  const [mDate, setMDate] = useState(() => localYmd(new Date()));
-  const [mMiles, setMMiles] = useState("");
-  const [mTime, setMTime] = useState(""); // optional "HH:MM" (24h, from <input type=time>)
 
   // Log-entry edit (add odometer readings / fix the miles after the fact)
   const [editing, setEditing] = useState<{ id: string; startOdo: string; endOdo: string; miles: string } | null>(null);
@@ -585,26 +581,6 @@ export default function Mileage(_props: Props) {
       total_miles: Math.round(miles * 10) / 10,
     });
     setEditing(null);
-    reload();
-  };
-
-  const addManual = async () => {
-    const miles = parseFloat(mMiles);
-    if (!miles || miles <= 0) { useStore.getState().showToast("Enter valid miles", "warning"); return; }
-    const saved = await db.post("mileage", {
-      user_id: user.id,
-      user_name: user.name,
-      job: mJob || "General",
-      trip_date: mDate,
-      start_time: mTime ? formatClock(clockMinutes(mTime)!) : null,
-      start_miles: 0,
-      end_miles: 0,
-      total_miles: miles,
-    });
-    if (!saved) return; // db.post toasted — keep what was typed
-    setMMiles("");
-    setMJob("");
-    setMTime("");
     reload();
   };
 
@@ -952,45 +928,6 @@ tr.daytot td{background:#f0f4f8;font-weight:600;color:#2E75B6;border-bottom:2px 
             )}
           </>
         )}
-      </div>
-
-      {/* Manual Entry */}
-      <div className="cd mb">
-        <h4 style={{ fontSize: 15, marginBottom: 6 }}>Manual Entry</h4>
-        <div className="row" style={{ marginBottom: 6 }}>
-          <input
-            type="date"
-            value={mDate}
-            onChange={(e) => setMDate(e.target.value)}
-            style={{ width: 130, color: "var(--color-accent-red)", fontWeight: 600 }}
-          />
-          <select value={mJob} onChange={(e) => setMJob(e.target.value)} style={{ flex: 1 }}>
-            <option value="">Select job</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.property}>{j.property}</option>
-            ))}
-          </select>
-        </div>
-        <div className="row">
-          <input
-            type="number"
-            value={mMiles}
-            onChange={(e) => setMMiles(e.target.value)}
-            placeholder="Miles"
-            style={{ width: 80 }}
-          />
-          <input
-            type="time"
-            value={mTime}
-            onChange={(e) => setMTime(e.target.value)}
-            aria-label="Start time (optional)"
-            title="Start time (optional)"
-            style={{ flex: 1, minWidth: 0 }}
-          />
-          <button className="bg" onClick={addManual} style={{ fontSize: 15, padding: "7px 12px" }}>
-            Log
-          </button>
-        </div>
       </div>
 
       {/* Mileage Log — grouped by day so a multi-stop day reads as a route:

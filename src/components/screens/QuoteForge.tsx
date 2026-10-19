@@ -54,6 +54,7 @@ import SendSheet from "../SendSheet";
 import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { orderShopList } from "@/lib/guide-shop";
 
 /** A saved, reusable quote-as-template: a name + the line-item rooms blob
  *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
@@ -440,7 +441,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // data.checkedTools / data.checkedShop, matching the keys WorkVision
   // already writes — so adds and checks round-trip between the two views.
   const [customTools, setCustomTools] = useState<string[]>([]);
-  const [customShop, setCustomShop] = useState<{ n: string; c: number; room?: string; trade?: string }[]>([]);
+  const [customShop, setCustomShop] = useState<{ n: string; c: number; room?: string; trade?: string; replaces?: string }[]>([]);
   const [checkedTools, setCheckedTools] = useState<string[]>([]);
   const [checkedShop, setCheckedShop] = useState<string[]>([]);
   const [removedGuideShop, setRemovedGuideShop] = useState<string[]>([]);
@@ -4096,8 +4097,8 @@ function GuideTab({
   // shopKey) instead of by index, so reorders don't drift the checks.
   customTools: string[];
   setCustomTools: React.Dispatch<React.SetStateAction<string[]>>;
-  customShop: { n: string; c: number; room?: string; trade?: string }[];
-  setCustomShop: React.Dispatch<React.SetStateAction<{ n: string; c: number; room?: string; trade?: string }[]>>;
+  customShop: { n: string; c: number; room?: string; trade?: string; replaces?: string }[];
+  setCustomShop: React.Dispatch<React.SetStateAction<{ n: string; c: number; room?: string; trade?: string; replaces?: string }[]>>;
   checkedTools: string[];
   setCheckedTools: React.Dispatch<React.SetStateAction<string[]>>;
   checkedShop: string[];
@@ -4124,7 +4125,9 @@ function GuideTab({
   const allTools = [...guide.tools, ...customTools];
   // Hide auto items the user removed/edited (adopted into customShop), matching
   // WorkVision so the two views show the same editable list.
-  const allShop = [...guide.shop.filter((gs) => !removedGuideShop.includes(shopKey(gs))), ...customShop];
+  // Edited items keep their spot; custom ones join their trade's section;
+  // general ones go last (lib/guide-shop.ts).
+  const allShop = orderShopList(guide.shop, removedGuideShop, customShop, shopKey);
 
   const toggleTool = (t: string) =>
     setCheckedTools((prev) =>
@@ -4141,7 +4144,7 @@ function GuideTab({
   // Inline edit/delete — same behavior as WorkVision's Guide tab. Custom items
   // edit in place; quote-derived (auto) items are "adopted" into customShop and
   // the original hidden via removedGuideShop. Checked state migrates on rename.
-  type ShopItem = { n: string; c: number; room?: string; trade?: string };
+  type ShopItem = { n: string; c: number; room?: string; trade?: string; replaces?: string };
   const [editShopKey, setEditShopKey] = useState<string | null>(null);
   const [editShopName, setEditShopName] = useState("");
   const [editShopCost, setEditShopCost] = useState("");
@@ -4154,7 +4157,10 @@ function GuideTab({
   const cancelEditShop = () => { setEditShopKey(null); setEditShopName(""); setEditShopCost(""); };
   const saveEditShop = (item: ShopItem) => {
     const key = shopKey(item);
-    const updated: ShopItem = { n: editShopName.trim() || item.n, c: parseFloat(editShopCost) || 0, room: item.room, trade: item.trade };
+    // `replaces` ties an edited copy to the quote item it stands in for, so
+    // it keeps that item's place in the list.
+    const replaces = isCustomShop(item) ? item.replaces : key;
+    const updated: ShopItem = { n: editShopName.trim() || item.n, c: parseFloat(editShopCost) || 0, room: item.room, trade: item.trade, ...(replaces ? { replaces } : {}) };
     const newKey = shopKey(updated);
     if (checkedShop.includes(key) && newKey !== key) {
       setCheckedShop((prev) => [...prev.filter((k) => k !== key), newKey]);

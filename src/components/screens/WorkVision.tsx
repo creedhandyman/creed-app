@@ -13,6 +13,7 @@ import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import ShopItemSheet, { type ShopDraft } from "../ShopItemSheet";
+import { orderShopList } from "@/lib/guide-shop";
 import MileageQuickTrack from "../MileageQuickTrack";
 import { startDrive, directionsUrl } from "@/lib/drive-tracker";
 import RenderModal from "../RenderModal";
@@ -1565,10 +1566,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           const roomsData = jobData?.rooms || [];
           const guide = makeGuide(roomsData);
           const allTools = [...guide.tools, ...extraTools];
-          const allShop: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }[] = [
-            ...guide.shop.filter((gs) => !removedGuideShop.includes(shopKey(gs))),
-            ...extraShop,
-          ];
+          // Edited items keep their spot; custom ones join their trade's
+          // section; general ones go last (lib/guide-shop.ts).
+          const allShop: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string; replaces?: string }[] =
+            orderShopList(guide.shop, removedGuideShop, extraShop, shopKey);
           const shopTotal = allShop.reduce((s, i) => s + (i.c || 0), 0);
           const shopRemaining = allShop.reduce(
             (s, i) => s + (checkedShop.includes(shopKey(i)) ? 0 : i.c || 0),
@@ -1607,13 +1608,16 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           // derived items are "adopted" into customShop and their original key
           // hidden via removedGuideShop. Checked state migrates if the name
           // (and thus shopKey) changed.
-          type ShopItem = { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string };
+          type ShopItem = { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string; replaces?: string };
           const isCustomShop = (item: ShopItem) => extraShop.some((x) => shopKey(x) === shopKey(item));
           const startEditShop = (item: ShopItem) => setShopSheet({ item });
           const cancelEditShop = () => setShopSheet(null);
           const saveEditShop = (item: ShopItem, draft: ShopDraft) => {
             const key = shopKey(item);
-            const updated: ShopItem = { ...draft, n: draft.n || item.n, room: item.room, trade: item.trade };
+            // `replaces` ties an edited copy to the quote item it stands in for,
+            // so it keeps that item's place in the list.
+            const replaces = isCustomShop(item) ? item.replaces : key;
+            const updated: ShopItem = { ...draft, n: draft.n || item.n, room: item.room, trade: item.trade, ...(replaces ? { replaces } : {}) };
             const newKey = shopKey(updated);
             const nextChecked = checkedShop.includes(key) && newKey !== key
               ? [...checkedShop.filter((k) => k !== key), newKey]
