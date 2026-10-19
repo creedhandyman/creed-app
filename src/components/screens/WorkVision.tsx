@@ -12,6 +12,7 @@ import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
 import MileageQuickTrack from "../MileageQuickTrack";
+import { startDrive, directionsUrl } from "@/lib/drive-tracker";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
 import { getFix } from "@/lib/geo";
@@ -871,6 +872,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
         <div className="dim" style={{ fontSize: 15, margin: "0 2px 14px" }}>{t("wv.selectJob")}</div>
 
+        {/* A drive started from a card's map button below */}
+        <div style={{ marginBottom: 10 }}>
+          <MileageQuickTrack hideIdle />
+        </div>
+
         {/* Today's schedule — tap a card to clock in */}
         {todaySchedule.length > 0 && (
           <>
@@ -899,13 +905,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                     );
                   })()}
                 </div>
-                {/* Directions without clocking in — tap-through to Maps.
-                    stopPropagation keeps the card's clock-in tap intact. */}
+                {/* Directions without clocking in — opens Maps AND starts
+                    tracking the drive's miles. stopPropagation keeps the
+                    card's clock-in tap intact. */}
                 <a
-                  href={`https://www.google.com/maps?q=${encodeURIComponent(s.job)}`}
+                  href={directionsUrl(s.job)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={(ev) => ev.stopPropagation()}
+                  onClick={(ev) => { ev.stopPropagation(); startDrive(s.job); }}
                   title={t("loc.openInMaps")}
                   style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,204,102,.10)", border: "1px solid rgba(0,204,102,.35)", flexShrink: 0 }}
                 >
@@ -946,10 +953,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               </div>
               {/* Directions without clocking in — see the schedule cards above. */}
               <a
-                href={`https://www.google.com/maps?q=${encodeURIComponent(j.property)}`}
+                href={directionsUrl(j.property)}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(ev) => ev.stopPropagation()}
+                onClick={(ev) => { ev.stopPropagation(); startDrive(j.property); }}
                 title={t("loc.openInMaps")}
                 style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,204,102,.10)", border: "1px solid rgba(0,204,102,.35)", flexShrink: 0 }}
               >
@@ -982,22 +989,18 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           </span>
         </div>
       </div>
-      {/* Job row + Map */}
+      {/* Job row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
         <div className="dim" style={{ fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <span style={{ fontWeight: 600 }}>{sj || "General"}</span>
           {activeJob?.client ? ` · ${activeJob.client}` : ""}{activeJob ? ` · #${activeJob.id.slice(-6).toUpperCase()}` : ""}
         </div>
-        {activeJob && (
-          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeJob.property)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, color: "#7fb6ff", background: "rgba(46,139,255,.12)", border: "1px solid rgba(46,139,255,.38)", padding: "5px 9px", borderRadius: 99, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none" }}>
-            <Icon name="mapPin" size={12} color="#7fb6ff" /> Map
-          </a>
-        )}
       </div>
 
-      {/* Drive mileage — simple GPS start/stop, logs to the Mileage screen */}
+      {/* Start drive = track the miles + open directions (was a separate
+          Map button). Logs to the Mileage screen. */}
       <div style={{ marginBottom: 12 }}>
-        <MileageQuickTrack job={sj || activeJob?.property} />
+        <MileageQuickTrack job={sj || activeJob?.property} address={activeJob?.property || (sj && sj !== "General" ? sj : undefined)} />
       </div>
 
       {/* Section tabs — text segmented control (matches the mockup) */}

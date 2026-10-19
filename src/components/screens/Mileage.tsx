@@ -1,8 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
-import { haversineMiles, getFix, ROAD_FACTOR, geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
+import { haversineMiles, ROAD_FACTOR, geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
+import { subscribeDrive, getDriveState, getServerDriveState, startDrive, finishDrive, cancelDrive, type DriveTrip } from "@/lib/drive-tracker";
 import { parseEntryDate } from "@/lib/dates";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
@@ -18,16 +19,10 @@ interface MileageEntry {
   user_name: string;
 }
 
-// localStorage key for an in-progress GPS snapshot trip — persisted so the trip
-// survives locking the phone / switching to Maps / closing the app.
-const TRIP_KEY = "c_mileage_trip";
-
-interface GpsTrip {
-  startLat: number;
-  startLng: number;
-  startOdo: string; // optional starting odometer, as typed
-  job: string;
-  startedAt: string; // ISO
+/** Odometer readings → miles, or null unless both are numbers and end > start. */
+function odoMiles(start: string, end: string): number | null {
+  const s = parseFloat(start), e = parseFloat(end);
+  return !isNaN(s) && !isNaN(e) && e > s ? Math.round((e - s) * 10) / 10 : null;
 }
 
 /* ── Suggested trips from the day's clock-ins ──────────────────────
@@ -56,13 +51,20 @@ function localYmd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-type SuggestedLeg = { from: string; to: string; miles: number; added: boolean };
+type SuggestedLeg = {
+  from: string; to: string; miles: number; added: boolean;
+  /** odometer readings typed for this leg — replace the estimate when set */
+  odo?: { start: string; end: string };
+};
 
 function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const timeEntries = useStore((s) => s.timeEntries);
+  const jobs = useStore((s) => s.jobs);
   const [date, setDate] = useState(() => localYmd(new Date()));
+  // A trip the suggestions missed (or a day with no clocked jobs).
+  const [extra, setExtra] = useState<{ from: string; to: string; miles: string; startOdo: string; endOdo: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [legs, setLegs] = useState<SuggestedLeg[] | null>(null);
@@ -143,14 +145,19 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
   const addLeg = async (idx: number) => {
     if (!legs || legs[idx].added) return;
     const leg = legs[idx];
+    const odo = leg.odo ? odoMiles(leg.odo.start, leg.odo.end) : null;
+    if (leg.odo && (leg.odo.start || leg.odo.end) && odo == null) {
+      useStore.getState().showToast("Ending odometer must be more than the starting one", "warning");
+      return;
+    }
     await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
       job: leg.to,
       trip_date: date,
-      start_miles: 0,
-      end_miles: 0,
-      total_miles: leg.miles,
+      start_miles: odo != null ? parseFloat(leg.odo!.start) : 0,
+      end_miles: odo != null ? parseFloat(leg.odo!.end) : 0,
+      total_miles: odo ?? leg.miles,
     });
     setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, added: true } : l)) : prev);
     onAdded();
@@ -161,6 +168,32 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
     for (let i = 0; i < legs.length; i++) {
       if (!legs[i].added) await addLeg(i);
     }
+  };
+
+  const setLegOdo = (idx: number, odo: SuggestedLeg["odo"]) =>
+    setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, odo } : l)) : prev);
+
+  const addExtra = async () => {
+    if (!extra) return;
+    const odo = odoMiles(extra.startOdo, extra.endOdo);
+    const miles = odo ?? parseFloat(extra.miles);
+    if (!miles || miles <= 0) {
+      useStore.getState().showToast("Enter the miles, or both odometer readings (end more than start)", "warning");
+      return;
+    }
+    const to = extra.to.trim(), from = extra.from.trim();
+    await db.post("mileage", {
+      user_id: user.id,
+      user_name: user.name,
+      job: (from && to ? `${from} → ${to}` : to || from) || "General",
+      trip_date: date,
+      start_miles: odo != null ? parseFloat(extra.startOdo) : 0,
+      end_miles: odo != null ? parseFloat(extra.endOdo) : 0,
+      total_miles: miles,
+    });
+    useStore.getState().showToast(`Logged ${miles.toFixed(1)} mi`, "success");
+    setExtra(null);
+    onAdded();
   };
 
   const pending = (legs || []).filter((l) => !l.added);
@@ -187,12 +220,34 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
             <div style={{ fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {short(leg.from)} → {short(leg.to)}
             </div>
-            <div className="dim" style={{ fontSize: 12 }}>~{leg.miles.toFixed(1)} mi ({t("loc.estimated")})</div>
+            {(() => {
+              const odo = leg.odo ? odoMiles(leg.odo.start, leg.odo.end) : null;
+              return odo != null
+                ? <div style={{ fontSize: 12, color: "var(--color-success)" }}>{odo.toFixed(1)} mi (odometer)</div>
+                : <div className="dim" style={{ fontSize: 12 }}>~{leg.miles.toFixed(1)} mi ({t("loc.estimated")})</div>;
+            })()}
+            {leg.odo && !leg.added && (
+              <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
+                <input type="number" inputMode="numeric" value={leg.odo.start} onChange={(e) => setLegOdo(i, { ...leg.odo!, start: e.target.value })} placeholder="Odometer start" style={{ flex: 1, minWidth: 0, fontSize: 13 }} />
+                <input type="number" inputMode="numeric" value={leg.odo.end} onChange={(e) => setLegOdo(i, { ...leg.odo!, end: e.target.value })} placeholder="Odometer end" style={{ flex: 1, minWidth: 0, fontSize: 13 }} />
+              </div>
+            )}
           </div>
           {leg.added ? (
             <span style={{ fontSize: 13, color: "var(--color-success)", flexShrink: 0 }}>✓ {t("loc.logged")}</span>
           ) : (
-            <button className="bo" onClick={() => addLeg(i)} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0 }}>{t("sched.add")}</button>
+            <>
+              <button
+                className="bo"
+                onClick={() => setLegOdo(i, leg.odo ? undefined : { start: "", end: "" })}
+                title="Use odometer readings"
+                aria-label="Use odometer readings"
+                style={{ fontSize: 12, padding: "4px 8px", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, alignSelf: "flex-start" }}
+              >
+                <Icon name="mileage" size={13} /> {leg.odo ? "Est." : "Odo"}
+              </button>
+              <button className="bo" onClick={() => addLeg(i)} style={{ fontSize: 13, padding: "4px 12px", flexShrink: 0, alignSelf: "flex-start" }}>{t("sched.add")}</button>
+            </>
           )}
         </div>
       ))}
@@ -200,6 +255,37 @@ function SuggestedTrips({ onAdded }: { onAdded: () => void }) {
         <button className="bg" onClick={addAll} style={{ fontSize: 14, padding: "6px 14px", marginTop: 8 }}>
           {t("loc.addAll")} {pending.length} ({pending.reduce((s, l) => s + l.miles, 0).toFixed(1)} mi)
         </button>
+      )}
+
+      {/* Trips the suggestions don't know about — another stop, a supply
+          run, a day without clock-ins. Miles or odometer readings. */}
+      {!extra ? (
+        <button className="bo" onClick={() => setExtra({ from: "", to: "", miles: "", startOdo: "", endOdo: "" })} style={{ width: "100%", fontSize: 13.5, padding: "7px 0", marginTop: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Icon name="add" size={14} /> Add a trip that&apos;s not listed
+        </button>
+      ) : (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--color-border-dark, #1e1e2e)" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>Add a trip · {date}</div>
+          <input value={extra.from} onChange={(e) => setExtra({ ...extra, from: e.target.value })} placeholder="From (optional) — shop, supply house…" style={{ width: "100%", marginBottom: 6 }} />
+          <input list="mileage-trip-jobs" value={extra.to} onChange={(e) => setExtra({ ...extra, to: e.target.value })} placeholder="To — job address or place" style={{ width: "100%", marginBottom: 6 }} />
+          <datalist id="mileage-trip-jobs">
+            {jobs.filter((j) => !j.archived).map((j) => <option key={j.id} value={j.property} />)}
+          </datalist>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
+            <input type="number" inputMode="decimal" value={extra.miles} onChange={(e) => setExtra({ ...extra, miles: e.target.value })} placeholder="Miles" style={{ flex: 1, minWidth: 0 }} />
+            <span className="dim" style={{ fontSize: 12 }}>or</span>
+            <input type="number" inputMode="numeric" value={extra.startOdo} onChange={(e) => setExtra({ ...extra, startOdo: e.target.value })} placeholder="Odo start" style={{ flex: 1, minWidth: 0 }} />
+            <input type="number" inputMode="numeric" value={extra.endOdo} onChange={(e) => setExtra({ ...extra, endOdo: e.target.value })} placeholder="Odo end" style={{ flex: 1, minWidth: 0 }} />
+          </div>
+          {(() => {
+            const odo = odoMiles(extra.startOdo, extra.endOdo);
+            return odo != null ? <div style={{ fontSize: 12.5, color: "var(--color-success)", marginBottom: 6 }}>{odo.toFixed(1)} mi from the odometer</div> : null;
+          })()}
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="bo" onClick={() => setExtra(null)} style={{ flex: 1, fontSize: 13.5, padding: "7px 0" }}>Cancel</button>
+            <button className="bg" onClick={addExtra} style={{ flex: 1, fontSize: 13.5, padding: "7px 0" }}>Log trip</button>
+          </div>
+        </div>
       )}
       <div className="dim" style={{ fontSize: 10.5, marginTop: 8 }}>
         {t("loc.distanceNote")}
@@ -226,32 +312,22 @@ export default function Mileage({ setPage }: Props) {
   const [startMiles, setStartMiles] = useState("");
   const [endMiles, setEndMiles] = useState("");
 
-  // Manual entry
-  const [mJob, setMJob] = useState("");
-  const [mDate, setMDate] = useState(new Date().toISOString().split("T")[0]);
-  const [mMiles, setMMiles] = useState("");
+  // Log-entry edit (add odometer readings / fix the miles after the fact)
+  const [editing, setEditing] = useState<{ id: string; startOdo: string; endOdo: string; miles: string } | null>(null);
 
-  // GPS snapshot trip: capture a start fix (+ optional starting odometer), then
-  // an end fix when you arrive — no continuous tracking, so the screen can lock
-  // and you can use Maps. Distance = start→end straight-line × road factor.
+  // GPS trip — the shared drive tracker (same one as Work Mode's Start
+  // drive): start point + fixes while open + a fix on every return, so the
+  // screen can lock and Maps can take over.
   const [trackMode, setTrackMode] = useState<"gps" | "manual">("gps");
   const [gpsJob, setGpsJob] = useState("");
   const [gpsStartOdo, setGpsStartOdo] = useState("");
   const [gpsErr, setGpsErr] = useState("");
   const [gpsBusy, setGpsBusy] = useState(false);
-  // In-progress trip — persisted to localStorage so it survives closing the app.
-  const [gpsTrip, setGpsTrip] = useState<GpsTrip | null>(null);
-  // After End: review/adjust the ending odometer before saving.
-  const [gpsReview, setGpsReview] = useState<{ miles: number; endOdo: string } | null>(null);
+  const { trip: gpsTrip, error: driveErr } = useSyncExternalStore(subscribeDrive, getDriveState, getServerDriveState);
+  // After End: the finished trip + its GPS miles, to confirm (or correct with
+  // the odometer / by hand) before saving.
+  const [gpsReview, setGpsReview] = useState<{ trip: DriveTrip; miles: string; endOdo: string } | null>(null);
   const gpsInProgress = !!gpsTrip || !!gpsReview;
-
-  // Restore an in-progress trip on mount — the whole point: start, leave, return.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(TRIP_KEY);
-      if (raw) setGpsTrip(JSON.parse(raw) as GpsTrip);
-    } catch { /* ignore a corrupt entry */ }
-  }, []);
 
   // Load entries
   if (!loaded) {
@@ -303,86 +379,52 @@ export default function Mileage({ setPage }: Props) {
     setLoaded(false);
   };
 
-  // ── GPS snapshot trip ──
-  // Start: stamp the current location + optional starting odometer, persist it,
-  // and let the user drive freely (phone locked, Maps open, app closed).
-  const startGpsTrip = async () => {
+  // ── GPS trip ──
+  const startGpsTrip = () => {
     if (gpsBusy || gpsTrip) return;
-    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
-      setGpsErr("This device can't share location."); return;
-    }
     setGpsErr("");
-    setGpsBusy(true);
-    const fix = await getFix();
-    setGpsBusy(false);
-    if (!fix) {
-      setGpsErr("Couldn't get your location. Allow location access, or log miles manually below.");
-      return;
+    if (!startDrive(gpsJob, { startOdo: gpsStartOdo.trim() })) {
+      setGpsErr("This device can't share location. Use Odometer mode instead.");
     }
-    const trip: GpsTrip = {
-      startLat: fix.lat,
-      startLng: fix.lng,
-      startOdo: gpsStartOdo.trim(),
-      job: gpsJob,
-      startedAt: new Date().toISOString(),
-    };
-    try { localStorage.setItem(TRIP_KEY, JSON.stringify(trip)); } catch { /* */ }
-    setGpsTrip(trip);
   };
 
-  // End: stamp the arrival location, estimate miles (start→end × road factor),
-  // and auto-fill the ending odometer = start + miles for the user to confirm.
+  // End: last fix, then review. The ending odometer is pre-filled from the
+  // start reading + GPS miles for the user to correct.
   const endGpsTrip = async () => {
     if (!gpsTrip || gpsBusy) return;
     setGpsErr("");
     setGpsBusy(true);
-    const fix = await getFix(12000);
+    const res = await finishDrive(12000);
     setGpsBusy(false);
-    if (!fix) {
-      setGpsErr("Couldn't get your location to finish the trip. Try again, or cancel and use Odometer mode.");
-      return;
-    }
-    // Prefer accumulated waypoint miles when the trip was started with live
-    // tracking (MileageQuickTrack or a future updated GPS mode). Falls back to
-    // the start→end straight-line × road-factor estimate.
-    const tracked = (gpsTrip as unknown as { accMiles?: number }).accMiles;
-    const miles = tracked != null && tracked > 0
-      ? Math.round(tracked * 10) / 10
-      : Math.round(haversineMiles(gpsTrip.startLat, gpsTrip.startLng, fix.lat, fix.lng) * ROAD_FACTOR * 10) / 10;
-    const startNum = parseFloat(gpsTrip.startOdo);
-    const endOdo = !isNaN(startNum) ? String(Math.round(startNum + miles)) : "";
-    setGpsReview({ miles, endOdo });
+    if (!res) return;
+    const startNum = parseFloat(res.trip.startOdo || "");
+    setGpsReview({
+      trip: res.trip,
+      miles: res.miles >= 0.1 ? res.miles.toFixed(1) : "",
+      endOdo: !isNaN(startNum) && res.miles >= 0.1 ? String(Math.round(startNum + res.miles)) : "",
+    });
   };
 
-  // Save: prefer the (possibly corrected) odometer delta; fall back to the GPS
-  // estimate when no starting odometer was entered.
+  // Save: the odometer delta when both readings are there, else the miles.
   const saveGpsTrip = async () => {
-    if (!gpsTrip || !gpsReview) return;
-    const startNum = parseFloat(gpsTrip.startOdo);
-    const endNum = parseFloat(gpsReview.endOdo);
-    let start_miles = 0, end_miles = 0, total_miles = gpsReview.miles;
-    if (!isNaN(startNum) && !isNaN(endNum) && endNum > startNum) {
-      start_miles = startNum;
-      end_miles = endNum;
-      total_miles = Math.round((endNum - startNum) * 10) / 10;
-    } else if (!isNaN(startNum)) {
-      start_miles = startNum; // ending odo cleared — keep start, log GPS miles
-    }
+    if (!gpsReview) return;
+    const startOdo = gpsReview.trip.startOdo || "";
+    const odo = odoMiles(startOdo, gpsReview.endOdo);
+    const total_miles = odo ?? (Math.round((parseFloat(gpsReview.miles) || 0) * 10) / 10);
     if (total_miles < 0.1) {
-      useStore.getState().showToast("No movement detected — nothing logged", "warning");
+      useStore.getState().showToast("Enter the miles (or the ending odometer) to log this trip", "warning");
       return;
     }
+    const startNum = parseFloat(startOdo);
     await db.post("mileage", {
       user_id: user.id,
       user_name: user.name,
-      job: gpsTrip.job || "General",
+      job: gpsReview.trip.job || "General",
       trip_date: new Date().toISOString().split("T")[0],
-      start_miles,
-      end_miles,
+      start_miles: odo != null ? startNum : 0,
+      end_miles: odo != null ? parseFloat(gpsReview.endOdo) : 0,
       total_miles,
     });
-    try { localStorage.removeItem(TRIP_KEY); } catch { /* */ }
-    setGpsTrip(null);
     setGpsReview(null);
     setGpsStartOdo("");
     setGpsJob("");
@@ -392,25 +434,25 @@ export default function Mileage({ setPage }: Props) {
 
   // Cancel an in-progress / to-be-reviewed trip without logging anything.
   const discardGpsTrip = () => {
-    try { localStorage.removeItem(TRIP_KEY); } catch { /* */ }
-    setGpsTrip(null);
+    cancelDrive();
     setGpsReview(null);
   };
 
-  const addManual = async () => {
-    const miles = parseFloat(mMiles);
-    if (!miles || miles <= 0) { useStore.getState().showToast("Enter valid miles", "warning"); return; }
-    await db.post("mileage", {
-      user_id: user.id,
-      user_name: user.name,
-      job: mJob || "General",
-      trip_date: mDate,
-      start_miles: 0,
-      end_miles: 0,
-      total_miles: miles,
+  // Save edits to a logged trip (odometer readings added later, or a fix).
+  const saveEdit = async () => {
+    if (!editing) return;
+    const odo = odoMiles(editing.startOdo, editing.endOdo);
+    const miles = odo ?? parseFloat(editing.miles);
+    if (!miles || miles <= 0) {
+      useStore.getState().showToast("Enter the miles, or both odometer readings (end more than start)", "warning");
+      return;
+    }
+    await db.patch("mileage", editing.id, {
+      start_miles: odo != null ? parseFloat(editing.startOdo) : 0,
+      end_miles: odo != null ? parseFloat(editing.endOdo) : 0,
+      total_miles: Math.round(miles * 10) / 10,
     });
-    setMMiles("");
-    setMJob("");
+    setEditing(null);
     setLoaded(false);
   };
 
@@ -561,7 +603,7 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
         </div>
 
         {trackMode === "gps" ? (
-          /* GPS snapshot trip: tap Start → drive freely → tap End → confirm. */
+          /* GPS trip: tap Start → drive freely → tap End → confirm. */
           !gpsTrip && !gpsReview ? (
             <>
               <div className="row" style={{ marginBottom: 8 }}>
@@ -582,13 +624,13 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                   style={{ flex: 1 }}
                 />
               </div>
-              <div className="cta glow-green" onClick={startGpsTrip} style={{ opacity: gpsBusy ? 0.7 : 1 }}>
-                <div className="ic"><Icon name={gpsBusy ? "refresh" : "start"} size={24} color="#fff" strokeWidth={2} /></div>
+              <div className="cta glow-green" onClick={startGpsTrip}>
+                <div className="ic"><Icon name="start" size={24} color="#fff" strokeWidth={2} /></div>
                 <div className="tx">
-                  <b>{gpsBusy ? "Getting location…" : "Start Trip"}</b>
+                  <b>Start Trip</b>
                   <small>Marks your start — then drive freely</small>
                 </div>
-                {!gpsBusy && <Icon name="next" size={19} color="#fff" />}
+                <Icon name="next" size={19} color="#fff" />
               </div>
               {gpsErr && (
                 <p style={{ fontSize: 12.5, marginTop: 8, color: "var(--color-accent-red)" }}>{gpsErr}</p>
@@ -605,9 +647,14 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
                   Trip started{gpsTrip.job ? ` · ${gpsTrip.job}` : ""}
                 </span>
               </div>
-              <div className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
-                {gpsTrip.startOdo ? `Started at ${gpsTrip.startOdo} mi · ` : ""}phone can stay locked
+              <div style={{ fontFamily: "Oswald", fontSize: 30, fontWeight: 700, color: "var(--color-success)", lineHeight: 1.1, marginBottom: 4 }}>
+                {gpsTrip.accMiles.toFixed(1)} <span style={{ fontSize: 14 }}>mi so far</span>
               </div>
+              <div className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
+                {gpsTrip.startOdo ? `Started at ${gpsTrip.startOdo} mi · ` : ""}
+                {(gpsTrip.fixes || 0) > 0 ? "start point saved · phone can stay locked" : "finding your start point…"}
+              </div>
+              {driveErr && <p style={{ fontSize: 12.5, margin: "-6px 0 10px", color: "var(--color-accent-red)" }}>{driveErr}</p>}
               <button className="br" onClick={endGpsTrip} disabled={gpsBusy} style={{ fontSize: 15, padding: "10px 28px", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <Icon name={gpsBusy ? "refresh" : "stop"} size={15} /> {gpsBusy ? "Getting location…" : "End Trip"}
               </button>
@@ -618,41 +665,55 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
             </div>
           ) : (
             <div style={{ padding: "4px 0" }}>
-              <div style={{ textAlign: "center", marginBottom: 12 }}>
-                <div className="dim" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".5px" }}>GPS estimate</div>
-                <div style={{ fontFamily: "Oswald", fontSize: 40, fontWeight: 700, color: "var(--color-success)", lineHeight: 1.1 }}>
-                  {gpsReview!.miles.toFixed(1)} <span style={{ fontSize: 16 }}>mi</span>
-                </div>
-              </div>
-              {gpsTrip!.startOdo ? (
-                <>
-                  <div className="dim" style={{ fontSize: 13, marginBottom: 6 }}>
-                    Started at {gpsTrip!.startOdo} mi. Confirm the ending odometer (auto-filled from the estimate — adjust to your real reading):
-                  </div>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={gpsReview!.endOdo}
-                    onChange={(e) => setGpsReview((r) => (r ? { ...r, endOdo: e.target.value } : r))}
-                    placeholder="Ending odometer"
-                    style={{ width: "100%", marginBottom: 8 }}
-                  />
-                  {(() => {
-                    const s = parseFloat(gpsTrip!.startOdo);
-                    const en = parseFloat(gpsReview!.endOdo);
-                    const tot = !isNaN(s) && !isNaN(en) && en > s ? en - s : gpsReview!.miles;
-                    return (
-                      <div style={{ textAlign: "center", marginBottom: 10 }}>
-                        <span style={{ fontFamily: "Oswald", fontSize: 22, color: "var(--color-success)" }}>{tot.toFixed(1)} miles</span>
+              {(() => {
+                const r = gpsReview!;
+                const startOdo = r.trip.startOdo || "";
+                const odo = odoMiles(startOdo, r.endOdo);
+                const total = odo ?? (parseFloat(r.miles) || 0);
+                return (
+                  <>
+                    <div style={{ textAlign: "center", marginBottom: 10 }}>
+                      <div className="dim" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".5px" }}>
+                        {odo != null ? "From your odometer" : r.miles ? "GPS estimate" : "GPS couldn't measure this drive"}
                       </div>
-                    );
-                  })()}
-                </>
-              ) : (
-                <div className="dim" style={{ fontSize: 13, marginBottom: 10, textAlign: "center" }}>
-                  No starting odometer entered — we&apos;ll log the GPS estimate.
-                </div>
-              )}
+                      <div style={{ fontFamily: "Oswald", fontSize: 40, fontWeight: 700, color: total > 0 ? "var(--color-success)" : "var(--color-dim)", lineHeight: 1.1 }}>
+                        {total.toFixed(1)} <span style={{ fontSize: 16 }}>mi</span>
+                      </div>
+                    </div>
+                    <div className="dim" style={{ fontSize: 12.5, marginBottom: 4 }}>Miles (adjust if needed)</div>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={r.miles}
+                      onChange={(e) => setGpsReview((x) => (x ? { ...x, miles: e.target.value } : x))}
+                      placeholder="Miles driven"
+                      disabled={odo != null}
+                      style={{ width: "100%", marginBottom: 8, opacity: odo != null ? 0.5 : 1 }}
+                    />
+                    <div className="dim" style={{ fontSize: 12.5, marginBottom: 4 }}>
+                      Odometer (optional){startOdo ? ` — started at ${startOdo}` : ""}
+                    </div>
+                    <div className="row" style={{ gap: 6, marginBottom: 10 }}>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={startOdo}
+                        onChange={(e) => setGpsReview((x) => (x ? { ...x, trip: { ...x.trip, startOdo: e.target.value } } : x))}
+                        placeholder="Start"
+                        style={{ flex: 1, minWidth: 0 }}
+                      />
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={r.endOdo}
+                        onChange={(e) => setGpsReview((x) => (x ? { ...x, endOdo: e.target.value } : x))}
+                        placeholder="End"
+                        style={{ flex: 1, minWidth: 0 }}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
               <div className="row" style={{ gap: 6 }}>
                 <button className="bo" onClick={discardGpsTrip} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Discard</button>
                 <button className="bb" onClick={saveGpsTrip} style={{ flex: 1, fontSize: 14, padding: "9px 0" }}>Save trip</button>
@@ -722,37 +783,6 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
         )}
       </div>
 
-      {/* Manual Entry */}
-      <div className="cd mb">
-        <h4 style={{ fontSize: 15, marginBottom: 6 }}>Manual Entry</h4>
-        <div className="row" style={{ marginBottom: 6 }}>
-          <input
-            type="date"
-            value={mDate}
-            onChange={(e) => setMDate(e.target.value)}
-            style={{ width: 130, color: "var(--color-accent-red)", fontWeight: 600 }}
-          />
-          <select value={mJob} onChange={(e) => setMJob(e.target.value)} style={{ flex: 1 }}>
-            <option value="">Select job</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.property}>{j.property}</option>
-            ))}
-          </select>
-        </div>
-        <div className="row">
-          <input
-            type="number"
-            value={mMiles}
-            onChange={(e) => setMMiles(e.target.value)}
-            placeholder="Miles"
-            style={{ width: 80 }}
-          />
-          <button className="bg" onClick={addManual} style={{ fontSize: 15, padding: "7px 12px" }}>
-            Log
-          </button>
-        </div>
-      </div>
-
       {/* Suggested trips — auto-built from the day's clocked jobs */}
       <SuggestedTrips onAdded={() => setLoaded(false)} />
 
@@ -762,7 +792,27 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
         {!entries.length ? (
           <p className="dim" style={{ fontSize: 14 }}>No trips logged</p>
         ) : (
-          entries.map((e) => (
+          entries.map((e) => editing?.id === e.id ? (
+            <div key={e.id} className="sep" style={{ fontSize: 14 }}>
+              <div style={{ marginBottom: 6 }}>
+                <span style={{ marginRight: 8 }}>{e.trip_date}</span>
+                <span style={{ color: "var(--color-primary)" }}>{e.job}</span>
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                <input type="number" inputMode="numeric" value={editing.startOdo} onChange={(ev) => setEditing({ ...editing, startOdo: ev.target.value })} placeholder="Odo start" style={{ flex: 1, minWidth: 0 }} />
+                <input type="number" inputMode="numeric" value={editing.endOdo} onChange={(ev) => setEditing({ ...editing, endOdo: ev.target.value })} placeholder="Odo end" style={{ flex: 1, minWidth: 0 }} />
+                <span className="dim" style={{ fontSize: 12 }}>or</span>
+                <input type="number" inputMode="decimal" value={editing.miles} onChange={(ev) => setEditing({ ...editing, miles: ev.target.value })} placeholder="Miles" disabled={odoMiles(editing.startOdo, editing.endOdo) != null} style={{ width: 70 }} />
+              </div>
+              {odoMiles(editing.startOdo, editing.endOdo) != null && (
+                <div style={{ fontSize: 12.5, color: "var(--color-success)", marginBottom: 6 }}>{odoMiles(editing.startOdo, editing.endOdo)!.toFixed(1)} mi from the odometer</div>
+              )}
+              <div style={{ display: "flex", gap: 6 }}>
+                <button className="bo" onClick={() => setEditing(null)} style={{ flex: 1, fontSize: 13, padding: "5px 0" }}>Cancel</button>
+                <button className="bg" onClick={saveEdit} style={{ flex: 1, fontSize: 13, padding: "5px 0" }}>Save</button>
+              </div>
+            </div>
+          ) : (
             <div
               key={e.id}
               className="sep"
@@ -778,6 +828,19 @@ td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:top}
               <span style={{ fontFamily: "Oswald", color: "var(--color-success)", minWidth: 50, textAlign: "right" }}>
                 {e.total_miles.toFixed(1)} mi
               </span>
+              <button
+                onClick={() => setEditing({
+                  id: e.id,
+                  startOdo: e.start_miles > 0 ? String(e.start_miles) : "",
+                  endOdo: e.end_miles > 0 ? String(e.end_miles) : "",
+                  miles: String(e.total_miles ?? ""),
+                })}
+                style={{ background: "none", color: "var(--color-dim)", fontSize: 14, marginLeft: 6, display: "inline-flex", alignItems: "center" }}
+                aria-label="Edit trip — miles or odometer"
+                title="Add odometer readings / fix miles"
+              >
+                <Icon name="edit" size={14} />
+              </button>
               <button
                 onClick={async () => {
                   if (!await useStore.getState().showConfirm("Delete Trip", "Delete this trip?")) return;

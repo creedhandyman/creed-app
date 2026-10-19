@@ -979,6 +979,30 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `defaultAddTiers: [editTier]` (the prompt says ORGANIZING: <option> and to
   use all three only when the user says every option needs it).
 
+- **Drive tracking = Start drive + map (2026-10-19)**: "No movement detected"
+  bug — the old Work Mode tracker only counted miles from watchPosition while
+  the app was on screen and never saved its start point, so Start → Maps
+  (PWA backgrounded, iOS stops web GPS) → Stop measured nothing. Now ONE
+  module-level tracker, `src/lib/drive-tracker.ts` (state in localStorage
+  `c_mileage_trip` + `useSyncExternalStore`), used by Work Mode's
+  `MileageQuickTrack` AND the Mileage screen's GPS trip: start point seeded
+  from a warm fix (`warmUpLocation()` on mount, ≤10 min old) and persisted at
+  once; fixes from watchPosition + a 20s poll + a fix on every return
+  (visibilitychange/pageshow/focus) so a missed first check is retried; a
+  sharper fix inside the last one's error circle refines it; a jump after a
+  >45s gap counts straight-line × ROAD_FACTOR; Stop takes a final fix and logs
+  max(tracked, start→end × ROAD_FACTOR). Pure `applyFix`/`finalMiles` are
+  tested (`drive-tracker.test.ts`). Still 0 → asks for miles or odometer
+  instead of logging nothing. **Start drive opens directions** (it's an
+  `<a target=_blank>` whose onClick starts the drive synchronously, before
+  the app is backgrounded); the separate Map chip is gone, and the clock-in
+  picker's per-job map buttons start a drive too (shown via
+  `<MileageQuickTrack hideIdle />`). Mileage screen: the GPS review lets you
+  type miles + start/end odometer; Suggested trips has per-leg **Odo**
+  readings and **Add a trip that's not listed** (from/to, miles or odometer —
+  replaced the old Manual Entry card); Trip Log rows have an edit pencil to
+  add odometer readings later. `WaypointTracker` (geo.ts) was removed.
+
 - **Edit-draft autosave for SAVED quotes (2026-10-12)**: the new-quote draft
   (`c_qf_draft_<uid>`) never covered editing an existing job — edits lived
   only on screen until Update/Send. Now each saved quote gets a phone-only
