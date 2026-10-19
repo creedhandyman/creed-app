@@ -1555,7 +1555,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   after-render** card (Generate seeds the render modal with the latest photo,
   toasts a hint if none). The renderings list (source/result pairs) still
   renders below. All handlers reused (`setWvCam`, `uploadWorkPhoto`,
-  `uploadReceipt`, `openRenderModal`). **Guide shopping list is editable**: the
+  `uploadReceipt`, `openRenderModal`). **Receipts (2026-10-19)**: Work Mode's Scan receipt now
+  opens `ReceiptScanSheet.tsx` (multi-page upload → one combined scan → review
+  vendor/items/TOTAL → Save, incl. price_corrections) — the old path saved $0
+  and back-filled the amount from the item sum only, silently doing nothing
+  when the scan returned no items. `uploadReceipt` is now the OFFLINE path only. **Guide shopping list is editable**: the
   checkbox alone toggles bought-state; tapping an item's name/price opens an
   inline editor (rename / change cost / delete). Custom items edit their
   `customShop` entry in place; quote-derived items are "adopted" into

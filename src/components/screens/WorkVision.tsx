@@ -13,6 +13,7 @@ import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import ShopItemSheet, { type ShopDraft } from "../ShopItemSheet";
+import ReceiptScanSheet from "../ReceiptScanSheet";
 import { orderShopList } from "@/lib/guide-shop";
 import MileageQuickTrack from "../MileageQuickTrack";
 import { startDrive, directionsUrl } from "@/lib/drive-tracker";
@@ -633,6 +634,18 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // to set the amount, and writes per-item rows into price_corrections so
   // the quoting AI learns real supply costs.
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  // Online receipts go through the review sheet (scan → check items/total →
+  // save), same flow as the job's Receipts screen. uploadReceipt below is the
+  // offline path only: stash the photo and upload it on reconnect.
+  const [receiptSheet, setReceiptSheet] = useState<File[] | null>(null);
+  const scanReceipt = (file: File) => {
+    if (!activeJob) {
+      useStore.getState().showToast("Clock into a job first to attach a receipt", "warning");
+      return;
+    }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) { void uploadReceipt(file); return; }
+    setReceiptSheet([file]);
+  };
   const uploadReceipt = async (file: File) => {
     if (!activeJob) {
       useStore.getState().showToast("Clock into a job first to attach a receipt", "warning");
@@ -1035,6 +1048,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const overlays = (
     <>
       {finishModal}
+      {receiptSheet && activeJob && (
+        <ReceiptScanSheet
+          job={{ id: activeJob.id, property: activeJob.property, trade: activeJob.trade }}
+          initialFiles={receiptSheet}
+          onClose={() => setReceiptSheet(null)}
+        />
+      )}
       {/* Shared AI render modal — seeded from the job's line items */}
       <RenderModal
         open={!!renderTarget}
@@ -1949,7 +1969,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   {/* Receipt scan — AI extracts vendor, items, total; enriches
                       the note + feeds price_corrections for the quoter. */}
                   <button
-                    onClick={async () => { const f = await pickReceiptPhoto(false); if (f) uploadReceipt(f); }}
+                    onClick={async () => { const f = await pickReceiptPhoto(false); if (f) scanReceipt(f); }}
                     disabled={uploadingReceipt}
                     style={{ ...pactTile, opacity: uploadingReceipt ? 0.5 : 1 }}
                     title="Snap or upload a receipt — AI extracts vendor, items, and total"
