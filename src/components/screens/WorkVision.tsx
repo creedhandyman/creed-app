@@ -1254,7 +1254,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             <Icon name="stop" size={12} color="#ff9d9d" /> {t("wv.clockOut")}
           </button>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "5px 10px", borderRadius: 99 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} />
+            {/* Fixed-width digits: Oswald's proportional numbers made the chip
+                change width every second, which re-truncated the title
+                ("WORK MO…" ↔ "WORK MODE"). */}
+            <span style={{ fontVariantNumeric: "tabular-nums", display: "inline-block", width: "4.6em", textAlign: "center" }}>{fmt(el)}</span>
           </span>
       </>} />
       {/* Job row */}

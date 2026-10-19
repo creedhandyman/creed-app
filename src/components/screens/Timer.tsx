@@ -616,7 +616,9 @@ export default function Timer({ setPage }: Props) {
           <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: liveSessions.length ? "#3ee08f" : "var(--color-dim)", fontWeight: 600 }}>{liveSessions.length} {t("timer.onTheClockCount")}</span>
         ) : on ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 14, color: "#3ee08f", background: "rgba(0,204,102,.12)", border: "1px solid rgba(0,204,102,.4)", padding: "4px 9px", borderRadius: 99 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} /> {fmt(el)}
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 8px var(--color-success)" }} />
+            {/* Fixed-width digits so the chip doesn't resize every second. */}
+            <span style={{ fontVariantNumeric: "tabular-nums", display: "inline-block", width: "4.6em", textAlign: "center" }}>{fmt(el)}</span>
           </span>
         ) : (
           <span style={{ fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600 }}>
@@ -705,7 +707,7 @@ export default function Timer({ setPage }: Props) {
           <div style={{ fontSize: 12, letterSpacing: ".16em", textTransform: "uppercase", color: "#3ee08f", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 9px var(--color-success)" }} /> {t("timer.onTheClock")}
           </div>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, letterSpacing: "1px", margin: "7px 0 2px", color: "var(--color-success)" }}>{fmt(el)}</div>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 40, letterSpacing: "1px", margin: "7px 0 2px", color: "var(--color-success)", fontVariantNumeric: "tabular-nums" }}>{fmt(el)}</div>
           <div className="dim" style={{ fontSize: 13.5 }}>{sj || t("timer.general")}</div>
           {sj && (
             <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(sj)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#7fb6ff", display: "inline-flex", alignItems: "center", gap: 5, marginTop: 7 }}>
