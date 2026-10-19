@@ -4180,70 +4180,9 @@ function GuideTab({
 
   return (
     <div>
-      <div className="g2 mb">
-        <div className="cd">
-          <h4 style={{ color: "var(--color-primary)", fontSize: 15, marginBottom: 6 }}>
-            🧰 Tools ({allTools.length})
-          </h4>
-          {allTools.map((t, i) => {
-            const done = checkedTools.includes(t);
-            return (
-              <div
-                key={i}
-                onClick={() => toggleTool(t)}
-                style={{
-                  fontSize: 14,
-                  padding: "4px 0",
-                  borderBottom: `1px solid ${border}`,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  textDecoration: done ? "line-through" : "none",
-                  opacity: done ? 0.5 : 1,
-                }}
-              >
-                <span style={{
-                  width: 16, height: 16, borderRadius: 3,
-                  border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
-                  background: done ? "var(--color-success)" : "transparent",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 14, color: "#fff", flexShrink: 0,
-                }}>
-                  {done && "✓"}
-                </span>
-                {t}
-              </div>
-            );
-          })}
-          {/* Add custom tool */}
-          <div className="row" style={{ marginTop: 6 }}>
-            <input
-              value={newTool}
-              onChange={(e) => setNewTool(e.target.value)}
-              placeholder="Add tool..."
-              style={{ flex: 1, fontSize: 15, padding: "4px 8px" }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newTool.trim()) {
-                  setCustomTools((prev) => [...prev, newTool.trim()]);
-                  setNewTool("");
-                }
-              }}
-            />
-            <button
-              onClick={() => {
-                if (newTool.trim()) {
-                  setCustomTools((prev) => [...prev, newTool.trim()]);
-                  setNewTool("");
-                }
-              }}
-              style={{ background: "none", color: "var(--color-primary)", fontSize: 16, padding: "0 4px" }}
-            >
-              +
-            </button>
-          </div>
-        </div>
-        <div className="cd">
+      <div className="mb">
+        {/* Materials first, tools underneath */}
+        <div className="cd mb">
           <h4 style={{ color: "var(--color-warning)", fontSize: 15, marginBottom: 6 }}>
             🛒 Shopping ($
             {allShop.reduce((s, i) => s + (i.c || 0), 0)})
@@ -4329,6 +4268,68 @@ function GuideTab({
                 }
               }}
               style={{ background: "none", color: "var(--color-warning)", fontSize: 16, padding: "0 4px" }}
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <div className="cd">
+          <h4 style={{ color: "var(--color-primary)", fontSize: 15, marginBottom: 6 }}>
+            🧰 Tools ({allTools.length})
+          </h4>
+          {allTools.map((t, i) => {
+            const done = checkedTools.includes(t);
+            return (
+              <div
+                key={i}
+                onClick={() => toggleTool(t)}
+                style={{
+                  fontSize: 14,
+                  padding: "4px 0",
+                  borderBottom: `1px solid ${border}`,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  textDecoration: done ? "line-through" : "none",
+                  opacity: done ? 0.5 : 1,
+                }}
+              >
+                <span style={{
+                  width: 16, height: 16, borderRadius: 3,
+                  border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
+                  background: done ? "var(--color-success)" : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 14, color: "#fff", flexShrink: 0,
+                }}>
+                  {done && "✓"}
+                </span>
+                {t}
+              </div>
+            );
+          })}
+          {/* Add custom tool */}
+          <div className="row" style={{ marginTop: 6 }}>
+            <input
+              value={newTool}
+              onChange={(e) => setNewTool(e.target.value)}
+              placeholder="Add tool..."
+              style={{ flex: 1, fontSize: 15, padding: "4px 8px" }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newTool.trim()) {
+                  setCustomTools((prev) => [...prev, newTool.trim()]);
+                  setNewTool("");
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                if (newTool.trim()) {
+                  setCustomTools((prev) => [...prev, newTool.trim()]);
+                  setNewTool("");
+                }
+              }}
+              style={{ background: "none", color: "var(--color-primary)", fontSize: 16, padding: "0 4px" }}
             >
               +
             </button>

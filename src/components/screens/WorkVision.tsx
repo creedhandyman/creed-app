@@ -1647,80 +1647,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
 
           return (
             <div>
-              {/* Tools */}
+              {/* Shopping (materials) first, tools under it */}
               <div className="cd mb">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <h4 style={{ fontSize: 15, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <Icon name="hammer" size={14} color="var(--color-primary)" />
-                    {t("wv.toolsNeeded")} ({allTools.length})
-                  </h4>
-                  <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-                    {checkedTools.length}/{allTools.length} packed
-                  </span>
-                </div>
-                {allTools.length === 0 && (
-                  <div className="dim" style={{ fontSize: 14, padding: "4px 0" }}>No tools listed.</div>
-                )}
-                {allTools.map((tool, i) => {
-                  const done = checkedTools.includes(tool);
-                  return (
-                    <div
-                      key={i}
-                      onClick={() => toggleTool(tool)}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        fontSize: 15, padding: "6px 0",
-                        borderBottom: `1px solid ${border}`,
-                        cursor: "pointer",
-                        textDecoration: done ? "line-through" : "none",
-                        opacity: done ? 0.5 : 1,
-                        transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
-                      }}
-                    >
-                      <span style={{
-                        width: 18, height: 18, borderRadius: 4,
-                        border: `2px solid ${done ? "var(--color-success)" : "#666"}`,
-                        background: done ? "var(--color-success)" : "transparent",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        flexShrink: 0,
-                      }}>
-                        {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
-                      </span>
-                      {tool}
-                    </div>
-                  );
-                })}
-                {/* Add custom tool */}
-                <div className="row" style={{ marginTop: 8 }}>
-                  <input
-                    value={newTool}
-                    onChange={(e) => setNewTool(e.target.value)}
-                    placeholder="Add tool…"
-                    style={{ flex: 1, fontSize: 15, padding: "6px 10px" }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && newTool.trim()) {
-                        addCustomTool(newTool.trim());
-                        setNewTool("");
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (newTool.trim()) {
-                        addCustomTool(newTool.trim());
-                        setNewTool("");
-                      }
-                    }}
-                    aria-label="Add tool"
-                    style={{ background: "none", color: "var(--color-primary)", padding: "0 6px", display: "inline-flex" }}
-                  >
-                    <Icon name="add" size={18} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Shopping */}
-              <div className="cd">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <h4 style={{ fontSize: 15, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <Icon name="cart" size={14} color="var(--color-warning)" />
@@ -1800,6 +1728,79 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   <Icon name="add" size={16} /> Add item
                 </button>
               </div>
+
+              {/* Tools */}
+              <div className="cd">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <h4 style={{ fontSize: 15, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Icon name="hammer" size={14} color="var(--color-primary)" />
+                    {t("wv.toolsNeeded")} ({allTools.length})
+                  </h4>
+                  <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald", letterSpacing: ".06em" }}>
+                    {checkedTools.length}/{allTools.length} packed
+                  </span>
+                </div>
+                {allTools.length === 0 && (
+                  <div className="dim" style={{ fontSize: 14, padding: "4px 0" }}>No tools listed.</div>
+                )}
+                {allTools.map((tool, i) => {
+                  const done = checkedTools.includes(tool);
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => toggleTool(tool)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        fontSize: 15, padding: "6px 0",
+                        borderBottom: `1px solid ${border}`,
+                        cursor: "pointer",
+                        textDecoration: done ? "line-through" : "none",
+                        opacity: done ? 0.5 : 1,
+                        transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
+                      }}
+                    >
+                      <span style={{
+                        width: 18, height: 18, borderRadius: 4,
+                        border: `2px solid ${done ? "var(--color-success)" : "#666"}`,
+                        background: done ? "var(--color-success)" : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0,
+                      }}>
+                        {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
+                      </span>
+                      {tool}
+                    </div>
+                  );
+                })}
+                {/* Add custom tool */}
+                <div className="row" style={{ marginTop: 8 }}>
+                  <input
+                    value={newTool}
+                    onChange={(e) => setNewTool(e.target.value)}
+                    placeholder="Add tool…"
+                    style={{ flex: 1, fontSize: 15, padding: "6px 10px" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newTool.trim()) {
+                        addCustomTool(newTool.trim());
+                        setNewTool("");
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (newTool.trim()) {
+                        addCustomTool(newTool.trim());
+                        setNewTool("");
+                      }
+                    }}
+                    aria-label="Add tool"
+                    style={{ background: "none", color: "var(--color-primary)", padding: "0 6px", display: "inline-flex" }}
+                  >
+                    <Icon name="add" size={18} />
+                  </button>
+                </div>
+              </div>
+
               {shopSheet && (
                 <ShopItemSheet
                   item={shopSheet.item}
