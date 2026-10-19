@@ -596,7 +596,10 @@ export const useStore = create<AppState>((set, get) => ({
     const timeEntriesF = timeEntries ?? cur.timeEntries;
     const reviewsF = reviews ?? cur.reviews;
     const referralsF = referrals ?? cur.referrals;
-    const scheduleF = schedule ?? cur.schedule;
+    // A visit linked to a job that no longer exists (deleted elsewhere, or
+    // before Jobs' delete cleaned up its visits) drops off every schedule view.
+    const jobIdsF = new Set(jobsF.map((j) => j.id));
+    const scheduleF = (schedule ?? cur.schedule).filter((e) => !e.job_id || jobsF.length === 0 || jobIdsF.has(e.job_id));
     const payHistoryF = payHistory ?? cur.payHistory;
     const receiptsF = receipts ?? cur.receipts;
     const questPayoutsF = questPayouts ?? cur.questPayouts;

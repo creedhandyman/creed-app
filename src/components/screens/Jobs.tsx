@@ -992,6 +992,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     const prop = jobs.find((j) => j.id === id)?.property;
     if (await useStore.getState().showConfirm(t("jobs.deleteJobTitle"), t("jobs.deleteJobBodyNamed").replace("{prop}", prop || t("jobs.noAddress")))) {
       await db.del("jobs", id);
+      // Take its visits off the schedule too: entries linked to this job, and
+      // legacy (unlinked) entries at its address when no other job is there.
+      const st = useStore.getState();
+      const addr = (prop || "").trim().toLowerCase();
+      const otherAtAddr = !!addr && st.jobs.some((j) => j.id !== id && (j.property || "").trim().toLowerCase() === addr);
+      const visits = st.schedule.filter((e) => e.job_id === id
+        || (!e.job_id && !!addr && !otherAtAddr && (e.job || "").trim().toLowerCase() === addr));
+      for (const e of visits) await db.del("schedule", e.id);
       setDetailJobId(null);
       loadAll();
     }
@@ -1000,6 +1008,28 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
   const escapeHtml = (s: string) =>
     String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // After photos on the invoice — a per-job choice (rooms.invoiceAfterPhotos,
+  // default off) toggled next to the Invoice PDF button.
+  const jobRoomsOf = (j: Job): Record<string, unknown> => {
+    try { return (typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms) || {}; } catch { return {}; }
+  };
+  const afterPhotosOf = (j: Job): { url: string; label?: string }[] => {
+    const ph = jobRoomsOf(j).photos;
+    return Array.isArray(ph) ? (ph as { url?: string; label?: string; type?: string }[])
+      .filter((p) => p && p.type === "after" && typeof p.url === "string" && p.url)
+      .map((p) => ({ url: p.url as string, label: p.label })) : [];
+  };
+  const setInvoiceAfterPhotos = (j: Job, on: boolean) => {
+    // Optimistic: flip it in the store now, then write the blob in the queue.
+    useStore.setState((st) => ({
+      jobs: st.jobs.map((x) => (x.id === j.id ? { ...x, rooms: JSON.stringify({ ...jobRoomsOf(x), invoiceAfterPhotos: on }) } : x)),
+    }));
+    void enqueueRoomsWrite(async () => {
+      const fresh = useStore.getState().jobs.find((x) => x.id === j.id) || j;
+      await db.patch("jobs", j.id, { rooms: JSON.stringify({ ...jobRoomsOf(fresh), invoiceAfterPhotos: on }) });
+    });
+  };
 
   const generateInvoice = (j: typeof jobs[0]) => {
     const today = new Date().toLocaleDateString("en-US", {
@@ -1059,6 +1089,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       (discountAmount > 0 ? `<tr style="color:#C00000"><td>${escapeHtml(discountLabel)}</td><td class="r">-$${discountAmount.toFixed(2)}</td></tr>` : "") +
       (feeAmt > 0.005 ? `<tr><td>${feeLabel}</td><td class="r">$${feeAmt.toFixed(2)}</td></tr>` : "");
 
+    const afterPics = jobRoomsOf(j).invoiceAfterPhotos === true ? afterPhotosOf(j) : [];
+    const invoicePhotosHtml = afterPics.length
+      ? `<h2>Completed Work</h2>
+<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px">
+${afterPics.map((p) => `  <figure style="margin:0;break-inside:avoid;page-break-inside:avoid">
+    <img src="${escapeHtml(p.url).replace(/"/g, "%22")}" alt="" style="width:100%;height:220px;object-fit:cover;border-radius:6px;border:1px solid #ddd;display:block"/>
+    ${p.label ? `<figcaption style="font-size:11px;color:#555;margin-top:4px">${escapeHtml(p.label)}</figcaption>` : ""}
+  </figure>`).join("")}
+</div>`
+      : "";
+
     const body = `
 <section class="grid-2" style="margin-bottom:18px">
   <div class="box">
@@ -1116,6 +1157,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   <div style="font-family:Oswald,sans-serif;font-size:34px;color:#2E75B6;font-weight:700">$${balanceDueNow.toFixed(2)}</div>
 </section>
 
+${invoicePhotosHtml}
 <h2>Payment Terms</h2>
 <div style="font-size:11.5px;color:#444;line-height:1.7">
   <p>Payment is due upon receipt unless other arrangements have been made.</p>
@@ -1705,6 +1747,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
               const btn = { fontSize: 14, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 } as const;
               return (
               <>
+              {(() => {
+                const nAfter = afterPhotosOf(dj).length;
+                if (!nAfter) return null;
+                const on = jobRoomsOf(dj).invoiceAfterPhotos === true;
+                return (
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 10, fontSize: 14, cursor: "pointer" }}>
+                    <input type="checkbox" checked={on} onChange={(e) => setInvoiceAfterPhotos(dj, e.target.checked)} style={{ width: 18, height: 18, accentColor: "var(--color-success)" }} />
+                    <span style={{ flex: 1 }}>{t("jobs.invoiceAfterPhotos").replace("{n}", String(nAfter))}</span>
+                  </label>
+                );
+              })()}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7, paddingTop: 8 }}>
                 {/* Printing is just a PDF — it no longer marks the job invoiced. */}
                 <button className="bo" onClick={() => generateInvoice(dj)} style={btn}>
