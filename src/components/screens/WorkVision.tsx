@@ -659,6 +659,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
         const queued = await enqueueUpload("receipt", file, {
           jobId: activeJob.id, orgId: user.org_id, receiptId: newRowId(),
+          property: activeJob.property, trade: activeJob.trade, // for the scan on upload
           name: file.name || "receipt.jpg", type: file.type || "image/jpeg",
           receiptDate: new Date().toLocaleDateString(),
         });
@@ -677,6 +678,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         if (isNetworkError(e)) {
           const queued = await enqueueUpload("receipt", file, {
             jobId: activeJob.id, orgId: user.org_id, receiptId: newRowId(),
+            property: activeJob.property, trade: activeJob.trade,
             name: file.name || "receipt.jpg", type: file.type || "image/jpeg",
             receiptDate: new Date().toLocaleDateString(),
           });

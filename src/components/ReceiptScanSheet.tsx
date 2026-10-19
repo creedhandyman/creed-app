@@ -13,15 +13,14 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
-import { apiFetch } from "@/lib/api";
 import { db } from "@/lib/supabase";
+import { scanReceipt, receiptNote, learnFromReceipt, type ReceiptItem } from "@/lib/receipt-scan";
 import { useStore } from "@/lib/store";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
-import { extractZip } from "@/lib/parser";
 import { t } from "@/lib/i18n";
 
-type Item = { name?: string; qty?: number; price?: number };
+type Item = ReceiptItem;
 type Page = { path: string; url: string };
 
 export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
@@ -46,32 +45,13 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
     setScanning(true);
     setScanErr("");
     try {
-      const res = await apiFetch("/api/ai/receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrls: urls }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setScanErr(`${t("jobs.scanFailedManual")} ${err?.error || res.statusText}`);
-        return;
-      }
-      const { data } = await res.json();
-      if (!data) { setScanErr(t("jobs.scanFailedManual")); return; }
-      const v = (data.vendor as string | undefined)?.trim() || "";
-      const its = (Array.isArray(data.items) ? data.items : []) as Item[];
-      const itemSum = its.reduce((s, it) => s + (typeof it.price === "number" && it.price > 0 ? it.price : 0), 0);
-      // The receipt's grand total (incl. tax) is what was spent; the item sum
-      // is only a fallback when the total couldn't be read.
-      const total = typeof data.total === "number" && data.total > 0 ? data.total : itemSum;
-      setVendor(v);
-      setItems(its);
-      if (total > 0) setAmount(total.toFixed(2));
-      const summary = its.filter((it) => it?.name).slice(0, 4).map((it) => it.name).join(", ");
-      const more = its.length > 4 ? ` (+${its.length - 4} more)` : "";
-      const n = v ? `${v}${summary ? ` — ${summary}${more}` : ""}` : `${summary}${more}`;
-      if (n.trim()) setNote(n);
-      if (!its.length && !(total > 0)) setScanErr(t("jobs.scannedReviewFields"));
+      const scan = await scanReceipt(urls);
+      setVendor(scan.vendor);
+      setItems(scan.items);
+      if (scan.total > 0) setAmount(scan.total.toFixed(2));
+      const n = receiptNote(scan);
+      if (n) setNote(n);
+      if (!scan.items.length && !(scan.total > 0)) setScanErr(t("jobs.scannedReviewFields"));
     } catch (e) {
       setScanErr(`${t("jobs.scanFailedManual")} ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -129,25 +109,11 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
       if (!result && paths.length > 1) result = await db.post<{ id: string }>("receipts", base);
       if (!result) return; // db.post toasted why; keep the sheet so they can retry
 
-      const trade = job.trade || "General";
-      const zip = extractZip(job.property || "");
-      const logs = items
-        .filter((it) => it?.name && typeof it.price === "number" && it.price > 0)
-        .map((it) => ({
-          item_name: it.name!.slice(0, 120),
-          material_name: vendor ? `${vendor}: ${it.name}`.slice(0, 160) : it.name!.slice(0, 160),
-          original_mat_cost: 0,
-          corrected_mat_cost: Number(it.price),
-          original_hours: 0,
-          corrected_hours: 0,
-          trade,
-          zip,
-        }));
-      for (const entry of logs) await db.post("price_corrections", entry);
+      const learned = await learnFromReceipt({ vendor, items, total: amt }, job);
 
       await useStore.getState().loadAll();
       useStore.getState().showToast(
-        `${t("jobs.receiptAdded")}${logs.length ? ` · ${logs.length} item${logs.length !== 1 ? "s" : ""} learned` : ""}`,
+        `${t("jobs.receiptAdded")}${learned ? ` · ${learned} item${learned !== 1 ? "s" : ""} learned` : ""}`,
         "success",
       );
       onClose();

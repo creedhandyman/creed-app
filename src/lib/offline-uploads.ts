@@ -18,6 +18,7 @@
 "use client";
 import { supabase, db } from "./supabase";
 import { uploadReceiptPrivate } from "./receipt-storage";
+import { scanReceipt, receiptNote, learnFromReceipt } from "./receipt-scan";
 
 const DB_NAME = "creed-uploads";
 const STORE = "uploads";
@@ -221,9 +222,28 @@ async function replayReceipt(item: QueuedUpload): Promise<void> {
       { onConflict: "id" },
     );
   if (error) throw error;
-  // NOTE: the AI scan (scanReceiptAndLearn) is intentionally NOT re-run on
-  // replay — the receipt image + row are saved (the lossless part); auto-scan
-  // is a bonus that only fires on the live online path.
+  // Now that it's uploaded, scan it like an online receipt: fill in the note
+  // + total and teach the quoting AI the item prices. Best-effort — the
+  // image + row are already saved, and a failed scan must not re-run the
+  // upload (a retried upsert would reset the row to "Receipt" / $0).
+  try {
+    const scan = await scanReceipt([up.url]);
+    const note = receiptNote(scan);
+    const patch: Record<string, unknown> = {};
+    if (note) patch.note = note;
+    if (scan.total > 0) patch.amount = scan.total;
+    if (Object.keys(patch).length) {
+      // amount = 0 → only while nobody has typed a total in the meantime.
+      await supabase.from("receipts").update(patch as never).eq("id", receiptId).eq("amount", 0);
+    }
+    await learnFromReceipt(scan, {
+      property: item.meta.property ? String(item.meta.property) : null,
+      trade: item.meta.trade ? String(item.meta.trade) : null,
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[offline-uploads] receipt saved; scan skipped:", err);
+  }
 }
 
 /**

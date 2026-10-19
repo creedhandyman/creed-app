@@ -1075,8 +1075,7 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   error) with a "saved — uploads when you reconnect" toast; `store.flushUploads`
   runs on reconnect (after the row queue) + on `startAutoRefresh`;
   `pendingUploads` folds into the banner count; cleared on logout. **NOT done**:
-  offline PREVIEW (queued images don't show in the grid until they upload); AI
-  receipt scan isn't re-run on replay; other upload sites (QuoteForge, Inspector,
+  offline PREVIEW (queued images don't show in the grid until they upload); other upload sites (QuoteForge, Inspector,
   equipment, renders) are still online-only. Background Sync API not used (the
   `online` listener covers reconnect while the app is open). SW + offline
   behaviour can't be tested locally (no dev env) — verify on-device.
@@ -1559,7 +1558,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   opens `ReceiptScanSheet.tsx` (multi-page upload → one combined scan → review
   vendor/items/TOTAL → Save, incl. price_corrections) — the old path saved $0
   and back-filled the amount from the item sum only, silently doing nothing
-  when the scan returned no items. `uploadReceipt` is now the OFFLINE path only. **Guide shopping list is editable**: the
+  when the scan returned no items. `uploadReceipt` is now the OFFLINE path only.
+  Scan helpers live in `lib/receipt-scan.ts` (scanReceipt / receiptNote /
+  learnFromReceipt — total = grand total, item sum only as fallback). Offline
+  receipts are now scanned on replay too (`offline-uploads.ts replayReceipt`:
+  best-effort after the row upsert; note+amount patched only while amount is
+  still 0; queue meta carries property/trade for the learning rows). **Guide shopping list is editable**: the
   checkbox alone toggles bought-state; tapping an item's name/price opens an
   inline editor (rename / change cost / delete). Custom items edit their
   `customShop` entry in place; quote-derived items are "adopted" into
