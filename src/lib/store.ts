@@ -26,6 +26,7 @@ import type {
   CustomerMembership,
   Equipment,
   FlipProject,
+  CrewLocation,
   ReviewRequest,
   AppNotification,
 } from "./types";
@@ -143,6 +144,9 @@ interface AppState {
   equipment: Equipment[];
   /** Flip Mode projects (owner/manager only — RLS returns none to crew). */
   flipProjects: FlipProject[];
+  /** Live crew locations (owner/manager only — one row per tech, sent while
+   *  they're clocked in with the app open; see lib/crew-heartbeat). */
+  crewLocations: CrewLocation[];
   notifications: AppNotification[];
   loading: boolean;
   /** True when the UI is showing the last cached snapshot because the network
@@ -225,7 +229,7 @@ const EMPTY_COLLECTIONS = {
   customers: [], addresses: [], profiles: [], pendingMembers: [], jobs: [], timeEntries: [],
   reviews: [], referrals: [], schedule: [], payHistory: [], receipts: [],
   questPayouts: [], timeOffRequests: [], recurringJobs: [], reviewRequests: [],
-  membershipPlans: [], customerMemberships: [], equipment: [], flipProjects: [], notifications: [],
+  membershipPlans: [], customerMemberships: [], equipment: [], flipProjects: [], crewLocations: [], notifications: [],
 };
 
 /** Placeholder user for a signed-in account that has no profile row yet.
@@ -453,6 +457,7 @@ export const useStore = create<AppState>((set, get) => ({
   customerMemberships: [],
   equipment: [],
   flipProjects: [],
+  crewLocations: [],
   notifications: [],
   loading: true,
   usingOfflineData: false,
@@ -543,6 +548,11 @@ export const useStore = create<AppState>((set, get) => ({
     const flipP: Promise<FlipProject[] | null> = orgFilter && (role === "owner" || role === "manager")
       ? settle(db.get<FlipProject>("flip_projects", orgFilter, { strict: true }))
       : Promise.resolve([]);
+    // Live crew locations: same treatment (optional, owner/manager only — a
+    // missing crew_locations table must never block sync).
+    const crewLocP: Promise<CrewLocation[] | null> = orgFilter && (role === "owner" || role === "manager")
+      ? settle(db.get<CrewLocation>("crew_locations", orgFilter, { strict: true }))
+      : Promise.resolve([]);
     const results = await Promise.all([
       settle(db.get<Customer>("customers", orgFilter, { strict: true })),
       settle(db.get<Address>("addresses", orgFilter, { strict: true })),
@@ -611,6 +621,8 @@ export const useStore = create<AppState>((set, get) => ({
     const equipmentF = equipment ?? cur.equipment;
     const flipProjects = await flipP;
     const flipProjectsF = flipProjects ?? cur.flipProjects;
+    const crewLocations = await crewLocP;
+    const crewLocationsF = crewLocations ?? cur.crewLocations;
     const notificationsF = notifications ?? cur.notifications;
 
     set({
@@ -622,6 +634,9 @@ export const useStore = create<AppState>((set, get) => ({
       reviews: reviewsF, referrals: referralsF, schedule: scheduleF, payHistory: payHistoryF, receipts: receiptsF, questPayouts: questPayoutsF, timeOffRequests: timeOffRequestsF, recurringJobs: recurringJobsF, reviewRequests: reviewRequestsF,
       membershipPlans: membershipPlansF, customerMemberships: customerMembershipsF, equipment: equipmentF,
       flipProjects: flipProjectsF,
+      // Not in the offline snapshot: other people's positions aren't kept on
+      // the device, and an old "live" dot is worse than none.
+      crewLocations: crewLocationsF,
       notifications: notificationsF,
       loading: false,
       usingOfflineData: false,

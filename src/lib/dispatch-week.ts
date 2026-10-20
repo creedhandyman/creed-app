@@ -8,18 +8,21 @@
  *                  addresses have coordinates.
  *  - planWrites:   an accepted plan → schedule rows to insert (new jobs) and
  *                  patches for booked visits it gave a time / crew / new day.
- *  - crewNow:      each tech's last GPS stamp today, the job they're clocked
- *                  into and their next stop (for "John is 10 min from …").
+ *  - crewNow:      where each tech is now — their live heartbeat fix when
+ *                  it's newer than their last clock-in/out GPS stamp today —
+ *                  the job they're clocked into and their next stop (for
+ *                  "John is 10 min from …").
  *
  * PURE (no store, React or fetch), tested in src/__tests__/dispatch-week.test.ts.
  * Calendar rules come from lib/day-plan (the same entry→job match, crew list
  * and done/now/todo states Home and Schedule use) so the assistant can't
  * disagree with the calendar it's planning.
  */
-import type { Job, Profile, ScheduleEntry, TimeEntry, TimeOffRequest } from "./types";
+import type { CrewLocation, Job, Profile, ScheduleEntry, TimeEntry, TimeOffRequest } from "./types";
 import { stopsForDay, entryJob, isJobScheduled, parseSchedTime, parseSchedCrew, localYmd, isEntryOnDay } from "./day-plan";
 import { isStaleOpenEntry } from "./shift";
-import { clockMinutes } from "./mileage-days";
+import { clockMinutes, formatClock } from "./mileage-days";
+import { liveFixFor, stampMs } from "./crew-location";
 import { haversineMiles, ROAD_FACTOR, driveMinutes } from "./geo";
 import { hhmmToMin, minToHhmm, roundQuarter } from "./route-plan";
 import { planningCrew } from "./job-duration";
@@ -349,19 +352,23 @@ export function planWrites(plan: WeekPlan, { booked, crew, replanBooked }: {
 export interface CrewNow {
   id: string;
   name: string;
-  /** Latest GPS stamp today (clock-in/out fixes — there's no live tracking). */
-  fix?: { lat: number; lng: number; time: string; kind: "in" | "out" };
+  /** Where they are, as far as the app knows: the live heartbeat fix when it's
+   *  newer than their last clock-in/out GPS stamp today, else that stamp.
+   *  `ageMin` is set for a live fix only. */
+  fix?: { lat: number; lng: number; time: string; kind: "in" | "out" | "live"; ageMin?: number };
   /** Clocked into this job right now. */
   onJob?: { address: string; since: string; jobId?: string };
   /** Their next stop still to do today. */
   next?: { address: string; time: string; jobId?: string };
 }
 
-export function crewNow({ crew, timeEntries, schedule, jobs, now = new Date() }: {
+export function crewNow({ crew, timeEntries, schedule, jobs, locations = [], now = new Date() }: {
   crew: Pick<Profile, "id" | "name">[];
   timeEntries: TimeEntry[];
   schedule: ScheduleEntry[];
   jobs: Job[];
+  /** crew_locations rows (owners/managers only — empty for crew). */
+  locations?: CrewLocation[];
   now?: Date;
 }): CrewNow[] {
   const today = localYmd(now);
@@ -379,6 +386,11 @@ export function crewNow({ crew, timeEntries, schedule, jobs, now = new Date() }:
       const lat = out ? last.end_lat : last.start_lat;
       const lng = out ? last.end_lng : last.start_lng;
       if (lat != null && lng != null) fix = { lat, lng, time: (out ? last.end_time : last.start_time) || "", kind: out ? "out" : "in" };
+    }
+    const live = liveFixFor(locations.find((l) => l.user_id === p.id), fix ? stampMs(now, fix.time) : null, now);
+    if (live) {
+      const d = new Date(live.atMs);
+      fix = { lat: live.lat, lng: live.lng, time: formatClock(d.getHours() * 60 + d.getMinutes()), kind: "live", ageMin: live.ageMin };
     }
     const open = mine.find((e) => !!e.start_time && !e.end_time && !isStaleOpenEntry(e.entry_date, e.start_time, now.getTime()));
     const onJob = open ? { address: open.job, since: open.start_time || "", jobId: open.job_id } : undefined;

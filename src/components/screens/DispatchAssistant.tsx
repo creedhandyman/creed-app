@@ -2,9 +2,11 @@
 /**
  * Dispatch Assistant — plan the whole crew's week in one go.
  *
- *  - CREW RIGHT NOW: each tech's last GPS stamp today (clock-in/out fixes;
- *    the app doesn't track phones between them), the job they're on, and how
- *    far they are from their next stop ("Ann is ~10 min from 1436 Piatt Ave").
+ *  - CREW RIGHT NOW: where each tech is — their live location (the phone's
+ *    foreground heartbeat while on the clock, lib/crew-heartbeat) when it's
+ *    newer than their last clock-in/out GPS stamp today, else that stamp —
+ *    the job they're on, and how far they are from their next stop ("Ann is
+ *    ~10 min from 1436 Piatt Ave").
  *  - PLAN THE WEEK: pick the days, who's working and the hours; the route
  *    planner (lib/route-plan, glue in lib/dispatch-week) books the jobs still
  *    waiting for a day around what's already booked — who, which day, what
@@ -25,6 +27,8 @@ import { t, getLang } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import RouteMap, { type MapCrew, type MapRoute } from "@/components/RouteMap";
+import { liveFixLabel } from "@/components/LocationSharingNote";
+import { LIVE_FRESH_MIN } from "@/lib/crew-location";
 import { geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
 import { localYmd, addDaysYmd, fmtClock } from "@/lib/day-plan";
 import { formatClock } from "@/lib/mileage-days";
@@ -105,6 +109,7 @@ export default function DispatchAssistant({ setPage }: Props) {
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
   const timeEntries = useStore((s) => s.timeEntries);
+  const crewLocations = useStore((s) => s.crewLocations);
   const timeOff = useStore((s) => s.timeOffRequests);
   const org = useStore((s) => s.org);
   const loadAll = useStore((s) => s.loadAll);
@@ -201,7 +206,10 @@ export default function DispatchAssistant({ setPage }: Props) {
   const pt = (addr?: string | null) => (addr ? coords.get(addr.trim()) ?? null : null);
 
   // ── Crew right now ──
-  const live = useMemo(() => crewNow({ crew: profiles, timeEntries, schedule, jobs }), [profiles, timeEntries, schedule, jobs]);
+  const live = useMemo(
+    () => crewNow({ crew: profiles, timeEntries, schedule, jobs, locations: crewLocations }),
+    [profiles, timeEntries, schedule, jobs, crewLocations],
+  );
   const liveAddrs = live.flatMap((c) => [c.next?.address, c.fix ? undefined : c.onJob?.address]).filter((a): a is string => !!a);
   useEffect(() => {
     if (liveAddrs.length) void locate(liveAddrs);
@@ -381,9 +389,16 @@ export default function DispatchAssistant({ setPage }: Props) {
             const eta = here && nextPt ? etaBetween(here, nextPt) : null;
             const status = c.onJob
               ? `${t("disp.onClockAt")} ${c.onJob.address}${c.onJob.since ? ` · ${t("disp.since")} ${c.onJob.since}` : ""}`
-              : c.fix
-                ? `${t("disp.lastSeen")} ${c.fix.time} (${c.fix.kind === "out" ? t("disp.clockedOut") : t("disp.clockedIn")})`
-                : t("disp.noLocation");
+              : c.fix?.kind === "live"
+                ? `${t("disp.lastLive")} ${c.fix.time}`
+                : c.fix
+                  ? `${t("disp.lastSeen")} ${c.fix.time} (${c.fix.kind === "out" ? t("disp.clockedOut") : t("disp.clockedIn")})`
+                  : t("disp.noLocation");
+            // On the clock: say where the dot comes from (live vs the clock-in stamp).
+            const fresh = c.fix?.kind === "live" && (c.fix.ageMin ?? Infinity) <= LIVE_FRESH_MIN;
+            const source = c.onJob && c.fix
+              ? c.fix.kind === "live" ? liveFixLabel(c.fix.ageMin ?? 0, c.fix.time) : t("disp.lastStamp").replace("{time}", c.fix.time)
+              : "";
             return (
               <div key={c.id} className="drow" style={{ alignItems: "flex-start", justifyContent: "flex-start", gap: 10 }}>
                 {avatar(c.id, c.name, 30)}
@@ -391,6 +406,7 @@ export default function DispatchAssistant({ setPage }: Props) {
                   <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 14 }}>
                     {c.name}
                     {c.onJob && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 6px var(--color-success)" }} />}
+                    {source && <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 500, whiteSpace: "nowrap", color: fresh ? "var(--color-success)" : "var(--color-dim)" }}>{source}</span>}
                   </div>
                   <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis" }}>{status}</div>
                   {c.next && (

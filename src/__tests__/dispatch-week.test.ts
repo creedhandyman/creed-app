@@ -203,4 +203,31 @@ describe("crewNow", () => {
     expect(bo.fix).toBeUndefined();
     expect(bo.next).toBeUndefined();
   });
+
+  describe("live locations", () => {
+    const te: TimeEntry[] = [
+      { id: "1", job: "200 W Oak", job_id: "j2", entry_date: MON, hours: 0, amount: 0, user_id: "a", user_name: "Ann Lee", start_time: "9:30 AM", start_lat: 3, start_lng: 3 },
+      { id: "2", job: "100 E Main", entry_date: MON, hours: 2, amount: 0, user_id: "b", user_name: "Bo Diaz", start_time: "8:00 AM", end_time: "10:50 AM", start_lat: 5, start_lng: 5, end_lat: 6, end_lng: 6 },
+    ];
+    const at = (local: string) => new Date(local).toISOString();
+
+    it("prefers a heartbeat fix newer than the last stamp, with its age", () => {
+      const locations = [{ user_id: "a", lat: 7, lng: 7, acc: 20, at: at("2026-10-19T10:57:00") }];
+      const [ann] = crewNow({ crew, timeEntries: te, schedule: [], jobs: [], locations, now });
+      expect(ann.fix).toEqual({ lat: 7, lng: 7, time: "10:57 AM", kind: "live", ageMin: 3 });
+      expect(ann.onJob).toMatchObject({ address: "200 W Oak" });
+    });
+    it("keeps a later clock stamp over an older heartbeat", () => {
+      // Bo's heartbeat came before he clocked out at 10:50.
+      const locations = [{ user_id: "b", lat: 8, lng: 8, at: at("2026-10-19T10:40:00") }];
+      const [, bo] = crewNow({ crew, timeEntries: te, schedule: [], jobs: [], locations, now });
+      expect(bo.fix).toEqual({ lat: 6, lng: 6, time: "10:50 AM", kind: "out" });
+    });
+    it("shows a live fix with no stamp, and ignores yesterday's", () => {
+      const ok = crewNow({ crew, timeEntries: [], schedule: [], jobs: [], locations: [{ user_id: "b", lat: 9, lng: 9, at: at("2026-10-19T10:30:00") }], now });
+      expect(ok[1].fix).toMatchObject({ lat: 9, kind: "live", ageMin: 30 });
+      const old = crewNow({ crew, timeEntries: [], schedule: [], jobs: [], locations: [{ user_id: "b", lat: 9, lng: 9, at: at("2026-10-18T16:00:00") }], now });
+      expect(old[1].fix).toBeUndefined();
+    });
+  });
 });

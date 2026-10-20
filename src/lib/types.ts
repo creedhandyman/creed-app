@@ -328,6 +328,21 @@ export interface TimeEntry {
   paid_at?: string;
 }
 
+/** A tech's latest live location (`crew_locations`, one row per user) — sent
+ *  by the foreground heartbeat (lib/crew-heartbeat) every few minutes while
+ *  they're clocked in with the app open. Never written off the clock (RLS
+ *  refuses it). Owners/managers read the org's rows; crew only their own. */
+export interface CrewLocation {
+  user_id: string;
+  org_id?: string;
+  lat: number;
+  lng: number;
+  /** Reported accuracy in meters. */
+  acc?: number | null;
+  /** Server time of the fix (ISO). */
+  at: string;
+}
+
 export interface Review {
   id: string;
   client_name: string;

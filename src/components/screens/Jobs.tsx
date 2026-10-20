@@ -20,7 +20,7 @@ import ReviewRequestModal from "../ReviewRequestModal";
 import RecordApprovalSheet from "../RecordApprovalSheet";
 import SmsNotifyButtons from "../SmsNotifyButtons";
 import { wrapPrint, openPrint } from "@/lib/print-template";
-import { formatHours, parseEntryDate } from "@/lib/dates";
+import { formatHours } from "@/lib/dates";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes, cityContext } from "@/lib/geo";
 import { residentContact } from "@/lib/resident";
 import {
@@ -34,16 +34,20 @@ import {
 import { stripAiHrsFromBlob } from "@/lib/ai-hours";
 import { useBackLayer } from "@/lib/back-layer";
 import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
+import { crewNow } from "@/lib/dispatch-week";
+import { liveFixLabel } from "../LocationSharingNote";
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
    Under the Requested-tech picker: ranks the crew by distance from
-   their LAST GPS STAMP TODAY (clock-in/out fixes — no live tracking)
-   to this job's address, with a rough drive ETA. Renders nothing when
-   there's no address, no stamps today, or geocoding fails — a hint,
-   never a blocker. */
+   where they are now — their live location (sent while on the clock
+   with the app open) when it's newer, else their LAST GPS STAMP TODAY
+   (dispatch-week crewNow, same as Dispatch) — to this job's address,
+   with a rough drive ETA. Renders nothing when there's no address, no
+   location today, or geocoding fails — a hint, never a blocker. */
 function ClosestTechHint({ job }: { job: Job }) {
   const profiles = useStore((s) => s.profiles);
   const timeEntries = useStore((s) => s.timeEntries);
+  const crewLocations = useStore((s) => s.crewLocations);
   const org = useStore((s) => s.org);
   const [rows, setRows] = useState<{ name: string; miles: number; asOf: string }[] | null>(null);
 
@@ -54,41 +58,22 @@ function ClosestTechHint({ job }: { job: Job }) {
     (async () => {
       const dest = await geocodeAddress(job.property, cityContext(org?.address));
       if (!dest || cancelled) return;
-      const toMin = (t?: string) => {
-        const m = (t || "").match(/(\d+):(\d+)\s*([AP]M)?/i);
-        if (!m) return 0;
-        let h = parseInt(m[1]);
-        const ap = m[3]?.toUpperCase();
-        if (ap === "PM" && h < 12) h += 12;
-        if (ap === "AM" && h === 12) h = 0;
-        return h * 60 + parseInt(m[2]);
-      };
-      const todayKey = new Date().toDateString();
       const out: { name: string; miles: number; asOf: string }[] = [];
-      for (const p of profiles) {
-        // Most recent stamped entry TODAY; the clock-out fix wins over
-        // clock-in when both exist (it's later).
-        const todays = timeEntries
-          .filter((e) => e.user_id === p.id)
-          .filter((e) => (e.start_lat != null || e.end_lat != null))
-          .filter((e) => parseEntryDate(e.entry_date)?.toDateString() === todayKey)
-          .sort((a, b) => toMin(b.end_time || b.start_time) - toMin(a.end_time || a.start_time));
-        const e = todays[0];
-        if (!e) continue;
-        const lat = e.end_lat ?? e.start_lat;
-        const lng = e.end_lng ?? e.start_lng;
-        if (lat == null || lng == null) continue;
+      for (const c of crewNow({ crew: profiles, timeEntries, schedule: [], jobs: [], locations: crewLocations })) {
+        if (!c.fix) continue;
         out.push({
-          name: p.name,
-          miles: Math.round(haversineMiles(lat, lng, dest.lat, dest.lng) * ROAD_FACTOR * 10) / 10,
-          asOf: (e.end_lat != null ? e.end_time : e.start_time) || "",
+          name: c.name,
+          miles: Math.round(haversineMiles(c.fix.lat, c.fix.lng, dest.lat, dest.lng) * ROAD_FACTOR * 10) / 10,
+          asOf: c.fix.kind === "live"
+            ? liveFixLabel(c.fix.ageMin ?? 0, c.fix.time)
+            : c.fix.time ? `${t("loc.asOf")} ${c.fix.time}` : "",
         });
       }
       out.sort((a, b) => a.miles - b.miles);
       if (!cancelled && out.length) setRows(out.slice(0, 3));
     })();
     return () => { cancelled = true; };
-  }, [job.id, job.property, profiles, timeEntries, org?.address]);
+  }, [job.id, job.property, profiles, timeEntries, crewLocations, org?.address]);
 
   if (!rows) return null;
   return (
@@ -100,7 +85,7 @@ function ClosestTechHint({ job }: { job: Job }) {
           <b style={{ color: i === 0 ? "#8cc0ff" : undefined, fontWeight: i === 0 ? 600 : 400 }}>
             {r.name.split(" ")[0]} ~{r.miles} mi (~{driveMinutes(r.miles)} min)
           </b>
-          {r.asOf ? ` ${t("loc.asOf")} ${r.asOf}` : ""}
+          {r.asOf ? ` ${r.asOf}` : ""}
         </span>
       ))}
     </div>

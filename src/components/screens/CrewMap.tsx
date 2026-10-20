@@ -5,7 +5,9 @@
  *    time order as a per-tech colored DASHED polyline (dashed on purpose:
  *    it's stop-to-stop, not a driving breadcrumb — the app has no background
  *    tracking). Numbered dots mark each stamp; the initials avatar sits on
- *    the tech's LAST stamp of the day.
+ *    the tech's LAST stamp of the day — or, TODAY, on their live location
+ *    (crew_locations, sent every few minutes while they're on the clock with
+ *    the app open) when that's newer, drawn with a green ring.
  *  - STOP pins: jobs scheduled for that day (status-colored) + active jobs
  *    (today only — "active" is only meaningful in the present).
  *  - DATE PICKER: look back at any past day's paths — the whole map is
@@ -30,6 +32,8 @@ import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
 import { geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
 import { parseEntryDate } from "@/lib/dates";
+import { liveFixFor, stampMs, LIVE_FRESH_MIN } from "@/lib/crew-location";
+import { liveFixLabel } from "../LocationSharingNote";
 import type { Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -59,7 +63,7 @@ function localYmd(d: Date): string {
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-type StampPt = { lat: number; lng: number; kind: "in" | "out"; time: string; job: string };
+type StampPt = { lat: number; lng: number; kind: "in" | "out" | "live"; time: string; job: string; ageMin?: number };
 
 // setPage stays in Props for AppShell's uniform call; Back walks history.
 export default function CrewMap(_props: Props) {
@@ -84,7 +88,7 @@ export default function CrewMap(_props: Props) {
       }).addTo(map);
       setNote(t("loc.loadingMap"));
 
-      const { profiles, timeEntries, schedule, jobs, org } = useStore.getState();
+      const { profiles, timeEntries, schedule, jobs, org, crewLocations } = useStore.getState();
       const bounds: [number, number][] = [];
       const isToday = date === localYmd(new Date());
 
@@ -112,7 +116,6 @@ export default function CrewMap(_props: Props) {
             const d = parseEntryDate(x.entry_date);
             return d ? localYmd(d) === date : false;
           });
-        if (!dayEntries.length) return;
 
         const pts: StampPt[] = [];
         for (const e of dayEntries) {
@@ -123,8 +126,21 @@ export default function CrewMap(_props: Props) {
             pts.push({ lat: e.end_lat, lng: e.end_lng, kind: "out", time: e.end_time || "", job: e.job || "" });
           }
         }
-        if (!pts.length) return;
         pts.sort((a, b) => toMin(a.time) - toMin(b.time));
+        // Today: the live location joins the path when it's newer than the
+        // last stamp (the avatar then sits on it).
+        if (isToday) {
+          const now = new Date();
+          const lastPt = pts[pts.length - 1];
+          const live = liveFixFor(crewLocations.find((l) => l.user_id === p.id), lastPt ? stampMs(now, lastPt.time) : null, now);
+          if (live) {
+            const at = new Date(live.atMs);
+            const time = at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+            const openJob = dayEntries.find((x) => !x.end_time)?.job || "";
+            pts.push({ lat: live.lat, lng: live.lng, kind: "live", time, job: openJob, ageMin: live.ageMin });
+          }
+        }
+        if (!pts.length) return;
 
         const color = TECH_COLORS[pi % TECH_COLORS.length];
         const initials = p.name.split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
@@ -143,15 +159,22 @@ export default function CrewMap(_props: Props) {
         pts.forEach((q, qi) => {
           const [mLat, mLng] = placed[qi];
           const isLast = qi === pts.length - 1;
+          const what = q.kind === "live"
+            ? esc(liveFixLabel(q.ageMin ?? 0, q.time))
+            : `${q.kind === "out" ? t("loc.clockedOut") : t("loc.clockedIn")} ${esc(q.time)}`;
           const popup =
             `<b>${esc(p.name)}</b><br/>` +
-            `#${qi + 1} · ${q.kind === "out" ? t("loc.clockedOut") : t("loc.clockedIn")} ${esc(q.time)} · ${esc(q.job)}<br/>` +
+            `#${qi + 1} · ${what}${q.job ? ` · ${esc(q.job)}` : ""}<br/>` +
             `<a href="https://www.google.com/maps?q=${q.lat},${q.lng}" target="_blank" rel="noopener">${t("loc.openInMaps")}</a>`;
           if (isLast) {
-            // Initials avatar on the final stamp of the day.
+            // Initials avatar on the final stamp of the day — a green ring
+            // when it's the live location (dimmer once it's gone stale).
+            const ring = q.kind === "live"
+              ? `,0 0 0 4px rgba(62,224,143,${(q.ageMin ?? 0) <= LIVE_FRESH_MIN ? ".75" : ".3"})`
+              : "";
             const icon = L.divIcon({
               className: "",
-              html: `<div style="width:34px;height:34px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;font-family:Oswald,sans-serif">${esc(initials)}</div>`,
+              html: `<div style="width:34px;height:34px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45)${ring};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;font-family:Oswald,sans-serif">${esc(initials)}</div>`,
               iconSize: [34, 34],
               iconAnchor: [17, 17],
             });

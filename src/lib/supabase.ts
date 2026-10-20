@@ -7,7 +7,7 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Tables that don't have a created_at column
-const NO_CREATED_AT = new Set(["time_entries"]);
+const NO_CREATED_AT = new Set(["time_entries", "crew_locations"]);
 
 // Tables that should NOT have org_id auto-injected
 const NO_ORG_ID = new Set(["organizations", "profiles"]);

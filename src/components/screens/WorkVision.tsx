@@ -29,6 +29,7 @@ import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
 import { newRowId, getPending } from "@/lib/offline-queue";
 import { isClosedRow, markLocalClockOut, unmarkLocalClockOut } from "@/lib/clock-sync";
 import { enqueueUpload, isNetworkError } from "@/lib/offline-uploads";
+import LocationSharingNote from "../LocationSharingNote";
 
 function ld<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -1290,6 +1291,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
           {activeJob?.client ? ` · ${activeJob.client}` : ""}{activeJob ? ` · #${activeJob.id.slice(-6).toUpperCase()}` : ""}
         </div>
       </div>
+      <LocationSharingNote on={on} style={{ display: "flex", margin: "-6px 0 12px" }} />
 
       {/* Start drive = track the miles + open directions (was a separate
           Map button). Logs to the Mileage screen. */}

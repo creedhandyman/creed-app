@@ -463,14 +463,83 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Clock-in/out (Timer + WorkVision) fire-and-forget a one-shot `getFix` and
   patch the stamp onto the entry — never blocks payroll actions; ONE-SHOT
   fixes only, on the clock only, no background tracking (impossible in a PWA
-  on iOS anyway). Consumers: Crew Activity 📍in/📍out map links,
-  `ClosestTechHint` (Jobs detail dispatch: crew ranked by distance from their
-  last stamp TODAY to the job, ETA via `driveMinutes`), Schedule day-view
+  on iOS anyway). Between stamps, the live crew-location heartbeat (next
+  entry) fills in while the app is open. Consumers: Crew Activity 📍in/📍out
+  map links, `ClosestTechHint` (Jobs detail dispatch: crew ranked by distance
+  from where they are now — dispatch-week `crewNow`, live fix when newer,
+  else the last stamp TODAY — to the job, ETA via `driveMinutes`), Schedule day-view
   `RouteOptimizer` (nearest-neighbor + 2-opt stop order, display-only), and
   Mileage `SuggestedTrips` (day chain from clocked jobs, one-tap logging).
   Geocoding: `geocodeAddress`/`hasGeocodeCache` in `src/lib/geo.ts` —
   OpenStreetMap Nominatim, no API key, cached forever per address in
   localStorage; throttle uncached lookups ~1/s per their policy.
+- Live crew locations (**NOT YET RUN in prod** — tracking location is the
+  owner's privacy call; RLS rehearsed 2026-10-19 in a rolled-back txn: tech on
+  the clock writes own row + server-stamped `at`, off-clock tech/manager
+  insert refused, can't write for another user or move to another org, tech
+  sees 1 row (own), owner/manager see the org's, other org sees only its own,
+  anon denied):
+  ```sql
+  CREATE TABLE IF NOT EXISTS crew_locations (
+    user_id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    org_id UUID NOT NULL,
+    lat DOUBLE PRECISION NOT NULL CHECK (lat BETWEEN -90 AND 90),
+    lng DOUBLE PRECISION NOT NULL CHECK (lng BETWEEN -180 AND 180),
+    acc NUMERIC CHECK (acc >= 0),
+    at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_crew_locations_org ON crew_locations(org_id);
+  CREATE OR REPLACE FUNCTION crew_locations_stamp() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+  BEGIN NEW.at := now(); RETURN NEW; END $$;
+  DROP TRIGGER IF EXISTS crew_locations_stamp ON crew_locations;
+  CREATE TRIGGER crew_locations_stamp BEFORE INSERT OR UPDATE ON crew_locations
+    FOR EACH ROW EXECUTE FUNCTION crew_locations_stamp();
+  ALTER TABLE crew_locations ENABLE ROW LEVEL SECURITY;
+  REVOKE ALL ON crew_locations FROM anon;
+  CREATE POLICY crew_locations_select ON crew_locations FOR SELECT TO authenticated
+    USING (org_id = auth_org_id() AND (user_id = auth.uid() OR auth_role() IN ('owner','manager')));
+  CREATE POLICY crew_locations_insert ON crew_locations FOR INSERT TO authenticated
+    WITH CHECK (user_id = auth.uid() AND org_id = auth_org_id()
+      AND EXISTS (SELECT 1 FROM time_entries te WHERE te.user_id = auth.uid()::text
+        AND te.org_id = auth_org_id() AND te.end_time IS NULL AND coalesce(te.start_time, '') <> ''));
+  CREATE POLICY crew_locations_update ON crew_locations FOR UPDATE TO authenticated
+    USING (user_id = auth.uid())
+    WITH CHECK (user_id = auth.uid() AND org_id = auth_org_id()
+      AND EXISTS (SELECT 1 FROM time_entries te WHERE te.user_id = auth.uid()::text
+        AND te.org_id = auth_org_id() AND te.end_time IS NULL AND coalesce(te.start_time, '') <> ''));
+  ```
+  One row per user, overwritten (no location history). Writer =
+  `src/lib/crew-heartbeat.ts` (started by AppShell `useCrewHeartbeat`): while
+  THIS phone is on the clock (c_t_on + c_t_active_id) AND the app is visible,
+  a one-shot `getFix` every ~4 min (`HEARTBEAT_MS`; the clock-in's own stamp
+  counts as the first) and on each return to the app (`visibilitychange` /
+  `pageshow`, unless the last try was <60 s ago) → upsert `{user_id, org_id,
+  lat, lng, acc}` (server stamps `at`). Fixes worse than 100 m are dropped;
+  the clock + user are re-checked after the fix lands (clock-out / sign-out /
+  switching away mid-fix → nothing sent). Only uses a location permission
+  already GRANTED (Permissions API "prompt"/"denied" → off; clock-in is what
+  asks) — it never pops a prompt. Silent by design: Supabase is called
+  directly (no db.* toasts); a missing table (PGRST205/42P01) is probed once,
+  remembered for an hour (`c_crewloc_missing_until`) and nothing — not even a
+  GPS fix — happens until it exists. RLS refuses a row from anyone without an
+  open shift (stale months-old open rows would still pass — the client gate is
+  the real one). Rules + knobs are PURE in `src/lib/crew-location.ts`
+  (`heartbeatDue`, `usableFix`, `liveFixFor`, `LIVE_FRESH_MIN` = 15; tested in
+  `crew-location.test.ts`). Readers: `store.crewLocations` (owner/manager only,
+  fetched beside the main batch, strict + settle like flip_projects — a missing
+  table never blocks sync; deliberately NOT in the offline snapshot, and
+  `crew_locations` is in supabase.ts `NO_CREATED_AT`); dispatch-week `crewNow`
+  prefers a fix from TODAY newer than the last clock stamp (a stamp in the same
+  minute wins) and returns `kind:"live"` + `ageMin`; Dispatch "Crew right now"
+  tags each on-the-clock tech "live · 3 min ago" (green while ≤15 min, else
+  "location from 2:14 PM") vs "last stamp 9:30 AM"; Crew Map (today) puts the
+  avatar on the live fix with a green ring (faded once stale) at the end of the
+  dashed path; Jobs `ClosestTechHint` uses `crewNow` too. Techs see
+  `components/LocationSharingNote.tsx` "Sharing location while on the clock"
+  in Time (on-the-clock card) and Work mode (under the job row) whenever the
+  heartbeat can share (hidden off the clock, without permission, or while the
+  table is missing). Deliberately NOT in preflight `DB_CHECKS` (optional).
 - `ALTER TABLE time_entries ADD COLUMN job_id UUID;`
   (Disambiguates time entries when two jobs share an address — e.g.
   a callback at a property that's already had a prior job. New clock-
@@ -850,8 +919,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   (owner/manager; AppShell route `dispatch`) and Schedule → Dispatch tab's
   "Plan the week" card (passes the viewed week's Monday via nav intent
   `{page:"dispatch", week}`). `screens/DispatchAssistant.tsx`: **Crew right
-  now** (each tech's last clock-in/out GPS stamp today, the job they're on,
-  "Jordan is ~8 min from <next stop>") + **Plan the week** (days Mon–Sat,
+  now** (where each tech is — their live location from the on-the-clock
+  heartbeat when newer, tagged "live · N min ago", else their last
+  clock-in/out GPS stamp today, tagged "last stamp"; see "Live crew
+  locations" in the migrations list — the job they're on, "Jordan is ~8 min
+  from <next stop>") + **Plan the week** (days Mon–Sat,
   who's working — approved time off removes that tech's day — working hours,
   "also book quotes", "re-plan booked visits"). Engine = `lib/route-plan.ts`
   `planWeek` (PURE, tested): one route per (day, tech) from/to the shop;
@@ -889,10 +961,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Leaflet route map (refits on resize). Limits: BOOKED crew visits with no
   promised time aren't synchronized (each tech's route times them on its
   own); a one-person job of ~8.5–9 h (with 8–5 hours) still reports no-room
-  instead of splitting (only joint jobs get the extra-day retry); no
-  live GPS between clock stamps (would need a foreground heartbeat table —
-  a privacy call for the owner), straight-line drive estimates (no routing
-  API).
+  instead of splitting (only joint jobs get the extra-day retry); live
+  location only while a tech is on the clock WITH THE APP OPEN (iOS can't run
+  a backgrounded PWA's GPS; between those it's the last fix or stamp) and
+  only once the `crew_locations` migration runs, straight-line drive
+  estimates (no routing API).
 
 - **Flip Mode — Phase 1 Deal Analyzer (2026-10-17)**: "should I buy this
   house?" for owners who flip their own properties. More hub → **Flip Mode**

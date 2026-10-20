@@ -22,6 +22,7 @@ import FlipAnalyzer from "./screens/FlipAnalyzer";
 import Coachmark from "./Coachmark";
 import OfflineBanner from "./OfflineBanner";
 import { t } from "@/lib/i18n";
+import { useCrewHeartbeat } from "@/lib/crew-heartbeat";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -44,6 +45,10 @@ export default function AppShell() {
   const [resetKey, setResetKey] = useState(0);
 
   const isAdmin = user.role === "owner" || user.role === "manager";
+
+  // Live crew location: a fix every few minutes while THIS phone is on the
+  // clock with the app open (never off the clock / in the background).
+  useCrewHeartbeat(!!user.org_id);
 
   // ── Hardware/gesture back = in-app back (Android PWA) ──────────────
   // The app navigates by state, not URLs, so the system back button saw an

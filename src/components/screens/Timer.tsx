@@ -12,6 +12,7 @@ import { isClosedRow, markLocalClockOut, unmarkLocalClockOut } from "@/lib/clock
 import { getFix } from "@/lib/geo";
 import { LONG_SHIFT_MS, entryStartMs, isStaleOpenEntry } from "@/lib/shift";
 import { useFinishTime } from "../FinishTimeModal";
+import LocationSharingNote from "../LocationSharingNote";
 
 // Decimal hours (the stored unit) <-> hours+minutes fields, so all time
 // entry/editing happens in "Xh Ym" while the DB keeps decimals.
@@ -714,6 +715,7 @@ export default function Timer({ setPage }: Props) {
               <Icon name="mapPin" size={12} color="#7fb6ff" /> {t("timer.showOnMap")}
             </a>
           )}
+          <LocationSharingNote on={on} style={{ display: "flex", justifyContent: "center", marginTop: 8 }} />
         </div>
         <div className="row" style={{ gap: 8, marginBottom: 12 }}>
           <button onClick={() => setPage?.("workvision")} style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px", padding: "12px", borderRadius: 12, color: "#fff", background: "rgba(46,139,255,.14)", border: "1px solid rgba(46,139,255,.85)", boxShadow: "0 0 22px -4px rgba(46,139,255,.55)" }}>
