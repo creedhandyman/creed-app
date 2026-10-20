@@ -473,8 +473,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Geocoding: `geocodeAddress`/`hasGeocodeCache` in `src/lib/geo.ts` —
   OpenStreetMap Nominatim, no API key, cached forever per address in
   localStorage; throttle uncached lookups ~1/s per their policy.
-- Live crew locations (**NOT YET RUN in prod** — tracking location is the
-  owner's privacy call; RLS rehearsed 2026-10-19 in a rolled-back txn: tech on
+- Live crew locations (**ALREADY RUN in prod 2026-10-19** via the Supabase
+  MCP, migration `crew_locations` — the owner approved it; tracking location is
+  their privacy call. RLS rehearsed first in a rolled-back txn: tech on
   the clock writes own row + server-stamped `at`, off-clock tech/manager
   insert refused, can't write for another user or move to another org, tech
   sees 1 row (own), owner/manager see the org's, other org sees only its own,
@@ -963,9 +964,8 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   own); a one-person job of ~8.5–9 h (with 8–5 hours) still reports no-room
   instead of splitting (only joint jobs get the extra-day retry); live
   location only while a tech is on the clock WITH THE APP OPEN (iOS can't run
-  a backgrounded PWA's GPS; between those it's the last fix or stamp) and
-  only once the `crew_locations` migration runs, straight-line drive
-  estimates (no routing API).
+  a backgrounded PWA's GPS; between those it's the last fix or stamp),
+  straight-line drive estimates (no routing API).
 
 - **Flip Mode — Phase 1 Deal Analyzer (2026-10-17)**: "should I buy this
   house?" for owners who flip their own properties. More hub → **Flip Mode**
