@@ -316,6 +316,18 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   priced with (`rooms.materialTaxPct`); quote-pdf reads ONLY that (absent = 0)
   so quotes saved before keep matching their saved total; QuoteForge uses the
   stored rate, else the org's current one (new / legacy quotes re-saved).
+  **By ZIP (2026-10-20, migration `organizations_material_tax_by_zip`,
+  ALREADY RUN):** `organizations.material_tax_by_zip JSONB` = {zip: {rate,
+  place, source: lookup|owner, at}}. The rate comes from the JOB's ZIP
+  (`lib/material-tax.ts materialTaxFor`, tested); `material_tax_pct` is now
+  only the default for addresses with no ZIP. An unknown ZIP is looked up
+  once by QuoteForge → `/api/tax/material-rate` (any org member; Claude
+  sonnet-5-5 + `web_search_20260209`, reply parsed by `parseRateReply`,
+  0–15% sanity) and cached on the org server-side; until it lands (or if the
+  lookup fails) the default prices the quote. Ops → Settings lists the ZIP
+  rates (`components/ZipTaxRates.tsx`): edit = source "owner" (never
+  replaced by a lookup), add, remove. Quotes store `materialTaxZip` with
+  `materialTaxPct`; the stored rate is kept unless the address moved ZIPs.
 - Timed promo codes (**ALREADY RUN in prod 2026-10-20**, migration
   `promo_redemptions`): table `promo_redemptions(promo_id, org_id, redeemed_at,
   UNIQUE(promo_id, org_id))`, RLS on, service-role only. `/api/promo/apply`

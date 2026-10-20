@@ -36,6 +36,7 @@ import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom, billedMaterial } from "@/lib/pricing";
+import { materialTaxFor, zipTaxMap } from "@/lib/material-tax";
 import Inspector from "./Inspector";
 import { useBackLayer } from "@/lib/back-layer";
 import type { InspectionData } from "./Inspector";
@@ -397,10 +398,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // (organizations.tax_mode, falling back to "total" for legacy rows).
   // Persisted on the rooms JSON blob as `data.taxMode`.
   const [taxMode, setTaxMode] = useState<TaxMode | null>(null);
-  // Sales tax paid BUYING materials, as saved on this quote (data.materialTaxPct).
-  // null = a new quote or one saved before this existed → the org's current
-  // rate. Saved quotes keep the rate they were priced with.
-  const [quoteMatTaxPct, setQuoteMatTaxPct] = useState<number | null>(null);
+  // Sales tax paid BUYING materials, as saved on this quote
+  // (data.materialTaxPct + materialTaxZip). null = a new quote or one saved
+  // before this existed → the rate for the job's ZIP (lib/material-tax.ts).
+  // A saved quote keeps its rate unless its address moved to another ZIP.
+  const [quoteMatTax, setQuoteMatTax] = useState<{ pct: number; zip: string } | null>(null);
   // Good-Better-Best tiered quote (per-quote, on the rooms JSON blob). When
   // on, each line item can be tagged base/better/best (cumulative) and the
   // customer picks an option on the approval page. `data.tieredQuote` +
@@ -743,7 +745,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       const tm = data?.taxMode;
       setTaxMode(tm === "total" || tm === "materials" || tm === "none" ? tm : null);
       const mtp = data?.materialTaxPct;
-      setQuoteMatTaxPct(typeof mtp === "number" && mtp >= 0 ? mtp : null);
+      setQuoteMatTax(typeof mtp === "number" && mtp >= 0 ? { pct: mtp, zip: typeof data?.materialTaxZip === "string" ? data.materialTaxZip : "" } : null);
       // Good-Better-Best (per-quote, rooms blob). Absent = off; legacy quotes
       // load as non-tiered so nothing changes for them.
       setTieredQuote(data?.tieredQuote === true);
@@ -878,7 +880,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     try { parsed = stripAiHrs(JSON.parse(tpl.template_rooms) as Room[]); } catch { /* */ }
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined);
-    setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTaxPct(null);
+    setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
     setTieredQuote(false); setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
@@ -1502,7 +1504,32 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   /* ── Calculations ── */
   const markupPct = org?.markup_pct || 0;
   // Sales tax paid buying the materials — built into material cost.
-  const materialTaxPct = quoteMatTaxPct ?? (org?.material_tax_pct || 0);
+  const jobZip = extractZip(prop);
+  const zipTax = materialTaxFor(org, jobZip);
+  const materialTaxPct = quoteMatTax && quoteMatTax.zip === jobZip ? quoteMatTax.pct : zipTax.rate;
+  // A ZIP we don't have a rate for yet → look it up once (cached on the org
+  // for everyone). Until it lands, the org default prices the materials.
+  const taxLookupRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!jobZip || zipTax.known || taxLookupRef.current.has(jobZip)) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    taxLookupRef.current.add(jobZip);
+    const t = setTimeout(async () => {
+      try {
+        const res = await apiFetch("/api/tax/material-rate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ zip: jobZip }),
+        });
+        const d = await res.json().catch(() => null);
+        const cur = useStore.getState().org;
+        if (!res.ok || !d || typeof d.rate !== "number" || !cur) return;
+        const map = { ...zipTaxMap(cur.material_tax_by_zip), [jobZip]: { rate: d.rate, place: d.place, source: d.source || "lookup", at: d.at || new Date().toISOString() } };
+        useStore.getState().setOrg({ ...cur, material_tax_by_zip: map });
+      } catch { /* best effort — the default rate stays */ }
+    }, 800); // let a ZIP being typed settle
+    return () => { clearTimeout(t); taxLookupRef.current.delete(jobZip); };
+  }, [jobZip, zipTax.known]);
   const taxPct = org?.tax_pct || 0;
   const tripFee = org?.trip_fee || 0;
   const all = rooms.flatMap((r) =>
@@ -1796,6 +1823,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // The materials sales-tax rate these prices include — kept with the
       // quote so a later change to the org setting can't reprice it.
       materialTaxPct,
+      materialTaxZip: jobZip,
       // Good-Better-Best tiered quote. Persisted explicitly so toggling off
       // clears it instead of inheriting prevData's stale entry. tierTotals is
       // computed by the authoritative editor cascade and stored so the
@@ -2662,7 +2690,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       >
         {[
           { l: "Labor", v: "$" + tl.toFixed(0) },
-          { l: "Mat'l" + (materialTaxPct > 0 ? " +tax" : "") + (markupPct > 0 ? ` +${markupPct}%` : ""), v: "$" + tm.toFixed(0) },
+          { l: "Mat'l" + (materialTaxPct > 0 ? ` +${materialTaxPct}% tax` : "") + (markupPct > 0 ? ` +${markupPct}%` : ""), v: "$" + tm.toFixed(0) },
           { l: "Hours", v: th.toFixed(1) },
         ].map((x) => (
           <div key={x.l} style={{ flex: 1, textAlign: "center" }}>

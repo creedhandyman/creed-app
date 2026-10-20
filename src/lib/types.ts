@@ -21,6 +21,8 @@ export interface Organization {
   markup_pct: number;
   /** Sales tax % the business pays buying materials — built into quoted material cost. */
   material_tax_pct?: number;
+  /** Per-ZIP materials sales tax {zip: {rate, place, source, at}} — lib/material-tax.ts. */
+  material_tax_by_zip?: Record<string, { rate: number; place?: string; source: "lookup" | "owner"; at: string }> | null;
   tax_pct: number;
   /** Tax computation mode. "total" = tax (labor + materials − discount)
    *  — the pre-feature behavior; "materials" = tax materials only with

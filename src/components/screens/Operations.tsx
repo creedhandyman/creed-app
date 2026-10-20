@@ -17,6 +17,7 @@ import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
+import ZipTaxRates from "../ZipTaxRates";
 
 /**
  * Catches render-time crashes inside an Ops sub-tab so the whole tab
@@ -321,6 +322,7 @@ function OpsSettings() {
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.taxHelp")}</div>
           </div>
         </div>
+        <ZipTaxRates raw={org.material_tax_by_zip} save={saveOrg} />
         <div className="g2">
           <div>
             <label className="sl">{t("ops.tripFee")}</label>
