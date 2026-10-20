@@ -916,10 +916,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
-- **Dispatch Assistant — week route planner (2026-10-19)**: More → **Dispatch**
-  (owner/manager; AppShell route `dispatch`) and Schedule → Dispatch tab's
-  "Plan the week" card (passes the viewed week's Monday via nav intent
-  `{page:"dispatch", week}`). `screens/DispatchAssistant.tsx`: **Crew right
+- **Dispatch Assistant — week route planner (2026-10-19)**: lives INSIDE
+  Schedule → **Dispatch** tab (owner/manager): Schedule renders
+  `screens/DispatchAssistant.tsx` above the manual "Needs scheduling" (Assign
+  one job by hand) and "This week by tech" lists; crew see only those lists.
+  No route / TopBar / More tile of its own any more. In the Dispatch view
+  Schedule's topbar arrows step by WEEK and pass that week's Monday as `week`;
+  once Mon–Fri have passed it offers "Next week" (`onNextWeek`). **Crew right
   now** (where each tech is — their live location from the on-the-clock
   heartbeat when newer, tagged "live · N min ago", else their last
   clock-in/out GPS stamp today, tagged "last stamp"; see "Live crew
@@ -1229,7 +1232,7 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   the app); it now merges into Next's state a tick later. Any custom
   pushState/replaceState must keep `...history.state`. Re-tapping the current
   tab remounts the screen at its top level (`resetKey`; not for `qf`).
-  Work mode lights the Time tab; crew see "Time Off" in the More slot; unread
+  Work mode shows as Time in the More slot; crew see "Time Off" in the More slot; unread
   bell dot on Home; Crew Map is owner/manager only; managers can't touch owner
   rows or grant owner (UI + profiles_guard); promotions confirm. Delete account
   = `/api/account/delete` (deletes profile + auth user; refused for owners).
@@ -1758,7 +1761,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `enqueueRoomsWrite` (avoids clobbering on quick taps). Full spec +
   build phases: `.claude/plans/jobs-redesign.md`.
 - **Nav + Dashboard redesign**: nav bar trimmed to 5 tabs
-  (Quote · Jobs · Home · Time · More) in `VerticalNav.tsx` — Home is a
+  (Quote · Jobs · Home · Time · More) in `VerticalNav.tsx` — **since
+  2026-10-19 Schedule replaced Time in the bar (Quote · Jobs · Home ·
+  Schedule · More); Time is the first More-hub tile and Time / Work mode
+  morph the More slot into a green "Time"** — Home is a
   house icon (the logo image is gone), bottom-nav buttons are `flex:1`
   edge-to-edge. Overflow tabs live in a new **More hub**
   (`screens/MoreHub.tsx`): Schedule, Quests, Operations, Customers

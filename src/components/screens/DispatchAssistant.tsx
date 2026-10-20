@@ -17,22 +17,21 @@
  *    scheduled, like Schedule's quick-add) and gives booked visits the time /
  *    tech the plan picked (promised times and named crews are kept).
  *
- * Owners/managers only (AppShell route "dispatch"). Reached from Schedule →
- * Dispatch and the More hub.
+ * Owners/managers only. Lives at the top of Schedule → Dispatch (Schedule
+ * renders it for admins); Schedule's own week arrows pick the week (`week` =
+ * that week's Monday) and the days below are Mon–Sat of it.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { t, getLang } from "@/lib/i18n";
 import { Icon } from "../Icon";
-import TopBar from "@/components/TopBar";
 import RouteMap, { type MapCrew, type MapRoute } from "@/components/RouteMap";
 import { liveFixLabel } from "@/components/LocationSharingNote";
 import { LIVE_FRESH_MIN } from "@/lib/crew-location";
 import { geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
 import { localYmd, addDaysYmd, fmtClock } from "@/lib/day-plan";
 import { formatClock } from "@/lib/mileage-days";
-import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { planWeek, hhmmToMin, roundQuarter, type LatLng, type WeekPlan, type PlannedRoute, type PlannedStop } from "@/lib/route-plan";
 import {
   collectWeek, toPlanInput, planWrites, crewNow, etaBetween, closestCrew, poolKey,
@@ -41,6 +40,10 @@ import {
 
 interface Props {
   setPage: (p: string) => void;
+  /** Monday of the week Schedule is showing. */
+  week: string;
+  /** Page Schedule forward a week (offered once this week's workdays are done). */
+  onNextWeek: () => void;
 }
 
 /** Same per-tech palette (and order: the profiles list) as Crew Map. */
@@ -79,12 +82,6 @@ function mondayOf(ymd: string): string {
 }
 /** First day you can still book: today until 2 PM (Schedule's rule), then tomorrow. */
 const firstBookable = () => (new Date().getHours() >= 14 ? addDaysYmd(localYmd(), 1) : localYmd());
-/** The week to open on — next week once only the weekend is left. */
-function defaultWeek(): string {
-  const f = firstBookable();
-  const dow = new Date(f + "T12:00:00").getDay();
-  return dow === 0 || dow === 6 ? addDaysYmd(mondayOf(f), 7) : mondayOf(f);
-}
 /** Mon–Fri of that week that haven't passed. */
 const defaultDays = (weekStart: string) =>
   [0, 1, 2, 3, 4].map((i) => addDaysYmd(weekStart, i)).filter((d) => d >= firstBookable());
@@ -104,7 +101,7 @@ interface Result {
   poolCount: number;
 }
 
-export default function DispatchAssistant({ setPage }: Props) {
+export default function DispatchAssistant({ setPage, week: weekProp, onNextWeek }: Props) {
   const profiles = useStore((s) => s.profiles);
   const jobs = useStore((s) => s.jobs);
   const schedule = useStore((s) => s.schedule);
@@ -116,14 +113,7 @@ export default function DispatchAssistant({ setPage }: Props) {
   const darkMode = useStore((s) => s.darkMode);
 
   const today = localYmd();
-  const [weekStart, setWeekStart] = useState(() => {
-    const i = peekNavIntent("dispatch");
-    const w = i?.page === "dispatch" ? i.week : undefined;
-    if (!w || !/^\d{4}-\d{2}-\d{2}$/.test(w)) return defaultWeek();
-    // A week that's already over (Schedule paged back) opens on the next one.
-    return addDaysYmd(mondayOf(w), 5) < firstBookable() ? defaultWeek() : mondayOf(w);
-  });
-  useEffect(() => { if (peekNavIntent("dispatch")) clearNavIntent(); }, []);
+  const weekStart = mondayOf(weekProp);
   const weekDays = useMemo(() => [0, 1, 2, 3, 4, 5].map((i) => addDaysYmd(weekStart, i)), [weekStart]);
   const [dayOn, setDayOn] = useState<string[]>(() => defaultDays(weekStart));
   const firstWeek = useRef(true);
@@ -366,14 +356,12 @@ export default function DispatchAssistant({ setPage }: Props) {
   const poolHrs = poolIncluded.reduce((h, p) => h + p.totalMin, 0) / 60;
   const bookedOurs = week.booked.filter((b) => !b.external);
   const bookedExternal = new Set(week.booked.filter((b) => b.external).map((b) => b.entry.id)).size;
-  // The previous week's Saturday has passed → nothing left to plan there.
-  const prevWeekGone = addDaysYmd(weekStart, -2) < firstBookable();
+  // Every Mon–Fri of this week has passed (Friday afternoon / Saturday).
+  const weekDone = weekDays.slice(0, 5).every((d) => d < firstBookable());
   const canPlan = crewSel.length > 0 && days.length > 0 && (poolIncluded.length > 0 || bookedOurs.length > 0);
 
   return (
-    <div className="fi">
-      <TopBar title={t("disp.title")} icon="navigation" color={HUE} onBack={() => window.history.back()} />
-
+    <div>
       {/* ── Crew right now ── */}
       {showLive && (
         <div className="section">
@@ -432,12 +420,17 @@ export default function DispatchAssistant({ setPage }: Props) {
       <div className="section">
         <div className="seclabel" style={{ justifyContent: "space-between" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><Icon name="schedule" size={13} /> {t("disp.planWeek")}</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, letterSpacing: 0, textTransform: "none", fontFamily: "Oswald", fontSize: 14, color: "var(--color-text, inherit)" }}>
-            <button type="button" className="iconbtn" aria-label={t("sched.previous")} onClick={() => setWeekStart((w) => addDaysYmd(w, -7))} disabled={prevWeekGone} style={{ width: 30, height: 30, opacity: prevWeekGone ? 0.35 : 1 }}><Icon name="back" size={14} /></button>
-            <span style={{ minWidth: 96, textAlign: "center" }}>{weekLabel(weekDays[0], weekDays[5])}</span>
-            <button type="button" className="iconbtn" aria-label={t("sched.next")} onClick={() => setWeekStart((w) => addDaysYmd(w, 7))} style={{ width: 30, height: 30 }}><Icon name="next" size={14} /></button>
-          </span>
+          <span style={{ letterSpacing: 0, textTransform: "none", fontFamily: "Oswald", fontSize: 14, color: "var(--color-text, inherit)" }}>{weekLabel(weekDays[0], weekDays[5])}</span>
         </div>
+
+        {weekDone && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0 2px", fontSize: 13 }}>
+            <span className="dim" style={{ flex: 1 }}>{t("disp.weekDone")}</span>
+            <button type="button" className="bo" onClick={onNextWeek} style={{ fontSize: 13, padding: "5px 11px", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+              {t("disp.planNextWeek")} <Icon name="next" size={13} />
+            </button>
+          </div>
+        )}
 
         <div className="dim" style={{ fontSize: 12.5, margin: "8px 0 6px" }}>{t("disp.days")}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

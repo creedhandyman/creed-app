@@ -12,7 +12,7 @@
  * later, a refresh) is ignored and the screen opens as usual. Blocked storage
  * (private mode) just degrades to a plain navigation — never throws.
  *
- * Readers: Jobs.tsx, Schedule.tsx, Timer.tsx, DispatchAssistant.tsx. Writers: DayCards (Home),
+ * Readers: Jobs.tsx, Schedule.tsx, Timer.tsx. Writers: DayCards (Home),
  * Schedule, Operations, Financials, QuoteForge. Some of those inline an
  * identical reader/writer — keep the shape and the TTL in step with them.
  */
@@ -28,8 +28,7 @@ export type NavIntent =
       jobId?: string;
     }
   | { page: "sched"; tab?: "day" | "week" | "month" | "dispatch" }
-  | { page: "time"; tab?: "time" | "crew" }
-  | { page: "dispatch"; week?: string };
+  | { page: "time"; tab?: "time" | "crew" };
 
 export function setNavIntent(i: NavIntent): void {
   try {

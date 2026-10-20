@@ -44,7 +44,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
   const tiles: {
     id: string; icon: IconName; name: string; sub: string; color: string; tint: string; onClick: () => void;
   }[] = [
-    { id: "sched", icon: "schedule", name: t("more.schedule"), sub: t("more.scheduleSub"), color: "#ff8a3d", tint: "rgba(255,138,61,.16)", onClick: () => setPage("sched") },
+    { id: "time", icon: "time", name: t("more.time"), sub: t("more.timeSub"), color: "#13c06a", tint: "rgba(19,192,106,.16)", onClick: () => setPage("time") },
     { id: "quests", icon: "trophy", name: t("more.quests"), sub: t("more.questsSub"), color: "var(--color-violet)", tint: "rgba(157,78,221,.16)", onClick: () => setPage("quests") },
     isAdmin
       ? { id: "ops", icon: "ops", name: t("more.operations"), sub: t("more.operationsSub"), color: "#3aa0ff", tint: "rgba(58,160,255,.14)", onClick: () => openOps() }
@@ -56,10 +56,6 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     // Crew Map shows everyone's clock-in locations — owners/managers only.
     ...(isAdmin
       ? [{ id: "map", icon: "map" as IconName, name: t("more.crewMap"), sub: t("more.crewMapSub"), color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") }]
-      : []),
-    // Dispatch Assistant — week route planner. Owners/managers only.
-    ...(isAdmin
-      ? [{ id: "dispatch", icon: "navigation" as IconName, name: t("more.dispatch"), sub: t("more.dispatchSub"), color: "#ff8a3d", tint: "rgba(255,138,61,.16)", onClick: () => setPage("dispatch") }]
       : []),
     // Flip Mode — the org's own buy/renovate/resell deals. Owner/manager only
     // (investor money; flip_projects RLS is owner/manager too).

@@ -10,14 +10,14 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-// Mockup 5-tab bar: Quote · Jobs · Home · Time · More. The overflow tabs
-// (Schedule, Quests, Operations, Customers, Mileage, Settings) relocate
-// into the More hub — nothing is lost. This array is in side-nav order;
+// 5-tab bar: Quote · Jobs · Home · Schedule · More. The overflow tabs
+// (Time, Quests, Operations, Customers, Mileage, Settings) relocate into
+// the More hub — nothing is lost. This array is in side-nav order;
 // bottom-nav reverses it (see `items` below), yielding Quote · Jobs ·
-// Home · Time · More left-to-right.
+// Home · Schedule · More left-to-right.
 const NAV_ITEMS: NavItem[] = [
   { id: "more", icon: "menu", labelKey: "nav.more" },
-  { id: "time", icon: "time", labelKey: "nav.time" },
+  { id: "sched", icon: "schedule", labelKey: "nav.sched" },
   { id: "dash", icon: "home", labelKey: "nav.home" },
   { id: "jobs", icon: "jobs", labelKey: "nav.jobs" },
   { id: "qf", icon: "quote", labelKey: "nav.quote" },
@@ -25,17 +25,16 @@ const NAV_ITEMS: NavItem[] = [
 
 // The 4 fixed tabs. Anything else (the More hub + every overflow page) is
 // represented by the morphing More slot.
-const BASE_TAB_IDS = ["qf", "jobs", "dash", "time"];
+const BASE_TAB_IDS = ["qf", "jobs", "dash", "sched"];
 
 // Overflow pages the More slot can morph into when one is active. Keyed by
 // AppShell page id → the icon + label to show in the slot.
 const OVERFLOW_TABS: Record<string, { icon: IconName; labelKey: string }> = {
-  sched: { icon: "schedule", labelKey: "nav.sched" },
+  time: { icon: "time", labelKey: "nav.time" },
   quests: { icon: "quest", labelKey: "nav.quest" },
   ops: { icon: "ops", labelKey: "nav.ops" },
   mileage: { icon: "mileage", labelKey: "nav.mileage" },
   map: { icon: "map", labelKey: "nav.map" },
-  dispatch: { icon: "navigation", labelKey: "nav.dispatch" },
   financials: { icon: "money", labelKey: "nav.financials" },
   payroll: { icon: "pay", labelKey: "nav.pay" },
   workvision: { icon: "worker", labelKey: "nav.work" },
@@ -57,7 +56,6 @@ const TAB_COLOR: Record<string, string> = {
   ops: "#06b6d4",         // Ops — cyan
   mileage: "#14b8a6",     // Mileage — teal
   map: "#3ee08f",         // Crew Map — mint (matches its More-hub tile)
-  dispatch: "#ff8a3d",    // Dispatch — Schedule's orange
   financials: "#10b981",  // Money — emerald
   payroll: "#22c55e",     // Payroll — green
   workvision: "#13c06a",  // Work mode — green
@@ -84,8 +82,8 @@ export default function VerticalNav({ page, setPage, isAdmin }: Props) {
   const items = navBottom ? [...NAV_ITEMS].reverse() : NAV_ITEMS;
   // We're on an overflow page (or the hub itself) whenever the current page
   // isn't one of the 4 base tabs — that's when the More slot lights up.
-  // Work mode is part of the Time flow (clock in → work order), so it lights
-  // the Time tab, not the More slot.
+  // Work mode is part of the Time flow (clock in → work order), so the More
+  // slot shows it as Time.
   const navPage = page === "workvision" ? "time" : page;
   const onOverflow = !BASE_TAB_IDS.includes(navPage);
 

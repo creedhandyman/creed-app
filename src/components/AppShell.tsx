@@ -12,7 +12,6 @@ import Payroll from "./screens/Payroll";
 import Quests from "./screens/Quests";
 import Mileage from "./screens/Mileage";
 import CrewMap from "./screens/CrewMap";
-import DispatchAssistant from "./screens/DispatchAssistant";
 import Troubleshoot from "./screens/Troubleshoot";
 import Financials from "./screens/Financials";
 import Operations from "./screens/Operations";
@@ -174,9 +173,6 @@ export default function AppShell() {
       case "map":
         // Everyone's clock-in locations — owners/managers only.
         return isAdmin ? <CrewMap setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
-      case "dispatch":
-        // Plans the whole crew's week — owners/managers only.
-        return isAdmin ? <DispatchAssistant setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
       case "troubleshoot":
         return <Troubleshoot setPage={goToPage} />;
       case "financials":
@@ -200,7 +196,7 @@ export default function AppShell() {
           doesn't float over the editor / inspection / Voice Walk sub-screens. */}
       {/* Crew can't dispatch, so they get their own schedule tip (own id). */}
       {page === "sched" && (isAdmin
-        ? <Coachmark id="schedule_v2" text={t("tip.scheduleAdmin")} />
+        ? <Coachmark id="schedule_v3" text={t("tip.scheduleAdmin")} />
         : <Coachmark id="schedule_crew" text={t("tip.scheduleCrew")} />)}
       {page === "time" && <Coachmark id="workmode" text={t("tip.workmode")} />}
     </div>
