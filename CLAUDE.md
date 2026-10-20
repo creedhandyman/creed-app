@@ -653,11 +653,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Phase 3 adds one column (subcontractor bids + permits, JSONB; **ALREADY
   RUN in prod 2026-10-17** via the Supabase MCP, migration `flip_projects_subs`):
   `ALTER TABLE flip_projects ADD COLUMN IF NOT EXISTS subs JSONB;`
-  Lender draws add one more (lender + draw schedule, JSONB):
+  Lender draws add one more (lender + draw schedule, JSONB; **ALREADY RUN in
+  prod 2026-10-19**, migration `flip_projects_loan`):
   `ALTER TABLE flip_projects ADD COLUMN IF NOT EXISTS loan JSONB;`
-  Until it runs, editing a flip's subs toasts "column does not exist" — and
-  because the analyzer batches edits into one patch, other edits made in the
-  same ~0.7s are lost with it.
+  In an environment missing either column, editing that part of a flip
+  toasts "column does not exist" — and because the analyzer batches edits
+  into one patch, other edits made in the same ~0.7s are lost with it.
 - Payments ledger / partial payments (deposits). Before this, `/api/verify-payment`
   set `status:'paid'` on ANY completed Stripe session — a 50% deposit marked the
   whole job paid, and nothing recorded how much was paid, so the balance could
