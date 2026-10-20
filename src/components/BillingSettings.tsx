@@ -371,7 +371,7 @@ function PromoCodeForm({ orgId }: { orgId: string }) {
           if (result.ok) {
             const orgs = await db.get<Organization>("organizations", { id: orgId });
             if (orgs.length) setOrg(orgs[0]);
-            useStore.getState().showToast("Promo code applied", "success");
+            useStore.getState().showToast(result.freeUntil ? `Promo applied — free until ${new Date(result.freeUntil).toLocaleDateString()}` : "Promo code applied", "success");
             setCode("");
             setOpen(false);
           } else {

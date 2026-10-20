@@ -15,7 +15,7 @@ import { apiFetch } from "./api";
 export async function applyPromoCode(
   _orgId: string,
   code: string,
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: boolean; reason?: string; freeUntil?: string }> {
   try {
     const res = await apiFetch("/api/promo/apply", {
       method: "POST",
@@ -26,7 +26,7 @@ export async function applyPromoCode(
     if (!res.ok || !data.ok) {
       return { ok: false, reason: data.error || "Invalid promo code" };
     }
-    return { ok: true };
+    return { ok: true, freeUntil: data.freeUntil };
   } catch {
     return { ok: false, reason: "Could not apply code — try again" };
   }

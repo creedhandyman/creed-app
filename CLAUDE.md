@@ -303,6 +303,17 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   exist" error — but the write is best-effort/try-caught so completing a job
   still works, and the read side (parser.ts) is migration-safe (undefined
   fields fall through). `lib/learning.ts` `recordJobOutcome` writes the rows.
+- Timed promo codes (**ALREADY RUN in prod 2026-10-20**, migration
+  `promo_redemptions`): table `promo_redemptions(promo_id, org_id, redeemed_at,
+  UNIQUE(promo_id, org_id))`, RLS on, service-role only. `/api/promo/apply`
+  falls through from the PROMO_CODES env list (= comp forever) to
+  `lib/promo-timed.ts` TIMED_PROMOS (SHA-256 hash of the code, months,
+  maxUses — the plain code is NOT in the repo): sets `trial_ends_at` to
+  max(current free end, now + months) and counts the use. `orgTrialEnd()`
+  (lib/trial.ts) = later of the signup trial and trial_ends_at; BillingGate's
+  pre-Stripe branch and create-checkout-session use it, so subscribing early
+  keeps the promo time as the Stripe trial. First code: `first-customer-3mo`
+  (3 months, 1 business), given to the owner 2026-10-20.
 - Mileage start times (**ALREADY RUN in prod 2026-10-17**, migration
   `mileage_start_time`): `ALTER TABLE mileage ADD COLUMN IF NOT EXISTS start_time TEXT;`
   ("8:05 AM", time-entry format). GPS / odometer / Work-mode tracker trips and

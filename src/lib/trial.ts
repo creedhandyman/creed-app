@@ -17,3 +17,12 @@ export function trialEndFromStart(trialStart?: string | null): Date {
 export function daysLeftUntil(end: Date, now = Date.now()): number {
   return Math.max(0, Math.ceil((end.getTime() - now) / DAY_MS));
 }
+
+/** The org's free-access end before it subscribes: the signup trial, or a
+ *  later date a timed promo code granted (stored on trial_ends_at) —
+ *  whichever is later. */
+export function orgTrialEnd(org: { trial_start?: string | null; trial_ends_at?: string | null }): Date {
+  const base = trialEndFromStart(org.trial_start);
+  const promo = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
+  return promo && !isNaN(promo.getTime()) && promo > base ? promo : base;
+}

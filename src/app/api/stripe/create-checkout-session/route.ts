@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthedProfile } from "@/lib/api-auth";
-import { trialEndFromStart } from "@/lib/trial";
+import { orgTrialEnd } from "@/lib/trial";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     // and reuse an existing stripe_customer_id if one is already on file.
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
-      .select("id, name, email, stripe_customer_id, stripe_subscription_id, trial_start")
+      .select("id, name, email, stripe_customer_id, stripe_subscription_id, trial_start, trial_ends_at")
       .eq("id", orgId)
       .single();
 
@@ -90,7 +90,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Stripe needs trial_end ≥ 48h out; with less left, bill from today.
-    const trialEnd = trialEndFromStart(org.trial_start);
+    // Includes free time from a timed promo code, so subscribing early keeps it.
+    const trialEnd = orgTrialEnd(org);
     const keepTrial = trialEnd.getTime() - Date.now() > 48 * 60 * 60 * 1000;
 
     const origin = returnUrl || req.headers.get("origin") || "https://www.creedhm.com";

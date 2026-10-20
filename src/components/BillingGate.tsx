@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { applyPromoCode } from "@/lib/promo-codes";
-import { TRIAL_DAYS, trialEndFromStart, daysLeftUntil } from "@/lib/trial";
+import { TRIAL_DAYS, orgTrialEnd, daysLeftUntil } from "@/lib/trial";
 import { isTwa, TWA_BILLING_NOTE } from "@/lib/twa";
 
 // localStorage key for trial-banner dismissal. Keyed by the days-remaining
@@ -47,9 +47,10 @@ export default function BillingGate({ children }: { children: React.ReactNode })
   }
 
   // Pre-Stripe trial (signed up but hasn't hit Stripe Checkout yet) —
-  // we compute from trial_start, the org-create timestamp.
-  if (org.trial_start) {
-    const daysLeft = daysLeftUntil(trialEndFromStart(org.trial_start));
+  // trial_start (org creation) + TRIAL_DAYS, or a later date a timed promo
+  // code granted (trial_ends_at).
+  if (org.trial_start || org.trial_ends_at) {
+    const daysLeft = daysLeftUntil(orgTrialEnd(org));
 
     if (daysLeft > 0) {
       // Still in trial — show banner but allow access. Banner is
@@ -246,7 +247,7 @@ function PaywallPromoCode({ orgId }: { orgId: string }) {
           setBusy(true);
           const result = await applyPromoCode(orgId, code);
           if (result.ok) {
-            useStore.getState().showToast("Promo code applied", "success");
+            useStore.getState().showToast(result.freeUntil ? `Promo applied — free until ${new Date(result.freeUntil).toLocaleDateString()}` : "Promo code applied", "success");
             // Hard reload so the gate re-evaluates org.billing_enforced
             // from a fresh fetch and passes through to the app.
             window.location.reload();
