@@ -199,6 +199,16 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
   };
   const [qsTime, setQsTime] = useState(() => loadStr("lastTime", ""));
   const [qsWorkers, setQsWorkers] = useState<string[]>(() => loadList("lastWorkers"));
+  // Crew can only be people on THIS team. The remembered list is phone-wide,
+  // so after switching accounts on a phone it held the other business's names
+  // (and they had no pill to un-pick them, so every visit got them).
+  const teamNames = new Set(profiles.map((p) => p.name));
+  const onTeam = (names: string[]) => (profiles.length ? names.filter((n) => teamNames.has(n)) : names);
+  useEffect(() => {
+    if (!profiles.length) return;
+    setQsWorkers((prev) => { const kept = prev.filter((n) => teamNames.has(n)); return kept.length === prev.length ? prev : kept; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profiles]);
   const [qsNote, setQsNote] = useState("");
   // Optional end day for multi-day jobs — an entry spans sched_date..end_date.
   const [endTarget, setEndTarget] = useState<string | null>(null);
@@ -263,7 +273,8 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     if (!armedJob || !dropTarget) return;
     const parts = [];
     if (qsTime) parts.push(`🕐 ${qsTime}`);
-    if (qsWorkers.length) parts.push(`👷 ${qsWorkers.join(", ")}`);
+    const crew = onTeam(qsWorkers);
+    if (crew.length) parts.push(`👷 ${crew.join(", ")}`);
     if (qsNote) parts.push(qsNote);
     const note = parts.join(" · ");
     // Multi-day jobs span sched_date..end_date.
@@ -298,7 +309,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem("c_sched_lastTime", qsTime || "");
-        localStorage.setItem("c_sched_lastWorkers", JSON.stringify(qsWorkers));
+        localStorage.setItem("c_sched_lastWorkers", JSON.stringify(onTeam(qsWorkers)));
       }
     } catch { /* ignore quota errors */ }
     const wasEdit = !!editSched;

@@ -325,6 +325,15 @@ export const useStore = create<AppState>((set, get) => ({
     clearQueue();
     clearWoQueue();
     void clearUploads();
+    // Phone-wide leftovers that belong to the account signing out: the
+    // Schedule's remembered crew/time (another business's names ended up on
+    // the next account's visits), an unfinished inspection, a drive in progress.
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith("c_sched_") || k.startsWith("c_inspect_") || k === "c_mileage_trip")) localStorage.removeItem(k);
+      }
+    } catch { /* storage blocked */ }
     set({ pendingWrites: 0, pendingUploads: 0 });
     get().stopAutoRefresh();
   },
