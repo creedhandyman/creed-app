@@ -1,7 +1,7 @@
 import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 import { resolveTaxMode, type TaxMode } from "./tax";
-import { priceCascade, rateForRoom } from "./pricing";
+import { priceCascade, rateForRoom, billedMaterial } from "./pricing";
 import { itemInTier, itemTiers, tierMembershipLabel, type TierKey } from "./tiers";
 import { approvalState, approvalPhrase, type QuoteApproval } from "./approval";
 import { estimateDays, planningCrew } from "./job-duration";
@@ -39,6 +39,8 @@ interface ExportOptions {
    *  includeInQuote). Rendered as a Now → Done section in the estimate. */
   renders?: { sourceUrl?: string; url: string }[];
   markupPct?: number;
+  /** Sales tax the business pays buying materials (%), built into material cost. */
+  materialTaxPct?: number;
   taxPct?: number;
   taxAmount?: number;
   tripFee?: number;
@@ -118,6 +120,11 @@ export function exportQuotePdf(opts: ExportOptions) {
   const photos = opts.photos || [];
   const renders = opts.renders || [];
   const markupPct = opts.markupPct || 0;
+  // Sales tax paid buying materials (cost recovery), then markup — the same
+  // helper QuoteForge prices with, so printed totals match the screen.
+  const materialTaxPct = opts.materialTaxPct || 0;
+  const matCost = (raw: number) => billedMaterial(raw, { materialTaxPct, markupPct });
+  const matNote = [materialTaxPct > 0 ? `incl. ${materialTaxPct}% sales tax` : "", markupPct > 0 ? `${markupPct}% markup` : ""].filter(Boolean).join(" + ");
   const taxPct = opts.taxPct || 0;
   const tripFee = opts.tripFee || 0;
   const jobId = opts.jobId || "";
@@ -150,7 +157,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   // materials" disclaimer below.
   const totalMat = allItems.reduce((s, it) => {
     const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
-    return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+    return s + matCost(raw);
   }, 0);
 
   const discountLabel = discount
@@ -205,7 +212,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     const lab = pairs.reduce((s, p) => s + p.it.laborHrs * roomRate(p.room), 0);
     const mat = pairs.reduce((s, p) => {
       const raw = p.it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
-      return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+      return s + matCost(raw);
     }, 0);
     // Same shared cascade as the headline — a tier column is just the
     // cascade over its own item set.
@@ -376,7 +383,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     const labor = pairs.reduce((s, p) => s + p.it.laborHrs * roomRate(p.room), 0);
     const mat = pairs.reduce((s, p) => {
       const raw = p.it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
-      return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+      return s + matCost(raw);
     }, 0);
     return { hrs, total: labor + mat, count: pairs.length };
   };
@@ -385,8 +392,9 @@ export function exportQuotePdf(opts: ExportOptions) {
   const summaryRows = categories.map((cat) => {
     const hrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
     const labor = hrs * roomRate(cat.name);
+    // Billed materials (purchase tax + markup) so the rows add up to the total.
     const mat = cat.items.reduce(
-      (s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0),
+      (s, it) => s + matCost(it.materials.reduce((ss, m) => ss + (m.c || 0), 0)),
       0,
     );
     return { name: cat.name, hrs, labor, mat, total: labor + mat, itemCount: cat.items.length };
@@ -423,13 +431,13 @@ export function exportQuotePdf(opts: ExportOptions) {
     const sectionHrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
     const sectionLabor = sectionHrs * sectionRate;
     const sectionMat = cat.items.reduce(
-      (s, it) => s + it.materials.reduce((ss, m) => ss + (m.c || 0), 0),
+      (s, it) => s + matCost(it.materials.reduce((ss, m) => ss + (m.c || 0), 0)),
       0,
     );
     // Marked-up materials, the way option prices are computed (tierTotalOf).
     const optMat = cat.items.reduce((s, it) => {
       const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
-      return s + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+      return s + matCost(raw);
     }, 0);
 
     const matMap: Record<
@@ -515,7 +523,7 @@ export function exportQuotePdf(opts: ExportOptions) {
       </table>
       <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:${accent};font-weight:600">
         Labor (${clockHrs}h × ${crewSize} crew = ${shownHrs.toFixed(1)} man-hrs @ $${sectionRate}/hr): $${sectionLabor.toFixed(2)}
-        &nbsp;·&nbsp; Material: $${(perOption ? optMat : sectionMat).toFixed(2)}${perOption && markupPct > 0 ? ` (incl. ${markupPct}% markup)` : ""}
+        &nbsp;·&nbsp; Material: $${(perOption ? optMat : sectionMat).toFixed(2)}${matNote ? ` (${matNote})` : ""}
         &nbsp;·&nbsp; <b>${showTiers && !perOption ? "All lines" : "Section Total"}: $${(sectionLabor + (perOption ? optMat : sectionMat)).toFixed(2)}</b>
         ${showTiers && !perOption ? `<div style="margin-top:3px;font-weight:600">${tierCols.map((c, i) => {
           const o = optCat(i, cat.name.trim().toLowerCase());
@@ -531,7 +539,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   // Line cost the way option prices count it (per-trade rate, marked-up mats).
   const lineCost = (room: string, it: RoomItem) => {
     const raw = it.materials.reduce((ss, m) => ss + (m.c || 0), 0);
-    return it.laborHrs * roomRate(room) + (markupPct > 0 ? Math.round(raw * (1 + markupPct / 100) * 100) / 100 : raw);
+    return it.laborHrs * roomRate(room) + matCost(raw);
   };
   const pick = (keep: (it: RoomItem) => boolean) => categories
     .map((c) => ({ name: c.name, items: c.items.filter(keep) }))
@@ -659,7 +667,7 @@ ${showTiers ? (() => {
     </tr>
   </tbody>
 </table>
-<div class="dim" style="font-size:11px;margin:-4px 0 14px">Each column is a complete, standalone price.${markupPct > 0 ? ` Material markup (${markupPct}%) is included in each section.` : ""}${acceptedIdx >= 0 ? " The breakdown below is the approved option's work." : " The breakdown below lists work shared by every option once, then what each option adds."}</div>`;
+<div class="dim" style="font-size:11px;margin:-4px 0 14px">Each column is a complete, standalone price.${matNote ? ` Materials ${matNote.startsWith("incl.") ? matNote : `incl. ${matNote}`} in each section.` : ""}${acceptedIdx >= 0 ? " The breakdown below is the approved option's work." : " The breakdown below lists work shared by every option once, then what each option adds."}</div>`;
 })() : `<h2>Estimate Summary</h2>
 <table>
   <thead>
@@ -689,8 +697,9 @@ ${showTiers ? (() => {
   </tbody>
 </table>
 
-${(markupPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
+${(markupPct > 0 || materialTaxPct > 0 || taxPct > 0 || tripFee > 0 || discount) ? `
 <table style="width:auto;margin-left:auto;font-size:12px;margin-bottom:14px">
+  ${materialTaxPct > 0 ? `<tr><td class="dim">Sales tax on materials (${materialTaxPct}%)</td><td class="r" style="padding-left:24px">Included in materials</td></tr>` : ""}
   ${markupPct > 0 ? `<tr><td class="dim">Material Markup (${markupPct}%)</td><td class="r" style="padding-left:24px">Included in materials</td></tr>` : ""}
   ${tripFee > 0 ? `<tr><td class="dim">Trip Fee</td><td class="r" style="padding-left:24px">$${tripFee.toFixed(2)}</td></tr>` : ""}
   ${discount ? `<tr style="color:#C00000"><td>${esc(discountLabel)}</td><td class="r" style="padding-left:24px">-$${discountAmount.toFixed(2)}</td></tr>` : ""}

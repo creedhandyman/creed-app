@@ -280,6 +280,16 @@ function OpsSettings() {
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.markupHelp")}</div>
           </div>
           <div>
+            <label className="sl">{t("ops.materialTax")}</label>
+            <input type="number" key={`mt-${org.material_tax_pct}`} defaultValue={org.material_tax_pct || 0} min="0" step="0.1" placeholder="0" style={{ marginTop: 4 }}
+              onBlur={async (e) => {
+                const v = Math.max(0, parseFloat(e.target.value) || 0);
+                if (v === Number(org.material_tax_pct || 0)) return;
+                await saveOrg({ material_tax_pct: v });
+              }} />
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.materialTaxHelp")}</div>
+          </div>
+          <div>
             <label className="sl">{t("ops.tax")}</label>
             <div className="row" style={{ gap: 6, marginTop: 4, alignItems: "stretch" }}>
               <input

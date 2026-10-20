@@ -303,6 +303,19 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   exist" error — but the write is best-effort/try-caught so completing a job
   still works, and the read side (parser.ts) is migration-safe (undefined
   fields fall through). `lib/learning.ts` `recordJobOutcome` writes the rows.
+- Materials purchase tax (**ALREADY RUN in prod 2026-10-20**, migration
+  `organizations_material_tax_pct`): `organizations.material_tax_pct NUMERIC
+  DEFAULT 0` (0–25). The sales tax the BUSINESS pays buying materials — quote
+  material prices (AI / learned receipt items / typed) are pre-tax shelf
+  prices, so this is cost recovery, NOT the customer sales tax (tax_pct /
+  tax_mode). `lib/pricing.ts billedMaterial(raw, {materialTaxPct, markupPct})`
+  = raw × (1+tax) × (1+markup); QuoteForge (`all`, QuoteTab line totals) and
+  export-pdf (every former markup site + summary/section material) use it.
+  Set in Ops → Settings ("Sales tax you pay on materials %"); Creed Handyman
+  LLC set to 7.5 (KS 6.5 + Sedgwick 1). Each quote stores the rate it was
+  priced with (`rooms.materialTaxPct`); quote-pdf reads ONLY that (absent = 0)
+  so quotes saved before keep matching their saved total; QuoteForge uses the
+  stored rate, else the org's current one (new / legacy quotes re-saved).
 - Timed promo codes (**ALREADY RUN in prod 2026-10-20**, migration
   `promo_redemptions`): table `promo_redemptions(promo_id, org_id, redeemed_at,
   UNIQUE(promo_id, org_id))`, RLS on, service-role only. `/api/promo/apply`

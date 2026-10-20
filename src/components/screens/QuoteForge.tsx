@@ -35,7 +35,7 @@ import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/
 import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
-import { priceCascade, rateForRoom } from "@/lib/pricing";
+import { priceCascade, rateForRoom, billedMaterial } from "@/lib/pricing";
 import Inspector from "./Inspector";
 import { useBackLayer } from "@/lib/back-layer";
 import type { InspectionData } from "./Inspector";
@@ -397,6 +397,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // (organizations.tax_mode, falling back to "total" for legacy rows).
   // Persisted on the rooms JSON blob as `data.taxMode`.
   const [taxMode, setTaxMode] = useState<TaxMode | null>(null);
+  // Sales tax paid BUYING materials, as saved on this quote (data.materialTaxPct).
+  // null = a new quote or one saved before this existed → the org's current
+  // rate. Saved quotes keep the rate they were priced with.
+  const [quoteMatTaxPct, setQuoteMatTaxPct] = useState<number | null>(null);
   // Good-Better-Best tiered quote (per-quote, on the rooms JSON blob). When
   // on, each line item can be tagged base/better/best (cumulative) and the
   // customer picks an option on the approval page. `data.tieredQuote` +
@@ -738,6 +742,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // / "none". Anything else means "inherit org default".
       const tm = data?.taxMode;
       setTaxMode(tm === "total" || tm === "materials" || tm === "none" ? tm : null);
+      const mtp = data?.materialTaxPct;
+      setQuoteMatTaxPct(typeof mtp === "number" && mtp >= 0 ? mtp : null);
       // Good-Better-Best (per-quote, rooms blob). Absent = off; legacy quotes
       // load as non-tiered so nothing changes for them.
       setTieredQuote(data?.tieredQuote === true);
@@ -872,7 +878,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     try { parsed = stripAiHrs(JSON.parse(tpl.template_rooms) as Room[]); } catch { /* */ }
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined);
-    setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null);
+    setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTaxPct(null);
     setTieredQuote(false); setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
@@ -1495,14 +1501,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
   /* ── Calculations ── */
   const markupPct = org?.markup_pct || 0;
+  // Sales tax paid buying the materials — built into material cost.
+  const materialTaxPct = quoteMatTaxPct ?? (org?.material_tax_pct || 0);
   const taxPct = org?.tax_pct || 0;
   const tripFee = org?.trip_fee || 0;
   const all = rooms.flatMap((r) =>
     r.items.map((i) => {
       const roomRate = getRateForRoom(r.name);
       const cost = calculateCost(i, roomRate);
-      // Apply markup to materials
-      if (markupPct > 0) cost.mc = Math.round(cost.mc * (1 + markupPct / 100) * 100) / 100;
+      // Materials: + the sales tax paid buying them, then markup
+      cost.mc = billedMaterial(cost.mc, { materialTaxPct, markupPct });
       cost.tot = Math.round((cost.lc + cost.mc) * 100) / 100;
       return { room: r.name, ...i, ...cost };
     })
@@ -1785,6 +1793,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       laborRate: laborRate,
       minLaborHours: minLaborHours,
       taxMode: taxMode,
+      // The materials sales-tax rate these prices include — kept with the
+      // quote so a later change to the org setting can't reprice it.
+      materialTaxPct,
       // Good-Better-Best tiered quote. Persisted explicitly so toggling off
       // clears it instead of inheriting prevData's stale entry. tierTotals is
       // computed by the authoritative editor cascade and stored so the
@@ -2651,7 +2662,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       >
         {[
           { l: "Labor", v: "$" + tl.toFixed(0) },
-          { l: markupPct > 0 ? `Mat'l +${markupPct}%` : "Mat'l", v: "$" + tm.toFixed(0) },
+          { l: "Mat'l" + (materialTaxPct > 0 ? " +tax" : "") + (markupPct > 0 ? ` +${markupPct}%` : ""), v: "$" + tm.toFixed(0) },
           { l: "Hours", v: th.toFixed(1) },
         ].map((x) => (
           <div key={x.l} style={{ flex: 1, textAlign: "center" }}>
@@ -3491,6 +3502,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                 photos: jobPhotos,
                 renders,
                 markupPct,
+                materialTaxPct,
                 taxPct,
                 taxAmount,
                 tripFee,
@@ -3634,7 +3646,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       />
 
       {/* QUOTE TAB */}
-      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} />}
+      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} matCost={(raw: number) => billedMaterial(raw, { materialTaxPct, markupPct })} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} />}
 
       {/* GUIDE TAB */}
       {tab === "guide" && (
@@ -3879,6 +3891,7 @@ function QuoteTab({
   upItem,
   rmItem,
   getRateForRoom,
+  matCost,
   snapItemEdit,
   logItemEdit,
   tieredQuote,
@@ -3891,6 +3904,8 @@ function QuoteTab({
   upItem: (rn: string, id: string, field: string, value: number | string | string[] | Material[]) => void;
   rmItem: (rn: string, id: string) => void;
   getRateForRoom?: (roomName: string) => number;
+  /** shelf materials $ → billed (purchase tax + markup), so line totals add up */
+  matCost?: (raw: number) => number;
   snapItemEdit: (rn: string, id: string) => void;
   logItemEdit: (rn: string, id: string) => void;
   tieredQuote?: boolean;
@@ -3911,8 +3926,8 @@ function QuoteTab({
           </div>
           {rm.items.map((it) => {
             const roomRate = getRateForRoom ? getRateForRoom(rm.name) : rate;
-            const { lc: _lc, mc: _mc, tot } = calculateCost(it, roomRate);
-            void _lc; void _mc;
+            const { lc, mc } = calculateCost(it, roomRate);
+            const tot = Math.round((lc + (matCost ? matCost(mc) : mc)) * 100) / 100;
             return (
               <div key={it.id} className="cd" style={{ marginBottom: 4, padding: 10 }}>
                 <div

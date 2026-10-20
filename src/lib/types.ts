@@ -19,6 +19,8 @@ export interface Organization {
   quote_terms?: string;
   default_rate: number;
   markup_pct: number;
+  /** Sales tax % the business pays buying materials — built into quoted material cost. */
+  material_tax_pct?: number;
   tax_pct: number;
   /** Tax computation mode. "total" = tax (labor + materials − discount)
    *  — the pre-feature behavior; "materials" = tax materials only with

@@ -48,6 +48,20 @@ export function rateForRoom(
   return o.defaultRate;
 }
 
+/**
+ * Billed materials $ from shelf cost: the sales tax the business pays when it
+ * BUYS the materials (org.material_tax_pct — a cost it has to recover; not the
+ * customer-facing sales tax, which is tax_pct/tax_mode) then the org's markup.
+ * Quote material prices (AI estimates, learned receipt items, typed costs)
+ * are pre-tax shelf prices. One helper for QuoteForge + export-pdf.
+ */
+export function billedMaterial(raw: number, o: { materialTaxPct?: number | null; markupPct?: number | null }): number {
+  const tax = o.materialTaxPct && o.materialTaxPct > 0 ? o.materialTaxPct : 0;
+  const mk = o.markupPct && o.markupPct > 0 ? o.markupPct : 0;
+  if (!tax && !mk) return raw;
+  return Math.round(raw * (1 + tax / 100) * (1 + mk / 100) * 100) / 100;
+}
+
 export interface CascadeDiscount {
   type: "percent" | "fixed";
   value: number;

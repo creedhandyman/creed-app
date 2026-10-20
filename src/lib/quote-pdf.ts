@@ -47,6 +47,10 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   let laborRateOverride: number | null = null;
   let minLaborHoursOverride: number | null = null;
   let taxModeOverride: "total" | "materials" | "none" | null = null;
+  // Sales tax paid buying materials, as priced into this quote when it was
+  // saved. Quotes saved before the setting existed carry none (= 0), so their
+  // PDF still matches their saved total.
+  let materialTaxPct = 0;
   let tieredQuote = false;
   let crewSize: number | null = null;
   let estDays: number | null = null;
@@ -78,6 +82,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
       taxModeOverride = tm;
     }
     tieredQuote = data?.tieredQuote === true;
+    if (typeof data?.materialTaxPct === "number" && data.materialTaxPct > 0) materialTaxPct = data.materialTaxPct;
     if (typeof data?.crewSize === "number" && data.crewSize > 0) crewSize = Math.round(data.crewSize);
     if (typeof data?.estDays === "number" && data.estDays > 0) estDays = data.estDays;
     const tn = data?.tierNames;
@@ -142,6 +147,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     orgLogo: org?.logo_url,
     photos,
     markupPct: org?.markup_pct,
+    materialTaxPct,
     taxPct: org?.tax_pct,
     tripFee: org?.trip_fee,
     discount,
