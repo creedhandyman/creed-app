@@ -408,7 +408,7 @@ function syncCrews(routes: Route[], g: Geo, o: PlanOptions) {
     let changed = false;
     for (const members of groups.values()) {
       const S = Math.max(...members.map((s) => at.get(s)!));
-      if (Math.abs(S - (members[0].syncMin ?? S)) > SYNC_SLACK) changed = true;
+      if (members[0].syncMin == null || Math.abs(S - members[0].syncMin) > SYNC_SLACK) changed = true;
       for (const s of members) s.syncMin = S;
     }
     if (!changed) break;
@@ -539,6 +539,31 @@ export function planWeek(input: PlanInput): WeekPlan {
   const calOrder = (a: Stop, b: Stop) =>
     (a.fixedMin ?? Infinity) - (b.fixedMin ?? Infinity) || a.order - b.order;
   for (const r of routes) r.stops.sort(calOrder);
+
+  // 1b. A booked crew visit (same key on several techs' routes that day) is
+  //     one visit: every piece shows who's on it, and one with no promised
+  //     time gets a crew start like a new crew job — the last member's
+  //     arrival, hard from here on — unless that would make one of them late
+  //     or run over somewhere; then it stays as it was booked.
+  const bookedCrews = new Map<string, Stop[]>();
+  for (const r of routes) {
+    for (const s of r.stops) bookedCrews.set(`${s.key}|${r.day}`, [...(bookedCrews.get(`${s.key}|${r.day}`) || []), s]);
+  }
+  const routeOf = new Map(routes.flatMap((r) => r.stops.map((s) => [s, r] as const)));
+  for (const [k, members] of bookedCrews) {
+    if (members.length < 2) continue;
+    const ids = members.map((s) => routeOf.get(s)!).sort((a, b) => a.techIdx - b.techIdx).map((r) => r.techId);
+    for (const s of members) s.crew = ids;
+    if (members[0].fixedMin != null) continue; // a promised time already lines them up
+    const touched = routes.filter((r) => r.stops.some((s) => s.group || members.includes(s)));
+    const before = new Map(touched.map((r) => [r, penalty(simulate(r, r.stops, g, o))]));
+    for (const s of members) s.group = `booked:${k}`;
+    syncCrews(routes, g, o);
+    if (touched.some((r) => penalty(simulate(r, r.stops, g, o)) > before.get(r)! + EPS)) {
+      for (const s of members) { s.group = undefined; s.syncMin = undefined; }
+      syncCrews(routes, g, o);
+    }
+  }
 
   const unplaced: { key: string; reason: UnplacedReason }[] = [];
   const shortCrew: ShortCrew[] = [];

@@ -1,5 +1,5 @@
 import { collectWeek, toPlanInput, planWrites, composeNote, stripNoteParts, crewNow, spanDays, poolKey } from "@/lib/dispatch-week";
-import { planWeek } from "@/lib/route-plan";
+import { planWeek, minToHhmm, roundQuarter } from "@/lib/route-plan";
 import type { Job, ScheduleEntry, TimeEntry, TimeOffRequest } from "@/lib/types";
 
 const MON = "2026-10-19", TUE = "2026-10-20", WED = "2026-10-21";
@@ -172,6 +172,27 @@ describe("toPlanInput + planWrites", () => {
       expect(writes.posts).toHaveLength(1);
       expect(writes.posts[0]).toMatchObject({ jobId: "deck", sched_date: MON, end_date: undefined });
       expect(writes.posts[0].note).toMatch(/^🕐 \d{2}:(00|15|30|45) · 👷 Ann Lee, Bo Diaz$/);
+    });
+
+    it("gives a booked crew visit with no time ONE start, when the last of them gets there", () => {
+      const jobs = [
+        mkJob("jw", "200 W Oak", "scheduled", 2),
+        mkJob("jc", "100 E Main", "scheduled", 6),
+      ];
+      const schedule = [
+        mkEntry("sw", "200 W Oak", MON, "🕐 08:00 · 👷 Bo Diaz", { job_id: "jw" }),
+        mkEntry("sc", "100 E Main", MON, "👷 Ann Lee, Bo Diaz · side gate", { job_id: "jc" }),
+      ];
+      const { pool, booked } = collectWeek({ jobs, schedule, timeEntries: [], crew, days: [MON], includeQuoted: false, dayMin: 540 });
+      const { input } = toPlanInput({ pool, booked, coords, days: [MON], crew, replanBooked: false, leaveOut: [], base: shop, timeOff });
+      const plan = planWeek(input);
+      const starts = plan.routes.map((r) => r.stops.find((s) => s.key === `sc@${MON}`)!.startMin);
+      expect(starts).toHaveLength(2);
+      expect(starts[0]).toBe(starts[1]);
+      expect(starts[0]).toBeGreaterThan(10 * 60); // after Bo's 8:00 visit across town
+      const writes = planWrites(plan, { booked, crew, replanBooked: false });
+      expect(writes.patches).toEqual([expect.objectContaining({ entryId: "sc", retimed: true, recrewed: false })]);
+      expect(writes.patches[0].patch.note).toBe(`🕐 ${minToHhmm(roundQuarter(starts[0]))} · 👷 Ann Lee, Bo Diaz · side gate`);
     });
 
     it("books one person over more days when the other is off, and flags it", () => {

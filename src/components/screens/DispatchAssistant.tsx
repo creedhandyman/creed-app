@@ -633,11 +633,18 @@ export default function DispatchAssistant({ setPage }: Props) {
                           {mates.length > 0 && (
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                               · {t("disp.with")}
-                              {mates.map((id) => (
-                                <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                                  {avatar(id, nameOf(id), 16)}{firstName(nameOf(id))}
-                                </span>
-                              ))}
+                              {mates.map((id) => {
+                                // Crew starts are lined up; one that couldn't be (it would run
+                                // someone's day over) says when the other person gets there.
+                                const theirs = dayRoutes.find((x) => x.techId === id)?.stops.find((x) => x.key === s.key);
+                                const apart = theirs && Math.abs(theirs.startMin - s.startMin) > 10 ? theirs : null;
+                                return (
+                                  <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                    {avatar(id, nameOf(id), 16)}{firstName(nameOf(id))}
+                                    {apart && <span style={{ color: "var(--color-warning, #f5b400)" }}>{t("disp.from")} {stopClock(apart)}</span>}
+                                  </span>
+                                );
+                              })}
                             </span>
                           )}
                           {j?.trade && <span>· {j.trade}</span>}

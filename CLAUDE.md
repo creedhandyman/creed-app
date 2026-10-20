@@ -938,8 +938,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   start is the later arrival (the others wait, `crewWaitCost`/min) and is
   HARD on every member route (nothing inserted later may make one of them
   late; `syncCrews` re-derives it after local search); crew pieces never
-  move on their own. Jobs over a day — or with the quote's AI `estDays` > 1
-  (`minDays`, cure waits) — take consecutive whole days, same crew each day.
+  move on their own. A BOOKED crew visit (same entry on 2+ techs' routes
+  that day) with no promised time gets the same crew start (planWeek step
+  1b), unless lining it up would make someone late / run over — then it
+  stays as booked and each stop says "with Jordan from 2:15 PM"; planWrites
+  writes the latest start either way. Jobs over a day — or with the
+  quote's AI `estDays` > 1 (`minDays`, cure waits) — take consecutive
+  whole days, same crew each day.
   No fit → one more day with the full crew (a 9 h wall day doesn't fit
   around the drive) → one person fewer … → `plan.shortCrew` (screen: "a crew
   of 2 isn't free on the same days, so it's booked for 1 person over 2
@@ -959,10 +964,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `crewNow`. Nothing writes until **Apply plan** (confirm). Route cards have
   Google Maps directions (shop → stops → shop) and a "Text" sms: link with the
   tech's day; crew stops say "with <name>". `components/RouteMap.tsx` =
-  Leaflet route map (refits on resize). Limits: BOOKED crew visits with no
-  promised time aren't synchronized (each tech's route times them on its
-  own); a one-person job of ~8.5–9 h (with 8–5 hours) still reports no-room
-  instead of splitting (only joint jobs get the extra-day retry); live
+  Leaflet route map (refits on resize). Limits: a booked crew visit that
+  can't be lined up isn't moved to make room; a one-person job of ~8.5–9 h
+  (with 8–5 hours) still reports no-room instead of splitting (only joint
+  jobs get the extra-day retry); live
   location only while a tech is on the clock WITH THE APP OPEN (iOS can't run
   a backgrounded PWA's GPS; between those it's the last fix or stamp),
   straight-line drive estimates (no routing API).

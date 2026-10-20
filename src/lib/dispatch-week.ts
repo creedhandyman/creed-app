@@ -331,7 +331,10 @@ export function planWrites(plan: WeekPlan, { booked, crew, replanBooked }: {
     const oldCrew = parseSchedCrew(e.note);
     const crewless = visits.every((v) => !v.crewNames.length);
 
-    const time = oldTime && !replanned ? oldTime : minToHhmm(roundQuarter(all[0].startMin));
+    // A crew visit starts when the last of them is there (the planner lines
+    // their starts up), so take the latest start on its first day.
+    const startMin = Math.max(...all.filter((p) => p.day === all[0].day).map((p) => p.startMin));
+    const time = oldTime && !replanned ? oldTime : minToHhmm(roundQuarter(startMin));
     const crewNames = crewless || replanned ? techNames(all) : oldCrew;
     const day = replanned ? all[0].day : e.sched_date;
 
