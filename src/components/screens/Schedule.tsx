@@ -771,6 +771,26 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
         const weekEntries = schedule.filter((s) => (s.end_date || s.sched_date) >= weekStart && s.sched_date <= weekEnd);
         return (
           <div className="mb">
+            {/* Dispatch Assistant — books the pool + routes the whole crew's week. */}
+            {isAdmin && (
+              <div
+                role="button"
+                onClick={() => {
+                  try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "dispatch", week: weekDates[1], at: Date.now() })); } catch { /* ignore */ }
+                  setPage("dispatch");
+                }}
+                style={{ display: "flex", alignItems: "center", gap: 11, background: darkMode ? "#16161f" : "#fff", border: "1px solid rgba(255,138,61,.55)", boxShadow: "0 0 18px -6px rgba(255,138,61,.55)", borderRadius: 14, padding: "11px 12px", marginBottom: 12, cursor: "pointer" }}
+              >
+                <span style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,138,61,.16)" }}>
+                  <Icon name="navigation" size={18} color="#ff8a3d" />
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontFamily: "Oswald", fontWeight: 600, fontSize: 16, letterSpacing: ".3px", textTransform: "uppercase" }}>{t("disp.planWeek")}</span>
+                  <span className="dim" style={{ fontSize: 12.5 }}>{t("disp.planWeekSub")}</span>
+                </span>
+                <Icon name="next" size={16} color="var(--color-dim)" />
+              </div>
+            )}
             {/* Needs scheduling — pool of unassigned jobs */}
             <div style={{ fontSize: 12.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "2px 2px 8px", display: "flex", alignItems: "center", gap: 7 }}>
               <Icon name="folder" size={13} color="var(--color-dim)" /> {t("sched.needsScheduling")} ({needScheduling.length})

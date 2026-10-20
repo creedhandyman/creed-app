@@ -35,6 +35,7 @@ const OVERFLOW_TABS: Record<string, { icon: IconName; labelKey: string }> = {
   ops: { icon: "ops", labelKey: "nav.ops" },
   mileage: { icon: "mileage", labelKey: "nav.mileage" },
   map: { icon: "map", labelKey: "nav.map" },
+  dispatch: { icon: "navigation", labelKey: "nav.dispatch" },
   financials: { icon: "money", labelKey: "nav.financials" },
   payroll: { icon: "pay", labelKey: "nav.pay" },
   workvision: { icon: "worker", labelKey: "nav.work" },
@@ -56,6 +57,7 @@ const TAB_COLOR: Record<string, string> = {
   ops: "#06b6d4",         // Ops — cyan
   mileage: "#14b8a6",     // Mileage — teal
   map: "#3ee08f",         // Crew Map — mint (matches its More-hub tile)
+  dispatch: "#ff8a3d",    // Dispatch — Schedule's orange
   financials: "#10b981",  // Money — emerald
   payroll: "#22c55e",     // Payroll — green
   workvision: "#13c06a",  // Work mode — green

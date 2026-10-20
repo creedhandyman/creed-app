@@ -57,6 +57,10 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     ...(isAdmin
       ? [{ id: "map", icon: "map" as IconName, name: t("more.crewMap"), sub: t("more.crewMapSub"), color: "#3ee08f", tint: "rgba(0,204,102,.14)", onClick: () => setPage("map") }]
       : []),
+    // Dispatch Assistant — week route planner. Owners/managers only.
+    ...(isAdmin
+      ? [{ id: "dispatch", icon: "navigation" as IconName, name: t("more.dispatch"), sub: t("more.dispatchSub"), color: "#ff8a3d", tint: "rgba(255,138,61,.16)", onClick: () => setPage("dispatch") }]
+      : []),
     // Flip Mode — the org's own buy/renovate/resell deals. Owner/manager only
     // (investor money; flip_projects RLS is owner/manager too).
     ...(isAdmin

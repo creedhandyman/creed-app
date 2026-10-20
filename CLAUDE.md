@@ -845,6 +845,38 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Dispatch Assistant — week route planner (2026-10-19)**: More → **Dispatch**
+  (owner/manager; AppShell route `dispatch`) and Schedule → Dispatch tab's
+  "Plan the week" card (passes the viewed week's Monday via nav intent
+  `{page:"dispatch", week}`). `screens/DispatchAssistant.tsx`: **Crew right
+  now** (each tech's last clock-in/out GPS stamp today, the job they're on,
+  "Jordan is ~8 min from <next stop>") + **Plan the week** (days Mon–Sat,
+  who's working — approved time off removes that tech's day — working hours,
+  "also book quotes", "re-plan booked visits"). Engine = `lib/route-plan.ts`
+  `planWeek` (PURE, tested): one route per (day, tech) from/to the shop;
+  booked visits pinned to their day + crew (a promised 🕐 is a soft window,
+  15 min grace; the planner never ADDS a late/overtime violation, an
+  overbooked day is reported, not fixed); jobs longer than a day take
+  consecutive whole days for one tech; the rest by regret insertion (cost =
+  detour minutes + `dayPenaltyMin`/day + `routeCostMin` to open an empty
+  tech-day), then 2-opt/or-opt + relocate + swap. Distances = haversine ×
+  ROAD_FACTOR at 28 mph + 10 min between stops, from a precomputed matrix
+  (40 jobs × 4 techs × 5 days ≈ 30 ms). Glue = `lib/dispatch-week.ts`
+  (tested): `collectWeek` (booked visits per day via day-plan `stopsForDay`;
+  a job's hours split over all its calendar visit-days and its crew; done
+  stops skipped; visits naming only people not in the plan — subs, techs
+  toggled off — are left untouched), `toPlanInput`, `planWrites` (new job →
+  schedule row `🕐 quarter-hour · 👷 tech`, + `end_date` for multi-day, job →
+  scheduled; booked visits keep their promised time + named crew, get a time
+  /tech only when they had none, move days only when re-planned),
+  `crewNow`. Nothing writes until **Apply plan** (confirm). Route cards have
+  Google Maps directions (shop → stops → shop) and a "Text" sms: link with the
+  tech's day. `components/RouteMap.tsx` = Leaflet route map (refits on
+  resize). Limits: one tech per new job (quote crewSize isn't used yet), no
+  live GPS between clock stamps (would need a foreground heartbeat table —
+  a privacy call for the owner), straight-line drive estimates (no routing
+  API).
+
 - **Flip Mode — Phase 1 Deal Analyzer (2026-10-17)**: "should I buy this
   house?" for owners who flip their own properties. More hub → **Flip Mode**
   tile (owner/manager only; AppShell route `flip` is admin-gated too) →
