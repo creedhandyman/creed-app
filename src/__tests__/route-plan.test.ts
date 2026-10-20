@@ -140,6 +140,113 @@ describe("planWeek", () => {
     expect(plan.routes[0].stops[0].arriveMin).toBeGreaterThan(13 * 60);
   });
 
+  describe("crew jobs", () => {
+    const crewStops = (plan: ReturnType<typeof planWeek>, key: string) =>
+      plan.routes.flatMap((r) => r.stops.filter((s) => s.key === key).map((s) => ({ ...s, day: r.day, techId: r.techId })));
+
+    it("books a 2-crew 12h job on one day for two techs at the same time", () => {
+      const plan = planWeek({ days: WEEK, techIds: ["a", "b", "c"], base: SHOP, fixed: [], flex: [job("deck", E1, 12, { crew: 2 })] });
+      expect(plan.unplaced).toEqual([]);
+      expect(plan.shortCrew).toEqual([]);
+      const parts = crewStops(plan, "deck");
+      expect(parts).toHaveLength(2);
+      expect(new Set(parts.map((p) => p.day))).toEqual(new Set([MON]));
+      expect(new Set(parts.map((p) => p.techId)).size).toBe(2);
+      expect(parts[0].startMin).toBe(parts[1].startMin);
+      for (const p of parts) {
+        expect(p.durMin).toBeCloseTo(6 * 60); // 12 h of work ÷ 2 people
+        expect(p.crew).toEqual(parts.map((x) => x.techId));
+        expect(p.part).toBeUndefined();
+      }
+      expect(plan.placedNew).toBe(1);
+    });
+
+    it("starts when the later tech gets there; the other waits", () => {
+      const fixed = [booked("b-west", W1, MON, "b", 2, { fixedMin: 8 * 60 })];
+      const plan = planWeek({ days: [MON], techIds: ["a", "b"], base: SHOP, fixed, flex: [job("deck", E1, 6, { crew: 2 })] });
+      const [pa, pb] = ["a", "b"].map((t) => crewStops(plan, "deck").find((p) => p.techId === t)!);
+      expect(pa.startMin).toBe(pb.startMin);
+      expect(pb.startMin).toBeGreaterThan(10 * 60); // after Bo's 8–10 visit + the drive over
+      expect(pa.arriveMin).toBeLessThan(pa.startMin); // Ann is early and waits
+      expect(plan.routes.every((r) => r.lateMin === 0 && r.overMin === 0)).toBe(true);
+    });
+
+    it("never makes a crew member late for the crew start", () => {
+      let seed = 11;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const flex = Array.from({ length: 30 }, (_, i) =>
+        job(`j${i}`, { lat: 37.6 + rnd() * 0.2, lng: -97.45 + rnd() * 0.3 }, 1 + Math.round(rnd() * 6) / 2, i % 5 === 0 ? { crew: 2 } : {}));
+      const t0 = Date.now();
+      const plan = planWeek({ days: WEEK, techIds: ["a", "b", "c", "d"], base: SHOP, fixed: [], flex });
+      expect(Date.now() - t0).toBeLessThan(3000);
+      expect(plan.placedNew).toBe(30);
+      expect(plan.shortCrew).toEqual([]);
+      for (const r of plan.routes) expect(r.overMin + r.lateMin).toBe(0);
+      for (let i = 0; i < 30; i += 5) {
+        const parts = crewStops(plan, `j${i}`);
+        expect(parts).toHaveLength(2);
+        expect(parts[0].day).toBe(parts[1].day);
+        expect(parts[0].startMin).toBe(parts[1].startMin);
+        for (const p of parts) expect(p.arriveMin).toBeLessThanOrEqual(p.startMin);
+      }
+    });
+
+    it("splits a long crew job over consecutive days, same crew each day", () => {
+      const plan = planWeek({ days: WEEK, techIds: ["a", "b"], base: SHOP, fixed: [], flex: [job("remodel", E1, 30, { crew: 2 })] });
+      const parts = crewStops(plan, "remodel");
+      expect(parts.map((p) => `${p.day}|${p.techId}`).sort()).toEqual([`${MON}|a`, `${MON}|b`, `${TUE}|a`, `${TUE}|b`]);
+      expect(parts.reduce((m, p) => m + p.durMin, 0)).toBeCloseTo(30 * 60);
+      for (const d of [MON, TUE]) {
+        const [x, y] = parts.filter((p) => p.day === d);
+        expect(x.startMin).toBe(y.startMin);
+      }
+    });
+
+    it("falls back to fewer techs over more days when the crew isn't free together, and says so", () => {
+      const plan = planWeek({
+        days: WEEK, techIds: ["a", "b"], base: SHOP, fixed: [], flex: [job("deck", E1, 12, { crew: 2 })],
+        isOff: (t) => t === "b",
+      });
+      expect(plan.unplaced).toEqual([]);
+      expect(plan.shortCrew).toEqual([{ key: "deck", wanted: 2, got: 1, days: 2 }]);
+      const parts = crewStops(plan, "deck");
+      expect(parts.map((p) => `${p.day}|${p.techId}`)).toEqual([`${MON}|a`, `${TUE}|a`]);
+      expect(parts.every((p) => p.crew === undefined)).toBe(true);
+    });
+
+    it("keeps the requested tech on the crew", () => {
+      const plan = planWeek({ days: [MON], techIds: ["a", "b", "c"], base: SHOP, fixed: [], flex: [job("deck", E1, 8, { crew: 2, leadId: "c" })] });
+      expect(crewStops(plan, "deck").map((p) => p.techId)).toContain("c");
+    });
+
+    it("says when even the full crew needs more days than planned", () => {
+      const plan = planWeek({ days: [MON, TUE], techIds: ["a", "b"], base: SHOP, fixed: [], flex: [job("remodel", E1, 40, { crew: 2 })] });
+      expect(plan.unplaced).toEqual([{ key: "remodel", reason: "too-long" }]);
+    });
+
+    it("leaves a crew job unplaced when nobody has room", () => {
+      const fixed = [booked("fa", W1, MON, "a", 8), booked("fb", W2, MON, "b", 8)];
+      const plan = planWeek({ days: [MON], techIds: ["a", "b"], base: SHOP, fixed, flex: [job("deck", E1, 6, { crew: 2 })] });
+      expect(plan.unplaced).toEqual([{ key: "deck", reason: "no-room" }]);
+      expect(plan.shortCrew).toEqual([]);
+    });
+
+    it("spreads a job over at least its cure-time days", () => {
+      const plan = planWeek({ days: WEEK, techIds: ["a"], base: SHOP, fixed: [], flex: [job("paint", E1, 4, { minDays: 2 })] });
+      const parts = crewStops(plan, "paint");
+      expect(parts.map((p) => p.day)).toEqual([MON, TUE]);
+      expect(parts.map((p) => p.durMin)).toEqual([120, 120]);
+    });
+
+    it("takes one more day before dropping a person when a full day won't fit around the drive", () => {
+      // 18 h ÷ 2 = 9 h on site: the whole 8–5 window with no time to drive.
+      const plan = planWeek({ days: WEEK, techIds: ["a", "b"], base: SHOP, fixed: [], flex: [job("deck", E1, 18, { crew: 2 })] });
+      expect(plan.shortCrew).toEqual([]);
+      const parts = crewStops(plan, "deck");
+      expect(parts.map((p) => `${p.day}|${p.techId}`).sort()).toEqual([`${MON}|a`, `${MON}|b`, `${TUE}|a`, `${TUE}|b`]);
+    });
+  });
+
   it("plans without a shop address", () => {
     const plan = planWeek({ days: [MON], techIds: ["a"], base: null, fixed: [], flex: [job("e1", E1, 1), job("e2", E2, 1)] });
     expect(plan.placedNew).toBe(2);

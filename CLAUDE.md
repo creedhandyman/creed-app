@@ -857,8 +857,20 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `planWeek` (PURE, tested): one route per (day, tech) from/to the shop;
   booked visits pinned to their day + crew (a promised 🕐 is a soft window,
   15 min grace; the planner never ADDS a late/overtime violation, an
-  overbooked day is reported, not fixed); jobs longer than a day take
-  consecutive whole days for one tech; the rest by regret insertion (cost =
+  overbooked day is reported, not fixed); then phase by phase (booked →
+  approved → quotes) the hard jobs first. A CREW job (the quote's Crew pick,
+  `rooms.crewSize`; Auto = job-duration `planningCrew` — 2 for >8 h — capped
+  at the people being planned) is ONE synchronized visit (2026-10-19): same
+  day(s) + same start on `crew` techs' routes, wall time = hours ÷ crew; the
+  start is the later arrival (the others wait, `crewWaitCost`/min) and is
+  HARD on every member route (nothing inserted later may make one of them
+  late; `syncCrews` re-derives it after local search); crew pieces never
+  move on their own. Jobs over a day — or with the quote's AI `estDays` > 1
+  (`minDays`, cure waits) — take consecutive whole days, same crew each day.
+  No fit → one more day with the full crew (a 9 h wall day doesn't fit
+  around the drive) → one person fewer … → `plan.shortCrew` (screen: "a crew
+  of 2 isn't free on the same days, so it's booked for 1 person over 2
+  days") or unplaced. The rest by regret insertion (cost =
   detour minutes + `dayPenaltyMin`/day + `routeCostMin` to open an empty
   tech-day), then 2-opt/or-opt + relocate + swap. Distances = haversine ×
   ROAD_FACTOR at 28 mph + 10 min between stops, from a precomputed matrix
@@ -866,14 +878,18 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   (tested): `collectWeek` (booked visits per day via day-plan `stopsForDay`;
   a job's hours split over all its calendar visit-days and its crew; done
   stops skipped; visits naming only people not in the plan — subs, techs
-  toggled off — are left untouched), `toPlanInput`, `planWrites` (new job →
-  schedule row `🕐 quarter-hour · 👷 tech`, + `end_date` for multi-day, job →
+  toggled off — are left untouched; pool jobs carry `crew` + `minDays` from
+  `quotePlanning(job)`), `toPlanInput`, `planWrites` (new job → ONE schedule
+  row `🕐 quarter-hour · 👷 everyone on it`, + `end_date` for multi-day, job →
   scheduled; booked visits keep their promised time + named crew, get a time
   /tech only when they had none, move days only when re-planned),
   `crewNow`. Nothing writes until **Apply plan** (confirm). Route cards have
   Google Maps directions (shop → stops → shop) and a "Text" sms: link with the
-  tech's day. `components/RouteMap.tsx` = Leaflet route map (refits on
-  resize). Limits: one tech per new job (quote crewSize isn't used yet), no
+  tech's day; crew stops say "with <name>". `components/RouteMap.tsx` =
+  Leaflet route map (refits on resize). Limits: BOOKED crew visits with no
+  promised time aren't synchronized (each tech's route times them on its
+  own); a one-person job of ~8.5–9 h (with 8–5 hours) still reports no-room
+  instead of splitting (only joint jobs get the extra-day retry); no
   live GPS between clock stamps (would need a foreground heartbeat table —
   a privacy call for the owner), straight-line drive estimates (no routing
   API).

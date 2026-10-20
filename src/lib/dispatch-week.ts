@@ -22,6 +22,7 @@ import { isStaleOpenEntry } from "./shift";
 import { clockMinutes } from "./mileage-days";
 import { haversineMiles, ROAD_FACTOR, driveMinutes } from "./geo";
 import { hhmmToMin, minToHhmm, roundQuarter } from "./route-plan";
+import { planningCrew } from "./job-duration";
 import type { FixedVisit, FlexVisit, LatLng, PlanInput, PlanOptions, WeekPlan } from "./route-plan";
 
 /** On-site time for a job whose quote has no labor hours. */
@@ -33,11 +34,34 @@ export interface Crew { id: string; name: string }
 
 export interface PoolJob {
   job: Job;
+  /** Total on-site minutes (all crew together). */
   totalMin: number;
   /** No labor hours on the quote → DEFAULT_JOB_MIN. */
   estimated: boolean;
   /** The job's requested tech, when they're on this week's crew. */
   techId?: string;
+  /** People who work it together: the quote's Crew pick, else Auto (2 for
+   *  more than a day's work — job-duration's rule — but never more people
+   *  than this plan has). */
+  crew: number;
+  /** The quote's own day estimate when it's more than one day (it counts
+   *  dry/cure waits, so the job isn't squeezed into fewer days). */
+  minDays?: number;
+}
+
+/** Crew pick + AI day estimate off a quote's rooms blob (null = Auto / none). */
+export function quotePlanning(job: Pick<Job, "rooms">): { crewSize: number | null; estDays: number | null } {
+  try {
+    const d = typeof job.rooms === "string" ? JSON.parse(job.rooms || "{}") : job.rooms;
+    const cs = d?.crewSize;
+    const ed = d?.estDays;
+    return {
+      crewSize: typeof cs === "number" && cs > 0 ? Math.round(cs) : null,
+      estDays: typeof ed === "number" && ed > 0 ? ed : null,
+    };
+  } catch {
+    return { crewSize: null, estDays: null };
+  }
 }
 
 export interface BookedVisit {
@@ -127,11 +151,21 @@ export function collectWeek({ jobs, schedule, timeEntries, crew, days, includeQu
       || (a.created_at || "").localeCompare(b.created_at || ""))
     .map((job) => {
       const hrs = job.total_hrs || 0;
+      const q = quotePlanning(job);
+      // A crew picked on the quote is kept (the planner reports it when that
+      // many people aren't free together); Auto never asks for more people
+      // than are being planned.
+      const crewN = q.crewSize ?? Math.min(planningCrew(hrs, null), Math.max(1, crew.length));
+      // estimateDays' other half (hours ÷ crew ÷ day) is the planner's own,
+      // with this plan's working hours.
+      const aiDays = hrs > 0 && q.estDays ? Math.ceil(q.estDays) : 0;
       return {
         job,
         totalMin: hrs > 0 ? Math.round(hrs * 60) : DEFAULT_JOB_MIN,
         estimated: !(hrs > 0),
         techId: job.requested_tech ? idByName.get(nameKey(job.requested_tech)) : undefined,
+        crew: crewN,
+        minDays: aiDays > 1 ? aiDays : undefined,
       };
     });
 
@@ -188,7 +222,8 @@ export function toPlanInput({ pool, booked, coords, days, crew, replanBooked, le
     if (!pt) { noLocation.push(key); continue; }
     flex.push({
       key, jobId: p.job.id, address: p.job.property, pt, totalMin: p.totalMin,
-      techIds: p.techId ? [p.techId] : undefined, isNew: true, phase: p.job.status === "accepted" ? 0 : 1,
+      crew: p.crew, minDays: p.minDays,
+      leadId: p.techId, isNew: true, phase: p.job.status === "accepted" ? 0 : 1,
     });
   }
 
@@ -267,12 +302,15 @@ export function planWrites(plan: WeekPlan, { booked, crew, replanBooked }: {
     list.sort(byDay);
     const first = list[0];
     const last = list[list.length - 1];
+    // A crew visit is one row: everyone on it, starting when the last of
+    // them is there (the planner gives them the same start).
+    const startMin = Math.max(...list.filter((p) => p.day === first.day).map((p) => p.startMin));
     posts.push({
       jobId: first.jobId || key.slice(4),
       job: first.address,
       sched_date: first.day,
       end_date: last.day > first.day ? last.day : undefined,
-      note: composeNote("", minToHhmm(roundQuarter(first.startMin)), techNames(list)),
+      note: composeNote("", minToHhmm(roundQuarter(startMin)), techNames(list)),
     });
   }
 

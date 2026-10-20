@@ -13,8 +13,16 @@
  *     window: arriving early waits, arriving more than maxLateMin late counts
  *     as a violation. The planner never ADDS a violation; a day that's already
  *     overbooked stays as it is (and is reported), it just gets nothing new.
- *  3. Jobs longer than a working day take whole CONSECUTIVE days for one tech
- *     (the hours split evenly over those days).
+ *  3. Then phase by phase (booked → approved → quotes), the jobs that are hard
+ *     to fit go first. A CREW job (the quote's crew size, `crew`) is ONE
+ *     synchronized visit: the same day(s) and the same start time on `crew`
+ *     different techs' routes, wall time = total hours ÷ crew. The start is
+ *     the later arrival (the others wait), it's a hard time on every route
+ *     (nothing added later may make one of them late for it), and crew pieces
+ *     never move on their own. Jobs longer than a working day (or with a
+ *     `minDays` floor, e.g. paint cure time) take whole CONSECUTIVE days, the
+ *     hours split evenly over them. When `crew` techs aren't free together the
+ *     job goes to fewer techs over more days and is reported in `shortCrew`.
  *  4. The rest go in by REGRET insertion: each round places the job that would
  *     cost the most to put off (best slot vs. second-best slot), at its
  *     cheapest position. Cost = extra drive minutes + dayPenaltyMin per day
@@ -22,7 +30,8 @@
  *     routeCostMin when it would put a tech on the road on an empty day.
  *     Lower `phase` goes first (approved work before quotes).
  *  5. Local search: 2-opt + or-opt inside every route, then relocating and
- *     swapping movable jobs between routes while the total cost drops.
+ *     swapping movable jobs between routes while the total cost drops. Crew
+ *     starts are re-derived afterwards (the last member's arrival).
  *
  * Distances are straight-line × ROAD_FACTOR at an average city speed: the
  * same estimate the day optimizer, mileage and closest-tech hints use (no
@@ -51,6 +60,10 @@ export interface PlanOptions {
   /** Cost of putting a tech on the road on a day that had nothing yet, so two
    *  small jobs share a day instead of each opening its own. */
   routeCostMin: number;
+  /** Cost of one crew member's minute spent waiting for the others to get
+   *  there, in drive-minutes (waiting is cheaper than driving: later work can
+   *  still fill it). */
+  crewWaitCost: number;
 }
 
 export const DEFAULT_PLAN_OPTIONS: PlanOptions = {
@@ -61,6 +74,7 @@ export const DEFAULT_PLAN_OPTIONS: PlanOptions = {
   maxLateMin: 15,
   dayPenaltyMin: 8,
   routeCostMin: 30,
+  crewWaitCost: 0.25,
 };
 
 /** A visit pinned to one tech's day. A crew visit is one FixedVisit per tech
@@ -87,14 +101,23 @@ export interface FlexVisit {
   entryId?: string;
   address: string;
   pt: LatLng;
-  /** Total on-site minutes. More than a working day = multi-day. */
+  /** Total on-site minutes (all crew together). More than a working day of
+   *  wall time = multi-day. */
   totalMin: number;
+  /** People who work it together — same day(s), same start time. The wall
+   *  time is totalMin ÷ crew. Default 1. */
+  crew?: number;
+  /** Fewest consecutive days it takes (dry/cure waits). Default 1. */
+  minDays?: number;
   /** Promised start (single-day visits only). */
   fixedMin?: number;
   /** Days it may land on (undefined = any planned day). */
   days?: string[];
   /** Techs who may take it (undefined = anyone). */
   techIds?: string[];
+  /** A tech who must be on it (the job's requested tech; for a crew job the
+   *  others are picked around them). */
+  leadId?: string;
   /** Not on the calendar yet. */
   isNew: boolean;
   /** Lower goes first: -1 booked, 0 approved, 1 quoted. */
@@ -130,6 +153,9 @@ export interface PlannedStop {
   pinned: boolean;
   /** Multi-day piece n of `of`. */
   part?: { n: number; of: number };
+  /** Everyone on a crew visit (this route's tech included), crew order.
+   *  Unset for one-person stops. */
+  crew?: string[];
   arriveMin: number;
   startMin: number;
   endMin: number;
@@ -161,10 +187,14 @@ export interface PlannedRoute {
 
 export type UnplacedReason = "no-room" | "too-long";
 
+/** A crew job placed with fewer people than asked (over `days` days). */
+export interface ShortCrew { key: string; wanted: number; got: number; days: number }
+
 export interface WeekPlan {
   /** Routes that have stops, by day then crew order. */
   routes: PlannedRoute[];
   unplaced: { key: string; reason: UnplacedReason }[];
+  shortCrew: ShortCrew[];
   /** New jobs placed (multi-day counts once). */
   placedNew: number;
   miles: number;
@@ -190,6 +220,12 @@ interface Stop {
   /** Index into input.flex for movable single-day stops. */
   flexIdx?: number;
   part?: { n: number; of: number };
+  /** Crew visit: the common start every member's route must make (hard —
+   *  arriving after it counts as late), its group (one per crew visit-day,
+   *  a Stop per member route) and the members. */
+  syncMin?: number;
+  group?: string;
+  crew?: string[];
   /** Calendar order of booked stops (the "before" route). */
   order: number;
 }
@@ -219,6 +255,20 @@ interface Geo { D: Float64Array; n: number; base: number }
 /** Road miles between two matrix rows (0 when either is unknown). */
 const leg = (g: Geo, i: number, j: number) => (i < 0 || j < 0 ? 0 : g.D[i * g.n + j]);
 
+/** Drive minutes into the stop at index i (parking buffer between stops). */
+const driveFor = (m: number, i: number, o: PlanOptions) => (m / o.mph) * 60 + (i > 0 && m > 0.05 ? o.bufferMin : 0);
+
+/** Work starts at arrival, or at the promised / crew start if that's later. */
+const startAt = (s: Stop, arrive: number) => Math.max(arrive, s.fixedMin ?? -Infinity, s.syncMin ?? -Infinity);
+
+/** Float noise allowed on a crew start (it IS one member's arrival). */
+const SYNC_SLACK = 0.01;
+
+/** Minutes past a promised time's grace, plus any minute after a crew start. */
+const lateness = (s: Stop, arrive: number, o: PlanOptions) =>
+  (s.fixedMin != null ? Math.max(0, arrive - s.fixedMin - o.maxLateMin) : 0)
+  + (s.syncMin != null ? Math.max(0, arrive - s.syncMin - SYNC_SLACK) : 0);
+
 function simulate(r: Route, stops: Stop[], g: Geo, o: PlanOptions): Sim {
   let t = r.startMin;
   let pos = g.base;
@@ -228,13 +278,12 @@ function simulate(r: Route, stops: Stop[], g: Geo, o: PlanOptions): Sim {
   for (let i = 0; i < stops.length; i++) {
     const s = stops[i];
     const m = leg(g, pos, s.pi);
-    const d = (m / o.mph) * 60 + (i > 0 && m > 0.05 ? o.bufferMin : 0);
+    const d = driveFor(m, i, o);
     drive += d;
     miles += m;
     const arrive = t + d;
-    const start = s.fixedMin != null ? Math.max(arrive, s.fixedMin) : arrive;
-    if (s.fixedMin != null) late += Math.max(0, arrive - s.fixedMin - o.maxLateMin);
-    t = start + s.durMin;
+    late += lateness(s, arrive, o);
+    t = startAt(s, arrive) + s.durMin;
     pos = s.pi;
   }
   if (stops.length && g.base >= 0) {
@@ -269,6 +318,117 @@ function bestInsertion(r: Route, stops: Stop[], stop: Stop, g: Geo, o: PlanOptio
     return { cost: sim.drive - before.drive, pos };
   }
   return null;
+}
+
+/** Arrival time at each stop of a route as it is. */
+function arrivals(r: Route, stops: Stop[], g: Geo, o: PlanOptions): number[] {
+  const out: number[] = [];
+  let t = r.startMin;
+  let pos = g.base;
+  for (let i = 0; i < stops.length; i++) {
+    const s = stops[i];
+    const arrive = t + driveFor(leg(g, pos, s.pi), i, o);
+    out.push(arrive);
+    t = startAt(s, arrive) + s.durMin;
+    pos = s.pi;
+  }
+  return out;
+}
+
+/** When a new stop at matrix point `pi` would be reached if it went in at
+ *  each position 0..n (the stops before it don't move). Same arithmetic as
+ *  simulate, so a crew start taken from here is exactly a member's arrival. */
+function arrivalsIfInserted(r: Route, pi: number, g: Geo, o: PlanOptions): number[] {
+  const out: number[] = [];
+  let t = r.startMin;
+  let pos = g.base;
+  for (let i = 0; i <= r.stops.length; i++) {
+    out.push(t + driveFor(leg(g, pos, pi), i, o));
+    if (i === r.stops.length) break;
+    const s = r.stops[i];
+    t = startAt(s, t + driveFor(leg(g, pos, s.pi), i, o)) + s.durMin;
+    pos = s.pi;
+  }
+  return out;
+}
+
+/** Cheapest way to fit ONE crew visit into several techs' routes at one
+ *  common start — the last to arrive sets it, the others wait — with no new
+ *  violation on any of them (the start is hard, so the later stops of every
+ *  route are checked against it). The best start is always one member's
+ *  arrival, so those are the only candidates. Cost = extra drive on every
+ *  route + crewWaitCost per minute anyone waits. null when no common start
+ *  works. */
+function bestCrewInsertion(rs: Route[], stop: Stop, g: Geo, o: PlanOptions): { cost: number; pos: number[]; syncMin: number } | null {
+  const before = rs.map((r) => simulate(r, r.stops, g, o));
+  const arr = rs.map((r) => arrivalsIfInserted(r, stop.pi, g, o));
+  const starts = [...new Set(arr.flat())].sort((a, b) => a - b);
+  let best: { cost: number; pos: number[]; syncMin: number } | null = null;
+  for (const S of starts) {
+    if (S + stop.durMin > o.dayEndMin + EPS) break; // later starts only run longer past the day
+    const s = { ...stop, syncMin: S };
+    let cost = 0;
+    const pos: number[] = [];
+    for (let k = 0; k < rs.length; k++) {
+      let bk: { c: number; p: number } | null = null;
+      for (let p = 0; p < arr[k].length; p++) {
+        if (arr[k][p] > S + SYNC_SLACK) continue;
+        const sim = simulate(rs[k], [...rs[k].stops.slice(0, p), s, ...rs[k].stops.slice(p)], g, o);
+        if (penalty(sim) > penalty(before[k]) + EPS) continue;
+        const c = sim.drive - before[k].drive + o.crewWaitCost * (S - arr[k][p]);
+        if (!bk || c < bk.c) bk = { c, p };
+      }
+      if (!bk) { cost = Infinity; break; }
+      cost += bk.c;
+      pos.push(bk.p);
+    }
+    if (cost < Infinity && (!best || cost < best.cost - EPS)) best = { cost, pos, syncMin: S };
+  }
+  return best;
+}
+
+/** Each crew visit starts when its last member gets there: re-derive every
+ *  crew start from the routes as they are now. After re-ordering and moves
+ *  that only ever pulls a start earlier (less waiting, more room after it);
+ *  a start shared by two routes can wait on another crew visit's start, so
+ *  repeat until nothing changes. */
+function syncCrews(routes: Route[], g: Geo, o: PlanOptions) {
+  const groups = new Map<string, Stop[]>();
+  for (const r of routes) {
+    for (const s of r.stops) if (s.group) groups.set(s.group, [...(groups.get(s.group) || []), s]);
+  }
+  if (!groups.size) return;
+  const withCrew = routes.filter((r) => r.stops.some((s) => s.group));
+  for (let it = 0; it < 12; it++) {
+    const at = new Map<Stop, number>();
+    for (const r of withCrew) {
+      const a = arrivals(r, r.stops, g, o);
+      r.stops.forEach((s, i) => { if (s.group) at.set(s, a[i]); });
+    }
+    let changed = false;
+    for (const members of groups.values()) {
+      const S = Math.max(...members.map((s) => at.get(s)!));
+      if (Math.abs(S - (members[0].syncMin ?? S)) > SYNC_SLACK) changed = true;
+      for (const s of members) s.syncMin = S;
+    }
+    if (!changed) break;
+  }
+}
+
+/** Every way to pick `c` techs from `pool` (crew order), always with `lead`. */
+function crewSets(pool: string[], c: number, lead?: string): string[][] {
+  const others = lead ? pool.filter((t) => t !== lead) : pool;
+  const need = lead ? c - 1 : c;
+  const out: string[][] = [];
+  const pick = (from: number, acc: string[]) => {
+    if (acc.length === need) {
+      out.push(lead ? [...acc, lead].sort((a, b) => pool.indexOf(a) - pool.indexOf(b)) : acc);
+      return;
+    }
+    for (let i = from; i <= others.length - (need - acc.length); i++) pick(i + 1, [...acc, others[i]]);
+  };
+  if (need >= 0 && need <= others.length) pick(0, []);
+  return out;
 }
 
 /** 2-opt + or-opt on one route's order, never adding a violation. */
@@ -314,7 +474,10 @@ function pathMiles(stops: Stop[], g: Geo): number {
 const opening = (stops: Stop[], o: PlanOptions) => (stops.length ? 0 : o.routeCostMin);
 
 const allowed = (v: FlexVisit, r: Route) =>
-  (!v.days || v.days.includes(r.day)) && (!v.techIds || v.techIds.includes(r.techId));
+  (!v.days || v.days.includes(r.day)) && (!v.techIds || v.techIds.includes(r.techId))
+  && (!v.leadId || v.leadId === r.techId);
+
+const wantCrew = (v: FlexVisit) => Math.max(1, Math.round(v.crew ?? 1));
 
 // ── The planner ──────────────────────────────────────────────────────
 
@@ -378,49 +541,93 @@ export function planWeek(input: PlanInput): WeekPlan {
   for (const r of routes) r.stops.sort(calOrder);
 
   const unplaced: { key: string; reason: UnplacedReason }[] = [];
+  const shortCrew: ShortCrew[] = [];
   const mkStop = (v: FlexVisit, vi: number, extra?: Partial<Stop>): Stop => ({
     key: v.key, jobId: v.jobId, entryId: v.entryId, address: v.address, pt: v.pt, pi: flexPi[vi],
     durMin: v.totalMin, fixedMin: v.fixedMin, isNew: v.isNew, pinned: false, flexIdx: vi,
     order: input.fixed.length + vi, ...extra,
   });
 
-  // 2. Multi-day jobs need consecutive days, so they go before the small ones.
+  // 2. Jobs that need several people at once or consecutive days are the
+  //    hardest to fit, so in each phase they go before the single visits.
+  //    Tries the full crew on the fewest days, then on one more day (shorter
+  //    days fit around the driving), then one person fewer, …
   const flexIdx = input.flex.map((_, i) => i);
-  const multi = flexIdx
-    .filter((i) => input.flex[i].totalMin > dayLen + 0.5)
-    .sort((a, b) => input.flex[a].phase - input.flex[b].phase || input.flex[b].totalMin - input.flex[a].totalMin);
-  for (const vi of multi) {
+  const isJoint = (v: FlexVisit) => wantCrew(v) > 1 || v.totalMin > dayLen + 0.5 || (v.minDays ?? 1) > 1;
+  type Slot = { rs: Route[]; pos: number[]; syncMin?: number };
+  const placeJoint = (vi: number) => {
     const v = input.flex[vi];
-    const k = Math.ceil(v.totalMin / dayLen);
-    if (k > input.days.length) { unplaced.push({ key: v.key, reason: "too-long" }); continue; }
-    const per = v.totalMin / k;
-    let best: { cost: number; slots: { r: Route; pos: number }[] } | null = null;
-    for (const techId of v.techIds ?? input.techIds) {
+    const want = wantCrew(v);
+    const pool = v.techIds ?? input.techIds;
+    const lead = v.leadId && pool.includes(v.leadId) ? v.leadId : undefined;
+    let reason: UnplacedReason | null = null;
+    for (let c = Math.min(want, pool.length); c >= 1; c--) {
+      const wall = v.totalMin / c;
+      const k0 = Math.max(Math.ceil(v.minDays ?? 1), wall > dayLen + 0.5 ? Math.ceil(wall / dayLen) : 1);
+      // More days than planned with the biggest crew = too long; a smaller
+      // crew only runs longer.
+      if (k0 > input.days.length) { reason ??= "too-long"; continue; }
+      reason ??= "no-room";
+      for (const k of k0 < input.days.length ? [k0, k0 + 1] : [k0]) {
+        if (placeCrew(v, vi, c, k, pool, lead)) {
+          if (c < want) shortCrew.push({ key: v.key, wanted: want, got: c, days: k });
+          return;
+        }
+      }
+    }
+    unplaced.push({ key: v.key, reason: reason ?? "no-room" });
+  };
+  /** Books `v` on `c` techs × `k` consecutive days at its cheapest spot;
+   *  false when nothing fits. */
+  const placeCrew = (v: FlexVisit, vi: number, c: number, k: number, pool: string[], lead?: string): boolean => {
+    const per = v.totalMin / c / k;
+    const piece = (extra?: Partial<Stop>) => mkStop(v, vi, { durMin: per, fixedMin: k === 1 ? v.fixedMin : undefined, ...extra });
+    let best: { cost: number; set: string[]; slots: Slot[] } | null = null;
+    for (const set of crewSets(pool, c, lead)) {
       for (let i = 0; i + k <= input.days.length; i++) {
         const ds = input.days.slice(i, i + k);
         if (!ds.every((d, j) => j === 0 || addDaysYmd(ds[0], j) === d)) continue;
         if (v.days && !ds.every((d) => v.days!.includes(d))) continue;
         let cost = i * o.dayPenaltyMin;
-        const slots: { r: Route; pos: number }[] = [];
+        const slots: Slot[] = [];
         for (const d of ds) {
-          const r = byKey.get(`${d}|${techId}`);
-          const ins = r && bestInsertion(r, r.stops, mkStop(v, vi, { durMin: per, fixedMin: undefined }), g, o);
-          if (!r || !ins) { slots.length = 0; break; }
-          cost += ins.cost + opening(r.stops, o);
-          slots.push({ r, pos: ins.pos });
+          const rs = set.map((t) => byKey.get(`${d}|${t}`));
+          if (rs.some((r) => !r)) break; // someone's off that day
+          const day = rs as Route[];
+          let ins: { cost: number; pos: number[]; syncMin?: number } | null;
+          if (c === 1) {
+            const b = bestInsertion(day[0], day[0].stops, piece(), g, o);
+            ins = b && { cost: b.cost, pos: [b.pos] };
+          } else {
+            ins = bestCrewInsertion(day, piece(), g, o);
+          }
+          if (!ins) break;
+          cost += ins.cost + day.reduce((m, r) => m + opening(r.stops, o), 0);
+          slots.push({ rs: day, pos: ins.pos, syncMin: ins.syncMin });
         }
-        if (slots.length === k && (!best || cost < best.cost - EPS)) best = { cost, slots };
+        if (slots.length === k && (!best || cost < best.cost - EPS)) best = { cost, set, slots };
       }
     }
-    if (!best) { unplaced.push({ key: v.key, reason: "no-room" }); continue; }
-    best.slots.forEach(({ r, pos }, n) => {
-      r.stops.splice(pos, 0, mkStop(v, vi, { durMin: per, fixedMin: undefined, pinned: true, flexIdx: undefined, part: { n: n + 1, of: k } }));
+    if (!best) return false;
+    const { set, slots } = best;
+    // A one-person, one-day fallback is an ordinary visit local search may
+    // still move; everything else stays put as one unit.
+    const movable = c === 1 && k === 1;
+    slots.forEach(({ rs, pos, syncMin }, n) => {
+      rs.forEach((r, j) => r.stops.splice(pos[j], 0, piece(movable ? {} : {
+        pinned: true,
+        flexIdx: undefined,
+        part: k > 1 ? { n: n + 1, of: k } : undefined,
+        ...(c > 1 ? { syncMin, group: `${v.key}#${n + 1}`, crew: set } : {}),
+      })));
     });
-  }
+    return true;
+  };
 
-  // 3. Single-day visits by regret insertion, phase by phase.
-  const single = flexIdx.filter((i) => input.flex[i].totalMin <= dayLen + 0.5);
-  const phases = [...new Set(single.map((i) => input.flex[i].phase))].sort((a, b) => a - b);
+  // 3. Phase by phase (booked → approved → quotes): the joint jobs, then the
+  //    single-day visits by regret insertion.
+  const single = flexIdx.filter((i) => !isJoint(input.flex[i]));
+  const phases = [...new Set(input.flex.map((v) => v.phase))].sort((a, b) => a - b);
   // Each job's best slot per route, recomputed only for the route that just
   // changed (the others' stops are the same as last round).
   const slotCache = new Map<number, ({ cost: number; pos: number } | null)[]>();
@@ -441,6 +648,11 @@ export function planWeek(input: PlanInput): WeekPlan {
     return row;
   };
   for (const phase of phases) {
+    flexIdx
+      .filter((i) => input.flex[i].phase === phase && isJoint(input.flex[i]))
+      .sort((a, b) => input.flex[b].totalMin - input.flex[a].totalMin)
+      .forEach(placeJoint);
+    syncCrews(routes, g, o);
     let pending = single.filter((i) => input.flex[i].phase === phase);
     let changed = -1;
     while (pending.length) {
@@ -515,7 +727,9 @@ export function planWeek(input: PlanInput): WeekPlan {
     }
     if (!moved) break;
   }
+  syncCrews(routes, g, o);
   for (const r of routes) optimizeOrder(r, g, o);
+  syncCrews(routes, g, o);
 
   // 5. Timings for the screen.
   const out: PlannedRoute[] = routes
@@ -534,6 +748,7 @@ export function planWeek(input: PlanInput): WeekPlan {
   return {
     routes: out,
     unplaced,
+    shortCrew,
     placedNew,
     miles: round1(out.reduce((m, r) => m + r.miles, 0)),
     driveMin: Math.round(out.reduce((m, r) => m + r.driveMin, 0)),
@@ -583,16 +798,16 @@ function detailRoute(r: Route, g: Geo, o: PlanOptions): PlannedRoute {
   let late = 0;
   const stops: PlannedStop[] = r.stops.map((s, i) => {
     const m = leg(g, pos, s.pi);
-    const d = (m / o.mph) * 60 + (i > 0 && m > 0.05 ? o.bufferMin : 0);
+    const d = driveFor(m, i, o);
     const arrive = t + d;
-    const start = s.fixedMin != null ? Math.max(arrive, s.fixedMin) : arrive;
-    const lateMin = s.fixedMin != null ? Math.max(0, arrive - s.fixedMin - o.maxLateMin) : 0;
+    const start = startAt(s, arrive);
+    const lateMin = lateness(s, arrive, o);
     late += lateMin;
     t = start + s.durMin;
     pos = s.pi;
     return {
       key: s.key, jobId: s.jobId, entryId: s.entryId, address: s.address, pt: s.pt,
-      durMin: s.durMin, fixedMin: s.fixedMin, isNew: s.isNew, pinned: s.pinned, part: s.part,
+      durMin: s.durMin, fixedMin: s.fixedMin, isNew: s.isNew, pinned: s.pinned, part: s.part, crew: s.crew,
       arriveMin: Math.round(arrive), startMin: Math.round(start), endMin: Math.round(t),
       driveMin: Math.round(d), miles: round1(m), lateMin: Math.round(lateMin),
     };

@@ -53,6 +53,8 @@ const locale = () => (getLang() === "es" ? "es" : "en-US");
 /** A stop's start as the calendar will get it: a promised time as-is, else
  *  the quarter hour planWrites rounds to. */
 const stopClock = (s: PlannedStop) => formatClock(s.fixedMin != null ? s.startMin : roundQuarter(s.startMin));
+/** The others on a crew visit (crew order). */
+const crewMates = (s: PlannedStop, techId: string) => (s.crew || []).filter((id) => id !== techId);
 const dayChip = (ymd: string) => {
   const d = new Date(ymd + "T12:00:00");
   return { dow: d.toLocaleDateString(locale(), { weekday: "short" }), num: d.getDate() };
@@ -328,7 +330,10 @@ export default function DispatchAssistant({ setPage }: Props) {
     if (!phone) return null;
     const body = [
       `${t("disp.routeText")} ${dayLong(r.day)}:`,
-      ...r.stops.map((s, i) => `${i + 1}. ${stopClock(s)} ${s.address} (${fmtDur(s.durMin)})`),
+      ...r.stops.map((s, i) => {
+        const mates = crewMates(s, r.techId).map((id) => firstName(nameOf(id)));
+        return `${i + 1}. ${stopClock(s)} ${s.address} (${fmtDur(s.durMin)}${mates.length ? `, ${t("disp.with")} ${mates.join(", ")}` : ""})`;
+      }),
       mapsUrl(r),
     ].join("\n");
     return `sms:${phone}?&body=${encodeURIComponent(body)}`;
@@ -341,7 +346,7 @@ export default function DispatchAssistant({ setPage }: Props) {
     stops: r.stops.map((s, i) => ({
       lat: s.pt.lat, lng: s.pt.lng, n: i + 1, isNew: s.isNew,
       title: s.address,
-      sub: `${firstName(nameOf(r.techId))} · ${stopClock(s)} · ${fmtDur(s.durMin)}${s.isNew ? ` · ${t("disp.new")}` : ""}`,
+      sub: `${[r.techId, ...crewMates(s, r.techId)].map((id) => firstName(nameOf(id))).join(" + ")} · ${stopClock(s)} · ${fmtDur(s.durMin)}${s.isNew ? ` · ${t("disp.new")}` : ""}`,
     })),
   }));
   const mapCrew: MapCrew[] = selDay === today
@@ -479,7 +484,7 @@ export default function DispatchAssistant({ setPage }: Props) {
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.job.property}</span>
                 <span className="dim" style={{ fontSize: 12.5 }}>
-                  {fmtDur(p.totalMin)}{p.estimated ? ` (${t("disp.estHours")})` : ""} · {p.job.status === "accepted" ? t("disp.approved") : t("disp.quoted")}
+                  {fmtDur(p.totalMin)}{p.estimated ? ` (${t("disp.estHours")})` : ""}{p.crew > 1 ? ` · ${t("disp.crewOf")} ${p.crew}` : ""} · {p.job.status === "accepted" ? t("disp.approved") : t("disp.quoted")}
                   {p.techId ? ` · ${t("disp.requested")}: ${firstName(nameOf(p.techId))}` : ""}
                 </span>
                 {near && <span style={{ display: "block", fontSize: 12, color: "#8cc0ff" }}>{t("disp.closestNow")} {firstName(near.name)} ~{near.min} min{near.busy ? ` (${t("disp.onAJob")})` : ""}</span>}
@@ -530,6 +535,15 @@ export default function DispatchAssistant({ setPage }: Props) {
             <div key={u.key} style={{ display: "flex", gap: 7, fontSize: 12.5, color: "var(--color-warning, #f5b400)", padding: "3px 0", lineHeight: 1.4 }}>
               <Icon name="warn" size={13} color="var(--color-warning, #f5b400)" />
               <span><b style={{ fontWeight: 600 }}>{keyLabel(u.key)}</b> — {why(u.reason)}</span>
+            </div>
+          ))}
+          {plan.shortCrew.map((c) => (
+            <div key={`crew-${c.key}`} style={{ display: "flex", gap: 7, fontSize: 12.5, color: "var(--color-warning, #f5b400)", padding: "3px 0", lineHeight: 1.4 }}>
+              <Icon name="clients" size={13} color="var(--color-warning, #f5b400)" />
+              <span>
+                <b style={{ fontWeight: 600 }}>{keyLabel(c.key)}</b> — {t("disp.crewOfA")} {c.wanted} {t("disp.notTogether")}{" "}
+                {c.got} {c.got === 1 ? t("disp.person") : t("disp.people")} {t("disp.over")} {c.days} {c.days === 1 ? t("disp.dayWord") : t("disp.daysWord")}
+              </span>
             </div>
           ))}
           {plan.routes.filter((r) => r.overMin > 0 || r.lateMin > 0).map((r) => (
@@ -590,6 +604,7 @@ export default function DispatchAssistant({ setPage }: Props) {
                 {r.stops.map((s, i) => {
                   const j = jobFor(s.jobId);
                   const promised = s.fixedMin != null ? `${t("disp.promised")} ${formatClock(s.fixedMin)}` : "";
+                  const mates = crewMates(s, r.techId);
                   return (
                     <div key={s.key + i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0", borderTop: "1px solid var(--color-border-dark)" }}>
                       <span style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, marginTop: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11.5, fontWeight: 700, fontFamily: "Oswald", background: s.isNew ? "transparent" : colorOf(r.techId), color: s.isNew ? colorOf(r.techId) : "#fff", border: `2px solid ${colorOf(r.techId)}` }}>{i + 1}</span>
@@ -599,6 +614,16 @@ export default function DispatchAssistant({ setPage }: Props) {
                         <span className="dim" style={{ fontSize: 12, display: "flex", flexWrap: "wrap", gap: "2px 6px", alignItems: "center" }}>
                           <span>{fmtDur(s.durMin)}</span>
                           {s.driveMin > 0 && <span>· {s.driveMin} min {t("disp.drive")}</span>}
+                          {mates.length > 0 && (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              · {t("disp.with")}
+                              {mates.map((id) => (
+                                <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                  {avatar(id, nameOf(id), 16)}{firstName(nameOf(id))}
+                                </span>
+                              ))}
+                            </span>
+                          )}
                           {j?.trade && <span>· {j.trade}</span>}
                           {s.part && <span>· {t("disp.dayPart")} {s.part.n} {t("disp.of")} {s.part.of}</span>}
                           {promised && <span>· {promised}</span>}

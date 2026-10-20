@@ -68,6 +68,25 @@ describe("collectWeek", () => {
     expect(b.pool.map((p) => p.job.id)).toEqual(["j2", "j5", "j3"]);
   });
 
+  it("reads the quote's crew size and day estimate", () => {
+    const quoteJobs = [
+      mkJob("c2", "1 Crew Ct", "accepted", 6, { rooms: JSON.stringify({ rooms: [], crewSize: 2 }) }),
+      mkJob("auto", "2 Auto Ave", "accepted", 12, { rooms: JSON.stringify({ rooms: [], crewSize: null }) }),
+      mkJob("small", "3 Small St", "accepted", 4, { rooms: "not json" }),
+      mkJob("cure", "4 Paint Pl", "accepted", 5, { rooms: JSON.stringify({ estDays: 2.5 }) }),
+    ];
+    const run = (c: typeof crew) => collectWeek({ jobs: quoteJobs, schedule: [], timeEntries: [], crew: c, days: [MON], includeQuoted: false, dayMin: 540 }).pool;
+    const two = run(crew);
+    expect(two.find((p) => p.job.id === "c2")).toMatchObject({ crew: 2, totalMin: 360 });
+    expect(two.find((p) => p.job.id === "auto")!.crew).toBe(2); // Auto: over a day's work → 2
+    expect(two.find((p) => p.job.id === "small")).toMatchObject({ crew: 1, minDays: undefined });
+    expect(two.find((p) => p.job.id === "cure")!.minDays).toBe(3);
+    // Auto never asks for more people than are planned; a picked crew is kept.
+    const solo = run([crew[0]]);
+    expect(solo.find((p) => p.job.id === "auto")!.crew).toBe(1);
+    expect(solo.find((p) => p.job.id === "c2")!.crew).toBe(2);
+  });
+
   it("drops a stop someone already clocked out of today", () => {
     const te: TimeEntry = { id: "t", job: "100 E Main", job_id: "j1", entry_date: MON, hours: 2, amount: 0, user_id: "a", user_name: "Ann Lee", start_time: "8:00 AM", end_time: "10:00 AM" };
     const { booked } = collectWeek({ jobs, schedule, timeEntries: [te], crew, days: [MON], includeQuoted: false, dayMin: 540 });
@@ -134,6 +153,34 @@ describe("toPlanInput + planWrites", () => {
     const { input } = toPlanInput({ pool: pool.filter((p) => p.job.id === "j9"), booked, coords, days: [MON, TUE, WED], crew: [crew[0]], replanBooked: false, leaveOut: [], base: shop, timeOff });
     const writes = planWrites(planWeek(input), { booked, crew: [crew[0]], replanBooked: false });
     expect(writes.posts).toEqual([expect.objectContaining({ jobId: "j9", sched_date: MON, end_date: TUE })]);
+  });
+
+  describe("crew jobs", () => {
+    const deck = mkJob("deck", "200 W Oak", "accepted", 12, { rooms: JSON.stringify({ rooms: [], crewSize: 2 }) });
+    const plan2 = (off: TimeOffRequest[] = []) => {
+      const { pool, booked } = collectWeek({ jobs: [deck], schedule: [], timeEntries: [], crew, days: [MON, TUE, WED], includeQuoted: false, dayMin: 540 });
+      const { input } = toPlanInput({ pool, booked, coords, days: [MON, TUE, WED], crew, replanBooked: false, leaveOut: [], base: shop, timeOff: off });
+      const plan = planWeek(input);
+      return { plan, writes: planWrites(plan, { booked, crew, replanBooked: false }) };
+    };
+
+    it("writes ONE row for a crew visit, listing everyone on it", () => {
+      const { plan, writes } = plan2();
+      expect(plan.routes.map((r) => `${r.day}|${r.techId}`)).toEqual([`${MON}|a`, `${MON}|b`]);
+      const [a, b] = plan.routes.map((r) => r.stops[0]);
+      expect(a.startMin).toBe(b.startMin);
+      expect(writes.posts).toHaveLength(1);
+      expect(writes.posts[0]).toMatchObject({ jobId: "deck", sched_date: MON, end_date: undefined });
+      expect(writes.posts[0].note).toMatch(/^🕐 \d{2}:(00|15|30|45) · 👷 Ann Lee, Bo Diaz$/);
+    });
+
+    it("books one person over more days when the other is off, and flags it", () => {
+      const off: TimeOffRequest[] = [{ id: "o", user_id: "b", user_name: "Bo Diaz", start_date: MON, end_date: WED, hours: 24, kind: "vacation", status: "approved" }];
+      const { plan, writes } = plan2(off);
+      expect(plan.shortCrew).toEqual([{ key: poolKey("deck"), wanted: 2, got: 1, days: 2 }]);
+      expect(writes.posts).toEqual([expect.objectContaining({ jobId: "deck", sched_date: MON, end_date: TUE })]);
+      expect(writes.posts[0].note).toMatch(/👷 Ann Lee$/);
+    });
   });
 });
 
