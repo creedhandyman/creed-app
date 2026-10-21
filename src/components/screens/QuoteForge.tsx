@@ -56,16 +56,9 @@ import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { orderShopList } from "@/lib/guide-shop";
+import ServiceTemplates, { CategoryField } from "../ServiceTemplates";
+import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, type ServiceTemplate } from "@/lib/service-templates";
 
-/** A saved, reusable quote-as-template: a name + the line-item rooms blob
- *  (stringified Room[], same shape as jobs.rooms). Lives in service_templates. */
-interface ServiceTemplate {
-  id: string;
-  org_id: string;
-  name: string;
-  template_rooms: string;
-  created_at?: string;
-}
 
 // Compress image for AI processing — aggressive for mobile (S23 Ultra = 200MP)
 async function compressImage(file: File, maxSize = 800): Promise<string> {
@@ -476,6 +469,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     rooms, workers, jobPhotos, customWorkOrder,
     discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab,
+    templateEdit,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const draftHasContent = (d: any) =>
@@ -505,6 +499,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCheckedTools(d.checkedTools || []); setCheckedShop(d.checkedShop || []);
       setRemovedGuideShop(d.removedGuideShop || []);
       setTab(d.tab || "quote");
+      setTemplateEdit(d.templateEdit ?? null);
       setMode(DRAFTABLE_MODES.includes(d.mode) ? d.mode : (d.rooms?.length ? "edit" : "quick"));
       setDraftAvailable(false);
       useStore.getState().showToast("Resumed your unsaved quote", "success");
@@ -836,6 +831,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const [templateCategory, setTemplateCategory] = useState("");
+  // Set while the editor is building / editing a SERVICE instead of a quote
+  // (From Template → New service, or a service's "Edit lines"). id null = new.
+  const [templateEdit, setTemplateEdit] = useState<{ id: string | null; name: string; category: string } | null>(null);
+  // "Add a service" sheet in the editor: drop a service's lines into this quote.
+  const [addingService, setAddingService] = useState(false);
   const reloadTemplates = async () => {
     const orgId = org?.id;
     if (!orgId) return;
@@ -861,19 +862,60 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const name = templateName.trim();
     if (!name) { useStore.getState().showToast("Name the template", "warning"); return; }
     if (!rooms.length) { useStore.getState().showToast("Add line items first", "warning"); return; }
-    const res = await db.post("service_templates", { org_id: org?.id, name, template_rooms: JSON.stringify(stripAiHrs(rooms)) });
-    if (!res) {
-      // db.post already toasted the real Supabase error (missing table / RLS /
-      // column). Don't claim success or close the form so the user can retry.
+    const category = canonCategory(templates, templateCategory);
+    const template_rooms = JSON.stringify(stripAiHrs(rooms));
+    const editId = templateEdit?.id;
+    const prev = editId ? templates.find((x) => x.id === editId) : undefined;
+    let ok: boolean;
+    if (editId) {
+      const patch: Record<string, unknown> = { name, category: category || null, template_rooms };
+      if ((category || "") !== (canonCategory(templates, prev?.category || ""))) patch.sort_order = nextSortOrder(templates, category, editId);
+      ok = await db.patch("service_templates", editId, patch);
+    } else {
+      ok = !!(await db.post("service_templates", {
+        org_id: org?.id, name, template_rooms,
+        category: category || null, sort_order: nextSortOrder(templates, category),
+      }));
+    }
+    // db.* already toasted the real Supabase error (missing table / RLS /
+    // column). Don't claim success or close the form so the user can retry.
+    if (!ok) return;
+    setSavingTemplate(false);
+    setTemplateName(""); setTemplateCategory("");
+    await reloadTemplates();
+    if (templateEdit) {
+      // Done building the service — back to the service list.
+      useStore.getState().showToast(`Saved "${name}"`, "success");
+      exitEditor();
+      clearDraft();
+      setMode("template");
       return;
     }
-    setSavingTemplate(false);
-    setTemplateName("");
-    await reloadTemplates();
     useStore.getState().showToast(`Saved "${name}" as a template`, "success");
   };
+  const openSaveTemplate = () => {
+    if (!rooms.length) { useStore.getState().showToast("Add line items first", "warning"); return; }
+    setTemplateName(templateEdit ? templateEdit.name : prop || "");
+    setTemplateCategory(templateEdit ? templateEdit.category : "");
+    setSavingTemplate(true);
+  };
+  // Drop a service's lines into the quote on screen (fresh line ids).
+  const addServiceToQuote = (tpl: ServiceTemplate) => {
+    let parsed: Room[] = [];
+    try { parsed = stripAiHrs(JSON.parse(tpl.template_rooms) as Room[]); } catch { /* */ }
+    let add = validateQuote(parsed);
+    if (!add.length) { useStore.getState().showToast("That service has no lines", "warning"); return; }
+    // Options on: the service goes into the option being organized, like the
+    // Add tab — never silently into all three.
+    if (tieredQuote) add = add.map((r) => ({ ...r, items: r.items.map((it) => ({ ...it, tiers: [editTier] })) }));
+    setRooms((cur) => appendTemplateRooms(cur, add, () => crypto.randomUUID().slice(0, 8)));
+    setAddingService(false);
+    setTab("quote");
+    const n = add.reduce((a, r) => a + r.items.length, 0);
+    useStore.getState().showToast(`Added "${tpl.name}" · ${n} line${n === 1 ? "" : "s"}`, "success");
+  };
   // Seed a fresh quote from a template's line items (clear any prior edit state).
-  const seedFromTemplate = (tpl: ServiceTemplate) => {
+  const seedFromTemplate = (tpl: Pick<ServiceTemplate, "template_rooms">) => {
     let parsed: Room[] = [];
     // stripAiHrs: a template's lines aren't this job's AI estimate (templates
     // saved before the strip may still carry the stamp).
@@ -885,8 +927,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
+    setTemplateEdit(null);
     setTab("quote");
     setMode("edit");
+  };
+  // Open a service's lines in the editor to change them (Save = update it).
+  const editTemplateLines = (tpl: ServiceTemplate) => {
+    seedFromTemplate(tpl);
+    setTemplateEdit({ id: tpl.id, name: tpl.name, category: tpl.category || "" });
+  };
+  // Set up a service from scratch: the empty editor, saved as a service.
+  const newService = () => {
+    seedFromTemplate({ template_rooms: "[]" });
+    setTemplateEdit({ id: null, name: "", category: "" });
+    setMode("manual");
   };
   // Org's published labor rate is the authoritative default for quotes.
   // Previously this read `user.rate` (the logged-in tech's payroll rate),
@@ -2126,7 +2180,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
   };
   const exitBuilding = () => { setMode(null); setParsing(false); setParseStatus(""); setInspParseFailed(false); };
   const exitEditor = () => {
-    setMode(null);
+    // Leaving a service being edited returns to the service list.
+    setMode(templateEdit ? "template" : null);
+    setTemplateEdit(null);
     setRooms([]);
     setCustomWorkOrder(null);
     woKnownIdsRef.current = new Set();
@@ -2166,9 +2222,22 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     }
     if (mode === "quick") return exitQuick();
     if (inspParseFailed && rooms.length === 0) return exitBuilding();
+    if (templateEdit) return exitEditor();
     if (mode === "edit" || (mode === "manual" && rooms.length > 0)) return exitEditor();
     setMode(null); // paste · empty manual · template
   });
+
+  // Shown while the editor is building / editing a service instead of a quote.
+  const templateBanner = templateEdit && (
+    <div className="cd mb" style={{ border: "1px solid rgba(157,78,221,.55)", background: "rgba(157,78,221,.08)", display: "flex", alignItems: "center", gap: 10 }}>
+      <Icon name="briefcase" size={18} color="var(--color-violet)" />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{templateEdit.id ? `Editing service: ${templateEdit.name}` : "New service"}</div>
+        <div className="dim" style={{ fontSize: 12 }}>Add the lines this service always needs, then save it to your list.</div>
+      </div>
+      {rooms.length > 0 && <button className="bb" onClick={openSaveTemplate} style={{ fontSize: 13, padding: "6px 12px", flexShrink: 0 }}>Save service</button>}
+    </div>
+  );
 
   if (!mode) {
     return (
@@ -2275,7 +2344,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18.5, letterSpacing: ".3px", color: cViolet.text }}>FROM TEMPLATE</div>
-            <div style={{ fontSize: 13, color: cViolet.sub }}>Reuse a saved service{templates.length ? ` · ${templates.length}` : ""}</div>
+            <div style={{ fontSize: 13, color: cViolet.sub }}>{templates.length ? `Your services, ready to quote · ${templates.length}` : "Set up the services you offer"}</div>
           </div>
           <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", ...cViolet.tag }}>FAST</span>
         </div>
@@ -2295,35 +2364,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           <button className="bo" onClick={() => setMode(null)} style={{ padding: "4px 11px" }}>←</button>
           <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px", textTransform: "uppercase" }}>From Template</span>
         </div>
-        {templates.length === 0 ? (
-          <div className="cd" style={{ textAlign: "center", padding: 22 }}>
-            <Icon name="briefcase" size={28} color="var(--color-dim)" />
-            <p className="dim" style={{ fontSize: 14, marginTop: 8 }}>No templates yet. Build a quote, then tap <b>Save as template</b> to reuse it here.</p>
-          </div>
-        ) : (
-          templates.map((tpl) => {
-            let count = 0;
-            try { (JSON.parse(tpl.template_rooms) as Room[]).forEach((r) => { count += r.items?.length || 0; }); } catch { /* */ }
-            return (
-              <div key={tpl.id} onClick={() => seedFromTemplate(tpl)} className="cd mb" style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: "12px 13px" }}>
-                <div style={{ width: 38, height: 38, borderRadius: 11, background: "rgba(157,78,221,.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Icon name="briefcase" size={18} color="var(--color-violet)" />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15.5, letterSpacing: ".3px" }}>{tpl.name}</div>
-                  <div className="dim" style={{ fontSize: 12.5, marginTop: 1 }}>{count} item{count === 1 ? "" : "s"}</div>
-                </div>
-                <button
-                  onClick={async (e) => { e.stopPropagation(); if (!await useStore.getState().showConfirm("Delete Template", `Delete "${tpl.name}"?`)) return; await db.del("service_templates", tpl.id); reloadTemplates(); }}
-                  aria-label="Delete template"
-                  style={{ background: "none", border: "none", color: "var(--color-accent-red)", cursor: "pointer", display: "inline-flex", padding: 4, flexShrink: 0 }}
-                >
-                  <Icon name="close" size={14} />
-                </button>
-              </div>
-            );
-          })
-        )}
+        <p className="dim" style={{ fontSize: 12.5, margin: "-4px 2px 10px" }}>
+          The services you offer. Tap one to start a quote — star the ones you use most, sort them into categories, and add more services from inside any quote.
+        </p>
+        <ServiceTemplates templates={templates} reload={reloadTemplates} onPick={seedFromTemplate} onEditLines={editTemplateLines} onNew={newService} />
       </div>
     );
 
@@ -2574,10 +2618,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     return (
       <div className="fi">
         <div className="row mb">
-          <button className="bo" onClick={() => setMode(null)}>←</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-warning)" }}>Manual Quote</h2>
+          <button className="bo" onClick={() => templateEdit ? exitEditor() : setMode(null)}>←</button>
+          <h2 style={{ fontSize: 20, color: templateEdit ? "var(--color-violet)" : "var(--color-warning)" }}>{templateEdit ? "New Service" : "Manual Quote"}</h2>
         </div>
-        <div className="cd mb">
+        {templateBanner}
+        {!templateEdit && <div className="cd mb">
           <CustomerPicker
             prop={prop}
             setProp={setProp}
@@ -2588,7 +2633,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             addressId={addressId}
             setAddressId={setAddressId}
           />
-        </div>
+        </div>}
         <AddItemForm
           nr={nr} setNr={setNr} na={na} setNa={setNa} nd={nd} setNd={setNd}
           nc={nc} setNc={setNc} nh={nh} setNh={setNh} nm={nm} setNm={setNm}
@@ -2660,9 +2705,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         </div>
       )}
 
+      {templateBanner}
+
       {/* Customer / property — pulled above the total so the glow card holds
-          just the totals (render look). */}
-      <div className="cd mb">
+          just the totals (render look). A service has no customer. */}
+      {!templateEdit && <div className="cd mb">
         <CustomerPicker
           prop={prop}
           setProp={setProp}
@@ -2674,7 +2721,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           setAddressId={setAddressId}
           compact
         />
-      </div>
+      </div>}
 
       {/* Totals — gold glow; figures sit next to each other, not stacked. */}
       <div
@@ -3474,8 +3521,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
 
       <AiNote text={t("ai.noteQuote")} style={{ marginBottom: 6 }} />
 
-      {/* Action bar — PDF / Send / Save (Save = green primary) */}
-      <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
+      {/* Action bar — PDF / Send / Save (Save = green primary). Hidden while
+          editing a service: that saves through "Save service", not as a job. */}
+      {!templateEdit && <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
         <button
           onClick={() =>
             (() => {
@@ -3603,7 +3651,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         >
           <Icon name="briefcase" size={14} color="#06371f" /> {editingId ? t("qf.update") : t("qf.saveJob")}
         </button>
-      </div>
+      </div>}
 
       {sendSheet && (
         <SendSheet
@@ -3629,18 +3677,44 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         />
       )}
 
-      {/* Save the current quote as a reusable service template */}
-      <button
-        onClick={() => { if (!rooms.length) { useStore.getState().showToast("Add line items first", "warning"); return; } setTemplateName(prop || ""); setSavingTemplate(true); }}
-        style={{ width: "100%", marginBottom: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5, fontWeight: 600, padding: 9, borderRadius: 11, color: "#c9a6ff", background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.4)", cursor: "pointer" }}
-      >
-        <Icon name="briefcase" size={13} color="#c9a6ff" /> Save as template
-      </button>
+      {/* Services: add one of the shop's saved services to this quote, or
+          save the current lines as a service. */}
+      <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
+        {!templateEdit && templates.length > 0 && (
+          <button
+            onClick={() => setAddingService(true)}
+            style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5, fontWeight: 600, padding: 9, borderRadius: 11, color: "#c9a6ff", background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.4)", cursor: "pointer" }}
+          >
+            <Icon name="add" size={13} color="#c9a6ff" /> Add a service
+          </button>
+        )}
+        <button
+          onClick={openSaveTemplate}
+          style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5, fontWeight: 600, padding: 9, borderRadius: 11, color: "#c9a6ff", background: "rgba(157,78,221,.1)", border: "1px solid rgba(157,78,221,.4)", cursor: "pointer" }}
+        >
+          <Icon name="briefcase" size={13} color="#c9a6ff" /> {templateEdit ? "Save service" : "Save as template"}
+        </button>
+      </div>
+      {addingService && (
+        <div onClick={() => setAddingService(false)} className="sheet-overlay">
+          <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxHeight: "88vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <h4 style={{ fontSize: 16, display: "inline-flex", alignItems: "center", gap: 7 }}><Icon name="briefcase" size={16} color="var(--color-violet)" /> Add a service</h4>
+              <button className="bo" onClick={() => setAddingService(false)} style={{ padding: "4px 10px" }} aria-label="Close"><Icon name="close" size={14} /></button>
+            </div>
+            <p className="dim" style={{ fontSize: 12.5, marginBottom: 10 }}>Its lines are added to this quote{tieredQuote ? ` (to the ${editTier === "base" ? "Base" : tierNames[editTier]} option)` : ""}.</p>
+            <ServiceTemplates mode="add" templates={templates} reload={reloadTemplates} onPick={addServiceToQuote} />
+          </div>
+        </div>
+      )}
       {savingTemplate && (
         <div onClick={() => setSavingTemplate(false)} className="sheet-overlay">
           <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxWidth: 420 }}>
-            <h4 style={{ fontSize: 16, marginBottom: 8 }}>Save as template</h4>
-            <input autoFocus value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Template name (e.g. Water heater swap)" style={{ width: "100%", marginBottom: 10 }} />
+            <h4 style={{ fontSize: 16, marginBottom: 8 }}>{templateEdit ? "Save service" : "Save as template"}</h4>
+            <input autoFocus value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Service name (e.g. Water heater swap)" style={{ width: "100%", marginBottom: 10 }} />
+            <div style={{ marginBottom: 12 }}>
+              <CategoryField value={templateCategory} onChange={setTemplateCategory} categories={templateCategories(templates)} />
+            </div>
             <div className="row" style={{ gap: 6 }}>
               <button className="bo" onClick={() => setSavingTemplate(false)} style={{ flex: 1 }}>Cancel</button>
               <button className="bb" onClick={saveAsTemplate} style={{ flex: 1 }}>Save</button>

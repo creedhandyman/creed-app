@@ -1381,6 +1381,24 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `defaultAddTiers: [editTier]` (the prompt says ORGANIZING: <option> and to
   use all three only when the user says every option needs it).
 
+- **Service list = organized templates (2026-10-21)**: QuoteForge → From
+  Template is the shop's list of the services it offers
+  (`components/ServiceTemplates.tsx`; rules pure + tested in
+  `lib/service-templates.ts`). Search (name / category / line text), filter
+  chips (All · Favorites · categories), groups = Favorites first, categories
+  A→Z, "Other" last; per row: star, move up/down inside its category, edit
+  (rename, category with one-tap chips — `canonCategory` folds case, Edit
+  lines, Duplicate, Delete). **New service** opens the empty editor in
+  service mode (`templateEdit` state: banner, no customer picker, the
+  job PDF/Send/Save bar hidden, "Save service" patches/creates the row and
+  returns to the list; kept in the c_qf_draft). In any quote, **Add a
+  service** appends a service's lines (`appendTemplateRooms`: joins same-named
+  areas, FRESH line ids so work-order links never collide; with options on
+  they go into the option being organized). Migration
+  `service_templates_organize` (**ALREADY RUN in prod 2026-10-21**):
+  `category TEXT, sort_order INTEGER DEFAULT 0, favorite BOOLEAN DEFAULT
+  FALSE` on `service_templates` (RLS = own-org FOR ALL, any member).
+
 - **Drive tracking = Start drive + map (2026-10-19)**: "No movement detected"
   bug — the old Work Mode tracker only counted miles from watchPosition while
   the app was on screen and never saved its start point, so Start → Maps
