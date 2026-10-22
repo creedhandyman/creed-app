@@ -372,7 +372,7 @@ export function OwnerDay({ setPage, openJob, openOps }: {
             ))}
           </div>
         )}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div className="needgrid">
           {tiles.map((a) => (
             // A zero tile drops the statusstrip (no breathing glow) and dims.
             <div

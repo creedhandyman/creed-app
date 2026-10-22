@@ -498,6 +498,13 @@ button:focus-visible {
   background: linear-gradient(180deg, color-mix(in srgb, var(--c) 12%, transparent), transparent);
 }
 
+/* Home "Needs attention" tiles (DayCards): 2x2 on a phone, one row of four
+   on a computer (same width the side menu turns on, lib/nav-layout.ts). */
+.needgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (min-width: 1024px) {
+  .needgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 /* ─── LAYOUT UTILS ─────────────────────────────────── */
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
