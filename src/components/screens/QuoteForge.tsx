@@ -2048,16 +2048,18 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const rms: any[] = blob.rooms || [];
     const TYPE_LABEL: Record<string, string> = {
       "move-out": "Move-Out / Vacant Turn", "move-in": "Move-In Condition", flooring: "Flooring Survey",
-      painting: "Painting Survey", yard: "Yard / Grounds", initial: "Initial Walkthrough",
+      painting: "Painting Survey", yard: "Yard / Grounds", fence: "Fence Inspection", initial: "Initial Walkthrough",
     };
+    // Fence walks read the same S/F/P/D codes as Good / Worn / Repair / Replace.
+    const isFence = blob.type === "fence";
     const typeLabel = TYPE_LABEL[blob.type] || "Property Inspection";
     const inspector = blob.inspected_by || insp.created_by || "";
 
     const COND: Record<string, { c: string; l: string; rank: number }> = {
-      D: { c: "#C00000", l: "DAMAGED", rank: 0 },
-      P: { c: "#e07000", l: "POOR", rank: 1 },
-      F: { c: "#b38f00", l: "FAIR", rank: 2 },
-      S: { c: "#00a352", l: "OK", rank: 3 },
+      D: { c: "#C00000", l: isFence ? "REPLACE" : "DAMAGED", rank: 0 },
+      P: { c: "#e07000", l: isFence ? "REPAIR" : "POOR", rank: 1 },
+      F: { c: "#b38f00", l: isFence ? "WORN" : "FAIR", rank: 2 },
+      S: { c: "#00a352", l: isFence ? "GOOD" : "OK", rank: 3 },
     };
     const cond = (c: string) => COND[String(c || "S").toUpperCase()] || COND.S;
     const chip = (c: string) => {
@@ -2111,7 +2113,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       const w = r.width && r.width > 0 ? r.width : 0;
       const l = r.length && r.length > 0 ? r.length : 0;
       if (sqft > 0) totalSqft += sqft;
-      const dimsLabel = sqft > 0
+      const dimsLabel = isFence
+        ? (l > 0 ? `<span style="font-family:Oswald,sans-serif;font-size:11px;color:#2E75B6;font-weight:400;letter-spacing:.04em;margin-left:8px">${l} ft run${w ? ` × ${w} ft tall · ${Math.round(l * w).toLocaleString()} sq ft face` : ""}</span>` : "")
+        : sqft > 0
         ? `<span style="font-family:Oswald,sans-serif;font-size:11px;color:#2E75B6;font-weight:400;letter-spacing:.04em;margin-left:8px">${w && l ? `${w}&prime; × ${l}&prime; · ` : ""}${sqft.toLocaleString()} sqft</span>`
         : "";
       areasHtml += `<h3>${esc(r.name)}${dimsLabel}</h3>
@@ -2135,10 +2139,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
 <section style="display:flex;gap:8px;margin-bottom:16px">
   ${stat(roomCount, "Areas", "#2E75B6")}
-  ${stat(counts.D, "Damaged", COND.D.c)}
-  ${stat(counts.P, "Poor", COND.P.c)}
-  ${stat(counts.F + counts.N, "Fair / Noted", COND.F.c)}
-  ${totalSqft > 0 ? stat(totalSqft, "Total Sqft", "#00a352") : ""}
+  ${stat(counts.D, isFence ? "Replace" : "Damaged", COND.D.c)}
+  ${stat(counts.P, isFence ? "Repair" : "Poor", COND.P.c)}
+  ${stat(counts.F + counts.N, isFence ? "Worn / Noted" : "Fair / Noted", COND.F.c)}
+  ${isFence
+    ? (rms.reduce((t: number, r: { length?: number }) => t + (Number(r.length) || 0), 0) > 0 ? stat(rms.reduce((t: number, r: { length?: number }) => t + (Number(r.length) || 0), 0), "Linear Ft", "#00a352") : "")
+    : totalSqft > 0 ? stat(totalSqft, "Total Sqft", "#00a352") : ""}
 </section>
 
 <h2>Work Needed — Punch List${totalFindings ? ` (${totalFindings})` : ""}</h2>

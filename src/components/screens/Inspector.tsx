@@ -63,6 +63,52 @@ export const ROOM_PRESETS: Record<string, string[]> = {
 /* Context-specific quick actions per item type */
 function getPresets(itemName: string): string[] {
   const n = itemName.toLowerCase();
+  // ── Fence inspection items — first, so "Pickets/Panels" doesn't hit the
+  // breaker-panel chips, "Gate Posts" the door ones, etc. ──
+  if (/^posts$/.test(n))
+    return ["Solid", "Leaning — reset post", "Loose in ground", "Rotted at grade — replace", "Broken — replace", "Sister/brace post"];
+  if (/post footings/.test(n))
+    return ["Solid", "Cracked concrete", "Heaved/shifted", "No concrete — set in dirt", "Re-set in concrete"];
+  if (/rails\/stringers/.test(n))
+    return ["Solid", "Sagging", "Cracked — replace rail", "Loose — add bracket", "Rotted — replace"];
+  if (/pickets\/panels/.test(n))
+    return ["Solid", "A few loose — re-nail", "Broken pickets — replace", "Missing pickets", "Panel down — replace section", "Gaps/warped boards"];
+  if (/fasteners\/brackets/.test(n))
+    return ["OK", "Rusted nails/screws", "Popped nails", "Add rail brackets", "Re-fasten with screws"];
+  if (/bottom rot|ground contact/.test(n))
+    return ["Clear of ground", "Boards touching dirt", "Bottom rot — trim/replace", "Add rot board"];
+  if (/stain\/paint\/sealer/.test(n))
+    return ["Good finish", "Faded — re-stain", "Peeling paint", "Never sealed", "Pressure wash + stain"];
+  if (/vegetation on fence/.test(n))
+    return ["Clear", "Vines on fence", "Tree pushing fence", "Branches over fence", "Clear before work"];
+  if (/gate frame|sag/.test(n))
+    return ["Square", "Sagging — add anti-sag kit", "Frame racked — rebuild", "Rotted frame — replace gate"];
+  if (/^hinges$/.test(n))
+    return ["OK", "Loose — tighten", "Rusted", "Broken — replace hinges", "Upgrade heavy-duty"];
+  if (/latch\/lock/.test(n))
+    return ["Latches OK", "Won't latch — adjust", "Broken latch — replace", "Add lock/hasp", "Self-closing needed"];
+  if (/gate posts/.test(n))
+    return ["Solid", "Leaning — reset", "Loose", "Rotted — replace", "Add steel post"];
+  if (/gate swing|clearance/.test(n))
+    return ["Swings freely", "Drags on ground", "Binds on post", "Re-hang gate"];
+  if (/material & style/.test(n))
+    return ["Wood privacy", "Board-on-board", "Wood picket", "Chain link", "Vinyl", "Wrought iron/aluminum", "Split rail", "Cedar", "Pine (treated)"];
+  if (/fence height/.test(n))
+    return ["3 ft", "4 ft", "5 ft", "6 ft", "8 ft"];
+  if (/fence age/.test(n))
+    return ["0–5 yrs", "5–10 yrs", "10–15 yrs", "15+ yrs", "Unknown age"];
+  if (/property line|survey/.test(n))
+    return ["Line clear", "Ask for survey", "Shared fence — neighbor OK", "Pins found"];
+  if (/utility locate|811/.test(n))
+    return ["Call 811 before digging", "Locate done", "Lines marked near fence"];
+  if (/permit\/hoa/.test(n))
+    return ["No permit needed", "Permit required", "HOA approval needed", "Check height limit"];
+  if (/equipment access/.test(n))
+    return ["Easy access", "Gate too narrow for auger", "Hand dig only", "Through neighbor's yard"];
+  if (/haul-away|haul away/.test(n))
+    return ["No tear-out", "Tear out section", "Tear out whole fence", "Haul to dump", "Owner keeps material"];
+  if (/pets\/pool/.test(n))
+    return ["No pets/pool", "Dogs — keep secure", "Pool — code latch/height", "Keep gate closed during work"];
   // ── Structural / MEP items (Initial Walkthrough) ──
   // Checked BEFORE the generic repair rules so data-capture items
   // (age, capacity, material…) get fitting chips instead of
@@ -361,7 +407,24 @@ const ROOM_ORDER = [
    stamped on the resulting InspectionData so the AI parser knows
    what kind of work to scope. */
 
-export type InspectionType = "move-out" | "move-in" | "flooring" | "painting" | "yard" | "initial";
+export type InspectionType = "move-out" | "move-in" | "flooring" | "painting" | "yard" | "fence" | "initial";
+
+// Fence inspection — one area per fence run (measured as LENGTH × HEIGHT,
+// see the size card) plus each gate and a "Whole Fence" area for the facts
+// that price the job (material, height, age, access, permits, haul-away).
+// Statuses read Good / Worn / Repair / Replace (same S/F/P/D codes).
+const FENCE_AREAS = ["Front Fence", "Back Fence", "Left Side Fence", "Right Side Fence", "Gate 1", "Gate 2", "Whole Fence"];
+const FENCE_RUN_ITEMS = [
+  "Posts", "Post Footings", "Rails/Stringers", "Pickets/Panels",
+  "Fasteners/Brackets", "Bottom Rot/Ground Contact", "Stain/Paint/Sealer", "Vegetation on Fence",
+];
+const GATE_ITEMS = ["Gate Frame/Sag", "Hinges", "Latch/Lock", "Gate Posts", "Gate Swing/Clearance"];
+const WHOLE_FENCE_ITEMS = [
+  "Material & Style", "Fence Height", "Fence Age", "Property Line/Survey",
+  "Utility Locate (811)", "Permit/HOA", "Equipment Access", "Old Fence Haul-away", "Pets/Pool Code",
+];
+const fenceItems = (room: string): string[] =>
+  /whole fence/i.test(room) ? WHOLE_FENCE_ITEMS : /gate/i.test(room) ? GATE_ITEMS : FENCE_RUN_ITEMS;
 
 const PAINTING_ITEMS = ["Walls", "Ceiling", "Trim/Baseboards", "Doors", "Window Casings"];
 // Floor-only inspection items. Was a single "Flooring" line per room
@@ -518,6 +581,14 @@ export const INSPECTION_TYPES: InspectionTypeConfig[] = [
     description: "Recurring lawn/landscape service — task checklist per area.",
     suggestedRooms: YARD_AREAS,
     itemsForRoom: (r) => YARD_PRESETS[r] || ["Mow", "Cleanup"],
+  },
+  {
+    id: "fence",
+    label: "Fence",
+    icon: "fence",
+    description: "Fence inspection — each run by length × height, every gate, and the facts that price the job.",
+    suggestedRooms: FENCE_AREAS,
+    itemsForRoom: fenceItems,
   },
   {
     id: "initial",
@@ -892,7 +963,8 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
         result.photos,
         checklist,
         property,
-        client
+        client,
+        inspectionType,
       );
       console.log(`[Inspector] AI returned ${items.length} items for "${roomName}":`, items.map((it) => `${it.name}[${it.condition}]`).join(", "));
 
@@ -1708,13 +1780,13 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
         <div className="cd" style={{ marginBottom: 8, padding: 10, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="calc" size={14} color="var(--color-primary)" />
           <div style={{ flex: 1 }}>
-            <label className="sl">Area Size (W × L)</label>
+            <label className="sl">{inspectionType === "fence" ? tr("insp.fenceSize") : "Area Size (W × L)"}</label>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
               <input
                 type="number"
                 inputMode="decimal"
                 value={room.width || ""}
-                placeholder="W"
+                placeholder={inspectionType === "fence" ? tr("insp.fenceHeight") : "W"}
                 min="0"
                 step="0.1"
                 style={{ fontSize: 15, width: 70, textAlign: "center" }}
@@ -1732,7 +1804,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
                 type="number"
                 inputMode="decimal"
                 value={room.length || ""}
-                placeholder="L"
+                placeholder={inspectionType === "fence" ? tr("insp.fenceLength") : "L"}
                 min="0"
                 step="0.1"
                 style={{ fontSize: 15, width: 70, textAlign: "center" }}
@@ -1748,7 +1820,12 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
               <span style={{ fontSize: 13, color: "#888" }}>ft</span>
             </div>
           </div>
-          {room.sqft > 0 && (
+          {inspectionType === "fence" ? (room.length || 0) > 0 && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 20, fontFamily: "Oswald", color: "var(--color-primary)", lineHeight: 1 }}>{room.length} ft</div>
+              <div className="dim" style={{ fontSize: 10 }}>{room.sqft > 0 ? `${room.sqft} ${tr("insp.fenceFace")}` : tr("insp.fenceRun")}</div>
+            </div>
+          ) : room.sqft > 0 && (
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 20, fontFamily: "Oswald", color: "var(--color-primary)", lineHeight: 1 }}>{room.sqft}</div>
               <div className="dim" style={{ fontSize: 10 }}>sq ft</div>
@@ -1863,7 +1940,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
                     fontWeight: item.condition === c.code ? 700 : 400,
                   }}
                 >
-                  {tr(`insp.cond${c.code}`)}
+                  {tr(inspectionType === "fence" ? `insp.fenceCond${c.code}` : `insp.cond${c.code}`)}
                 </button>
               ))}
             </div>

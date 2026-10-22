@@ -2094,6 +2094,9 @@ export interface InspectionInput {
   rooms: {
     name: string;
     sqft?: number;
+    /** Fence inspections: width = fence HEIGHT, length = run LENGTH (ft). */
+    width?: number;
+    length?: number;
     items: {
       name: string;
       condition: string;
@@ -2182,6 +2185,7 @@ function compileInspectionText(
       flooring: "FLOORING-ONLY survey — quote ONLY flooring work (LVP, carpet, tile, sqft-priced baseboards/cove base). Every line item MUST be in the Flooring trade bucket. Skip any non-flooring findings even if mentioned in passing.",
       painting: "PAINTING-ONLY survey — quote ONLY painted-surface work (wall paint, ceiling paint, trim/baseboard paint, door paint, window-casing paint, drywall patch + paint, caulking). Every line item MUST be in the Painting trade bucket.",
       yard: "RECURRING YARD/GROUNDS service — this is NOT a one-time repair quote. Quote a recurring service (per-visit pricing for mow/edge/trim/cleanup tasks). Group line items under the General trade bucket. Do not include carpentry, plumbing, electrical, or HVAC items.",
+      fence: "FENCE inspection — quote ONLY fence and gate work, in the Carpentry trade bucket (chain link / vinyl / iron work still goes there). Each fence-run area gives its LENGTH in linear feet and HEIGHT; price section/picket/stain/build work by the linear foot of that run (stain by the square feet of fence face given), posts per post (assume one post every 8 ft when counting). Statuses: Good = no work; Worn = cosmetic only (weathered, faded or peeling finish) — quote finish work only when the item is the finish or a note asks; Repair = fix in place (reset/brace post, re-nail or replace a few pickets, add rail brackets, adjust gate, replace hinges/latch); Replace = replace that component — when most of a run's posts/rails/pickets are Replace, quote replacing the whole run instead of piece by piece. The \"Whole Fence\" area describes the job (material, height, age, survey, 811 locate, permit/HOA, access, pets/pool): use it to choose materials and method; it is not work by itself except tear-out/haul-away when noted, and a note like \"permit required\" adds a line for pulling the permit.",
       initial: "INITIAL BASELINE walkthrough — comprehensive scope across interior rooms AND structural/MEP areas (foundation, roof, drainage, electrical panel, HVAC, plumbing, water heater). Treat this as a property-condition baseline; surface every meaningful finding even when it's data-capture rather than required repair (e.g. note Panel Brand, HVAC tonnage, water-heater age). Use the standard 7-trade taxonomy.",
     };
     const type = inspectionType || "move-out";
@@ -2207,14 +2211,22 @@ function compileInspectionText(
       text += `No work needed — every item in this room is Satisfactory. Do NOT create any line items for this room.\n`;
     }
     const eff = effectiveSqft(room);
-    if (eff.sqft > 0 && (needsWork || quotesEveryRoom)) {
+    if (inspectionType === "fence") {
+      // A fence run is measured by length × height, not floor area.
+      const len = Number(room.length) || 0;
+      const ht = Number(room.width) || 0;
+      if (needsWork && len > 0) {
+        text += `Fence Run: ${len} linear feet${ht > 0 ? `, ${ht} ft tall (${Math.round(len * ht)} sq ft of fence face)` : ""}\n`;
+      }
+    } else if (eff.sqft > 0 && (needsWork || quotesEveryRoom)) {
       text += eff.estimated
         ? `Room Size: ~${eff.sqft} square feet (ESTIMATED from room type — verify on site)\n`
         : `Room Size: ${eff.sqft} square feet\n`;
     }
     room.items.forEach((item) => {
-      const condLabel =
-        item.condition === "D" ? "Damaged" :
+      const condLabel = inspectionType === "fence"
+        ? (item.condition === "D" ? "Replace" : item.condition === "P" ? "Repair" : item.condition === "F" ? "Worn" : "Good")
+        : item.condition === "D" ? "Damaged" :
         item.condition === "P" ? "Poor" :
         item.condition === "F" ? "Fair" :
         "Satisfactory";
@@ -2723,10 +2735,22 @@ export async function aiParseVoiceWalkRoom(
   photos: VoiceWalkPhoto[],
   checklist: string[],
   property: string,
-  client: string
+  client: string,
+  inspectionType?: string,
 ): Promise<InspectionRoom["items"]> {
-  return processVoiceWalkRoom(roomName, transcript, photos, checklist, property, client);
+  return processVoiceWalkRoom(roomName, transcript, photos, checklist, property, client, inspectionType);
 }
+
+/** Fence walks rate with the same S/F/P/D codes, read as Good / Worn /
+ *  Repair / Replace — appended to the Voice Walk system prompt. */
+const FENCE_VOICE_STATUS = `
+
+THIS IS A FENCE INSPECTION. The same four codes mean:
+  - "S" — Good. Solid, straight, no work.
+  - "F" — Worn. Cosmetic only: weathered, gray, faded or peeling stain/paint, minor checking.
+  - "P" — Repair. Fixable in place: leaning or loose post, a few loose/broken/missing pickets, sagging rail, gate sags or won't latch, rusty hinges.
+  - "D" — Replace. Rotted post at the ground, broken post, section down or mostly broken, rotted gate frame.
+Put spoken measurements (run length, height, number of posts) into the notes.`;
 
 /** New flow: transcript + timestamped photos + checklist → InspectionItems. */
 async function processVoiceWalkRoom(
@@ -2735,7 +2759,8 @@ async function processVoiceWalkRoom(
   photos: VoiceWalkPhoto[],
   checklist: string[],
   property: string,
-  client: string
+  client: string,
+  inspectionType?: string,
 ): Promise<InspectionRoom["items"]> {
   // Skip work if there's nothing to analyze.
   const cleanTranscript = (transcript || "").trim();
@@ -2850,7 +2875,7 @@ Output ONLY valid JSON of this shape:
       // Cache the (fully static) voicewalk system prompt — every room in an
       // inspection re-sends it, so rooms 2..N read it instead of re-billing.
       // No reorder needed: all per-room content lives in `content`, not here.
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: inspectionType === "fence" ? system + FENCE_VOICE_STATUS : system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content }],
     }),
   });
