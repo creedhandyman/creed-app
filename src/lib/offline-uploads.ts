@@ -232,6 +232,13 @@ async function replayReceipt(item: QueuedUpload): Promise<void> {
     const patch: Record<string, unknown> = {};
     if (note) patch.note = note;
     if (scan.total > 0) patch.amount = scan.total;
+    // Date the expense by the PURCHASE date printed on the receipt (the row
+    // was inserted with the snap/queue date, which can be days earlier
+    // than the replay but still isn't what the receipt says).
+    if (scan.date) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(scan.date);
+      if (m) patch.receipt_date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString();
+    }
     if (Object.keys(patch).length) {
       // amount = 0 → only while nobody has typed a total in the meantime.
       await supabase.from("receipts").update(patch as never).eq("id", receiptId).eq("amount", 0);

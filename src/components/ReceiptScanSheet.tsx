@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { db } from "@/lib/supabase";
-import { scanReceipt, receiptNote, learnFromReceipt, type ReceiptItem } from "@/lib/receipt-scan";
+import { scanReceipt, receiptNote, learnFromReceipt, scanMismatch, type ReceiptItem } from "@/lib/receipt-scan";
 import { useStore } from "@/lib/store";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
@@ -37,18 +37,32 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
   const [items, setItems] = useState<Item[]>([]);
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
+  // Purchase date (YYYY-MM-DD for the <input type="date">), default today —
+  // the scan overwrites it with the date printed on the receipt.
+  const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const [rdate, setRdate] = useState(today());
   const [scanErr, setScanErr] = useState("");
+  const [mathWarn, setMathWarn] = useState("");
   const started = useRef(false);
 
   const scan = async (urls: string[]) => {
     if (!urls.length) return;
     setScanning(true);
     setScanErr("");
+    setMathWarn("");
     try {
       const scan = await scanReceipt(urls);
       setVendor(scan.vendor);
       setItems(scan.items);
       if (scan.total > 0) setAmount(scan.total.toFixed(2));
+      if (scan.date) setRdate(scan.date);
+      const expected = scanMismatch(scan);
+      if (expected !== null) {
+        setMathWarn(`${t("jobs.receiptMathWarn")} ($${expected.toFixed(2)} vs $${scan.total.toFixed(2)})`);
+      }
       const n = receiptNote(scan);
       if (n) setNote(n);
       if (!scan.items.length && !(scan.total > 0)) setScanErr(t("jobs.scannedReviewFields"));
@@ -101,7 +115,13 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
         org_id: user.org_id, // explicit — a missing org_id hides the row on refresh
         note: note.trim(),
         amount: Math.round(amt * 100) / 100,
-        receipt_date: new Date().toLocaleDateString(),
+        // The PURCHASE date (scanned off the receipt, editable above), stored
+        // in the same locale format the table has always used.
+        receipt_date: (() => {
+          const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(rdate);
+          const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
+          return (isNaN(d.getTime()) ? new Date() : d).toLocaleDateString();
+        })(),
         photo_url: paths[0] || "",
       };
       // `pages` may not be migrated — retry without it so the receipt still saves.
@@ -109,7 +129,7 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
       if (!result && paths.length > 1) result = await db.post<{ id: string }>("receipts", base);
       if (!result) return; // db.post toasted why; keep the sheet so they can retry
 
-      const learned = await learnFromReceipt({ vendor, items, total: amt }, job);
+      const learned = await learnFromReceipt({ vendor, items }, job);
 
       await useStore.getState().loadAll();
       useStore.getState().showToast(
@@ -171,6 +191,7 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
                 : t("jobs.attachPhotoAutoScan")}
         </div>
         {scanErr && !scanning && <div style={{ fontSize: 12.5, color: "var(--color-warning)", marginTop: 6 }}>{scanErr}</div>}
+        {mathWarn && !scanning && <div style={{ fontSize: 12.5, color: "var(--color-warning)", marginTop: 6 }}>{mathWarn}</div>}
 
         {items.length > 0 && !scanning && (
           <div style={{ marginTop: 10, border: "1px solid var(--color-border-dark)", borderRadius: 10, padding: "6px 10px", maxHeight: 220, overflowY: "auto" }}>
@@ -188,8 +209,16 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
 
         <div className="dim" style={{ fontSize: 12, marginTop: 10, marginBottom: 4 }}>Note</div>
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={scanning ? t("jobs.scanningShort") : t("jobs.noteVendor")} disabled={scanning} style={{ width: "100%" }} />
-        <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>Total paid</div>
-        <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="$" disabled={scanning} style={{ width: "100%" }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>Total paid</div>
+            <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="$" disabled={scanning} style={{ width: "100%" }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>{t("jobs.purchaseDate")}</div>
+            <input type="date" value={rdate} onChange={(e) => setRdate(e.target.value)} disabled={scanning} style={{ width: "100%" }} />
+          </div>
+        </div>
 
         <button className="bg" onClick={save} disabled={busy} style={{ width: "100%", padding: 12, marginTop: 12, fontFamily: "Oswald", fontSize: 16 }}>
           {saving ? "Saving…" : scanning ? t("jobs.scanningShort") : `Save receipt${parseFloat(amount) > 0 ? ` · $${parseFloat(amount).toFixed(2)}` : ""}`}
