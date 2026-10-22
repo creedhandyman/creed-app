@@ -1007,10 +1007,178 @@ button:focus-visible {
   padding-top: 4px;
 }
 
+/* ─── SIDE MENU (computers) ─────────────────────────
+   Auto / Left / Right on a wide screen (lib/nav-layout.ts → html.nav-side):
+   a labeled menu with every main screen, instead of the 5-tab bar. The page
+   is centered in the space beside it. `.sn-*` = VerticalNav's SideNav. */
+:root { --side-w: 232px; }
+.snav {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--side-w);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 10px 12px calc(10px + env(safe-area-inset-left));
+  border-right: 1px solid var(--color-border-dark);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.dark .snav { background: rgba(10, 10, 18, 0.92); }
+.light .snav { background: rgba(255, 255, 255, 0.92); border-right-color: #d5dce5; }
+.snav.r {
+  left: auto;
+  right: 0;
+  border-right: none;
+  border-left: 1px solid var(--color-border-dark);
+  padding: 14px calc(10px + env(safe-area-inset-right)) 12px 10px;
+}
+.light .snav.r { border-left-color: #d5dce5; }
+
+/* Reset the global button look (Oswald caps) for the menu's rows. */
+.snav button {
+  font-family: var(--font-body);
+  text-transform: none;
+  letter-spacing: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.sn-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 8px 16px;
+}
+.sn-brand img { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; }
+.sn-word b, .sn-word small { display: block; font-family: var(--font-heading); }
+.sn-word b { font-size: 23px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; }
+.sn-word small { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; margin-top: 3px; color: #3a9bff; }
+.light .sn-word small { color: #1565c0; }
+
+.sn-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.sn-label {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-dim);
+  padding: 16px 12px 6px;
+}
+.snav .sn-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  margin-bottom: 2px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.dark .snav .sn-item { color: #a3a9b8; }
+.light .snav .sn-item { color: #4b5263; }
+.dark .snav .sn-item:hover { background: rgba(255, 255, 255, 0.05); color: #eef1f7; }
+.light .snav .sn-item:hover { background: rgba(0, 0, 0, 0.045); color: #12141c; }
+.snav .sn-item:active { transform: scale(0.98); }
+/* Active row: tinted in the screen's own hue (VerticalNav TAB_COLOR → --tab). */
+.snav .sn-item.on, .snav .sn-item.on:hover { background: color-mix(in srgb, var(--tab) 16%, transparent); font-weight: 600; }
+.dark .snav .sn-item.on { color: #fff; }
+.light .snav .sn-item.on { color: #12141c; background: color-mix(in srgb, var(--tab) 13%, transparent); }
+.sn-item.on .sn-ic { color: var(--tab); }
+.sn-item.on::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--tab);
+}
+.sn-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sn-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #ff3d6e;
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.snav .sn-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-dark);
+}
+.light .snav .sn-user { border-color: #d5dce5; }
+.dark .snav .sn-user:hover { background: rgba(255, 255, 255, 0.05); }
+.light .snav .sn-user:hover { background: rgba(0, 0, 0, 0.04); }
+.sn-av {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-card-dark-3);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 13px;
+}
+.sn-av img { width: 100%; height: 100%; object-fit: cover; }
+/* Short laptop screens: tighter rows so the whole list fits without scrolling. */
+@media (max-height: 820px) {
+  .snav { padding-top: 10px; }
+  .sn-brand { padding-bottom: 10px; }
+  .snav .sn-item { min-height: 34px; margin-bottom: 1px; font-size: 14.5px; }
+  .sn-label { padding: 10px 12px 4px; }
+  .snav .sn-user { margin-top: 6px; padding: 6px 10px; }
+}
+.sn-who { flex: 1; min-width: 0; }
+.sn-who b, .sn-who small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sn-who b { font-size: 14px; font-weight: 600; }
+.sn-who small { font-size: 12px; color: var(--color-dim); }
+
+/* Page beside the menu: centered in the remaining space once that's wider
+   than the page (% = the body's width, so a scrollbar never overflows it). */
+.nav-side .mc {
+  margin-right: 0;
+  margin-left: calc(var(--side-w) + max(0px, (100% - var(--side-w) - 1200px) / 2));
+}
+.nav-side-r .mc {
+  margin-left: max(0px, (100% - var(--side-w) - 1200px) / 2);
+  margin-right: var(--side-w);
+}
+
 /* ─── PRINT ────────────────────────────────────────── */
 @media print {
-  .vnav, .no-print { display: none !important; }
-  .mc { margin-right: 0 !important; margin-bottom: 0 !important; }
+  .vnav, .snav, .no-print { display: none !important; }
+  .mc { margin-right: 0 !important; margin-left: 0 !important; margin-bottom: 0 !important; }
   body { background: #fff !important; color: #000 !important; }
 }
 

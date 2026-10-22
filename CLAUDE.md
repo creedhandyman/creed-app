@@ -952,6 +952,24 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Desktop side menu (2026-10-21)**: the nav pick is ONE store field,
+  `navMode` = auto | left | right | bottom (localStorage `c_navmode`; the old
+  `c_navb`/`c_navl` flags migrate: bottom → auto). `lib/nav-layout.ts`
+  `navLayout(mode, wide)` (wide = ≥1024px) decides the real layout: **auto =
+  labeled side menu on a computer, bottom bar on a phone** (the default);
+  left/right = side menu on a computer, the 56px icon rail on a phone;
+  bottom = bottom bar everywhere. ThemeProvider sets `html.nav-side`
+  (+ `nav-side-r`) / `nav-bottom` / `nav-left` from it; use
+  `useNavLayout()` (not the raw mode) for layout checks (Jobs' sticky bulk
+  bar does). The side menu = `SideNav` in VerticalNav.tsx (styles `.snav` /
+  `.sn-*` in globals.css): Creed badge → Home · Quote · Jobs · Schedule ·
+  Time, then Business (owner/manager: Customers / Payroll / Financials =
+  `openOps(tab)` deep links, Operations), then Tools (Quests, crew's Time
+  Off, Mileage, Crew Map + Flip Mode for admins, Fix-it, More), user card →
+  Settings. Active row is tinted in the screen's TAB_COLOR. The page is
+  centered in the space beside the menu; short screens (≤820px tall) get
+  tighter rows. Phones are unchanged.
+
 - **Dispatch Assistant — week route planner (2026-10-19)**: lives INSIDE
   Schedule → **Dispatch** tab (owner/manager): Schedule renders
   `screens/DispatchAssistant.tsx` above the manual "Needs scheduling" (Assign

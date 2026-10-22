@@ -33,6 +33,7 @@ import {
 } from "@/lib/recurring";
 import { stripAiHrsFromBlob } from "@/lib/ai-hours";
 import { useBackLayer } from "@/lib/back-layer";
+import { useNavLayout } from "@/lib/nav-layout";
 import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
 import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
@@ -143,7 +144,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const flipProjects = useStore((s) => s.flipProjects);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
-  const navBottom = useStore((s) => s.navBottom);
+  const navBottom = useNavLayout().layout === "bottom";
   // Every table has loaded at least once (or jobs themselves are in) — until
   // then an empty list is "not loaded yet", never "all done here" / "no jobs".
   const storeLoading = useStore((s) => s.loading);

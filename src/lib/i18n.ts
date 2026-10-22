@@ -223,6 +223,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.help": "Help",
     "nav.fixit": "Fix-it",
     "nav.flip": "Flip",
+    "nav.groupBusiness": "Business",
+    "nav.groupTools": "Tools",
 
     // Dashboard
     "dash.welcome": "Welcome",
@@ -1057,6 +1059,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "settings.roleEmp": "Role · Emp #",
     "settings.pushTitle": "Push notifications",
     "settings.pushInstallHint": "Add Creed to your home screen to get push alerts.",
+    "settings.navAuto": "Auto",
+    "settings.navAutoHint": "Auto: side menu on a computer, bottom bar on a phone.",
     "settings.navRight": "Right",
     "settings.navLeft": "Left",
     "settings.navBottom": "Bottom",
@@ -1786,6 +1790,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.help": "Ayuda",
     "nav.fixit": "Arreglos",
     "nav.flip": "Flip",
+    "nav.groupBusiness": "Negocio",
+    "nav.groupTools": "Herramientas",
 
     // Dashboard
     "dash.welcome": "Bienvenido",
@@ -2620,6 +2626,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "settings.roleEmp": "Rol · N.º de empleado",
     "settings.pushTitle": "Notificaciones push",
     "settings.pushInstallHint": "Agrega Creed a tu pantalla de inicio para recibir alertas push.",
+    "settings.navAuto": "Auto",
+    "settings.navAutoHint": "Auto: menú lateral en la computadora, barra abajo en el teléfono.",
     "settings.navRight": "Derecha",
     "settings.navLeft": "Izquierda",
     "settings.navBottom": "Abajo",

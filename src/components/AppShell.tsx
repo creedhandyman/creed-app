@@ -190,7 +190,7 @@ export default function AppShell() {
   return (
     <div style={{ minHeight: "100vh", background: darkMode ? "#0a0a0f" : "#f0f2f5" }}>
       <OfflineBanner />
-      <VerticalNav page={page} setPage={goToPage} isAdmin={isAdmin} />
+      <VerticalNav page={page} setPage={goToPage} isAdmin={isAdmin} opsTab={opsInitialTab} openOps={goToOps} openSettings={openSettingsNav} />
       <div className="mc" key={`${page}:${resetKey}`}>{renderPage()}</div>
       {/* The "quote" tip is mounted inside QuoteForge's hub (not here) so it
           doesn't float over the editor / inspection / Voice Walk sub-screens. */}

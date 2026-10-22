@@ -1,21 +1,22 @@
 "use client";
 import { useEffect } from "react";
 import { useStore } from "@/lib/store";
+import { useNavLayout } from "@/lib/nav-layout";
 import { DEFAULT_BRAND, isHex, normHex, brandInk, brandGrad, lighten, rgbTriplet } from "@/lib/brand";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const darkMode = useStore((s) => s.darkMode);
-  const navLeft = useStore((s) => s.navLeft);
-  const navBottom = useStore((s) => s.navBottom);
+  const { layout, right } = useNavLayout();
   const brandColor = useStore((s) => s.org?.brand_color);
   const brandColor2 = useStore((s) => s.org?.brand_color_2);
 
   useEffect(() => {
     const classes = [darkMode ? "dark" : "light"];
-    if (navBottom) classes.push("nav-bottom");
-    else if (navLeft) classes.push("nav-left");
+    if (layout === "bottom") classes.push("nav-bottom");
+    else if (layout === "side") classes.push(right ? "nav-side nav-side-r" : "nav-side");
+    else if (!right) classes.push("nav-left");
     document.documentElement.className = classes.join(" ");
-  }, [darkMode, navLeft, navBottom]);
+  }, [darkMode, layout, right]);
 
   // Per-org brand accent. Inline styles on <html> outrank the globals.css
   // :root / .light rules, so the brand color holds across the dark/light

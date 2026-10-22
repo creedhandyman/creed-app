@@ -78,6 +78,19 @@ function sv(key: string, value: unknown) {
   localStorage.setItem("c_" + key, JSON.stringify(value));
 }
 
+export type NavMode = "auto" | "left" | "right" | "bottom";
+const NAV_MODES: NavMode[] = ["auto", "left", "right", "bottom"];
+
+function initialNavMode(): NavMode {
+  const m = ld<string>("navmode", "");
+  if ((NAV_MODES as string[]).includes(m)) return m as NavMode;
+  // Before Auto existed the pick was two flags (c_navb / c_navl). Bottom was
+  // the default, so it becomes Auto (still the bottom bar on a phone); a
+  // left/right pick is kept.
+  if (ld("navb", true)) return "auto";
+  return ld("navl", false) ? "left" : "right";
+}
+
 /* ── Toast timing (module-level so a re-render never resets them) ── */
 // The ONE pending auto-hide. Cleared before every new toast so an earlier
 // toast's timer can never hide a later one mid-read.
@@ -106,11 +119,11 @@ interface AppState {
 
   // ui preferences
   darkMode: boolean;
-  navLeft: boolean;
-  navBottom: boolean;
+  /** Where the nav sits. "auto" = side menu on a computer, bottom bar on a
+   *  phone (lib/nav-layout.ts decides per screen width). */
+  navMode: NavMode;
   toggleDark: () => void;
-  toggleNavSide: () => void;
-  toggleNavBottom: () => void;
+  setNavMode: (m: NavMode) => void;
 
   // toast + confirm
   toast: { message: string; type: "success" | "error" | "info" | "warning"; visible: boolean };
@@ -393,8 +406,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   /* ── UI Preferences ── */
   darkMode: ld("dk", true),
-  navLeft: ld("navl", false),
-  navBottom: ld("navb", true),
+  navMode: initialNavMode(),
 
   toggleDark: () => {
     const next = !get().darkMode;
@@ -402,17 +414,9 @@ export const useStore = create<AppState>((set, get) => ({
     sv("dk", next);
   },
 
-  toggleNavBottom: () => {
-    const next = !get().navBottom;
-    set({ navBottom: next, navLeft: false });
-    sv("navb", next);
-    if (next) sv("navl", false);
-  },
-
-  toggleNavSide: () => {
-    const next = !get().navLeft;
-    set({ navLeft: next });
-    sv("navl", next);
+  setNavMode: (m) => {
+    set({ navMode: m });
+    sv("navmode", m);
   },
 
   /* ── Toast + Confirm ── */

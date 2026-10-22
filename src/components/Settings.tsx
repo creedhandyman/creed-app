@@ -39,10 +39,8 @@ export default function Settings({ onClose }: Props) {
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
   const toggleDark = useStore((s) => s.toggleDark);
-  const navLeft = useStore((s) => s.navLeft);
-  const navBottom = useStore((s) => s.navBottom);
-  const toggleNavSide = useStore((s) => s.toggleNavSide);
-  const toggleNavBottom = useStore((s) => s.toggleNavBottom);
+  const navMode = useStore((s) => s.navMode);
+  const setNavMode = useStore((s) => s.setNavMode);
 
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -230,15 +228,19 @@ export default function Settings({ onClose }: Props) {
           <span className="l">{t("settings.darkMode")}</span>
           <Sw on={darkMode} onTap={toggleDark} />
         </div>
-        <div className="drow">
+        {/* Wraps the picker under its label when four options don't fit (Spanish on a small phone). */}
+        <div className="drow" style={{ flexWrap: "wrap", rowGap: 6 }}>
           <span className="l">{t("settings.navigation")}</span>
-          <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
-            {[{ key: "right", label: t("settings.navRight") }, { key: "left", label: t("settings.navLeft") }, { key: "bottom", label: t("settings.navBottom") }].map((opt) => {
-              const isActive = opt.key === "bottom" ? navBottom : opt.key === "left" ? navLeft && !navBottom : !navLeft && !navBottom;
-              return (<button key={opt.key} onClick={() => { if (opt.key === "bottom") toggleNavBottom(); else if (opt.key === "left") { if (navBottom) toggleNavBottom(); toggleNavSide(); } else { if (navBottom) toggleNavBottom(); if (navLeft) toggleNavSide(); } }} style={{ padding: "4px 10px", fontSize: 13, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
+          <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", marginLeft: "auto" }}>
+            {([{ key: "auto", label: t("settings.navAuto") }, { key: "left", label: t("settings.navLeft") }, { key: "right", label: t("settings.navRight") }, { key: "bottom", label: t("settings.navBottom") }] as const).map((opt) => {
+              const isActive = navMode === opt.key;
+              return (<button key={opt.key} onClick={() => setNavMode(opt.key)} style={{ padding: "4px 8px", fontSize: 13, background: isActive ? "var(--color-primary)" : darkMode ? "#12121a" : "#fff", color: isActive ? "#fff" : "#888", border: `1px solid ${darkMode ? "#1e1e2e" : "#ddd"}`, fontFamily: "Oswald" }}>{opt.label}</button>);
             })}
           </div>
         </div>
+        {navMode === "auto" && (
+          <div className="dim" style={{ fontSize: 12.5, padding: "2px 0 6px" }}>{t("settings.navAutoHint")}</div>
+        )}
         <div className="drow">
           <span className="l">{t("settings.language")} / Idioma</span>
           <div style={{ display: "flex", borderRadius: 6, overflow: "hidden" }}>
