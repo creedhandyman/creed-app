@@ -1316,6 +1316,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   items only). Inspection blobs store `type`, `inspected_by/at`, sqft/W/L.
   Report (`printInspection`): walk date, type, severity counts, worst-first
   Work Needed punch list with checkboxes, then the full condition record.
+- **Fence inspection (2026-10-22, c2f0ec0)**: inspection type `fence`
+  (Inspector `FENCE_AREAS` / `fenceItems`): Front/Back/Left/Right fence runs,
+  Gate 1/2, Whole Fence (facts that price the job). Statuses keep the S/F/P/D
+  codes but READ Good / Worn / Repair / Replace (`insp.fenceCond*` keys,
+  parser condLabel, `FENCE_VOICE_STATUS` appended to the Voice Walk prompt,
+  printInspection `isFence`). Size card = height × length: `room.width` is the
+  HEIGHT, `room.length` the run length (ft), sqft = fence face; the parser
+  prints "Fence Run: N linear feet, H ft tall" instead of Room Size. Fence chip
+  rules sit at the TOP of getPresets ("Pickets/Panels" would hit /panel/).
 - **Crew size + estimated days (2026-10-08)**: QuoteForge's pricing row has a
   **Crew** picker (Auto · 1–4; rooms blob `data.crewSize`, null = Auto). It
   NEVER changes price — labor hours are TOTAL work hours — only the PDF's per-
