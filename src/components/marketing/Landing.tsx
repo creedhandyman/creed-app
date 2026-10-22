@@ -62,6 +62,11 @@ export default function Landing() {
               <Link className="btn btn-ghost btn-lg" href="/features"><Icon name="start" size={18} /> See it in action</Link>
             </div>
             <div className="hnote"><Icon name="check" size={14} /> No credit card to start · set up in minutes</div>
+            <a href="https://play.google.com/store/apps/details?id=com.creedhm.app" target="_blank" rel="noopener"
+              aria-label="Get Creed Handy Manager on Google Play" style={{ display: "inline-block", marginTop: 6, marginLeft: -12 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/google-play-badge.png" alt="Get it on Google Play" style={{ height: 58, width: "auto", display: "block" }} />
+            </a>
           </div>
           <div className="heromock">
             <div className="device"><div className="scr">
@@ -174,9 +179,7 @@ export default function Landing() {
         <div className="lead" style={{ marginTop: 18 }}>Built by a handyman, for handymen. Start free today.</div>
         <div className="hbtns" style={{ justifyContent: "center", marginTop: 30 }}>
           <Link className="btn btn-glow btn-lg" href="/signin?mode=signup"><Icon name="rocket" size={18} /> Get Started Free</Link>
-          {/* Not a link until the Play listing is live (in Google review since
-              2026-10-15) — then point Android at the store. */}
-          <span className="btn btn-ghost btn-lg" aria-disabled="true" style={{ cursor: "default", filter: "none", transform: "none", opacity: 0.75 }}><Icon name="download" size={18} /> Android App Coming Soon</span>
+          <a className="btn btn-ghost btn-lg" href="https://play.google.com/store/apps/details?id=com.creedhm.app" target="_blank" rel="noopener"><Icon name="download" size={18} /> Get the Android App</a>
         </div>
       </div></section>
     </MarketingShell>
