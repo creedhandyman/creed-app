@@ -149,3 +149,31 @@ export function legStartTimes<T extends MileageTrip & { start_time?: string | nu
     return arriveBy(stops.find((s) => s.key === to));
   });
 }
+
+/**
+ * Which suggested legs are already in the log. Each logged trip covers ONE
+ * leg: same day + same destination (address compared loosely). A trip whose
+ * miles match a leg's estimate (±0.2 — e.g. added from Suggested trips before)
+ * claims that leg first; any other trip to the same place that day — a Work
+ * Mode GPS drive, odometer or typed miles — then covers the next open leg
+ * there, whatever its miles, so the drive isn't logged twice.
+ * Returns the logged miles per leg (null = not logged yet).
+ */
+export function matchLoggedLegs(
+  legs: { to: string; miles: number }[],
+  logged: { key: string; date: string; to: string; miles: number }[],
+  date: string,
+): (number | null)[] {
+  const out: (number | null)[] = legs.map(() => null);
+  const used = new Set<string>();
+  const pool = logged.filter((e) => e.date === date);
+  for (const exact of [true, false]) {
+    legs.forEach((leg, i) => {
+      if (out[i] != null) return;
+      const hit = pool.find((e) => !used.has(e.key) && norm(e.to) === norm(leg.to)
+        && (!exact || Math.abs(e.miles - leg.miles) < 0.2));
+      if (hit) { used.add(hit.key); out[i] = hit.miles; }
+    });
+  }
+  return out;
+}

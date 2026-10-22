@@ -9,7 +9,7 @@ import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import CountUp from "@/components/CountUp";
-import { groupTripsByDay, dayLabel, legStartTimes, clockOf, formatClock, clockMinutes, type LegStart, type TripDay } from "@/lib/mileage-days";
+import { groupTripsByDay, dayLabel, legStartTimes, clockOf, formatClock, clockMinutes, matchLoggedLegs, type LegStart, type TripDay } from "@/lib/mileage-days";
 
 interface MileageEntry {
   id: string;
@@ -57,6 +57,8 @@ function localYmd(d: Date): string {
 
 type SuggestedLeg = {
   from: string; to: string; miles: number; added: boolean;
+  /** miles already in the log for this leg (a Work Mode drive, an earlier add) */
+  loggedMiles?: number;
   /** odometer readings typed for this leg — replace the estimate when set */
   odo?: { start: string; end: string };
 };
@@ -146,10 +148,10 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
         if (!hadCache) await new Promise((r) => setTimeout(r, 1100));
       }
 
-      // A leg already in the log (same day, same destination, ~same miles —
-      // e.g. from an earlier "Add all") shows as logged so re-finding the
-      // day can't double-post it. Each logged trip covers ONE leg. Rows this
-      // card just saved count too, unless the log already has them (by id).
+      // A leg already in the log — same day + same destination, whatever the
+      // miles (a Work Mode GPS drive counts) — shows as logged so re-finding
+      // or "Add all" can't post it twice (lib/mileage-days matchLoggedLegs).
+      // Rows this card just saved count too, unless the log already has them.
       const logNow = entriesRef.current;
       const logIds = new Set(logNow.map((e) => e.id));
       const candidates = [
@@ -158,13 +160,6 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
           .filter((p) => !p.id || !logIds.has(p.id))
           .map((p, i) => ({ key: `posted:${i}`, date: p.date, to: p.to, miles: p.miles })),
       ];
-      const usedEntries = new Set<string>();
-      const alreadyLogged = (to: string, miles: number) => {
-        const hit = candidates.find((e) => !usedEntries.has(e.key) && e.date === date && e.to === to
-          && Math.abs(e.miles - miles) < 0.2);
-        if (hit) usedEntries.add(hit.key);
-        return !!hit;
-      };
 
       const out: SuggestedLeg[] = [];
       let unlocated = 0;
@@ -174,8 +169,11 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
         if (!a || !b) { unlocated++; continue; }
         const miles = Math.round(haversineMiles(a.lat, a.lng, b.lat, b.lng) * ROAD_FACTOR * 10) / 10;
         if (miles < 0.2) continue; // same block — not a loggable drive
-        out.push({ from: deduped[i - 1].addr, to: deduped[i].addr, miles, added: alreadyLogged(deduped[i].addr, miles) });
+        out.push({ from: deduped[i - 1].addr, to: deduped[i].addr, miles, added: false });
       }
+      matchLoggedLegs(out, candidates, date).forEach((m, i) => {
+        if (m != null) { out[i].added = true; out[i].loggedMiles = m; }
+      });
       setLegs(out);
       if (unlocated > 0) setNote(`${unlocated} ${t("loc.legsSkipped")}`);
       if (out.length === 0 && unlocated === 0) setNote(t("loc.allClose"));
@@ -204,8 +202,8 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
       total_miles: odo ?? leg.miles,
     });
     if (!saved) return false;
-    postedRef.current.push({ id: saved[0]?.id, date, to: leg.to, miles: leg.miles });
-    setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, added: true } : l)) : prev);
+    postedRef.current.push({ id: saved[0]?.id, date, to: leg.to, miles: odo ?? leg.miles });
+    setLegs((prev) => prev ? prev.map((l, i) => (i === idx ? { ...l, added: true, loggedMiles: odo ?? leg.miles } : l)) : prev);
     onAdded();
     return true;
   };
@@ -310,6 +308,9 @@ function SuggestedTrips({ entries, loaded, onAdded }: { entries: MileageEntry[];
             </div>
             {(() => {
               const odo = leg.odo ? odoMiles(leg.odo.start, leg.odo.end) : null;
+              if (leg.added && leg.loggedMiles != null) {
+                return <div style={{ fontSize: 12, color: "var(--color-success)" }}>{leg.loggedMiles.toFixed(1)} mi in your log</div>;
+              }
               return odo != null
                 ? <div style={{ fontSize: 12, color: "var(--color-success)" }}>{odo.toFixed(1)} mi (odometer)</div>
                 : <div className="dim" style={{ fontSize: 12 }}>~{leg.miles.toFixed(1)} mi ({t("loc.estimated")})</div>;

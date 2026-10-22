@@ -75,3 +75,22 @@ describe("legStartTimes", () => {
     expect(formatClock(clockMinutes("12:05 PM")!)).toBe("12:05 PM");
   });
 });
+
+describe("matchLoggedLegs", () => {
+  const { matchLoggedLegs } = jest.requireActual("@/lib/mileage-days");
+  const d = "2026-10-21";
+  test("a Work Mode GPS trip covers the leg whatever its miles", () => {
+    expect(matchLoggedLegs([{ to: "12 Oak St", miles: 5.2 }], [{ key: "a", date: d, to: "12 oak st.", miles: 7.9 }], d)).toEqual([7.9]);
+  });
+  test("other days / places don't count", () => {
+    expect(matchLoggedLegs([{ to: "12 Oak St", miles: 5 }], [
+      { key: "a", date: "2026-10-20", to: "12 Oak St", miles: 5 },
+      { key: "b", date: d, to: "9 Elm", miles: 5 },
+    ], d)).toEqual([null]);
+  });
+  test("one trip covers one leg; exact miles claim first", () => {
+    const legs = [{ to: "X", miles: 5 }, { to: "Y", miles: 3 }, { to: "X", miles: 9 }];
+    expect(matchLoggedLegs(legs, [{ key: "a", date: d, to: "X", miles: 9.1 }], d)).toEqual([null, null, 9.1]);
+    expect(matchLoggedLegs(legs, [{ key: "a", date: d, to: "X", miles: 9.1 }, { key: "b", date: d, to: "X", miles: 6 }], d)).toEqual([6, null, 9.1]);
+  });
+});

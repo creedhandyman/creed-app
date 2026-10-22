@@ -1439,7 +1439,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   type miles + start/end odometer; Suggested trips has per-leg **Odo**
   readings and **Add a trip that's not listed** (from/to, optional start time,
   miles or odometer, for the picked date — the old Manual Entry card is gone); Trip Log rows have an edit pencil to add odometer
-  readings later. A save that fails offline `holdDrive`s the trip (`stopped`,
+  readings later. Suggested legs already in the log are shown as
+  logged ("N mi in your log") by `mileage-days.ts matchLoggedLegs`: same day +
+  same destination, ANY miles (a Work Mode GPS drive counts; exact-miles rows
+  claim first; one trip covers one leg) — so Add all can't double-log a drive. A save that fails offline `holdDrive`s the trip (`stopped`,
   never resumes GPS) so the miles survive closing the app and the next
   Stop/End saves them. `WaypointTracker` (geo.ts) was removed.
 
