@@ -36,6 +36,8 @@ import type {
 // fetch. Module-level (not store state) so the in-flight tracking doesn't
 // trigger re-renders. Cleared in the finally() after the batch resolves.
 let loadAllInFlight: Promise<void> | null = null;
+// One more load queued behind the in-flight one (see loadAll).
+let loadAllTrailing: Promise<void> | null = null;
 
 // Throttle offline-snapshot writes. loadAll runs every 15s; persisting the
 // full data set that often is wasteful, so we write at most once per 30s.
@@ -491,7 +493,21 @@ export const useStore = create<AppState>((set, get) => ({
     // queries. With it, overlapping callers share the in-flight
     // promise and we run the batch exactly once. Module-level (vs
     // store state) so the guard doesn't trigger re-renders.
-    if (loadAllInFlight) return loadAllInFlight;
+    // BUT a load already running may have sent its queries before the
+    // caller's write landed (e.g. the 15s poll was mid-flight when QuoteForge
+    // saved a new job) — joining it hands back the OLD list, and the new job
+    // only appeared after a manual refresh. So a caller arriving mid-load
+    // gets ONE fresh load queued behind it, shared by everyone who arrives
+    // meanwhile (at most two batches, never a pile-up).
+    if (loadAllInFlight) {
+      if (!loadAllTrailing) {
+        loadAllTrailing = loadAllInFlight.catch(() => {}).then(() => {
+          loadAllTrailing = null;
+          return get().loadAll();
+        });
+      }
+      return loadAllTrailing;
+    }
     loadAllInFlight = (async () => {
     const orgId = get().user?.org_id;
     const userId = get().user?.id;

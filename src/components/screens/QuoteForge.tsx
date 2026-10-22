@@ -8,7 +8,7 @@ import Coachmark from "../Coachmark";
 import { buildRenderPrompt } from "@/lib/render-prompt";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
-import type { Room, RoomItem, Material, JobDiscount } from "@/lib/types";
+import type { Room, RoomItem, Material, JobDiscount, Job } from "@/lib/types";
 import { itemInTier, itemTiers, sharedSuppliesLines, type TierKey } from "@/lib/tiers";
 import { buildAssistJobContext, type AssistInspection } from "@/lib/assist-context";
 import { applyAssistOps, optionDiffSummary, type AssistAdd, type AssistPatch } from "@/lib/assist-ops";
@@ -1966,6 +1966,14 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       const rows = await db.post<{ id: string }>("jobs", jobData);
       if (rows === null) return null;
       savedId = rows[0]?.id ?? null;
+    }
+    // Put the saved job in the store right away, so Jobs shows it even if
+    // the refresh below comes back late or a table read blips.
+    if (savedId) {
+      const st = useStore.getState();
+      const prev = st.jobs.find((j) => j.id === savedId);
+      const merged = { ...(prev || { id: savedId, org_id: user.org_id, created_at: new Date().toISOString() }), ...jobData } as Job;
+      useStore.setState({ jobs: prev ? st.jobs.map((j) => (j.id === savedId ? merged : j)) : [merged, ...st.jobs] });
     }
     useStore.getState().showToast(t(editingId ? "qf.jobUpdated" : "qf.jobCreated") + ": " + prop, "success");
 
