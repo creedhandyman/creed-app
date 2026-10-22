@@ -8,6 +8,7 @@ import { profitSnapshot, makeInRange, makeEntryPay } from "@/lib/financials";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
+import QuickBooksExportSheet from "@/components/QuickBooksExportSheet";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
 
@@ -26,6 +27,9 @@ export default function Financials({ setPage, embedded }: { setPage: (p: string)
   const receipts = useStore((s) => s.receipts);
   const darkMode = useStore((s) => s.darkMode);
   const org = useStore((s) => s.org);
+  const user = useStore((s) => s.user);
+  const [qbOpen, setQbOpen] = useState(false);
+  const canExport = user?.role === "owner" || user?.role === "manager";
 
   const [range, setRange] = useState<Range>("month");
   const [printing, setPrinting] = useState(false);
@@ -361,6 +365,13 @@ export default function Financials({ setPage, embedded }: { setPage: (p: string)
           ? <div className="row mb" style={{ justifyContent: "flex-end", alignItems: "center" }}>{printBtn}</div>
           : <TopBar title="Financials" icon="trending" color="#10b981" right={printBtn} />;
       })()}
+
+      {canExport && (
+        <button className="bo mb" onClick={() => setQbOpen(true)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, padding: "6px 12px" }}>
+          <Icon name="download" size={14} /> {t("qb.open")}
+        </button>
+      )}
+      {qbOpen && <QuickBooksExportSheet onClose={() => setQbOpen(false)} />}
 
       {/* The month in one plain sentence */}
       <div className="cd mb" style={{ padding: 14, fontSize: 16, lineHeight: 1.45, fontWeight: 500 }}>
