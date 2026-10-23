@@ -13,6 +13,7 @@ const SECTIONS: { h: string; p: string }[] = [
   { h: "How we use it", p: "To provide the service — generate quotes, schedule crews, process payments, and send job notifications. We do not sell your data, and we don't use your business records to train models for anyone else." },
   { h: "Text messages", p: "If you give us your mobile number, we may send service-related text messages (job and appointment updates, estimate and invoice links, secure sign-in links, and review requests). Consent to receive texts is collected when you provide your number — for example, the consent checkbox on the estimate approval page. Message frequency varies with your service activity; message and data rates may apply. Reply STOP to opt out at any time, or HELP for help. No mobile information will be shared with third parties or affiliates for marketing or promotional purposes; text messaging originator opt-in data and consent are not shared with any third parties." },
   { h: "Service providers", p: "We rely on trusted processors to operate: Supabase (database, authentication, file storage), Stripe (payments — handled in your own connected account), and AI providers (Anthropic, OpenAI) to generate quotes, transcriptions, and renders. Each processes data only to deliver that feature." },
+  { h: "Advertising measurement", p: "Our public marketing pages (the creedhm.com home, features, pricing and sign-in pages) use the Meta Pixel so we can tell whether our Facebook and Instagram ads work. It records page visits and whether a visitor went on to create an account or start a free trial, and Meta may use cookies to connect that to its own ad reports. It is not loaded inside the app, on quote, invoice or customer portal pages, or on your business pages, so your business and customer records are never shared with Meta. You can limit ad tracking in your Facebook and Instagram ad settings or your browser." },
   { h: "Payments", p: "Card payments are processed by Stripe through your own connected Stripe account. We never see or store full card numbers." },
   { h: "Data retention & deletion", p: "Your data is kept while your account is active. You can request export or deletion of your account and its data at any time by contacting us." },
   { h: "Security", p: "Data is encrypted in transit, access is scoped per organization, and we follow industry-standard practices to protect it. No method is 100% secure, but we work to keep your information safe." },
@@ -25,7 +26,7 @@ export default function PrivacyPage() {
       <div className="phead"><div className="wrap">
         <div className="kick">Legal</div>
         <h1 className="h1">Privacy <span className="g">Policy</span></h1>
-        <div className="lead">Plain-language summary of what we collect and how it&apos;s used. Last updated June 2026.</div>
+        <div className="lead">Plain-language summary of what we collect and how it&apos;s used. Last updated October 2026.</div>
       </div></div>
       <div className="wrap" style={{ maxWidth: 800, padding: "20px 24px 80px" }}>
         {SECTIONS.map((s) => (

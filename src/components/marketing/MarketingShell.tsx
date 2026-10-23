@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
+import MetaPixel from "./MetaPixel";
 
 /** Single swappable product name (wordmark + titles + footer). */
 export const PRODUCT_NAME = "Creed Handy Manager";
@@ -75,6 +76,7 @@ export default function MarketingShell({ children }: { children: React.ReactNode
   }, [path]);
   return (
     <div className="mkt">
+      <MetaPixel />
       <nav>
         <div className="wrap nav">
           <Link href="/" aria-label="Creed Handy Manager home"><Brand /></Link>

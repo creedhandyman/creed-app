@@ -8,6 +8,7 @@ import Grizz from "./Grizz";
 import { TRADE_IDS, tradeConfig, tradePatch, tradeName, tradeStarterItems, tradeUnits } from "@/lib/trades";
 import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
 import { getLang, setLang, t } from "@/lib/i18n";
+import { pixelEvent } from "@/lib/meta-pixel";
 
 /**
  * Fast onboarding led by Grizz, the handyman-bear mascot. Owners: 1 business
@@ -137,6 +138,8 @@ export default function Onboarding() {
       });
       if (!profileResult?.length) { setErr(t("ob.errProfile")); setSaving(false); return; }
 
+      // Ad measurement: a new business started its free trial (Meta Pixel).
+      pixelEvent("StartTrial", { value: 0, currency: "USD" });
       setCreatedBiz({ org: { ...org, ...tp }, profile: profileResult[0] });
       setSaving(false);
       setStepIdx(2);

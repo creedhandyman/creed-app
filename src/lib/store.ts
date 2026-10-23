@@ -1,6 +1,7 @@
 "use client";
 import { create } from "zustand";
 import { supabase, db } from "./supabase";
+import { pixelEvent } from "./meta-pixel";
 import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
 import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPending, isFlushing } from "./offline-queue";
 import { needsServerCheck, serverVerdict, isLocalClockOut, isCloseWrite } from "./clock-sync";
@@ -319,6 +320,9 @@ export const useStore = create<AppState>((set, get) => ({
     if (!data.user) return "Signup failed";
 
     if (data.user.identities?.length === 0) return "Email already registered";
+
+    // Ad measurement: a new account was created (Meta Pixel, marketing funnel only).
+    pixelEvent("CompleteRegistration");
 
     // If email confirmation is required in Supabase, session will be null
     if (!data.session) return "CHECK_EMAIL";
