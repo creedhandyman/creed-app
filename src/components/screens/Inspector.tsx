@@ -9,6 +9,7 @@ import AiNote from "../AiNote";
 import CameraModal from "../CameraModal";
 import VoiceWalk, { type VoiceWalkResult, type VoiceWalkRoomStatus } from "../VoiceWalk";
 import { aiParseVoiceWalkRoom } from "@/lib/parser";
+import { spokenDims } from "@/lib/voice-measure";
 import { tradeConfig, resolvePrimaryTrade } from "@/lib/trades";
 import VoiceWalkTip from "../VoiceWalkTip";
 // Aliased: the inspection-type chip loop already uses `t` as its param name.
@@ -938,6 +939,20 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
         }
       } else {
         console.warn(`[Inspector] No audio blob for "${roomName}" (size ${result.audioBlob?.size || 0}B); using partial transcript only`);
+      }
+
+      // A size said out loud ("12 by 14", "6 foot fence, 120 feet long")
+      // fills the size boxes — only the ones still empty, so typed wins.
+      const dims = spokenDims(transcript, inspectionType === "fence" ? "fence" : "room");
+      if (dims) {
+        setRoomData((prev) => prev.map((r, ri) => {
+          if (ri !== roomIdx) return r;
+          const width = r.width || dims.width || 0;
+          const length = r.length || dims.length || 0;
+          if (width === (r.width || 0) && length === (r.length || 0) && !(dims.sqft && !r.sqft)) return r;
+          const sqft = width && length ? +(width * length).toFixed(1) : (r.sqft || dims.sqft || 0);
+          return { ...r, width: width || undefined, length: length || undefined, sqft };
+        }));
       }
 
       if (!transcript && result.photos.length === 0) {
