@@ -651,10 +651,6 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
      down and fold this segment's audio into the room's accumulated chunks.
   ────────────────────────────────────────────────────────────────── */
   useEffect(() => {
-    if (autoStart) setInspecting(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  useEffect(() => {
     if (inspecting) {
       beginSegment();
       startCameraAndRecorder();
@@ -754,6 +750,14 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
     setPendingTyped("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx]);
+
+  // autoStart: turn the camera + mic on as the screen opens. Must sit AFTER
+  // the force-pause effect above — that one also runs on mount and its
+  // setInspecting(false) would otherwise win and leave a Start button.
+  useEffect(() => {
+    if (autoStart) setInspecting(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ── Auto-tick checklist items as they're mentioned ──────────────── */
   useEffect(() => {
