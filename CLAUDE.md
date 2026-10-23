@@ -963,6 +963,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `quickDesc`; the user reviews, then Generate. Phone back closes the walk
   (layer re-armed). The separate "Talk it through" DictateButton was removed
   (owner: redundant next to Voice Walk) and its component deleted.
+  **Quote sub-screen headers unified (2026-10-23)**: every QuoteForge
+  sub-screen (Quick Quote, From Template, Upload Report, Manual / New
+  Service, Building Quote, the editor) + Inspector (areas / room / review) +
+  VoiceWalk use `<TopBar onBack>`; the icon-tile colour = the hub card that
+  opens it (`QF_HUE` in QuoteForge: Quick Quote gold, inspection + Voice Walk
+  green #3ee08f, Upload Report blue, templates violet).
 
 - **Schedule alerts + phone-calendar feed (2026-10-23)**: (1) **Alerts** —
   every client schedule write (Schedule quick-add/edit/delete, Dispatch

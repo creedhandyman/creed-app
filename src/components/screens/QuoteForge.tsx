@@ -61,6 +61,10 @@ import ServiceTemplates, { CategoryField } from "../ServiceTemplates";
 import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, type ServiceTemplate } from "@/lib/service-templates";
 
 
+/** Sub-screen header colours = the hub card that opens them (Quick Quote gold,
+ *  Full Inspection green, Upload Report blue, From Template violet). */
+const QF_HUE = { gold: "#f5b400", green: "#3ee08f", blue: "#2e8bff", violet: "#9d4edd" } as const;
+
 // Compress image for AI processing — aggressive for mobile (S23 Ultra = 200MP)
 async function compressImage(file: File, maxSize = 800): Promise<string> {
   return new Promise((resolve) => {
@@ -2420,10 +2424,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
   if (mode === "template")
     return (
       <div className="fi">
-        <div className="row mb" style={{ alignItems: "center", gap: 8 }}>
-          <button className="bo" onClick={() => setMode(null)} style={{ padding: "4px 11px" }}>←</button>
-          <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19, letterSpacing: ".5px", textTransform: "uppercase" }}>From Template</span>
-        </div>
+        <TopBar title="From Template" icon="briefcase" color={QF_HUE.violet} onBack={() => setMode(null)} />
         <p className="dim" style={{ fontSize: 12.5, margin: "-4px 2px 10px" }}>
           The services you offer. Tap one to start a quote — star the ones you use most, sort them into categories, and add more services from inside any quote.
         </p>
@@ -2478,11 +2479,8 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
   if (mode === "quick")
     return (
       <div className="fi">
-        <div className="row mb">
-          {/* Disabled mid-build: a running AI parse would still land on this screen. */}
-          <button className="bo" disabled={parsing} style={parsing ? { opacity: 0.4 } : undefined} onClick={exitQuick}>←</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-accent-red)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="camera" size={18} color="var(--color-accent-red)" /> {t("qf.quickQuote")}</h2>
-        </div>
+        {/* Back is ignored mid-build: a running AI parse would still land on this screen. */}
+        <TopBar title={t("qf.quickQuote")} icon="quote" color={QF_HUE.gold} onBack={() => { if (!parsing) exitQuick(); }} />
 
         {/* Property + Client */}
         <div className="cd mb">
@@ -2692,10 +2690,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
   if (mode === "paste")
     return (
       <div className="fi">
-        <div className="row mb">
-          <button className="bo" onClick={() => setMode(null)}>←</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>Parse Report</h2>
-        </div>
+        <TopBar title="Upload Report" icon="doc" color={QF_HUE.blue} onBack={() => setMode(null)} />
         <div className="cd">
           <textarea
             value={text}
@@ -2745,10 +2740,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
   if (mode === "manual" && !rooms.length)
     return (
       <div className="fi">
-        <div className="row mb">
-          <button className="bo" onClick={() => templateEdit ? exitEditor() : setMode(null)}>←</button>
-          <h2 style={{ fontSize: 20, color: templateEdit ? "var(--color-violet)" : "var(--color-warning)" }}>{templateEdit ? "New Service" : "Manual Quote"}</h2>
-        </div>
+        <TopBar
+          title={templateEdit ? "New Service" : "Manual Quote"}
+          icon={templateEdit ? "briefcase" : "edit"}
+          color={templateEdit ? QF_HUE.violet : QF_HUE.gold}
+          onBack={() => templateEdit ? exitEditor() : setMode(null)}
+        />
         {templateBanner}
         {!templateEdit && <div className="cd mb">
           <CustomerPicker
@@ -2777,10 +2774,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
   if ((parsing || inspParseFailed) && rooms.length === 0) {
     return (
       <div className="fi">
-        <div className="row mb">
-          <button className="bo" onClick={exitBuilding}>←</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="sparkle" size={18} color="var(--color-primary)" /> Building Quote</h2>
-        </div>
+        <TopBar title="Building Quote" icon="sparkle" color={QF_HUE.gold} onBack={exitBuilding} />
         <div className="cd">
           {parsing ? (
             <AiLoadingDisplay status={parseStatus || "Processing inspection..."} />
@@ -2806,13 +2800,13 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
   return (
     <div className="fi">
       {/* Header */}
-      <div className="row mb">
-        <button className="bo" onClick={exitEditor}>←</button>
-        <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="quote" size={18} color="var(--color-primary)" /> {t("qf.quoteTitle")}</h2>
-        <span style={{ fontSize: 12 }} className="dim">
-          ${rate}/hr{laborRate && laborRate > 0 ? " (override)" : ""}
-        </span>
-      </div>
+      <TopBar
+        title={templateEdit ? "Service" : t("qf.quoteTitle")}
+        icon={templateEdit ? "briefcase" : "quote"}
+        color={templateEdit ? QF_HUE.violet : QF_HUE.gold}
+        onBack={exitEditor}
+        right={<span style={{ fontSize: 12 }} className="dim">${rate}/hr{laborRate && laborRate > 0 ? " (override)" : ""}</span>}
+      />
 
       {editDraftOffer && editDraftOffer.id === editingId && (
         <div className="cd mb" style={{ border: "1px solid rgba(245,180,0,.55)", background: "rgba(245,180,0,.08)" }}>

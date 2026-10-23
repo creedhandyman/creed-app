@@ -1,4 +1,5 @@
 "use client";
+import TopBar from "@/components/TopBar";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
@@ -968,21 +969,18 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       />
 
       {/* Header */}
-      <div className="row mb" style={{ justifyContent: "space-between" }}>
-        <button
-          className="bo"
-          disabled={uploading > 0}
-          onClick={() => { stopCameraAndRecorder(); onCancel(); }}
-          title={uploading > 0 ? "Wait for photo upload to finish…" : "Cancel"}
-          style={{ fontSize: 14, padding: "4px 8px", opacity: uploading > 0 ? 0.5 : 1 }}
-        >← Cancel</button>
-        <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Icon name="mic" size={18} color="var(--color-primary)" strokeWidth={2} /> Voice Walk
-        </h2>
-        <span className="dim" style={{ fontSize: 13 }}>
-          Room {currentIdx + 1}/{rooms.length}
-        </span>
-      </div>
+      {/* Back waits while a photo is still uploading (it would be lost). */}
+      <TopBar
+        title="Voice Walk"
+        icon="mic"
+        color="#3ee08f"
+        backLabel="Cancel"
+        onBack={() => {
+          if (uploading > 0) { useStore.getState().showToast("Wait for the photo upload to finish…", "info"); return; }
+          stopCameraAndRecorder(); onCancel();
+        }}
+        right={rooms.length > 1 ? <span className="dim" style={{ fontSize: 13 }}>Room {currentIdx + 1}/{rooms.length}</span> : undefined}
+      />
 
       {/* Progress strip — every room with its status. Hidden in
           single-room mode (Inspector per-room mic integration). */}

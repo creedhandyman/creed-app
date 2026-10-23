@@ -1,4 +1,5 @@
 "use client";
+import TopBar from "@/components/TopBar";
 import { apiFetch } from "@/lib/api";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
@@ -1244,12 +1245,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
   if (step === "rooms") {
     return (
       <div className="fi">
-        <div className="row mb">
-          <button className="bo" onClick={leaveWalkthrough}>←</button>
-          <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Icon name="search" size={18} color="var(--color-primary)" />{isEditing ? tr("insp.editInspection") : tr("insp.newInspection")}
-          </h2>
-        </div>
+        <TopBar title={isEditing ? tr("insp.editInspection") : tr("insp.newInspection")} icon="search" color="#3ee08f" onBack={leaveWalkthrough} />
 
         {/* Linked-quote warning — surfaces in edit mode when one or more
             quotes were previously generated from this inspection. The
@@ -1652,11 +1648,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
         )}
 
         {/* Header */}
-        <div className="row mb" style={{ justifyContent: "space-between" }}>
-          <div className="row">
-            <button className="bo" onClick={() => setStep("rooms")} style={{ fontSize: 14, padding: "4px 8px" }}>←</button>
-            <h2 style={{ fontSize: 20, color: "var(--color-primary)" }}>{room.name}</h2>
-          </div>
+        <TopBar title={room.name} icon="search" color="#3ee08f" onBack={() => setStep("rooms")} right={
           <div className="row" style={{ gap: 8 }}>
             {/* Per-room voice walk: tap to open a one-continuous-recording
                 + camera + checklist panel for THIS room. AI fills the
@@ -1687,7 +1679,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
               {currentRoomIdx + 1} / {roomData.length}
             </span>
           </div>
-        </div>
+        } />
 
         {/* Upload indicator */}
         {uploadCount > 0 && (
@@ -2128,12 +2120,7 @@ export default function Inspector({ onComplete, onCancel, darkMode, editing, exi
      ═══════════════════════════════════ */
   return (
     <div className="fi">
-      <div className="row mb">
-        <button className="bo" onClick={() => setStep("inspect")} style={{ fontSize: 14, padding: "4px 8px" }}>← Edit</button>
-        <h2 style={{ fontSize: 20, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Icon name="search" size={18} color="var(--color-primary)" />Inspection Review
-        </h2>
-      </div>
+      <TopBar title="Inspection Review" icon="search" color="#3ee08f" onBack={() => setStep("inspect")} />
 
       {/* Property */}
       <div className="cd mb">
