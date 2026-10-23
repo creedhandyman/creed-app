@@ -952,6 +952,36 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Schedule alerts + phone-calendar feed (2026-10-23)**: (1) **Alerts** —
+  every client schedule write (Schedule quick-add/edit/delete, Dispatch
+  Apply plan, Jobs delete-job) builds notices with
+  `lib/schedule-notify-client.ts noticesFor(before, after)` → pure
+  `lib/schedule-notify.ts scheduleNotices` (tested): crew = note 👷 list +
+  the job's requested tech; added → "You're scheduled", moved/re-timed →
+  "Visit changed (was …)", dropped/deleted → "Taken off a visit"; note-only
+  edits and visits entirely in the past tell nobody. POST
+  `/api/notify/schedule` (any org member) resolves names → active profiles
+  in the org, skips the person who made the change, writes the text itself
+  (`messagesFor`: 3+ for one person in one batch = one "Your schedule was
+  updated" summary), notification type `job_scheduled` (migration
+  `notifications_job_scheduled_type`, ALREADY RUN 2026-10-23), honoring
+  `notify_assigned` (label now "When I'm assigned or scheduled on a job").
+  AppFolio imports don't alert. (2) **Calendar subscribe link** — Settings →
+  "Schedule in your phone calendar" (`components/CalendarSubscribe.tsx`):
+  iPhone (webcal:) / Google (calendar.google.com/r?cid=) / Copy / Reset;
+  owners+managers can also take the "Whole crew" feed. `/api/calendar/link`
+  mints a random token per (user, scope) in `calendar_feeds` (migration
+  `calendar_feeds`, ALREADY RUN; RLS on, service-role only — the token is
+  the credential, so it's NOT on profiles where coworkers could read it);
+  reset = new token. `/api/calendar/feed/<token>.ics` (no login; NOT rate
+  limited — Google/Apple fetch from shared IPs) serves visits from 30 days
+  back to 6 months ahead via pure `lib/calendar-feed.ts buildCalendar`
+  (tested): floating local times, untimed = all-day (multi-day spans), timed
+  multi-day = one event per day, length = job hrs ÷ crew ÷ days (1–10 h,
+  2 h unknown), archived jobs dropped, person must still be an active member
+  of that org. Google/Apple refresh subscriptions every few hours — the
+  in-app alert is the instant channel. Not done: a morning "your day" alert.
+
 - **Desktop side menu (2026-10-21)**: the nav pick is ONE store field,
   `navMode` = auto | left | right | bottom (localStorage `c_navmode`; the old
   `c_navb`/`c_navl` flags migrate: bottom → auto). `lib/nav-layout.ts`

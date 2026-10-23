@@ -28,7 +28,7 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:creedhandyman@gmail.c
 const PUSH_ENABLED = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 
 // join_request rows are written by a DB trigger (profiles insert), not here.
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved" | "job_scheduled";
 
 export interface NotifyRecipient {
   /** Recipient profile id. */

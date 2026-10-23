@@ -21,6 +21,8 @@
  * renders it for admins); Schedule's own week arrows pick the week (`week` =
  * that week's Monday) and the days below are Mon–Sat of it.
  */
+import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
+import type { Notice } from "@/lib/schedule-notify";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
@@ -267,6 +269,9 @@ export default function DispatchAssistant({ setPage, week: weekProp, onNextWeek 
     if (!ok) return;
     setApplying(true);
     let done = 0, failed = 0;
+    // Crew alerts for the whole plan go out as ONE batch (3+ per person
+    // collapse into a single "your schedule was updated").
+    const notices: Notice[] = [];
     try {
       for (const p of posts) {
         const row: Record<string, unknown> = { sched_date: p.sched_date, job: p.job, job_id: p.jobId, note: p.note };
@@ -274,13 +279,18 @@ export default function DispatchAssistant({ setPage, week: weekProp, onNextWeek 
         if (p.end_date) row.end_date = p.end_date;
         if (await db.post("schedule", row) === null) { failed++; continue; }
         done++;
+        notices.push(...noticesFor(null, row as { sched_date: string }));
         const j = jobs.find((x) => x.id === p.jobId);
         if (j && (j.status === "accepted" || j.status === "quoted")) await db.patch("jobs", j.id, { status: "scheduled" });
       }
       for (const p of patches) {
-        if (await db.patch("schedule", p.entryId, p.patch)) done++;
-        else failed++;
+        if (await db.patch("schedule", p.entryId, p.patch)) {
+          done++;
+          const before = useStore.getState().schedule.find((e) => e.id === p.entryId);
+          if (before) notices.push(...noticesFor(before, { ...before, ...p.patch } as typeof before));
+        } else failed++;
       }
+      sendScheduleNotices(notices);
       await loadAll();
       setResult(null);
       setLeaveOut([]);

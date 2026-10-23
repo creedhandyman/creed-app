@@ -136,7 +136,7 @@ export interface Profile {
  *  `user_id`. SMS is a delivery side-effect at creation time, gated by the
  *  recipient's prefs — the row is always written so the feed is complete.
  *  Named AppNotification to avoid colliding with the DOM `Notification`. */
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved" | "job_scheduled";
 
 export interface AppNotification {
   id: string;

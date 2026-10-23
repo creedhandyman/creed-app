@@ -1,4 +1,5 @@
 "use client";
+import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
 import { apiFetch, getStatusLink } from "@/lib/api";
 import { markQuoteSent, sentAgo } from "@/lib/quote-send";
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -986,6 +987,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       const visits = st.schedule.filter((e) => e.job_id === id
         || (!e.job_id && !!addr && !otherAtAddr && (e.job || "").trim().toLowerCase() === addr));
       for (const e of visits) await db.del("schedule", e.id);
+      // The crew booked on it hear it's off their schedule.
+      sendScheduleNotices(visits.flatMap((e) => noticesFor(e, null)));
       setDetailJobId(null);
       loadAll();
     }

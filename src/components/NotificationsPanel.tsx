@@ -37,6 +37,7 @@ const META: Record<NotificationType, { icon: IconName; color: string }> = {
   payroll_alert: { icon: "pay", color: "#f5b400" },
   join_request: { icon: "clients", color: "#8cc0ff" },
   quote_approved: { icon: "checkCircle", color: "#ff9f43" },
+  job_scheduled: { icon: "schedule", color: "#f5c400" },
 };
 
 export default function NotificationsPanel({ onClose, onOpenJob, onOpenOps }: Props) {

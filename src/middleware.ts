@@ -26,6 +26,10 @@ export const config = {
     "/api/checkout",
     "/api/verify-payment",
     "/api/notify",
+    "/api/notify/schedule",
+    // Only the link route — the .ics feed is fetched by Google/Apple from a
+    // few shared IPs for all their users, so a per-IP limit would cut it off.
+    "/api/calendar/link",
     "/api/promo/:path*",
     "/api/status-link",
     "/api/stripe/:path*",
@@ -50,6 +54,7 @@ const LIMITS: Record<string, number> = {
   "/api/checkout": 10,
   "/api/verify-payment": 15,
   "/api/notify": 10,
+  "/api/notify/schedule": 20,
   "/api/promo/apply": 5,
   "/api/status-link": 20,
   "/api/portal/request-link": 2,

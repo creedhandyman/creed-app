@@ -18,6 +18,7 @@ import { tipsEnabled, setTipsEnabled, undismissGs } from "@/lib/grizz";
 import { isPushSupported, isSubscribed, enablePush, disablePush } from "@/lib/push";
 import { SUPPORT_EMAIL } from "@/lib/platform-admin";
 import { apiFetch } from "@/lib/api";
+import CalendarSubscribe from "./CalendarSubscribe";
 
 interface Props {
   onClose: () => void;
@@ -220,6 +221,8 @@ export default function Settings({ onClose }: Props) {
           </div>
         )}
       </div>
+
+      <CalendarSubscribe />
 
       {/* Appearance */}
       <div className="section">

@@ -1,4 +1,5 @@
 "use client";
+import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
@@ -289,6 +290,8 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
       else if (editSched.end_date) patch.end_date = null;
       // Failed write (already toasted) — keep the modal open to retry.
       if (!await db.patch("schedule", editSched.id, patch)) return;
+      // Tell the crew: added → booked, moved → changed, dropped → taken off.
+      sendScheduleNotices(noticesFor(editSched, { ...editSched, sched_date: dropTarget, note, end_date: endDate }));
     } else {
       // Only send end_date for a real range so single-day scheduling still
       // works before the `end_date` column migration runs.
@@ -298,6 +301,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
       // Only bump the job to "scheduled" once the calendar entry exists —
       // otherwise it drops out of Unscheduled with nothing on the calendar.
       if (await db.post("schedule", payload) === null) return;
+      sendScheduleNotices(noticesFor(null, { job: armedJob, job_id: armedJobId, sched_date: dropTarget, end_date: endDate, note }));
       const matched = armedJobId
         ? jobs.find((j) => j.id === armedJobId && (j.status === "quoted" || j.status === "accepted"))
         : jobs.find((j) => j.property === armedJob && (j.status === "quoted" || j.status === "accepted"));
@@ -433,6 +437,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     if (!editSched) return;
     if (!await useStore.getState().showConfirm(t("sched.removeFromSchedule"), `${t("sched.unscheduleConfirm")} ${editSched.job}?`)) return;
     await db.del("schedule", editSched.id);
+    sendScheduleNotices(noticesFor(editSched, null));
     setArmedJob(null); setDropTarget(null); setQsNote("");
     await loadAll();
     useStore.getState().showToast(t("sched.removedFromSchedule"), "info");
