@@ -961,8 +961,8 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   → photos join `quickPhotos`, the audio is Whisper-transcribed
   (`/api/transcribe`, live-preview text as fallback) and appended to
   `quickDesc`; the user reviews, then Generate. Phone back closes the walk
-  (layer re-armed). The small DictateButton ("talk only") stays in the
-  description card.
+  (layer re-armed). The separate "Talk it through" DictateButton was removed
+  (owner: redundant next to Voice Walk) and its component deleted.
 
 - **Schedule alerts + phone-calendar feed (2026-10-23)**: (1) **Alerts** —
   every client schedule write (Schedule quick-add/edit/delete, Dispatch

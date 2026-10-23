@@ -47,7 +47,6 @@ import TopBar from "@/components/TopBar";
 import AiNote from "../AiNote";
 import MaterialsSheet from "../MaterialsSheet";
 import CameraModal from "../CameraModal";
-import DictateButton from "../DictateButton";
 import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { getUsage, incrementUsage } from "@/lib/inspection-usage";
@@ -337,7 +336,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [quickCam, setQuickCam] = useState(false);
   // Quick Quote voice input: stop (and transcribe) before the camera opens —
   // iOS often refuses the camera while the mic is still recording.
-  const quickDictateStop = useRef<(() => Promise<void>) | null>(null);
   // Quick Quote Voice Walk: the live camera + mic together (the Inspection's
   // VoiceWalk screen) — "tip" = the short how-to first, "walk" = recording.
   // What's said lands in the description, the photos in Photos.
@@ -346,7 +344,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const QQ_TIP_KEY = `c_qq_vw_tip_off_${user?.id || "anon"}`;
   const [qqTipOff, setQqTipOff] = useState(false);
   const openQuickWalk = async () => {
-    await quickDictateStop.current?.();
     let off = false;
     try { off = localStorage.getItem(QQ_TIP_KEY) === "1"; } catch { /* */ }
     setQqTipOff(off);
@@ -2563,17 +2560,6 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             placeholder="e.g. Kitchen faucet leaking from base, bathroom door won't close properly, 3 outlet covers missing..."
             style={{ height: 100, marginTop: 4 }}
           />
-          {/* Voice: say what you see (sizes too — "bathroom's 5 by 8"), it's
-              written into the description above for the AI and for editing. */}
-          <div style={{ marginTop: 8 }}>
-            <DictateButton
-              stopRef={quickDictateStop}
-              onText={(txt) => setQuickDesc((d) => (d.trim() ? `${d.trim()}\n${txt}` : txt))}
-            />
-            <div className="dim" style={{ fontSize: 12, marginTop: 4, textAlign: "center" }}>
-              Walk it and talk — what's wrong, where, and sizes. Tap again to stop.
-            </div>
-          </div>
         </div>
 
         {/* Photos */}
@@ -2585,7 +2571,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             <div className="row" style={{ gap: 4 }}>
               <button
                 className="bb"
-                onClick={async () => { await quickDictateStop.current?.(); setQuickCam(true); }}
+                onClick={() => setQuickCam(true)}
                 disabled={quickUploading}
                 style={{ fontSize: 14, padding: "4px 10px" }}
               >
