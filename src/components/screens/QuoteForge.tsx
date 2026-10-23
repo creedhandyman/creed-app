@@ -57,6 +57,7 @@ import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { orderShopList } from "@/lib/guide-shop";
+import VoiceWalk, { type VoiceWalkResult } from "../VoiceWalk";
 import ServiceTemplates, { CategoryField } from "../ServiceTemplates";
 import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, type ServiceTemplate } from "@/lib/service-templates";
 
@@ -337,6 +338,49 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // Quick Quote voice input: stop (and transcribe) before the camera opens —
   // iOS often refuses the camera while the mic is still recording.
   const quickDictateStop = useRef<(() => Promise<void>) | null>(null);
+  // Quick Quote Voice Walk: the live camera + mic together (the Inspection's
+  // VoiceWalk screen) — "tip" = the short how-to first, "walk" = recording.
+  // What's said lands in the description, the photos in Photos.
+  const [qqWalk, setQqWalk] = useState<null | "tip" | "walk">(null);
+  const [qqTranscribing, setQqTranscribing] = useState(false);
+  const QQ_TIP_KEY = `c_qq_vw_tip_off_${user?.id || "anon"}`;
+  const [qqTipOff, setQqTipOff] = useState(false);
+  const openQuickWalk = async () => {
+    await quickDictateStop.current?.();
+    let off = false;
+    try { off = localStorage.getItem(QQ_TIP_KEY) === "1"; } catch { /* */ }
+    setQqTipOff(off);
+    setQqWalk(off ? "walk" : "tip");
+  };
+  const startQuickWalk = () => {
+    try { if (qqTipOff) localStorage.setItem(QQ_TIP_KEY, "1"); else localStorage.removeItem(QQ_TIP_KEY); } catch { /* */ }
+    setQqWalk("walk");
+  };
+  const finishQuickWalk = async (result: VoiceWalkResult) => {
+    setQqWalk(null);
+    if (result.photos.length) setQuickPhotos((prev) => [...prev, ...result.photos.map((p) => p.url).filter((u) => !prev.includes(u))]);
+    let text = result.partialTranscript;
+    if (result.audioBlob && result.audioBlob.size > 1024) {
+      setQqTranscribing(true);
+      try {
+        const fd = new FormData();
+        fd.append("audio", result.audioBlob, "quick-quote.webm");
+        const res = await apiFetch("/api/transcribe", { method: "POST", body: fd });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data.text === "string" && data.text.trim()) text = data.text.trim();
+        } else if (!text) {
+          useStore.getState().showToast("Couldn't turn the recording into text — type what you saw, the photos are saved", "warning");
+        }
+      } catch { /* keep the live preview text */ }
+      setQqTranscribing(false);
+    }
+    if (text.trim()) setQuickDesc((d) => (d.trim() ? `${d.trim()}\n${text.trim()}` : text.trim()));
+    const n = result.photos.length;
+    if (text.trim() || n) {
+      useStore.getState().showToast(`Added ${text.trim() ? "your notes" : ""}${text.trim() && n ? " and " : ""}${n ? `${n} photo${n === 1 ? "" : "s"}` : ""} — check them, then Generate`, "success");
+    }
+  };
 
   // Compress + upload one Quick Quote photo, then keep its URL. Shared by the
   // in-app camera and the library picker below.
@@ -2238,6 +2282,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       else { setEditingInspection(null); setMode(null); }
       return;
     }
+    if (mode === "quick" && qqWalk) { setQqWalk(null); setBackRearm(true); return; }
     if (mode === "quick") return exitQuick();
     if (inspParseFailed && rooms.length === 0) return exitBuilding();
     if (templateEdit) return exitEditor();
@@ -2416,6 +2461,23 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
   /* ══════════════════════════════════════════
      QUICK QUOTE MODE
      ══════════════════════════════════════════ */
+  if (mode === "quick" && qqWalk === "walk")
+    return (
+      <VoiceWalk
+        property={prop}
+        client={client}
+        rooms={["Walk & talk"]}
+        singleRoom
+        itemsForRoom={() => []}
+        darkMode={darkMode}
+        autoStart
+        doneLabel="Add to quote"
+        doneHint="Your words go into the description and your photos into Photos — check them, then Generate."
+        onCancel={() => setQqWalk(null)}
+        onComplete={(r) => { void finishQuickWalk(r); }}
+      />
+    );
+
   if (mode === "quick")
     return (
       <div className="fi">
@@ -2438,6 +2500,57 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             setAddressId={setAddressId}
           />
         </div>
+
+        {/* Voice Walk — camera + mic together, same green as Full Inspection */}
+        <div
+          role="button"
+          onClick={() => { if (!parsing && !qqTranscribing) void openQuickWalk(); }}
+          style={{ display: "flex", alignItems: "center", gap: 13, padding: 15, borderRadius: 18, marginBottom: 12, cursor: "pointer", opacity: parsing ? 0.5 : 1, ...cGreen.card }}
+        >
+          <div style={{ width: 46, height: 46, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="mic" size={26} color={cGreen.icon} strokeWidth={2} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 18, letterSpacing: ".3px", color: cGreen.text }}>VOICE WALK</div>
+            <div style={{ fontSize: 13, color: cGreen.sub }}>
+              {qqTranscribing ? "Writing up what you said…" : "Camera + mic together — snap photos and talk it through"}
+            </div>
+          </div>
+          <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", ...cGreen.tag }}>FASTEST</span>
+        </div>
+
+        {qqWalk === "tip" && (
+          <div className="sheet-overlay" onClick={() => setQqWalk(null)}>
+            <div className="sheet cd" onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ fontFamily: "Oswald", fontSize: 19, display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <Icon name="mic" size={19} color="#3ee08f" /> Voice Walk — how it works
+              </h3>
+              {[
+                ["camera", "Your camera and mic turn on together — no extra buttons."],
+                ["mic", "Walk the job and talk: what's wrong, where, and sizes (\"bathroom is 5 by 8\")."],
+                ["photo", "Tap the shutter on each problem while you talk about it."],
+                ["check", "Tap Stop, then Add to quote — your words and photos fill in. Check them, then Generate."],
+              ].map(([icon, line], i) => (
+                <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 9 }}>
+                  <span style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(0,204,102,.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Icon name={icon} size={14} color="#3ee08f" />
+                  </span>
+                  <span style={{ fontSize: 14, lineHeight: 1.45 }}>{line}</span>
+                </div>
+              ))}
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-dim)", margin: "6px 0 12px", cursor: "pointer" }}>
+                <input type="checkbox" checked={qqTipOff} onChange={(e) => setQqTipOff(e.target.checked)} style={{ width: 16, height: 16 }} />
+                Don&apos;t show this again
+              </label>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="bo" onClick={startQuickWalk} style={{ flex: 1 }}>Skip</button>
+                <button className="bg" onClick={startQuickWalk} style={{ flex: 2, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <Icon name="mic" size={15} /> Start recording
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         <div className="cd mb">

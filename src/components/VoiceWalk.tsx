@@ -272,9 +272,15 @@ interface Props {
    *  Yard Cutting / Initial Walkthrough surface the same checklist on
    *  both the form and the voice screen. */
   itemsForRoom?: (room: string) => string[];
+  /** Turn the camera + mic on as soon as the screen opens (Quick Quote's
+   *  Voice Walk — the tap that opened it already said "start"). */
+  autoStart?: boolean;
+  /** Done button text / hint under it (Quick Quote fills the quote, not a room). */
+  doneLabel?: string;
+  doneHint?: string;
 }
 
-export default function VoiceWalk({ property, client: _client, rooms, onComplete, onCancel, darkMode, singleRoom, roomStatuses, itemsForRoom }: Props) {
+export default function VoiceWalk({ property, client: _client, rooms, onComplete, onCancel, darkMode, singleRoom, roomStatuses, itemsForRoom, autoStart, doneLabel, doneHint }: Props) {
   void property; void _client; // (used only by the parent's processRoomVoice now)
   const isSingleRoom = singleRoom || rooms.length === 1;
 
@@ -644,6 +650,10 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
      audio is the canonical source for Whisper at end-of-room. When off: tear
      down and fold this segment's audio into the room's accumulated chunks.
   ────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (autoStart) setInspecting(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (inspecting) {
       beginSegment();
@@ -1518,13 +1528,13 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
             opacity: uploading > 0 ? 0.5 : 1,
           }}
         >
-          ✓ Done — {isSingleRoom ? "Apply to Room" : "Process & Next Room"}
+          ✓ Done — {doneLabel || (isSingleRoom ? "Apply to Room" : "Process & Next Room")}
         </button>
         <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 4 }}>
-          AI processes this room in the background. The next room opens immediately.
+          {doneHint || "AI processes this room in the background. The next room opens immediately."}
         </p>
       </div>
-      {isSingleRoom && (
+      {isSingleRoom && !doneHint && (
         <p className="dim" style={{ fontSize: 13, textAlign: "center", marginTop: 4 }}>
           Tap Done to transcribe and apply findings to this room.
         </p>

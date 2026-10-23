@@ -952,6 +952,18 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Quick Quote Voice Walk (2026-10-23)**: Quick Quote has a green (cGreen,
+  same as Full Inspection) **VOICE WALK** card above the description. Tap →
+  a skippable how-to sheet (Skip / Start recording, "Don't show this again" =
+  localStorage `c_qq_vw_tip_off_<uid>`) → the Inspection's own `VoiceWalk`
+  screen (single "Walk & talk" area, empty checklist) with new props
+  `autoStart` (camera + mic turn on at once), `doneLabel` / `doneHint`. Done
+  → photos join `quickPhotos`, the audio is Whisper-transcribed
+  (`/api/transcribe`, live-preview text as fallback) and appended to
+  `quickDesc`; the user reviews, then Generate. Phone back closes the walk
+  (layer re-armed). The small DictateButton ("talk only") stays in the
+  description card.
+
 - **Schedule alerts + phone-calendar feed (2026-10-23)**: (1) **Alerts** —
   every client schedule write (Schedule quick-add/edit/delete, Dispatch
   Apply plan, Jobs delete-job) builds notices with
