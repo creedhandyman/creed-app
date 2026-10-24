@@ -952,6 +952,32 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **AI draft quotes for website leads (2026-10-24)**: `/api/leads` (public
+  intake: the creedhandyman.com form + the app's /lead/<slug> page) now runs
+  `lib/lead-draft.ts draftLeadQuote` in Next's `after()` (route maxDuration
+  300) once the lead is saved + the "New lead" alert sent. It's the SAME
+  engine as Quick Quote — `aiParsePdf` gained an optional `ParserDeps`
+  {getCorrections, callAi} so it can run server-side with the org's own
+  price_corrections (service role, filtered by org_id) and `callClaude`
+  (`lib/anthropic-server.ts`, now shared with /api/ai: key, Sonnet 5.5
+  refusal fallback, ai_usage logging; call_type `lead_draft`). Result is
+  validateQuote'd and stored on the lead blob as `leadDraft {v, rooms,
+  estDays, total, at}` (status stays "lead"; written only while the job is
+  still an unquoted lead). `draftTotal` (tested) = QuoteForge's default
+  pricing (per-room rate, materials + ZIP purchase tax + markup, min-labor /
+  trip fee / tax cascade). Owners/managers then get "Draft quote ready · $X"
+  (type new_lead, notify_leads). Guards: needs ≥8 chars of description or a
+  photo; max `DRAFTS_PER_DAY` = 25 per org per 24h. App: Jobs lead card hint
+  "AI draft ready · $X" + CTA "Review draft quote · $X"
+  (`lib/lead-draft-info.ts leadDraftTotal`, client-safe); QuoteForge opening
+  a lead with a `leadDraft` loads those rooms straight into the editor
+  (customer photos as "before" photos, estDays) instead of re-running the
+  AI; Save/Send turns it into the quote as before. Any failure = the old
+  behavior (Build Quote runs the AI on the phone). Flow tested end-to-end
+  with a fake db + AI (`lead-draft-flow.test.ts`). NOTE the website form
+  sends no photos (it asks people to text them), so website drafts are
+  text-only; the /lead/<slug> page does send photos.
+
 - **Quick Quote Voice Walk (2026-10-23)**: Quick Quote has a green (cGreen,
   same as Full Inspection) **VOICE WALK** card above the description. Tap →
   a skippable how-to sheet (Skip / Start recording, "Don't show this again" =

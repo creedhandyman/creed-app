@@ -1,10 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { dispatchNotifications } from "@/lib/notify-server";
 import { siteOrigin } from "@/lib/site-url";
 import { applySmsConsent } from "@/lib/sms-consent";
+import { draftLeadQuote } from "@/lib/lead-draft";
 
 export const dynamic = "force-dynamic";
+// The AI draft quote runs after the response (see `after` below) — a parse
+// takes ~30–90s, so give the function room to finish it.
+export const maxDuration = 300;
 
 /**
  * Public lead intake endpoint. Called from /lead/[slug] when a prospect
@@ -264,6 +268,21 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       // eslint-disable-next-line no-console
       console.error("leads notify failed (lead still saved):", notifyErr);
     }
+
+    // Draft a quote from the customer's words + photos while the owner is
+    // still reading the "New lead" alert — after the response, so the form
+    // never waits on the AI. Best-effort (lib/lead-draft.ts).
+    after(async () => {
+      try {
+        const r = await draftLeadQuote(supabase, {
+          orgId, jobId: jobRow.id, description, photos,
+          property: addressLine || street || "", client: name,
+        });
+        if (!r.ok) console.log(`[leads] no AI draft for ${jobRow.id}: ${r.reason}`);
+      } catch (e) {
+        console.error("[leads] AI draft failed (lead still saved):", e);
+      }
+    });
 
     return NextResponse.json({ ok: true, business: org.name });
   } catch (error: unknown) {

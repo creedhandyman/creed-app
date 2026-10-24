@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, serviceClient } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
+import { callClaude } from "@/lib/anthropic-server";
 
 export const dynamic = "force-dynamic";
 // A quote parse is a non-streaming call that writes ~10-13K tokens; say so
@@ -12,18 +13,6 @@ export const maxDuration = 300;
 // the caller pick a non-Claude model.
 const MAX_TOKENS_CEILING = 16000;
 const MAX_BODY_BYTES = 6_000_000; // inspection pages ride as base64 image blocks
-
-// Approx Anthropic $/million tokens for cost estimation (Phase 0 measurement).
-// Estimates only — refine against the real invoice; used for relative tracking.
-const PRICING: Record<string, { in: number; out: number; cacheWrite: number; cacheRead: number }> = {
-  // Order matters for the prefix match below: more-specific keys first —
-  // "claude-sonnet-5" is a prefix of "claude-sonnet-5-5".
-  "claude-sonnet-5-5": { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.2 },
-  "claude-sonnet-5": { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.2 },
-  "claude-sonnet-4-6": { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.3 },
-  "claude-haiku-4-5": { in: 1, out: 5, cacheWrite: 1.25, cacheRead: 0.1 },
-  "claude-opus-4-8": { in: 5, out: 25, cacheWrite: 6.25, cacheRead: 0.5 },
-};
 
 export async function POST(req: NextRequest) {
   // Previously this was an OPEN proxy to Anthropic with our key — anyone could
@@ -49,70 +38,11 @@ export async function POST(req: NextRequest) {
       body.max_tokens = Math.min(body.max_tokens, MAX_TOKENS_CEILING);
     }
 
-    // Sonnet 5.5 can decline a request (HTTP 200, stop_reason "refusal").
-    // Server-side fallback re-runs "cyber" / "frontier_llm" declines on Claude
-    // Sonnet 5 inside the same call; "general_harms" / "bio" /
-    // "reasoning_extraction" declines still come back as refusals, so callers
-    // check stop_reason (the parse, AI Assist and Troubleshoot do). If the
-    // fallback option itself is ever rejected, retry once without it rather
-    // than break every AI call.
-    const send = (b: Record<string, unknown>, beta?: string) =>
-      fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          ...(beta ? { "anthropic-beta": beta } : {}),
-        },
-        body: JSON.stringify(b),
-      });
-    const withFallback = body.model === "claude-sonnet-5-5" && body.fallbacks === undefined;
-    let response = withFallback
-      ? await send({ ...body, fallbacks: "default" }, "server-side-fallback-2026-07-01")
-      : await send(body);
-    let data = await response.json();
-    if (withFallback && response.status === 400 && /fallback|beta/i.test(String(data?.error?.message ?? ""))) {
-      console.warn("[ai] server-side fallback rejected — retrying without it:", data?.error?.message);
-      response = await send(body);
-      data = await response.json();
-    }
-
-    // Phase 0 — best-effort AI usage logging. Never blocks or breaks the
-    // response: a missing ai_usage table or insert error is swallowed.
-    try {
-      const usage = (data?.usage || {}) as {
-        input_tokens?: number; output_tokens?: number;
-        cache_creation_input_tokens?: number; cache_read_input_tokens?: number;
-      };
-      // The model that actually answered (a fallback-served call reports
-      // Sonnet 5 here); the request's model if the response lacks one.
-      const model = (typeof data?.model === "string" && data.model) || (body.model as string);
-      // Prefix match so dated snapshots (e.g. claude-haiku-4-5-20251001) map to
-      // their rate row.
-      const rateKey = Object.keys(PRICING).find((k) => model.startsWith(k)) || "claude-sonnet-5";
-      const rate = PRICING[rateKey];
-      const inTok = usage.input_tokens || 0;
-      const outTok = usage.output_tokens || 0;
-      const cacheWrite = usage.cache_creation_input_tokens || 0;
-      const cacheRead = usage.cache_read_input_tokens || 0;
-      const estCost =
-        (inTok * rate.in + outTok * rate.out + cacheWrite * rate.cacheWrite + cacheRead * rate.cacheRead) /
-        1_000_000;
-      await serviceClient().from("ai_usage").insert({
-        org_id: req.headers.get("x-creed-org") || null,
-        user_id: auth.userId,
-        call_type: req.headers.get("x-creed-call-type") || "other",
-        model,
-        input_tokens: inTok,
-        output_tokens: outTok,
-        cache_creation_tokens: cacheWrite,
-        cache_read_tokens: cacheRead,
-        est_cost: Number(estCost.toFixed(6)),
-      });
-    } catch {
-      /* logging is best-effort — ignore */
-    }
+    const { data } = await callClaude(body, {
+      orgId: req.headers.get("x-creed-org"),
+      userId: auth.userId,
+      callType: req.headers.get("x-creed-call-type") || "other",
+    });
 
     // Preserve the prior contract (client inspects the JSON body itself).
     return NextResponse.json(data);

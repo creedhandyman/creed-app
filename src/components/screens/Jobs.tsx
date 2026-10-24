@@ -1,4 +1,5 @@
 "use client";
+import { leadDraftTotal } from "@/lib/lead-draft-info";
 import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
 import { apiFetch, getStatusLink } from "@/lib/api";
 import { markQuoteSent, sentAgo } from "@/lib/quote-send";
@@ -1199,7 +1200,13 @@ ${invoicePhotosHtml}
   // (onEditJob is only passed to admins), so a tech sees no CTA there.
   const primaryCTA = (dj: typeof jobs[0]): { label: string; icon: string; onClick: () => void } | null => {
     switch (dj.status) {
-      case "lead":      return onEditJob ? { label: t("jobs.buildQuote"), icon: "quote", onClick: () => onEditJob(dj.id) } : null;
+      case "lead": {
+        if (!onEditJob) return null;
+        const draft = leadDraftTotal(dj.rooms);
+        return draft !== null
+          ? { label: t("jobs.reviewDraft").replace("{amt}", `$${Math.round(draft).toLocaleString()}`), icon: "sparkle", onClick: () => onEditJob(dj.id) }
+          : { label: t("jobs.buildQuote"), icon: "quote", onClick: () => onEditJob(dj.id) };
+      }
       // Quoted: SEND is the next step (editing stays one tap away in Work /
       // the Money pencil); once it's out, the next step is a follow-up nudge.
       case "quoted":
@@ -2439,6 +2446,9 @@ ${invoicePhotosHtml}
             switch (j.status) {
               // A lead's own words ("Leaky faucet in the…") say more than "New lead".
               case "lead": {
+                // The server already drafted a quote from the request.
+                const draft = leadDraftTotal(j.rooms);
+                if (draft !== null) return { icon: "sparkle", text: t("jobs.hintDraftReady").replace("{amt}", `$${Math.round(draft).toLocaleString()}`) };
                 let desc = "";
                 try {
                   const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;

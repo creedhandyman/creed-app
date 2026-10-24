@@ -1459,13 +1459,30 @@ export function aiText(content: unknown): string {
 }
 const setAiError = (m: string) => { _lastAiError = m; };
 
+/**
+ * Where the parse gets its data when it runs somewhere other than a signed-in
+ * phone — the server drafting a quote for a website lead (lib/lead-draft.ts).
+ * Omitted = the app's normal path (db.get with the user's session + /api/ai).
+ */
+export interface ParserDeps {
+  /** This org's price_corrections rows (learned pricing + labor calibration). */
+  getCorrections?: () => Promise<Array<{
+    item_name: string; original_hours: number; corrected_hours: number;
+    original_mat_cost: number; corrected_mat_cost: number; trade: string;
+    zip?: string; job_id?: string; source?: string; created_at?: string;
+  }>>;
+  /** Send the Anthropic request body; resolves like fetch's Response. */
+  callAi?: (body: Record<string, unknown>) => Promise<Response>;
+}
+
 export async function aiParsePdf(
   text: string,
   images: string[],
   laborRate?: number,
   licensedTrades?: string[],
   propertyZip?: string,
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  deps?: ParserDeps,
 ): Promise<AiParseResult | null> {
   setAiError("");
   // Single API call, with images trimmed to fit one request body. We do NOT
@@ -1503,7 +1520,7 @@ export async function aiParsePdf(
       onProgress?.(`Sending ${trimmed.length} of ${images.length} pages (${dropped} skipped to fit one call)...`);
     }
   }
-  return aiParsePdfSingle(text, trimmed, laborRate, licensedTrades, propertyZip);
+  return aiParsePdfSingle(text, trimmed, laborRate, licensedTrades, propertyZip, deps);
 }
 
 async function aiParsePdfSingle(
@@ -1511,7 +1528,8 @@ async function aiParsePdfSingle(
   images: string[],
   laborRate?: number,
   licensedTrades?: string[],
-  propertyZip?: string
+  propertyZip?: string,
+  deps?: ParserDeps,
 ): Promise<AiParseResult | null> {
   try {
     // Load recent price corrections for AI learning. When a propertyZip is
@@ -1541,7 +1559,7 @@ async function aiParsePdfSingle(
     const calFactor = (bucket: string) =>
       Math.min(laborCalBasis === "raw" ? 1.5 : 1.15, Math.max(1, laborCalByTrade[bucket.trim().toLowerCase()] ?? laborCalOverall));
     try {
-      const corrections = await db.get<{
+      const corrections = deps?.getCorrections ? await deps.getCorrections() : await db.get<{
         item_name: string; original_hours: number; corrected_hours: number;
         original_mat_cost: number; corrected_mat_cost: number; trade: string;
         zip?: string; job_id?: string; source?: string; created_at?: string;
@@ -1869,47 +1887,50 @@ ${cleanText.slice(0, 60000)}`
         : "Parse this inspection report following the quoting engine rules exactly. Process ONLY the detailed room breakdowns, skip the summary table. Return ONLY the JSON.",
     });
 
-    const res = await apiFetch("/api/ai", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-creed-call-type": "parse" },
-      body: JSON.stringify({
-        // Sonnet 5.5 — same $2/$10 price as Sonnet 5, smarter and faster.
-        // Like Sonnet 5 it REJECTS sampling params (temperature/top_p →
-        // 400): run-to-run consistency rests on the prompt rules plus the
-        // deterministic validateQuote layer (dedup, caps, floors), which
-        // the zzz quote-math audit suite gates. Prompt caches are
-        // model-scoped: the first parse after a model change re-warms.
-        model: "claude-sonnet-5-5",
-        // Structured extraction, not open-ended reasoning: turn thinking
-        // off. Sonnet 5.5 400s on {type:"disabled"} — "between_tools" is
-        // its lowest setting and, on a no-tools request like this one,
-        // behaves exactly like disabled did (text-only response, no
-        // thinking tokens on the bill or eating the output budget).
-        thinking: { type: "between_tools" },
-        output_config: { effort: "high" },
-        max_tokens: 16000,
-        // Prompt caching: static rules FIRST (cache-hot on every call), then the
-        // per-org learned-pricing block (cache-hot within a same-ZIP session),
-        // then the volatile per-job header LAST so it never busts the cached
-        // prefix. Reordered from the old volatile-first string — re-validate a
-        // fixture if quote output ever drifts.
-        system: [
-          { type: "text", text: AI_SYSTEM_PROMPT_BASE, cache_control: { type: "ephemeral" } },
-          ...(correctionsPrompt
-            ? [{ type: "text", text: correctionsPrompt, cache_control: { type: "ephemeral" } }]
-            : []),
-          {
-            type: "text",
-            text:
-              `Labor rate: $${laborRate || 55}.00/hour.\n\n` +
-              (licensedTrades?.length
-                ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors. Include labor, materials, and hours for all ${licensedTrades.join("/")} work.\n\n`
-                : ""),
-          },
-        ],
-        messages: [{ role: "user", content }],
-      }),
-    });
+    const aiBody: Record<string, unknown> = {
+      // Sonnet 5.5 — same $2/$10 price as Sonnet 5, smarter and faster.
+      // Like Sonnet 5 it REJECTS sampling params (temperature/top_p →
+      // 400): run-to-run consistency rests on the prompt rules plus the
+      // deterministic validateQuote layer (dedup, caps, floors), which
+      // the zzz quote-math audit suite gates. Prompt caches are
+      // model-scoped: the first parse after a model change re-warms.
+      model: "claude-sonnet-5-5",
+      // Structured extraction, not open-ended reasoning: turn thinking
+      // off. Sonnet 5.5 400s on {type:"disabled"} — "between_tools" is
+      // its lowest setting and, on a no-tools request like this one,
+      // behaves exactly like disabled did (text-only response, no
+      // thinking tokens on the bill or eating the output budget).
+      thinking: { type: "between_tools" },
+      output_config: { effort: "high" },
+      max_tokens: 16000,
+      // Prompt caching: static rules FIRST (cache-hot on every call), then the
+      // per-org learned-pricing block (cache-hot within a same-ZIP session),
+      // then the volatile per-job header LAST so it never busts the cached
+      // prefix. Reordered from the old volatile-first string — re-validate a
+      // fixture if quote output ever drifts.
+      system: [
+        { type: "text", text: AI_SYSTEM_PROMPT_BASE, cache_control: { type: "ephemeral" } },
+        ...(correctionsPrompt
+          ? [{ type: "text", text: correctionsPrompt, cache_control: { type: "ephemeral" } }]
+          : []),
+        {
+          type: "text",
+          text:
+            `Labor rate: $${laborRate || 55}.00/hour.\n\n` +
+            (licensedTrades?.length
+              ? `This business holds licenses for: ${licensedTrades.join(", ")}. FULLY QUOTE work in these trades — do NOT flag them for subcontractors. Include labor, materials, and hours for all ${licensedTrades.join("/")} work.\n\n`
+              : ""),
+        },
+      ],
+      messages: [{ role: "user", content }],
+    };
+    const res = deps?.callAi
+      ? await deps.callAi(aiBody)
+      : await apiFetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-creed-call-type": "parse" },
+          body: JSON.stringify(aiBody),
+        });
 
     if (!res.ok) {
       console.error("AI API error:", res.status, await res.text().catch(() => ""));
@@ -1919,7 +1940,7 @@ ${cleanText.slice(0, 60000)}`
       if ((res.status === 413 || res.status === 400) && images.length > 1) {
         const half = Math.floor(images.length / 2);
         console.log(`Retrying with fewer pages (${images.length} → ${half})...`);
-        return aiParsePdfSingle(text, images.slice(0, half), laborRate, licensedTrades, propertyZip);
+        return aiParsePdfSingle(text, images.slice(0, half), laborRate, licensedTrades, propertyZip, deps);
       }
       setAiError(`Anthropic API HTTP ${res.status}`);
       return null;

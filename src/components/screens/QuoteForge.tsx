@@ -706,7 +706,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // quickPhotos commits before doAiParse reads it). editingId stays this
       // job, so saving promotes the same lead row to a quote.
       const leadPhotos = Array.isArray(data?.leadPhotos) ? data.leadPhotos : [];
-      if (!data?.rooms?.length && (data?.leadDescription || leadPhotos.length)) {
+      // The server already drafted a quote from the request (lib/lead-draft.ts)
+      // → open it in the editor right away instead of running the AI again.
+      const leadDraftRooms: Room[] | null =
+        !data?.rooms?.length && Array.isArray(data?.leadDraft?.rooms) && data.leadDraft.rooms.length ? data.leadDraft.rooms : null;
+      if (!data?.rooms?.length && !leadDraftRooms && (data?.leadDescription || leadPhotos.length)) {
         // The AI already built this lead once and that quote is still in its
         // edit draft (left before Save) → don't re-run the AI. Take the normal
         // edit path below so Resume / Discard is offered; Discard falls back
@@ -738,6 +742,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // hit where the materials list edit "didn't save").
         loadedRooms = validateQuote(data.rooms, { skipCaps: true });
         setRooms(loadedRooms);
+      } else if (leadDraftRooms) {
+        loadedRooms = validateQuote(leadDraftRooms, { skipCaps: true });
+        setRooms(loadedRooms);
+        useStore.getState().showToast("AI draft from the customer's request — check it, then Send", "info");
       }
       if (data?.workers?.length) {
         setWorkers(data.workers.map((w: { id: string }) => w.id));
@@ -795,7 +803,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setTieredQuote(data?.tieredQuote === true);
       const cs = data?.crewSize;
       setCrewSize(typeof cs === "number" && cs > 0 ? Math.round(cs) : null);
-      const ed = data?.estDays;
+      const ed = data?.estDays ?? data?.leadDraft?.estDays;
       setAiEstDays(typeof ed === "number" && ed > 0 ? ed : null);
       const tn = data?.tierNames as { better?: unknown; best?: unknown } | undefined;
       setTierNames({
@@ -816,6 +824,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
               type: p.type === "after" || p.type === "work" ? p.type : "before",
             })),
         );
+      } else if (leadDraftRooms && leadPhotos.length) {
+        // The customer's photos ride along as "before" photos (Quick Quote does the same).
+        setJobPhotos((leadPhotos as unknown[]).filter((u): u is string => typeof u === "string").map((url) => ({ url, label: "Customer photo", type: "before" as const })));
       } else {
         setJobPhotos([]);
       }
