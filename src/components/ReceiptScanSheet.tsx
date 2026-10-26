@@ -57,15 +57,15 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
       const scan = await scanReceipt(urls);
       setVendor(scan.vendor);
       setItems(scan.items);
-      if (scan.total > 0) setAmount(scan.total.toFixed(2));
+      if (scan.total) setAmount(scan.total.toFixed(2));
       if (scan.date) setRdate(scan.date);
       const expected = scanMismatch(scan);
       if (expected !== null) {
         setMathWarn(`${t("jobs.receiptMathWarn")} ($${expected.toFixed(2)} vs $${scan.total.toFixed(2)})`);
       }
       const n = receiptNote(scan);
-      if (n) setNote(n);
-      if (!scan.items.length && !(scan.total > 0)) setScanErr(t("jobs.scannedReviewFields"));
+      if (n) setNote(scan.total < 0 ? `Refund — ${n}` : n);
+      if (!scan.items.length && !scan.total) setScanErr(t("jobs.scannedReviewFields"));
     } catch (e) {
       setScanErr(`${t("jobs.scanFailedManual")} ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -106,7 +106,7 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
   const save = async () => {
     if (!note.trim()) { useStore.getState().showToast(t("jobs.enterReceiptNote"), "warning"); return; }
     const amt = parseFloat(amount);
-    if (!amt || amt <= 0) { useStore.getState().showToast(t("jobs.enterValidAmount"), "warning"); return; }
+    if (!amt) { useStore.getState().showToast(t("jobs.enterValidAmount"), "warning"); return; }
     setSaving(true);
     try {
       const paths = pages.map((p) => p.path);
@@ -211,7 +211,7 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={scanning ? t("jobs.scanningShort") : t("jobs.noteVendor")} disabled={scanning} style={{ width: "100%" }} />
         <div style={{ display: "flex", gap: 8 }}>
           <div style={{ flex: 1 }}>
-            <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>Total paid</div>
+            <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>{parseFloat(amount) < 0 ? "Refund (negative)" : "Total paid"}</div>
             <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="$" disabled={scanning} style={{ width: "100%" }} />
           </div>
           <div style={{ flex: 1 }}>
@@ -221,7 +221,7 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
         </div>
 
         <button className="bg" onClick={save} disabled={busy} style={{ width: "100%", padding: 12, marginTop: 12, fontFamily: "Oswald", fontSize: 16 }}>
-          {saving ? "Saving…" : scanning ? t("jobs.scanningShort") : `Save receipt${parseFloat(amount) > 0 ? ` · $${parseFloat(amount).toFixed(2)}` : ""}`}
+          {saving ? "Saving…" : scanning ? t("jobs.scanningShort") : parseFloat(amount) < 0 ? `Save refund · −$${Math.abs(parseFloat(amount)).toFixed(2)}` : `Save receipt${parseFloat(amount) > 0 ? ` · $${parseFloat(amount).toFixed(2)}` : ""}`}
         </button>
       </div>
     </div>

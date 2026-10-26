@@ -231,7 +231,7 @@ async function replayReceipt(item: QueuedUpload): Promise<void> {
     const note = receiptNote(scan);
     const patch: Record<string, unknown> = {};
     if (note) patch.note = note;
-    if (scan.total > 0) patch.amount = scan.total;
+    if (scan.total) patch.amount = scan.total;
     // Date the expense by the PURCHASE date printed on the receipt (the row
     // was inserted with the snap/queue date, which can be days earlier
     // than the replay but still isn't what the receipt says).

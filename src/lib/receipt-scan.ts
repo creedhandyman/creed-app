@@ -14,6 +14,7 @@ export type ReceiptItem = { name?: string; qty?: number; price?: number };
 export type ReceiptScan = {
   vendor: string;
   items: ReceiptItem[];
+  /** negative for a refund / return */
   total: number;
   /** transaction date printed on the receipt, "YYYY-MM-DD" ("" if unread) */
   date: string;
@@ -34,9 +35,10 @@ export function itemSum(items: ReceiptItem[]): number {
  * checked (no items, or no independent total to compare against).
  */
 export function scanMismatch(scan: Pick<ReceiptScan, "items" | "tax" | "total">): number | null {
-  if (!scan.items.length || !(scan.total > 0)) return null;
-  const expected = Math.round((itemSum(scan.items) + (scan.tax > 0 ? scan.tax : 0)) * 100) / 100;
-  if (expected <= 0) return null;
+  if (!scan.items.length || !scan.total) return null;
+  // Refunds are negative throughout (total, tax, lines) — same check.
+  const expected = Math.round((itemSum(scan.items) + (scan.tax || 0)) * 100) / 100;
+  if (!expected || Math.sign(expected) !== Math.sign(scan.total)) return null;
   return Math.abs(expected - scan.total) > 1 ? expected : null;
 }
 
@@ -73,8 +75,10 @@ export async function scanReceipt(urls: string[]): Promise<ReceiptScan> {
   const vendor = (data?.vendor as string | undefined)?.trim() || "";
   const items = (Array.isArray(data?.items) ? data.items : []) as ReceiptItem[];
   const sum = itemSum(items);
-  const total = typeof data?.total === "number" && data.total > 0 ? data.total : sum > 0 ? sum : 0;
-  const tax = typeof data?.tax === "number" && data.tax > 0 ? Math.round(data.tax * 100) / 100 : 0;
+  // A refund / return comes back NEGATIVE (money back) and is saved that way,
+  // so it subtracts from the job's material cost.
+  const total = typeof data?.total === "number" && data.total !== 0 ? data.total : sum;
+  const tax = typeof data?.tax === "number" ? Math.round(data.tax * 100) / 100 : 0;
   return { vendor, items, total: Math.round(total * 100) / 100, date: cleanScanDate(data?.date), tax };
 }
 

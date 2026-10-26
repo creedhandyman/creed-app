@@ -493,7 +493,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
       setScannedVendor(vendor);
       setScannedItems(items);
-      if (total > 0) setRa(total.toFixed(2));
+      if (total) setRa(total.toFixed(2));
 
       const itemSummary = items.filter((it) => it?.name).slice(0, 4).map((it) => it.name).join(", ");
       const more = items.length > 4 ? ` (+${items.length - 4} more)` : "";
@@ -501,8 +501,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       if (note.trim()) setRn(note);
 
       useStore.getState().showToast(
-        total > 0
-          ? `${t("jobs.scanned")}: $${total.toFixed(2)}${vendor ? ` ${t("jobs.scannedAt")} ${vendor}` : ""} — ${t("jobs.reviewAndAdd")}`
+        total
+          ? `${t("jobs.scanned")}: ${total < 0 ? `Refund −$${Math.abs(total).toFixed(2)}` : `$${total.toFixed(2)}`}${vendor ? ` ${t("jobs.scannedAt")} ${vendor}` : ""} — ${t("jobs.reviewAndAdd")}`
           : t("jobs.scannedReviewFields"),
         "success",
       );
@@ -539,7 +539,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const addReceipt = async (jobId: string) => {
     if (!rn.trim()) { useStore.getState().showToast(t("jobs.enterReceiptNote"), "warning"); return; }
     const amt = parseFloat(ra);
-    if (!amt || amt <= 0) { useStore.getState().showToast(t("jobs.enterValidAmount"), "warning"); return; }
+    if (!amt) { useStore.getState().showToast(t("jobs.enterValidAmount"), "warning"); return; }
     setUploading(true);
     try {
       // Pages were uploaded as they were attached. photo_url = page 1; the rest

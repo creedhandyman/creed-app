@@ -58,6 +58,7 @@ Rules:
 - items: every line item on the receipt; qty = the quantity purchased (default 1 if not shown)
 - price: the LINE total as printed (qty x unit price), not the unit price
 - discounts, coupons, refunds and returned items are line items with a NEGATIVE price
+- REFUND / RETURN receipt (money given BACK to the customer — "REFUND", "RETURN", "CREDIT", "AMOUNT REFUNDED", a negative or parenthesized total): report total and tax as NEGATIVE numbers (e.g. -42.18). A normal purchase total is positive.
 - transcribe item names as printed (abbreviations are fine); if a line is truly unreadable, skip it rather than guessing
 - sanity-check yourself: the item prices plus tax should come close to the total — re-read any digits that don't add up
 - Return ONLY the JSON object, no prose, no code fences, no markdown.`;

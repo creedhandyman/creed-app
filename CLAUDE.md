@@ -1851,7 +1851,7 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   learnFromReceipt — total = grand total, item sum only as fallback). Offline
   receipts are now scanned on replay too (`offline-uploads.ts replayReceipt`:
   best-effort after the row upsert; note+amount patched only while amount is
-  still 0; queue meta carries property/trade for the learning rows). **Guide shopping list is editable**: the
+  still 0; queue meta carries property/trade for the learning rows). **Refunds (2026-10-26)**: a refund/return receipt scans as a NEGATIVE total (prompt rule) and saves as a negative amount, so it subtracts from job materials; the sheet labels it "Save refund" and prefixes the note "Refund —". Learning skips non-positive lines. **Guide shopping list is editable**: the
   checkbox alone toggles bought-state; tapping an item's name/price opens an
   inline editor (rename / change cost / delete). Custom items edit their
   `customShop` entry in place; quote-derived items are "adopted" into
