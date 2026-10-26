@@ -1,7 +1,7 @@
 "use client";
 /**
  * Scan → review → save a receipt for a job. Work Mode's "Scan receipt" opens
- * this; it's the same flow as the Jobs receipts screen (which works well):
+ * this, and so does Jobs → Receipts (one flow for both):
  * every page is uploaded, ALL pages are scanned together as ONE receipt, the
  * AI's vendor / line items / grand total are shown for review, and Save
  * writes the receipt (with its pages) plus each priced item to
