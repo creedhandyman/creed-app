@@ -55,7 +55,7 @@ import SendSheet from "../SendSheet";
 import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
 import { isPlatformAdmin } from "@/lib/platform-admin";
-import { orderShopList } from "@/lib/guide-shop";
+import GuideShopTools, { type ShopItem as GuideShopItem } from "../GuideShopTools";
 import VoiceWalk, { type VoiceWalkResult } from "../VoiceWalk";
 import ServiceTemplates, { CategoryField } from "../ServiceTemplates";
 import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, type ServiceTemplate } from "@/lib/service-templates";
@@ -489,7 +489,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // data.checkedTools / data.checkedShop, matching the keys WorkVision
   // already writes — so adds and checks round-trip between the two views.
   const [customTools, setCustomTools] = useState<string[]>([]);
-  const [customShop, setCustomShop] = useState<{ n: string; c: number; room?: string; trade?: string; replaces?: string }[]>([]);
+  const [customShop, setCustomShop] = useState<GuideShopItem[]>([]);
   const [checkedTools, setCheckedTools] = useState<string[]>([]);
   const [checkedShop, setCheckedShop] = useState<string[]>([]);
   const [removedGuideShop, setRemovedGuideShop] = useState<string[]>([]);
@@ -4347,8 +4347,8 @@ function GuideTab({
   // shopKey) instead of by index, so reorders don't drift the checks.
   customTools: string[];
   setCustomTools: React.Dispatch<React.SetStateAction<string[]>>;
-  customShop: { n: string; c: number; room?: string; trade?: string; replaces?: string }[];
-  setCustomShop: React.Dispatch<React.SetStateAction<{ n: string; c: number; room?: string; trade?: string; replaces?: string }[]>>;
+  customShop: GuideShopItem[];
+  setCustomShop: React.Dispatch<React.SetStateAction<GuideShopItem[]>>;
   checkedTools: string[];
   setCheckedTools: React.Dispatch<React.SetStateAction<string[]>>;
   checkedShop: string[];
@@ -4357,12 +4357,6 @@ function GuideTab({
   setRemovedGuideShop: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
   const border = darkMode ? "#1e1e2e" : "#eee";
-  const [newTool, setNewTool] = useState("");
-  const [newShopName, setNewShopName] = useState("");
-  // Stable identity for a shop item — same shape WorkVision uses so the
-  // two views stay in sync on the same job.
-  const shopKey = (s: { n: string; room?: string; trade?: string }) =>
-    `${(s.n || "").toLowerCase().trim()}|||${(s.room || "").toLowerCase().trim()}|||${(s.trade || "").toLowerCase().trim()}`;
   // New-task form state
   const [taskRoom, setTaskRoom] = useState("");
   const [taskDetail, setTaskDetail] = useState("");
@@ -4370,227 +4364,27 @@ function GuideTab({
   const [taskPri, setTaskPri] = useState<"HIGH" | "MED" | "LOW">("MED");
   const [taskHrs, setTaskHrs] = useState("1");
   const workOrderHrs = workOrder.reduce((s, x) => s + (x.hrs || 0), 0);
-  const [newShopCost, setNewShopCost] = useState("");
-
-  const allTools = [...guide.tools, ...customTools];
-  // Hide auto items the user removed/edited (adopted into customShop), matching
-  // WorkVision so the two views show the same editable list.
-  // Edited items keep their spot; custom ones join their trade's section;
-  // general ones go last (lib/guide-shop.ts).
-  const allShop = orderShopList(guide.shop, removedGuideShop, customShop, shopKey);
-
-  const toggleTool = (t: string) =>
-    setCheckedTools((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
-    );
-
-  const toggleShop = (s: { n: string; room?: string; trade?: string }) => {
-    const key = shopKey(s);
-    setCheckedShop((prev) =>
-      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key],
-    );
-  };
-
-  // Inline edit/delete — same behavior as WorkVision's Guide tab. Custom items
-  // edit in place; quote-derived (auto) items are "adopted" into customShop and
-  // the original hidden via removedGuideShop. Checked state migrates on rename.
-  type ShopItem = { n: string; c: number; room?: string; trade?: string; replaces?: string };
-  const [editShopKey, setEditShopKey] = useState<string | null>(null);
-  const [editShopName, setEditShopName] = useState("");
-  const [editShopCost, setEditShopCost] = useState("");
-  const isCustomShop = (item: ShopItem) => customShop.some((x) => shopKey(x) === shopKey(item));
-  const startEditShop = (item: ShopItem) => {
-    setEditShopKey(shopKey(item));
-    setEditShopName(item.n);
-    setEditShopCost(item.c != null ? String(item.c) : "");
-  };
-  const cancelEditShop = () => { setEditShopKey(null); setEditShopName(""); setEditShopCost(""); };
-  const saveEditShop = (item: ShopItem) => {
-    const key = shopKey(item);
-    // `replaces` ties an edited copy to the quote item it stands in for, so
-    // it keeps that item's place in the list.
-    const replaces = isCustomShop(item) ? item.replaces : key;
-    const updated: ShopItem = { n: editShopName.trim() || item.n, c: parseFloat(editShopCost) || 0, room: item.room, trade: item.trade, ...(replaces ? { replaces } : {}) };
-    const newKey = shopKey(updated);
-    if (checkedShop.includes(key) && newKey !== key) {
-      setCheckedShop((prev) => [...prev.filter((k) => k !== key), newKey]);
-    }
-    if (isCustomShop(item)) {
-      setCustomShop((prev) => prev.map((x) => (shopKey(x) === key ? updated : x)));
-    } else {
-      setRemovedGuideShop((prev) => [...prev, key]);
-      setCustomShop((prev) => [...prev, updated]);
-    }
-    cancelEditShop();
-  };
-  const deleteShop = (item: ShopItem) => {
-    const key = shopKey(item);
-    setCheckedShop((prev) => prev.filter((k) => k !== key));
-    if (isCustomShop(item)) {
-      setCustomShop((prev) => prev.filter((x) => shopKey(x) !== key));
-    } else {
-      setRemovedGuideShop((prev) => [...prev, key]);
-    }
-    cancelEditShop();
-  };
 
   return (
     <div>
       <div className="mb">
-        {/* Materials first, tools underneath */}
-        <div className="cd mb">
-          <h4 style={{ color: "var(--color-warning)", fontSize: 15, marginBottom: 6 }}>
-            🛒 Shopping ($
-            {allShop.reduce((s, i) => s + (i.c || 0), 0)})
-          </h4>
-          <div>
-            {allShop.map((s, i) => {
-              const key = shopKey(s);
-              const done = checkedShop.includes(key);
-              const editing = editShopKey === key;
-              // Show trade header when trade changes
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const prevTrade = i > 0 ? (allShop[i - 1] as any).trade : null;
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const curTrade = (s as any).trade || "";
-              const showHeader = curTrade && curTrade !== prevTrade;
-              return (
-                <div key={i}>
-                  {showHeader && (
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-primary)", marginTop: i > 0 ? 10 : 0, marginBottom: 4 }}>{curTrade}</div>
-                  )}
-                  {editing ? (
-                    <div className="row" style={{ padding: "4px 0 4px 12px", gap: 6, borderBottom: `1px solid ${border}` }}>
-                      <input value={editShopName} onChange={(e) => setEditShopName(e.target.value)} placeholder="Item name..." style={{ flex: 1, fontSize: 15, padding: "4px 8px", minWidth: 0 }} />
-                      <input type="number" value={editShopCost} onChange={(e) => setEditShopCost(e.target.value)} placeholder="$" style={{ width: 56, fontSize: 15, padding: "4px 6px" }} />
-                      <button onClick={() => saveEditShop(s)} title="Save" style={{ background: "none", color: "var(--color-success)", fontSize: 16, padding: "0 4px" }}>✓</button>
-                      <button onClick={() => deleteShop(s)} title="Delete" style={{ background: "none", color: "var(--color-accent-red)", fontSize: 15, padding: "0 4px" }}>🗑</button>
-                      <button onClick={cancelEditShop} title="Cancel" style={{ background: "none", color: "var(--color-dim)", fontSize: 15, padding: "0 4px" }}>✕</button>
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        fontSize: 15,
-                        padding: "3px 0 3px 12px",
-                        borderBottom: `1px solid ${border}`,
-                      }}
-                    >
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
-                        <span
-                          onClick={() => toggleShop(s)}
-                          style={{
-                            width: 14, height: 14, borderRadius: 3,
-                            border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
-                            background: done ? "var(--color-success)" : "transparent",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 15, color: "#fff", flexShrink: 0, cursor: "pointer",
-                          }}
-                        >
-                          {done && "✓"}
-                        </span>
-                        <span onClick={() => startEditShop(s)} style={{ cursor: "pointer", textDecoration: done ? "line-through" : "none", opacity: done ? 0.5 : 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.n}</span>
-                      </span>
-                      <span onClick={() => startEditShop(s)} style={{ cursor: "pointer", color: done ? "#555" : "var(--color-success)", flexShrink: 0, paddingLeft: 8 }}>${s.c}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {/* Add custom shop item */}
-          <div className="row" style={{ marginTop: 6 }}>
-            <input
-              value={newShopName}
-              onChange={(e) => setNewShopName(e.target.value)}
-              placeholder="Item name..."
-              style={{ flex: 1, fontSize: 15, padding: "4px 8px" }}
-            />
-            <input
-              type="number"
-              value={newShopCost}
-              onChange={(e) => setNewShopCost(e.target.value)}
-              placeholder="$"
-              style={{ width: 50, fontSize: 15, padding: "4px 6px" }}
-            />
-            <button
-              onClick={() => {
-                if (newShopName.trim()) {
-                  setCustomShop((prev) => [...prev, { n: newShopName.trim(), c: parseFloat(newShopCost) || 0, room: "Custom" }]);
-                  setNewShopName("");
-                  setNewShopCost("");
-                }
-              }}
-              style={{ background: "none", color: "var(--color-warning)", fontSize: 16, padding: "0 4px" }}
-            >
-              +
-            </button>
-          </div>
-        </div>
-        <div className="cd">
-          <h4 style={{ color: "var(--color-primary)", fontSize: 15, marginBottom: 6 }}>
-            🧰 Tools ({allTools.length})
-          </h4>
-          {allTools.map((t, i) => {
-            const done = checkedTools.includes(t);
-            return (
-              <div
-                key={i}
-                onClick={() => toggleTool(t)}
-                style={{
-                  fontSize: 14,
-                  padding: "4px 0",
-                  borderBottom: `1px solid ${border}`,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  textDecoration: done ? "line-through" : "none",
-                  opacity: done ? 0.5 : 1,
-                }}
-              >
-                <span style={{
-                  width: 16, height: 16, borderRadius: 3,
-                  border: `2px solid ${done ? "var(--color-success)" : "#555"}`,
-                  background: done ? "var(--color-success)" : "transparent",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 14, color: "#fff", flexShrink: 0,
-                }}>
-                  {done && "✓"}
-                </span>
-                {t}
-              </div>
-            );
-          })}
-          {/* Add custom tool */}
-          <div className="row" style={{ marginTop: 6 }}>
-            <input
-              value={newTool}
-              onChange={(e) => setNewTool(e.target.value)}
-              placeholder="Add tool..."
-              style={{ flex: 1, fontSize: 15, padding: "4px 8px" }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newTool.trim()) {
-                  setCustomTools((prev) => [...prev, newTool.trim()]);
-                  setNewTool("");
-                }
-              }}
-            />
-            <button
-              onClick={() => {
-                if (newTool.trim()) {
-                  setCustomTools((prev) => [...prev, newTool.trim()]);
-                  setNewTool("");
-                }
-              }}
-              style={{ background: "none", color: "var(--color-primary)", fontSize: 16, padding: "0 4px" }}
-            >
-              +
-            </button>
-          </div>
-        </div>
+        <GuideShopTools
+          guide={guide}
+          customShop={customShop}
+          removedGuideShop={removedGuideShop}
+          checkedShop={checkedShop}
+          customTools={customTools}
+          checkedTools={checkedTools}
+          darkMode={darkMode}
+          addTrade="Added"
+          onChange={(patch) => {
+            if (patch.customShop) setCustomShop(patch.customShop);
+            if (patch.removedGuideShop) setRemovedGuideShop(patch.removedGuideShop);
+            if (patch.checkedShop) setCheckedShop(patch.checkedShop);
+            if (patch.customTools) setCustomTools(patch.customTools);
+            if (patch.checkedTools) setCheckedTools(patch.checkedTools);
+          }}
+        />
       </div>
       <div className="cd">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>

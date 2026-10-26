@@ -12,9 +12,8 @@ import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
-import ShopItemSheet, { type ShopDraft } from "../ShopItemSheet";
+import GuideShopTools from "../GuideShopTools";
 import ReceiptScanSheet from "../ReceiptScanSheet";
-import { orderShopList } from "@/lib/guide-shop";
 import MileageQuickTrack from "../MileageQuickTrack";
 import { startDrive, directionsUrl } from "@/lib/drive-tracker";
 import RenderModal from "../RenderModal";
@@ -167,13 +166,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [checkedShop, setCheckedShop] = useState<string[]>([]);
   const [extraTools, setExtraTools] = useState<string[]>([]);
   const [extraShop, setExtraShop] = useState<{ n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }[]>([]);
-  const [newTool, setNewTool] = useState("");
   // Quote-derived shop items the user has edited/removed (hidden from the
   // auto list; an edited copy lives in customShop). Keyed by shopKey.
   const [removedGuideShop, setRemovedGuideShop] = useState<string[]>([]);
-  // Inline shopping-item editor: the shopKey being edited + draft name/cost.
-  // Shopping-list add/edit sheet (ShopItemSheet). item null = adding.
-  const [shopSheet, setShopSheet] = useState<{ item: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string } | null } | null>(null);
   const rate = user.rate || 55;
 
   // Persist timer
@@ -239,11 +234,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; itemId?: string }[] = jobData?.workOrder || [];
 
   // ── Guide-tab persistence ────────────────────────────────────────
-  // Stable identity for a shop item so checked-state survives reorders /
-  // remounts. Trade can be missing on legacy custom items — fall back to "".
-  const shopKey = (s: { n: string; room?: string; trade?: string }) =>
-    `${(s.n || "").toLowerCase().trim()}|||${(s.room || "").toLowerCase().trim()}|||${(s.trade || "").toLowerCase().trim()}`;
-
   // Hydrate guide-tab state from the active job whenever it changes — so
   // switching between jobs shows each job's own custom items + checks, and a
   // page refresh doesn't wipe the shopping list.
@@ -1591,261 +1581,25 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             same structure the estimator built). ── */}
       {section === "guide" && activeJob && (() => {
         try {
-          const roomsData = jobData?.rooms || [];
-          const guide = makeGuide(roomsData);
-          const allTools = [...guide.tools, ...extraTools];
-          // Edited items keep their spot; custom ones join their trade's
-          // section; general ones go last (lib/guide-shop.ts).
-          const allShop: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string; replaces?: string }[] =
-            orderShopList(guide.shop, removedGuideShop, extraShop, shopKey);
-          const shopTotal = allShop.reduce((s, i) => s + (i.c || 0), 0);
-          const shopRemaining = allShop.reduce(
-            (s, i) => s + (checkedShop.includes(shopKey(i)) ? 0 : i.c || 0),
-            0,
-          );
-          // Toggle helpers — optimistic local update + persist into the
-          // job's rooms blob so the state survives remounts and the Jobs
-          // tab can read the same source of truth.
-          const toggleTool = (tool: string) => {
-            const next = checkedTools.includes(tool)
-              ? checkedTools.filter((x) => x !== tool)
-              : [...checkedTools, tool];
-            setCheckedTools(next);
-            persistGuide({ checkedTools: next });
-          };
-          const toggleShop = (item: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }) => {
-            const key = shopKey(item);
-            const next = checkedShop.includes(key)
-              ? checkedShop.filter((k) => k !== key)
-              : [...checkedShop, key];
-            setCheckedShop(next);
-            persistGuide({ checkedShop: next });
-          };
-          const addCustomTool = (tool: string) => {
-            if (!tool || extraTools.includes(tool)) return;
-            const next = [...extraTools, tool];
-            setExtraTools(next);
-            persistGuide({ customTools: next });
-          };
-          const addCustomShop = (item: { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string }) => {
-            const next = [...extraShop, item];
-            setExtraShop(next);
-            persistGuide({ customShop: next });
-          };
-          // Edit-in-place. Custom items update their extraShop entry; quote-
-          // derived items are "adopted" into customShop and their original key
-          // hidden via removedGuideShop. Checked state migrates if the name
-          // (and thus shopKey) changed.
-          type ShopItem = { n: string; c: number; qty?: number; unitPrice?: number; room?: string; trade?: string; replaces?: string };
-          const isCustomShop = (item: ShopItem) => extraShop.some((x) => shopKey(x) === shopKey(item));
-          const startEditShop = (item: ShopItem) => setShopSheet({ item });
-          const cancelEditShop = () => setShopSheet(null);
-          const saveEditShop = (item: ShopItem, draft: ShopDraft) => {
-            const key = shopKey(item);
-            // `replaces` ties an edited copy to the quote item it stands in for,
-            // so it keeps that item's place in the list.
-            const replaces = isCustomShop(item) ? item.replaces : key;
-            const updated: ShopItem = { ...draft, n: draft.n || item.n, room: item.room, trade: item.trade, ...(replaces ? { replaces } : {}) };
-            const newKey = shopKey(updated);
-            const nextChecked = checkedShop.includes(key) && newKey !== key
-              ? [...checkedShop.filter((k) => k !== key), newKey]
-              : checkedShop;
-            if (isCustomShop(item)) {
-              const nextExtra = extraShop.map((x) => (shopKey(x) === key ? updated : x));
-              setExtraShop(nextExtra); setCheckedShop(nextChecked);
-              persistGuide({ customShop: nextExtra, checkedShop: nextChecked });
-            } else {
-              const nextRemoved = [...removedGuideShop, key];
-              const nextExtra = [...extraShop, updated];
-              setRemovedGuideShop(nextRemoved); setExtraShop(nextExtra); setCheckedShop(nextChecked);
-              persistGuide({ removedGuideShop: nextRemoved, customShop: nextExtra, checkedShop: nextChecked });
-            }
-            cancelEditShop();
-          };
-          const deleteShop = (item: ShopItem) => {
-            const key = shopKey(item);
-            const nextChecked = checkedShop.filter((k) => k !== key);
-            if (isCustomShop(item)) {
-              const nextExtra = extraShop.filter((x) => shopKey(x) !== key);
-              setExtraShop(nextExtra); setCheckedShop(nextChecked);
-              persistGuide({ customShop: nextExtra, checkedShop: nextChecked });
-            } else {
-              const nextRemoved = [...removedGuideShop, key];
-              setRemovedGuideShop(nextRemoved); setCheckedShop(nextChecked);
-              persistGuide({ removedGuideShop: nextRemoved, checkedShop: nextChecked });
-            }
-            cancelEditShop();
-          };
-
+          const guide = makeGuide(jobData?.rooms || []);
           return (
-            <div>
-              {/* Shopping (materials) first, tools under it */}
-              <div className="cd mb">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <h4 style={{ fontSize: 15, color: "var(--color-warning)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <Icon name="cart" size={14} color="var(--color-warning)" />
-                    {t("wv.shoppingList")} (${shopTotal.toFixed(0)})
-                  </h4>
-                  <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-                    ${shopRemaining.toFixed(0)} left
-                  </span>
-                </div>
-                {allShop.length === 0 && (
-                  <div className="dim" style={{ fontSize: 14, padding: "4px 0" }}>No shopping items.</div>
-                )}
-                {allShop.map((s, i) => {
-                  const done = checkedShop.includes(shopKey(s));
-                  const prevTrade = i > 0 ? allShop[i - 1].trade : null;
-                  const curTrade = s.trade || "";
-                  const showHeader = curTrade && curTrade !== prevTrade;
-                  return (
-                    <div key={i}>
-                      {showHeader && (
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: "var(--color-primary)",
-                            marginTop: i > 0 ? 12 : 0,
-                            marginBottom: 4,
-                            fontFamily: "Oswald",
-                            textTransform: "uppercase",
-                            letterSpacing: ".08em",
-                          }}
-                        >
-                          {curTrade}
-                        </div>
-                      )}
-                      {(
-                        <div
-                          style={{
-                            display: "flex", justifyContent: "space-between", alignItems: "center",
-                            fontSize: 15, padding: "6px 0 6px 4px",
-                            borderBottom: `1px solid ${border}`,
-                            textDecoration: done ? "line-through" : "none",
-                            opacity: done ? 0.5 : 1,
-                            transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
-                          }}
-                        >
-                          <span style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
-                            <button
-                              onClick={() => toggleShop(s)}
-                              aria-label={done ? "Uncheck item" : "Check off item"}
-                              style={{
-                                width: 18, height: 18, borderRadius: 4, padding: 0,
-                                border: `2px solid ${done ? "var(--color-success)" : "#666"}`,
-                                background: done ? "var(--color-success)" : "transparent",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                flexShrink: 0, cursor: "pointer",
-                              }}
-                            >
-                              {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
-                            </button>
-                            <span onClick={() => startEditShop(s)} style={{ flex: 1, minWidth: 0, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.qty && s.qty > 1 ? <b style={{ color: "var(--color-warning)", marginRight: 4 }}>{s.qty}×</b> : null}{s.n}</span>
-                          </span>
-                          <span onClick={() => startEditShop(s)} style={{ color: done ? "#888" : "var(--color-success)", fontFamily: "Oswald", cursor: "pointer", flexShrink: 0, marginLeft: 8 }}>
-                            ${(s.c || 0).toFixed(0)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {/* Add custom shop item */}
-                <button
-                  onClick={() => setShopSheet({ item: null })}
-                  className="bo"
-                  style={{ width: "100%", marginTop: 10, padding: "10px 0", fontSize: 15, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, color: "var(--color-warning)", borderColor: "rgba(255,170,0,.45)" }}
-                >
-                  <Icon name="add" size={16} /> Add item
-                </button>
-              </div>
-
-              {/* Tools */}
-              <div className="cd">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <h4 style={{ fontSize: 15, color: "var(--color-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <Icon name="hammer" size={14} color="var(--color-primary)" />
-                    {t("wv.toolsNeeded")} ({allTools.length})
-                  </h4>
-                  <span className="dim" style={{ fontSize: 13, fontFamily: "Oswald", letterSpacing: ".06em" }}>
-                    {checkedTools.length}/{allTools.length} packed
-                  </span>
-                </div>
-                {allTools.length === 0 && (
-                  <div className="dim" style={{ fontSize: 14, padding: "4px 0" }}>No tools listed.</div>
-                )}
-                {allTools.map((tool, i) => {
-                  const done = checkedTools.includes(tool);
-                  return (
-                    <div
-                      key={i}
-                      onClick={() => toggleTool(tool)}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        fontSize: 15, padding: "6px 0",
-                        borderBottom: `1px solid ${border}`,
-                        cursor: "pointer",
-                        textDecoration: done ? "line-through" : "none",
-                        opacity: done ? 0.5 : 1,
-                        transition: "opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)",
-                      }}
-                    >
-                      <span style={{
-                        width: 18, height: 18, borderRadius: 4,
-                        border: `2px solid ${done ? "var(--color-success)" : "#666"}`,
-                        background: done ? "var(--color-success)" : "transparent",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        flexShrink: 0,
-                      }}>
-                        {done && <Icon name="check" size={12} color="#fff" strokeWidth={3} />}
-                      </span>
-                      {tool}
-                    </div>
-                  );
-                })}
-                {/* Add custom tool */}
-                <div className="row" style={{ marginTop: 8 }}>
-                  <input
-                    value={newTool}
-                    onChange={(e) => setNewTool(e.target.value)}
-                    placeholder="Add tool…"
-                    style={{ flex: 1, fontSize: 15, padding: "6px 10px" }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && newTool.trim()) {
-                        addCustomTool(newTool.trim());
-                        setNewTool("");
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (newTool.trim()) {
-                        addCustomTool(newTool.trim());
-                        setNewTool("");
-                      }
-                    }}
-                    aria-label="Add tool"
-                    style={{ background: "none", color: "var(--color-primary)", padding: "0 6px", display: "inline-flex" }}
-                  >
-                    <Icon name="add" size={18} />
-                  </button>
-                </div>
-              </div>
-
-              {shopSheet && (
-                <ShopItemSheet
-                  item={shopSheet.item}
-                  darkMode={darkMode}
-                  onClose={cancelEditShop}
-                  onDelete={shopSheet.item ? () => deleteShop(shopSheet.item!) : undefined}
-                  onSave={(draft) => {
-                    if (shopSheet.item) saveEditShop(shopSheet.item, draft);
-                    else { addCustomShop({ ...draft, room: "Custom", trade: "Added on site" }); cancelEditShop(); }
-                  }}
-                />
-              )}
-            </div>
+            <GuideShopTools
+              guide={guide}
+              customShop={extraShop}
+              removedGuideShop={removedGuideShop}
+              checkedShop={checkedShop}
+              customTools={extraTools}
+              checkedTools={checkedTools}
+              darkMode={darkMode}
+              onChange={(patch) => {
+                if (patch.customShop) setExtraShop(patch.customShop);
+                if (patch.removedGuideShop) setRemovedGuideShop(patch.removedGuideShop);
+                if (patch.checkedShop) setCheckedShop(patch.checkedShop);
+                if (patch.customTools) setExtraTools(patch.customTools);
+                if (patch.checkedTools) setCheckedTools(patch.checkedTools);
+                persistGuide(patch);
+              }}
+            />
           );
         } catch { return <div className="cd dim" style={{ padding: 20, textAlign: "center" }}>Guide unavailable</div>; }
       })()}

@@ -17,7 +17,7 @@ export type GuideShopItem = {
   replaces?: string;
 };
 
-const GENERAL = new Set(["", "general", "added on site", "custom"]);
+const GENERAL = new Set(["", "general", "added", "added on site", "custom"]);
 const tradeOf = (s: GuideShopItem) => (s.trade || "").toLowerCase().trim();
 
 export function orderShopList<A extends GuideShopItem, C extends GuideShopItem>(
