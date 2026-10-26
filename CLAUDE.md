@@ -1862,6 +1862,14 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   edited copy carries `replaces` (the original's key) and takes its exact
   spot; other custom items join their trade's section; general / "Added on
   site" / no-trade items go last. Materials list renders above Tools.
+  **One component (2026-10-26)**: the Shopping + Tools cards are
+  `components/GuideShopTools.tsx`, used by BOTH WorkVision → Guide and
+  QuoteForge → Guide (the quote editor used to have a cruder inline
+  name/$ editor). Add/edit = `ShopItemSheet` (type-ahead, −/+ qty, each,
+  total), "$ left" counter. Parent owns the state and gets one patch via
+  `onChange` — WorkVision persists it to the job at once, QuoteForge keeps
+  it until Save. Quote-editor adds use trade "Added" (sorts last, like
+  "Added on site").
 - **Nav per-tab colors + morphing More slot; dashboard "next check"**:
   `VerticalNav.tsx` colors the active tab in its signature hue (Home blue,
   Quote yellow/gold, Jobs red, Time green, Quests purple, … — `TAB_COLOR`
