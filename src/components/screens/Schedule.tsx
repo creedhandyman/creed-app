@@ -3,6 +3,10 @@ import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
+import { peekNavIntent, clearNavIntent, goWithIntent } from "@/lib/nav-intent";
+import { parseSchedTime, parseSchedCrew, entryJob, isJobScheduled } from "@/lib/day-plan";
+import { stripNoteParts } from "@/lib/dispatch-week";
+import type { ScheduleEntry } from "@/lib/types";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
@@ -147,9 +151,8 @@ const ymd = (d: Date) =>
 // Booking default: after 2 PM the next open slot is realistically tomorrow.
 const defaultDay = () => { const d = new Date(); if (d.getHours() >= 14) d.setDate(d.getDate() + 1); return ymd(d); };
 
-// One-shot "open on this view" hint another screen leaves in sessionStorage
+// One-shot "open on this view" hint another screen leaves via lib/nav-intent
 // (e.g. Home → today's Day view). Stale after 15s so a later visit opens normally.
-function peekNavIntent(page: string) { try { const raw = sessionStorage.getItem("c_nav_intent"); if (!raw) return null; const v = JSON.parse(raw); if (!v || v.page !== page || typeof v.at !== "number" || Date.now() - v.at > 15000) return null; return v as { tab?: string }; } catch { return null; } }
 
 export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Props) {
   const jobs = useStore((s) => s.jobs);
@@ -164,7 +167,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
   const [view, setView] = useState<"day" | "week" | "month" | "dispatch">(() => { const v = peekNavIntent("sched")?.tab; return v === "day" || v === "week" || v === "month" || v === "dispatch" ? v : "week"; });
   // The nav intent is single-use — drop it once read so a later visit opens on Week.
   useEffect(() => {
-    try { const raw = sessionStorage.getItem("c_nav_intent"); if (raw && JSON.parse(raw)?.page === "sched") sessionStorage.removeItem("c_nav_intent"); } catch { /* ignore */ }
+    clearNavIntent("sched");
   }, []);
   // Crew open pre-filtered to themselves — but only when they're actually on
   // the calendar (named in an entry's 👷 crew list or the linked job's
@@ -172,9 +175,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
   const [workerFilter, setWorkerFilter] = useState<string | null>(() => {
     const me = user?.name;
     if (isAdmin || !me) return null;
-    const inCrew = (note?: string) => { const m = note?.match(/👷\s*([^·]+)/); return !!m && m[1].split(",").map((s) => s.trim()).includes(me); };
-    const latestAt = (property?: string) => property ? jobs.filter((j) => j.property === property && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] : undefined;
-    const mine = schedule.some((e) => inCrew(e.note) || ((e.job_id ? jobs.find((j) => j.id === e.job_id) : undefined) || latestAt(e.job))?.requested_tech === me);
+    const mine = schedule.some((e) => parseSchedCrew(e.note).includes(me) || entryJob(e, jobs)?.requested_tech === me);
     return mine ? me : null;
   });
   const [suggestion, setSuggestion] = useState<{ date: string; reason: string } | null>(null);
@@ -376,12 +377,10 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     : `${MONTH_NAMES[month]} ${year}`;
   // Workers live in the note as "👷 Name, Name"; the linked job's
   // requested_tech is a fallback so entries scheduled without a crew list
-  // still filter to that tech.
-  const parseWorkers = (note?: string): string[] => {
-    const m = note?.match(/👷\s*([^·]+)/);
-    return m ? m[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
-  };
-  const parseTime = (note?: string): string => note?.match(/🕐\s*(\d{1,2}:\d{2})/)?.[1] || "";
+  // still filter to that tech. Note parsing is day-plan's (parseSchedCrew /
+  // parseSchedTime — the latter also reads AppFolio's "🕐 2:30pm" as 14:30).
+  const parseWorkers = parseSchedCrew;
+  const parseTime = parseSchedTime;
   const fmt12 = (hhmm: string): string => {
     if (!hhmm) return "";
     const [h, m] = hhmm.split(":").map(Number);
@@ -402,24 +401,16 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     return total > 1 ? { idx, total } : null;
   };
   const initialsOf = (name: string): string => (name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
-  const jobFor = (property?: string) => property ? jobs.filter((j) => j.property === property && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] : undefined;
-  // An entry's job: the linked one when it has job_id, else (legacy) the
-  // latest job at that address.
-  const jobForEntry = (e: { job?: string; job_id?: string | null }) =>
-    (e.job_id ? jobs.find((j) => j.id === e.job_id) : undefined) || jobFor(e.job);
-  // Is this job on the calendar? Linked entries count only for their own job.
-  // A legacy (unlinked) entry at the same address counts only if it isn't
-  // older than the job — an old job's visit must not hide a new one there.
-  const isScheduled = (j: { id: string; property: string; created_at?: string }) =>
-    schedule.some((e) => e.job_id
-      ? e.job_id === j.id
-      : e.job === j.property && (!j.created_at || e.sched_date >= j.created_at.slice(0, 10)));
-  const entryWorkers = (e: { note?: string; job?: string; job_id?: string | null }): string[] => {
+  // An entry's job (linked, else the latest job at that address) and "is this
+  // job on the calendar" — day-plan's entryJob / isJobScheduled.
+  const jobForEntry = (e: Pick<ScheduleEntry, "job" | "job_id">) => entryJob(e, jobs);
+  const isScheduled = (j: { id: string; property: string; created_at?: string }) => isJobScheduled(j, schedule);
+  const entryWorkers = (e: Pick<ScheduleEntry, "note" | "job" | "job_id">): string[] => {
     const w = parseWorkers(e.note);
     const j = jobForEntry(e);
     return (j?.requested_tech && !w.includes(j.requested_tech)) ? [...w, j.requested_tech] : w;
   };
-  const matchesWorker = (e: { note?: string; job?: string; job_id?: string | null }) => !workerFilter || entryWorkers(e).includes(workerFilter);
+  const matchesWorker = (e: Pick<ScheduleEntry, "note" | "job" | "job_id">) => !workerFilter || entryWorkers(e).includes(workerFilter);
 
   // Open the quick-schedule modal pre-filled to EDIT/MOVE an existing entry
   // (change its day(s), time, crew, notes — or unschedule it).
@@ -431,7 +422,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     setEndTarget(s.end_date || null);
     setQsTime(parseTime(s.note));
     setQsWorkers(parseWorkers(s.note));
-    setQsNote((s.note || "").replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/g, "").replace(/👷\s*[^·]+·?\s*/g, "").trim());
+    setQsNote(stripNoteParts(s.note));
   };
   const deleteSched = async () => {
     if (!editSched) return;
@@ -650,7 +641,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
               const color = j ? statusColor(j.status) : "var(--color-primary)";
               const time = parseTime(s.note);
               const crew = entryWorkers(s);
-              const meta = j ? `${j.trade || t("sched.job")} · ${(j.total_hrs || 0).toFixed(1)}h` : (s.note?.replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/, "").replace(/👷\s*[^·]+·?\s*/, "").trim() || t("sched.scheduled"));
+              const meta = j ? `${j.trade || t("sched.job")} · ${(j.total_hrs || 0).toFixed(1)}h` : (stripNoteParts(s.note) || t("sched.scheduled"));
               return (
                 <div key={s.id} style={{ display: "flex", gap: 9, marginBottom: 8 }}>
                   <div style={{ width: 44, flexShrink: 0, fontSize: 12, color: "var(--color-dim)", fontFamily: "Oswald", fontWeight: 600, paddingTop: 11, textAlign: "right" }}>{time ? fmt12(time) : "—"}</div>
@@ -875,7 +866,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
                           {(() => {
                             const time = parseTime(s.note);
                             const crew = parseWorkers(s.note);
-                            const freeform = (s.note || "").replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/, "").replace(/👷\s*[^·]+·?\s*/, "").trim();
+                            const freeform = stripNoteParts(s.note);
                             const bits = [time ? fmt12(time) : "", crew.join(", "), freeform].filter(Boolean);
                             return bits.length ? <div className="dim" style={{ fontSize: 12 }}>{bits.join(" · ")}</div> : null;
                           })()}
@@ -895,8 +886,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
                               className="bo"
                               onClick={() => {
                                 // Jobs reads this to open straight to the job's detail.
-                                try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "jobs", jobId: linkedJob.id, at: Date.now() })); } catch { /* ignore */ }
-                                setPage("jobs");
+                                goWithIntent(setPage, { page: "jobs", jobId: linkedJob.id });
                               }}
                               style={{ fontSize: 13, padding: "4px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}
                             >
@@ -945,10 +935,9 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
               const rows = monthEntries.map((s) => {
                 const d = new Date(s.sched_date + "T12:00:00");
                 const dayName = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-                const timeMatch = s.note?.match(/🕐\s*(\d{1,2}:\d{2})/);
-                const time = timeMatch ? timeMatch[1] : "—";
-                const workers = s.note?.match(/👷\s*(.+?)(?:\s*·|$)/)?.[1] || "—";
-                const notes = s.note?.replace(/🕐\s*\d{1,2}:\d{2}\s*·?\s*/g, "").replace(/👷\s*.+?(?:\s*·|$)/g, "").trim() || "";
+                const time = parseSchedTime(s.note) || "—";
+                const workers = parseSchedCrew(s.note).join(", ") || "—";
+                const notes = stripNoteParts(s.note);
                 return `<tr><td style="white-space:nowrap;font-weight:600">${esc(dayName)}</td><td>${esc(time)}</td><td style="color:#2E75B6">${esc(s.job)}</td><td>${esc(workers)}</td><td class="dim">${esc(notes)}</td></tr>`;
               }).join("");
 

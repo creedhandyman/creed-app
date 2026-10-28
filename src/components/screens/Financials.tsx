@@ -8,6 +8,7 @@ import { profitSnapshot, makeInRange, makeEntryPay } from "@/lib/financials";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
+import { goWithIntent } from "@/lib/nav-intent";
 import QuickBooksExportSheet from "@/components/QuickBooksExportSheet";
 
 type Range = "week" | "month" | "quarter" | "year" | "all";
@@ -106,8 +107,7 @@ export default function Financials({ setPage, embedded }: { setPage: (p: string)
   // A/R card → Jobs, Billing tab filtered to unpaid (one-shot handoff Jobs
   // reads on mount).
   const openUnpaidJobs = () => {
-    try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "jobs", tab: "billing", filter: "unpaid", at: Date.now() })); } catch { /* */ }
-    setPage("jobs");
+    goWithIntent(setPage, { page: "jobs", tab: "billing", filter: "unpaid" });
   };
 
   // Status buckets. "Issued quotes" = anything past the lead/inspection

@@ -7,6 +7,7 @@ import { applyApproval } from "@/lib/approve-job";
 import type { Room } from "@/lib/types";
 import { applySmsConsent } from "@/lib/sms-consent";
 import { notifyQuoteApproved } from "@/lib/notify-server";
+import { tryReadBlob } from "@/lib/job-blob";
 
 export const dynamic = "force-dynamic";
 
@@ -136,12 +137,7 @@ export async function POST(req: NextRequest) {
     const shownTotal =
       typeof body.shownTotal === "number" && Number.isFinite(body.shownTotal) ? body.shownTotal : null;
     if (shownFp || shownTotal !== null) {
-      let current: Record<string, unknown> | null = null;
-      try {
-        current = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms ?? null;
-      } catch {
-        current = null;
-      }
+      const current: Record<string, unknown> | null = tryReadBlob(job.rooms);
       const tt = current?.tierTotals as Record<string, number> | undefined;
       const t = body.tier;
       const expectedTotal =
@@ -198,11 +194,9 @@ export async function POST(req: NextRequest) {
     // re-sign of an already-accepted job.
     if (patch.status === "accepted") {
       let option: string | null = null;
-      try {
-        const b = typeof patch.rooms === "string" ? JSON.parse(patch.rooms as string) : null;
-        const tk = b?.acceptedTier as string | undefined;
-        if (b?.tieredQuote && tk) option = tk === "base" ? "Base" : (b.tierNames?.[tk] || tk);
-      } catch { /* no option label */ }
+      const b = tryReadBlob(patch.rooms);
+      const tk = b?.acceptedTier as string | undefined;
+      if (b?.tieredQuote && tk) option = tk === "base" ? "Base" : (b.tierNames?.[tk] || tk);
       await notifyQuoteApproved(supabase, {
         jobId,
         orgId: job.org_id,

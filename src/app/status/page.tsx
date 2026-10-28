@@ -8,6 +8,7 @@ import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { itemInTier, tierDeltas } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
 import { smsConsentGranted } from "@/lib/sms-consent";
+import { readBlob, tryReadBlob } from "@/lib/job-blob";
 
 const STATUS_STEPS = [
   { key: "quoted", label: "Quoted", icon: "📝" },
@@ -75,7 +76,7 @@ function StatusContent() {
           setJob(j);
           // Parse work order + discount off the rooms JSON blob
           try {
-            const blob = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+            const blob = readBlob(j.rooms);
             setWorkOrder((blob?.workOrder || []).map((w: { room: string; detail: string; done: boolean }) => ({
               room: w.room, detail: w.detail, done: w.done,
             })));
@@ -239,8 +240,8 @@ function StatusContent() {
       // PDF downloaded right away prints the approval without a reload.
       let rooms = job.rooms;
       try {
-        const blob = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-        if (blob && typeof blob === "object") {
+        const blob = tryReadBlob(job.rooms);
+        if (blob) {
           if (data?.approval) blob.approval = data.approval;
           if (tiered) blob.acceptedTier = selectedTier;
           rooms = JSON.stringify(blob);

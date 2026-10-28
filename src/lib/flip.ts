@@ -6,6 +6,7 @@
 import type { FlipComp, FlipLoan, FlipProject, FlipSub, Job, Profile, Receipt, TimeEntry } from "./types";
 import { makeEntryPay } from "./financials";
 import { entriesForJob, receiptsForJob } from "./job-entries";
+import { readBlob, tryReadBlob } from "./job-blob";
 
 export const RULE_70 = 0.70;        // classic 70% rule ceiling (of ARV, minus rehab)
 export const THIN_PROFIT = 20000;   // profit below this = "thin" (warn)
@@ -93,7 +94,7 @@ export interface FlipActuals {
  *  Every job on a flip sits at the same address, so the areas name the line. */
 function jobScope(rooms: unknown): { done: number; total: number; areas: string[] } {
   try {
-    const blob = typeof rooms === "string" ? JSON.parse(rooms) : rooms;
+    const blob = readBlob(rooms);
     const wo: { done?: boolean; room?: string }[] = Array.isArray(blob?.workOrder) ? blob.workOrder : [];
     const quoteRooms: { name?: string }[] = Array.isArray(blob?.rooms) ? blob.rooms : [];
     const names = (wo.length ? wo.map((w) => w?.room) : quoteRooms.map((r) => r?.name))
@@ -286,8 +287,7 @@ export function resaleData(flipId: string, jobs: Job[]): ResaleData {
   const out: ResaleData = { areas: [], before: [], after: [], renders: [], work: [] };
   const seen = new Set<string>();
   for (const j of jobs.filter((x) => x.flip_project_id === flipId)) {
-    let blob: Record<string, unknown> | null = null;
-    try { blob = typeof j.rooms === "string" ? JSON.parse(j.rooms) : (j.rooms as unknown as Record<string, unknown>); } catch { /* */ }
+    const blob: Record<string, unknown> | null = tryReadBlob(j.rooms);
     const jobDone = DONE_STATUSES.includes(j.status);
     const wo = Array.isArray(blob?.workOrder) ? (blob!.workOrder as { room?: string; detail?: string; done?: boolean }[]) : [];
     if (wo.length) {

@@ -27,6 +27,7 @@ import { haversineMiles, ROAD_FACTOR, driveMinutes } from "./geo";
 import { hhmmToMin, minToHhmm, roundQuarter } from "./route-plan";
 import { planningCrew } from "./job-duration";
 import type { FixedVisit, FlexVisit, LatLng, PlanInput, PlanOptions, WeekPlan } from "./route-plan";
+import { readBlob } from "./job-blob";
 
 /** On-site time for a job whose quote has no labor hours. */
 export const DEFAULT_JOB_MIN = 120;
@@ -55,7 +56,7 @@ export interface PoolJob {
 /** Crew pick + AI day estimate off a quote's rooms blob (null = Auto / none). */
 export function quotePlanning(job: Pick<Job, "rooms">): { crewSize: number | null; estDays: number | null } {
   try {
-    const d = typeof job.rooms === "string" ? JSON.parse(job.rooms || "{}") : job.rooms;
+    const d = readBlob(job.rooms);
     const cs = d?.crewSize;
     const ed = d?.estDays;
     return {

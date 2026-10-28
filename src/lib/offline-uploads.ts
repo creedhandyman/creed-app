@@ -19,6 +19,7 @@
 import { supabase, db } from "./supabase";
 import { uploadReceiptPrivate } from "./receipt-storage";
 import { scanReceipt, receiptNote, learnFromReceipt } from "./receipt-scan";
+import { readBlob } from "./job-blob";
 
 const DB_NAME = "creed-uploads";
 const STORE = "uploads";
@@ -183,12 +184,7 @@ async function replayJobPhoto(item: QueuedUpload): Promise<void> {
   const jobs = await db.get<{ id: string; rooms: unknown }>("jobs", { id: jobId });
   const job = jobs[0];
   if (!job) return; // job deleted — drop
-  let roomsData: Record<string, unknown> = {};
-  try {
-    roomsData = (typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms) || {};
-  } catch {
-    roomsData = {};
-  }
+  const roomsData: Record<string, unknown> = readBlob(job.rooms);
   if (!Array.isArray(roomsData.photos)) roomsData.photos = [];
   const photos = roomsData.photos as { url?: string; label?: string; type?: string }[];
   if (!photos.some((p) => p.url === publicUrl)) {

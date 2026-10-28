@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
+import { readBlob } from "@/lib/job-blob";
 
 export const dynamic = "force-dynamic";
 
@@ -135,14 +136,7 @@ export async function POST(req: NextRequest) {
     .eq("org_id", orgId)
     .eq("property", property);
   if (existErr) return NextResponse.json({ error: existErr.message }, { status: 500 });
-  const dup = (candidates || []).find((j) => {
-    try {
-      const blob = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-      return blob?.appfolioWorkOrderNumber === woNumber;
-    } catch {
-      return false;
-    }
-  });
+  const dup = (candidates || []).find((j) => readBlob(j.rooms).appfolioWorkOrderNumber === woNumber);
   if (dup) {
     return NextResponse.json({ error: "Already imported", jobId: dup.id }, { status: 409 });
   }

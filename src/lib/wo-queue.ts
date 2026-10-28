@@ -16,6 +16,7 @@
  */
 "use client";
 import { supabase } from "./supabase";
+import { woKey } from "./job-blob";
 
 export interface WoToggle {
   qid: string;
@@ -29,9 +30,8 @@ export interface WoToggle {
 
 const KEY = "c_wo_queue";
 
-export function woKey(w: { room?: string; detail?: string }): string {
-  return `${(w.room || "").toLowerCase().trim()}|||${(w.detail || "").toLowerCase().trim()}`;
-}
+// The task key lives with the blob reader; re-exported for existing callers.
+export { woKey };
 
 function read(): WoToggle[] {
   if (typeof window === "undefined") return [];

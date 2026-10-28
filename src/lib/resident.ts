@@ -1,3 +1,4 @@
+import { readBlob } from "./job-blob";
 /**
  * Resident (tenant) contact for a job — the person LIVING at the property,
  * distinct from the paying client (often a property manager). Stored on the
@@ -14,7 +15,7 @@
  */
 export function residentContact(roomsBlob: unknown): { name: string; phone: string; email: string } {
   try {
-    const d = (typeof roomsBlob === "string" ? JSON.parse(roomsBlob) : (roomsBlob || {})) as Record<string, unknown>;
+    const d: Record<string, unknown> = readBlob(roomsBlob);
     const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
     return {
       name: s(d.residentName) || s(d.tenantName),

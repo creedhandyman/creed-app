@@ -8,7 +8,8 @@ import { t } from "@/lib/i18n";
 import { makeGuide, extractZip } from "@/lib/parser";
 import { formatHours, parseEntryDate } from "@/lib/dates";
 import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
-import { FINISHED } from "@/lib/day-plan";
+import { FINISHED, stopsForDay, fmtClock } from "@/lib/day-plan";
+import { stripNoteParts } from "@/lib/dispatch-week";
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
@@ -30,6 +31,7 @@ import { newRowId } from "@/lib/offline-queue";
 import { unpaidFor } from "@/lib/pay";
 import { enqueueUpload, isNetworkError } from "@/lib/offline-uploads";
 import LocationSharingNote from "../LocationSharingNote";
+import { readBlob, tryReadBlob, jobBlob, woKey } from "@/lib/job-blob";
 
 function fmt(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -38,23 +40,8 @@ function fmt(ms: number): string {
 
 // Stable identity for a work-order item across renders — used by toggleWO to
 // find the right item in the latest store snapshot even if the array order
-// shifted. Kept in sync with the merge key in QuoteForge.saveJob.
-function woStableKey(w: { room?: string; detail?: string }): string {
-  return `${(w.room || "").toLowerCase().trim()}|||${(w.detail || "").toLowerCase().trim()}`;
-}
-
-// Scheduled start from a schedule note's "🕐 …" as 24h "HH:MM", or "".
-// Schedule writes "🕐 14:30"; AppFolio imports write "🕐 2:30pm" — an
-// optional am/pm suffix is folded in. Mirrored in Timer.tsx schedMinutes.
-function schedTime24(note?: string): string {
-  const m = note?.match(/🕐\s*(\d{1,2}):(\d{2})\s*(?:([ap])\.?m\.?(?![a-z]))?/i);
-  if (!m) return "";
-  let h = parseInt(m[1], 10);
-  const ap = m[3]?.toLowerCase();
-  if (ap === "p" && h < 12) h += 12;
-  if (ap === "a" && h === 12) h = 0;
-  return `${String(h).padStart(2, "0")}:${m[2]}`;
-}
+// shifted. Shared with the offline tick queue (lib/job-blob woKey).
+const woStableKey = woKey;
 
 // Photo entries on a job. The shape was originally {url,label,type} for
 // before/after/work uploads; rendered AI previews extend it with sourceUrl
@@ -184,10 +171,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     : stamped && stamped.property === sj ? stamped
     : pinned && pinned.property === sj ? pinned
     : byAddr || pinned;
-  const jobData = (() => {
-    try { return activeJob ? (typeof activeJob.rooms === "string" ? JSON.parse(activeJob.rooms) : activeJob.rooms) : null; }
-    catch { return null; }
-  })();
+  const jobData = activeJob ? tryReadBlob(activeJob.rooms) : null;
   // `itemId` links a task to its quote line (stamped by QuoteForge's save).
   const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; itemId?: string }[] = jobData?.workOrder || [];
 
@@ -276,41 +260,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Today's schedule
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  // Multi-day jobs span sched_date..end_date — match any day in that range, not
-  // just the start day, so a job scheduled across several days still shows in
-  // Work Mode on its middle/end days. (Mirrors Schedule.tsx spansDay.)
-  const todaySchedule = schedule.filter((s) => todayStr >= s.sched_date && todayStr <= (s.end_date || s.sched_date));
-  // Today's stops for the picker — same rules as Home's day plan / Schedule:
-  // an entry's job is its linked job_id, else the latest non-archived job at
-  // that address; archived or finished jobs drop out; time from the note's
-  // "🕐 HH:MM" (am/pm folded to 24h), crew from "👷 names" + the job's
-  // requested tech. My stops first, then by time (untimed last), then address.
-  const todayStops = (() => {
-    const latestAt = (property?: string) => property
-      ? jobs.filter((j) => j.property === property && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0]
-      : undefined;
-    const minutes = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
-    return todaySchedule
-      .map((s) => {
-        const job = (s.job_id ? jobs.find((j) => j.id === s.job_id) : undefined) || latestAt(s.job);
-        const time = schedTime24(s.note);
-        const named = s.note?.match(/👷\s*([^·]+)/)?.[1]?.split(",").map((n) => n.trim()).filter(Boolean) || [];
-        const crew = job?.requested_tech && !named.includes(job.requested_tech) ? [...named, job.requested_tech] : named;
-        return { s, job, time, crew, mine: !!user.name && crew.includes(user.name) };
-      })
-      .filter((x) => !(x.job && (x.job.archived || FINISHED.includes(x.job.status))))
-      .sort((a, b) => {
-        if (a.mine !== b.mine) return a.mine ? -1 : 1;
-        if (a.time && b.time && a.time !== b.time) return minutes(a.time) - minutes(b.time);
-        if (!!a.time !== !!b.time) return a.time ? -1 : 1;
-        return (a.s.job || "").localeCompare(b.s.job || "");
-      });
-  })();
-  // "14:05" → "2:05 PM" (the dashboard's Up-next format).
-  const fmtClock = (hhmm: string) => {
-    const [h, m] = hhmm.split(":").map(Number);
-    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-  };
+  // Today's stops for the picker — Home's day plan (day-plan stopsForDay:
+  // multi-day spans, linked job else the latest at the address, note time +
+  // crew, my stops first, then by time, then address). Work mode also drops
+  // stops whose job is already finished; one somebody clocked out of today
+  // stays, so it can be clocked into again.
+  const todayStops = stopsForDay({ schedule, jobs, timeEntries, day: todayStr, me: user.name || undefined })
+    .filter((st) => !(st.job && FINISHED.includes(st.job.status)))
+    .map(({ entry, job, time, crew, mine }) => ({ s: entry, job, time, crew, mine }));
 
   // "Nice work" card once a shift is done today: my CLOSED entries dated today
   // (parseEntryDate keeps M/D/YYYY and ISO dates local) + the next check —
@@ -449,10 +406,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     const tag = typeOverride ?? photoType;
     await enqueueRoomsWrite(async () => {
       const freshJob = useStore.getState().jobs.find((j) => j.id === activeJob.id);
-      let freshData: Record<string, unknown> = {};
-      try {
-        freshData = freshJob ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {} : {};
-      } catch { /* */ }
+      const freshData: Record<string, unknown> = jobBlob(freshJob);
       if (!Array.isArray(freshData.photos)) freshData.photos = [];
       (freshData.photos as JobPhoto[]).push({ url: publicUrl, label: "", type: tag });
       await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(freshData) });
@@ -638,12 +592,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     if (!activeJob) return;
     await enqueueRoomsWrite(async () => {
       const freshJob = useStore.getState().jobs.find((j) => j.id === activeJob.id);
-      let freshData: Record<string, unknown> = {};
-      try {
-        freshData = freshJob
-          ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {}
-          : {};
-      } catch { /* */ }
+      const freshData: Record<string, unknown> = jobBlob(freshJob);
       if (!Array.isArray(freshData.photos)) freshData.photos = [];
       (freshData.photos as JobPhoto[]).push({
         url,
@@ -978,7 +927,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   )}
                   <div style={{ fontWeight: 600, fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.job}</div>
                   {(() => {
-                    const cleanNote = (s.note || "").replace(/👷\s*[^·\n]+·?\s*/g, "").replace(/🕐\s*[\d:]+\s*(?:[ap]\.?m\.?(?![a-z]))?\s*·?\s*/gi, "").trim();
+                    const cleanNote = stripNoteParts(s.note);
                     return (
                       <>
                         {crew.length > 0 && (
@@ -1713,8 +1662,7 @@ function JobNotesEditor({ jobId }: { jobId: string }) {
     try {
       const job = useStore.getState().jobs.find((j) => j.id === jobId);
       if (!job) return "";
-      const d = typeof job.rooms === "string" ? JSON.parse(job.rooms) : (job.rooms || {});
-      return d?.jobNotes || "";
+      return readBlob(job.rooms).jobNotes || "";
     } catch { return ""; }
   })();
   // An unsaved note from an earlier visit comes back — still "unsaved"

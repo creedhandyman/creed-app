@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useStore, clockDeps } from "@/lib/store";
 import { t } from "@/lib/i18n";
+import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import { parseEntryDate, formatHours } from "@/lib/dates";
@@ -11,7 +12,7 @@ import { entryAmount, isUsersEntry, unpaidFor } from "@/lib/pay";
 import { LONG_SHIFT_MS, entryStartMs, isStaleOpenEntry } from "@/lib/shift";
 import { useFinishTime } from "../FinishTimeModal";
 import LocationSharingNote from "../LocationSharingNote";
-import { FINISHED } from "@/lib/day-plan";
+import { FINISHED, parseSchedTime } from "@/lib/day-plan";
 
 // Decimal hours (the stored unit) <-> hours+minutes fields, so all time
 // entry/editing happens in "Xh Ym" while the DB keeps decimals.
@@ -112,23 +113,18 @@ function fmt(ms: number): string {
 const localYmd = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-// One-shot navigation hint another screen leaves in sessionStorage (e.g. the
-// dashboard's "on the clock" line opening Time → Crew). Ignored when it's for
-// another page or older than 15s. Inline copy — kept in sync with nav-intent.
-function peekNavIntent(page: string) { try { const raw = sessionStorage.getItem("c_nav_intent"); if (!raw) return null; const v = JSON.parse(raw); if (!v || v.page !== page || typeof v.at !== "number" || Date.now() - v.at > 15000) return null; return v as { tab?: string }; } catch { return null; } }
+// One-shot navigation hint (lib/nav-intent) another screen leaves — e.g. the
+// dashboard's "on the clock" line opening Time → Crew. Ignored when it's for
+// another page or older than 15s.
 
 // Scheduled start time ("🕐 09:30" in the schedule note) as minutes since
-// midnight, for ordering today's chips; untimed entries sort last. AppFolio
-// imports write "🕐 2:30pm" — an optional am/pm suffix folds to 24h.
-// Mirrored in WorkVision.tsx schedTime24.
+// midnight, for ordering today's chips; untimed entries sort last. AppFolio's
+// "🕐 2:30pm" folds to 24h in day-plan parseSchedTime.
 const schedMinutes = (note?: string): number => {
-  const m = note?.match(/🕐\s*(\d{1,2}):(\d{2})\s*(?:([ap])\.?m\.?(?![a-z]))?/i);
-  if (!m) return 24 * 60;
-  let h = parseInt(m[1], 10);
-  const ap = m[3]?.toLowerCase();
-  if (ap === "p" && h < 12) h += 12;
-  if (ap === "a" && h === 12) h = 0;
-  return h * 60 + parseInt(m[2], 10);
+  const hhmm = parseSchedTime(note);
+  if (!hhmm) return 24 * 60;
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
 };
 
 // Composite sort key for a time entry. entry_date may be "YYYY-MM-DD" or
@@ -240,10 +236,7 @@ export default function Timer({ setPage }: Props) {
   // The nav intent was read once (initial tab) — consume it so a later visit
   // to Time doesn't reopen Crew.
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("c_nav_intent");
-      if (raw && JSON.parse(raw)?.page === "time") sessionStorage.removeItem("c_nav_intent");
-    } catch { /* storage blocked — nothing to clear */ }
+    clearNavIntent("time");
   }, []);
 
   // Tick every 30s on Crew tab so "clocked in 1h 12m ago" stays current
@@ -381,7 +374,9 @@ export default function Timer({ setPage }: Props) {
   // entry's job_id, else (legacy rows) the newest non-archived job there.
   // The chip clocks into exactly the job it vetted; a job_id whose job is
   // gone (deleted + re-made) carries none, so start() matches the address
-  // instead of booking hours to a dead id.
+  // instead of booking hours to a dead id. Deliberately NOT day-plan
+  // entryJob: a dead job_id must not fall back to the address, and a legacy
+  // row ranks like start() would.
   const todayChips = todayJobs
     .map((s) => {
       const linked = s.job_id
