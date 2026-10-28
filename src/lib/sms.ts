@@ -1,10 +1,12 @@
-// Server-only Twilio sender. Single send path shared by /api/sms (after auth)
-// and /api/portal/request-link (server-to-server) so there's no internal HTTP
-// hop to a public route — that hop is what made /api/sms hard to lock down.
+// Server-only Twilio sender — the ONLY one. Shared by /api/sms (after auth),
+// /api/portal/request-link (server-to-server, so there's no internal HTTP hop
+// to a public route — that hop is what made /api/sms hard to lock down),
+// lib/notify-server (crew/owner alerts) and the review-request cron. Every
+// text gets the STOP opt-out line (withOptOut).
 import { withOptOut } from "@/lib/sms-consent";
 
 /** Loose US → E.164. "+" prefixes are kept; bare 10/11-digit US numbers get +1. */
-export function normalizePhone(raw: string): string {
+export function normalizePhone(raw: string | null | undefined): string {
   const v = (raw || "").trim();
   if (!v) return "";
   if (v.startsWith("+")) return "+" + v.slice(1).replace(/\D/g, "");

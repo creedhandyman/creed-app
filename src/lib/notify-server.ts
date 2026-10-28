@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
-import { withOptOut } from "@/lib/sms-consent";
+import { normalizePhone, sendSms } from "@/lib/sms";
 
 /**
  * Server-only notification helpers. Shared by /api/notify (job assigned)
@@ -41,42 +41,71 @@ export interface NotifyRecipient {
   eventOptIn?: boolean | null;
 }
 
-/** Loose-US → E.164. Mirrors normalizePhone in /api/sms + reviews/dispatch. */
-export function normalizePhone(raw: string | null | undefined): string {
-  const v = (raw || "").trim();
-  if (!v) return "";
-  if (v.startsWith("+")) return "+" + v.slice(1).replace(/\D/g, "");
-  const digits = v.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return digits ? `+${digits}` : "";
+// The phone normalizer + Twilio send live in lib/sms.ts (one copy for every
+// server texting path). Re-exported so existing imports keep working.
+export { normalizePhone };
+
+/** Which per-event pref column gates a notification. "none" = no column for
+ *  this event (payments, payroll, quote approved) → everyone opted in. */
+export type RecipientEvent = "assigned" | "leads" | "none";
+
+const EVENT_COLUMN: Record<RecipientEvent, string | null> = {
+  assigned: "notify_assigned",
+  leads: "notify_leads",
+  none: null,
+};
+
+export interface ResolvedRecipient extends NotifyRecipient {
+  name: string | null;
 }
 
-async function sendSms(to: string, body: string): Promise<{ ok: boolean; error?: string }> {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_FROM_NUMBER;
-  if (!sid || !token || !from) return { ok: false, error: "Twilio not configured" };
-  const phone = normalizePhone(to);
-  if (!phone) return { ok: false, error: "No valid phone" };
+/**
+ * Build a dispatchNotifications recipient list from the org's profiles. The
+ * audience is any mix of: the org's owners + managers (`managers`), specific
+ * profile ids (`ids`), or crew names as the schedule note / requested_tech
+ * store them (`names` — trimmed, case-insensitive; nameless profiles never
+ * match). Always scoped to `orgId`; pending (not yet approved) members are
+ * never notified. `event` picks the per-event pref (notify_assigned /
+ * notify_leads) that becomes `eventOptIn` — null/undefined there still means
+ * opted in (dispatchNotifications decides). De-duped by id. Throws on a
+ * query error so each caller keeps its own error handling.
+ */
+export async function resolveRecipients(
+  supabase: SupabaseClient,
+  orgId: string,
+  opts: { managers?: boolean; ids?: string[]; names?: string[]; event: RecipientEvent },
+): Promise<ResolvedRecipient[]> {
+  const ids = new Set((opts.ids || []).filter(Boolean));
+  const names = new Set((opts.names || []).map((n) => (n || "").trim().toLowerCase()).filter(Boolean));
+  if (!orgId || (!opts.managers && !ids.size && !names.size)) return [];
 
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
-  const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-  const form = new URLSearchParams({ To: phone, From: from, Body: withOptOut(body) });
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
+  const col = EVENT_COLUMN[opts.event];
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(`id, name, role, status, phone, notify_sms${col ? `, ${col}` : ""}`)
+    .eq("org_id", orgId);
+  if (error) throw new Error(error.message);
+
+  const seen = new Set<string>();
+  const out: ResolvedRecipient[] = [];
+  for (const raw of (data || []) as unknown as Record<string, unknown>[]) {
+    const id = raw.id as string;
+    if (!id || seen.has(id) || raw.status === "pending") continue;
+    const name = typeof raw.name === "string" ? raw.name : null;
+    const hit = (opts.managers && (raw.role === "owner" || raw.role === "manager"))
+      || ids.has(id)
+      || (!!name && names.has(name.trim().toLowerCase()));
+    if (!hit) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name,
+      phone: (raw.phone as string | null) ?? null,
+      notify_sms: (raw.notify_sms as boolean | null) ?? null,
+      eventOptIn: col ? ((raw[col] as boolean | null) ?? null) : null,
     });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { message?: string };
-      return { ok: false, error: data.message || `Twilio ${res.status}` };
-    }
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+  return out;
 }
 
 /**
@@ -179,7 +208,9 @@ export async function dispatchNotifications(
   // SMS — best-effort, in parallel.
   const text = (smsBody || `${title} — ${body}`).slice(0, 600);
   const sendable = targets.filter((r) => r.notify_sms !== false && normalizePhone(r.phone));
-  const results = await Promise.all(sendable.map((r) => sendSms(r.phone as string, text)));
+  // sendSms can throw on a network error — never let that sink the batch.
+  const results = await Promise.all(sendable.map((r) =>
+    sendSms(r.phone as string, text).catch(() => ({ ok: false }))));
   const texted = results.filter((x) => x.ok).length;
   return { created: targets.length, texted, pushed, failures: results.length - texted };
 }
@@ -223,18 +254,8 @@ export async function notifyJobPaid(
     const who = job?.client ? ` from ${job.client}` : "";
 
     // Owners + managers get the money-in alert (the crew doesn't need it).
-    const { data: admins } = await supabase
-      .from("profiles")
-      .select("id, phone, notify_sms")
-      .eq("org_id", p.orgId)
-      .in("role", ["owner", "manager"]);
-    const recipients: NotifyRecipient[] = (admins || []).map((a) => ({
-      id: a.id as string,
-      phone: (a.phone as string | null) ?? null,
-      notify_sms: (a.notify_sms as boolean | null) ?? null,
-      // No per-event opt-out column for payments yet → everyone opted in.
-      eventOptIn: null,
-    }));
+    // No per-event opt-out column for payments yet → everyone opted in.
+    const recipients = await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" });
     if (!recipients.length) return;
 
     const amt = `$${(Number(p.paidNow) || 0).toFixed(2)}`;
@@ -290,18 +311,7 @@ export async function notifyQuoteApproved(
 ): Promise<void> {
   try {
     if (!p.orgId || !p.jobId) return;
-    const { data: admins } = await supabase
-      .from("profiles")
-      .select("id, phone, notify_sms")
-      .eq("org_id", p.orgId)
-      .eq("status", "active")
-      .in("role", ["owner", "manager"]);
-    const recipients: NotifyRecipient[] = (admins || []).map((a) => ({
-      id: a.id as string,
-      phone: (a.phone as string | null) ?? null,
-      notify_sms: (a.notify_sms as boolean | null) ?? null,
-      eventOptIn: null,
-    }));
+    const recipients = await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" });
     if (!recipients.length) return;
     const who = p.client || "Your customer";
     const what = p.property || "their job";
@@ -344,18 +354,8 @@ export async function notifyPayrollAlert(
   try {
     if (!p.orgId) return;
 
-    const { data: admins } = await supabase
-      .from("profiles")
-      .select("id, phone, notify_sms")
-      .eq("org_id", p.orgId)
-      .in("role", ["owner", "manager"]);
-    const recipients: NotifyRecipient[] = (admins || []).map((a) => ({
-      id: a.id as string,
-      phone: (a.phone as string | null) ?? null,
-      notify_sms: (a.notify_sms as boolean | null) ?? null,
-      // No per-event opt-out column for payroll alerts → always opted in.
-      eventOptIn: null,
-    }));
+    // No per-event opt-out column for payroll alerts → always opted in.
+    const recipients = await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" });
     if (!recipients.length) return;
 
     // Same-UTC-day dedupe (17:00 + 21:00 invocations of a no-op payday).

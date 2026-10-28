@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { dispatchNotifications } from "@/lib/notify-server";
+import { dispatchNotifications, resolveRecipients } from "@/lib/notify-server";
 import { siteOrigin } from "@/lib/site-url";
 import { applySmsConsent } from "@/lib/sms-consent";
 import { draftLeadQuote } from "@/lib/lead-draft";
@@ -226,28 +226,11 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     // for attribution. Best-effort — never fail the lead capture if this
     // throws (the lead is the thing that matters).
     try {
-      const recipientIds = new Set<string>();
-      const { data: admins } = await supabase
-        .from("profiles")
-        .select("id, phone, notify_sms, notify_leads")
-        .eq("org_id", orgId)
-        .in("role", ["owner", "manager"]);
-      const recipients = (admins || []).map((p) => {
-        recipientIds.add(p.id);
-        return { id: p.id, phone: p.phone, notify_sms: p.notify_sms, eventOptIn: p.notify_leads };
+      const recipients = await resolveRecipients(supabase, orgId, {
+        managers: true,
+        ids: referrerTechId ? [referrerTechId] : [],
+        event: "leads",
       });
-      if (referrerTechId && !recipientIds.has(referrerTechId)) {
-        const { data: ref } = await supabase
-          .from("profiles")
-          .select("id, phone, notify_sms, notify_leads")
-          .eq("org_id", orgId)
-          .eq("id", referrerTechId)
-          .limit(1);
-        if (ref?.length) {
-          const p = ref[0];
-          recipients.push({ id: p.id, phone: p.phone, notify_sms: p.notify_sms, eventOptIn: p.notify_leads });
-        }
-      }
       if (recipients.length) {
         // Trusted origin — NOT the request Host/Origin header. /api/leads is
         // public + unauthenticated, so a spoofed Host must not be able to plant
