@@ -3,8 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
 import { computeNextFire } from "@/lib/recurring";
 import { visitCadence } from "@/lib/memberships";
-import { recordJobPayment, scheduleReviewRequest } from "@/lib/payment-fulfillment";
-import { notifyJobPaid } from "@/lib/notify-server";
+import { fulfillJobPayment, paymentFromCheckoutSession, recordJobRefund } from "@/lib/payment-fulfillment";
+import { findOrgIdForSub, orgUpdateFromSubscription } from "@/lib/stripe-subscription";
 
 export const dynamic = "force-dynamic";
 
@@ -14,110 +14,19 @@ const supabase = createClient(
 );
 
 /**
- * Resolve a Stripe price ID back to one of our plan names. We compare
- * against the three STRIPE_PRICE_* env vars Bernard sets on Vercel.
- * Falls back to the subscription's metadata.plan when the env-var
- * comparison fails (e.g. price IDs were rotated since the trial start).
- */
-function planFromSubscription(sub: Stripe.Subscription): string | null {
-  const priceId = sub.items?.data?.[0]?.price?.id;
-  if (priceId) {
-    if (priceId === process.env.STRIPE_PRICE_SOLO) return "solo";
-    if (priceId === process.env.STRIPE_PRICE_CREW) return "crew";
-    if (priceId === process.env.STRIPE_PRICE_PRO)  return "pro";
-  }
-  const fromMeta = (sub.metadata as Record<string, string> | undefined)?.plan;
-  if (fromMeta === "solo" || fromMeta === "crew" || fromMeta === "pro") return fromMeta;
-  return null;
-}
-
-/**
- * Map Stripe subscription.status to our org.subscription_status.
- * - trialing  → "trialing"   (rest of the free trial — see lib/trial.ts)
- * - active    → "active"
- * - past_due  → "past_due"
- * - unpaid    → "past_due"   (treat the same way — billing failed)
- * - canceled  → "canceled"
- * - incomplete / incomplete_expired / paused → "past_due"
- *
- * Kept narrow on purpose: the BillingGate component reads these strings,
- * so adding a status here means adding a case there too.
- */
-function statusFromStripe(s: Stripe.Subscription.Status): string {
-  switch (s) {
-    case "active":   return "active";
-    case "trialing": return "trialing";
-    case "canceled": return "canceled";
-    case "past_due":
-    case "unpaid":
-    case "incomplete":
-    case "incomplete_expired":
-    case "paused":
-      return "past_due";
-    default: return "active";
-  }
-}
-
-/**
- * Find an org id for a subscription event using whatever identifier
- * we have. Tries metadata first (cheapest, fired by us), then
- * subscription_id, then customer_id. Returns null if nothing matches —
- * the caller logs and skips the write.
- */
-async function findOrgIdForSub(sub: Stripe.Subscription): Promise<string | null> {
-  const fromMeta = (sub.metadata as Record<string, string> | undefined)?.org_id;
-  if (fromMeta) return fromMeta;
-
-  const { data: bySubId } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("stripe_subscription_id", sub.id)
-    .single();
-  if (bySubId) return bySubId.id;
-
-  if (sub.customer) {
-    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-    const { data: byCust } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("stripe_customer_id", customerId)
-      .single();
-    if (byCust) return byCust.id;
-  }
-  return null;
-}
-
-/**
  * Single source of truth for subscription → org sync. Handles both the
  * created and updated lifecycle events so we don't have two near-duplicate
- * code paths drifting from each other.
+ * code paths drifting from each other. The mapping itself (plan / status /
+ * trial, mirrored to the legacy `plan` column) is lib/stripe-subscription.ts,
+ * shared with /api/stripe/verify-subscription.
  */
 async function syncSubscriptionToOrg(sub: Stripe.Subscription): Promise<void> {
-  const orgId = await findOrgIdForSub(sub);
+  const orgId = await findOrgIdForSub(supabase, sub);
   if (!orgId) {
     console.warn("[stripe webhook] no org found for subscription", sub.id);
     return;
   }
-
-  const status = statusFromStripe(sub.status);
-  const plan = planFromSubscription(sub);
-  const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
-
-  // Mirror to legacy `plan` column too — old UI (BillingGate paywall plan
-  // cards, the Operations admin dashboard) still reads `plan` rather than
-  // `subscription_plan`. Writing both keeps a single source of truth
-  // until the legacy reads are migrated.
-  const update: Record<string, unknown> = {
-    subscription_status: status,
-    stripe_subscription_id: sub.id,
-  };
-  if (plan) {
-    update.subscription_plan = plan;
-    update.plan = plan;
-  }
-  if (trialEnd !== null) update.trial_ends_at = trialEnd;
-
-  await supabase.from("organizations").update(update).eq("id", orgId);
+  await supabase.from("organizations").update(orgUpdateFromSubscription(sub)).eq("id", orgId);
 }
 
 // ── Memberships (customer service plans) ────────────────────────────────────
@@ -249,46 +158,21 @@ export async function POST(req: NextRequest) {
           // idempotently (via the UNIQUE session id), so a customer who closes
           // the tab before /payment/success runs still gets their payment
           // recorded — the redirect is no longer the only fulfillment path.
-          const { data: job } = await supabase
-            .from("jobs")
-            .select("id, org_id, total, platform_fee_cents, paid_at")
-            .eq("id", meta.job_id)
-            .maybeSingle();
-          if (job && (!meta.org_id || meta.org_id === job.org_id)) {
-            const piId =
-              typeof session.payment_intent === "string"
-                ? session.payment_intent
-                : session.payment_intent?.id ?? null;
-            const paidNow = Math.max(0, Number(session.amount_total ?? meta.amount_cents ?? 0)) / 100;
-            try {
-              const result = await recordJobPayment(supabase, {
-                jobId: job.id,
-                orgId: job.org_id,
-                jobTotal: Number(job.total) || 0,
-                jobFeeCents: Number(job.platform_fee_cents) || 0,
-                jobPaidAt: job.paid_at ?? null,
-                sessionId: session.id,
-                paymentIntentId: piId,
-                paidNow,
-                platformFeeCents: Math.max(0, Number(meta.platform_fee_cents) || 0),
-                kind: meta.kind || "payment",
-              });
-              if (result.fullyPaid) await scheduleReviewRequest(supabase, job.id).catch(() => {});
-              // Alert owners/managers — once per charge (see notifyJobPaid;
-              // !alreadyRecorded dedups against /api/verify-payment).
-              if (!result.alreadyRecorded && paidNow > 0) {
-                await notifyJobPaid(supabase, {
-                  jobId: job.id,
-                  orgId: job.org_id,
-                  paidNow,
-                  amountPaid: result.amountPaid,
-                  total: result.total,
-                  fullyPaid: result.fullyPaid,
-                });
-              }
-            } catch (e) {
-              console.error("[webhook] one-time payment fulfillment failed:", e);
-            }
+          // Unknown job / org mismatch => silently skipped, as before.
+          const pay = paymentFromCheckoutSession(session);
+          try {
+            await fulfillJobPayment(supabase, {
+              jobId: meta.job_id,
+              expectOrgId: pay.orgId,
+              sessionId: pay.sessionId,
+              paymentIntentId: pay.paymentIntentId,
+              paidNow: pay.paidNow,
+              platformFeeCents: pay.platformFeeCents,
+              kind: pay.kind,
+              source: "webhook",
+            });
+          } catch (e) {
+            console.error("[webhook] one-time payment fulfillment failed:", e);
           }
         }
         break;
@@ -311,7 +195,7 @@ export async function POST(req: NextRequest) {
             .eq("stripe_subscription_id", sub.id);
           break;
         }
-        const orgId = await findOrgIdForSub(sub);
+        const orgId = await findOrgIdForSub(supabase, sub);
         if (orgId) {
           await supabase
             .from("organizations")
@@ -383,104 +267,16 @@ export async function POST(req: NextRequest) {
             ? charge.payment_intent
             : charge.payment_intent?.id;
         if (piId) {
-          const isFullRefund = charge.refunded && charge.amount_refunded >= charge.amount;
-          const keptFraction =
-            charge.amount > 0 ? (charge.amount - charge.amount_refunded) / charge.amount : 0;
-          const refunded = Math.round(charge.amount_refunded) / 100;
-
-          // Resolve the job from the PAYMENTS LEDGER first: it records every
-          // charge's PaymentIntent, so refunding a DEPOSIT still finds its job.
-          // `jobs.stripe_payment_intent_id` only ever holds the LATEST payment,
-          // so relying on it alone silently drops deposit refunds.
-          let jobId: string | null = null;
-          let orgId: string | null = null;
-          let chargeRow: { id: string; platform_fee_cents: number } | null = null;
-          {
-            const { data: pay } = await supabase
-              .from("payments")
-              .select("id, job_id, org_id, platform_fee_cents")
-              .eq("stripe_payment_intent_id", piId)
-              .neq("kind", "refund")
-              .limit(1)
-              .maybeSingle();
-            if (pay) {
-              jobId = pay.job_id;
-              orgId = pay.org_id;
-              chargeRow = { id: pay.id, platform_fee_cents: Number(pay.platform_fee_cents) || 0 };
-            }
-          }
-          // Legacy fallback: job paid before the ledger existed.
-          let legacyFee: number | null = null;
-          if (!jobId) {
-            const { data: j } = await supabase
-              .from("jobs")
-              .select("id, org_id, platform_fee_cents")
-              .eq("stripe_payment_intent_id", piId)
-              .maybeSingle();
-            if (j) {
-              jobId = j.id;
-              orgId = j.org_id;
-              legacyFee = Number(j.platform_fee_cents) || 0;
-            }
-          }
-
-          if (jobId) {
-            // Prorate THIS charge's own fee — never the job's cumulative fee,
-            // which on a multi-payment job also contains other charges' fees.
-            if (chargeRow) {
-              const netFee = isFullRefund ? 0 : Math.round(chargeRow.platform_fee_cents * keptFraction);
-              await supabase.from("payments").update({ platform_fee_cents: netFee }).eq("id", chargeRow.id);
-            } else if (legacyFee !== null) {
-              const netFee = isFullRefund ? 0 : Math.round(legacyFee * keptFraction);
-              await supabase.from("jobs").update({ platform_fee_cents: netFee }).eq("id", jobId);
-            }
-
-            // Payment ledger: ONE refund row per PaymentIntent carrying the
-            // CUMULATIVE amount_refunded (negative). Upserting on the synthetic
-            // key makes webhook retries and partial→full refunds idempotent. A
-            // refund can pull a settled job back to owing, so recompute status.
-            // Best-effort — never fail the webhook (Stripe would just retry).
-            try {
-              await supabase.from("payments").upsert(
-                {
-                  org_id: orgId,
-                  job_id: jobId,
-                  amount: -refunded,
-                  kind: "refund",
-                  stripe_session_id: `refund_${piId}`,
-                  stripe_payment_intent_id: piId,
-                  platform_fee_cents: 0,
-                },
-                { onConflict: "stripe_session_id" },
-              );
-              const { data: rows } = await supabase
-                .from("payments")
-                .select("amount, platform_fee_cents")
-                .eq("job_id", jobId);
-              const { data: j2 } = await supabase
-                .from("jobs")
-                .select("total, status")
-                .eq("id", jobId)
-                .maybeSingle();
-              const amountPaid = rows
-                ? Math.round(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0) * 100) / 100
-                : 0;
-              const total = Math.round((Number(j2?.total) || 0) * 100) / 100;
-              const stillPaid = total > 0 && amountPaid >= total - 0.01;
-              const patch: Record<string, unknown> = { amount_paid: amountPaid };
-              // Job fee = sum of its charges' (post-refund) fees.
-              if (chargeRow && rows) {
-                patch.platform_fee_cents = rows.reduce((s, r) => s + (Number(r.platform_fee_cents) || 0), 0);
-              }
-              if (j2?.status === "paid" && !stillPaid) {
-                patch.status = "invoiced";
-                patch.paid_at = null;
-              }
-              await supabase.from("jobs").update(patch).eq("id", jobId);
-            } catch (e) {
-              console.error("[webhook] refund ledger update failed:", e);
-            }
-          }
+          // Fee proration, the negative ledger row (one per PaymentIntent,
+          // upserted) and the paid → invoiced recompute — org-scoped, in
+          // lib/payment-fulfillment.ts next to recordJobPayment. The ledger part
+          // is best-effort inside it (never fails the webhook).
+          await recordJobRefund(supabase, {
+            paymentIntentId: piId,
+            chargeCents: charge.amount,
+            refundedCents: charge.amount_refunded,
+            fullyRefunded: charge.refunded,
+          });
         }
         break;
       }

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
+import {
+  findOrgIdForSub,
+  orgUpdateFromSubscription,
+  planFromSubscription,
+  statusFromStripe,
+} from "@/lib/stripe-subscription";
 
 export const dynamic = "force-dynamic";
 
@@ -32,63 +38,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Keep these mappings IDENTICAL to the webhook handler
-// (src/app/api/stripe/webhook/route.ts). If you change one, change both.
-function planFromSubscription(sub: Stripe.Subscription): string | null {
-  const priceId = sub.items?.data?.[0]?.price?.id;
-  if (priceId) {
-    if (priceId === process.env.STRIPE_PRICE_SOLO) return "solo";
-    if (priceId === process.env.STRIPE_PRICE_CREW) return "crew";
-    if (priceId === process.env.STRIPE_PRICE_PRO)  return "pro";
-  }
-  const fromMeta = (sub.metadata as Record<string, string> | undefined)?.plan;
-  if (fromMeta === "solo" || fromMeta === "crew" || fromMeta === "pro") return fromMeta;
-  return null;
-}
-
-function statusFromStripe(s: Stripe.Subscription.Status): string {
-  switch (s) {
-    case "active":   return "active";
-    case "trialing": return "trialing";
-    case "canceled": return "canceled";
-    case "past_due":
-    case "unpaid":
-    case "incomplete":
-    case "incomplete_expired":
-    case "paused":
-      return "past_due";
-    default: return "active";
-  }
-}
-
-async function findOrgIdForSub(
-  sub: Stripe.Subscription,
-  sessionOrgId?: string | null
-): Promise<string | null> {
-  // Session metadata is the most reliable — we stamped it ourselves in
-  // create-checkout-session and it's available right here.
-  if (sessionOrgId) return sessionOrgId;
-  const fromMeta = (sub.metadata as Record<string, string> | undefined)?.org_id;
-  if (fromMeta) return fromMeta;
-
-  const { data: bySubId } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("stripe_subscription_id", sub.id)
-    .single();
-  if (bySubId) return bySubId.id;
-
-  if (sub.customer) {
-    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-    const { data: byCust } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("stripe_customer_id", customerId)
-      .single();
-    if (byCust) return byCust.id;
-  }
-  return null;
-}
+// The subscription → org mapping is shared with the webhook handler via
+// src/lib/stripe-subscription.ts, so the two can't drift.
 
 export async function POST(req: NextRequest) {
   try {
@@ -116,8 +67,10 @@ export async function POST(req: NextRequest) {
         ? await stripe.subscriptions.retrieve(session.subscription)
         : (session.subscription as Stripe.Subscription);
 
+    // Session metadata is the most reliable — we stamped it ourselves in
+    // create-checkout-session and it's available right here.
     const sessionOrgId = (session.metadata as Record<string, string> | null)?.org_id;
-    const orgId = await findOrgIdForSub(sub, sessionOrgId);
+    const orgId = await findOrgIdForSub(supabase, sub, sessionOrgId);
     if (!orgId) {
       console.warn("[verify-subscription] no org found for session", sessionId);
       return NextResponse.json({ error: "Org not found for session" }, { status: 404 });
@@ -125,17 +78,7 @@ export async function POST(req: NextRequest) {
 
     const status = statusFromStripe(sub.status);
     const plan = planFromSubscription(sub);
-    const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
-
-    const update: Record<string, unknown> = {
-      subscription_status: status,
-      stripe_subscription_id: sub.id,
-    };
-    if (plan) {
-      update.subscription_plan = plan;
-      update.plan = plan;
-    }
-    if (trialEnd !== null) update.trial_ends_at = trialEnd;
+    const update = orgUpdateFromSubscription(sub);
 
     // Also persist the customer id if we somehow don't have it yet.
     if (sub.customer) {

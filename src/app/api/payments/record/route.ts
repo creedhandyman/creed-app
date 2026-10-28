@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOwner, serviceClient } from "@/lib/api-auth";
-import { recordJobPayment, scheduleReviewRequest } from "@/lib/payment-fulfillment";
+import { fulfillJobPayment } from "@/lib/payment-fulfillment";
 
 export const dynamic = "force-dynamic";
 
@@ -40,36 +40,27 @@ export async function POST(req: NextRequest) {
   if (!body.ref || !UUID.test(body.ref)) return NextResponse.json({ error: "Missing reference" }, { status: 400 });
   if (!(amount > 0)) return NextResponse.json({ error: "Enter the amount received" }, { status: 400 });
 
-  const supabase = serviceClient();
-  const { data: job } = await supabase
-    .from("jobs")
-    .select("id, org_id, total, platform_fee_cents, paid_at")
-    .eq("id", body.jobId)
-    .maybeSingle();
   // Scope to the caller's own business — never record against another org.
-  if (!job || job.org_id !== prof.orgId) {
-    return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  }
+  if (!prof.orgId) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
+  const supabase = serviceClient();
   try {
-    const result = await recordJobPayment(supabase, {
-      jobId: job.id,
-      orgId: job.org_id,
-      jobTotal: Number(job.total) || 0,
-      jobFeeCents: Number(job.platform_fee_cents) || 0,
-      jobPaidAt: job.paid_at ?? null,
+    // Same fulfillment as a Stripe charge: ledger, review request once covered
+    // (unless skipReview), and the owner "Payment received" alert — once per
+    // ref, since a retried tap finds its manual_<ref> row already recorded.
+    const fulfilled = await fulfillJobPayment(supabase, {
+      jobId: body.jobId,
+      expectOrgId: prof.orgId,
       sessionId: `manual_${body.ref}`,
       paymentIntentId: null,
       paidNow: amount,
       platformFeeCents: 0,
       kind: method,
+      skipReview,
+      source: "payments/record",
     });
-    if (result.fullyPaid && !skipReview) {
-      await scheduleReviewRequest(supabase, job.id).catch((e) => {
-        console.error("[payments/record] review-request schedule failed:", e);
-      });
-    }
-    return NextResponse.json({ ok: true, ...result });
+    if (!fulfilled.ok) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    return NextResponse.json({ ok: true, ...fulfilled.result });
   } catch (e) {
     console.error("[payments/record]", e);
     return NextResponse.json({ error: "Couldn't record that payment — please try again." }, { status: 500 });
