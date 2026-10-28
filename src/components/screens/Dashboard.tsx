@@ -13,6 +13,8 @@ import CountUp from "@/components/CountUp";
 import { useBackLayer } from "@/lib/back-layer";
 import { computeQuests, parseQuestConfig } from "@/lib/quests";
 import { goWithIntent } from "@/lib/nav-intent";
+import { readLocalClock } from "@/lib/clock";
+import { unpaidFor, isUsersEntry } from "@/lib/pay";
 import { stopsForDay, techDayStops, fmtClock, localYmd, type DayStop } from "@/lib/day-plan";
 
 interface Props {
@@ -48,14 +50,10 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   // intentionally not previewed here. The user-match mirrors payroll's
   // self-run claim (by id, or legacy name when the row predates the
   // user_id column) so the same entries are counted.
-  const rate = user.rate || 55;
-  // No rate on file yet (new joiners start at 0) → show HOURS, never a
-  // made-up $55/hr figure. `rate` above stays for the math.
-  const rateSet = (user.rate || 0) > 0;
-  const mine = timeEntries.filter((e) => e.user_id === user.id || (!e.user_id && e.user_name === user.name));
-  const unpaidMine = mine.filter((e) => !e.paid_at);
-  const checkHrs = unpaidMine.reduce((s, e) => s + (e.hours || 0), 0);
-  const checkPay = checkHrs * rate;
+  // No rate on file yet (new joiners start at 0) → $0 and the cards show
+  // HOURS + "Rate not set", never a made-up rate (lib/pay).
+  const { hours: checkHrs, pay: checkPay, rateSet, rate } = unpaidFor(user, timeEntries);
+  const mine = timeEntries.filter((e) => isUsersEntry(e, user));
   // Most recent payout (store loads pay_history newest-first) labels the
   // period — the unpaid entries are exactly everything since that date.
   const myPays = payHistory.filter((p) => p.user_id === user.id);
@@ -121,8 +119,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
   // Re-render when the office closes this phone's shift (store.reconcileClock
   // clears c_t_on) so the CTA flips from Work mode back to Clock in.
   useStore((s) => s.clockReset);
-  const isClocked = (() => { try { return JSON.parse(localStorage.getItem("c_t_on") || "false"); } catch { return false; } })();
-  const clockedJob = (() => { try { return localStorage.getItem("c_t_sj") ? JSON.parse(localStorage.getItem("c_t_sj")!) : ""; } catch { return ""; } })();
+  const { on: isClocked, sj: clockedJob } = readLocalClock();
 
   const [showNotifs, setShowNotifs] = useState(false);
   useBackLayer(showNotifs, () => setShowNotifs(false));
@@ -200,7 +197,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
             <OwnerDay setPage={setPage} openJob={openJob} openOps={openOps} />
             <div className="cd" style={{ display: "flex", padding: "13px 0" }}>
               {[
-                { k: "myCheck", l: t("dash.myCheck"), v: `$${checkPay.toFixed(0)}`, green: true, go: () => setPage("time") },
+                { k: "myCheck", l: t("dash.myCheck"), v: rateSet ? `$${checkPay.toFixed(0)}` : t("timer.noRate"), green: true, go: () => setPage("time") },
                 { k: "thisMonth", l: t("dash.thisMonth"), v: `$${earnedMonth.toLocaleString()}`, green: false, go: () => openOps?.("financials") },
                 { k: "pipeline", l: t("dash.pipeline"), v: pipeline >= 1000 ? `$${(pipeline / 1000).toFixed(1)}k` : `$${pipeline.toFixed(0)}`, green: false, go: () => goWithIntent(setPage, { page: "jobs", tab: "active" }) },
               ].map((m, i) => (
