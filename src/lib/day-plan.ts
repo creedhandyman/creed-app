@@ -153,6 +153,9 @@ export function stopsForDay({ schedule, jobs, timeEntries, day, me }: {
     if (job && FINISHED.includes(job.status)) {
       state = "done";
     } else {
+      // Deliberately NOT job-entries' oldest-job rule: this asks "did anyone
+      // work this VISIT's address today", so a legacy unlinked entry at the
+      // stop's address counts whichever job it resolved to.
       const matches = dayEntries.filter((te) => (job && te.job_id === job.id) || (!te.job_id && te.job === e.job));
       if (matches.some(isOpenEntry)) state = "now";
       else if (matches.length) state = "done";

@@ -12,7 +12,8 @@ import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
-import { recordJobOutcome, jobHasOpenEntries } from "@/lib/learning";
+import { entriesForJob, isOldestAtAddress, receiptsForJob } from "@/lib/job-entries";
+import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
@@ -224,16 +225,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // inheriting the prior job's history.
   const getJobLabor = (thisJob: Job) => {
     const jobProp = thisJob.property;
-    const sameAddressJobs = jobs.filter((j) => j.property === jobProp);
-    const isOldestAtAddress = sameAddressJobs.every(
-      (j) => (thisJob.created_at || "") <= (j.created_at || ""),
-    );
-    const entries = timeEntries.filter((e) => {
-      if ((e.hours || 0) <= 0) return false;
-      if (e.job_id) return e.job_id === thisJob.id;
-      // Legacy row with no job_id — only credit the oldest job at the address.
-      return e.job === jobProp && isOldestAtAddress;
-    });
+    const isOldest = isOldestAtAddress(thisJob, jobs);
+    // job_id, else (legacy row) only the oldest job at the address — lib/job-entries.
+    const entries = entriesForJob(thisJob, jobs, timeEntries).filter((e) => (e.hours || 0) > 0);
     const loggedHrs = entries.reduce((s, e) => s + (e.hours || 0), 0);
     const loggedCost = entries.reduce((s, e) => s + (e.amount || 0), 0);
 
@@ -256,7 +250,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     // same oldest-at-address rule used for legacy time_entries above —
     // a second job at the same property doesn't inherit the prior job's
     // recovered hours.
-    const histForJob = isOldestAtAddress ? (historicalByJobByUser[jobProp] || {}) : {};
+    const histForJob = isOldest ? (historicalByJobByUser[jobProp] || {}) : {};
     const recoveredByUser: Record<string, { name: string; hrs: number; cost: number }> = {};
     let recoveredHrs = 0;
     let recoveredCost = 0;
@@ -456,30 +450,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // setStatus and the bulk bar. No confirm and no reload — callers own those.
   // Resolves true when the status write landed (false = db.patch already
   // toasted why), so callers only confirm success when it really saved.
-  const applyStatus = async (id: string, status: string): Promise<boolean> => {
-    const ok = await db.patch("jobs", id, { status });
-    if (!ok) return false;
-
-    // When a job goes Complete, teach the AI quoter from its real hours
-    // (job-level per trade + per item). Shared via recordJobOutcome with
-    // WorkVision's Complete Job button so EVERY completion path feeds learning,
-    // not just this admin one.
-    if (status === "complete") {
-      const completedJob = jobs.find((j) => j.id === id);
-      if (completedJob) {
-        try {
-          await recordJobOutcome(completedJob, getJobLabor(completedJob).totalHrs, {
-            crewStillClocked: jobHasOpenEntries(completedJob, useStore.getState().timeEntries),
-          });
-        } catch { /* learning is best-effort */ }
-        // Stamp the serviced unit's last_service_at (equipment asset history).
-        if (completedJob.equipment_id) {
-          try { await db.patch("equipment", completedJob.equipment_id, { last_service_at: new Date().toISOString() }); } catch { /* best-effort */ }
-        }
-      }
-    }
-    return true;
-  };
+  // Side effects (AI learning + equipment stamp on complete) live in
+  // lib/job-transition, shared with Work mode's Complete Job. Learning here
+  // also counts hours recovered from pay_history (getJobLabor).
+  const applyStatus = (id: string, status: string): Promise<boolean> =>
+    transitionJob(id, status as Job["status"], {
+      jobs: () => useStore.getState().jobs,
+      timeEntries: () => useStore.getState().timeEntries,
+      actualHours: (j) => getJobLabor(j).totalHrs,
+    });
 
   // Resolves true only when the status was written; false when the paid
   // choice sheet took over, the confirm was cancelled, or the write failed.
@@ -1054,11 +1033,7 @@ ${invoicePhotosHtml}
       case "paid": {
         // Review already queued/sent (or automation off) → the only thing
         // left is filing it away.
-        const rr = reviewRequests
-          .filter((r) => r.job_id === dj.id)
-          .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
-        const reviewHandled = rr?.status === "scheduled" || rr?.status === "sent" || !!dj.review_requested_at || org?.review_request_enabled === false;
-        if (!reviewHandled) return { label: t("jobs.requestReview"), icon: "star", onClick: () => setReviewJob(dj) };
+        if (shouldPromptReview(dj, org, reviewRequests)) return { label: t("jobs.requestReview"), icon: "star", onClick: () => setReviewJob(dj) };
         return dj.archived ? null : { label: t("jobs.doneArchive"), icon: "package", onClick: () => { void archiveJob(dj); } };
       }
       default:          return null;
@@ -1772,6 +1747,7 @@ ${invoicePhotosHtml}
     if (!subScreen) return null;
     const sj = jobs.find((x) => x.id === subScreen.id);
     if (!sj) return null;
+    const sjReceipts = receiptsForJob(sj, receipts);
     return (
       <>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -1899,16 +1875,16 @@ ${invoicePhotosHtml}
             <div className="section">
               <div className="seclabel" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="receipt" size={13} /> {t("jobs.receipts")}</span>
-                {receipts.filter((r) => r.job_id === sj.id).length > 0 && (
+                {sjReceipts.length > 0 && (
                   <span style={{ color: "var(--color-success)", fontFamily: "Oswald", fontSize: 14 }}>
-                    ${receipts.filter((r) => r.job_id === sj.id).reduce((s, r) => s + (r.amount || 0), 0).toFixed(2)} total
+                    ${sjReceipts.reduce((s, r) => s + (r.amount || 0), 0).toFixed(2)} total
                   </span>
                 )}
               </div>
-              {receipts.filter((r) => r.job_id === sj.id).length === 0 ? (
+              {sjReceipts.length === 0 ? (
                 <div style={{ fontSize: 14, color: "var(--color-dim)", padding: "10px 0", textAlign: "center" }}>{t("jobs.noReceipts")}</div>
               ) : (
-                receipts.filter((r) => r.job_id === sj.id).map((r) => {
+                sjReceipts.map((r) => {
                   const src = isPrivatePath(r.photo_url) ? signedReceipts[r.photo_url] : r.photo_url;
                   return (
                   <div key={r.id} className="drow">

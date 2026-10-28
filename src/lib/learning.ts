@@ -15,6 +15,7 @@
 import { db } from "./supabase";
 import { extractZip, isOverheadLine, RAW_JOB_PREFIX } from "./parser";
 import { itemInTier, type TierKey } from "./tiers";
+import { entriesForJob } from "./job-entries";
 import type { Job, TimeEntry, Room, RoomItem } from "./types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -39,11 +40,13 @@ export async function logCorrection(c: CorrectionRow): Promise<void> {
   await db.post("price_corrections", { material_name: "", job_id: null, ...c });
 }
 
-/** Hours actually logged against a job — explicit job_id link, with a legacy
- *  property-match fallback for time entries written before job_id existed. */
-export function jobActualHours(job: Job, timeEntries: TimeEntry[]): number {
-  return timeEntries
-    .filter((e) => (e.hours || 0) > 0 && (e.job_id ? e.job_id === job.id : e.job === job.property))
+/** Hours actually logged against a job — job-entries.ts's rule (job_id, else
+ *  a legacy address match credited only to the OLDEST job there, so a
+ *  callback job doesn't learn the previous job's hours). `jobs` = the org's
+ *  full job list. */
+export function jobActualHours(job: Job, jobs: Job[], timeEntries: TimeEntry[]): number {
+  return entriesForJob(job, jobs, timeEntries)
+    .filter((e) => (e.hours || 0) > 0)
     .reduce((s, e) => s + (e.hours || 0), 0);
 }
 
@@ -94,10 +97,8 @@ function parseJobItems(job: Job): { items: { trade: string; item: RoomItem }[]; 
  */
 /** Someone is still on the clock for this job (an entry with a start and no
  *  end) — its clocked total isn't final yet. Same job match as jobActualHours. */
-export function jobHasOpenEntries(job: Job, timeEntries: TimeEntry[]): boolean {
-  return timeEntries.some(
-    (e) => !!e.start_time && !e.end_time && (e.job_id ? e.job_id === job.id : e.job === job.property),
-  );
+export function jobHasOpenEntries(job: Job, jobs: Job[], timeEntries: TimeEntry[]): boolean {
+  return entriesForJob(job, jobs, timeEntries).some((e) => !!e.start_time && !e.end_time);
 }
 
 export async function recordJobOutcome(
