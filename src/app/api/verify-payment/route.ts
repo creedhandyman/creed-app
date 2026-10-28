@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
-import { recordJobPayment, scheduleReviewRequest } from "@/lib/payment-fulfillment";
-import { notifyJobPaid } from "@/lib/notify-server";
+import { fulfillJobPayment, paymentFromCheckoutSession } from "@/lib/payment-fulfillment";
 import { signJobToken } from "@/lib/job-token";
 import { siteOrigin } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
-// scheduleReviewRequest + the payment-ledger fulfillment logic live in
-// src/lib/payment-fulfillment.ts so the Stripe webhook reuses them (a lost
-// /payment/success redirect must not drop the payment).
+// The fulfillment (ledger, review request, owner alert) lives in
+// src/lib/payment-fulfillment.ts fulfillJobPayment so the Stripe webhook
+// reuses it (a lost /payment/success redirect must not drop the payment).
 
 // Server-side payment verification: the success page passes ?session_id=<stripe session>
 // and we confirm with Stripe that the session is actually paid before flipping the job
@@ -50,66 +49,31 @@ export async function POST(req: NextRequest) {
     const supabase = serviceClient();
 
     // Confirm the job exists and, when the session carries an org_id, that it
-    // matches the job's org — then scope the write by org too.
-    const { data: job, error: jobErr } = await supabase
-      .from("jobs")
-      .select("id, org_id, total, platform_fee_cents, paid_at")
-      .eq("id", jobId)
-      .single();
-    if (jobErr || !job) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    }
-    const sessionOrgId = session.metadata?.org_id;
-    if (sessionOrgId && sessionOrgId !== job.org_id) {
-      return NextResponse.json({ error: "Session/job org mismatch" }, { status: 400 });
-    }
-
-    const platformFeeCents = Math.max(0, Number(session.metadata?.platform_fee_cents) || 0);
-    const pi = session.payment_intent;
-    const stripePaymentIntentId = typeof pi === "string" ? pi : pi?.id ?? null;
-    // What was ACTUALLY charged. Stripe's amount_total is authoritative; the
-    // checkout metadata is a fallback for sessions created before it existed.
-    const paidNow = Math.max(0, Number(session.amount_total ?? session.metadata?.amount_cents ?? 0)) / 100;
-
-    let result;
+    // matches the job's org — then record (scoped by org), schedule the review
+    // once settled and alert owners once per charge (fulfillJobPayment).
+    const pay = paymentFromCheckoutSession(session);
+    let fulfilled;
     try {
-      result = await recordJobPayment(supabase, {
+      fulfilled = await fulfillJobPayment(supabase, {
         jobId,
-        orgId: job.org_id,
-        jobTotal: Number(job.total) || 0,
-        jobFeeCents: Number(job.platform_fee_cents) || 0,
-        jobPaidAt: job.paid_at ?? null,
+        expectOrgId: pay.orgId,
         sessionId,
-        paymentIntentId: stripePaymentIntentId,
-        paidNow,
-        platformFeeCents,
-        kind: session.metadata?.kind || "payment",
+        paymentIntentId: pay.paymentIntentId,
+        paidNow: pay.paidNow,
+        platformFeeCents: pay.platformFeeCents,
+        kind: pay.kind,
+        source: "verify-payment",
       });
     } catch (e) {
       return NextResponse.json({ error: (e as Error).message }, { status: 500 });
     }
-
-    // Only ask for a review once the job is actually settled — never after a
-    // deposit. Best-effort; the cron at /api/reviews/dispatch sends it later.
-    if (result.fullyPaid) {
-      await scheduleReviewRequest(supabase, jobId).catch((e) => {
-        console.error("[verify-payment] review-request schedule failed:", e);
-      });
+    if (!fulfilled.ok) {
+      return fulfilled.reason === "org_mismatch"
+        ? NextResponse.json({ error: "Session/job org mismatch" }, { status: 400 })
+        : NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
-
-    // Alert owners/managers that money landed. Gate on !alreadyRecorded so this
-    // fires once per charge — the webhook fulfills the same session, but only
-    // the path that first inserts the ledger row sees alreadyRecorded === false.
-    if (!result.alreadyRecorded && paidNow > 0) {
-      await notifyJobPaid(supabase, {
-        jobId,
-        orgId: job.org_id,
-        paidNow,
-        amountPaid: result.amountPaid,
-        total: result.total,
-        fullyPaid: result.fullyPaid,
-      });
-    }
+    const { result, orgId } = fulfilled;
+    const paidNow = pay.paidNow;
 
     // For the success page: who was paid (their branding, not Creed's) and a
     // way back to the job page. Best-effort — never fail a verified payment.
@@ -117,7 +81,7 @@ export async function POST(req: NextRequest) {
     let statusUrl: string | null = null;
     try {
       const { data: org } = await supabase
-        .from("organizations").select("name, logo_url, brand_color").eq("id", job.org_id).maybeSingle();
+        .from("organizations").select("name, logo_url, brand_color").eq("id", orgId).maybeSingle();
       business = org || null;
     } catch { /* */ }
     try {
