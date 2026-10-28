@@ -7,7 +7,7 @@ import TopBar from "@/components/TopBar";
 import { parseEntryDate, formatHours } from "@/lib/dates";
 import { newRowId } from "@/lib/offline-queue";
 import { readLocalClock, writeLocalClock, clockIn, clockOut, resolveActiveJobId, pickableJobs, PICKER_HIDDEN } from "@/lib/clock";
-import { entryAmount, isUsersEntry, unpaidFor } from "@/lib/pay";
+import { entryAmount, isUsersEntry, roundHours, unpaidFor } from "@/lib/pay";
 import { LONG_SHIFT_MS, entryStartMs, isStaleOpenEntry } from "@/lib/shift";
 import { useFinishTime } from "../FinishTimeModal";
 import LocationSharingNote from "../LocationSharingNote";
@@ -353,7 +353,7 @@ export default function Timer({ setPage }: Props) {
       job: mj || "General",
       job_id: resolveActiveJobId(jobs, mj),
       entry_date: mDate,
-      hours: h,
+      hours: roundHours(h),
       amount: entryAmount(h, targetUser),
       user_id: targetUser.id,
       user_name: targetUser.name,
@@ -705,7 +705,7 @@ export default function Timer({ setPage }: Props) {
                 onSave={async (newHrs) => {
                   // My Log rows are mine — price them at my rate (0 with none).
                   const owner = profiles.find((p) => p.id === e.user_id) || user;
-                  await saveTimeEntry(e.id, { hours: newHrs, amount: entryAmount(newHrs, owner) }, "patch");
+                  await saveTimeEntry(e.id, { hours: roundHours(newHrs), amount: entryAmount(newHrs, owner) }, "patch");
                 }}
               />
               <span style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 14.5, color: "var(--color-success)", minWidth: 42, textAlign: "right" }}>${(e.amount || 0).toFixed(0)}</span>
@@ -922,7 +922,7 @@ export default function Timer({ setPage }: Props) {
                             </div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                            <HoursCell hours={en.hours || 0} canEdit onSave={async (nh) => { await saveTimeEntry(en.id, { hours: nh, amount: entryAmount(nh, p) }, "patch"); }} />
+                            <HoursCell hours={en.hours || 0} canEdit onSave={async (nh) => { await saveTimeEntry(en.id, { hours: roundHours(nh), amount: entryAmount(nh, p) }, "patch"); }} />
                             <button aria-label={t("common.delete")} onClick={async () => { if (!await useStore.getState().showConfirm("Delete Entry", `Delete this time entry for ${p.name}?`)) return; await dropTimeEntry(en.id); }} style={{ width: 36, height: 36, minHeight: 36, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", padding: 0, margin: "-7px -7px -7px -4px" }}>
                               <Icon name="delete" size={15} color="var(--color-accent-red)" />
                             </button>
