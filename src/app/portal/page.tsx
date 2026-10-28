@@ -24,6 +24,7 @@ import type { Customer, Address, Job, Receipt, Organization } from "@/lib/types"
 import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { exportJobReport } from "@/lib/export-job-report";
 import { statusColor } from "@/lib/status";
+import { receiptsForJob } from "@/lib/job-entries";
 import { Icon } from "@/components/Icon";
 
 const PRIMARY = "#2E75B6";
@@ -690,7 +691,7 @@ function PropertyCard({ group, receipts, accent }: { group: PropGroup; receipts:
       </div>
       <div style={{ marginTop: 5 }}>
         {group.jobs.map((j, i) => (
-          <JobRow key={j.id} job={j} first={i === 0} receiptCount={receipts.filter((r) => r.job_id === j.id).length} />
+          <JobRow key={j.id} job={j} first={i === 0} receiptCount={receiptsForJob(j, receipts).length} />
         ))}
         {group.jobs.length === 0 && (
           <div style={{ fontSize: 12.5, color: "#666", fontStyle: "italic", padding: "8px 0 2px" }}>No jobs here yet.</div>

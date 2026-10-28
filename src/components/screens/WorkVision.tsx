@@ -7,7 +7,8 @@ import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip } from "@/lib/parser";
 import { formatHours, parseEntryDate } from "@/lib/dates";
-import { recordJobOutcome, jobActualHours, jobHasOpenEntries } from "@/lib/learning";
+import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
+import { FINISHED } from "@/lib/day-plan";
 import type { Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { Icon } from "../Icon";
@@ -297,7 +298,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         const crew = job?.requested_tech && !named.includes(job.requested_tech) ? [...named, job.requested_tech] : named;
         return { s, job, time, crew, mine: !!user.name && crew.includes(user.name) };
       })
-      .filter((x) => !(x.job && (x.job.archived || ["complete", "invoiced", "paid"].includes(x.job.status))))
+      .filter((x) => !(x.job && (x.job.archived || FINISHED.includes(x.job.status))))
       .sort((a, b) => {
         if (a.mine !== b.mine) return a.mine ? -1 : 1;
         if (a.time && b.time && a.time !== b.time) return minutes(a.time) - minutes(b.time);
@@ -703,32 +704,28 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // If the status write fails (no signal), stop here: db already toasted
     // that it didn't save, and the tech stays clocked in to try again —
     // instead of a "Job completed!" for a job that never reaches To invoice.
-    if (!await db.patch("jobs", activeJob.id, { status: "complete" })) return;
-    // Clock out — quietly; the single "Job complete · Xh logged" toast below
-    // replaces clockOut's own (two stacked toasts hid each other).
+    // Once it lands: clock out — quietly; the single "Job complete · Xh
+    // logged" toast below replaces clockOut's own (two stacked toasts hid each
+    // other) — then lib/job-transition teaches the AI quoter from the real
+    // hours (clockOut refreshed the store, so the final session counts) and
+    // stamps the serviced unit, both best-effort.
     const hrs = st ? (endAt - st) / 3600000 : 0;
-    await clockOut(endAt, { quiet: true });
-    // Teach the AI quoter from this job's real hours. clockOut() refreshed the
-    // store, so the final session is now counted. Best-effort — never block
-    // completion on a learning write.
-    try {
-      const fresh = useStore.getState().jobs.find((j) => j.id === activeJob.id) || activeJob;
-      const entries = useStore.getState().timeEntries;
-      await recordJobOutcome(fresh, jobActualHours(fresh, entries), {
-        crewStillClocked: jobHasOpenEntries(fresh, entries),
-      });
-      // Stamp the serviced unit's last_service_at (equipment asset history).
-      if (fresh.equipment_id) {
-        try { await db.patch("equipment", fresh.equipment_id, { last_service_at: new Date().toISOString() }); } catch { /* */ }
-      }
-    } catch { /* */ }
+    const done = await transitionJob(activeJob.id, "complete", {
+      jobs: () => useStore.getState().jobs,
+      timeEntries: () => useStore.getState().timeEntries,
+      fallbackJob: activeJob,
+      afterWrite: () => clockOut(endAt, { quiet: true }).then(() => undefined),
+    });
+    if (!done) return;
     useStore.getState().showToast(
       closedElsewhereRef.current ? t("wv.jobDoneShiftClosed") : t("wv.jobDoneToast").replace("{hrs}", formatHours(hrs)),
       closedElsewhereRef.current ? "warning" : "success",
     );
     // Pop the review-request modal before navigating away — last chance to
     // capture the client's goodwill while the work is fresh in their mind.
-    if (!activeJob.review_requested_at) {
+    // Same rule as Jobs' Request Review (respects the org's opt-out).
+    const { org, reviewRequests } = useStore.getState();
+    if (shouldPromptReview(activeJob, org, reviewRequests)) {
       setReviewJob({ ...activeJob, status: "complete" });
       // Don't navigate immediately; the modal's onClose will handle that.
       return;

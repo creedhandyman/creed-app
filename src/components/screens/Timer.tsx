@@ -11,6 +11,7 @@ import { entryAmount, isUsersEntry, roundHours, unpaidFor } from "@/lib/pay";
 import { LONG_SHIFT_MS, entryStartMs, isStaleOpenEntry } from "@/lib/shift";
 import { useFinishTime } from "../FinishTimeModal";
 import LocationSharingNote from "../LocationSharingNote";
+import { FINISHED } from "@/lib/day-plan";
 
 // Decimal hours (the stored unit) <-> hours+minutes fields, so all time
 // entry/editing happens in "Xh Ym" while the DB keeps decimals.
@@ -391,7 +392,7 @@ export default function Timer({ setPage }: Props) {
           || jobs.filter((j) => j.property === s.job && !j.archived).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0]);
       return { s, linked };
     })
-    .filter(({ linked }) => !linked || (!linked.archived && !["complete", "invoiced", "paid"].includes(linked.status)))
+    .filter(({ linked }) => !linked || (!linked.archived && !FINISHED.includes(linked.status)))
     .sort((a, b) => schedMinutes(a.s.note) - schedMinutes(b.s.note))
     .map(({ s, linked }) => ({ key: s.id, label: s.job, val: s.job, jobId: linked?.id }));
 

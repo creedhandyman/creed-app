@@ -5,6 +5,7 @@
 
 import type { FlipComp, FlipLoan, FlipProject, FlipSub, Job, Profile, Receipt, TimeEntry } from "./types";
 import { makeEntryPay } from "./financials";
+import { entriesForJob, receiptsForJob } from "./job-entries";
 
 export const RULE_70 = 0.70;        // classic 70% rule ceiling (of ARV, minus rehab)
 export const THIN_PROFIT = 20000;   // profit below this = "thin" (warn)
@@ -119,19 +120,14 @@ export function flipActuals(args: {
   let unratedHrs = 0;
 
   const lines: FlipLine[] = jobs.filter((j) => j.flip_project_id === flipId).map((j) => {
-    const isOldestAtAddress = !!j.property && jobs
-      .filter((o) => o.property === j.property)
-      .every((o) => (j.created_at || "") <= (o.created_at || ""));
-    const entries = timeEntries.filter((e) =>
-      e.job_id ? e.job_id === j.id : isOldestAtAddress && e.job === j.property,
-    );
+    const entries = entriesForJob(j, jobs, timeEntries);
     let labor = 0;
     for (const e of entries) {
       const pay = num(entryPay(e));
       if (pay === 0) unratedHrs += num(e.hours);
       labor += pay;
     }
-    const materials = receipts.filter((r) => r.job_id === j.id).reduce((s, r) => s + num(r.amount), 0);
+    const materials = receiptsForJob(j, receipts).reduce((s, r) => s + num(r.amount), 0);
     const actual = materials + labor;
     const budget = num(j.total);
     const wo = jobScope(j.rooms);
