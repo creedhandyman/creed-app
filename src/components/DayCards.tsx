@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
+import { readLocalClock } from "@/lib/clock";
+import { isUsersEntry } from "@/lib/pay";
 import { t, getLang } from "@/lib/i18n";
 import { formatHours, parseEntryDate } from "@/lib/dates";
 import { statusColor } from "@/lib/status";
@@ -39,8 +41,8 @@ export function fill(str: string, vars: Record<string, string | number>): string
 const firstName = (n: string) => (n || "").trim().split(/\s+/)[0] || "";
 const firstNames = (names: string[]) => Array.from(new Set(names.map(firstName).filter(Boolean))).join(", ");
 const stopsPhrase = (n: number) => (n === 1 ? t("day.stopsOne") : fill(t("day.stopsMany"), { n }));
-// Same flag the dashboard's Clock-in CTA reads (Timer/WorkVision write c_t_on).
-const isClockedIn = () => { try { return !!JSON.parse(localStorage.getItem("c_t_on") || "false"); } catch { return false; } };
+// Same flag the dashboard's Clock-in CTA reads (lib/clock owns it).
+const isClockedIn = () => readLocalClock().on;
 /** Date locale for weekday / month names — same rule as Payroll's dates. */
 const dateLocale = () => (getLang() === "es" ? "es" : "en-US");
 /** "Tomorrow" or the short weekday for a YYYY-MM-DD. */
@@ -209,7 +211,7 @@ export function OwnerDay({ setPage, openJob, openOps }: {
         rows.push({ key: "payday", ok: true, text: t("day.autoPayToday") });
       } else {
         const owed = profiles.filter((p) => timeEntries.some((e) =>
-          (e.user_id === p.id || (!e.user_id && e.user_name === p.name)) && !e.paid_at && (e.hours || 0) > 0)).length;
+          isUsersEntry(e, p) && !e.paid_at && (e.hours || 0) > 0)).length;
         if (owed) rows.push({ key: "payday", ok: false, text: owed === 1 ? t("day.paydayOne") : fill(t("day.paydayMany"), { n: owed }), go: () => openOps?.("payroll") });
       }
     }

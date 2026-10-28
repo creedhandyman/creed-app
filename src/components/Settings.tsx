@@ -10,6 +10,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
+import { readLocalClock } from "@/lib/clock";
 import { supabase, db } from "@/lib/supabase";
 import { t, getLang } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
@@ -376,8 +377,7 @@ export default function Settings({ onClose }: Props) {
         onClick={async () => {
           const s = useStore.getState();
           const pending = (s.pendingWrites || 0) + (s.pendingUploads || 0);
-          let onClock = false;
-          try { onClock = JSON.parse(localStorage.getItem("c_t_on") || "false") === true; } catch { /* */ }
+          const onClock = readLocalClock().on;
           if (pending > 0 || onClock) {
             const ok = await s.showConfirm(
               t("settings.logout"),

@@ -1,7 +1,7 @@
 "use client";
 import { apiFetch } from "@/lib/api";
 import { useState, useEffect, useRef, Fragment } from "react";
-import { useStore } from "@/lib/store";
+import { useStore, clockDeps } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
@@ -18,33 +18,21 @@ import MileageQuickTrack from "../MileageQuickTrack";
 import { startDrive, directionsUrl } from "@/lib/drive-tracker";
 import RenderModal from "../RenderModal";
 import { buildRenderPrompt } from "@/lib/render-prompt";
-import { getFix } from "@/lib/geo";
 import { LONG_SHIFT_MS } from "@/lib/shift";
 import { useFinishTime } from "../FinishTimeModal";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
 import { pickReceiptPhoto } from "@/lib/image";
 import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
-import { newRowId, getPending } from "@/lib/offline-queue";
-import { isClosedRow, markLocalClockOut, unmarkLocalClockOut } from "@/lib/clock-sync";
+import { readLocalClock, clockIn as runClockIn, clockOut as runClockOut, resolveClockInJobId, pickableJobs } from "@/lib/clock";
+import { newRowId } from "@/lib/offline-queue";
+import { unpaidFor } from "@/lib/pay";
 import { enqueueUpload, isNetworkError } from "@/lib/offline-uploads";
 import LocationSharingNote from "../LocationSharingNote";
 
-function ld<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try { const v = localStorage.getItem("c_" + key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
-}
-function sv(key: string, value: unknown) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("c_" + key, JSON.stringify(value));
-}
 function fmt(ms: number): string {
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 3600).toString().padStart(2, "0")}:${Math.floor((s % 3600) / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
-}
-function fmtTime(ts: number): string {
-  const d = new Date(ts);
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
 // Stable identity for a work-order item across renders — used by toggleWO to
@@ -53,31 +41,6 @@ function fmtTime(ts: number): string {
 function woStableKey(w: { room?: string; detail?: string }): string {
   return `${(w.room || "").toLowerCase().trim()}|||${(w.detail || "").toLowerCase().trim()}`;
 }
-
-// Resolve a job_id from a property/address string when stamping a new
-// time_entries row. Disambiguates the case where two jobs share an address
-// (e.g. callback work at a property that's already had a prior job) by
-// preferring the most current one: active > scheduled > accepted > quoted >
-// complete > invoiced > paid, with most-recently-created winning ties.
-// Returns undefined if no match — caller should fall back to address-only.
-function resolveActiveJobId(jobs: Job[], address: string): string | undefined {
-  if (!address || address === "General") return undefined;
-  const matches = jobs.filter((j) => j.property === address);
-  if (matches.length === 0) return undefined;
-  if (matches.length === 1) return matches[0].id;
-  const order = ["active", "scheduled", "accepted", "quoted", "complete", "invoiced", "paid", "lead", "inspection"];
-  const sorted = [...matches].sort((a, b) => {
-    const oa = order.indexOf(a.status);
-    const ob = order.indexOf(b.status);
-    if (oa !== ob) return oa - ob;
-    return (b.created_at || "").localeCompare(a.created_at || "");
-  });
-  return sorted[0]?.id;
-}
-
-// Job statuses the clock-in pickers hide (finished work + pre-quote
-// inspections). Mirrored in Timer.tsx — keep in sync.
-const PICKER_HIDDEN = ["complete", "invoiced", "paid", "inspection"];
 
 // Scheduled start from a schedule note's "🕐 …" as 24h "HH:MM", or "".
 // Schedule writes "🕐 14:30"; AppFolio imports write "🕐 2:30pm" — an
@@ -120,9 +83,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const fullSyncAt = useStore((s) => s.fullSyncAt);
   const dataReady = !loading && fullSyncAt !== null;
 
-  const [on, setOn] = useState(() => ld("t_on", false));
-  const [st, setSt] = useState(() => ld<number | null>("t_st", null));
-  const [sj, setSj] = useState(() => ld("t_sj", ""));
+  // This phone's clock (lib/clock owns the stored copy; these mirror it).
+  const [on, setOn] = useState(() => readLocalClock().on);
+  const [st, setSt] = useState(() => readLocalClock().st);
+  const [sj, setSj] = useState(() => readLocalClock().sj);
   const [el, setEl] = useState(0);
   // Serialize all writes that mutate the job's `rooms` blob (checkbox toggles,
   // photo uploads, completion notes, etc.). Two fast taps used to race: tap A
@@ -141,11 +105,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Active server-side time_entries row id, shared with Timer.tsx via localStorage
   // so clock-out in either screen patches the same row instead of creating a new
   // entry and orphaning the original.
-  const [activeId, setActiveId] = useState<string | null>(() => ld<string | null>("t_active_id", null));
+  const [activeId, setActiveId] = useState<string | null>(() => readLocalClock().activeId);
   // Picked-job FK for the current clock-in. Persisted so a refresh keeps the
   // right job pinned when two share an address. Address-only fallback at the
   // bottom of activeJob handles legacy rows that pre-date this state.
-  const [activeJobId, setActiveJobId] = useState<string | null>(() => ld<string | null>("t_active_job_id", null));
+  const [activeJobId, setActiveJobId] = useState<string | null>(() => readLocalClock().activeJobId);
   // Which task in the work order is expanded to show materials / photos / comment
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
   // Photo capture type. Defaults to "after" because the most common
@@ -169,9 +133,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Quote-derived shop items the user has edited/removed (hidden from the
   // auto list; an edited copy lives in customShop). Keyed by shopKey.
   const [removedGuideShop, setRemovedGuideShop] = useState<string[]>([]);
-  const rate = user.rate || 55;
 
-  // Persist timer
   // The office (force clock-out) or another phone closed / removed THIS
   // shift — store.reconcileClock confirmed it with the server and cleared
   // localStorage; stop the running clock here too. Keyed on the row id so an
@@ -191,11 +153,6 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clockReset?.at]);
 
-  useEffect(() => sv("t_on", on), [on]);
-  useEffect(() => sv("t_st", st), [st]);
-  useEffect(() => sv("t_sj", sj), [sj]);
-  useEffect(() => sv("t_active_id", activeId), [activeId]);
-  useEffect(() => sv("t_active_job_id", activeJobId), [activeJobId]);
 
   // Tick
   useEffect(() => {
@@ -218,7 +175,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const openEntry = activeId ? timeEntries.find((e) => e.id === activeId) : undefined;
   const stamped = openEntry?.job_id ? jobs.find((j) => j.id === openEntry.job_id) : undefined;
   const byAddrId = sj
-    ? resolveActiveJobId(jobs.filter((j) => !j.archived && !PICKER_HIDDEN.includes(j.status)), sj) || resolveActiveJobId(jobs, sj)
+    ? resolveClockInJobId(jobs, sj)
     : undefined;
   const byAddr = byAddrId ? jobs.find((j) => j.id === byAddrId) : undefined;
   const activeJob = !sj
@@ -363,10 +320,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     return !!d && d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
   });
   const hrsToday = closedToday.reduce((sum, e) => sum + (e.hours || 0), 0);
-  const unpaidHrs = timeEntries
-    .filter((e) => (e.user_id === user.id || (!e.user_id && e.user_name === user.name)) && !e.paid_at)
-    .reduce((sum, e) => sum + (e.hours || 0), 0);
-  const nextCheckAmt = user.rate ? Math.round(unpaidHrs * user.rate).toLocaleString("en-US") : "";
+  const nextCheck = unpaidFor(user, timeEntries);
+  const nextCheckAmt = nextCheck.rateSet ? Math.round(nextCheck.pay).toLocaleString("en-US") : "";
 
   // Clock in: create an in-progress time_entries row so admins can see who's
   // clocked in right now (same pattern Timer.tsx uses). When the caller knows
@@ -381,56 +336,19 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     if (clockBusyRef.current || on) return;
     clockBusyRef.current = true;
     try {
-      await clockInNow(job, jobId);
+      // lib/clock runs the whole sequence (client-id row shared with Timer,
+      // GPS stamp, scheduled → active).
+      await runClockIn({
+        job, jobId, jobs, user,
+        onLocal: (s) => { setSj(s.sj); setSt(s.st); setOn(true); setEl(0); setActiveJobId(s.activeJobId); setActiveId(s.activeId); },
+      }, clockDeps());
     } finally {
       clockBusyRef.current = false;
     }
   };
-  const clockInNow = async (job: string, jobId?: string) => {
-    const startedAt = Date.now();
-    // Open (pickable) jobs first, like Timer.start — across ALL jobs a paid
-    // or archived job at the address can outrank the open one.
-    const resolvedJobId = jobId
-      || resolveActiveJobId(jobs.filter((j) => !j.archived && !PICKER_HIDDEN.includes(j.status)), job)
-      || resolveActiveJobId(jobs, job);
-    setSj(job);
-    setSt(startedAt);
-    setOn(true);
-    setEl(0);
-    setActiveJobId(resolvedJobId || null);
-    // Stable client id so an offline clock-in + later clock-out target the same
-    // row (queued + replayed on reconnect). Shared with Timer via t_active_id.
-    const id = newRowId();
-    setActiveId(id);
-    await saveTimeEntry(id, {
-      job: job || "General",
-      job_id: resolvedJobId,
-      entry_date: new Date().toLocaleDateString("en-US"),
-      hours: 0,
-      amount: 0,
-      user_id: user.id,
-      user_name: user.name,
-      start_time: fmtTime(startedAt),
-    }, "post");
-    // GPS stamp — fire-and-forget one-shot fix; never blocks clock-in.
-    void getFix(8000).then((fix) => {
-      if (fix) void saveTimeEntry(id, { start_lat: fix.lat, start_lng: fix.lng, start_acc: fix.accuracy }, "patch");
-    });
-    // Auto-promote the matching job from "scheduled" to "active" so the
-    // workload view reflects what's actually happening. Don't flip jobs
-    // already in "complete"/"paid" backwards.
-    if (resolvedJobId) {
-      const matched = jobs.find((j) => j.id === resolvedJobId && j.status === "scheduled");
-      if (matched) await db.patch("jobs", matched.id, { status: "active" });
-    } else if (job) {
-      const matched = jobs.find((j) => j.property === job && j.status === "scheduled");
-      if (matched) await db.patch("jobs", matched.id, { status: "active" });
-    }
-  };
 
-  // Clock out + save — patches the existing active row instead of inserting
-  // a new entry, so "Currently Clocked In" updates correctly. Falls back to
-  // patching whatever open row this user has if activeId got lost.
+  // Clock out — lib/clock closes the open row (never posts a second entry;
+  // a row closed elsewhere is left alone and the clock just resets).
   // `endAt` = the finish time already picked (Complete Job asks first).
   // Otherwise a shift past the long-shift limit — a forgotten clock-out —
   // asks for the real finish time instead of booking all of it.
@@ -439,105 +357,30 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // No confirm in here — the header pill asks; Complete Job must not.
   const clockOut = async (endAtArg?: number, opts?: { quiet?: boolean }): Promise<boolean> => {
     if (!st) return true;
-    // While this phone closes its own row, the post-load server check must not
-    // read that close as the office's (marked right before the write below).
-    const closingId = activeId;
     closedElsewhereRef.current = false;
-    try {
-    // Already closed elsewhere (manager force clock-out / another phone) and
-    // nothing of ours is waiting to sync → keep their times, just stop here.
-    const mine = activeId ? useStore.getState().timeEntries.find((e) => e.id === activeId) : undefined;
-    if (activeId && isClosedRow(mine) && !getPending("time_entries").some((w) => w.rowId === activeId)) {
-      setOn(false); setSt(null); setEl(0); setSj(""); setActiveId(null); setActiveJobId(null);
-      sv("t_on", false); sv("t_st", null); sv("t_active_id", null); sv("t_active_job_id", null);
-      useStore.getState().showToast(t("timer.shiftAlreadyClosed"), "warning");
-      closedElsewhereRef.current = true;
-      return true;
-    }
-    let endAt = endAtArg ?? Date.now();
-    if (endAtArg === undefined && endAt - st >= LONG_SHIFT_MS) {
-      const picked = await askFinish(st);
-      if (picked === null) return false;
-      endAt = picked;
-    }
-    const hrs = (endAt - st) / (1000 * 60 * 60);
-    const rounded = Math.round(hrs * 100) / 100;
-    const amount = Math.round(hrs * rate * 100) / 100;
-    // false = the shift was already closed elsewhere; the store toasts that
-    // and the server kept those times (onlyIfOpen never overwrites a close).
-    let landed = true;
-    markLocalClockOut(closingId);
-    // Off the clock NOW. Each write below is queued (durable) the moment it's
-    // called — only its sync is awaited, so a slow signal never leaves the
-    // header looking stuck. Persisted immediately so a load landing mid-sync
-    // already sees this phone as off.
-    // ONCE only: the clock-in picker shows the moment we go off, so a new
-    // shift started while this sync is in flight must never be reset by a
-    // second call after the await.
+    // Off the clock the moment the close is queued (durable). ONCE only: the
+    // clock-in picker shows the moment we go off, so a new shift started
+    // while the sync is in flight must never be reset by a second call.
     let wentOff = false;
     const goOff = () => {
       if (wentOff) return;
       wentOff = true;
       setOn(false); setSt(null); setEl(0); setSj(""); setActiveId(null); setActiveJobId(null);
-      sv("t_on", false); sv("t_st", null); sv("t_active_id", null); sv("t_active_job_id", null);
     };
-    if (hrs > 0.01) {
-      const closePatch = { hours: rounded, amount, end_time: fmtTime(endAt), job: sj || "General" };
-      if (activeId) {
-        // Durable — survives offline and replays on reconnect. earlierWins:
-        // the tech's own tap beats a LATER office close made while it was queued.
-        const write = saveTimeEntry(activeId, closePatch, "patch", { onlyIfOpen: true, earlierWins: true });
-        goOff();
-        landed = await write;
-        // GPS stamp at clock-out — fire-and-forget one-shot fix.
-        if (landed) void getFix(8000).then((fix) => {
-          if (fix) void saveTimeEntry(activeId, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
-        });
-      } else {
-        // Fallback: find this user's most-recent open active row and close it.
-        const open = useStore.getState().timeEntries
-          .filter((e) => e.user_id === user.id && e.start_time && !e.end_time)
-          .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
-        const target = open[open.length - 1];
-        if (target) {
-          const write = saveTimeEntry(target.id, closePatch, "patch", { onlyIfOpen: true, earlierWins: true });
-          goOff();
-          landed = await write;
-          if (landed) void getFix(8000).then((fix) => {
-            if (fix) void saveTimeEntry(target.id, { end_lat: fix.lat, end_lng: fix.lng, end_acc: fix.accuracy }, "patch");
-          });
-        } else {
-          // No open row at all — last-resort: post a completed entry.
-          const write = saveTimeEntry(newRowId(), {
-            job: sj || "General",
-            job_id: resolveActiveJobId(jobs, sj),
-            entry_date: new Date().toLocaleDateString("en-US"),
-            hours: rounded,
-            amount,
-            user_id: user.id,
-            user_name: user.name,
-            start_time: fmtTime(st),
-            end_time: fmtTime(Date.now()),
-          }, "post");
-          goOff();
-          await write;
-        }
-      }
-    } else if (activeId) {
-      // Brief in-and-out — delete the in-progress row instead of leaving a
-      // zero-hour ghost entry.
-      const write = dropTimeEntry(activeId, { onlyIfOpen: true });
-      goOff();
-      await write;
+    const r = await runClockOut({ reason: "self", person: user, endAt: endAtArg, askFinish: (s) => askFinish(s), onOff: goOff }, clockDeps());
+    if (r.status === "cancelled") return false;
+    if (r.status === "not-on") { goOff(); return true; }
+    if (r.status === "already-closed") {
+      useStore.getState().showToast(t("timer.shiftAlreadyClosed"), "warning");
+      closedElsewhereRef.current = true;
+      return true;
     }
-    goOff(); // paths with no write at all (no await happened) — no-op otherwise
     await loadAll();
-    if (!landed) closedElsewhereRef.current = true;
-    if (!opts?.quiet && landed) useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(hrs)), "success");
+    // landed false = closed elsewhere meanwhile; the store toasted that and
+    // the server kept those times (onlyIfOpen never overwrites a close).
+    if (r.status === "closed" && !r.landed) closedElsewhereRef.current = true;
+    if (!opts?.quiet && r.status === "closed" && r.landed) useStore.getState().showToast(t("wv.clockedOutToast").replace("{hrs}", formatHours(r.hours)), "success");
     return true;
-    } finally {
-      unmarkLocalClockOut(closingId);
-    }
   };
 
   // Toggle work order item. Match by `(room, detail)` against the latest
@@ -1176,7 +1019,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         {(() => {
           // Inspections are pre-quote walkthroughs, not billable work — keep
           // them out of the clock-in picker so techs can't clock into one.
-          const active = jobs.filter((j) => !j.archived && !PICKER_HIDDEN.includes(j.status));
+          const active = pickableJobs(jobs);
           // Never a dead end: with no open jobs, shop / general time is still
           // one tap away.
           if (active.length === 0) return (

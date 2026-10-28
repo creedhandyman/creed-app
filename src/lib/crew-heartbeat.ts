@@ -3,7 +3,7 @@
  * last clocked in/out.
  *
  * While this phone is ON THE CLOCK (the shared Timer/WorkVision clock state:
- * localStorage c_t_on + c_t_active_id) AND the app is on screen, take a
+ * lib/clock readLocalClock: on + an active row id) AND the app is on screen, take a
  * one-shot fix (geo.getFix) every ~4 minutes and on each return to the app,
  * and upsert it into `crew_locations` (one row per user; the server stamps the
  * time). Owners/managers read those rows for Dispatch's "Crew right now",
@@ -26,6 +26,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { supabase } from "./supabase";
 import { getFix } from "./geo";
+import { readLocalClock } from "./clock";
 import { heartbeatDue, usableFix, isMissingTableError, CHECK_MS, TABLE_RETRY_MS } from "./crew-location";
 
 const MISSING_KEY = "c_crewloc_missing_until";
@@ -49,8 +50,8 @@ function ld<T>(key: string): T | null {
 
 /** The shared clock state Timer + WorkVision write. */
 function clockState(): { on: boolean; clockInAt: number | null } {
-  const st = ld<number>("t_st");
-  return { on: ld<boolean>("t_on") === true && !!ld<string>("t_active_id"), clockInAt: typeof st === "number" ? st : null };
+  const c = readLocalClock();
+  return { on: c.on && !!c.activeId, clockInAt: c.st };
 }
 
 function me(): { id: string; org_id: string } | null {

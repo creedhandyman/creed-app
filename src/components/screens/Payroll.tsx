@@ -10,6 +10,7 @@ import { openPrint } from "@/lib/print-template";
 import { buildStubHtml, runPayrollForUser, type StubInput } from "@/lib/payroll-runner";
 import { computeQuests, parseQuestConfig } from "@/lib/quests";
 import { isStaleOpenEntry } from "@/lib/shift";
+import { payRate, isUsersEntry } from "@/lib/pay";
 import type { PayHistory } from "@/lib/types";
 
 /** Trigger a browser download of an HTML string as a .html file. Used by
@@ -67,7 +68,9 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
       (e.user_id === sel || (sel === user.id && !e.user_id && e.user_name === user.name))
   );
   const totalHrs = entries.reduce((s, e) => s + (e.hours || 0), 0);
-  const laborPay = totalHrs * (selUser.rate || 55);
+  // The person's REAL rate — no guessed rate for pay (rate <= 0 = $0 + "No rate").
+  const selRate = payRate(selUser);
+  const laborPay = totalHrs * selRate;
 
   // Group by job
   const byJob: Record<string, number> = {};
@@ -169,7 +172,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   const buildCurrentStubInput = (): StubInput => ({
     empName: selUser.name,
     empNum: selUser.emp_num || "",
-    rate: selUser.rate || 55,
+    rate: selRate,
     payDate: new Date().toLocaleDateString("en-US", {
       year: "numeric", month: "long", day: "numeric",
     }),
@@ -181,7 +184,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
     jobs: Object.entries(byJob).map(([job, hrs]) => ({
       job,
       hrs,
-      amount: parseFloat((hrs * (selUser.rate || 55)).toFixed(2)),
+      amount: parseFloat((hrs * selRate).toFixed(2)),
     })),
     bonuses: approvedQuests.map((q) => ({ name: q.name, amount: q.bonus })),
     org: org || {},
@@ -193,7 +196,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
     // Never fabricate a rate for a rate-0 crew member — paying them at a made-up
     // $55/hr overpays (the auto-run cron correctly refuses to). Require a real
     // rate, set in Team, before processing pay.
-    if (!(Number(selUser.rate) > 0)) {
+    if (!(selRate > 0)) {
       useStore.getState().showToast(`Set a pay rate for ${selUser.name} in Team before processing pay.`, "warning");
       return;
     }
@@ -206,7 +209,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
       // Confirmation step
       const confirmed = await useStore.getState().showConfirm(
         "Process Payment",
-        `${selUser.name} — ${totalHrs.toFixed(1)} hrs × $${selUser.rate || 55}/hr = $${totalPay.toFixed(2)}${approvedQuests.length ? ` (includes $${totalBonus} approved bonus)` : ""}. Save pay stub?`
+        `${selUser.name} — ${totalHrs.toFixed(1)} hrs × $${selRate}/hr = $${totalPay.toFixed(2)}${approvedQuests.length ? ` (includes $${totalBonus} approved bonus)` : ""}. Save pay stub?`
       );
       if (!confirmed) return;
 
@@ -303,9 +306,9 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   // of the total. Includes legacy name-matched entries (null user_id).
   const empRows = profiles
     .map((p) => {
-      const unpaid = timeEntries.filter((e) => !e.paid_at && (e.user_id === p.id || (!e.user_id && e.user_name === p.name)));
+      const unpaid = timeEntries.filter((e) => !e.paid_at && isUsersEntry(e, p));
       const hrs = unpaid.reduce((s, e) => s + (e.hours || 0), 0);
-      const rate = p.rate || 0;
+      const rate = payRate(p);
       return {
         id: p.id,
         name: p.name,
@@ -347,7 +350,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   // a shift running today is normal; one from an earlier day (or past the
   // long-shift limit) is a forgotten clock-out that needs a finish time.
   const openEntriesOf = (p: { id: string; name: string }) =>
-    timeEntries.filter((e) => !e.paid_at && e.start_time && !e.end_time && (e.user_id === p.id || (!e.user_id && e.user_name === p.name)));
+    timeEntries.filter((e) => !e.paid_at && e.start_time && !e.end_time && isUsersEntry(e, p));
   const onClockNames = profiles
     .filter((p) => openEntriesOf(p).some((e) => !isStaleOpenEntry(e.entry_date, e.start_time)))
     .map((p) => p.name.split(/\s+/)[0]);
@@ -590,7 +593,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
         </div>
         <div className="cd" style={{ textAlign: "center" }}>
           <div className="sl">Rate</div>
-          <div className="sv">${selUser.rate || 55}/hr</div>
+          <div className="sv">{selRate > 0 ? `$${selRate}/hr` : t("timer.noRate")}</div>
         </div>
         {totalBonus > 0 && (
           <div className="cd statusstrip" style={{ textAlign: "center", ["--c" as any]: "var(--color-warning)" }}>
@@ -714,7 +717,7 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
               <span>
                 {formatHours(hrs)} →{" "}
                 <span style={{ color: "var(--color-success)" }}>
-                  ${(hrs * (selUser.rate || 55)).toFixed(2)}
+                  ${(hrs * selRate).toFixed(2)}
                 </span>
               </span>
             </div>

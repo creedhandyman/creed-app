@@ -3,8 +3,10 @@ import { create } from "zustand";
 import { supabase, db } from "./supabase";
 import { pixelEvent } from "./meta-pixel";
 import { saveSnapshot, loadSnapshot, clearSnapshot } from "./offline-cache";
-import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPending, isFlushing } from "./offline-queue";
+import { enqueueWrite, flushQueue, applyPending, pendingCount, clearQueue, getPending, isFlushing, newRowId } from "./offline-queue";
 import { needsServerCheck, serverVerdict, isLocalClockOut, isCloseWrite } from "./clock-sync";
+import { readLocalClock, clearLocalClock, type ClockDeps } from "./clock";
+import { getFix } from "./geo";
 import { t } from "./i18n";
 import { flushUploads, pendingUploadCount, clearUploads } from "./offline-uploads";
 import { flushWoQueue, applyWoPending, woPendingCount, clearWoQueue } from "./wo-queue";
@@ -762,7 +764,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (reconcileBusy) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     if (get().usingOfflineData) return; // a snapshot can't confirm anything
-    const local = { on: ld<boolean>("t_on", false) === true, activeId: ld<string | null>("t_active_id", null), st: ld<number | null>("t_st", null) };
+    const local = readLocalClock();
     const id = local.activeId;
     if (!local.on || !id || isLocalClockOut(id)) return;
     // Only an unsynced open/close/remove of the row holds the check off — a
@@ -788,13 +790,10 @@ export const useStore = create<AppState>((set, get) => ({
       const verdict = serverVerdict(rows);
       if (verdict === "keep") return;
       // The user may have clocked out, or queued a write, while we were reading.
-      if (ld<boolean>("t_on", false) !== true || ld<string | null>("t_active_id", null) !== id) return;
+      const now = readLocalClock();
+      if (!now.on || now.activeId !== id) return;
       if (isLocalClockOut(id) || getPending("time_entries").some((w) => w.rowId === id && isCloseWrite(w))) return;
-      sv("t_on", false);
-      sv("t_st", null);
-      sv("t_sj", "");
-      sv("t_active_id", null);
-      sv("t_active_job_id", null);
+      clearLocalClock();
       set({ clockReset: { at: Date.now(), id, reason: verdict } });
       get().showToast(
         verdict === "closed"
@@ -1054,4 +1053,18 @@ if (typeof window !== "undefined") {
   window.addEventListener("offline", () => {
     if (useStore.getState().user) void useStore.getState().loadAll();
   });
+}
+
+/** The data side of lib/clock's clock in / clock out, bound to this store:
+ *  the offline-durable time-entry writes, the queue, GPS and the job promote. */
+export function clockDeps(): ClockDeps {
+  return {
+    saveTimeEntry: (...a) => useStore.getState().saveTimeEntry(...a),
+    dropTimeEntry: (...a) => useStore.getState().dropTimeEntry(...a),
+    timeEntries: () => useStore.getState().timeEntries,
+    pendingRowIds: () => getPending("time_entries").map((w) => w.rowId),
+    getFix,
+    setJobActive: (jobId) => db.patch("jobs", jobId, { status: "active" }),
+    newRowId,
+  };
 }
