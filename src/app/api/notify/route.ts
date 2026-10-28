@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dispatchNotifications } from "@/lib/notify-server";
+import { dispatchNotifications, resolveRecipients, type ResolvedRecipient } from "@/lib/notify-server";
 import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
@@ -60,15 +60,17 @@ export async function POST(req: NextRequest) {
     const supabase = serviceClient();
 
     // Resolve the recipient profile (scoped to the org), by id when we have
-    // it, else by exact name match against requested_tech.
-    let q = supabase
-      .from("profiles")
-      .select("id, name, phone, notify_sms, notify_assigned, org_id")
-      .eq("org_id", orgId);
-    q = recipientId ? q.eq("id", recipientId) : q.eq("name", techName);
-    const { data: profs, error: pErr } = await q.limit(1);
-    if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
-    if (!profs?.length) return NextResponse.json({ error: "Tech not found in org" }, { status: 404 });
+    // it, else by name match against requested_tech.
+    let profs: ResolvedRecipient[];
+    try {
+      profs = await resolveRecipients(supabase, orgId, {
+        ...(recipientId ? { ids: [recipientId] } : { names: [techName] }),
+        event: "assigned",
+      });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    }
+    if (!profs.length) return NextResponse.json({ error: "Tech not found in org" }, { status: 404 });
     const tech = profs[0];
 
     // Don't notify someone for assigning a job to themselves.
@@ -97,12 +99,7 @@ export async function POST(req: NextRequest) {
       body: job.client ? `${property} · ${job.client}` : property,
       jobId,
       smsBody: `New job assigned: ${property}${job.client ? ` (${job.client})` : ""}.${origin ? ` ${origin}` : ""}`,
-      recipients: [{
-        id: tech.id,
-        phone: tech.phone,
-        notify_sms: tech.notify_sms,
-        eventOptIn: tech.notify_assigned,
-      }],
+      recipients: [tech],
     });
 
     return NextResponse.json({ ok: true, ...result });

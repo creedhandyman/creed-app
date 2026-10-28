@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
 import { residentContact } from "@/lib/resident";
-import { smsConsentGranted, withOptOut } from "@/lib/sms-consent";
+import { smsConsentGranted } from "@/lib/sms-consent";
+import { normalizePhone, sendSms } from "@/lib/sms";
 import { cronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
@@ -84,43 +85,16 @@ function firstName(full: string | null | undefined): string {
   return String(full).trim().split(/\s+/)[0] || "there";
 }
 
-function normalizePhone(raw: string): string {
-  const v = (raw || "").trim();
-  if (!v) return "";
-  if (v.startsWith("+")) return "+" + v.slice(1).replace(/\D/g, "");
-  const digits = v.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return digits ? `+${digits}` : "";
-}
-
-async function sendSms(to: string, body: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_FROM_NUMBER;
-  if (!sid || !token || !from) {
+/** The review text via the shared Twilio sender (lib/sms.ts — it adds the STOP
+ *  line). Keeps this cron's own error wording, which lands in
+ *  review_requests.error for the owner to read. */
+async function sendReviewSms(to: string, body: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_FROM_NUMBER) {
     return { ok: false, error: "Twilio not configured (TWILIO_ACCOUNT_SID/TOKEN/FROM_NUMBER)" };
   }
-  const phone = normalizePhone(to);
-  if (!phone) return { ok: false, error: "No valid phone number on customer record" };
-
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
-  const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-  const form = new URLSearchParams({ To: phone, From: from, Body: withOptOut(body) });
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: form.toString(),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({} as { message?: string }));
-    return { ok: false, error: (data as { message?: string }).message || `Twilio ${res.status}` };
-  }
-  return { ok: true };
+  if (!normalizePhone(to)) return { ok: false, error: "No valid phone number on customer record" };
+  const r = await sendSms(to, body);
+  return r.ok ? { ok: true } : { ok: false, error: r.error || "Twilio send failed" };
 }
 
 // sendEmail now lives in src/lib/email.ts (shared with the portal link flow).
@@ -189,7 +163,7 @@ async function dispatchOne(
     } else if (!smsConsentGranted(job.rooms)) {
       errors.push("SMS: no text-message consent on record for this customer");
     } else {
-      const r = await sendSms(toPhone, body);
+      const r = await sendReviewSms(toPhone, body);
       if (r.ok) sentAny = true; else errors.push(`SMS: ${r.error}`);
     }
   }

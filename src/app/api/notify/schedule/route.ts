@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dispatchNotifications } from "@/lib/notify-server";
+import { dispatchNotifications, resolveRecipients, type ResolvedRecipient } from "@/lib/notify-server";
 import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
 import { messagesFor, type Notice, type NoticeKind } from "@/lib/schedule-notify";
 
@@ -48,16 +48,14 @@ export async function POST(req: NextRequest) {
     if (!notices.length) return NextResponse.json({ ok: true, sent: 0 });
 
     const supabase = serviceClient();
-    const { data: profs, error } = await supabase
-      .from("profiles")
-      .select("id, name, phone, notify_sms, notify_assigned, status")
-      .eq("org_id", orgId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    const byName = new Map<string, NonNullable<typeof profs>[number]>();
-    for (const p of profs || []) {
-      if (p.status === "pending" || !p.name) continue;
-      byName.set(String(p.name).trim().toLowerCase(), p);
+    let profs: ResolvedRecipient[];
+    try {
+      profs = await resolveRecipients(supabase, orgId, { names: notices.map((n) => n.name), event: "assigned" });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
     }
+    const byName = new Map<string, ResolvedRecipient>();
+    for (const p of profs) byName.set(String(p.name).trim().toLowerCase(), p);
 
     // Deep links only to this org's jobs.
     const jobIds = [...new Set(notices.map((n) => n.visit.jobId).filter(Boolean))] as string[];
@@ -77,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     let sent = 0;
     for (const [id, list] of perPerson) {
-      const p = (profs || []).find((x) => x.id === id)!;
+      const p = profs.find((x) => x.id === id)!;
       for (const m of messagesFor(list)) {
         const r = await dispatchNotifications(supabase, {
           orgId,
@@ -86,7 +84,7 @@ export async function POST(req: NextRequest) {
           body: m.body,
           jobId: m.jobId && okJobs.has(m.jobId) ? m.jobId : null,
           smsBody: `${m.title}: ${m.body}`,
-          recipients: [{ id, phone: p.phone, notify_sms: p.notify_sms, eventOptIn: p.notify_assigned }],
+          recipients: [p],
         });
         sent += r.created;
       }
