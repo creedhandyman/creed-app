@@ -2642,6 +2642,39 @@ ${invoicePhotosHtml}
             <div style={{ fontSize: 14, color: "#888", marginBottom: 16 }}>
               {t("jobs.qrInstructions")}
             </div>
+            {/* Same Stripe link as the QR — copy or share it to text the customer. */}
+            <div style={{ maxWidth: 320, margin: "0 auto 16px" }}>
+              <div style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>
+                {t("jobs.payLinkOr")}
+              </div>
+              <div style={{ fontSize: 12, color: "#bbb", background: "rgba(255,255,255,.06)", border: "1px solid #333", borderRadius: 8, padding: "7px 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 8, userSelect: "all" }}>
+                {payQR.url}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="bo"
+                  style={{ flex: 1, fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  onClick={async () => {
+                    try { await navigator.clipboard.writeText(payQR.url); useStore.getState().showToast(t("jobs.payLinkCopied"), "success"); }
+                    catch { useStore.getState().showToast(t("jobs.copyFailed"), "error"); }
+                  }}
+                >
+                  <Icon name="copy" size={14} /> {t("common.copy")}
+                </button>
+                {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
+                  <button
+                    className="bb"
+                    style={{ flex: 1, fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                    onClick={() => {
+                      const text = t("jobs.payLinkMsg").replace("{amount}", payQR.amount.toLocaleString());
+                      navigator.share({ text: `${text} ${payQR.url}` }).catch(() => {});
+                    }}
+                  >
+                    <Icon name="send" size={14} /> {t("jobs.payLinkShare")}
+                  </button>
+                )}
+              </div>
+            </div>
             <button
               className="bo"
               onClick={() => setPayQR(null)}

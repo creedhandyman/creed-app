@@ -9,6 +9,7 @@
 import {
   Zap,
   ClipboardList,
+  Copy,
   Calendar,
   Clock,
   Target,
@@ -143,6 +144,7 @@ const ICONS: Record<string, LucideIcon> = {
   upload: Upload,
   download: Download,
   send: Send,
+  copy: Copy,
   qr: QrCode,
   filter: Filter,
   menu: Menu,
