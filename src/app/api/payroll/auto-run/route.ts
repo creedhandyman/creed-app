@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { runPayrollForUser, type RunPayrollResult } from "@/lib/payroll-runner";
 import { notifyPayrollAlert } from "@/lib/notify-server";
+import { cronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -77,23 +78,6 @@ interface FiredOrg {
   stamped: boolean;
 }
 
-type AuthVia = "cron_secret" | "x-vercel-cron" | "admin_token";
-
-// Returns WHICH path authorized the request (for cron_log.auth_via), or null
-// if rejected. Vercel cron carries `Authorization: Bearer <CRON_SECRET>` when
-// CRON_SECRET is set; x-admin-token matches the ADMIN_PASSWORD pattern for
-// ad-hoc manual triggers; x-vercel-cron=1 is Vercel's (less reliable) marker.
-function isAuthorized(req: NextRequest): AuthVia | null {
-  const auth = req.headers.get("authorization") || "";
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && auth === `Bearer ${cronSecret}`) return "cron_secret";
-  if (req.headers.get("x-vercel-cron") === "1") return "x-vercel-cron";
-  const adminToken = req.headers.get("x-admin-token");
-  const adminPw = process.env.ADMIN_PASSWORD;
-  if (adminPw && adminToken && adminToken === adminPw) return "admin_token";
-  return null;
-}
-
 /**
  * Owner/manager session auth — lets the in-app "Run now" test button in
  * the Auto Payroll panel trigger this endpoint with the logged-in user's
@@ -143,10 +127,10 @@ export async function GET(req: NextRequest) {
   const hasAuthHeader = !!req.headers.get("authorization");
   const cronSecretSet = !!process.env.CRON_SECRET;
 
-  const authVia = isAuthorized(req);
+  const authVia = cronAuth(req);
   // Owner-session (the in-app "Run now / Process all" button) is scoped to the
-  // caller's own org; cron-secret / admin-token / x-vercel-cron paths are the
-  // real cron and run all enabled orgs.
+  // caller's own org; cron-secret / admin-token paths are the real cron and run
+  // all enabled orgs.
   const ownerOrgId = authVia ? null : await isOwnerSession(req, supabase);
   const ownerSession = !!ownerOrgId;
   if (!authVia && !ownerSession) {

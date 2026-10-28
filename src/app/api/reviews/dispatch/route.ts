@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
 import { residentContact } from "@/lib/resident";
 import { smsConsentGranted, withOptOut } from "@/lib/sms-consent";
+import { cronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,8 @@ export const dynamic = "force-dynamic";
  * depending on `channel`, then patches the row's status + sent_at /
  * error.
  *
- * Authorization mirrors /api/payroll/auto-run: Vercel cron header,
- * CRON_SECRET bearer, or x-admin-token for manual triggers from the
- * field-test panel.
+ * Authorization: lib/cron-auth.ts — CRON_SECRET bearer, or x-admin-token
+ * for manual triggers from the field-test panel.
  *
  * Email is best-effort via Resend (RESEND_API_KEY). If the channel
  * requires email but Resend isn't configured, the row is marked failed
@@ -58,17 +58,6 @@ interface CustomerRow {
   name: string | null;
   phone: string | null;
   email: string | null;
-}
-
-function isAuthorized(req: NextRequest): boolean {
-  const auth = req.headers.get("authorization") || "";
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && auth === `Bearer ${cronSecret}`) return true;
-  if (req.headers.get("x-vercel-cron") === "1") return true;
-  const adminToken = req.headers.get("x-admin-token");
-  const adminPw = process.env.ADMIN_PASSWORD;
-  if (adminPw && adminToken && adminToken === adminPw) return true;
-  return false;
 }
 
 function defaultTemplate(): string {
@@ -239,7 +228,7 @@ async function dispatchOne(
 }
 
 async function handleDispatch(req: NextRequest): Promise<NextResponse> {
-  if (!isAuthorized(req)) {
+  if (!cronAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

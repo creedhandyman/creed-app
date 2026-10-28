@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeNextFire, type Cadence } from "@/lib/recurring";
 import { visitCadence } from "@/lib/memberships";
+import { cronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -37,17 +38,6 @@ interface RecurringRow {
   is_active?: boolean;
   last_fired_at?: string | null;
   next_fire_at?: string | null;
-}
-
-function isAuthorized(req: NextRequest): boolean {
-  const auth = req.headers.get("authorization") || "";
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && auth === `Bearer ${cronSecret}`) return true;
-  if (req.headers.get("x-vercel-cron") === "1") return true;
-  const adminToken = req.headers.get("x-admin-token");
-  const adminPw = process.env.ADMIN_PASSWORD;
-  if (adminPw && adminToken && adminToken === adminPw) return true;
-  return false;
 }
 
 const VALID_CADENCES: Cadence[] = [
@@ -89,7 +79,7 @@ function parseTemplateBlob(blob: unknown): { text: string; parsed: RoomsBlob } {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!cronAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

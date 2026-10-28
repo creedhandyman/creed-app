@@ -472,8 +472,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   success, and on error — all best-effort (a missing table never blocks payroll).
   **Also set `CRON_SECRET`** (any long random string) in Vercel + redeploy:
   Vercel then sends `Authorization: Bearer <CRON_SECRET>` on cron calls, which
-  `isAuthorized()` validates — the reliable auth path (vs. the flaky
-  `x-vercel-cron` header). Diagnose: `select invoked_at, authorized, auth_via,
+  `lib/cron-auth.ts` `cronAuth()` validates (shared by all 3 cron routes:
+  CRON_SECRET bearer or x-admin-token ONLY — the bare `x-vercel-cron` header
+  is NOT accepted since 2026-10-28: anyone can send it, and with `?force=1` it
+  ran payroll on demand; cron_log showed every scheduled run used the secret). Diagnose: `select invoked_at, authorized, auth_via,
   is_vercel_cron, total_paid from cron_log where endpoint='auto-run' order by
   invoked_at desc limit 20;` — a `cron_secret` row with `total_paid>0` = working;
   a `rejected` row (or no row at all) = the cron isn't reaching/authing.
