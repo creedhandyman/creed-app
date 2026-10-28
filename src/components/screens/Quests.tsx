@@ -6,7 +6,7 @@ import { t } from "@/lib/i18n";
 import { QRCodeSVG } from "qrcode.react";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
-import { computeQuests, parseQuestConfig, type QuestDef as Quest } from "@/lib/quests";
+import { computeQuests, parseQuestConfig, isDismissedPayout, type QuestDef as Quest } from "@/lib/quests";
 import ShopQuestsManager from "../ShopQuestsManager";
 
 export default function Quests({ openOps }: { openOps?: (tab?: string) => void } = {}) {
@@ -96,7 +96,7 @@ export default function Quests({ openOps }: { openOps?: (tab?: string) => void }
         (r) => r.rating === 5 && inCycle(r.created_at) && r.employee_names?.toLowerCase().includes((p.name || "").toLowerCase()),
       ).length;
       const initials = (p.name || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-      return { id: p.id, name: p.name || "—", role: p.role, earned, quests: mine.length, fiveStars, initials };
+      return { id: p.id, name: p.name || "—", role: p.role, earned, quests: mine.filter((qp) => !isDismissedPayout(qp)).length, fiveStars, initials };
     })
     .sort((a, b) => b.earned - a.earned || b.fiveStars - a.fiveStars || a.name.localeCompare(b.name));
   const teamTotal = cycleQuestPayouts.reduce((s, qp) => s + (qp.bonus_amount || 0), 0);
@@ -122,11 +122,10 @@ export default function Quests({ openOps }: { openOps?: (tab?: string) => void }
   //     quest_key) — paid is the server-side source of truth (survives a
   //     localStorage clear), so a paid quest won't pop again until reset.
   const completedQuests = allQuests.filter((q) => q.progress >= q.goal);
-  const paidKeys = new Set(
-    questPayouts
-      .filter((qp) => qp.user_id === user.id && inCycle(qp.paid_date || qp.created_at))
-      .map((qp) => qp.quest_key)
-  );
+  const myCyclePayouts = questPayouts.filter((qp) => qp.user_id === user.id && inCycle(qp.paid_date || qp.created_at));
+  const paidKeys = new Set(myCyclePayouts.map((qp) => qp.quest_key));
+  // Bonuses an owner dismissed this cycle (a $0 row) — handled, but not paid.
+  const dismissedKeys = new Set(myCyclePayouts.filter((qp) => isDismissedPayout(qp)).map((qp) => qp.quest_key));
   const celebratable = completedQuests.filter((q) => !paidKeys.has(q.key));
   const completedKey = celebratable.map((q) => q.key).join("|");
   const ackKey = `creed_quest_seen_${user.id}_${cycleStart.getFullYear()}_${cycleStart.getMonth()}`;
@@ -276,7 +275,8 @@ export default function Quests({ openOps }: { openOps?: (tab?: string) => void }
 
                 {tier.quests.map((q) => {
                   const isDone = q.progress >= q.goal;
-                  const isPaid = isDone && paidKeys.has(q.key);
+                  const isDismissed = isDone && dismissedKeys.has(q.key);
+                  const isPaid = isDone && paidKeys.has(q.key) && !isDismissed;
                   const pct = Math.min(100, (q.progress / q.goal) * 100);
                   return (
                     <div key={q.name} className="statusstrip" style={{ ["--c" as any]: isDone ? "#f5b400" : q.tierColor, background: surf, border: `1px solid ${isDone ? "rgba(245,180,0,.5)" : surfBorder}`, borderRadius: 15, padding: "12px 13px", marginBottom: 9, boxShadow: isDone ? "0 0 24px -11px rgba(245,180,0,.7)" : "none" }}>
@@ -300,6 +300,8 @@ export default function Quests({ openOps }: { openOps?: (tab?: string) => void }
                           <span style={{ color: "#c9a6ff", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <Icon name="checkCircle" size={12} color="#c9a6ff" /> {t("quest.paid")} ✓
                           </span>
+                        ) : isDismissed ? (
+                          <span style={{ fontWeight: 700 }}>{t("quest.notAwarded")}</span>
                         ) : isDone ? (
                           <span style={{ color: "#3ee08f", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <Icon name="checkCircle" size={12} color="#3ee08f" /> {t("quest.donePending")}

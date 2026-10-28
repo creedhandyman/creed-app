@@ -111,6 +111,33 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
   useEffect(() => { setApprovedBonusKeys(new Set()); }, [sel]);
   const approvedQuests = earnedQuests.filter((q) => approvedBonusKeys.has(q.key));
   const totalBonus = approvedQuests.reduce((s, q) => s + q.bonus, 0);
+
+  // Dismiss a bonus that triggered by accident: a $0 quest_payouts row marks
+  // it handled for this cycle (see isDismissedPayout), so it leaves this list
+  // and never pays. No delete policy on quest_payouts, so it's final.
+  const dismissing = useRef(false);
+  const dismissBonus = async (q: { key: string; name: string; bonus: number }) => {
+    if (dismissing.current) return;
+    const ok = await useStore.getState().showConfirm(
+      t("payroll.dismissBonusTitle"),
+      t("payroll.dismissBonusBody").replace("{name}", selUser.name || "").replace("{amount}", String(q.bonus)).replace("{quest}", q.name),
+      { confirmLabel: t("payroll.dismissBonus"), danger: true },
+    );
+    if (!ok) return;
+    dismissing.current = true;
+    try {
+      const row = await db.post("quest_payouts", {
+        org_id: org?.id, user_id: sel, quest_key: q.key, bonus_amount: 0,
+        paid_date: new Date().toLocaleDateString("en-US"),
+      });
+      if (!row) return; // db.post already toasted the error
+      setApprovedBonusKeys((prev) => { const next = new Set(prev); next.delete(q.key); return next; });
+      useStore.getState().showToast(t("payroll.bonusDismissed"), "success");
+      await loadAll();
+    } finally {
+      dismissing.current = false;
+    }
+  };
   const totalPay = laborPay + totalBonus;
 
   const [processing, setProcessing] = useState(false);
@@ -617,6 +644,16 @@ export default function Payroll({ embedded }: { embedded?: boolean }) {
                   </span>
                 )}
                 <span style={{ color: approved ? "var(--color-success)" : "#888", fontFamily: "Oswald" }}>${q.bonus}</span>
+                {isOwner && (
+                  <button
+                    className="iconbtn"
+                    onClick={() => void dismissBonus(q)}
+                    aria-label={`${t("payroll.dismissBonus")} ${q.name}`}
+                    title={t("payroll.dismissBonus")}
+                  >
+                    <Icon name="close" size={15} />
+                  </button>
+                )}
               </div>
             );
           })}

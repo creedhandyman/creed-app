@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n";
 import { formatHours } from "@/lib/dates";
 import { Icon } from "./Icon";
 import { inviteLink } from "@/lib/signup-helpers";
+import { isDismissedPayout } from "@/lib/quests";
 
 /**
  * Team Stats — supersets the old TeamSettings panel. Keeps every admin
@@ -106,7 +107,7 @@ export default function TeamStats() {
 
     // Quests won (distinct paid quest keys) + no-callback rate over the
     // tech's completed jobs (matched by job_id or property name).
-    const questsWon = new Set(questPayouts.filter((qp) => qp.user_id === p.id).map((qp) => qp.quest_key)).size;
+    const questsWon = new Set(questPayouts.filter((qp) => qp.user_id === p.id && !isDismissedPayout(qp)).map((qp) => qp.quest_key)).size;
     const jobIds = new Set(allEntries.map((e) => e.job_id).filter((x): x is string => !!x));
     const jobNames = new Set(allEntries.map((e) => e.job).filter((x): x is string => !!x && x !== "General"));
     const techJobs = jobs.filter((j) => jobIds.has(j.id) || (!!j.property && jobNames.has(j.property)));

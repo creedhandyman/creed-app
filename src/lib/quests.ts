@@ -89,6 +89,13 @@ export interface CustomQuest {
 export const questCycleKey = (cycleStart: Date) =>
   `${cycleStart.getFullYear()}-${String(cycleStart.getMonth() + 1).padStart(2, "0")}`;
 
+/** A quest_payouts row with no money is a DISMISSAL: an owner/manager decided
+ *  an earned bonus shouldn't be paid (it triggered by accident). It still
+ *  counts as "handled this cycle" so the bonus leaves Payroll's review list,
+ *  but it's not a win — leaderboards / quests-won / the PAID badge skip it.
+ *  Real payouts always carry the bonus amount (payroll-runner). */
+export const isDismissedPayout = (qp: { bonus_amount?: number | null }) => (qp.bonus_amount || 0) <= 0;
+
 /** quest_config JSON → the built-in toggles/bonuses + the shop quests. */
 export function parseQuestConfig(raw?: string | null): {
   config: Record<string, { enabled?: boolean; bonus?: number }>;
