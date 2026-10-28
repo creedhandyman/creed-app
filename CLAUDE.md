@@ -192,6 +192,43 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   receipts else charged. Financials' "Month" pill = CALENDAR month-to-date
   (not rolling 30d) so hub → Financials shows the same number. Never
   re-implement a profit figure inline — extend the snapshot.
+- **One home per rule (deepening pass, 2026-10-28)** — call these, never
+  re-inline them (each has a test in `src/__tests__`):
+  - `lib/clock.ts` — OWNS the c_t_* clock keys (`readLocalClock` /
+    `writeLocalClock` / `clearLocalClock`) and the whole `clockIn` /
+    `clockOut({reason:'self'|'force'})` sequence (stable row id, GPS stamps,
+    scheduled→active, onlyIfOpen/earlierWins, markLocalClockOut). Timer +
+    WorkVision call it; screens only show dialogs. Owner rules: a clock-out
+    that can't find its open row NEVER posts a second entry; one brief-shift
+    cutoff (rounded hrs ≥ 0.01).
+  - `lib/pay.ts` — `entryAmount` / `unpaidFor` / `isUsersEntry` / `roundHours`.
+    **No `rate || 55` for pay** (owner, 2026-10-28): rate ≤ 0 earns $0 and
+    shows "No rate"; Payroll's per-person Process Pay refuses like Process
+    All. (`org.default_rate || 55` for the CUSTOMER labor rate in quotes is a
+    different thing and stays.)
+  - `lib/job-entries.ts` `entriesForJob` / `receiptsForJob` — job_id, else
+    address match credited only to the OLDEST job there (learning uses it too).
+  - `lib/job-transition.ts` `transitionJob` (status patch + learning +
+    equipment stamp) and `shouldPromptReview` (honors the org opt-out).
+  - `lib/job-blob.ts` `readBlob(rooms)` / `jobBlob(row)` / `woKey` — the only
+    way to READ `jobs.rooms` (never throws, {} on bad data). Writes are
+    unchanged (enqueueRoomsWrite / wo-queue) — a shared writer is still TODO.
+  - `lib/nav-intent.ts` for every deep link; day-plan / dispatch-week
+    `parseSchedTime` / `parseSchedCrew` / `stripNoteParts` for 🕐/👷 notes.
+  - Server: `lib/cron-auth.ts` `cronAuth`; `lib/payment-fulfillment.ts`
+    `fulfillJobPayment` (load → record → review → alert; `notify: false |
+    {excludeUserId}` — Record payment skips the recorder, bulk Paid alerts no
+    one), `paymentFromCheckoutSession`, `recordJobRefund` (org-scoped);
+    `lib/stripe-subscription.ts` (plan/status mapping for webhook +
+    verify-subscription); `notify-server` `resolveRecipients` (callers pass
+    audience + event, never query profiles); `lib/sms.ts` `sendSms` /
+    `normalizePhone` (the only Twilio sender); `lib/anthropic-server.ts`
+    `callClaude` (every Claude call: fallback + ai_usage logging, call_type
+    also receipt/tax/render/transcribe) + the logged OpenAI helper.
+  - Quest bonuses: a `quest_payouts` row with `bonus_amount 0` = DISMISSED
+    (`isDismissedPayout`) — Payroll's ✕; counts as handled, never as a win.
+  - Known flaky test: `promo-timed.test.ts` fails by 1 h across the November
+    DST change (local-time month math in promo-timed/trial) — not a regression.
 
 ## Required env vars (Vercel)
 
