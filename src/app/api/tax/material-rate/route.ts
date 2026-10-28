@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
 import { zipTaxMap, parseRateReply } from "@/lib/material-tax";
+import { callClaude } from "@/lib/anthropic-server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -37,27 +38,25 @@ export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: "claude-sonnet-5-5",
-      max_tokens: 2048,
-      thinking: { type: "between_tools" },
-      output_config: { effort: "medium" },
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
-      messages: [{
-        role: "user",
-        content:
-          `What is the current total combined sales tax rate (state + county + city + any special district) ` +
-          `for retail purchases in US ZIP code ${zip}? Search the web for the current rate. ` +
-          `If the ZIP spans several rates, use the rate for its main city. ` +
-          `Reply with ONLY this JSON and nothing else: {"rate": <percent as a number, e.g. 7.5>, "place": "<City, ST>"}`,
-      }],
-    }),
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data) {
+  // callClaude throws on a non-JSON reply; that was a 502 "Lookup failed" here.
+  const res = await callClaude({
+    model: "claude-sonnet-5-5",
+    max_tokens: 2048,
+    thinking: { type: "between_tools" },
+    output_config: { effort: "medium" },
+    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
+    messages: [{
+      role: "user",
+      content:
+        `What is the current total combined sales tax rate (state + county + city + any special district) ` +
+        `for retail purchases in US ZIP code ${zip}? Search the web for the current rate. ` +
+        `If the ZIP spans several rates, use the rate for its main city. ` +
+        `Reply with ONLY this JSON and nothing else: {"rate": <percent as a number, e.g. 7.5>, "place": "<City, ST>"}`,
+    }],
+  }, { orgId: prof.orgId, userId: prof.userId, callType: "tax" })
+    .catch(() => ({ status: 0, data: null as Record<string, unknown> | null }));
+  const data = res.data as { error?: { message?: string }; content?: unknown } | null;
+  if (res.status < 200 || res.status >= 300 || !data) {
     return NextResponse.json({ error: data?.error?.message || `Lookup failed (${res.status})` }, { status: 502 });
   }
   const text = (Array.isArray(data.content) ? data.content : [])
