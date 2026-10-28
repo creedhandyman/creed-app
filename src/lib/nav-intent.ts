@@ -13,8 +13,8 @@
  * (private mode) just degrades to a plain navigation — never throws.
  *
  * Readers: Jobs.tsx, Schedule.tsx, Timer.tsx. Writers: DayCards (Home),
- * Schedule, Operations, Financials, QuoteForge. Some of those inline an
- * identical reader/writer — keep the shape and the TTL in step with them.
+ * Dashboard, FlipDashboard, Schedule, Operations, Financials, QuoteForge —
+ * all through this module, so the shape and the TTL live only here.
  */
 
 export const NAV_INTENT_KEY = "c_nav_intent";
@@ -57,6 +57,14 @@ export function peekNavIntent(page: string): (NavIntent & { at: number }) | null
   }
 }
 
-export function clearNavIntent(): void {
-  try { sessionStorage.removeItem(NAV_INTENT_KEY); } catch { /* blocked storage */ }
+/** Consume the pending intent. With `page`, only when it names that page
+ *  (fresh or stale) — a note meant for another screen is left alone. */
+export function clearNavIntent(page?: string): void {
+  try {
+    if (page !== undefined) {
+      const raw = sessionStorage.getItem(NAV_INTENT_KEY);
+      if (!raw || JSON.parse(raw)?.page !== page) return;
+    }
+    sessionStorage.removeItem(NAV_INTENT_KEY);
+  } catch { /* blocked storage / malformed note */ }
 }

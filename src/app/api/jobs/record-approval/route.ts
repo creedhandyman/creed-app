@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOwner, serviceClient } from "@/lib/api-auth";
 import { applyApproval } from "@/lib/approve-job";
 import type { ApprovalVia } from "@/lib/approval";
+import { readBlob } from "@/lib/job-blob";
 
 export const dynamic = "force-dynamic";
 
@@ -54,11 +55,8 @@ export async function POST(req: NextRequest) {
     if (job.client_signature) return NextResponse.json({ error: "This quote is already approved." }, { status: 409 });
     if (job.status === "lead") return NextResponse.json({ error: "Build and save the quote first." }, { status: 409 });
 
-    let tiered = false;
-    try {
-      const b = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-      tiered = b?.tieredQuote === true && !!b?.tierTotals;
-    } catch { /* not tiered */ }
+    const b = readBlob(job.rooms);
+    const tiered = b.tieredQuote === true && !!b.tierTotals;
     const tier = body.tier === "base" || body.tier === "better" || body.tier === "best" ? body.tier : null;
     if (tiered && !tier) return NextResponse.json({ error: "Pick the option the homeowner chose." }, { status: 400 });
 

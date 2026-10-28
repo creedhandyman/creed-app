@@ -1,3 +1,4 @@
+import { tryReadBlob } from "./job-blob";
 /**
  * Text-message consent (A2P 10DLC / CTIA): business texts need a recorded,
  * customer-given opt-in. It lives on the job's rooms blob as `smsConsent`,
@@ -25,14 +26,7 @@ export interface SmsConsentRecord {
 
 type Obj = Record<string, unknown>;
 
-const parse = (rooms: unknown): Obj | null => {
-  try {
-    const b = typeof rooms === "string" ? JSON.parse(rooms) : rooms;
-    return b && typeof b === "object" && !Array.isArray(b) ? (b as Obj) : null;
-  } catch {
-    return null;
-  }
-};
+const parse = (rooms: unknown): Obj | null => tryReadBlob(rooms);
 
 /** The consent record on a job's rooms blob (string or object), if any. */
 export function smsConsentOf(rooms: unknown): SmsConsentRecord | null {

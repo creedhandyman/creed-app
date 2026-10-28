@@ -1,6 +1,7 @@
 import type { Job, Room, JobDiscount } from "./types";
 import { exportQuotePdf } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
+import { readBlob } from "./job-blob";
 
 /**
  * The subset of Organization fields the quote PDF needs. Both the full
@@ -56,7 +57,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   let estDays: number | null = null;
   let tierNames: { better: string; best: string } | undefined;
   try {
-    const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+    const data = readBlob(job.rooms);
     rooms = (data?.rooms || []) as Room[];
     workers = (data?.workers || []).map((w: { id?: string; name?: string }) => ({
       id: w.id || "",

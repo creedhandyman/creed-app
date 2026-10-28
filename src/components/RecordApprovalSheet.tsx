@@ -11,6 +11,7 @@ import { Icon } from "./Icon";
 import { apiFetch } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import type { TierKey } from "@/lib/tiers";
+import { readBlob } from "@/lib/job-blob";
 
 type Job = { id: string; client?: string | null; property?: string | null; total?: number | null; rooms?: unknown };
 type Via = "in_person" | "phone" | "paper";
@@ -19,8 +20,7 @@ const VIA_LABEL: Record<Via, string> = { in_person: "In person", phone: "By phon
 const HUE: Record<TierKey, string> = { base: "#8a8a99", better: "#2E75B6", best: "#9d4edd" };
 
 export default function RecordApprovalSheet({ job, onClose }: { job: Job; onClose: () => void }) {
-  let blob: Record<string, unknown> = {};
-  try { blob = (typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms) as Record<string, unknown> || {}; } catch { blob = {}; }
+  const blob: Record<string, unknown> = readBlob(job.rooms);
   const tt = blob.tierTotals as Record<TierKey, number> | undefined;
   const tiered = blob.tieredQuote === true && !!tt;
   const names = (blob.tierNames as { better?: string; best?: string } | undefined) || {};

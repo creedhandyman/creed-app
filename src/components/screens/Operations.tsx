@@ -15,6 +15,7 @@ import BrandingSettings from "../BrandingSettings";
 import { Icon, type IconName } from "../Icon";
 import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
+import { goWithIntent } from "@/lib/nav-intent";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
@@ -770,8 +771,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
                 // Related-work row → that job's detail in Jobs. The intent is
                 // a one-shot sessionStorage handoff Jobs reads on mount.
                 onOpenJob={(id) => {
-                  try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "jobs", jobId: id, at: Date.now() })); } catch { /* */ }
-                  setPage("jobs");
+                  goWithIntent(setPage, { page: "jobs", jobId: id });
                 }}
               />
             )

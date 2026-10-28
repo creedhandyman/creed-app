@@ -26,6 +26,7 @@ import { exportJobReport } from "@/lib/export-job-report";
 import { statusColor } from "@/lib/status";
 import { receiptsForJob } from "@/lib/job-entries";
 import { Icon } from "@/components/Icon";
+import { readBlob } from "@/lib/job-blob";
 
 const PRIMARY = "#2E75B6";
 const GOLD = "#f5b400";
@@ -95,7 +96,7 @@ function formatAddress(a: Address): string {
 function extractPhotos(j: Job): { url: string; type: string; label?: string }[] {
   const out: { url: string; type: string; label?: string }[] = [];
   try {
-    const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
+    const data = readBlob(j.rooms);
     if (Array.isArray(data?.photos)) {
       for (const p of data.photos) {
         if (p?.url) out.push({ url: p.url, type: p.type || "work", label: p.label });
@@ -825,7 +826,7 @@ function DocumentsSection({ jobs, org }: { jobs: Job[]; org: PortalOrg | null })
     const job = doc.job;
     let workerNames: string[] = [];
     try {
-      const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+      const data = readBlob(job.rooms);
       workerNames = (data?.workers || [])
         .map((w: { name?: string }) => w?.name || "")
         .filter(Boolean);

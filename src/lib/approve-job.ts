@@ -13,6 +13,7 @@
  */
 import { itemInTier, type TierKey } from "./tiers";
 import { scopeFingerprint, type ApprovalRecord, type ApprovalVia } from "./approval";
+import { tryReadBlob } from "./job-blob";
 
 type JobRow = { status?: string | null; rooms?: unknown; total?: number | string | null };
 
@@ -28,13 +29,8 @@ export function applyApproval(
   };
   if (job.status === "quoted") patch.status = "accepted";
 
-  let blob: Record<string, unknown> | null = null;
-  try {
-    const raw = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-    blob = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
-  } catch {
-    blob = null; // malformed blob — approve on the stored total, no record
-  }
+  // Malformed / missing blob → null: approve on the stored total, no record.
+  const blob: Record<string, unknown> | null = tryReadBlob(job.rooms);
 
   const tier = opts.tier;
   if (blob && (tier === "base" || tier === "better" || tier === "best")) {

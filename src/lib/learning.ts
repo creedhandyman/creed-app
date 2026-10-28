@@ -17,6 +17,7 @@ import { extractZip, isOverheadLine, RAW_JOB_PREFIX } from "./parser";
 import { itemInTier, type TierKey } from "./tiers";
 import { entriesForJob } from "./job-entries";
 import type { Job, TimeEntry, Room, RoomItem } from "./types";
+import { readBlob } from "./job-blob";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -55,7 +56,7 @@ function parseJobItems(job: Job): { items: { trade: string; item: RoomItem }[]; 
   let acceptedTier: TierKey | null = null;
   let tiered = false;
   try {
-    const blob = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+    const blob = readBlob(job.rooms);
     if (blob && Array.isArray(blob.rooms)) rooms = blob.rooms as Room[];
     tiered = blob?.tieredQuote === true;
     const at = blob?.acceptedTier;

@@ -40,6 +40,8 @@ import { useNavLayout } from "@/lib/nav-layout";
 import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
 import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
+import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
+import { readBlob, woKey } from "@/lib/job-blob";
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
    Under the Requested-tech picker: ranks the crew by distance from
@@ -97,12 +99,9 @@ function ClosestTechHint({ job }: { job: Job }) {
 }
 
 /* ── Nav intent (Home → a filtered Jobs list, or one job) ──────────
-   Dashboard tiles drop {page, tab?, filter?, jobId?, at} in sessionStorage
-   and switch to Jobs. Read inline (not lib/nav-intent) so this screen has
-   no hard dependency on the writer; a stale (>15s) or malformed intent is
-   ignored. Consumed once on mount. */
-const NAV_KEY = "c_nav_intent";
-function peekNavIntent(page: string): { tab?: string; filter?: string; jobId?: string } | null { try { const raw = sessionStorage.getItem(NAV_KEY); if (!raw) return null; const v = JSON.parse(raw); if (!v || v.page !== page || typeof v.at !== "number" || Date.now() - v.at > 15000) return null; return v; } catch { return null; } }
+   Dashboard tiles leave a lib/nav-intent note and switch to Jobs; a stale
+   (>15s) or malformed intent is ignored. Consumed once on mount. The fields
+   are still validated below — the note is untyped storage. */
 type QuickKey = "lead" | "toSend" | "waiting" | "toInvoice" | "unpaid";
 const QUICK: QuickKey[] = ["lead", "toSend", "waiting", "toInvoice", "unpaid"];
 type JobTab = "active" | "billing" | "paid" | "archive";
@@ -171,8 +170,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     });
     return roomsQueue.current;
   };
-  const woStableKey = (w: { room?: string; detail?: string }) =>
-    `${(w.room || "").toLowerCase().trim()}|||${(w.detail || "").toLowerCase().trim()}`;
+  const woStableKey = woKey;
 
   // ── Historical labor reconstruction ────────────────────────────────
   // Pre-c99d286, Payroll did `db.del("time_entries", id)` instead of
@@ -299,7 +297,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
   // Home deep link (read once). A quick filter picks its tab: invoice/unpaid
   // live under Billing, the rest under Active.
-  const [navIntent] = useState(() => peekNavIntent("jobs"));
+  const [navIntent] = useState(() => {
+    const v = peekNavIntent("jobs");
+    return v?.page === "jobs" ? v : null;
+  });
   const navFilter: QuickKey | null =
     navIntent && typeof navIntent.filter === "string" && (QUICK as string[]).includes(navIntent.filter)
       ? (navIntent.filter as QuickKey) : null;
@@ -318,7 +319,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // to Jobs via the nav tab later opens the list, not this job again.
   useEffect(() => {
     if (initialDetailJobId) clearInitialDetail?.();
-    if (navIntent) { try { sessionStorage.removeItem(NAV_KEY); } catch { /* storage blocked */ } }
+    if (navIntent) clearNavIntent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Phase 3: sub-screen opened from the detail's Work section (work order /
@@ -428,22 +429,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // its rooms blob into the new recurring_jobs row.
   const [recurringFrom, setRecurringFrom] = useState<Job | null>(null);
 
-  const getWorkers = (j: typeof jobs[0]): { id: string; name: string }[] => {
-    try {
-      const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-      return d?.workers || [];
-    } catch {
-      return [];
-    }
-  };
+  const getWorkers = (j: typeof jobs[0]): { id: string; name: string }[] => readBlob(j.rooms).workers || [];
 
   // Unchecked work-order items on a job (0 when there's no work order).
   const uncheckedCount = (job: Job): number => {
-    try {
-      const jobData = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-      const workOrder = (jobData?.workOrder || []) as { done: boolean }[];
-      return workOrder.filter((w) => !w.done).length;
-    } catch { return 0; }
+    const workOrder = (readBlob(job.rooms).workOrder || []) as { done: boolean }[];
+    return workOrder.filter((w) => !w.done).length;
   };
 
   // Core status write + completion side effects, shared by the single-job
@@ -684,12 +675,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         // cheapest option instead (same wording as QuoteForge's Send). Once
         // an option was picked (acceptedTier), total IS that price.
         let totalLine = `Total: $${(job.total || 0).toFixed(2)}`;
-        try {
-          const d = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-          const tt = d?.tieredQuote && !d?.acceptedTier ? d?.tierTotals : null;
+        {
+          // Malformed rooms → readBlob's {} → plain total.
+          const d = readBlob(job.rooms);
+          const tt = d.tieredQuote && !d.acceptedTier ? d.tierTotals : null;
           const prices = tt ? [tt.base, tt.better, tt.best].filter((v): v is number => typeof v === "number" && v > 0) : [];
           if (prices.length) totalLine = `Options from $${Math.min(...prices).toFixed(2)}`;
-        } catch { /* malformed rooms — plain total */ }
+        }
         msg = `Hi ${name}! Here's your quote from ${orgName} for ${prop}:\n\n${totalLine}\n\nView details & approve: ${url}`;
         break;
       }
@@ -814,9 +806,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // invoiceBeforePhotos / invoiceAfterPhotos, default off) toggled next to the
   // Invoice PDF button.
   type InvoicePhotoKey = "invoiceBeforePhotos" | "invoiceAfterPhotos";
-  const jobRoomsOf = (j: Job): Record<string, unknown> => {
-    try { return (typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms) || {}; } catch { return {}; }
-  };
+  const jobRoomsOf = (j: Job): Record<string, unknown> => readBlob(j.rooms);
   const jobPhotosOf = (j: Job, type: "before" | "after"): { url: string; label?: string }[] => {
     const ph = jobRoomsOf(j).photos;
     return Array.isArray(ph) ? (ph as { url?: string; label?: string; type?: string }[])
@@ -853,13 +843,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     // exactly, even if an org setting changed since the quote was saved.
     const subtotal = Math.round(((j.total_labor || 0) + (j.total_mat || 0)) * 100) / 100;
     let discParsed: { type: string; value: number; label?: string } | null = null;
-    try {
-      const data = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-      const d = data?.discount;
-      if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
-        discParsed = { type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined };
-      }
-    } catch { /* malformed rooms — no discount line */ }
+    // Malformed rooms → readBlob's {} → no discount line.
+    const d = readBlob(j.rooms).discount;
+    if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
+      discParsed = { type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined };
+    }
     const tripFee = org?.trip_fee || 0;
     const preBase = subtotal + tripFee;
     const discountAmount = discParsed
@@ -1052,7 +1040,7 @@ ${invoicePhotosHtml}
       const cta = primaryCTA(dj);
       const djLead = dj.status === "lead" ? (() => {
         try {
-          const data = typeof dj.rooms === "string" ? JSON.parse(dj.rooms) : dj.rooms;
+          const data = readBlob(dj.rooms);
           return {
             description: data?.leadDescription as string | undefined,
             photos: (Array.isArray(data?.leadPhotos) ? data.leadPhotos : []) as string[],
@@ -1063,8 +1051,7 @@ ${invoicePhotosHtml}
       })() : null;
       // Editable job number + notes live in the rooms blob (no schema
       // migration), same pattern as jobNotes / workOrder.
-      let djRoomsData: Record<string, unknown> = {};
-      try { djRoomsData = typeof dj.rooms === "string" ? JSON.parse(dj.rooms) : (dj.rooms || {}); } catch { djRoomsData = {}; }
+      const djRoomsData: Record<string, unknown> = readBlob(dj.rooms);
       const djJobNumber = typeof djRoomsData.jobNumber === "string" ? djRoomsData.jobNumber : "";
       return (
         <>
@@ -1762,8 +1749,7 @@ ${invoicePhotosHtml}
         <div className="dim" style={{ fontSize: 13.5, marginBottom: 11 }}>{sj.property}</div>
 
         {subScreen.kind === "workorder" && (() => {
-          let jobData: Record<string, unknown> = {};
-          try { jobData = typeof sj.rooms === "string" ? JSON.parse(sj.rooms) : (sj.rooms || {}); } catch { jobData = {}; }
+          const jobData: Record<string, unknown> = readBlob(sj.rooms);
           const workOrder: WOItem[] = Array.isArray(jobData.workOrder) ? (jobData.workOrder as WOItem[]) : [];
           if (!workOrder.length) {
             return (
@@ -1916,11 +1902,8 @@ ${invoicePhotosHtml}
                 rooms.photos blob in the PUBLIC bucket, so they render directly.
                 Previously this screen showed receipts only. */}
             {(() => {
-              let photos: { url: string; label?: string; type?: string }[] = [];
-              try {
-                const d = typeof sj.rooms === "string" ? JSON.parse(sj.rooms) : sj.rooms;
-                photos = Array.isArray(d?.photos) ? d.photos : [];
-              } catch { /* */ }
+              const ph = readBlob(sj.rooms).photos;
+              const photos: { url: string; label?: string; type?: string }[] = Array.isArray(ph) ? ph : [];
               if (!photos.length) return null;
               return (
                 <div className="section">
@@ -2232,11 +2215,8 @@ ${invoicePhotosHtml}
                 // The server already drafted a quote from the request.
                 const draft = leadDraftTotal(j.rooms);
                 if (draft !== null) return { icon: "sparkle", text: t("jobs.hintDraftReady").replace("{amt}", `$${Math.round(draft).toLocaleString()}`) };
-                let desc = "";
-                try {
-                  const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-                  desc = typeof d?.leadDescription === "string" ? d.leadDescription.replace(/\s+/g, " ").trim() : "";
-                } catch { desc = ""; }
+                const ld = readBlob(j.rooms).leadDescription;
+                const desc = typeof ld === "string" ? ld.replace(/\s+/g, " ").trim() : "";
                 return { icon: "quote", text: desc ? (desc.length > 40 ? `${desc.slice(0, 40).trimEnd()}…` : desc) : t("jobs.hintNewLead") };
               }
               case "quoted":    return j.quote_sent_at
@@ -2928,12 +2908,7 @@ function MakeRecurringModal({
 }
 
 function JobNotesInput({ job }: { job: Job }) {
-  const initial = (() => {
-    try {
-      const d = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
-      return d?.jobNotes || "";
-    } catch { return ""; }
-  })();
+  const initial = readBlob(job.rooms).jobNotes || "";
   const [value, setValue] = useState(initial);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSaved = useRef(initial);

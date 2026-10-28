@@ -42,6 +42,7 @@ import { useBackLayer } from "@/lib/back-layer";
 import type { InspectionData } from "./Inspector";
 import CustomerPicker from "../CustomerPicker";
 import { t } from "@/lib/i18n";
+import { setNavIntent } from "@/lib/nav-intent";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import AiNote from "../AiNote";
@@ -59,6 +60,7 @@ import GuideShopTools, { type ShopItem as GuideShopItem } from "../GuideShopTool
 import VoiceWalk, { type VoiceWalkResult } from "../VoiceWalk";
 import ServiceTemplates, { CategoryField } from "../ServiceTemplates";
 import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, type ServiceTemplate } from "@/lib/service-templates";
+import { readBlob, jobBlob } from "@/lib/job-blob";
 
 
 /** Sub-screen header colours = the hub card that opens them (Quick Quote gold,
@@ -698,7 +700,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     leadSeedRef.current = null;
 
     try {
-      const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+      const data = readBlob(job.rooms);
       // A new lead (public intake form) stores work-order details as
       // { leadDescription, leadPhotos } with no quote rooms yet. "Build Quote"
       // lands here — instead of a blank editor, seed the Quick Quote flow with
@@ -1029,8 +1031,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // from this inspection (heuristic: same property + has data.inspection),
   // and switches the screen into the inspect-edit mode.
   const openInspectionEdit = (insp: { id: string; property?: string; client?: string; customer_id?: string; address_id?: string; rooms?: string | unknown }) => {
-    let parsed: Record<string, unknown> = {};
-    try { parsed = typeof insp.rooms === "string" ? JSON.parse(insp.rooms) : (insp.rooms as Record<string, unknown>) || {}; } catch { parsed = {}; }
+    const parsed: Record<string, unknown> = readBlob(insp.rooms);
     const inspBlob = (parsed as { inspection?: { type?: string; rooms?: { name: string; sqft?: number; width?: number; length?: number; items: { name: string; condition: string; comment?: string; notes?: string; photos?: string[] }[] }[] } }).inspection;
     const initialData: InspectionData = {
       rooms: (inspBlob?.rooms || []).map((r) => ({
@@ -1060,10 +1061,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       if (j.id === insp.id) return false;
       if (j.status === "inspection") return false;
       if ((j.property || "") !== (insp.property || "")) return false;
-      try {
-        const d = typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms;
-        return !!d?.inspection;
-      } catch { return false; }
+      return !!readBlob(j.rooms).inspection;
     }).length;
     setEditingInspection({ id: insp.id, initialData, linkedQuoteCount });
     setMode("inspect-edit");
@@ -1077,9 +1075,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // on a schema change for the timestamp.
   const handleInspectionEditSave = async (data: InspectionData) => {
     if (!editingInspection) return;
-    let prevBlob: Record<string, unknown> = {};
     const prevJob = jobs.find((j) => j.id === editingInspection.id);
-    try { prevBlob = prevJob ? (typeof prevJob.rooms === "string" ? JSON.parse(prevJob.rooms) : prevJob.rooms) || {} : {}; } catch { /* */ }
+    const prevBlob: Record<string, unknown> = jobBlob(prevJob);
     const prevInsp = (prevBlob.inspection as Record<string, unknown> | undefined) || {};
     const merged = {
       ...prevBlob,
@@ -1803,9 +1800,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     let prevData: Record<string, unknown> = {};
     if (editingId) {
       const prevJob = useStore.getState().jobs.find((j) => j.id === editingId);
-      try {
-        prevData = prevJob ? (typeof prevJob.rooms === "string" ? JSON.parse(prevJob.rooms) : prevJob.rooms) || {} : {};
-      } catch { prevData = {}; }
+      prevData = jobBlob(prevJob);
     }
 
     // Use custom work order if user edited it, otherwise auto-generate from
@@ -2084,7 +2079,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     savingRef.current = false;
     // Land on the job just saved (Jobs opens its detail from this intent).
-    if (savedId) { try { sessionStorage.setItem("c_nav_intent", JSON.stringify({ page: "jobs", jobId: savedId, at: Date.now() })); } catch { /* */ } }
+    if (savedId) setNavIntent({ page: "jobs", jobId: savedId });
     setPage("jobs");
     return savedId;
   };
@@ -3297,9 +3292,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                 // Read-only job context: the inspection (this session's, the
                 // quote's saved copy, or the newest inspection at this
                 // address), work-order state, job notes, original request.
-                const blobOf = (j?: { rooms?: unknown } | null): Record<string, unknown> => {
-                  try { return (typeof j?.rooms === "string" ? JSON.parse(j.rooms) : j?.rooms) || {}; } catch { return {}; }
-                };
+                const blobOf = (j?: { rooms?: unknown } | null): Record<string, unknown> => jobBlob(j);
                 const allJobs = useStore.getState().jobs;
                 const savedBlob = editingId ? blobOf(allJobs.find((j) => j.id === editingId)) : {};
                 const propKey = (prop || "").trim().toLowerCase();
@@ -3671,13 +3664,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
               const savedJob = editingId ? useStore.getState().jobs.find((j) => j.id === editingId) : null;
               let renders: { sourceUrl?: string; url: string }[] = [];
               if (savedJob) {
-                try {
-                  const d = typeof savedJob.rooms === "string" ? JSON.parse(savedJob.rooms) : savedJob.rooms;
-                  const ph: Record<string, unknown>[] = Array.isArray(d?.photos) ? d.photos : [];
-                  renders = ph
-                    .filter((p) => p.type === "rendered" && p.includeInQuote)
-                    .map((p) => ({ sourceUrl: p.sourceUrl as string | undefined, url: p.url as string }));
-                } catch { /* */ }
+                const d = readBlob(savedJob.rooms);
+                const ph: Record<string, unknown>[] = Array.isArray(d.photos) ? d.photos : [];
+                renders = ph
+                  .filter((p) => p.type === "rendered" && p.includeInQuote)
+                  .map((p) => ({ sourceUrl: p.sourceUrl as string | undefined, url: p.url as string }));
               }
               exportQuotePdf({
                 property: prop,
@@ -3867,8 +3858,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         onSaved={async (url, sourceUrl, includeInQuote) => {
           if (!editingId) return;
           const freshJob = useStore.getState().jobs.find((j) => j.id === editingId);
-          let data: Record<string, unknown> = {};
-          try { data = freshJob ? (typeof freshJob.rooms === "string" ? JSON.parse(freshJob.rooms) : freshJob.rooms) || {} : {}; } catch { /* */ }
+          const data: Record<string, unknown> = jobBlob(freshJob);
           if (!Array.isArray(data.photos)) data.photos = [];
           (data.photos as Record<string, unknown>[]).push({
             url, label: "Proposed finish", type: "rendered", sourceUrl,
@@ -4879,8 +4869,7 @@ function SavedInspections({ jobs, onQuote, onEdit, onPrint, onDelete }: { jobs: 
       {open && (
         <div style={{ marginTop: 6 }}>
           {inspections.map((insp) => {
-            let inspData: Record<string, unknown> = {};
-            try { inspData = typeof insp.rooms === "string" ? JSON.parse(insp.rooms) : insp.rooms || {}; } catch { inspData = {}; }
+            const inspData: Record<string, unknown> = readBlob(insp.rooms);
             const inspection = inspData.inspection as { rooms?: { name: string; items: { name: string; condition: string; comment: string; photos?: string[] }[] }[] } | undefined;
             const roomCount = inspection?.rooms?.length || 0;
             const findingsCount = inspection?.rooms?.reduce((s, r) => s + r.items.filter((it) => it.condition !== "S").length, 0) || 0;

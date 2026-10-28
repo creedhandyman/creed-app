@@ -1,6 +1,7 @@
 import type { Job } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 import { useStore } from "./store";
+import { readBlob } from "./job-blob";
 
 interface ReportOptions {
   job: Job;
@@ -49,7 +50,7 @@ export function exportJobReport(opts: ReportOptions) {
   }[] = [];
   let photos: { url: string; label: string; type: string }[] = [];
   try {
-    const data = typeof job.rooms === "string" ? JSON.parse(job.rooms) : job.rooms;
+    const data = readBlob(job.rooms);
     workOrder = data?.workOrder || [];
     photos = data?.photos || [];
   } catch {
