@@ -1,10 +1,12 @@
 /**
  * Server-only: send one request to Anthropic's Messages API with the app's
  * key, the Sonnet 5.5 server-side refusal fallback, and best-effort usage
- * logging to ai_usage. Shared by /api/ai (the signed-in app) and server jobs
- * that run without a user (the website-lead quote draft).
+ * logging to ai_usage. EVERY Anthropic call goes through here: /api/ai (the
+ * signed-in app), /api/ai/receipt, /api/tax/material-rate, and server jobs
+ * that run without a user (the website-lead quote draft). Callers keep their
+ * own model / max_tokens / tools; this owns the key, headers, fallback + log.
  */
-import { serviceClient } from "./api-auth";
+import { logAiUsage, type AiUsageLog } from "./ai-usage";
 
 // Approx Anthropic $/million tokens for cost estimation (Phase 0 measurement).
 // Estimates only — refine against the real invoice; used for relative tracking.
@@ -20,7 +22,7 @@ const PRICING: Record<string, { in: number; out: number; cacheWrite: number; cac
 
 export async function callClaude(
   body: Record<string, unknown>,
-  log: { orgId?: string | null; userId?: string | null; callType?: string },
+  log: AiUsageLog,
 ): Promise<{ status: number; data: Record<string, unknown> }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { status: 500, data: { error: "ANTHROPIC_API_KEY not configured" } };
@@ -63,7 +65,7 @@ export async function callClaude(
     };
     // The model that actually answered (a fallback-served call reports
     // Sonnet 5 here); the request's model if the response lacks one.
-    const model = (typeof data?.model === "string" && data.model) || (body.model as string);
+    const model = (typeof data?.model === "string" && data.model) || String(body.model ?? "");
     // Prefix match so dated snapshots (e.g. claude-haiku-4-5-20251001) map to
     // their rate row.
     const rateKey = Object.keys(PRICING).find((k) => model.startsWith(k)) || "claude-sonnet-5";
@@ -75,16 +77,9 @@ export async function callClaude(
     const estCost =
       (inTok * rate.in + outTok * rate.out + cacheWrite * rate.cacheWrite + cacheRead * rate.cacheRead) /
       1_000_000;
-    await serviceClient().from("ai_usage").insert({
-      org_id: log.orgId || null,
-      user_id: log.userId || null,
-      call_type: log.callType || "other",
-      model,
-      input_tokens: inTok,
-      output_tokens: outTok,
-      cache_creation_tokens: cacheWrite,
-      cache_read_tokens: cacheRead,
-      est_cost: Number(estCost.toFixed(6)),
+    await logAiUsage(log, {
+      model, inputTokens: inTok, outputTokens: outTok,
+      cacheWriteTokens: cacheWrite, cacheReadTokens: cacheRead, estCost,
     });
   } catch {
     /* logging is best-effort — ignore */

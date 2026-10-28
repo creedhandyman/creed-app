@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
+import { callOpenAI } from "@/lib/openai-server";
 
 /**
  * Transcribe an audio blob via OpenAI Whisper.
@@ -86,13 +87,12 @@ export async function POST(req: NextRequest) {
         (hint ? ` Checklist: ${hint}.` : "")
     );
 
-    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: fwd,
+    const res = await callOpenAI("/v1/audio/transcriptions", fwd, {
+      orgId: req.headers.get("x-creed-org"), userId: auth.userId, callType: "transcribe",
+      model: "whisper-1",
     });
 
-    const text = await res.text();
+    const text = res.text;
     if (!res.ok) {
       console.error("Whisper error:", res.status, text);
       return NextResponse.json(

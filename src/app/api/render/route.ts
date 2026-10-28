@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireAuth, isSupabaseStorageUrl } from "@/lib/api-auth";
+import { callOpenAI } from "@/lib/openai-server";
 
 export const dynamic = "force-dynamic";
 // Image generation can take 20–50s end to end; give it room.
@@ -91,15 +92,15 @@ export async function POST(req: NextRequest) {
     fwd.append("model", "gpt-image-1");
     fwd.append("prompt", prompt);
     fwd.append("size", typeof size === "string" && ALLOWED_SIZE.has(size) ? size : "1024x1024");
-    fwd.append("quality", typeof quality === "string" && ALLOWED_QUALITY.has(quality) ? quality : "low");
+    const q = typeof quality === "string" && ALLOWED_QUALITY.has(quality) ? quality : "low";
+    fwd.append("quality", q);
     fwd.append("n", "1");
 
-    const aiRes = await fetch("https://api.openai.com/v1/images/edits", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: fwd,
+    const aiRes = await callOpenAI("/v1/images/edits", fwd, {
+      orgId: req.headers.get("x-creed-org"), userId: auth.userId, callType: "render",
+      model: "gpt-image-1", quality: q,
     });
-    const aiText = await aiRes.text();
+    const aiText = aiRes.text;
     if (!aiRes.ok) {
       console.error("gpt-image-1 error:", aiRes.status, aiText);
       return NextResponse.json(

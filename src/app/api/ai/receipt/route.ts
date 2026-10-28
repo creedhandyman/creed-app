@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isSupabaseStorageUrl } from "@/lib/api-auth";
+import { callClaude } from "@/lib/anthropic-server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -63,14 +64,8 @@ Rules:
 - sanity-check yourself: the item prices plus tax should come close to the total — re-read any digits that don't add up
 - Return ONLY the JSON object, no prose, no code fences, no markdown.`;
 
-    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
+    const { status, data: aiData } = await callClaude(
+      {
         model: "claude-sonnet-5-5",
         max_tokens: multi ? 3500 : 2000,
         messages: [
@@ -82,12 +77,12 @@ Rules:
             ],
           },
         ],
-      }),
-    });
-
-    const aiData = await aiRes.json();
-    if (!aiRes.ok) {
-      return NextResponse.json({ error: aiData?.error?.message || "AI request failed" }, { status: 502 });
+      },
+      { orgId: req.headers.get("x-creed-org"), userId: auth.userId, callType: "receipt" },
+    );
+    if (status < 200 || status >= 300) {
+      const err = aiData?.error as { message?: string } | undefined;
+      return NextResponse.json({ error: err?.message || "AI request failed" }, { status: 502 });
     }
 
     const blocks: Array<{ type?: string; text?: string }> = Array.isArray(aiData?.content) ? aiData.content : [];
