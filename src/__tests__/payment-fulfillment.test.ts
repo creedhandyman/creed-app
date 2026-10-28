@@ -153,6 +153,15 @@ test("manual (cash) payment alerts owners once per ref and honours skipReview", 
   expect(notify).toHaveBeenCalledTimes(1);
 });
 
+test("manual payment alert skips the recorder; notify:false sends none", async () => {
+  const { db } = fakeDb({ jobs: [job()] });
+  await fulfillJobPayment(db, charge("manual_one", 400, { paymentIntentId: null, kind: "cash", notify: { excludeUserId: "u_owner" } }));
+  expect(notify).toHaveBeenCalledTimes(1);
+  expect(notify.mock.calls[0][1]).toMatchObject({ excludeUserId: "u_owner" });
+  await fulfillJobPayment(db, charge("manual_two", 400, { paymentIntentId: null, kind: "cash", notify: false }));
+  expect(notify).toHaveBeenCalledTimes(1);
+});
+
 test("a failing review-request schedule is logged and never fails the payment", async () => {
   const err = jest.spyOn(console, "error").mockImplementation(() => {});
   const { db, tables } = fakeDb({ jobs: [job()] }, { throwOn: ["review_requests"] });

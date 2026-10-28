@@ -242,6 +242,8 @@ export async function notifyJobPaid(
     amountPaid: number;   // paid-to-date after this charge
     total: number;        // job total
     fullyPaid: boolean;
+    /** Skip this person (they recorded the payment themselves). */
+    excludeUserId?: string | null;
   },
 ): Promise<void> {
   try {
@@ -255,7 +257,8 @@ export async function notifyJobPaid(
 
     // Owners + managers get the money-in alert (the crew doesn't need it).
     // No per-event opt-out column for payments yet → everyone opted in.
-    const recipients = await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" });
+    const recipients = (await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" }))
+      .filter((r) => r.id !== p.excludeUserId);
     if (!recipients.length) return;
 
     const amt = `$${(Number(p.paidNow) || 0).toFixed(2)}`;

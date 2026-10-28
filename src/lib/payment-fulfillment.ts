@@ -162,6 +162,9 @@ export interface FulfillPaymentInput {
   kind: string;
   /** Don't schedule the review-request text even if this settles the job. */
   skipReview?: boolean;
+  /** Owner/manager alert: default on. `false` = none (bulk cleanups);
+   *  `{excludeUserId}` = everyone but the person who recorded it. */
+  notify?: boolean | { excludeUserId: string };
   /** Log prefix, e.g. "verify-payment". */
   source: string;
 }
@@ -213,8 +216,9 @@ export async function fulfillJobPayment(
     });
   }
 
-  if (!result.alreadyRecorded && p.paidNow > 0) {
+  if (!result.alreadyRecorded && p.paidNow > 0 && p.notify !== false) {
     await notifyJobPaid(supabase, {
+      excludeUserId: typeof p.notify === "object" ? p.notify.excludeUserId : null,
       jobId: job.id,
       orgId: job.org_id,
       paidNow: p.paidNow,

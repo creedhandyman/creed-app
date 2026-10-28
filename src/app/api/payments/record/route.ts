@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
     // Same fulfillment as a Stripe charge: ledger, review request once covered
     // (unless skipReview), and the owner "Payment received" alert — once per
     // ref, since a retried tap finds its manual_<ref> row already recorded.
+    // The alert skips the person who tapped; a bulk "Paid" cleanup
+    // (skipReview) alerts no one — 15 bell rows about your own taps is noise.
     const fulfilled = await fulfillJobPayment(supabase, {
       jobId: body.jobId,
       expectOrgId: prof.orgId,
@@ -57,6 +59,7 @@ export async function POST(req: NextRequest) {
       platformFeeCents: 0,
       kind: method,
       skipReview,
+      notify: skipReview ? false : { excludeUserId: prof.userId },
       source: "payments/record",
     });
     if (!fulfilled.ok) return NextResponse.json({ error: "Job not found" }, { status: 404 });
