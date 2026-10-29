@@ -891,9 +891,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   sends the message via Twilio (and Resend if `RESEND_API_KEY` is set
   for email channel), and updates `status` + `sent_at`. Manual
   "Request Review Now" cancels any pending row for the same job.
-- Quote "opened" alerts + automatic follow-up (**NOT RUN YET, 2026-10-29** —
-  code is live-safe without it: the view route no-ops quietly, the cron returns a
-  `hint`, the Ops toggle toasts "column does not exist"):
+- Quote "opened" alerts + automatic follow-up (**ALREADY RUN in prod 2026-10-29** via the
+  Supabase MCP, migration `quote_viewed_and_followup`; columns + widened CHECK
+  verified. Listed for other environments):
   ```sql
   ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_viewed_at TIMESTAMPTZ;        -- last open of the /status link
   ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_view_count INTEGER DEFAULT 0;
