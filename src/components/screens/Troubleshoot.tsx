@@ -121,13 +121,12 @@ export default function Troubleshoot(_props: { setPage: (p: string) => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-creed-call-type": "troubleshoot" },
         body: JSON.stringify({
-          model: "claude-sonnet-5-5",
-          // Support chat — no thinking, same as before the move. Sonnet 5.5
-          // 400s on {type:"disabled"}; between_tools is its no-thinking
-          // setting (allowed at effort high or below).
-          thinking: { type: "between_tools" },
-          output_config: { effort: "high" },
-          max_tokens: 1500,
+          model: "claude-haiku-5-5",
+          // Support chat on Haiku 5.5 (fast). Thinking is adaptive + on by
+          // default and counts toward max_tokens, so effort low keeps it quick
+          // and the cap leaves room. ("between_tools" is Sonnet-only → 400 here.)
+          output_config: { effort: "low" },
+          max_tokens: 3000,
           system: SYSTEM_PROMPT,
           messages: apiMessages,
         }),

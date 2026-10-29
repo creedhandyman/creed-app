@@ -2024,9 +2024,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   **Legacy cap lowered to 1.15x (0de85c7, 2026-10-08)** after "quotes slightly
   high": big quotes were 1.45–1.9x aiHrs. Raw basis still caps at 1.5x. The
   learned-durations prompt no longer says "actuals consistently exceed quotes".
-- **Models**: every AI call is `claude-sonnet-5-5` (parse, ping, voice walk,
-  AI Assist, Troubleshoot — Haiku retired 2026-09-29; there is no Haiku 5).
-  Thinking off = `thinking: {type:"between_tools"}` + `effort:"high"`
+- **Models**: quote parse, ping, voice walk, AI Assist, lead draft and the tax
+  lookup are `claude-sonnet-5-5`. **Receipt scan (`/api/ai/receipt`, effort
+  medium) and Troubleshoot (effort low) moved to `claude-haiku-5-5` on
+  2026-10-28** — Haiku 5.5 DOES exist ($0.10/$0.50 per MTok ≤100K prompt; the
+  old "no Haiku 5" note was wrong). Haiku: adaptive thinking is on by default
+  and counts toward `max_tokens` (caps were raised); `between_tools` and
+  `temperature` 400; no server-side refusal fallback. Spot-check refunds and
+  multi-page receipts after any change to the receipt model.
+  Sonnet thinking off = `thinking: {type:"between_tools"}` + `effort:"high"`
   (`{type:"disabled"}` and `temperature` 400 on Sonnet 5.5). `/api/ai` adds
   server-side refusal fallback (`fallbacks:"default"` + beta
   `server-side-fallback-2026-07-01`, retried once without it if rejected).

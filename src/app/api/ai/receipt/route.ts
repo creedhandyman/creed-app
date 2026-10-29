@@ -5,9 +5,10 @@ import { callClaude } from "@/lib/anthropic-server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// Scan a receipt photo with Claude vision (claude-sonnet-5-5 — the same model
-// as every other AI call in the app; it reads long/faded thermal receipts far
-// better than the gpt-4o-mini this route used before) and return structured
+// Scan a receipt photo with Claude vision (claude-haiku-5-5 since 2026-10-28 —
+// the most frequent, latency-felt call; it was Sonnet 5.5 before, which read
+// long/faded thermal receipts far better than the gpt-4o-mini before that.
+// Spot-check refunds + multi-page receipts after changing it) and return structured
 // data (vendor, date, total, tax, items). The client hands us signed Supabase
 // Storage URLs; Anthropic fetches them directly so the bytes never pass
 // through this route.
@@ -66,8 +67,12 @@ Rules:
 
     const { status, data: aiData } = await callClaude(
       {
-        model: "claude-sonnet-5-5",
-        max_tokens: multi ? 3500 : 2000,
+        model: "claude-haiku-5-5",
+        // Adaptive thinking (default on) counts toward max_tokens, so leave
+        // room for it on top of the JSON. Medium keeps the "re-read digits
+        // that don't add up" self-check; Haiku has no server-side fallback.
+        max_tokens: multi ? 8000 : 6000,
+        output_config: { effort: "medium" },
         messages: [
           {
             role: "user",
