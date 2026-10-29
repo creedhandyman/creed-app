@@ -35,7 +35,7 @@ import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/
 import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
-import { priceCascade, rateForRoom, billedMaterial } from "@/lib/pricing";
+import { priceCascade, rateForRoom, billedMaterial, pricingInputs } from "@/lib/pricing";
 import { materialTaxFor, zipTaxMap } from "@/lib/material-tax";
 import Inspector from "./Inspector";
 import { useBackLayer } from "@/lib/back-layer";
@@ -1009,12 +1009,16 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // which meant changing the rate in Ops → Settings never reached the
   // quote — Settings writes `organizations.default_rate`, not the user's
   // profile. Resolution order: per-quote override → org default → $55.
-  const defaultRate = org?.default_rate || 55;
+  // Every price-driving org setting (+ the per-quote overrides) resolves in ONE
+  // place — lib/pricing.ts pricingInputs — shared with the printed quote and
+  // the AI lead draft, so they can't drift from this preview.
+  const priceIn = pricingInputs(org, { laborRate, minLaborHours, taxMode });
+  const { defaultRate, taxPct, tripFee, markupPct } = priceIn;
+  const effectiveMinHrs = priceIn.minHrs;
+  const effectiveTaxMode: TaxMode = priceIn.taxMode;
 
   // Get trade-specific rate or fall back to user rate
-  const tradeRates: Record<string, number> = (() => {
-    try { return org?.trade_rates ? JSON.parse(org.trade_rates) : {}; } catch { return {}; }
-  })();
+  const tradeRates: Record<string, number> = priceIn.tradeRates ?? {};
   // Shared resolver (lib/pricing.ts) — the same function export-pdf uses,
   // so the printed section rates can't drift from the preview's. Override
   // wins over trade rates wins over the org default.
@@ -1022,7 +1026,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     rateForRoom(roomName, { defaultRate, override: laborRate, tradeRates });
   // Effective non-trade rate. Used for the PDF labor line + the
   // "Labor rate: $X.00/hour" line in the AI Assist system prompt.
-  const rate = laborRate && laborRate > 0 ? laborRate : defaultRate;
+  const rate = priceIn.rate;
 
   /* ── Inspection edit: open + save handlers ── */
   // Open the Inspector in edit mode for an already-saved inspection job.
@@ -1612,8 +1616,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       w.includes(id) ? w.filter((x) => x !== id) : [...w, id]
     );
 
-  /* ── Calculations ── */
-  const markupPct = org?.markup_pct || 0;
+  /* ── Calculations ── (org settings: priceIn above — markupPct, taxPct, tripFee, minHrs, tax mode) */
   // Sales tax paid buying the materials — built into material cost.
   const jobZip = extractZip(prop);
   const zipTax = materialTaxFor(org, jobZip);
@@ -1641,8 +1644,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     }, 800); // let a ZIP being typed settle
     return () => { clearTimeout(t); taxLookupRef.current.delete(jobZip); };
   }, [jobZip, zipTax.known]);
-  const taxPct = org?.tax_pct || 0;
-  const tripFee = org?.trip_fee || 0;
   const all = rooms.flatMap((r) =>
     r.items.map((i) => {
       const roomRate = getRateForRoom(r.name);
@@ -1670,20 +1671,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const tm = all.reduce((s, i) => s + i.mc, 0);
   const thRaw = all.reduce((s, i) => s + i.laborHrs, 0);
 
-  // Minimum-labor-hours floor. Resolution order matches the labor-rate
-  // and discount fields: per-quote override → org default → 1 hour
-  // fallback. Per-quote override of 0 is honored (disables the minimum
-  // for this quote). The floor only kicks in for quotes that already
-  // have some labor on them — a pure materials quote (0 hrs total)
-  // shouldn't get a phantom service charge tacked on.
-  const effectiveMinHrs =
-    minLaborHours !== null && minLaborHours >= 0
-      ? minLaborHours
-      : (typeof org?.min_labor_hours === "number" && org.min_labor_hours >= 0
-          ? org.min_labor_hours
-          : 1);
-  // Resolve tax-mode: per-quote override → org default → "total" (legacy).
-  const effectiveTaxMode: TaxMode = taxMode ?? resolveTaxMode(org?.tax_mode);
+  // Minimum-labor-hours floor (effectiveMinHrs, from pricingInputs): per-quote
+  // override → org default → 1 hour; an override of 0 is honored (turns the
+  // minimum off for this quote). It only kicks in for quotes that already
+  // have some labor — a pure materials quote (0 hrs) never gets a phantom
+  // service charge. Tax mode (effectiveTaxMode): per-quote → org → "total".
   // Min-labor floor → trip fee → discount → tax → grand total, all via the
   // SHARED cascade (lib/pricing.ts) — the same function export-pdf prints
   // with, so the preview and the signed PDF can't drift. LINE mode

@@ -183,6 +183,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   AGGREGATE mode (omit it) = export-pdf's cent-rounded labor. Never
   re-implement the cascade inline — a regression suite covers it (the
   zzz quote-math audit test in the worktree, AUDIT_RUN=1 gated).
+  **Its inputs too (2026-10-28)**: the org-settings side — labor rate (per-quote
+  override → org → $55), trade rates, min hours (override → org → 1; 0 is
+  honored), trip fee, tax %, tax mode, markup — resolves in `pricing.ts
+  pricingInputs(org, overrides)`. QuoteForge, quote-pdf and the lead draft call
+  it; never re-derive "min hours defaults to 1" / "trip fee || 0" at a call
+  site (`pricing-inputs.test.ts`). The ZIP materials tax stays separate
+  (`material-tax.ts`).
 - **Money rollups**: revenue / net-profit math lives in ONE place —
   `src/lib/financials.ts` `profitSnapshot()` — consumed by the Financials
   screen AND the Ops hub KPIs (dashboard Revenue·mo mirrors its revenue

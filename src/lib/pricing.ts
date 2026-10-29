@@ -19,9 +19,91 @@
  *    number printed on the PDF is a cascade output, self-consistent to
  *    the cent.
  */
-import { computeTax, type TaxMode } from "./tax";
+import { computeTax, resolveTaxMode, type TaxMode } from "./tax";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * The org settings that drive a quote's price. Structural on purpose: a full
+ * Organization row, the narrow select a server job makes (lead drafts) and a
+ * test literal all satisfy it.
+ */
+export interface PricingOrg {
+  default_rate?: number | null;
+  /** JSON string: { "plumbing": 75, … } */
+  trade_rates?: string | null;
+  markup_pct?: number | null;
+  tax_pct?: number | null;
+  tax_mode?: string | null;
+  trip_fee?: number | null;
+  min_labor_hours?: number | null;
+}
+
+/** Per-quote decisions that beat the org's settings (all optional / nullable). */
+export interface PricingOverrides {
+  /** "this job bills at $X/hr" — ignored unless > 0. */
+  laborRate?: number | null;
+  /** Per-quote minimum billable hours — 0 is honored (turns the floor off). */
+  minLaborHours?: number | null;
+  taxMode?: TaxMode | null;
+}
+
+export interface PricingInputs {
+  /** Org labor rate, $55 when none is set. */
+  defaultRate: number;
+  /** The rate everything non-trade bills at: per-quote override → defaultRate. */
+  rate: number;
+  /** Parsed trade_rates, null when the org has none / the JSON is bad. */
+  tradeRates: Record<string, number> | null;
+  markupPct: number;
+  taxPct: number;
+  taxMode: TaxMode;
+  tripFee: number;
+  /** Minimum billable hours: per-quote → org → 1. */
+  minHrs: number;
+}
+
+export function parseTradeRates(raw: unknown): Record<string, number> | null {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, number>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ONE place that turns org settings + a quote's overrides into the inputs
+ * priceCascade / rateForRoom / billedMaterial take. QuoteForge's live preview,
+ * the printed quote (quote-pdf) and the AI lead draft each used to re-derive
+ * these by hand ("min hours defaults to 1", "trip fee or 0", tax-mode
+ * fallback…) — three copies that could drift a draft total away from the
+ * quote it becomes. The ZIP-based materials purchase tax is separate
+ * (material-tax.ts) because it depends on the job's address.
+ */
+export function pricingInputs(
+  org: PricingOrg | null | undefined,
+  o: PricingOverrides = {},
+): PricingInputs {
+  const defaultRate = org?.default_rate || 55;
+  const orgMin = org?.min_labor_hours;
+  return {
+    defaultRate,
+    rate: o.laborRate && o.laborRate > 0 ? o.laborRate : defaultRate,
+    tradeRates: parseTradeRates(org?.trade_rates),
+    markupPct: org?.markup_pct || 0,
+    taxPct: org?.tax_pct || 0,
+    taxMode: o.taxMode ?? resolveTaxMode(org?.tax_mode),
+    tripFee: org?.trip_fee || 0,
+    minHrs:
+      typeof o.minLaborHours === "number" && o.minLaborHours >= 0
+        ? o.minLaborHours
+        : typeof orgMin === "number" && orgMin >= 0
+          ? orgMin
+          : 1,
+  };
+}
 
 /**
  * Per-room (trade-bucket) labor-rate resolution — ONE implementation for

@@ -13,9 +13,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Room } from "./types";
 import { aiParsePdf, validateQuote, calculateCost, extractZip, type ParserDeps } from "./parser";
 import { callClaude } from "./anthropic-server";
-import { rateForRoom, billedMaterial, priceCascade } from "./pricing";
+import { rateForRoom, billedMaterial, priceCascade, pricingInputs } from "./pricing";
 import { materialTaxFor } from "./material-tax";
-import { resolveTaxMode } from "./tax";
 import { dispatchNotifications } from "./notify-server";
 
 /** Most AI drafts per business per day — a public form can't run up the bill. */
@@ -39,11 +38,10 @@ export interface DraftOrg {
  * tax + markup, then the shared min-labor → trip fee → tax cascade.
  */
 export function draftTotal(rooms: Room[], org: DraftOrg, property: string): number {
-  const defaultRate = org.default_rate || 55;
-  let tradeRates: Record<string, number> = {};
-  try { tradeRates = org.trade_rates ? JSON.parse(org.trade_rates) : {}; } catch { /* */ }
+  const p = pricingInputs(org); // same org-settings rules as QuoteForge + the printed quote
+  const { defaultRate, markupPct } = p;
+  const tradeRates = p.tradeRates ?? {};
   const materialTaxPct = materialTaxFor(org as Parameters<typeof materialTaxFor>[0], extractZip(property)).rate;
-  const markupPct = org.markup_pct || 0;
   let laborRaw = 0, hoursRaw = 0, materials = 0, subtotalRaw = 0;
   for (const r of rooms) {
     const rate = rateForRoom(r.name, { defaultRate, tradeRates });
@@ -56,11 +54,11 @@ export function draftTotal(rooms: Room[], org: DraftOrg, property: string): numb
   }
   return priceCascade({
     laborRaw, hoursRaw, materials, rate: defaultRate,
-    minHrs: typeof org.min_labor_hours === "number" && org.min_labor_hours >= 0 ? org.min_labor_hours : 1,
-    tripFee: org.trip_fee || 0,
+    minHrs: p.minHrs,
+    tripFee: p.tripFee,
     discount: null,
-    taxPct: org.tax_pct || 0,
-    taxMode: resolveTaxMode(org.tax_mode),
+    taxPct: p.taxPct,
+    taxMode: p.taxMode,
     subtotalRaw,
   }).grandTotal;
 }

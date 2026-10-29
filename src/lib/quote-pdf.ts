@@ -2,6 +2,7 @@ import type { Job, Room, JobDiscount } from "./types";
 import { exportQuotePdf } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
 import { readBlob } from "./job-blob";
+import { pricingInputs } from "./pricing";
 
 /**
  * The subset of Organization fields the quote PDF needs. Both the full
@@ -97,33 +98,17 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     /* malformed rooms — render with defaults */
   }
 
-  // Resolve the effective floor: per-quote override → org default → 1.
-  const orgMin = org?.min_labor_hours;
-  const effectiveMinLaborHours =
-    minLaborHoursOverride !== null
-      ? minLaborHoursOverride
-      : (typeof orgMin === "number" && orgMin >= 0 ? orgMin : 1);
-  // Resolve tax-mode: per-quote override → org default → "total" (legacy).
-  const orgTaxMode = org?.tax_mode;
-  const effectiveTaxMode: "total" | "materials" | "none" =
-    taxModeOverride ??
-    (orgTaxMode === "materials" || orgTaxMode === "none" || orgTaxMode === "total"
-      ? orgTaxMode
-      : "total");
-
-  // Per-trade rates (parsed from the org) — only when no per-quote
-  // override, mirroring QuoteForge's getRateForRoom precedence.
-  let tradeRates: Record<string, number> | undefined;
-  if (!laborRateOverride && org?.trade_rates) {
-    try { tradeRates = JSON.parse(org.trade_rates); } catch { /* malformed — flat rate */ }
-  }
+  // Rate, floor, tax mode, trip fee… resolve exactly as QuoteForge's preview
+  // and the AI lead draft do — one shared function (lib/pricing.ts).
+  const p = pricingInputs(org, { laborRate: laborRateOverride, minLaborHours: minLaborHoursOverride, taxMode: taxModeOverride });
 
   exportQuotePdf({
     property: job.property,
     client: job.client,
     rooms,
-    rate: laborRateOverride || org?.default_rate || 55,
-    tradeRates,
+    rate: p.rate,
+    // Per-trade rates only when no per-quote override (QuoteForge's getRateForRoom precedence).
+    tradeRates: laborRateOverride ? undefined : (p.tradeRates ?? undefined),
     workers,
     grandTotal: job.total || 0,
     totalLabor: job.total_labor || 0,
@@ -147,13 +132,13 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     orgAddress: org?.address,
     orgLogo: org?.logo_url,
     photos,
-    markupPct: org?.markup_pct,
+    markupPct: p.markupPct,
     materialTaxPct,
-    taxPct: org?.tax_pct,
-    tripFee: org?.trip_fee,
+    taxPct: p.taxPct,
+    tripFee: p.tripFee,
     discount,
-    minLaborHours: effectiveMinLaborHours,
-    taxMode: effectiveTaxMode,
+    minLaborHours: p.minHrs,
+    taxMode: p.taxMode,
     statusUrl: typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : "",
     // A signed quote prints the customer's signature (unless revised since).
     approval: quoteApprovalFromJob(job),
