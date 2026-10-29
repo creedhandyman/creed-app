@@ -5,7 +5,7 @@ import { useStore, clockDeps } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
-import { makeGuide, extractZip } from "@/lib/parser";
+import { makeGuide, extractZip, classify } from "@/lib/parser";
 import { formatHours, parseEntryDate } from "@/lib/dates";
 import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
 import { FINISHED, stopsForDay, fmtClock } from "@/lib/day-plan";
@@ -174,6 +174,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const jobData = activeJob ? tryReadBlob(activeJob.rooms) : null;
   // `itemId` links a task to its quote line (stamped by QuoteForge's save).
   const workOrder: { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; itemId?: string }[] = jobData?.workOrder || [];
+  const safetyIssues = classify(Array.isArray(jobData?.rooms) ? jobData.rooms : []).critical;
 
   // ── Guide-tab persistence ────────────────────────────────────────
   // Hydrate guide-tab state from the active job whenever it changes — so
@@ -1136,6 +1137,23 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* ── TASKS TAB ── */}
       {section === "tasks" && (
         <div>
+          {/* Safety first — the quote's Critical findings (same classify() as
+              the quote editor's Issues tab: missing smoke/CO, ungrounded,
+              water damage, structural, mold, electrician/code), derived live
+              from the quote lines so they always head the work order. */}
+          {safetyIssues.length > 0 && (
+            <div className="cd" style={{ padding: "11px 13px", marginBottom: 12, background: "rgba(255,59,59,.08)", border: "1px solid rgba(255,59,59,.55)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "Oswald", fontWeight: 600, fontSize: 14, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--color-accent-red)" }}>
+                <Icon name="warn" size={17} color="var(--color-accent-red)" />
+                {t("wv.safetyTitle")} ({safetyIssues.length})
+              </div>
+              {safetyIssues.map((x, i) => (
+                <div key={i} style={{ fontSize: 14, padding: "6px 0 0", lineHeight: 1.35 }}>
+                  <b>{x.room}</b> — {x.detail}{x.comment ? `: ${x.comment}` : ""}
+                </div>
+              ))}
+            </div>
+          )}
           {/* Every task ticked → point at the two things left: after photos,
               then Complete Job. */}
           {workOrder.length > 0 && workOrder.every((w) => w.done) && (
