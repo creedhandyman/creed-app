@@ -2220,7 +2220,9 @@ ${invoicePhotosHtml}
                 return { icon: "quote", text: desc ? (desc.length > 40 ? `${desc.slice(0, 40).trimEnd()}…` : desc) : t("jobs.hintNewLead") };
               }
               case "quoted":    return j.quote_sent_at
-                ? { icon: "send", text: t("jobs.hintSentAgo").replace("{ago}", sentAgo(j.quote_sent_at)) }
+                ? (Number(j.quote_view_count) > 0
+                  ? { icon: "eye", text: (Number(j.quote_view_count) > 1 ? t("jobs.hintSentOpenedN").replace("{n}", String(j.quote_view_count)) : t("jobs.hintSentOpened")).replace("{ago}", sentAgo(j.quote_sent_at)) }
+                  : { icon: "send", text: t("jobs.hintSentAgo").replace("{ago}", sentAgo(j.quote_sent_at)) })
                 : { icon: "warn", text: t("jobs.hintNotSent") };
               case "accepted":  return { icon: "schedule", text: t("jobs.hintScheduleIt") };
               case "scheduled": return { icon: "schedule", text: j.job_date || t("status.scheduled") };

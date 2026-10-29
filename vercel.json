@@ -14,6 +14,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/quotes/followup",
+      "schedule": "15 17 * * *"
+    },
+    {
       "path": "/api/reviews/dispatch",
       "schedule": "0 * * * *"
     }

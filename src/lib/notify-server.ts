@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 import { normalizePhone, sendSms } from "@/lib/sms";
+import { ordinal } from "@/lib/quote-followup";
 
 /**
  * Server-only notification helpers. Shared by /api/notify (job assigned)
@@ -28,7 +29,7 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:creedhandyman@gmail.c
 const PUSH_ENABLED = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 
 // join_request rows are written by a DB trigger (profiles insert), not here.
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved" | "job_scheduled";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved" | "job_scheduled" | "quote_viewed" | "quote_followup";
 
 export interface NotifyRecipient {
   /** Recipient profile id. */
@@ -333,6 +334,69 @@ export async function notifyQuoteApproved(
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("[notify] quote-approved notification failed:", e);
+  }
+}
+
+/**
+ * "Your customer just opened the quote" alert to owners/managers, deep-linked
+ * to the job. Fired by /api/jobs/viewed on the first open and again only after
+ * a quiet gap (quote-followup.ts shouldNotifyView). Needs 'quote_viewed' in the
+ * notifications.type CHECK (migration in CLAUDE.md) — until that runs the
+ * in-app insert fails and this degrades to a logged no-op. Never throws.
+ */
+export async function notifyQuoteViewed(
+  supabase: SupabaseClient,
+  p: { jobId: string; orgId: string; total?: number | null; property?: string | null; client?: string | null; viewCount: number },
+): Promise<void> {
+  try {
+    if (!p.orgId || !p.jobId) return;
+    const recipients = await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" });
+    if (!recipients.length) return;
+    const who = p.client || "Your customer";
+    const what = p.property || "their quote";
+    const amt = Number(p.total) > 0 ? ` (${`$${Number(p.total).toFixed(2)}`})` : "";
+    const again = p.viewCount > 1 ? ` again (${ordinal(p.viewCount)} time)` : "";
+    const title = p.viewCount > 1 ? "Quote opened again" : "Quote opened";
+    const body = `${who} opened ${what}${amt}${again}. Good time to follow up.`;
+    await dispatchNotifications(supabase, {
+      orgId: p.orgId,
+      type: "quote_viewed",
+      title,
+      body,
+      jobId: p.jobId,
+      smsBody: `${title}: ${who} opened ${what}.`,
+      recipients,
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[notify] quote-viewed notification failed:", e);
+  }
+}
+
+/**
+ * Tells owners/managers what the follow-up cron did for a quote: it sent a
+ * text/email, or it could not (no consent / email on file) and the owner
+ * should reach out themselves. Never throws.
+ */
+export async function notifyQuoteFollowup(
+  supabase: SupabaseClient,
+  p: { jobId: string; orgId: string; title: string; body: string },
+): Promise<void> {
+  try {
+    if (!p.orgId || !p.jobId) return;
+    const recipients = await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" });
+    if (!recipients.length) return;
+    await dispatchNotifications(supabase, {
+      orgId: p.orgId,
+      type: "quote_followup",
+      title: p.title,
+      body: p.body,
+      jobId: p.jobId,
+      recipients,
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[notify] quote-followup notification failed:", e);
   }
 }
 

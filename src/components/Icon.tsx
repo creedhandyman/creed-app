@@ -8,6 +8,7 @@
  */
 import {
   Zap,
+  Eye,
   ClipboardList,
   Copy,
   Calendar,
@@ -144,6 +145,7 @@ const ICONS: Record<string, LucideIcon> = {
   upload: Upload,
   download: Download,
   send: Send,
+  eye: Eye,
   copy: Copy,
   qr: QrCode,
   filter: Filter,

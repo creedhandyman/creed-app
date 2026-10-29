@@ -84,6 +84,8 @@ export interface Organization {
   // review_requests for review_request_delay_hours later. Hourly cron
   // /api/reviews/dispatch picks pending rows up and sends them.
   review_request_enabled?: boolean;
+  /** Auto-follow-up on unanswered quotes (cron /api/quotes/followup). Opt-in. */
+  quote_followup_enabled?: boolean;
   review_request_delay_hours?: number;        // default 24
   review_request_channel?: "sms" | "email" | "both"; // default "sms"
   /** Custom template. Supports {customer_name}, {business_name},
@@ -136,7 +138,7 @@ export interface Profile {
  *  `user_id`. SMS is a delivery side-effect at creation time, gated by the
  *  recipient's prefs — the row is always written so the feed is complete.
  *  Named AppNotification to avoid colliding with the DOM `Notification`. */
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved" | "job_scheduled";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved" | "job_scheduled" | "quote_viewed" | "quote_followup";
 
 export interface AppNotification {
   id: string;
@@ -241,6 +243,13 @@ export interface Job {
   review_requested_at?: string;
   /** When the quote was last sent to the customer (Text/Email/Copy/Share). */
   quote_sent_at?: string | null;
+  /** Last time the customer opened the /status quote link, and how many times
+   *  (set by /api/jobs/viewed; see lib/quote-followup.ts). */
+  quote_viewed_at?: string | null;
+  quote_view_count?: number | null;
+  /** Automatic follow-ups already handled for this quote (0–2) and the last one's time. */
+  quote_followup_count?: number | null;
+  quote_followup_at?: string | null;
   /** Profile.id of the technician whose QR code / share-link the lead
    *  came in through. Set by /api/leads when the lead-intake URL had
    *  ?tech=<id>. Powers Network Scout / referral credit so a tech who

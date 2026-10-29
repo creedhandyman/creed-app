@@ -451,6 +451,44 @@ function OpsSettings() {
           N hours after a Stripe-paid invoice. Wires the gamification quest
           flywheel without the owner having to remember. */}
       <ReviewAutomationCard org={org} saveOrg={saveOrg} />
+      <QuoteFollowupCard org={org} saveOrg={saveOrg} />
+    </div>
+  );
+}
+
+/** Quote follow-up automation toggle. The cron at /api/quotes/followup reads
+ *  organizations.quote_followup_enabled; OFF by default (it texts/emails
+ *  customers on the business's behalf, so the owner opts in). */
+function QuoteFollowupCard({
+  org,
+  saveOrg,
+}: {
+  org: NonNullable<ReturnType<typeof useStore.getState>["org"]>;
+  saveOrg: (u: Record<string, unknown>) => Promise<void>;
+}) {
+  const enabled = org.quote_followup_enabled === true;
+  return (
+    <div className="cd">
+      <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Icon name="send" size={16} color="var(--color-primary)" />
+        {t("ops.quoteFollowup")}
+      </h4>
+      <div className="dim" style={{ fontSize: 14, marginBottom: 12 }}>
+        {t("ops.quoteFollowupHelp")}
+      </div>
+      <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={async (e) => {
+            await saveOrg({ quote_followup_enabled: e.target.checked });
+          }}
+          style={{ width: 16, height: 16, cursor: "pointer" }}
+        />
+        <span style={{ fontSize: 15, fontWeight: 500 }}>
+          {enabled ? t("ops.enabled") : t("ops.disabled")} — {t("ops.quoteFollowupToggle")}
+        </span>
+      </label>
     </div>
   );
 }

@@ -891,6 +891,35 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   sends the message via Twilio (and Resend if `RESEND_API_KEY` is set
   for email channel), and updates `status` + `sent_at`. Manual
   "Request Review Now" cancels any pending row for the same job.
+- Quote "opened" alerts + automatic follow-up (**NOT RUN YET, 2026-10-29** —
+  code is live-safe without it: the view route no-ops quietly, the cron returns a
+  `hint`, the Ops toggle toasts "column does not exist"):
+  ```sql
+  ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_viewed_at TIMESTAMPTZ;        -- last open of the /status link
+  ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_view_count INTEGER DEFAULT 0;
+  ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_followup_count INTEGER DEFAULT 0;  -- auto follow-ups handled (0-2)
+  ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_followup_at TIMESTAMPTZ;
+  ALTER TABLE organizations ADD COLUMN IF NOT EXISTS quote_followup_enabled BOOLEAN DEFAULT FALSE;  -- opt-in
+  ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+  ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+    CHECK (type IN ('job_assigned','new_lead','payment_received','payroll_alert','join_request','quote_approved','job_scheduled','quote_viewed','quote_followup'));
+  ```
+  **Opened**: `/status` POSTs `/api/jobs/viewed` once per browser session for a
+  `quoted` job (needs the signed `t` token — only a link we sent counts; link
+  bots and a signed-in member of the job's own org are not counted). First open
+  alerts owners/managers ("Quote opened"); a re-open alerts only after 4 quiet
+  hours ("opened again, 3rd time"). Jobs list shows "Sent 3d ago · opened 2x".
+  **Follow-up**: cron `/api/quotes/followup` (daily 17:15 UTC, so ~10-12 local
+  across US zones; `?dry=1` + admin token previews without sending). Opt-in per
+  org (Ops → Settings → Quote Follow-up). Rules are PURE in
+  `lib/quote-followup.ts` (tested): #1 two days after last contact, #2 three days
+  after that; last contact = later of `quote_sent_at` (a manual follow-up
+  re-stamps it) and `quote_followup_at`; stops on approval/archive/status change.
+  Channel: text ONLY with the customer's recorded opt-in (`smsConsentGranted`) +
+  phone, else email, else the OWNER gets a "Follow-up needed" alert to reach out
+  themselves. The step is claimed with a conditional update BEFORE sending, so
+  a double-fired cron can't send twice. Owner is told what happened via
+  `quote_followup` notifications. Recipient is the customer, never a resident.
 - HR / time-off (v1):
   ```
   CREATE TABLE time_off_requests (

@@ -9,6 +9,7 @@ import { itemInTier, tierDeltas } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
 import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
+import { apiFetch } from "@/lib/api";
 
 const STATUS_STEPS = [
   { key: "quoted", label: "Quoted", icon: "📝" },
@@ -111,6 +112,21 @@ function StatusContent() {
       })
       .catch(() => setLoading(false));
   }, [jobId]);
+
+  // Tell the owner their customer opened the quote ("Dave opened your quote").
+  // Once per browser session (a refresh isn't a second look). apiFetch forwards
+  // a signed-in session if there is one, so the owner previewing their own link
+  // isn't counted; link-preview bots never run this JS. Best-effort, silent.
+  useEffect(() => {
+    if (!job || job.status !== "quoted" || !token) return;
+    const key = `c_qv_${job.id}`;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, "1"); } catch { /* private mode: report anyway */ }
+    void apiFetch("/api/jobs/viewed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job: job.id, t: token }),
+    }).catch(() => { /* never matters to the customer */ });
+  }, [job, token]);
 
   // Kick off the timeline reveal shortly after mount.
   useEffect(() => {
