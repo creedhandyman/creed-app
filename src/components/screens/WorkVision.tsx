@@ -24,7 +24,6 @@ import { LONG_SHIFT_MS } from "@/lib/shift";
 import { useFinishTime } from "../FinishTimeModal";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
-import { pickReceiptPhoto } from "@/lib/image";
 import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
 import { readLocalClock, clockIn as runClockIn, clockOut as runClockOut, resolveClockInJobId, pickableJobs } from "@/lib/clock";
 import { newRowId } from "@/lib/offline-queue";
@@ -691,7 +690,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [section, setSection] = useState<"tasks" | "guide" | "notes" | "photos">("tasks");
   // Shared in-app camera target — which upload handler the next shot feeds.
   const [wvCam, setWvCam] = useState<
-    null | { title: string; multiple: boolean; onFiles: (files: File[]) => void }
+    null | { title: string; multiple: boolean; onFiles: (files: File[]) => void; maxSize?: number; quality?: number }
   >(null);
 
   // Swipe between tabs. The original implementation only tracked X and
@@ -863,6 +862,8 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         onCapture={(fs) => wvCam?.onFiles(fs)}
         multiple={wvCam?.multiple ?? false}
         title={wvCam?.title}
+        maxSize={wvCam?.maxSize}
+        quality={wvCam?.quality}
       />
     </>
   );
@@ -1534,7 +1535,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
                   {/* Receipt scan — AI extracts vendor, items, total; enriches
                       the note + feeds price_corrections for the quoter. */}
                   <button
-                    onClick={async () => { const f = await pickReceiptPhoto(false); if (f) scanReceipt(f); }}
+                    onClick={() => setWvCam({
+                      // Rear camera first (HD, like the old receipt picker); the
+                      // modal's "choose from library" covers an existing photo,
+                      // and the review sheet has Add page for long receipts.
+                      title: "Scan receipt", multiple: false, maxSize: 2400, quality: 0.9,
+                      onFiles: (fs) => { if (fs[0]) scanReceipt(fs[0]); },
+                    })}
                     disabled={uploadingReceipt}
                     style={{ ...pactTile, opacity: uploadingReceipt ? 0.5 : 1 }}
                     title="Snap or upload a receipt — AI extracts vendor, items, and total"
