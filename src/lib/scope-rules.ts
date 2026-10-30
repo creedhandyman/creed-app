@@ -53,6 +53,14 @@ function compile(pattern: string): RegExp | null {
   return re;
 }
 
+/** The AI often hedges a repair as "Repair/replace closet door" or "repair or
+ *  replace". That's a REPAIR — reading the "replace" made every
+ *  door-replacement rule (stain/paint the new door, haul away the old one,
+ *  measure for a pre-hung…) fire on a door nobody is replacing. */
+export function matchText(text: string): string {
+  return text.replace(/\b(repair|fix|adjust|rehang|re-hang)\s*(?:\/|\bor\b|\band\/or\b|&)\s*(?:if needed\s+)?replace\b/gi, "$1");
+}
+
 /** Does this rule attach to the line? A line that already knows its price_book
  *  ids (future strict-JSON quotes) matches on those; free text matches on the
  *  rule's pattern. */
@@ -60,7 +68,12 @@ export function ruleMatchesLine(rule: ScopeRule, text: string, kbIds?: string[])
   if (kbIds && kbIds.length && rule.applies_kb_ids?.some((k) => kbIds.includes(k))) return true;
   if (!rule.applies_pattern) return false;
   const re = compile(rule.applies_pattern);
-  return !!re && re.test(text);
+  return !!re && re.test(matchText(text));
+}
+
+/** Every active rule that attaches to this line — "Not needed" dismisses them all. */
+export function matchingRuleIds(rules: ScopeRule[], text: string, kbIds?: string[]): string[] {
+  return rules.filter((r) => r.active !== false && ruleMatchesLine(r, text, kbIds)).map((r) => r.id);
 }
 
 /** answers use "yes"/"no" for booleans. */

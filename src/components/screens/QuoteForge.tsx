@@ -63,7 +63,7 @@ import VoiceWalk, { type VoiceWalkResult } from "../VoiceWalk";
 import ServiceTemplates, { CategoryField } from "../ServiceTemplates";
 import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, type ServiceTemplate } from "@/lib/service-templates";
 import { readBlob, jobBlob } from "@/lib/job-blob";
-import { evaluateLine, uniqueSuggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
+import { evaluateLine, matchingRuleIds, uniqueSuggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
 import { loadScopeRules } from "@/lib/scope-rules-client";
 import { isPdfFile } from "@/lib/pdf-detect";
 import { GrizzFace } from "../Grizz";
@@ -1570,6 +1570,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   };
   const skipScope = (itemId: string, ruleId: string) =>
     patchScope(itemId, (s) => ({ ...s, dismissed: [...(s.dismissed || []), ruleId] }));
+  // "Not needed" — the line isn't what the rules think (no door is being
+  // replaced): dismiss every rule on it at once.
+  const skipAllScope = (item: RoomItem) => {
+    const ids = matchingRuleIds(scopeRules, item.detail || "");
+    patchScope(item.id, (s) => ({ ...s, dismissed: [...new Set([...(s.dismissed || []), ...ids])] }));
+  };
   const addScopeLine = (roomName: string, trigger: RoomItem, rule: ScopeRule) => {
     const taken = new Set(rooms.flatMap((r) => r.items.map((x) => (x.detail || "").toLowerCase().replace(/\s+/g, " ").trim())));
     const detail = uniqueSuggestionDetail(rule, trigger.detail || "", taken);
@@ -3099,7 +3105,12 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           </p>
           {scopeView.map(({ room, item, ev }) => (
             <div key={item.id} style={{ borderTop: "1px solid var(--color-border, rgba(128,128,128,.25))", paddingTop: 8, marginTop: 8 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>{item.detail}</div>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{item.detail}</div>
+                <button className="bo" style={{ fontSize: 12, padding: "4px 9px", flexShrink: 0 }} onClick={() => skipAllScope(item)}>
+                  {t("qf.scopeNotNeeded")}
+                </button>
+              </div>
               {ev.questions.map((q) => (
                 <div key={(q.ruleId || q.key || q.text)} style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 13.5, marginBottom: 4 }}>

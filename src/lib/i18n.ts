@@ -283,6 +283,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "qf.aiAssist": "Grizz Assist",
     "qf.scopeTitle": "Grizz's checklist",
     "qf.scopeSub": "From your shop's rules, not AI. Nothing is added until you tap Add.",
+    "qf.scopeNotNeeded": "Not needed",
 
     // Jobs
     "jobs.active": "Active",
@@ -1930,6 +1931,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "qf.aiAssist": "Asistente Grizz",
     "qf.scopeTitle": "Lista de Grizz",
     "qf.scopeSub": "De las reglas de tu taller, no de la IA. Nada se agrega sin tu aprobación.",
+    "qf.scopeNotNeeded": "Ninguno aplica",
 
     // Jobs
     "jobs.active": "Activos",

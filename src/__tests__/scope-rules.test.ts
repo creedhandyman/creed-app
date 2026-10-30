@@ -46,6 +46,12 @@ describe("door patterns", () => {
     "Pocket door repair",
     "Paint interior doors",
     "Front bedroom — Replace door knob",
+    // A hedged repair is a repair, not a new door.
+    "Bedroom 2 — Repair/replace closet door",
+    "Bedroom — Repair or replace bathroom door",
+    "Hallway — Fix / replace door",
+    "Replace screen door",
+    "Back — Replace screen door with new aluminum screen door",
   ];
   it.each(interior)("interior matches: %s", (l) => expect(match(INTERIOR_DOOR, l)).toBe(true));
   it.each(notInterior)("interior ignores: %s", (l) => expect(match(INTERIOR_DOOR, l)).toBe(false));
@@ -179,4 +185,13 @@ describe("helpers", () => {
     expect(uniqueSuggestionDetail(r, "Bedroom 2 — Replace entry door", taken)).toBe("Bedroom 2 — Stain + clear coat (for: Replace entry door) #2");
     expect(uniqueSuggestionDetail(r, "Replace door", new Set(["stain + clear coat"]))).toBe("Stain + clear coat (for: Replace door)");
   });
+});
+
+describe("no door rule fires on", () => {
+  it.each([
+    "Bedroom 2 — Repair/replace closet door",
+    "Replace screen door",
+    "Back — Replace screen door with new aluminum screen door",
+    "Front — Repair or replace storm door",
+  ])("%s", (l) => expect(match(ANY_DOOR, l)).toBe(false));
 });
