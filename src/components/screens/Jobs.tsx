@@ -11,6 +11,8 @@ import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
 import StatusSheet, { statusLabel } from "../StatusSheet";
+import PrintSheet from "../PrintSheet";
+import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
 import { entriesForJob, isOldestAtAddress, receiptsForJob } from "@/lib/job-entries";
@@ -378,6 +380,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const [bulkBusy, setBulkBusy] = useState(false);
   // The manual status picker sheet: for the open job, or for the bulk bar.
   const [statusSheet, setStatusSheet] = useState<"job" | "bulk" | null>(null);
+  // The job view's Print button: quote PDF or invoice.
+  const [printSheet, setPrintSheet] = useState(false);
   const toggleSelected = (id: string) =>
     setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   // Drives the review-request modal. Set to a job when status transitions
@@ -1049,7 +1053,7 @@ ${invoicePhotosHtml}
               <Icon name="back" size={15} /> {isDeepLinkedDetail ? t("common.back") : t("nav.jobs")}
             </button>
             <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 20, letterSpacing: ".5px" }}>{t("jobs.jobUpper")}</div>
-            <button className="bo" onClick={() => generateInvoice(dj)} title={t("jobs.printInvoice")} style={{ padding: "6px 9px", display: "inline-flex", alignItems: "center" }}>
+            <button className="bo" onClick={() => setPrintSheet(true)} title={t("common.print")} aria-label={t("common.print")} style={{ padding: "6px 9px", display: "inline-flex", alignItems: "center" }}>
               <Icon name="print" size={15} />
             </button>
           </div>
@@ -2407,6 +2411,22 @@ ${invoicePhotosHtml}
           if (job && st !== job.status) void setStatus(job.id, st);
         }}
       />
+
+      {/* Print — the customer's quote PDF or the invoice (job view's top button) */}
+      {(() => {
+        const pj = jobs.find((j) => j.id === detailJobId);
+        const rooms = pj ? readBlob(pj.rooms).rooms : null;
+        return (
+          <PrintSheet
+            open={printSheet && !!pj}
+            status={pj?.status}
+            hasQuote={Array.isArray(rooms) && rooms.length > 0}
+            onClose={() => setPrintSheet(false)}
+            onQuote={() => { setPrintSheet(false); if (pj) openJobQuotePdf(pj, org); }}
+            onInvoice={() => { setPrintSheet(false); if (pj) generateInvoice(pj); }}
+          />
+        );
+      })()}
 
       {/* Record payment (cash / check / own card terminal) */}
       {recordPay && (() => {
