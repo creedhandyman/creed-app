@@ -42,6 +42,7 @@ import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
+import { patchBlob, runSerialized } from "@/lib/job-write-client";
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
    Under the Requested-tech picker: ranks the crew by distance from
@@ -160,16 +161,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const pillBg = darkMode ? "var(--color-card-dark-2)" : "var(--color-light-bg)";
   const pillBorder = darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)";
 
-  // Serialize all `rooms` blob mutations on this screen — checkbox toggles,
-  // after-photo uploads — so two quick taps can't race and clobber each
-  // other (the bug Bernard hit where checked items kept un-checking).
-  const roomsQueue = useRef<Promise<void>>(Promise.resolve());
-  const enqueueRoomsWrite = (task: () => Promise<void>) => {
-    roomsQueue.current = roomsQueue.current.then(task).catch((err) => {
-      console.warn("[Jobs] rooms write failed:", err);
-    });
-    return roomsQueue.current;
-  };
+  // `rooms` blob writes on this screen go through lib/job-write-client
+  // patchBlob: instant on-screen update, ONE per-job queue shared with Work
+  // mode, merged onto the server's current blob (two quick taps can't clobber
+  // each other — the checked-items-un-checking bug — and a stale screen copy
+  // can't erase what the server set).
   const woStableKey = woKey;
 
   // ── Historical labor reconstruction ────────────────────────────────
@@ -814,14 +810,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       .map((p) => ({ url: p.url as string, label: p.label })) : [];
   };
   const setInvoicePhotos = (j: Job, key: InvoicePhotoKey, on: boolean) => {
-    // Optimistic: flip it in the store now, then write the blob in the queue.
-    useStore.setState((st) => ({
-      jobs: st.jobs.map((x) => (x.id === j.id ? { ...x, rooms: JSON.stringify({ ...jobRoomsOf(x), [key]: on }) } : x)),
-    }));
-    void enqueueRoomsWrite(async () => {
-      const fresh = useStore.getState().jobs.find((x) => x.id === j.id) || j;
-      await db.patch("jobs", j.id, { rooms: JSON.stringify({ ...jobRoomsOf(fresh), [key]: on }) });
-    });
+    // Flips on screen now; the blob write is queued behind any other.
+    void patchBlob(j.id, { [key]: on });
   };
 
   const generateInvoice = (j: typeof jobs[0]) => {
@@ -1076,15 +1066,8 @@ ${invoicePhotosHtml}
                 placeholder="—"
                 onBlur={(e) => {
                   const val = e.target.value.trim();
-                  enqueueRoomsWrite(async () => {
-                    const fresh = useStore.getState().jobs.find((x) => x.id === dj.id);
-                    if (!fresh) return;
-                    let fd: Record<string, unknown> = {};
-                    try { fd = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {}); } catch { return; }
-                    if (((fd.jobNumber as string) || "") === val) return;
-                    await db.patch("jobs", dj.id, { rooms: JSON.stringify({ ...fd, jobNumber: val }) });
-                    await loadAll();
-                  });
+                  if (val === djJobNumber) return; // blank stays blank — no write
+                  void patchBlob(dj.id, { jobNumber: val }).then((r) => { if (r.ok && r.changed) void loadAll(); });
                 }}
                 style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid #243a5e", borderRadius: 6, padding: "3px 8px", fontFamily: "Oswald", fontSize: 15, color: "inherit", maxWidth: 150 }}
               />
@@ -1359,16 +1342,10 @@ ${invoicePhotosHtml}
                 imports pre-fill via tenantName/tenantPhone (lib/resident). */}
             {(() => {
               const res = residentContact(dj.rooms);
-              const saveResident = (field: "residentName" | "residentPhone", val: string) =>
-                enqueueRoomsWrite(async () => {
-                  const fresh = useStore.getState().jobs.find((x) => x.id === dj.id);
-                  if (!fresh) return;
-                  let fd: Record<string, unknown> = {};
-                  try { fd = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {}); } catch { return; }
-                  if (((fd[field] as string) || "") === val) return;
-                  await db.patch("jobs", dj.id, { rooms: JSON.stringify({ ...fd, [field]: val }) });
-                  await loadAll();
-                });
+              const saveResident = (field: "residentName" | "residentPhone", val: string) => {
+                if (val === (((readBlob(dj.rooms)[field]) as string) || "")) return; // unchanged / blank stays blank
+                return patchBlob(dj.id, { [field]: val }).then((r) => { if (r.ok && r.changed) void loadAll(); });
+              };
               const inputStyle = { flex: 1, maxWidth: 180, textAlign: "right" as const, background: "transparent", border: "none", borderBottom: "1px dashed var(--color-border-dark, #2a2a3e)", padding: "2px 4px", fontSize: 14, color: "inherit" };
               return (
                 <>
@@ -1797,7 +1774,7 @@ ${invoicePhotosHtml}
                     // Durable: queued first, then synced against the job's
                     // current server blob (replays on reconnect when offline).
                     enqueueWoToggle(sj.id, targetKey, nextDone);
-                    enqueueRoomsWrite(async () => { await flushWoQueue(sj.id); });
+                    void runSerialized(sj.id, () => flushWoQueue(sj.id)).catch((err) => console.warn("[Jobs] work-order sync failed:", err));
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark)", borderRadius: 12, padding: "9px 10px", marginBottom: 7, cursor: "pointer", opacity: w.done ? 0.6 : 1 }}
                 >
@@ -2920,12 +2897,7 @@ function JobNotesInput({ job }: { job: Job }) {
   const save = async (note: string) => {
     if (note === lastSaved.current) return;
     lastSaved.current = note;
-    try {
-      const fresh = useStore.getState().jobs.find((x) => x.id === job.id) || job;
-      const d = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
-      d.jobNotes = note;
-      await db.patch("jobs", job.id, { rooms: JSON.stringify(d) });
-    } catch { /* */ }
+    await patchBlob(job.id, { jobNotes: note });
   };
 
   useEffect(() => {

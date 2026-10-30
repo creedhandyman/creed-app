@@ -25,12 +25,13 @@ import { useFinishTime } from "../FinishTimeModal";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
 import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
+import { patchBlob, runSerialized, settled, addPhoto } from "@/lib/job-write-client";
 import { readLocalClock, clockIn as runClockIn, clockOut as runClockOut, resolveClockInJobId, pickableJobs } from "@/lib/clock";
 import { newRowId } from "@/lib/offline-queue";
 import { unpaidFor } from "@/lib/pay";
 import { enqueueUpload, isNetworkError } from "@/lib/offline-uploads";
 import LocationSharingNote from "../LocationSharingNote";
-import { readBlob, tryReadBlob, jobBlob, woKey } from "@/lib/job-blob";
+import { readBlob, tryReadBlob, woKey } from "@/lib/job-blob";
 
 function fmt(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -75,20 +76,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   const [st, setSt] = useState(() => readLocalClock().st);
   const [sj, setSj] = useState(() => readLocalClock().sj);
   const [el, setEl] = useState(0);
-  // Serialize all writes that mutate the job's `rooms` blob (checkbox toggles,
-  // photo uploads, completion notes, etc.). Two fast taps used to race: tap A
-  // would `loadAll()` async, tap B's render closure still saw the pre-A
-  // snapshot, and tap B's spread-and-write reverted A's flag. Each task here
-  // chains onto the prior promise and reads the truly-current store state
-  // right before it patches.
-  const roomsQueue = useRef<Promise<void>>(Promise.resolve());
-  const enqueueRoomsWrite = (task: () => Promise<void>) => {
-    const next = roomsQueue.current.then(task).catch((err) => {
-      console.warn("[WorkVision] rooms write failed:", err);
-    });
-    roomsQueue.current = next;
-    return next;
-  };
+  // Every write to the job's `rooms` blob (guide ticks, photos, notes…) goes
+  // through lib/job-write-client patchBlob: instant on-screen update, one
+  // per-job queue shared with Jobs, merged onto the SERVER's current blob.
   // Active server-side time_entries row id, shared with Timer.tsx via localStorage
   // so clock-out in either screen patches the same row instead of creating a new
   // entry and orphaning the original.
@@ -241,20 +231,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     removedGuideShop?: string[];
   }) => {
     if (!activeJob) return;
-    const targetId = activeJob.id;
-    // Instant local merge; no post-write loadAll — the store already holds
-    // exactly what the patch writes, and the poll covers everything else.
-    mutateRoomsLocal(targetId, (data) => ({ ...data, ...updates }));
-    enqueueRoomsWrite(async () => {
-      const fresh = useStore.getState().jobs.find((j) => j.id === targetId);
-      if (!fresh) return;
-      let freshData: Record<string, unknown> = {};
-      try {
-        freshData = typeof fresh.rooms === "string" ? JSON.parse(fresh.rooms) : (fresh.rooms || {});
-      } catch { return; }
-      const merged = { ...freshData, ...updates };
-      await db.patch("jobs", targetId, { rooms: JSON.stringify(merged) });
-    });
+    // Instant local merge, then a serialized write of just these keys onto the
+    // server blob; no post-write loadAll — the poll covers everything else.
+    void patchBlob(activeJob.id, updates);
   };
 
   // Today's schedule
@@ -368,7 +347,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // reconnect; until then loadAll keeps the tick on screen.
     const jobId = activeJob.id;
     enqueueWoToggle(jobId, targetKey, nextDone);
-    enqueueRoomsWrite(async () => { await flushWoQueue(jobId); });
+    // In the job's write queue so the flush's read-merge-write can't interleave
+    // with a guide / photo / notes write.
+    void runSerialized(jobId, () => flushWoQueue(jobId)).catch((err) => console.warn("[WorkVision] work-order sync failed:", err));
   };
 
   // Upload work photo. Same fresh-read + queue pattern so a photo upload
@@ -404,14 +385,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     if (!urlData?.publicUrl) return;
     const publicUrl = urlData.publicUrl;
     const tag = typeOverride ?? photoType;
-    await enqueueRoomsWrite(async () => {
-      const freshJob = useStore.getState().jobs.find((j) => j.id === activeJob.id);
-      const freshData: Record<string, unknown> = jobBlob(freshJob);
-      if (!Array.isArray(freshData.photos)) freshData.photos = [];
-      (freshData.photos as JobPhoto[]).push({ url: publicUrl, label: "", type: tag });
-      await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(freshData) });
-      await loadAll();
-    });
+    const wrote = await patchBlob(activeJob.id, addPhoto({ url: publicUrl, label: "", type: tag }));
+    if (!wrote.ok) {
+      // A refused write was already toasted by db.patch; say so for the rest.
+      if (wrote.reason !== "rejected") useStore.getState().showToast(t("wv.photoUploadFailed"), "error");
+      return;
+    }
+    await loadAll();
     const tagLabel = tag === "after" ? "Completion" : tag === "before" ? "Before" : "Work";
     useStore.getState().showToast(`${tagLabel} photo saved`, "success");
   };
@@ -590,20 +570,18 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // the shared RenderModal as onSaved.
   const saveRenderedPhoto = async (url: string, source: string) => {
     if (!activeJob) return;
-    await enqueueRoomsWrite(async () => {
-      const freshJob = useStore.getState().jobs.find((j) => j.id === activeJob.id);
-      const freshData: Record<string, unknown> = jobBlob(freshJob);
-      if (!Array.isArray(freshData.photos)) freshData.photos = [];
-      (freshData.photos as JobPhoto[]).push({
-        url,
-        label: "AI render",
-        type: "rendered",
-        sourceUrl: source,
-        createdAt: new Date().toISOString(),
-      });
-      await db.patch("jobs", activeJob.id, { rooms: JSON.stringify(freshData) });
-      await loadAll();
-    });
+    const wrote = await patchBlob(activeJob.id, addPhoto({
+      url,
+      label: "AI render",
+      type: "rendered",
+      sourceUrl: source,
+      createdAt: new Date().toISOString(),
+    }));
+    if (!wrote.ok) {
+      if (wrote.reason !== "rejected") useStore.getState().showToast(t("wv.photoUploadFailed"), "error");
+      return;
+    }
+    await loadAll();
     useStore.getState().showToast(t("wv.renderSaved"), "success");
   };
 
@@ -649,7 +627,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       if (picked === null) return;
       endAt = picked;
     }
-    await roomsQueue.current;
+    await settled(activeJob.id); // let queued blob writes land first
     // If the status write fails (no signal), stop here: db already toasted
     // that it didn't save, and the tech stays clocked in to try again —
     // instead of a "Job completed!" for a job that never reaches To invoice.
@@ -1664,19 +1642,15 @@ const pendingNotes = new Map<string, string>();
 // spreads the store's blob — doesn't bring the old note back.
 async function saveJobNote(jobId: string, note: string): Promise<boolean> {
   pendingNotes.set(jobId, note);
-  try {
-    const fresh = useStore.getState().jobs.find((x) => x.id === jobId);
-    if (!fresh) { pendingNotes.delete(jobId); return false; } // job gone / signed out
-    const d = typeof fresh.rooms === "string" ? (JSON.parse(fresh.rooms) || {}) : (fresh.rooms || {});
-    d.jobNotes = note;
-    if (!(await db.patch("jobs", jobId, { rooms: JSON.stringify(d) }))) return false;
-    if (pendingNotes.get(jobId) === note) pendingNotes.delete(jobId);
-    useStore.setState({ jobs: useStore.getState().jobs.map((j) => {
-      if (j.id !== jobId) return j;
-      try { const cur = (typeof j.rooms === "string" ? JSON.parse(j.rooms) : j.rooms) || {}; return { ...j, rooms: JSON.stringify({ ...cur, jobNotes: note }) }; } catch { return j; }
-    }) });
-    return true;
-  } catch { return false; /* db helper toasts the error */ }
+  // patchBlob updates the screen copy at once and writes just `jobNotes` onto
+  // the server's current blob (a failure stays in pendingNotes for a retry).
+  const r = await patchBlob(jobId, { jobNotes: note });
+  if (!r.ok) {
+    if (r.reason === "no-job") pendingNotes.delete(jobId); // job gone / signed out
+    return false;
+  }
+  if (pendingNotes.get(jobId) === note) pendingNotes.delete(jobId);
+  return true;
 }
 if (typeof window !== "undefined") {
   window.addEventListener("online", () => { pendingNotes.forEach((note, id) => { void saveJobNote(id, note); }); });

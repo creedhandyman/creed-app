@@ -218,8 +218,22 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   - `lib/job-transition.ts` `transitionJob` (status patch + learning +
     equipment stamp) and `shouldPromptReview` (honors the org opt-out).
   - `lib/job-blob.ts` `readBlob(rooms)` / `jobBlob(row)` / `woKey` — the only
-    way to READ `jobs.rooms` (never throws, {} on bad data). Writes are
-    unchanged (enqueueRoomsWrite / wo-queue) — a shared writer is still TODO.
+    way to READ `jobs.rooms` (never throws, {} on bad data).
+  - `lib/job-write.ts` (pure core) + `lib/job-write-client.ts` (Supabase +
+    store wiring) — the way to WRITE it from the app (2026-10-29):
+    `patchBlob(jobId, {key: value} | blob => delta | SKIP)`. Instant on-screen
+    update, ONE per-job queue shared by Jobs / Work mode / offline photo replay,
+    every write merged onto the SERVER's current blob (never the stale store
+    copy — that clobbered the `approval` record once), nothing written when
+    nothing changes, never throws (`{ok:false, reason}`). A function change runs
+    twice (store copy, then server blob) so keep it pure; return only the keys
+    you touched. `addPhoto(photo)` = append deduped by url; `runSerialized(jobId,
+    task)` / `settled(jobId)` for anything else that must not interleave (the
+    wo-queue flush). A failed write leaves the optimistic value until the 15s
+    poll reconciles (as before). NOT moved onto it: wo-queue's offline ticks,
+    QuoteForge's whole-blob saves, and the server routes (approve /
+    record-approval / lead-draft keep their own status-guarded writes).
+    Tested at the interface with fake adapters (`job-write.test.ts`).
   - `lib/nav-intent.ts` for every deep link; day-plan / dispatch-week
     `parseSchedTime` / `parseSchedCrew` / `stripNoteParts` for 🕐/👷 notes.
   - Server: `lib/cron-auth.ts` `cronAuth`; `lib/payment-fulfillment.ts`

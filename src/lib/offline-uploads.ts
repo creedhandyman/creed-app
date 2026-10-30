@@ -16,10 +16,10 @@
  * — so a replay that half-finished and retries can't create duplicates.
  */
 "use client";
-import { supabase, db } from "./supabase";
+import { supabase } from "./supabase";
 import { uploadReceiptPrivate } from "./receipt-storage";
 import { scanReceipt, receiptNote, learnFromReceipt } from "./receipt-scan";
-import { readBlob } from "./job-blob";
+import { patchBlob, addPhoto } from "./job-write-client";
 
 const DB_NAME = "creed-uploads";
 const STORE = "uploads";
@@ -180,17 +180,13 @@ async function replayJobPhoto(item: QueuedUpload): Promise<void> {
   const { data } = supabase.storage.from("receipts").getPublicUrl(path);
   const publicUrl = data?.publicUrl;
   if (!publicUrl) throw new Error("no public url");
-  // Append to the job's rooms.photos, deduped by url (idempotent on retry).
-  const jobs = await db.get<{ id: string; rooms: unknown }>("jobs", { id: jobId });
-  const job = jobs[0];
-  if (!job) return; // job deleted — drop
-  const roomsData: Record<string, unknown> = readBlob(job.rooms);
-  if (!Array.isArray(roomsData.photos)) roomsData.photos = [];
-  const photos = roomsData.photos as { url?: string; label?: string; type?: string }[];
-  if (!photos.some((p) => p.url === publicUrl)) {
-    photos.push({ url: publicUrl, label: "", type: tag });
-    await db.patch("jobs", jobId, { rooms: JSON.stringify(roomsData) });
-  }
+  // Append to the job's rooms.photos, deduped by url (idempotent on retry),
+  // through the shared per-job writer so it can't interleave with a screen's
+  // own blob write.
+  const r = await patchBlob(jobId, addPhoto({ url: publicUrl, label: "", type: tag }));
+  if (r.ok || r.reason === "no-job") return; // written / already there / job deleted — done
+  // No signal → keep the item and retry later; anything else is un-replayable.
+  throw r.reason === "network" ? new TypeError("network") : new Error(`job photo write ${r.reason}`);
 }
 
 async function replayReceipt(item: QueuedUpload): Promise<void> {
