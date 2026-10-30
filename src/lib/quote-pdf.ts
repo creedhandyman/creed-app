@@ -3,6 +3,7 @@ import { exportQuotePdf } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
 import { readBlob } from "./job-blob";
 import { pricingInputs } from "./pricing";
+import { readQuoteSettings } from "./quote-blob";
 
 /**
  * The subset of Organization fields the quote PDF needs. Both the full
@@ -69,31 +70,18 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
       label: p.label || "",
       type: p.type || "",
     }));
-    const d = data?.discount;
-    if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
-      discount = { type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined };
-    }
-    if (typeof data?.laborRate === "number" && data.laborRate > 0) {
-      laborRateOverride = data.laborRate;
-    }
-    if (typeof data?.minLaborHours === "number" && data.minLaborHours >= 0) {
-      minLaborHoursOverride = data.minLaborHours;
-    }
-    const tm = data?.taxMode;
-    if (tm === "total" || tm === "materials" || tm === "none") {
-      taxModeOverride = tm;
-    }
-    tieredQuote = data?.tieredQuote === true;
-    if (typeof data?.materialTaxPct === "number" && data.materialTaxPct > 0) materialTaxPct = data.materialTaxPct;
-    if (typeof data?.crewSize === "number" && data.crewSize > 0) crewSize = Math.round(data.crewSize);
-    if (typeof data?.estDays === "number" && data.estDays > 0) estDays = data.estDays;
-    const tn = data?.tierNames;
-    if (tn && (typeof tn.better === "string" || typeof tn.best === "string")) {
-      tierNames = {
-        better: typeof tn.better === "string" && tn.better.trim() ? tn.better : "Better",
-        best: typeof tn.best === "string" && tn.best.trim() ? tn.best : "Best",
-      };
-    }
+    // The per-quote settings, validated by the one shared reader (quote-blob.ts).
+    const q = readQuoteSettings(data);
+    discount = q.discount;
+    laborRateOverride = q.laborRate;
+    minLaborHoursOverride = q.minLaborHours;
+    taxModeOverride = q.taxMode;
+    tieredQuote = q.tieredQuote;
+    // Only the rate this quote was priced with; none (or 0) = no purchase tax.
+    materialTaxPct = q.materialTax && q.materialTax.pct > 0 ? q.materialTax.pct : 0;
+    crewSize = q.crewSize;
+    estDays = q.estDays;
+    tierNames = q.tierNames;
   } catch {
     /* malformed rooms — render with defaults */
   }

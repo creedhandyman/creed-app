@@ -36,6 +36,7 @@ import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom, billedMaterial, pricingInputs } from "@/lib/pricing";
+import { readQuoteSettings, readEstDays } from "@/lib/quote-blob";
 import { materialTaxFor, zipTaxMap } from "@/lib/material-tax";
 import Inspector from "./Inspector";
 import { useBackLayer } from "@/lib/back-layer";
@@ -778,40 +779,22 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCheckedTools(Array.isArray(data?.checkedTools) ? data.checkedTools : []);
       setCheckedShop(Array.isArray(data?.checkedShop) ? data.checkedShop : []);
       setRemovedGuideShop(Array.isArray(data?.removedGuideShop) ? data.removedGuideShop : []);
-      // Per-quote discount (lives on the rooms JSON blob; absent = none).
-      const d = data?.discount as Partial<JobDiscount> | null | undefined;
-      if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
-        setDiscount({ type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined });
-      } else {
-        setDiscount(null);
-      }
-      // Per-quote labor-rate override (Feature 2). Absent / non-positive
-      // = use org default.
-      const lr = data?.laborRate;
-      setLaborRate(typeof lr === "number" && lr > 0 ? lr : null);
-      // Per-quote minimum-labor-hours override. Stored as a non-negative
-      // number (0 = disabled for this quote). Anything else (undefined,
-      // non-number, negative) means "inherit org default".
-      const mh = data?.minLaborHours;
-      setMinLaborHours(typeof mh === "number" && mh >= 0 ? mh : null);
-      // Per-quote tax-mode override. Valid values: "total" / "materials"
-      // / "none". Anything else means "inherit org default".
-      const tm = data?.taxMode;
-      setTaxMode(tm === "total" || tm === "materials" || tm === "none" ? tm : null);
-      const mtp = data?.materialTaxPct;
-      setQuoteMatTax(typeof mtp === "number" && mtp >= 0 ? { pct: mtp, zip: typeof data?.materialTaxZip === "string" ? data.materialTaxZip : "" } : null);
-      // Good-Better-Best (per-quote, rooms blob). Absent = off; legacy quotes
-      // load as non-tiered so nothing changes for them.
-      setTieredQuote(data?.tieredQuote === true);
-      const cs = data?.crewSize;
-      setCrewSize(typeof cs === "number" && cs > 0 ? Math.round(cs) : null);
-      const ed = data?.estDays ?? data?.leadDraft?.estDays;
-      setAiEstDays(typeof ed === "number" && ed > 0 ? ed : null);
-      const tn = data?.tierNames as { better?: unknown; best?: unknown } | undefined;
-      setTierNames({
-        better: typeof tn?.better === "string" && tn.better.trim() ? tn.better : "Better",
-        best: typeof tn?.best === "string" && tn.best.trim() ? tn.best : "Best",
-      });
+      // Per-quote settings — discount, labor-rate / min-hours / tax-mode
+      // overrides (absent or invalid = inherit the org's), the materials tax it
+      // was priced with, Good-Better-Best (absent = off; legacy quotes load
+      // non-tiered), crew size, est. days. One shared reader (lib/quote-blob.ts)
+      // so this load, the printed quote, the invoice and /status can't drift.
+      const q = readQuoteSettings(data);
+      setDiscount(q.discount);
+      setLaborRate(q.laborRate);
+      setMinLaborHours(q.minLaborHours);
+      setTaxMode(q.taxMode);
+      setQuoteMatTax(q.materialTax);
+      setTieredQuote(q.tieredQuote);
+      setCrewSize(q.crewSize);
+      // A lead's AI draft carries its own estimate until the first save.
+      setAiEstDays(q.estDays ?? readEstDays(data?.leadDraft?.estDays));
+      setTierNames(q.tierNames);
       // Restore the photo gallery so the Photos tab + AI Render get the quote's
       // photos back — including the inspection photos collected when the quote
       // was first built. Without this, re-opening a saved quote dropped them and

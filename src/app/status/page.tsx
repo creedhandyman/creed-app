@@ -9,6 +9,7 @@ import { itemInTier, tierDeltas } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
 import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
+import { readQuoteSettings } from "@/lib/quote-blob";
 import { apiFetch } from "@/lib/api";
 
 const STATUS_STEPS = [
@@ -81,12 +82,10 @@ function StatusContent() {
             setWorkOrder((blob?.workOrder || []).map((w: { room: string; detail: string; done: boolean }) => ({
               room: w.room, detail: w.detail, done: w.done,
             })));
-            const d = blob?.discount;
-            if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
-              setDiscount({ type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined });
-            }
+            const q = readQuoteSettings(blob); // same validity rules as the editor + printed quote
+            if (q.discount) setDiscount(q.discount);
             if (Array.isArray(blob?.rooms)) setQuoteRooms(blob.rooms as Room[]);
-            if (typeof blob?.laborRate === "number" && blob.laborRate > 0) setLaborRate(blob.laborRate);
+            if (q.laborRate) setLaborRate(q.laborRate);
             // Good-Better-Best options (computed totals live on the blob).
             const tt = blob?.tierTotals;
             if (blob?.tieredQuote === true && tt && typeof tt.base === "number") {
@@ -97,11 +96,7 @@ function StatusContent() {
                 better: typeof tt.better === "number" ? tt.better : tt.base,
                 best: typeof tt.best === "number" ? tt.best : tt.base,
               });
-              const tn = blob?.tierNames;
-              setTierNames({
-                better: typeof tn?.better === "string" && tn.better.trim() ? tn.better : "Better",
-                best: typeof tn?.best === "string" && tn.best.trim() ? tn.best : "Best",
-              });
+              setTierNames(q.tierNames);
               const at = blob?.acceptedTier;
               if (at === "base" || at === "better" || at === "best") { setAcceptedTier(at); setSelectedTier(at); }
             }

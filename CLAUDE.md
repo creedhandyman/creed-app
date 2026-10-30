@@ -219,6 +219,16 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     equipment stamp) and `shouldPromptReview` (honors the org opt-out).
   - `lib/job-blob.ts` `readBlob(rooms)` / `jobBlob(row)` / `woKey` — the only
     way to READ `jobs.rooms` (never throws, {} on bad data).
+  - `lib/quote-blob.ts` `readQuoteSettings(blob)` (+ `readDiscount`,
+    `readLaborRate`, `readMinLaborHours`, `readTaxMode`, `readMaterialTax`,
+    `readTierNames`, `readCrewSize`, `readEstDays`) — the ONE validity rule for a
+    quote's per-quote settings read back from the blob (discount needs a positive
+    value; min hours 0 is valid; tax mode is one of 3; names default to
+    Better/Best…). Used by the QuoteForge load, quote-pdf, the Jobs invoice and
+    /status — never re-check these inline. Photos are NOT in it on purpose (the
+    PDF keeps `rendered`, the editor clamps types). Its write twin
+    (`buildQuoteSave`, the work-order/photo merge + accepted-tier lock still
+    inline in QuoteForge `saveJob`) is the next step.
   - `lib/job-write.ts` (pure core) + `lib/job-write-client.ts` (Supabase +
     store wiring) — the way to WRITE it from the app (2026-10-29):
     `patchBlob(jobId, {key: value} | blob => delta | SKIP)`. Instant on-screen

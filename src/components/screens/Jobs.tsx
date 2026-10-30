@@ -43,6 +43,7 @@ import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
 import { patchBlob, runSerialized } from "@/lib/job-write-client";
+import { readDiscount } from "@/lib/quote-blob";
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
    Under the Requested-tech picker: ranks the crew by distance from
@@ -832,12 +833,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     // is derived as the reconciling remainder and every line foots to it
     // exactly, even if an org setting changed since the quote was saved.
     const subtotal = Math.round(((j.total_labor || 0) + (j.total_mat || 0)) * 100) / 100;
-    let discParsed: { type: string; value: number; label?: string } | null = null;
     // Malformed rooms → readBlob's {} → no discount line.
-    const d = readBlob(j.rooms).discount;
-    if (d && (d.type === "percent" || d.type === "fixed") && typeof d.value === "number" && d.value > 0) {
-      discParsed = { type: d.type, value: d.value, label: typeof d.label === "string" ? d.label : undefined };
-    }
+    const discParsed = readDiscount(readBlob(j.rooms).discount);
     const tripFee = org?.trip_fee || 0;
     const preBase = subtotal + tripFee;
     const discountAmount = discParsed
