@@ -65,6 +65,7 @@ import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, 
 import { readBlob, jobBlob } from "@/lib/job-blob";
 import { evaluateLine, uniqueSuggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
 import { loadScopeRules } from "@/lib/scope-rules-client";
+import { isPdfFile } from "@/lib/pdf-detect";
 
 
 /** Sub-screen header colours = the hub card that opens them (Quick Quote gold,
@@ -1242,7 +1243,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // 4.5 MB serverless body limit, so we can ship every page (up to
       // Anthropic's per-call image cap) instead of dropping pages past 20.
       let images: string[] = [];
-      if (file && file.name.endsWith(".pdf")) {
+      if (file && (await isPdfFile(file))) {
         setParseStatus("Rendering PDF pages...");
         try {
           const renders = await renderPdfPages(file, Number.MAX_SAFE_INTEGER, 1.0,
@@ -1382,19 +1383,25 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   /* ── File upload ── */
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
+    // Clear the input so picking the SAME file again (after a failed try) still
+    // fires onChange — otherwise the second attempt does nothing at all.
+    e.target.value = "";
     if (!f) return;
     setParsing(true);
     setParseStatus("Reading file...");
     try {
-      if (f.name.endsWith(".pdf")) {
+      if (await isPdfFile(f)) {
         setPdfFile(f);
         setParseStatus(`Reading PDF (${(f.size / 1024 / 1024).toFixed(1)}MB)...`);
         const t = await readPdf(f);
         if (!t.trim()) {
-          useStore.getState().showToast("PDF appears empty — try pasting text instead", "warning");
+          // A scanned or image-only report has no text layer. The AI reads the
+          // rendered pages, so run it on those instead of stopping on a toast.
+          useStore.getState().showToast("No text in this PDF — reading the pages as images", "info");
+          setMode("paste");
           setParsing(false);
           setParseStatus("");
-          setMode("paste");
+          setTimeout(() => doAiParse("Analyze these report pages and quote all repairs needed.", f), 100);
           return;
         }
         setText(t);

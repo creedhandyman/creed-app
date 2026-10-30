@@ -3,6 +3,7 @@ import { db, supabase } from "./supabase";
 import { apiFetch } from "./api";
 import { MATERIALS_DB } from "./materials-db";
 import { TRADE_CATEGORY_LIST, canonicalDetail, isSuppliesOnlyLine } from "./line-canon";
+import { withTimeout } from "./pdf-detect";
 
 /* ====== PDF LOADING ====== */
 
@@ -50,10 +51,12 @@ export async function loadPdf(): Promise<typeof window.pdfjsLib> {
   });
 }
 
+const PDF_OPEN_TIMEOUT_MS = 45000;
+
 export async function readPdf(file: File): Promise<string> {
   const lib = await loadPdf();
   const buf = await file.arrayBuffer();
-  const pdf = await lib.getDocument({ data: buf }).promise;
+  const pdf = await withTimeout(lib.getDocument({ data: buf }).promise, PDF_OPEN_TIMEOUT_MS, "The PDF took too long to open");
   let txt = "";
   for (let i = 1; i <= pdf.numPages; i++) {
     const pg = await pdf.getPage(i);
@@ -125,7 +128,7 @@ export async function renderPdfPages(
 ): Promise<string[]> {
   const lib = await loadPdf();
   const buf = await file.arrayBuffer();
-  const pdf = await lib.getDocument({ data: buf }).promise;
+  const pdf = await withTimeout(lib.getDocument({ data: buf }).promise, PDF_OPEN_TIMEOUT_MS, "The PDF took too long to open");
   const images: string[] = [];
   const count = Math.min(pdf.numPages, maxPages);
   const MAX_DIM = 1200; // cap page dimensions for API size limits
