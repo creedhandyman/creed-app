@@ -29,7 +29,7 @@ export const SECTIONS_ES: Record<string, GuideCopy> = {
           "Trabajos — todas las cotizaciones y trabajos activos en una lista. Toca una tarjeta para abrir el detalle completo.",
           "Inicio — tu panel: próximo trabajo, resumen del dinero y acciones rápidas.",
           "Agenda — el calendario por Día, Semana y Mes. Su pestaña Despacho planea la semana de todo el equipo: quién va a dónde, en qué orden, con rutas.",
-          "Más — aquí viven Tiempo (fichar entrada y salida; una vez fichado se convierte en Modo Trabajo, tu cabina de mando en campo), Metas, Operaciones, Clientes, Millaje, Ajustes del negocio, el Ayudante de reparación y Pregúntale a Grizz. Toca tu nombre arriba en Más para tus ajustes personales.",
+          "Más — aquí viven Tiempo (fichar entrada y salida; una vez fichado se convierte en Modo Trabajo, tu cabina de mando en campo), Metas, Operaciones, Clientes, Millaje, Ajustes del negocio, el Arreglos con Grizz y Pregúntale a Grizz. Toca tu nombre arriba en Más para tus ajustes personales.",
         ],
       },
     ],

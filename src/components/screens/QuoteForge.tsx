@@ -66,6 +66,7 @@ import { readBlob, jobBlob } from "@/lib/job-blob";
 import { evaluateLine, uniqueSuggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
 import { loadScopeRules } from "@/lib/scope-rules-client";
 import { isPdfFile } from "@/lib/pdf-detect";
+import { GrizzFace } from "../Grizz";
 
 
 /** Sub-screen header colours = the hub card that opens them (Quick Quote gold,
@@ -3091,10 +3092,10 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       {scopeView.length > 0 && (
         <div className="cd mb">
           <h4 style={{ fontSize: 15, display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-            <Icon name="list" size={14} color="var(--color-primary)" />Scope check
+            <GrizzFace size={20} />{t("qf.scopeTitle")}
           </h4>
           <p className="dim" style={{ fontSize: 12.5, marginBottom: 8 }}>
-            Work that usually goes with these lines. Nothing is added until you tap Add.
+            {t("qf.scopeSub")}
           </p>
           {scopeView.map(({ room, item, ev }) => (
             <div key={item.id} style={{ borderTop: "1px solid var(--color-border, rgba(128,128,128,.25))", paddingTop: 8, marginTop: 8 }}>
@@ -3151,7 +3152,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       <div className="cd mb">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <h4 style={{ fontSize: 15, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Icon name="ai" size={14} color="var(--color-primary)" />AI Assist
+            <GrizzFace size={20} />{t("qf.aiAssist")}
           </h4>
         </div>
         <AiNote text={t("ai.noteAssist")} style={{ marginBottom: 6 }} />

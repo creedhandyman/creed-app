@@ -1,5 +1,5 @@
 "use client";
-import { Icon } from "./Icon";
+import { GrizzFace } from "./Grizz";
 
 /**
  * One-line "AI can make mistakes" disclosure, shown wherever AI output lands
@@ -14,7 +14,7 @@ export default function AiNote({ text, style }: { text: string; style?: React.CS
       role="note"
       style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11.5, lineHeight: 1.4, ...style }}
     >
-      <Icon name="ai" size={12} style={{ flexShrink: 0, marginTop: 1.5 }} />
+      <GrizzFace size={16} style={{ marginTop: -1 }} />
       <span>{text}</span>
     </div>
   );

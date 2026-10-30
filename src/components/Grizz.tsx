@@ -78,6 +78,24 @@ const leftArmRest = (
   </>
 );
 
+/** Head-only Grizz for small spots — the marker on AI notes and headers (12–24
+ *  px), where the full body would be an unreadable smudge. Static (no blink,
+ *  no hop): it sits next to text the user is reading. */
+export function GrizzFace({ size = 16, style }: { size?: number; style?: CSSProperties }) {
+  return (
+    <svg
+      viewBox="22 30 76 76"
+      width={size}
+      height={size}
+      role="img"
+      aria-label="Grizz"
+      style={{ display: "inline-block", flexShrink: 0, ...style }}
+    >
+      {ears}{head}{faceNeutral}{beanie}
+    </svg>
+  );
+}
+
 export default function Grizz({
   pose,
   size = 166,

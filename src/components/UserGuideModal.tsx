@@ -49,7 +49,7 @@ const SECTIONS: Section[] = [
           "Jobs — every quote and active job in one list. Tap a card to open the full detail screen.",
           "Home — your dashboard: next job, money snapshot, and quick actions.",
           "Schedule — the Day, Week and Month calendar. Its Dispatch tab plans the whole crew's week: who goes where, in what order, with routes.",
-          "More — Time (clock in/out; once clocked in it becomes Work Mode, your in-field cockpit), Quests, Operations, Customers, Mileage, Business settings, Fix-it helper and Ask Grizz all live here. Tap your name at the top of More for your own settings.",
+          "More — Time (clock in/out; once clocked in it becomes Work Mode, your in-field cockpit), Quests, Operations, Customers, Mileage, Business settings, Grizz Fix-it and Ask Grizz all live here. Tap your name at the top of More for your own settings.",
         ],
       },
     ],
