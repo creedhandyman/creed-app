@@ -10,6 +10,7 @@ import { signReceiptPaths, isPrivatePath } from "@/lib/receipt-storage";
 import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
 import type { Job } from "@/lib/types";
+import StatusSheet, { statusLabel } from "../StatusSheet";
 import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
 import { entriesForJob, isOldestAtAddress, receiptsForJob } from "@/lib/job-entries";
@@ -375,6 +376,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  // The manual status picker sheet: for the open job, or for the bulk bar.
+  const [statusSheet, setStatusSheet] = useState<"job" | "bulk" | null>(null);
   const toggleSelected = (id: string) =>
     setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   // Drives the review-request modal. Set to a job when status transitions
@@ -480,8 +483,6 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     // automation — so changing status no longer pops anything up.
     return ok;
   };
-
-  const statusLabel = (s: string) => (s === "lead" ? t("jobs.lead") : (t(`status.${s}`) || s));
 
   // Apply bulkStatus to every selected job. One confirm up front (it also
   // flags jobs that still have unchecked work-order items when completing),
@@ -1100,12 +1101,12 @@ ${invoicePhotosHtml}
               );
             })()}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 8 }}>
-              <select
-                value={dj.status || "quoted"}
-                onChange={(e) => setStatus(dj.id, e.target.value)}
+              <button
+                type="button"
+                onClick={() => setStatusSheet("job")}
                 aria-label={t("jobs.jobStatus")}
+                aria-haspopup="dialog"
                 style={{
-                  WebkitAppearance: "none", MozAppearance: "none", appearance: "none",
                   fontFamily: "Oswald", fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em",
                   color: statusColor(dj.status), backgroundColor: statusColor(dj.status) + "1f",
                   border: `1px solid ${statusColor(dj.status)}66`, borderRadius: 999,
@@ -1114,15 +1115,8 @@ ${invoicePhotosHtml}
                   backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
                 }}
               >
-                <option value="lead"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("jobs.lead")}</option>
-                <option value="quoted"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.quoted")}</option>
-                <option value="accepted"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.accepted")}</option>
-                <option value="scheduled" style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.scheduled")}</option>
-                <option value="active"    style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.active")}</option>
-                <option value="complete"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.complete")}</option>
-                <option value="invoiced"  style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.invoiced")}</option>
-                <option value="paid"      style={{ color: "#e8e8ee", background: "#1a1a28" }}>{t("status.paid")}</option>
-              </select>
+                {statusLabel(dj.status || "quoted")}
+              </button>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 24, color: "var(--color-money)" }}>${(dj.total || 0).toFixed(0)}</div>
                 {/* A deposit is in but the job isn't paid off — say what's left. */}
@@ -2359,17 +2353,20 @@ ${invoicePhotosHtml}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <select
-                    value={bulkStatus}
-                    onChange={(e) => setBulkStatus(e.target.value)}
+                  <button
+                    type="button"
+                    className="bo"
+                    onClick={() => setStatusSheet("bulk")}
                     aria-label={t("jobs.setStatusTo")}
-                    style={{ flex: 1, fontSize: 15 }}
+                    aria-haspopup="dialog"
+                    style={{
+                      flex: 1, fontSize: 15, textAlign: "left", display: "inline-flex", alignItems: "center", gap: 8,
+                      ...(bulkStatus ? { color: statusColor(bulkStatus), borderColor: statusColor(bulkStatus) + "88" } : {}),
+                    }}
                   >
-                    <option value="">{t("jobs.setStatusTo")}</option>
-                    {["lead", "quoted", "accepted", "scheduled", "active", "complete", "invoiced", "paid"].map((st) => (
-                      <option key={st} value={st}>{statusLabel(st)}</option>
-                    ))}
-                  </select>
+                    {bulkStatus && <span aria-hidden style={{ width: 10, height: 10, borderRadius: 99, background: statusColor(bulkStatus), flexShrink: 0 }} />}
+                    {bulkStatus ? statusLabel(bulkStatus) : t("jobs.setStatusTo")}
+                  </button>
                   <button
                     className="bb"
                     disabled={!selectedIds.length || !bulkStatus || bulkBusy}
@@ -2395,6 +2392,21 @@ ${invoicePhotosHtml}
       </div>
         </>
       )}
+
+      {/* Manual status picker — mounted out here so it opens over any level */}
+      <StatusSheet
+        open={statusSheet !== null}
+        current={statusSheet === "bulk" ? bulkStatus : jobs.find((j) => j.id === detailJobId)?.status}
+        title={statusSheet === "bulk" ? t("jobs.setStatusTo") : undefined}
+        onClose={() => setStatusSheet(null)}
+        onPick={(st) => {
+          const which = statusSheet;
+          setStatusSheet(null);
+          if (which === "bulk") { setBulkStatus(st); return; }
+          const job = jobs.find((j) => j.id === detailJobId);
+          if (job && st !== job.status) void setStatus(job.id, st);
+        }}
+      />
 
       {/* Record payment (cash / check / own card terminal) */}
       {recordPay && (() => {
