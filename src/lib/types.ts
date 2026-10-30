@@ -773,6 +773,10 @@ export interface RoomItem {
    *  Good/Better vs. concrete slab in Best only). Absent = fall back to the
    *  cumulative reading of `tier`. Only meaningful when `data.tieredQuote`. */
   tiers?: ("base" | "better" | "best")[];
+  /** Scope-check state (src/lib/scope-rules.ts): the owner's answers, the rules
+   *  already added or skipped for this line, and `from` = the rule that added
+   *  THIS line (such lines never trigger rules themselves). */
+  scope?: { answers?: Record<string, string>; added?: string[]; dismissed?: string[]; from?: string };
 }
 
 export interface Room {

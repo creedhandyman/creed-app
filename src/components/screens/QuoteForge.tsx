@@ -63,6 +63,8 @@ import VoiceWalk, { type VoiceWalkResult } from "../VoiceWalk";
 import ServiceTemplates, { CategoryField } from "../ServiceTemplates";
 import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, type ServiceTemplate } from "@/lib/service-templates";
 import { readBlob, jobBlob } from "@/lib/job-blob";
+import { evaluateLine, suggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
+import { loadScopeRules } from "@/lib/scope-rules-client";
 
 
 /** Sub-screen header colours = the hub card that opens them (Quick Quote gold,
@@ -324,6 +326,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [customerId, setCustomerId] = useState<string | undefined>(undefined);
   const [addressId, setAddressId] = useState<string | undefined>(undefined);
   const [rooms, setRooms] = useState<Room[]>([]);
+  // Scope-check rules (finish work, trim-out, cleanup a quote tends to forget).
+  const [scopeRules, setScopeRules] = useState<ScopeRule[]>([]);
+  useEffect(() => {
+    let live = true;
+    loadScopeRules().then((r) => { if (live) setScopeRules(r); });
+    return () => { live = false; };
+  }, []);
   const [tab, setTab] = useState("quote");
   const [workers, setWorkers] = useState<string[]>([]);
   const [parsing, setParsing] = useState(false);
@@ -1515,6 +1524,61 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setNcn("-");
     useStore.getState().showToast(`Added: ${detail}`, "success");
     if (mode !== "edit") setMode("edit");
+  };
+
+  /* ── Scope check ── */
+  // What the rules say about each line. Lines a rule added never trigger rules,
+  // and a once-per-job rule shows on the first line it matches.
+  const scopeView = useMemo(() => {
+    if (!scopeRules.length) return [] as { room: string; item: RoomItem; ev: LineScope }[];
+    const skipOnce = new Set<string>();
+    const out: { room: string; item: RoomItem; ev: LineScope }[] = [];
+    for (const r of rooms) {
+      for (const it of r.items) {
+        if (it.scope?.from) continue;
+        for (const id of it.scope?.dismissed || []) skipOnce.add(id);
+        const ev = evaluateLine(scopeRules, it.detail || "", it.scope, { skipOnce });
+        if (!ev.questions.length && !ev.suggestions.length && !ev.warnings.length) continue;
+        out.push({ room: r.name, item: it, ev });
+        for (const q of ev.questions) { if (q.ruleId) skipOnce.add(q.ruleId); }
+        for (const s of [...ev.suggestions, ...ev.warnings]) skipOnce.add(s.id);
+      }
+    }
+    return out;
+  }, [rooms, scopeRules]);
+
+  const patchScope = (itemId: string, fn: (s: ScopeState) => ScopeState, everyLine = false) =>
+    setRooms((cur) => cur.map((r) => ({
+      ...r,
+      items: r.items.map((it) => (everyLine || it.id === itemId ? { ...it, scope: fn(it.scope || {}) } : it)),
+    })));
+  // A yes/no that no rule asks for (e.g. "built before 1978?") describes the
+  // house, so it answers every line; a rule's own question answers just its line.
+  const answerScope = (itemId: string, key: string, value: string, ruleId: string | null) =>
+    patchScope(itemId, (s) => ({ ...s, answers: { ...s.answers, [key]: value } }), ruleId === null);
+  const skipScope = (itemId: string, ruleId: string) =>
+    patchScope(itemId, (s) => ({ ...s, dismissed: [...(s.dismissed || []), ruleId] }));
+  const addScopeLine = (roomName: string, trigger: RoomItem, rule: ScopeRule) => {
+    const detail = suggestionDetail(rule, trigger.detail || "");
+    const it: RoomItem = {
+      id: crypto.randomUUID().slice(0, 8),
+      detail,
+      condition: "-",
+      comment: detail,
+      laborHrs: rule.labor_hours,
+      // Cost is unknown until the shelf price is typed in — the hint names what to price.
+      materials: [{ n: rule.mat_hint ? rule.mat_hint.charAt(0).toUpperCase() + rule.mat_hint.slice(1) : "Materials", c: 0 }],
+      userClassified: true,
+      scope: { from: rule.id },
+      ...(trigger.tiers ? { tiers: trigger.tiers } : tieredQuote ? { tiers: [editTier] } : {}),
+    };
+    const merged = rooms.map((r) =>
+      r.name === roomName
+        ? { ...r, items: [...r.items.map((x) => (x.id === trigger.id ? { ...x, scope: { ...x.scope, added: [...(x.scope?.added || []), rule.id] } } : x)), it] }
+        : r
+    );
+    setRooms(validateQuote(merged, { skipCaps: true }));
+    useStore.getState().showToast(`Added: ${detail}${rule.mat_hint ? " — price the materials" : ""}`, "success");
   };
 
   /* ── Item ops ── */
@@ -3001,6 +3065,66 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             Minimum service charge applied — {effectiveMinHrs} hr min
             (actual labor: {thRaw.toFixed(2)} hr).
           </span>
+        </div>
+      )}
+
+      {/* Scope check — finish work and trim-out the quote tends to leave off */}
+      {scopeView.length > 0 && (
+        <div className="cd mb">
+          <h4 style={{ fontSize: 15, display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <Icon name="list" size={14} color="var(--color-primary)" />Scope check
+          </h4>
+          <p className="dim" style={{ fontSize: 12.5, marginBottom: 8 }}>
+            Work that usually goes with these lines. Nothing is added until you tap Add.
+          </p>
+          {scopeView.map(({ room, item, ev }) => (
+            <div key={item.id} style={{ borderTop: "1px solid var(--color-border, rgba(128,128,128,.25))", paddingTop: 8, marginTop: 8 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>{item.detail}</div>
+              {ev.questions.map((q) => (
+                <div key={(q.ruleId || q.key || q.text)} style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 13.5, marginBottom: 4 }}>
+                    {q.severity === "required" && <span style={{ color: "var(--color-danger, #e5484d)", fontWeight: 700 }}>Needed · </span>}
+                    {q.text}
+                  </div>
+                  {q.reason && <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>{q.reason}</div>}
+                  <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+                    {q.key && q.options.map((o) => (
+                      <button key={o} className="bo" style={{ fontSize: 13, padding: "6px 10px" }} onClick={() => answerScope(item.id, q.key as string, o, q.ruleId)}>
+                        {o}
+                      </button>
+                    ))}
+                    {!q.key && q.ruleId && (
+                      <button className="bo" style={{ fontSize: 13, padding: "6px 10px" }} onClick={() => skipScope(item.id, q.ruleId as string)}>
+                        Got it
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {ev.warnings.map((w) => (
+                <div key={w.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, marginBottom: 8, color: "var(--color-warning, #f5b400)" }}>
+                  <Icon name="warn" size={14} />
+                  <span style={{ flex: 1 }}>{w.suggestion}</span>
+                  <button className="bo" style={{ fontSize: 12, padding: "4px 8px" }} onClick={() => skipScope(item.id, w.id)}>OK</button>
+                </div>
+              ))}
+              {ev.suggestions.map((s) => (
+                <div key={s.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5 }}>
+                      {s.severity === "required" && <span style={{ color: "var(--color-danger, #e5484d)", fontWeight: 700 }}>Needed · </span>}
+                      {s.suggestion}
+                    </div>
+                    <div className="dim" style={{ fontSize: 12 }}>
+                      +{s.labor_hours.toFixed(2)} h{s.reason ? ` · ${s.reason}` : ""}
+                    </div>
+                  </div>
+                  <button className="bb" style={{ fontSize: 13, padding: "6px 12px" }} onClick={() => addScopeLine(room, item, s)}>Add</button>
+                  <button className="bo" style={{ fontSize: 13, padding: "6px 10px" }} onClick={() => skipScope(item.id, s.id)}>Skip</button>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
 
