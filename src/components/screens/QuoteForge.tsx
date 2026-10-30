@@ -37,6 +37,7 @@ import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom, billedMaterial, pricingInputs } from "@/lib/pricing";
 import { readQuoteSettings, readEstDays } from "@/lib/quote-blob";
+import { buildQuoteSave, dominantTrade } from "@/lib/quote-save";
 import { materialTaxFor, zipTaxMap } from "@/lib/material-tax";
 import Inspector from "./Inspector";
 import { useBackLayer } from "@/lib/back-layer";
@@ -1432,9 +1433,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       return syncWorkOrder(curr, rooms, woKnownIdsRef.current) ?? curr;
     });
   }, [rooms, customWorkOrder]);
-  // Text key for matching legacy (pre-itemId) saved tasks in saveJob.
-  const woKeyOf = (s: { room?: string; detail?: string }) =>
-    `${(s.room || "").toLowerCase().trim()}|||${(s.detail || "").toLowerCase().trim()}`;
 
   /* ── Add item ── */
   const addItem = () => {
@@ -1732,24 +1730,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const issues = classify(rooms);
   const guide = makeGuide(rooms);
 
-  /* ── Auto trade label ──
-     The quote's rooms ARE trade buckets, so the job can label itself:
-     if one trade carries the MAJORITY (>50%) of labor hours it names the
-     job; genuinely mixed jobs stay "General". Hours-weighted so a 30-hr
-     flooring job with a 1-hr caulk line still reads "Flooring"; buckets
-     with zero-hour items fall back to a small per-item weight so a
-     materials-only bucket isn't invisible. */
-  const dominantTrade = (): string => {
-    const hrsByTrade: Record<string, number> = {};
-    let total = 0;
-    rooms.forEach((r) => {
-      const hrs = r.items.reduce((s, it) => s + (it.laborHrs || 0), 0) || r.items.length * 0.5;
-      hrsByTrade[r.name] = (hrsByTrade[r.name] || 0) + hrs;
-      total += hrs;
-    });
-    const top = Object.entries(hrsByTrade).sort((a, b) => b[1] - a[1])[0];
-    return top && total > 0 && top[1] / total > 0.5 ? top[0] : "General";
-  };
+  // (The job's trade label — dominantTrade(rooms) — lives in lib/quote-save.ts.)
 
   /* ── Save job ── */
   // stay: keep the editor open on the saved job (Save & Send) instead of
@@ -1767,224 +1748,42 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     if (gt <= 0 && !await useStore.getState().showConfirm("Empty Quote", "Quote total is $0. Save anyway?")) {
       return null;
     }
-    // Pull the prior saved blob so an edit-save merges into it instead of
-    // overwriting field-collected state (work-order `done` checkmarks,
-    // after/work photos, jobNotes from WorkVision, etc.).
-    type WO = { room: string; detail: string; action: string; pri: string; hrs: number; done: boolean; tier?: string; tiers?: TierKey[]; itemId?: string; custom?: boolean };
-    type JobPhoto = { url: string; label: string; type: "before" | "after" | "work" };
-    let prevData: Record<string, unknown> = {};
-    if (editingId) {
-      const prevJob = useStore.getState().jobs.find((j) => j.id === editingId);
-      prevData = jobBlob(prevJob);
-    }
-
-    // Use custom work order if user edited it, otherwise auto-generate from
-    // guide. Re-sync against the quote right here too (not only via the
-    // effect) so a save fired in the same tick as a line edit can't write a
-    // work order that's one edit behind.
+    // Everything that gets saved — the work-order merge (field checkmarks survive
+    // an edit), the photo merge, the prior blob's keys we don't own, the status
+    // rule and the accepted-option lock — is assembled by the pure
+    // lib/quote-save.ts, where each rule is tested on its own. This function
+    // feeds it, then writes the result and resets the screen.
+    const prevJob = editingId ? useStore.getState().jobs.find((j) => j.id === editingId) : null;
+    // Re-sync the work order against the quote right here too (not only via the
+    // effect) so a save fired in the same tick as a line edit can't write a work
+    // order that's one edit behind.
     const syncedSteps = customWorkOrder
       ? (syncWorkOrder(customWorkOrder, rooms, woKnownIdsRef.current) ?? customWorkOrder)
       : guide.steps;
-    // Safety net: a quote with lines never saves an empty work order (the
-    // crew's Tasks tab and the customer's progress list would go blank).
-    const hasLines = rooms.some((r) => r.items.length > 0);
-    const sourceSteps = syncedSteps.length === 0 && hasLines ? guide.steps : syncedSteps;
-    const prevWO: WO[] = Array.isArray(prevData.workOrder) ? prevData.workOrder as WO[] : [];
-    const prevWOByKey = new Map(prevWO.map((w) => [woKeyOf(w), w]));
-    // Prior tasks by quote-line id — so a task whose line text was edited
-    // keeps its `done` checkmark from the field (the text key changed).
-    const prevWOByItem = new Map(prevWO.filter((w) => w.itemId).map((w) => [w.itemId as string, w]));
-    const usedPrior = new Set<WO>();
-    // Tag each work-order task with its line-item option MEMBERSHIP set (for
-    // Good-Better-Best pruning on approval). By line id first, then the text
-    // key; an unmatched step defaults to all three options — a safe fallback
-    // (in every option, so a mis-tag never hides a task).
-    const tierByKey = new Map<string, TierKey[]>();
-    const tierById = new Map<string, TierKey[]>();
-    for (const r of rooms) {
-      for (const it of r.items) {
-        tierByKey.set(woKeyOf({ room: r.name, detail: it.detail }), itemTiers(it));
-        if (it.id) tierById.set(it.id, itemTiers(it));
-      }
-    }
-    // Merge prior work-order items by (room, detail). Take EVERY editable
-    // field — room, detail, action, pri, hrs — from the new/incoming step
-    // `s` so user edits in this session actually persist on save. Inherit
-    // ONLY the completion-state field(s) from the prior saved item; `done`
-    // is owned by Tasks/WorkVision (no UI in QuoteForge), so it must
-    // survive an edit-save round trip. Same goes for any future timestamp
-    // we add alongside `done` (e.g. `completed_at`).
-    const workOrder: WO[] = sourceSteps.map((s) => {
-      const key = woKeyOf(s);
-      const byItem = s.itemId ? prevWOByItem.get(s.itemId) : undefined;
-      const byKey = prevWOByKey.get(key);
-      const prior = (byItem || (byKey && !usedPrior.has(byKey) ? byKey : undefined)) as (WO & { completed_at?: string }) | undefined;
-      if (prior) usedPrior.add(prior);
-      const next: WO & { completed_at?: string } = {
-        // editable fields — always from the new step
-        room: s.room,
-        detail: s.detail,
-        action: s.action,
-        pri: s.pri,
-        hrs: s.hrs,
-        tiers: (s.itemId && tierById.get(s.itemId)) || tierByKey.get(key) || ["base", "better", "best"],
-        // completion-state — inherit from prior, default to "not done" for
-        // freshly-keyed items
-        done: prior?.done === true,
-        // Link back to the quote line so the next edit session (and
-        // WorkVision's task detail) can follow it even if the text changes.
-        ...(s.itemId ? { itemId: s.itemId } : {}),
-        ...(s.custom ? { custom: true } : {}),
-      };
-      if (prior?.completed_at) next.completed_at = prior.completed_at;
-      // Diagnostic: surface when an in-session edit changed any editable
-      // field on a matched (key-stable) item. Helps catch a future
-      // regression where the merge silently reverts to prior values.
-      if (prior) {
-        const changed: string[] = [];
-        if (prior.action !== s.action) changed.push(`action: "${prior.action}" → "${s.action}"`);
-        if (prior.pri !== s.pri) changed.push(`pri: ${prior.pri} → ${s.pri}`);
-        if (prior.hrs !== s.hrs) changed.push(`hrs: ${prior.hrs} → ${s.hrs}`);
-        if (changed.length) {
-          // eslint-disable-next-line no-console
-          console.log(`[QuoteForge.saveJob] WO edit "${s.room} — ${s.detail}":`, changed.join(", "));
-        }
-      }
-      return next;
+    const { row: jobData, droppedDone } = buildQuoteSave({
+      rooms,
+      workers: workers.map((wid) => ({ id: wid, name: profiles.find((x) => x.id === wid)?.name || "" })),
+      jobPhotos,
+      steps: syncedSteps,
+      guideSteps: guide.steps,
+      guideState: { customTools, customShop, checkedTools, checkedShop, removedGuideShop },
+      settings: { discount, laborRate, minLaborHours, taxMode, materialTaxPct, materialTaxZip: jobZip, tieredQuote, tierNames, crewSize, estDays: aiEstDays },
+      pricing: { gt, tl, tm, th, tierTotals, tierBreakdown, headlineKey, hasSplit },
+      inspection: inspectionData,
+      prev: prevJob ? { blob: jobBlob(prevJob), status: prevJob.status } : null,
+      identity: {
+        editing: !!editingId, property: prop, client, customerId, addressId,
+        createdBy: user.name, trade: dominantTrade(rooms),
+        today: new Date().toISOString().split("T")[0],
+      },
     });
-    // Surface any previously-completed items that no longer exist in the new
-    // quote — drop them but warn so we'd notice in the console if a save
-    // unexpectedly nukes finished work.
-    const droppedDone = prevWO
-      .filter((w) => w.done && !usedPrior.has(w))
-      .map((w) => `${w.room} — ${w.detail}`);
+    // A save that drops finished work-order tasks is worth a console trace.
     if (droppedDone.length) {
       console.warn(
         `[QuoteForge.saveJob] Dropping ${droppedDone.length} previously-checked work-order item(s) that are no longer in the quote:`,
         droppedDone,
       );
     }
-
-    // Photos: preserve every existing photo (before/after/work) and append
-    // anything new the user added in this edit session. Match on URL so a
-    // photo added in QuoteForge AND already on the job doesn't double up.
-    const prevPhotos: JobPhoto[] = Array.isArray(prevData.photos) ? prevData.photos as JobPhoto[] : [];
-    const seenUrls = new Set(prevPhotos.map((p) => p.url));
-    const mergedPhotos: JobPhoto[] = [
-      ...prevPhotos,
-      ...jobPhotos.filter((p) => !seenUrls.has(p.url)),
-    ];
-
-    // Spread prevData first so unknown/forward-compatible fields (jobNotes,
-    // future blob keys) survive the save. Then override the keys QuoteForge
-    // owns.
-    const data = {
-      ...prevData,
-      rooms: rooms,
-      workers: workers.map((wid) => {
-        const u = profiles.find((x) => x.id === wid);
-        return { id: wid, name: u?.name || "" };
-      }),
-      photos: mergedPhotos,
-      workOrder,
-      // Guide-tab state. Saved at the top level of the rooms blob using the
-      // same keys WorkVision writes — keeps shopping-list adds and checks
-      // in sync between the two views (and stops the
-      // shopping-additions-disappear-on-save bug Bernard hit).
-      customTools,
-      customShop,
-      checkedTools,
-      checkedShop,
-      removedGuideShop,
-      // Per-quote discount + labor-rate override + min-labor-hours
-      // override + tax-mode override. Persist explicitly (not via spread)
-      // so clearing them actually clears the saved value instead of
-      // inheriting prevData's stale entry.
-      discount: discount,
-      laborRate: laborRate,
-      minLaborHours: minLaborHours,
-      taxMode: taxMode,
-      // The materials sales-tax rate these prices include — kept with the
-      // quote so a later change to the org setting can't reprice it.
-      materialTaxPct,
-      materialTaxZip: jobZip,
-      // Good-Better-Best tiered quote. Persisted explicitly so toggling off
-      // clears it instead of inheriting prevData's stale entry. tierTotals is
-      // computed by the authoritative editor cascade and stored so the
-      // approval page + approve API can read each option's price without
-      // re-deriving the pricing math server-side.
-      tieredQuote: tieredQuote,
-      tierNames: tierNames,
-      // Crew size (null = Auto). Explicit so picking Auto clears it.
-      crewSize: crewSize,
-      estDays: aiEstDays,
-      tierTotals: tieredQuote ? tierTotals : null,
-      tierBreakdown: tieredQuote ? tierBreakdown : null,
-      // Whether the options actually differ in SCOPE (not just price) — so the
-      // customer picker still shows for two distinct options at the same price.
-      tierSplit: tieredQuote ? hasSplit : false,
-      // Only overwrite `inspection` if the user just ran the inspector in
-      // this session; otherwise keep whatever was there (handled by spread).
-      ...(inspectionData ? {
-        inspection: {
-          type: inspectionData.inspection_type || "move-out",
-          rooms: inspectionData.rooms.map((r) => ({
-            name: r.name,
-            sqft: r.sqft,
-            width: r.width,
-            length: r.length,
-            items: r.items.map((it) => ({ name: it.name, condition: it.condition, comment: it.notes, photos: it.photos })),
-          })),
-          property: inspectionData.property,
-          client: inspectionData.client,
-        },
-      } : {}),
-    };
-    // On a new save, status starts at "quoted". On an edit, keep whatever the
-    // job's current status is — mid-job edits (active/complete/paid) shouldn't
-    // silently demote the job back to "quoted" and reset its lifecycle. The one
-    // promotion we DO make: a "lead" being quoted for the first time becomes
-    // "quoted" — that's exactly what Build Quote on a lead is for.
-    const prevJob = editingId ? useStore.getState().jobs.find((j) => j.id === editingId) : null;
-    const nextStatus = prevJob ? (prevJob.status === "lead" ? "quoted" : prevJob.status) : "quoted";
-    // Preserve a customer's accepted tier across re-saves. If this quote was
-    // already approved at a Good-Better-Best option, keep the job LOCKED to it
-    // — recompute that tier's totals from the (possibly edited) items and prune
-    // the work order to it — instead of silently reverting billing + crew scope
-    // to the full (Best) scope the customer didn't buy.
-    let lockTotal = gt, lockLabor = tl, lockMat = tm, lockHrs = th;
-    const acceptedTier = prevData.acceptedTier as string | undefined;
-    if (tieredQuote) {
-      const isAccepted = acceptedTier === "base" || acceptedTier === "better" || acceptedTier === "best";
-      // Lock the job to the accepted option, or (pre-approval) to the headline
-      // option — never `gt`, which double-counts mutually-exclusive scopes.
-      const key: TierKey = isAccepted ? (acceptedTier as TierKey) : headlineKey;
-      lockTotal = tierTotals[key];
-      lockLabor = tierBreakdown[key].labor;
-      lockMat = tierBreakdown[key].mat;
-      lockHrs = tierBreakdown[key].hrs;
-      // Prune the crew work order only once a specific option was accepted;
-      // pre-approval keeps every task (legacy single-tier tasks fall back to
-      // the cumulative reading via itemInTier).
-      if (isAccepted) data.workOrder = workOrder.filter((w) => itemInTier(w, key));
-    }
-    const jobData = {
-      property: prop,
-      client: client || "",
-      ...(customerId ? { customer_id: customerId } : {}),
-      ...(addressId ? { address_id: addressId } : {}),
-      // Only on create — re-saving an old quote must not move it to today
-      // (it would jump months in Financials and on the customer's page).
-      ...(editingId ? {} : { job_date: new Date().toISOString().split("T")[0] }),
-      rooms: JSON.stringify(data),
-      total: lockTotal,
-      total_labor: lockLabor,
-      total_mat: lockMat,
-      total_hrs: lockHrs,
-      status: nextStatus,
-      trade: dominantTrade(),
-      created_by: user.name,
-    };
 
     // A failed write must NOT fall through to the reset below — that clears
     // the draft and the editor, and an unsaved (often AI-built) quote is gone

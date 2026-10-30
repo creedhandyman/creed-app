@@ -226,9 +226,22 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     value; min hours 0 is valid; tax mode is one of 3; names default to
     Better/Best…). Used by the QuoteForge load, quote-pdf, the Jobs invoice and
     /status — never re-check these inline. Photos are NOT in it on purpose (the
-    PDF keeps `rendered`, the editor clamps types). Its write twin
-    (`buildQuoteSave`, the work-order/photo merge + accepted-tier lock still
-    inline in QuoteForge `saveJob`) is the next step.
+    PDF keeps `rendered`, the editor clamps types).
+  - `lib/quote-save.ts` `buildQuoteSave(input)` → `{row, blob, droppedDone}` —
+    what QuoteForge's `saveJob` WRITES, pure (2026-10-29): work-order merge
+    (editable fields from the new step; only `done`/`completed_at` inherited from
+    the prior task, matched by line id then room|detail key, each prior used
+    once; option-membership tags; a quote with lines never saves an empty work
+    order), photo merge (keep all, append new urls), prior blob spread first so
+    keys QuoteForge doesn't own survive (jobNotes, approval, leadDraft) while the
+    ones it owns are written explicitly (clearing really clears), status rule
+    (new → quoted; edit keeps status; lead → quoted), accepted-option lock
+    (re-save stays on the accepted option + prunes the work order; pre-approval =
+    headline option, never `gt`), `job_date` only when creating. Also
+    `dominantTrade(rooms)`. `saveJob` just validates, calls it, writes, resets the
+    screen. Tested in `quote-save.test.ts`. Pricing numbers are INPUTS (the
+    cascade stays in pricing.ts). The old per-task console.log of edited fields
+    was dropped; the dropped-done warning is kept.
   - `lib/job-write.ts` (pure core) + `lib/job-write-client.ts` (Supabase +
     store wiring) — the way to WRITE it from the app (2026-10-29):
     `patchBlob(jobId, {key: value} | blob => delta | SKIP)`. Instant on-screen
