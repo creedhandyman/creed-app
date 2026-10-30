@@ -63,7 +63,7 @@ import VoiceWalk, { type VoiceWalkResult } from "../VoiceWalk";
 import ServiceTemplates, { CategoryField } from "../ServiceTemplates";
 import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, type ServiceTemplate } from "@/lib/service-templates";
 import { readBlob, jobBlob } from "@/lib/job-blob";
-import { evaluateLine, suggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
+import { evaluateLine, uniqueSuggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
 import { loadScopeRules } from "@/lib/scope-rules-client";
 
 
@@ -1553,15 +1553,21 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       items: r.items.map((it) => (everyLine || it.id === itemId ? { ...it, scope: fn(it.scope || {}) } : it)),
     })));
   // A yes/no that no rule asks for (e.g. "built before 1978?") describes the
-  // house, so it answers every line; a rule's own question answers just its line.
-  const answerScope = (itemId: string, key: string, value: string, ruleId: string | null) =>
-    patchScope(itemId, (s) => ({ ...s, answers: { ...s.answers, [key]: value } }), ruleId === null);
+  // house, so it answers every line, and so does a once-per-job question (it is
+  // shown on one line only, so the others would never get an answer); a rule's
+  // own per-line question answers just its line.
+  const answerScope = (itemId: string, key: string, value: string, ruleId: string | null) => {
+    const jobWide = ruleId === null || scopeRules.some((r) => r.id === ruleId && r.qty_basis === "once_per_job");
+    patchScope(itemId, (s) => ({ ...s, answers: { ...s.answers, [key]: value } }), jobWide);
+  };
   const skipScope = (itemId: string, ruleId: string) =>
     patchScope(itemId, (s) => ({ ...s, dismissed: [...(s.dismissed || []), ruleId] }));
   const addScopeLine = (roomName: string, trigger: RoomItem, rule: ScopeRule) => {
-    const detail = suggestionDetail(rule, trigger.detail || "");
+    const taken = new Set(rooms.flatMap((r) => r.items.map((x) => (x.detail || "").toLowerCase().replace(/\s+/g, " ").trim())));
+    const detail = uniqueSuggestionDetail(rule, trigger.detail || "", taken);
+    const newId = crypto.randomUUID().slice(0, 8);
     const it: RoomItem = {
-      id: crypto.randomUUID().slice(0, 8),
+      id: newId,
       detail,
       condition: "-",
       comment: detail,
@@ -1570,14 +1576,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       materials: [{ n: rule.mat_hint ? rule.mat_hint.charAt(0).toUpperCase() + rule.mat_hint.slice(1) : "Materials", c: 0 }],
       userClassified: true,
       scope: { from: rule.id },
-      ...(trigger.tiers ? { tiers: trigger.tiers } : tieredQuote ? { tiers: [editTier] } : {}),
+      // Same options as the line it goes with (no tiers = every option).
+      ...(trigger.tiers ? { tiers: [...trigger.tiers] } : {}),
     };
     const merged = rooms.map((r) =>
       r.name === roomName
         ? { ...r, items: [...r.items.map((x) => (x.id === trigger.id ? { ...x, scope: { ...x.scope, added: [...(x.scope?.added || []), rule.id] } } : x)), it] }
         : r
     );
-    setRooms(validateQuote(merged, { skipCaps: true }));
+    const next = validateQuote(merged, { skipCaps: true });
+    if (!next.some((r) => r.items.some((x) => x.id === newId))) {
+      useStore.getState().showToast("That line is already on the quote", "info");
+      return;
+    }
+    setRooms(next);
     useStore.getState().showToast(`Added: ${detail}${rule.mat_hint ? " — price the materials" : ""}`, "success");
   };
 

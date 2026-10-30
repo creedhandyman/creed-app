@@ -13,7 +13,8 @@ export function loadScopeRules(): Promise<ScopeRule[]> {
       try {
         const { data, error } = await supabase.from("scope_rules").select("*").eq("active", true);
         if (error || !Array.isArray(data)) { cached = null; return []; }
-        return data as ScopeRule[];
+        // numeric columns can arrive as strings — the card calls toFixed on these
+        return (data as ScopeRule[]).map((r) => ({ ...r, labor_hours: Number(r.labor_hours) || 0 }));
       } catch {
         cached = null;
         return [];

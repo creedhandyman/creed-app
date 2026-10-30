@@ -120,8 +120,14 @@ export function evaluateLine(
 
   for (const r of matched) {
     // once_per_job rules show on the first line they match, not on every door.
-    if (r.qty_basis === "once_per_job" && opts?.skipOnce?.has(r.id)) continue;
-    if (dismissed.has(r.id)) continue;
+    // A question skipped here (shown on another line, or dismissed) still owns
+    // its key: never re-ask it as a made-up yes/no — its answer goes job-wide
+    // (once_per_job) or the owner chose not to answer.
+    const skipped = (r.qty_basis === "once_per_job" && opts?.skipOnce?.has(r.id)) || dismissed.has(r.id);
+    if (skipped) {
+      if (r.kind === "ask_question" && r.sets_key) askedKeys.add(r.sets_key);
+      continue;
+    }
     if (r.kind === "ask_question") {
       if (r.sets_key) {
         if (answers?.[r.sets_key] !== undefined) continue;
@@ -162,4 +168,21 @@ export function suggestionDetail(rule: ScopeRule, triggerDetail: string): string
   const area = areaOf(triggerDetail);
   const text = rule.suggestion ?? rule.name;
   return area ? `${area} — ${text}` : text;
+}
+
+/** suggestionDetail made unique among `taken` (lower-cased details already on
+ *  the quote): two doors in one area each get their own line instead of
+ *  validateQuote dropping the second as a duplicate. */
+export function uniqueSuggestionDetail(rule: ScopeRule, triggerDetail: string, taken: Set<string>): string {
+  const base = suggestionDetail(rule, triggerDetail);
+  const norm = (d: string) => d.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!taken.has(norm(base))) return base;
+  const area = areaOf(triggerDetail);
+  const task = (area ? triggerDetail.slice(triggerDetail.indexOf(" — ") + 3) : triggerDetail).trim();
+  const withTask = task ? `${base} (for: ${task})` : base;
+  if (!taken.has(norm(withTask))) return withTask;
+  for (let n = 2; ; n++) {
+    const d = `${withTask} #${n}`;
+    if (!taken.has(norm(d))) return d;
+  }
 }

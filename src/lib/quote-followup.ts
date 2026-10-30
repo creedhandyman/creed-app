@@ -15,6 +15,13 @@ import { tryReadBlob } from "./job-blob";
 /** Days since the last contact before follow-up #1 and #2 are due. */
 export const FOLLOWUP_GAP_DAYS = [2, 3] as const;
 export const MAX_FOLLOWUPS = FOLLOWUP_GAP_DAYS.length;
+/** The cron runs once a day, so "2 days" is checked with this much slack —
+ *  otherwise a quote sent in the afternoon is 47 h old at the day-2 run and
+ *  waits until day 3. */
+export const FOLLOWUP_SLACK_HOURS = 6;
+/** Quotes whose last contact is older than this are left alone: turning the
+ *  feature on must not nudge every quote that went quiet weeks ago. */
+export const FOLLOWUP_STALE_DAYS = 14;
 /** A re-open only alerts the owner after this many quiet hours. */
 export const VIEW_RENOTIFY_HOURS = 4;
 
@@ -64,7 +71,8 @@ export function followupDue(job: FollowupJob, now: number): 1 | 2 | null {
   if (done >= MAX_FOLLOWUPS) return null;
   const last = lastContactMs(job);
   if (Number.isNaN(last)) return null; // never sent → nothing to follow up on
-  if (now - last < FOLLOWUP_GAP_DAYS[done] * DAY_MS) return null;
+  if (now - last < FOLLOWUP_GAP_DAYS[done] * DAY_MS - FOLLOWUP_SLACK_HOURS * HOUR_MS) return null;
+  if (now - last > FOLLOWUP_STALE_DAYS * DAY_MS) return null;
   return (done + 1) as 1 | 2;
 }
 

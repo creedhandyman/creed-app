@@ -1,6 +1,6 @@
 import {
   followupChannel, followupDue, followupMessage, lastContactMs, looksLikeBot, ordinal,
-  shouldNotifyView, FOLLOWUP_GAP_DAYS, VIEW_RENOTIFY_HOURS,
+  shouldNotifyView, FOLLOWUP_GAP_DAYS, FOLLOWUP_SLACK_HOURS, FOLLOWUP_STALE_DAYS, VIEW_RENOTIFY_HOURS,
 } from "../lib/quote-followup";
 
 const DAY = 86_400_000;
@@ -18,13 +18,27 @@ const quoted = (over: Record<string, unknown> = {}) => ({
 
 describe("followupDue", () => {
   it("waits the first gap, then fires step 1", () => {
-    expect(followupDue(quoted(), T0 + 2 * DAY - 1)).toBeNull();
-    expect(followupDue(quoted(), T0 + FOLLOWUP_GAP_DAYS[0] * DAY)).toBe(1);
+    const slack = FOLLOWUP_SLACK_HOURS * HOUR;
+    expect(followupDue(quoted(), T0 + 2 * DAY - slack - 1)).toBeNull();
+    expect(followupDue(quoted(), T0 + FOLLOWUP_GAP_DAYS[0] * DAY - slack)).toBe(1);
+  });
+
+  it("the once-a-day cron still sends on day 2 for an afternoon quote", () => {
+    // Sent 2:30 PM Central; the cron runs 12:15 PM Central two days later (45.75 h).
+    const sent = Date.parse("2026-10-20T19:30:00Z");
+    expect(followupDue(quoted({ quote_sent_at: iso(sent) }), Date.parse("2026-10-22T17:15:00Z"))).toBe(1);
+  });
+
+  it("leaves quotes that went quiet long ago alone (turning it on doesn't blast old quotes)", () => {
+    expect(followupDue(quoted(), T0 + FOLLOWUP_STALE_DAYS * DAY)).toBe(1);
+    expect(followupDue(quoted(), T0 + FOLLOWUP_STALE_DAYS * DAY + 1)).toBeNull();
+    const afterFirst = quoted({ quote_followup_count: 1, quote_followup_at: iso(T0 + 2 * DAY) });
+    expect(followupDue(afterFirst, T0 + 40 * DAY)).toBeNull();
   });
 
   it("fires step 2 three days after the first follow-up, then stops", () => {
     const afterFirst = quoted({ quote_followup_count: 1, quote_followup_at: iso(T0 + 2 * DAY) });
-    expect(followupDue(afterFirst, T0 + 5 * DAY - 1)).toBeNull();
+    expect(followupDue(afterFirst, T0 + 5 * DAY - FOLLOWUP_SLACK_HOURS * HOUR - 1)).toBeNull();
     expect(followupDue(afterFirst, T0 + 5 * DAY)).toBe(2);
     const afterSecond = quoted({ quote_followup_count: 2, quote_followup_at: iso(T0 + 5 * DAY) });
     expect(followupDue(afterSecond, T0 + 60 * DAY)).toBeNull();

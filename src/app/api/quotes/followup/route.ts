@@ -8,7 +8,7 @@ import { signJobToken } from "@/lib/job-token";
 import { siteOrigin } from "@/lib/site-url";
 import { notifyQuoteFollowup } from "@/lib/notify-server";
 import {
-  followupChannel, followupDue, followupMessage, MAX_FOLLOWUPS, ordinal,
+  followupChannel, followupDue, followupMessage, FOLLOWUP_STALE_DAYS, MAX_FOLLOWUPS, ordinal,
   type FollowupChannel, type FollowupJob,
 } from "@/lib/quote-followup";
 
@@ -73,6 +73,12 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     .in("org_id", [...orgName.keys()])
     .eq("status", "quoted")
     .not("quote_sent_at", "is", null)
+    // Only rows that could still be due, newest first, so old ghosted quotes
+    // can't crowd new ones out of the read (followupDue re-checks all of this).
+    .not("archived", "is", true)
+    .or(`quote_followup_count.is.null,quote_followup_count.lt.${MAX_FOLLOWUPS}`)
+    .gte("quote_sent_at", new Date(Date.now() - (FOLLOWUP_STALE_DAYS + 10) * DAY_MS).toISOString())
+    .order("quote_sent_at", { ascending: false })
     .limit(500);
   if (jErr) {
     return NextResponse.json({
@@ -98,6 +104,8 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   const results: { job_id: string; step: number; via: FollowupChannel | "skipped"; error?: string }[] = [];
 
   for (const { j, step } of due) {
+    // Built before the claim: if signing throws (secret unset) nothing is spent.
+    const link = `${siteOrigin()}/status?job=${encodeURIComponent(j.id)}&t=${encodeURIComponent(signJobToken(j.id))}`;
     const cust = j.customer_id ? customers.get(j.customer_id) : undefined;
     const channel = followupChannel({
       consent: smsConsentGranted(j.rooms),
@@ -122,7 +130,6 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     const business = orgName.get(j.org_id) || "";
     const client = j.client || cust?.name || "your customer";
     const where = j.property || "their quote";
-    const link = `${siteOrigin()}/status?job=${encodeURIComponent(j.id)}&t=${encodeURIComponent(signJobToken(j.id))}`;
     const msg = followupMessage({
       step, customer: cust?.name || j.client, business, property: j.property, link,
       viewed: (Number(j.quote_view_count) || 0) > 0,

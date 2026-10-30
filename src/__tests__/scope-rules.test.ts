@@ -1,5 +1,5 @@
 import {
-  ruleMatchesLine, evaluateLine, conditionMet, areaOf, suggestionDetail, type ScopeRule,
+  ruleMatchesLine, evaluateLine, conditionMet, areaOf, suggestionDetail, uniqueSuggestionDetail, type ScopeRule,
 } from "../lib/scope-rules";
 
 // The patterns stored on the shared door rules in `scope_rules`. Keep this file
@@ -126,6 +126,23 @@ describe("evaluateLine", () => {
     expect(evaluateLine([once], "Replace door", undefined).suggestions.length).toBe(1);
   });
 
+  it("a once-per-job question shown on another line is not re-asked as a yes/no", () => {
+    // Door 1 showed "existing finish?"; door 2's stain/paint rules wait for that
+    // answer (it goes job-wide) instead of inventing a yes/no that, answered,
+    // would wipe the real answer on every door.
+    const askOnce = { ...ask, qty_basis: "once_per_job" as const };
+    const r = evaluateLine([paint, stain, askOnce], "Replace door", undefined, { skipOnce: new Set(["ask"]) });
+    expect(r.questions).toEqual([]);
+    expect(r.suggestions).toEqual([]);
+    const answered = evaluateLine([paint, stain, askOnce], "Replace door", { answers: { existing_finish: "stained" } }, { skipOnce: new Set(["ask"]) });
+    expect(answered.suggestions.map((s) => s.id)).toEqual(["stain"]);
+  });
+
+  it("a dismissed question is not re-asked as a yes/no", () => {
+    const r = evaluateLine([paint, stain, ask], "Replace door", { dismissed: ["ask"] });
+    expect(r.questions).toEqual([]);
+  });
+
   it("matches by price_book id when the line has one", () => {
     const byId = rule({ id: "byid", applies_pattern: null, applies_kb_ids: ["DL-004"] });
     expect(evaluateLine([byId], "anything", undefined, { kbIds: ["DL-004"] }).suggestions.length).toBe(1);
@@ -151,5 +168,15 @@ describe("helpers", () => {
     const r = rule({ suggestion: "Fill and caulk" });
     expect(suggestionDetail(r, "Bedroom 2 — Replace door")).toBe("Bedroom 2 — Fill and caulk");
     expect(suggestionDetail(r, "Replace door")).toBe("Fill and caulk");
+  });
+  it("uniqueSuggestionDetail keeps two doors in one area as two lines", () => {
+    const r = rule({ suggestion: "Stain + clear coat" });
+    const taken = new Set<string>();
+    expect(uniqueSuggestionDetail(r, "Bedroom 2 — Replace closet door", taken)).toBe("Bedroom 2 — Stain + clear coat");
+    taken.add("bedroom 2 — stain + clear coat");
+    expect(uniqueSuggestionDetail(r, "Bedroom 2 — Replace entry door", taken)).toBe("Bedroom 2 — Stain + clear coat (for: Replace entry door)");
+    taken.add("bedroom 2 — stain + clear coat (for: replace entry door)");
+    expect(uniqueSuggestionDetail(r, "Bedroom 2 — Replace entry door", taken)).toBe("Bedroom 2 — Stain + clear coat (for: Replace entry door) #2");
+    expect(uniqueSuggestionDetail(r, "Replace door", new Set(["stain + clear coat"]))).toBe("Stain + clear coat (for: Replace door)");
   });
 });
