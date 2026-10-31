@@ -51,7 +51,7 @@ test("drafts, stores leadDraft on the lead and alerts the owner", async () => {
   expect(blob.leadDraft.rooms[0].items[0].detail).toMatch(/faucet/i);
   expect(blob.leadDraft.total).toBeGreaterThan(0);
   expect(dispatch).toHaveBeenCalledTimes(1);
-  expect((dispatch.mock.calls[0] as unknown[])[1]).toMatchObject({ jobId: "j1", title: expect.stringMatching(/^Draft quote ready · \$/) });
+  expect((dispatch.mock.calls[0] as unknown[])[1]).toMatchObject({ jobId: "j1", title: expect.stringMatching(/^Grizz drafted a quote · \$/) });
 });
 
 test("leaves a lead alone once it moved on, and respects the daily cap", async () => {

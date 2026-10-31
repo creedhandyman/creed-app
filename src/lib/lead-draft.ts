@@ -5,7 +5,7 @@
  * customer's description and photos. The draft is NOT a quote yet: it's
  * stored on the lead's rooms blob as `leadDraft` ({v, rooms, estDays, total,
  * at}); "Build Quote" opens it in the editor instantly, and only Save/Send
- * turns the lead into a quote. Owners/managers get a "Draft quote ready ·
+ * turns the lead into a quote. Owners/managers get a "Grizz drafted a quote ·
  * $X" alert. Best-effort throughout: any failure just leaves the lead as it
  * was (Build Quote then runs the AI on the phone, like before).
  */
@@ -124,10 +124,10 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
       await dispatchNotifications(supabase, {
         orgId,
         type: "new_lead",
-        title: `Draft quote ready · ${money}`,
+        title: `Grizz drafted a quote · ${money}`,
         body: `${lead.client ? `${lead.client} · ` : ""}${lead.property} — review it, then Send`,
         jobId,
-        smsBody: `Draft quote ready (${money}) for ${lead.client || "a new lead"} at ${lead.property}. Open Creed to review and send.`,
+        smsBody: `Grizz drafted a quote (${money}) for ${lead.client || "a new lead"} at ${lead.property}. Open Creed to review and send.`,
         recipients,
       });
     }
