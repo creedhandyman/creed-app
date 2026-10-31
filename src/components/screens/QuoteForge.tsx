@@ -3167,7 +3167,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             <GrizzFace size={20} />{t("qf.aiAssist")}
           </h4>
         </div>
-        <AiNote text={t("ai.noteAssist")} style={{ marginBottom: 6 }} />
+        <AiNote text={t("ai.noteAssist")} face={false} style={{ marginBottom: 6 }} />
         <div className="row">
           <input
             value={quickDesc}

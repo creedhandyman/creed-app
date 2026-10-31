@@ -7,14 +7,14 @@ import { GrizzFace } from "./Grizz";
  * The full wording lives in the Terms (section 5); this is the in-context
  * reminder. Keep it small and quiet — a note, not a warning banner.
  */
-export default function AiNote({ text, style }: { text: string; style?: React.CSSProperties }) {
+export default function AiNote({ text, style, face = true }: { text: string; style?: React.CSSProperties; /** false when a Grizz head already sits in the header right above. */ face?: boolean }) {
   return (
     <div
       className="dim"
       role="note"
       style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11.5, lineHeight: 1.4, ...style }}
     >
-      <GrizzFace size={16} style={{ marginTop: -1 }} />
+      {face && <GrizzFace size={16} style={{ marginTop: -1 }} />}
       <span>{text}</span>
     </div>
   );
