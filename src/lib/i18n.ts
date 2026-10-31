@@ -284,6 +284,11 @@ const translations: Record<Lang, Record<string, string>> = {
     "qf.scopeTitle": "Grizz's checklist",
     "qf.scopeSub": "From your shop's rules, not AI. Nothing is added until you tap Add.",
     "qf.scopeNotNeeded": "Not needed",
+    "qf.vwMentionArea": "Which room / area",
+    "qf.vwMentionMeasure": "Measurements",
+    "qf.vwMentionCondition": "What's wrong / condition",
+    "qf.vwMentionMaterial": "Material, color, finish",
+    "qf.vwMentionAccess": "Access & notes",
 
     // Jobs
     "jobs.active": "Active",
@@ -1932,6 +1937,11 @@ const translations: Record<Lang, Record<string, string>> = {
     "qf.scopeTitle": "Lista de Grizz",
     "qf.scopeSub": "De las reglas de tu taller, no de la IA. Nada se agrega sin tu aprobación.",
     "qf.scopeNotNeeded": "Ninguno aplica",
+    "qf.vwMentionArea": "Qué cuarto / área",
+    "qf.vwMentionMeasure": "Medidas",
+    "qf.vwMentionCondition": "Qué está mal / estado",
+    "qf.vwMentionMaterial": "Material, color, acabado",
+    "qf.vwMentionAccess": "Acceso y notas",
 
     // Jobs
     "jobs.active": "Activos",

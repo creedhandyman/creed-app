@@ -2341,6 +2341,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         autoStart
         doneLabel="Add to quote"
         doneHint="Your words go into the description and your photos into Photos — check them, then Generate."
+        talkPrompts={[t("qf.vwMentionArea"), t("qf.vwMentionMeasure"), t("qf.vwMentionCondition"), t("qf.vwMentionMaterial"), t("qf.vwMentionAccess")]}
         onCancel={() => setQqWalk(null)}
         onComplete={(r) => { void finishQuickWalk(r); }}
       />

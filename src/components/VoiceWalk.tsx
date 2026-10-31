@@ -279,9 +279,12 @@ interface Props {
   /** Done button text / hint under it (Quick Quote fills the quote, not a room). */
   doneLabel?: string;
   doneHint?: string;
+  /** Shown instead of "No checklist" when the area has no items — what to
+   *  mention while talking (Quick Quote: area, measurements, condition…). */
+  talkPrompts?: string[];
 }
 
-export default function VoiceWalk({ property, client: _client, rooms, onComplete, onCancel, darkMode, singleRoom, roomStatuses, itemsForRoom, autoStart, doneLabel, doneHint }: Props) {
+export default function VoiceWalk({ property, client: _client, rooms, onComplete, onCancel, darkMode, singleRoom, roomStatuses, itemsForRoom, autoStart, doneLabel, doneHint, talkPrompts }: Props) {
   void property; void _client; // (used only by the parent's processRoomVoice now)
   const isSingleRoom = singleRoom || rooms.length === 1;
 
@@ -1205,6 +1208,17 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
                     );
                   })}
                 </div>
+              ) : talkPrompts?.length ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  <span style={{ fontSize: 12, color: "#fff", fontFamily: "Oswald", letterSpacing: ".06em", textTransform: "uppercase", background: "rgba(0,0,0,0.45)", padding: "3px 8px", borderRadius: 10 }}>
+                    Mention
+                  </span>
+                  {talkPrompts.map((p) => (
+                    <span key={p} style={{ fontSize: 12.5, color: "#fff", background: "rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.35)", padding: "3px 9px", borderRadius: 12, WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)" }}>
+                      {p}
+                    </span>
+                  ))}
+                </div>
               ) : (
                 <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontStyle: "italic", background: "rgba(0,0,0,0.4)", padding: "3px 8px", borderRadius: 10, display: "inline-block" }}>
                   No checklist — describe what you see.
@@ -1349,9 +1363,15 @@ export default function VoiceWalk({ property, client: _client, rooms, onComplete
       )}
       {!inspecting && currentRoom && items.length === 0 && (
         <div className="cd mb" style={{ padding: 10 }}>
-          <div className="dim" style={{ fontSize: 14, fontStyle: "italic" }}>
-            No standard checklist for this room — describe what you see.
-          </div>
+          {talkPrompts?.length ? (
+            <div className="dim" style={{ fontSize: 14 }}>
+              Mention: {talkPrompts.join(" · ")}
+            </div>
+          ) : (
+            <div className="dim" style={{ fontSize: 14, fontStyle: "italic" }}>
+              No standard checklist for this room — describe what you see.
+            </div>
+          )}
         </div>
       )}
 
