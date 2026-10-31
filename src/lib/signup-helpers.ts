@@ -10,6 +10,9 @@
 /** localStorage key an invite link (/signin?join=<code>) leaves for onboarding,
  *  which renders at "/" after auth (the query string is gone by then). */
 export const JOIN_CODE_KEY = "c_join_code";
+/** Promo code typed on Create account (or ?promo= in the link) — applied by
+ *  onboarding once the business exists (/api/promo/apply needs an org). */
+export const PROMO_CODE_KEY = "c_signup_promo";
 
 /** Shareable invite link for an org — opens Create account, then lands the
  *  new user on "Join a team" with the code filled in. */

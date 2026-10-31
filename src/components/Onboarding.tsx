@@ -6,7 +6,8 @@ import type { Organization, Profile } from "@/lib/types";
 import { Icon } from "./Icon";
 import Grizz from "./Grizz";
 import { TRADE_IDS, tradeConfig, tradePatch, tradeName, tradeStarterItems, tradeUnits } from "@/lib/trades";
-import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
+import { JOIN_CODE_KEY, PROMO_CODE_KEY } from "@/lib/signup-helpers";
+import { applyPromoCode } from "@/lib/promo-codes";
 import { getLang, setLang, t } from "@/lib/i18n";
 import { pixelEvent } from "@/lib/meta-pixel";
 
@@ -77,6 +78,8 @@ export default function Onboarding() {
   // rendering; finish() applies them to the store to enter the app.
   const [stepIdx, setStepIdx] = useState(0);
   const [createdBiz, setCreatedBiz] = useState<{ org: Organization; profile: Profile } | null>(null);
+  // Result of the promo code typed on Create account (applied once the org exists).
+  const [promoNote, setPromoNote] = useState<{ ok: boolean; text: string } | null>(null);
   const created = createdBiz !== null;
 
   // The owner's own rate wins over the trade default — on the org's
@@ -140,7 +143,20 @@ export default function Onboarding() {
 
       // Ad measurement: a new business started its free trial (Meta Pixel).
       pixelEvent("StartTrial", { value: 0, currency: "USD" });
-      setCreatedBiz({ org: { ...org, ...tp }, profile: profileResult[0] });
+      let newOrg: Organization = { ...org, ...tp };
+      let promoCode = "";
+      try { promoCode = localStorage.getItem(PROMO_CODE_KEY) || ""; } catch { /* */ }
+      if (promoCode) {
+        const r = await applyPromoCode(org.id, promoCode);
+        try { localStorage.removeItem(PROMO_CODE_KEY); } catch { /* */ }
+        if (r.ok) {
+          if (r.freeUntil) newOrg = { ...newOrg, trial_ends_at: r.freeUntil };
+          setPromoNote({ ok: true, text: r.freeUntil ? `Promo ${promoCode} applied — free until ${new Date(r.freeUntil).toLocaleDateString()}` : `Promo ${promoCode} applied` });
+        } else {
+          setPromoNote({ ok: false, text: `Promo ${promoCode}: ${r.reason || "not applied"}. You can try it again in Operations → Billing.` });
+        }
+      }
+      setCreatedBiz({ org: newOrg, profile: profileResult[0] });
       setSaving(false);
       setStepIdx(2);
     } catch (e) {
@@ -184,7 +200,7 @@ export default function Onboarding() {
       });
       if (!profileResult?.length) { setErr(t("ob.joinFailed")); setSaving(false); return; }
 
-      try { localStorage.removeItem(JOIN_CODE_KEY); } catch { /* */ }
+      try { localStorage.removeItem(JOIN_CODE_KEY); localStorage.removeItem(PROMO_CODE_KEY); } catch { /* */ }
       setCreatedBiz({ org, profile: profileResult[0] });
       setSaving(false);
       setStepIdx(2); // skip the trade picker — joiners inherit the org's trade
@@ -381,6 +397,11 @@ export default function Onboarding() {
                     ? <>{t("ob.joinDoneSpeech")}</>
                     : <>{t("ob.doneA")}<b>{t("ob.doneLoop")}</b>{t("ob.doneB")}</>}</p>
                 </div>
+                {promoNote && (
+                  <div style={{ margin: "8px auto 0", maxWidth: 340, textAlign: "center", fontSize: 13.5, padding: "7px 12px", borderRadius: 10, background: promoNote.ok ? "rgba(62,224,143,.14)" : "rgba(255,170,0,.14)", color: promoNote.ok ? "#7dffb8" : "#ffc861" }}>
+                    {promoNote.text}
+                  </div>
+                )}
                 {mode === "create" && (
                   <div className="ob-loop">
                     {[["sparkle", t("ob.loopQuote")], ["schedule", t("ob.loopSchedule")], ["list", t("ob.loopWork")], ["money", t("ob.loopPaid")]].map(([ic, nm]) => (

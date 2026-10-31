@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useStore } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 import { Icon } from "@/components/Icon";
-import { JOIN_CODE_KEY } from "@/lib/signup-helpers";
+import { JOIN_CODE_KEY, PROMO_CODE_KEY } from "@/lib/signup-helpers";
 import { TRIAL_DAYS } from "@/lib/trial";
 
 /**
@@ -31,6 +31,14 @@ export default function Login() {
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mode") === "signup") return "signup";
     return "login";
   });
+  // Promo code (optional) — from ?promo= or typed below; applied after the
+  // business is created in onboarding.
+  const [promo, setPromo] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const q = (new URLSearchParams(window.location.search).get("promo") || "").trim();
+    if (q) return q.toUpperCase();
+    try { return localStorage.getItem(PROMO_CODE_KEY) || ""; } catch { return ""; }
+  });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<"" | "verify" | "reset">("");
   const [email, setEmail] = useState("");
@@ -52,6 +60,10 @@ export default function Login() {
     if (!name.trim()) { setErr("Enter your name"); return; }
     if (!email.trim()) { setErr("Enter your email"); return; }
     if (password.length < 6) { setErr("Password must be at least 6 characters"); return; }
+    try {
+      if (promo.trim() && !joinCode) localStorage.setItem(PROMO_CODE_KEY, promo.trim().toUpperCase());
+      else localStorage.removeItem(PROMO_CODE_KEY);
+    } catch { /* */ }
     setBusy(true);
     const e = await signup(email.trim(), password, name.trim());
     setBusy(false);
@@ -134,6 +146,12 @@ export default function Login() {
             />
             <button type="button" className="eye" onClick={() => setShowPw(!showPw)} aria-label={showPw ? "Hide password" : "Show password"}>{showPw ? "🙈" : "👁"}</button>
           </div>
+          {mode === "signup" && !joinCode && (
+            <div className="field">
+              <label>Promo code <span style={{ opacity: 0.6, fontWeight: 400 }}>(optional)</span></label>
+              <input value={promo} onChange={(e) => setPromo(e.target.value.toUpperCase())} placeholder="FOUNDING25" autoCapitalize="characters" autoComplete="off" style={{ textTransform: "uppercase" }} />
+            </div>
+          )}
           <div className="frow-sm">
             <span>{mode === "signup" ? "Min 6 characters" : ""}</span>
             {mode === "login" && <a onClick={forgot}>Forgot password?</a>}
