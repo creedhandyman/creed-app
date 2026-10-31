@@ -419,7 +419,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   (lib/trial.ts) = later of the signup trial and trial_ends_at; BillingGate's
   pre-Stripe branch and create-checkout-session use it, so subscribing early
   keeps the promo time as the Stripe trial. First code: `first-customer-3mo`
-  (3 months, 1 business), given to the owner 2026-10-20.
+  (3 months, 1 business), given to the owner 2026-10-20. **FOUNDING25** (`founding-25`, 2026-10-31): 25 uses, STACKS
+  `addDays: 76` on top of the business's current free end (14-day trial + 76
+  = ~3 months; an expired trial restarts from today) via `promoEndFor`. The
+  route recounts after inserting and backs out if a simultaneous redemption
+  pushed it past maxUses.
 - Mileage start times (**ALREADY RUN in prod 2026-10-17**, migration
   `mileage_start_time`): `ALTER TABLE mileage ADD COLUMN IF NOT EXISTS start_time TEXT;`
   ("8:05 AM", time-entry format). GPS / odometer / Work-mode tracker trips and

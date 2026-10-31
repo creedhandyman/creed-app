@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOwner, serviceClient } from "@/lib/api-auth";
-import { findTimedPromo, promoEnd } from "@/lib/promo-timed";
+import { findTimedPromo, promoEndFor, type TimedPromo } from "@/lib/promo-timed";
 import { orgTrialEnd } from "@/lib/trial";
 
 export const dynamic = "force-dynamic";
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function applyTimed(promo: { id: string; months: number; maxUses: number }, orgId: string) {
+async function applyTimed(promo: TimedPromo, orgId: string) {
   const sb = serviceClient();
   const { data: org, error: orgErr } = await sb
     .from("organizations")
@@ -87,10 +87,17 @@ async function applyTimed(promo: { id: string; months: number; maxUses: number }
     return NextResponse.json({ ok: false, error: "This promo code has already been used" }, { status: 400 });
   }
 
-  const end = promoEnd(promo.months, orgTrialEnd(org));
+  const end = promoEndFor(promo, orgTrialEnd(org));
   if (!tableMissing) {
     const { error: insErr } = await sb.from("promo_redemptions").insert({ promo_id: promo.id, org_id: orgId });
     if (insErr) return NextResponse.json({ ok: false, error: "This promo code has already been used" }, { status: 400 });
+    // Two businesses redeeming at the same moment could both pass the count
+    // above — recount and back out if this one went over the limit.
+    const { count } = await sb.from("promo_redemptions").select("org_id", { count: "exact", head: true }).eq("promo_id", promo.id);
+    if ((count || 0) > promo.maxUses) {
+      await sb.from("promo_redemptions").delete().eq("promo_id", promo.id).eq("org_id", orgId);
+      return NextResponse.json({ ok: false, error: "This promo code has already been used" }, { status: 400 });
+    }
   }
   const { error } = await sb.from("organizations").update({ trial_ends_at: end.toISOString() }).eq("id", orgId);
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
