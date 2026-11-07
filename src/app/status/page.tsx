@@ -7,6 +7,7 @@ import { Icon } from "@/components/Icon";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { itemInTier, tierDeltas } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
+import { payPlan } from "@/lib/pay-plan";
 import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
 import { readQuoteSettings } from "@/lib/quote-blob";
@@ -154,8 +155,6 @@ function StatusContent() {
   // 0 = they don't take deposits → only "Pay in full".
   const [depositPick, setDepositPct] = useState<number | null>(null);
   const orgDepositPct = Number(org?.deposit_pct ?? 50);
-  const depositPct = depositPick ?? (orgDepositPct > 0 && orgDepositPct < 100 ? orgDepositPct : 100);
-  const depositOptions = orgDepositPct > 0 && orgDepositPct < 100 ? [orgDepositPct, 100] : [100];
   const [depositLoading, setDepositLoading] = useState(false);
   const [payError, setPayError] = useState("");
 
@@ -300,14 +299,14 @@ function StatusContent() {
       // (Best-scope) job.total. Post-approval job.total already equals this,
       // but compute it explicitly so the deposit can never bill the wrong tier.
       const baseTotal = tiered && tierTotals ? tierTotals[selectedTier] : job.total;
-      // Never collect more than what's still owed — a deposit already taken is
-      // subtracted here (and the server clamps to the balance as well).
-      const paidToDate = Number(job.amount_paid) || 0;
-      const balanceDue = Math.round(Math.max(0, baseTotal - paidToDate) * 100) / 100;
-      const deposit = Math.round(baseTotal * (depositPct / 100) * 100) / 100;
-      // Once the work is done it's a bill, not a deposit: charge the balance.
+      // The same plan the button label shows (lib/pay-plan.ts): never more
+      // than what's still owed — a deposit already taken is subtracted (and
+      // the server clamps to the balance as well). A finished job defaults to
+      // the whole balance but the customer can still pick part now.
       const billing = job.status === "complete" || job.status === "invoiced";
-      const amount = billing ? balanceDue : Math.min(deposit, balanceDue);
+      const { amount } = payPlan({
+        total: baseTotal, paid: Number(job.amount_paid) || 0, orgDepositPct, billing, pick: depositPick,
+      });
       if (amount <= 0) {
         setDepositLoading(false);
         return;
@@ -367,15 +366,11 @@ function StatusContent() {
   // balance (same math as startDeposit), so the label can never disagree with
   // the charge for a customer who already paid a deposit.
   const paidToDate = Math.round((Number(job.amount_paid) || 0) * 100) / 100;
-  const balanceDue = Math.round(Math.max(0, effectiveTotal - paidToDate) * 100) / 100;
-  const depositAmount = Math.min(
-    Math.round(effectiveTotal * (depositPct / 100) * 100) / 100,
-    balanceDue,
-  );
-  const remainingAfterDeposit = Math.round(Math.max(0, balanceDue - depositAmount) * 100) / 100;
   // After the work: a bill for the balance — shown whether or not the
   // customer signed online (owner-entered / verbally approved jobs too).
   const billing = job.status === "complete" || job.status === "invoiced";
+  const plan = payPlan({ total: effectiveTotal, paid: paidToDate, orgDepositPct, billing, pick: depositPick });
+  const { balanceDue, amount: payAmount, remaining: remainingAfterPay } = plan;
   const showPayCard = job.total > 0 && job.status !== "paid" && !!org?.stripe_connected && balanceDue > 0
     && (billing || !!job.client_signature);
   // Only surface the picker when the options actually differ in price — a
@@ -734,54 +729,45 @@ function StatusContent() {
           )}
         </div>
 
-        {/* Deposit button — only after approval, only if total > 0 and
-            the contractor has Stripe Connect set up. We default to a 50%
-            deposit; the prospect can dial it up to 100% (full payment
-            up front) before being routed to Stripe Checkout. */}
-        {showPayCard && billing && (
+        {/* Pay card — after approval (or once the work is billed), only if total > 0
+            and the contractor has Stripe Connect set up. Before the work: a
+            deposit (the default) or the whole thing. After the work: the whole
+            balance by default, with a "pay part now" choice when the business
+            takes deposits (a payment plan). Amounts: lib/pay-plan.ts. */}
+        {showPayCard && (
           <div className="card">
-            <div className="lbl">Pay your balance</div>
-            <button className="btn glow-gold" onClick={startDeposit} disabled={depositLoading}>
-              <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${balanceDue.toFixed(2)} now`}
-            </button>
-            {payError && <p style={{ fontSize: 13, color: "#ff8888", textAlign: "center", margin: "9px 0 0" }}>{payError}</p>}
-            <p style={{ fontSize: 12, color: "#666", textAlign: "center", margin: "9px 0 0" }}>
-              Secure checkout via Stripe.
-              {paidToDate > 0 && ` $${paidToDate.toFixed(2)} already paid of $${effectiveTotal.toFixed(2)}.`}
-            </p>
-          </div>
-        )}
-        {showPayCard && !billing && (
-          <div className="card">
-            <div className="lbl">{depositOptions.length > 1 ? "Pay deposit" : "Pay now"}</div>
-            {depositOptions.length > 1 && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 11 }}>
-              {depositOptions.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setDepositPct(p)}
-                  style={{
-                    flex: 1, padding: "9px 0", borderRadius: 9, fontSize: 13.5, fontFamily: "Oswald, sans-serif",
-                    background: depositPct === p ? "rgba(46,117,182,.14)" : "transparent",
-                    color: depositPct === p ? "#acd2ff" : "#8a8a99",
-                    border: `1px solid ${depositPct === p ? "rgba(46,117,182,.9)" : "#2a2a3a"}`,
-                    cursor: "pointer",
-                  }}
-                >
-                  {p === 100 ? "Pay in full" : `${p}% deposit`}
-                </button>
-              ))}
+            <div className="lbl">
+              {billing ? (plan.canChoose ? "Pay now" : "Pay your balance") : plan.canChoose ? "Pay deposit" : "Pay now"}
             </div>
+            {plan.canChoose && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 11 }}>
+                {plan.options.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setDepositPct(p)}
+                    style={{
+                      flex: 1, padding: "9px 0", borderRadius: 9, fontSize: 13.5, fontFamily: "Oswald, sans-serif",
+                      background: plan.pct === p ? "rgba(46,117,182,.14)" : "transparent",
+                      color: plan.pct === p ? "#acd2ff" : "#8a8a99",
+                      border: `1px solid ${plan.pct === p ? "rgba(46,117,182,.9)" : "#2a2a3a"}`,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {p === 100 ? (billing ? "Pay balance" : "Pay in full") : billing ? `${p}% now` : `${p}% deposit`}
+                  </button>
+                ))}
+              </div>
             )}
-            <button className="btn glow-gold" onClick={startDeposit} disabled={depositLoading || depositAmount <= 0}>
-              <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${depositAmount.toFixed(2)} now`}
+            <button className="btn glow-gold" onClick={startDeposit} disabled={depositLoading || payAmount <= 0}>
+              <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${payAmount.toFixed(2)} now`}
             </button>
+            {billing && payError && <p style={{ fontSize: 13, color: "#ff8888", textAlign: "center", margin: "9px 0 0" }}>{payError}</p>}
             <p style={{ fontSize: 12, color: "#666", textAlign: "center", margin: "9px 0 0" }}>
               Secure checkout via Stripe.
-              {paidToDate > 0 && ` $${paidToDate.toFixed(2)} already paid.`}
-              {remainingAfterDeposit > 0 && ` Remaining $${remainingAfterDeposit.toFixed(2)} due on completion.`}
+              {paidToDate > 0 && (billing ? ` $${paidToDate.toFixed(2)} already paid of $${effectiveTotal.toFixed(2)}.` : ` $${paidToDate.toFixed(2)} already paid.`)}
+              {remainingAfterPay > 0 && (billing ? ` Remaining $${remainingAfterPay.toFixed(2)} still due after this payment.` : ` Remaining $${remainingAfterPay.toFixed(2)} due on completion.`)}
             </p>
-            {payError && <p style={{ fontSize: 13, color: "#ff8888", textAlign: "center", margin: "9px 0 0" }}>{payError}</p>}
+            {!billing && payError && <p style={{ fontSize: 13, color: "#ff8888", textAlign: "center", margin: "9px 0 0" }}>{payError}</p>}
           </div>
         )}
 
