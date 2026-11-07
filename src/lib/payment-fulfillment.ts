@@ -31,6 +31,8 @@ export interface RecordPaymentResult {
   balance: number;
   fullyPaid: boolean;
   alreadyRecorded: boolean;
+  /** Dollars refunded right away because this charge overpaid the job. */
+  refundedExcess?: number;
 }
 
 export async function recordJobPayment(
@@ -56,7 +58,13 @@ export async function recordJobPayment(
     });
     if (payErr) {
       if (payErr.code === "23505" || /duplicate key|unique/i.test(payErr.message)) alreadyRecorded = true;
-      else ledgerOk = false;
+      else if (isMissingTable(payErr)) ledgerOk = false;
+      // Any other failure (a timeout, a dropped connection) must NOT be papered
+      // over: recording "this charge only" would wipe an earlier deposit off
+      // amount_paid, and swallowing it lets the webhook ack Stripe with nothing
+      // saved. Throw so the webhook answers 500 and Stripe retries (the insert
+      // is idempotent on stripe_session_id, so a retry is safe).
+      else throw new Error(`payments ledger insert failed: ${payErr.message}`);
     }
   }
 
@@ -125,6 +133,12 @@ async function sumLedger(
   };
 }
 
+/** The payments table doesn't exist yet (pre-migration org) — the one ledger
+ *  error we degrade on instead of failing the payment. */
+function isMissingTable(e: { code?: string; message: string }): boolean {
+  return e.code === "42P01" || /relation .* does not exist/i.test(e.message);
+}
+
 /** A paid-to-date that covers the total (1¢ slack) — the ONLY thing that makes a job "paid". */
 function coversTotal(amountPaid: number, total: number): boolean {
   return total > 0 && amountPaid >= total - 0.01;
@@ -167,6 +181,12 @@ export interface FulfillPaymentInput {
   notify?: boolean | { excludeUserId: string };
   /** Log prefix, e.g. "verify-payment". */
   source: string;
+  /** Refunds part of a card charge (Stripe). When given, a card charge that
+   *  takes paid-to-date OVER the job total (two checkout pages both paid, or
+   *  cash recorded while the customer was mid-checkout) has the extra refunded
+   *  automatically. Resolves true when the refund was created. Manual payments
+   *  never pass it. */
+  refundExcess?: (args: { paymentIntentId: string; amountCents: number; idempotencyKey: string; jobId: string }) => Promise<boolean>;
 }
 
 export type FulfillPaymentResult =
@@ -216,6 +236,33 @@ export async function fulfillJobPayment(
     });
   }
 
+  // Overpayment backstop. Checkout clamps each charge to the balance when the
+  // page opens, but two pages opened before either was paid can both go
+  // through. Refund only THIS charge's share of the extra, and only from the
+  // call that recorded it (so the redirect + webhook race can't refund twice;
+  // the Stripe idempotency key backs that up). The charge.refunded webhook then
+  // writes the negative ledger row, bringing amount_paid back to the total.
+  let refundedExcess = 0;
+  const excess = Math.round((result.amountPaid - result.total) * 100) / 100;
+  if (!result.alreadyRecorded && p.refundExcess && p.paymentIntentId && result.total > 0 && excess > 0.01) {
+    const amountCents = Math.round(Math.min(excess, p.paidNow) * 100);
+    if (amountCents > 0) {
+      try {
+        const ok = await p.refundExcess({
+          paymentIntentId: p.paymentIntentId,
+          amountCents,
+          idempotencyKey: `overpay_${p.sessionId}`,
+          jobId: job.id,
+        });
+        if (ok) refundedExcess = amountCents / 100;
+      } catch (e) {
+        // Owners are still alerted below (with the overpaid amount), so a
+        // person can refund by hand. Never fail the payment over it.
+        console.error(`[${p.source}] overpayment refund failed:`, e);
+      }
+    }
+  }
+
   if (!result.alreadyRecorded && p.paidNow > 0 && p.notify !== false) {
     await notifyJobPaid(supabase, {
       excludeUserId: typeof p.notify === "object" ? p.notify.excludeUserId : null,
@@ -225,10 +272,12 @@ export async function fulfillJobPayment(
       amountPaid: result.amountPaid,
       total: result.total,
       fullyPaid: result.fullyPaid,
+      overpaid: excess > 0.01 ? excess : 0,
+      refunded: refundedExcess,
     });
   }
 
-  return { ok: true, orgId: job.org_id, result };
+  return { ok: true, orgId: job.org_id, result: { ...result, refundedExcess } };
 }
 
 /** What a paid Stripe Checkout session says about a job payment. */

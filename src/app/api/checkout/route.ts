@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { computePlatformFee, currentPeriodStart } from "@/lib/platform-fee";
+import {
+  checkoutCancelUrl,
+  checkoutExpiresAt,
+  expireOpenJobSessions,
+  type CheckoutSessionsApi,
+} from "@/lib/checkout-sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -112,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     const origin = req.headers.get("origin") || "https://www.creedhm.com";
     const referer = req.headers.get("referer") || "";
-    const cancelUrl = referer.startsWith(`${origin}/status?`) ? referer : `${origin}/payment/cancel`;
+    const cancelUrl = checkoutCancelUrl(origin, referer);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sessionParams: any = {
@@ -131,6 +137,9 @@ export async function POST(req: NextRequest) {
         },
       ],
       mode: "payment",
+      // An hour, not Stripe's default 24 h: an abandoned page can't be paid
+      // later on top of a newer one (see lib/checkout-sessions.ts).
+      expires_at: checkoutExpiresAt(),
       // session_id lets /payment/success verify server-side before flipping status.
       success_url: `${origin}/payment/success?job_id=${job.id}&session_id={CHECKOUT_SESSION_ID}`,
       // Cancelling returns the customer to the job page they paid from (the
@@ -162,6 +171,9 @@ export async function POST(req: NextRequest) {
 
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+    // One live checkout per job: close any page still open for this job (the
+    // customer's other device, an earlier tap) so both can't be paid.
+    await expireOpenJobSessions(stripe.checkout.sessions as unknown as CheckoutSessionsApi, job.id);
     const session = await stripe.checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ url: session.url });

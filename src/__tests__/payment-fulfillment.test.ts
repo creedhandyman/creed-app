@@ -16,6 +16,7 @@ interface FakeOpts {
   missingTables?: string[];      // relation does not exist
   missingColumns?: string[];     // jobs column does not exist (select/update)
   throwOn?: string[];            // any query on this table rejects
+  failInsert?: string[];         // inserts into this table return a (non-duplicate) error
 }
 interface Call { table: string; op: string; payload?: unknown; filters: [string, string, unknown][] }
 
@@ -45,6 +46,9 @@ function fakeDb(seed: Record<string, Row[]>, opts: FakeOpts = {}) {
       }
       if (op === "insert") {
         const r = payload!;
+        if (opts.failInsert?.includes(table)) {
+          return { data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } };
+        }
         if (table === "payments" && rows().some((x) => x.stripe_session_id === r.stripe_session_id)) {
           return { data: null, error: { code: "23505", message: "duplicate key value violates unique constraint" } };
         }
@@ -185,6 +189,60 @@ test("pre-migration (no payments table, no amount_paid column): a lone deposit d
   expect(full.ok && full.result.fullyPaid).toBe(true);
   expect(b.tables.jobs[0].status).toBe("paid");
   expect(b.tables.jobs[0].amount_paid).toBeUndefined();
+});
+
+test("a ledger insert that fails (not a duplicate, not pre-migration) throws so the webhook retries — and doesn't wipe a deposit", async () => {
+  const { db, tables } = fakeDb(
+    { jobs: [job({ amount_paid: 500 })], payments: [{ job_id: JOB, amount: 500, stripe_session_id: "cs_dep" }] },
+    { failInsert: ["payments"] },
+  );
+  await expect(fulfillJobPayment(db, charge("cs_bal", 500))).rejects.toThrow(/ledger insert failed/);
+  // Nothing written over the earlier deposit, nobody told it was paid.
+  expect(tables.jobs[0]).toMatchObject({ amount_paid: 500, status: "invoiced" });
+  expect(notify).not.toHaveBeenCalled();
+});
+
+test("overpayment: two checkout pages both paid → the extra on the second card charge is refunded once", async () => {
+  const { db, tables } = fakeDb({ jobs: [job()] });
+  const refundExcess = jest.fn(async () => true);
+
+  // Phone page: 50% deposit. Computer page (opened before the deposit landed): full $1,000.
+  await fulfillJobPayment(db, charge("cs_phone", 500, { kind: "deposit", refundExcess }));
+  expect(refundExcess).not.toHaveBeenCalled();
+  const second = await fulfillJobPayment(db, charge("cs_computer", 1000, { refundExcess }));
+
+  expect(refundExcess).toHaveBeenCalledTimes(1);
+  expect(refundExcess).toHaveBeenCalledWith({
+    paymentIntentId: "pi_cs_computer", amountCents: 50000, idempotencyKey: "overpay_cs_computer", jobId: JOB,
+  });
+  expect(second.ok && second.result).toMatchObject({ amountPaid: 1500, fullyPaid: true, refundedExcess: 500 });
+  expect(tables.jobs[0].status).toBe("paid");
+  expect(notify.mock.calls[1][1]).toMatchObject({ paidNow: 1000, overpaid: 500, refunded: 500 });
+
+  // The webhook replaying the same session refunds nothing more.
+  await fulfillJobPayment(db, charge("cs_computer", 1000, { refundExcess }));
+  expect(refundExcess).toHaveBeenCalledTimes(1);
+});
+
+test("overpayment refund never exceeds this charge, skips manual payments, and a failed refund still alerts the owner", async () => {
+  const err = jest.spyOn(console, "error").mockImplementation(() => {});
+  // Cash logged for the full $1,000 while the customer was mid-checkout for $300.
+  const a = fakeDb({ jobs: [job()] });
+  const refundExcess = jest.fn(async () => true);
+  await fulfillJobPayment(a.db, charge("manual_cash", 1000, { paymentIntentId: null, kind: "cash", refundExcess }));
+  expect(refundExcess).not.toHaveBeenCalled(); // manual: never refunded through Stripe
+  await fulfillJobPayment(a.db, charge("cs_late", 300, { refundExcess }));
+  expect(refundExcess).toHaveBeenCalledWith(expect.objectContaining({ amountCents: 30000 }));
+
+  // Refund call fails → payment still recorded; alert says "please refund".
+  notify.mockClear();
+  const b = fakeDb({ jobs: [job({ amount_paid: 1000 })], payments: [{ job_id: JOB, amount: 1000, stripe_session_id: "cs_first" }] });
+  const failing = jest.fn(async () => { throw new Error("stripe down"); });
+  const r = await fulfillJobPayment(b.db, charge("cs_again", 1000, { refundExcess: failing }));
+  expect(r.ok && r.result).toMatchObject({ amountPaid: 2000, refundedExcess: 0 });
+  expect(notify.mock.calls[0][1]).toMatchObject({ overpaid: 1000, refunded: 0 });
+  expect(err).toHaveBeenCalledWith("[test] overpayment refund failed:", expect.any(Error));
+  err.mockRestore();
 });
 
 test("paymentFromCheckoutSession reads amount, intent, fee and kind", () => {

@@ -4,6 +4,7 @@ import type Stripe from "stripe";
 import { computeNextFire } from "@/lib/recurring";
 import { visitCadence } from "@/lib/memberships";
 import { fulfillJobPayment, paymentFromCheckoutSession, recordJobRefund } from "@/lib/payment-fulfillment";
+import { stripeExcessRefunder } from "@/lib/stripe-refund";
 import { findOrgIdForSub, orgUpdateFromSubscription } from "@/lib/stripe-subscription";
 
 export const dynamic = "force-dynamic";
@@ -170,9 +171,16 @@ export async function POST(req: NextRequest) {
               platformFeeCents: pay.platformFeeCents,
               kind: pay.kind,
               source: "webhook",
+              refundExcess: stripeExcessRefunder(stripe),
             });
           } catch (e) {
+            // The charge went through but couldn't be saved. Answer 500 so
+            // Stripe RETRIES this event (it does, for up to 3 days). Acking 200
+            // here meant a customer who closed the tab before the success page
+            // loaded was charged with nothing recorded. Retrying is safe: the
+            // ledger insert is idempotent on the session id.
             console.error("[webhook] one-time payment fulfillment failed:", e);
+            return NextResponse.json({ error: "Payment not recorded yet, retry" }, { status: 500 });
           }
         }
         break;
