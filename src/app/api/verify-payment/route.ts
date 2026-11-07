@@ -4,6 +4,7 @@ import { fulfillJobPayment, paymentFromCheckoutSession } from "@/lib/payment-ful
 import { stripeExcessRefunder } from "@/lib/stripe-refund";
 import { signJobToken } from "@/lib/job-token";
 import { siteOrigin } from "@/lib/site-url";
+import { isWorkDone } from "@/lib/payment-success-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -89,8 +90,15 @@ export async function POST(req: NextRequest) {
     try {
       statusUrl = `${siteOrigin()}/status?job=${jobId}&t=${encodeURIComponent(signJobToken(jobId))}`;
     } catch { /* PORTAL_SESSION_SECRET unset */ }
+    // Whether the work is finished, so a balance left on a done job reads as
+    // due now rather than "when the work is complete". Best-effort.
+    let workDone = false;
+    try {
+      const { data: j } = await supabase.from("jobs").select("status").eq("id", jobId).maybeSingle();
+      workDone = isWorkDone(j?.status);
+    } catch { /* */ }
 
-    return NextResponse.json({ ok: true, ...result, paidNow, business, statusUrl });
+    return NextResponse.json({ ok: true, ...result, paidNow, workDone, business, statusUrl });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("verify-payment error:", message);
