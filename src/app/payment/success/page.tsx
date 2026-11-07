@@ -2,11 +2,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { paymentSuccessCopy } from "@/lib/payment-success-copy";
 
 interface VerifyResult {
   paidNow?: number;
   balance?: number;
   fullyPaid?: boolean;
+  workDone?: boolean;
   business?: { name?: string; logo_url?: string | null; brand_color?: string | null } | null;
   statusUrl?: string | null;
 }
@@ -23,6 +25,7 @@ function SuccessContent() {
   const sessionId = params.get("session_id");
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [notPaid, setNotPaid] = useState(false);
 
   useEffect(() => {
     if (!jobId || !sessionId) { setVerifyError("missing"); return; }
@@ -34,7 +37,12 @@ function SuccessContent() {
           body: JSON.stringify({ sessionId, jobId }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) { setVerifyError(data?.error || "Could not verify payment"); return; }
+        if (!res.ok) {
+          // 402 = Stripe says this checkout isn't paid (see /api/verify-payment).
+          setNotPaid(res.status === 402);
+          setVerifyError(data?.error || "Could not verify payment");
+          return;
+        }
         setResult(data as VerifyResult);
       } catch (err) {
         setVerifyError(err instanceof Error ? err.message : "Verification failed");
@@ -44,26 +52,10 @@ function SuccessContent() {
 
   const business = result?.business;
   const accent = business?.brand_color || "#2E75B6";
-  const verifying = !result && !verifyError;
-  const money = (n?: number) => `$${(Number(n) || 0).toFixed(2)}`;
-
-  let title = "Confirming your payment…";
-  let body = "One moment while we confirm it with the bank.";
-  let tone = "#8cc0ff";
-  if (verifyError) {
-    title = "Payment received";
-    body = "Your card went through, but we couldn't confirm it on our end just yet. It will update automatically — no need to pay again. Contact us if your invoice still shows unpaid tomorrow.";
-    tone = "#ffb15e";
-  } else if (result) {
-    tone = "#00cc66";
-    if (result.fullyPaid) {
-      title = "Paid in full";
-      body = `Thank you! We received ${money(result.paidNow)} and your invoice is paid in full.`;
-    } else {
-      title = "Payment received";
-      body = `Thank you! We received ${money(result.paidNow)}. Remaining balance: ${money(result.balance)} — due when the work is complete.`;
-    }
-  }
+  const { title, body, tone, icon } = paymentSuccessCopy({
+    error: verifyError ? { notPaid } : null,
+    result,
+  });
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a0a0f, #0d1530)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -75,7 +67,7 @@ function SuccessContent() {
           <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 22, color: "#e8e8ee", marginBottom: 14 }}>{business.name}</div>
         ) : null}
         <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center", border: `3px solid ${tone}`, color: tone, fontSize: 30 }}>
-          {verifying ? "…" : verifyError ? "!" : "✓"}
+          {icon}
         </div>
         <h1 style={{ fontFamily: "Oswald, sans-serif", fontSize: 24, color: tone, textTransform: "uppercase", marginBottom: 8 }}>{title}</h1>
         <p style={{ color: "#a8a8b4", fontSize: 16, fontFamily: "Source Sans 3, sans-serif", marginBottom: 24, lineHeight: 1.5 }}>{body}</p>
