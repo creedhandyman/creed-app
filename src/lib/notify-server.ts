@@ -245,6 +245,10 @@ export async function notifyJobPaid(
     fullyPaid: boolean;
     /** Skip this person (they recorded the payment themselves). */
     excludeUserId?: string | null;
+    /** Dollars this payment took paid-to-date OVER the job total (0 = none). */
+    overpaid?: number;
+    /** Dollars of that overpayment already refunded to the customer. */
+    refunded?: number;
   },
 ): Promise<void> {
   try {
@@ -265,9 +269,18 @@ export async function notifyJobPaid(
     const amt = `$${(Number(p.paidNow) || 0).toFixed(2)}`;
     const balance = Math.max(0, (Number(p.total) || 0) - (Number(p.amountPaid) || 0));
     const title = p.fullyPaid ? "Paid in full" : "Payment received";
-    const body = p.fullyPaid
+    // Overpaid (two checkout pages both paid, cash logged mid-checkout): say
+    // so, and whether the extra already went back or needs refunding by hand.
+    const over = Number(p.overpaid) || 0;
+    const back = Number(p.refunded) || 0;
+    const overNote = over > 0.009
+      ? back > 0.009
+        ? ` Overpaid by $${over.toFixed(2)}; $${back.toFixed(2)} was refunded to the customer automatically.`
+        : ` Overpaid by $${over.toFixed(2)}; please refund the extra in Stripe.`
+      : "";
+    const body = (p.fullyPaid
       ? `${amt} for ${property}${who} — paid in full.`
-      : `${amt} for ${property}${who} · balance $${balance.toFixed(2)}.`;
+      : `${amt} for ${property}${who} · balance $${balance.toFixed(2)}.`) + overNote;
 
     // Idempotency backstop for the degraded / transient case the call-site
     // !alreadyRecorded gate can't cover (see the function doc). Both fulfillment
@@ -295,7 +308,7 @@ export async function notifyJobPaid(
       title,
       body,
       jobId: p.jobId,
-      smsBody: `${title}: ${amt} for ${property}${who}.`,
+      smsBody: `${title}: ${amt} for ${property}${who}.${overNote}`,
       recipients,
     });
   } catch (e) {

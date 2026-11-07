@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { fulfillJobPayment, paymentFromCheckoutSession } from "@/lib/payment-fulfillment";
+import { stripeExcessRefunder } from "@/lib/stripe-refund";
 import { signJobToken } from "@/lib/job-token";
 import { siteOrigin } from "@/lib/site-url";
 
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
         platformFeeCents: pay.platformFeeCents,
         kind: pay.kind,
         source: "verify-payment",
+        refundExcess: stripeExcessRefunder(stripe),
       });
     } catch (e) {
       return NextResponse.json({ error: (e as Error).message }, { status: 500 });

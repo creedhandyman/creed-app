@@ -1546,20 +1546,22 @@ ${invoicePhotosHtml}
                     className="bo"
                     onClick={async () => {
                       try {
-                        const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: dj.id, amount: balanceDue }) });
-                        const data = await res.json();
-                        if (data.url) {
-                          // Baseline = the server's paid-to-date NOW, not the
-                          // render-time copy (up to 15s old) — otherwise a
-                          // deposit that landed meanwhile would flip the QR to
-                          // "Payment received" before the customer scans it.
-                          await loadAll().catch(() => { /* keep the render-time value */ });
-                          const fresh = useStore.getState().jobs.find((x) => x.id === dj.id);
-                          // Show what Stripe will actually charge (checkout caps at the live balance).
-                          const freshDue = fresh ? balanceOf(fresh).due : balanceDue;
-                          setPayQR({ url: data.url, jobId: dj.id, amount: Math.min(balanceDue, freshDue), startPaid: Number(fresh?.amount_paid ?? dj.amount_paid) || 0 });
-                        }
-                        else useStore.getState().showToast(data.error || t("jobs.couldNotCreatePayment"), "error");
+                        // A Creed /pay link, not a raw Stripe Checkout URL: a
+                        // Stripe URL died after 24 h and froze the amount, and
+                        // a copied one stayed payable next to the customer's
+                        // own page (double charge). /pay makes a fresh checkout
+                        // for the live balance each time it's opened (app/pay).
+                        const statusUrl = await getStatusLink(dj.id);
+                        const url = statusUrl.replace("/status?", "/pay?");
+                        // Baseline = the server's paid-to-date NOW, not the
+                        // render-time copy (up to 15s old) — otherwise a
+                        // deposit that landed meanwhile would flip the QR to
+                        // "Payment received" before the customer scans it.
+                        await loadAll().catch(() => { /* keep the render-time value */ });
+                        const fresh = useStore.getState().jobs.find((x) => x.id === dj.id);
+                        // Show what checkout will charge (it bills the live balance).
+                        const freshDue = fresh ? balanceOf(fresh).due : balanceDue;
+                        setPayQR({ url, jobId: dj.id, amount: freshDue, startPaid: Number(fresh?.amount_paid ?? dj.amount_paid) || 0 });
                       } catch { useStore.getState().showToast(t("jobs.failedCreatePayment"), "error"); }
                     }}
                     style={btn}
@@ -2606,7 +2608,8 @@ ${invoicePhotosHtml}
             <div style={{ fontSize: 14, color: "#888", marginBottom: 16 }}>
               {t("jobs.qrInstructions")}
             </div>
-            {/* Same Stripe link as the QR — copy or share it to text the customer. */}
+            {/* Same /pay link as the QR — copy or share it to text the customer.
+                It never expires and always bills the live balance. */}
             <div style={{ maxWidth: 320, margin: "0 auto 16px" }}>
               <div style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>
                 {t("jobs.payLinkOr")}
