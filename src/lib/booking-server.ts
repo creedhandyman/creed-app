@@ -41,16 +41,18 @@ export async function loadBookingOrg(supabase: SupabaseClient, slug: string): Pr
 
 /** Every visit that could touch `fromDate`…`fromDate + daysAhead`. Looks back
  *  60 days for multi-day visits that started earlier. Throws on a read error
- *  (callers must not offer times they couldn't check). */
-export async function loadBusyVisits(supabase: SupabaseClient, orgId: string, fromDate: string, daysAhead: number): Promise<BusyVisit[]> {
+ *  (callers must not offer times they couldn't check). `excludeId` leaves one
+ *  schedule row out (a just-inserted hold re-checking against the others). */
+export async function loadBusyVisits(supabase: SupabaseClient, orgId: string, fromDate: string, daysAhead: number, excludeId?: string | number): Promise<BusyVisit[]> {
   const { data, error } = await supabase
     .from("schedule")
-    .select("sched_date, end_date, note, start_time, duration_min, job_id")
+    .select("id, sched_date, end_date, note, start_time, duration_min, job_id")
     .eq("org_id", orgId)
     .gte("sched_date", addDays(fromDate, -60))
     .lte("sched_date", addDays(fromDate, daysAhead));
   if (error) throw new Error(error.message);
-  const rows = (data || []) as { sched_date: string; end_date?: string | null; note?: string | null; start_time?: string | null; duration_min?: number | null; job_id?: string | null }[];
+  const rows = ((data || []) as { id?: string | number; sched_date: string; end_date?: string | null; note?: string | null; start_time?: string | null; duration_min?: number | null; job_id?: string | null }[])
+    .filter((r) => excludeId == null || String(r.id) !== String(excludeId));
   // Drop old single-day rows the look-back pulled in.
   const relevant = rows.filter((r) => (r.end_date && r.end_date > String(r.sched_date)) || String(r.sched_date) >= fromDate);
 

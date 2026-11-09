@@ -80,18 +80,20 @@ export function fmt12(hhmm: string): string {
 }
 
 /** The one validity rule for stored hours (jsonb or its JSON text). Bad
- *  windows (unparseable, end ≤ start) are dropped; nothing usable at all →
- *  the default hours, so a broken setting never shows "no times ever". */
+ *  windows (unparseable, end ≤ start) are dropped. Junk (not an object, or no
+ *  day keys at all) → the default hours. A real setting with every day closed
+ *  stays closed, so the owner can stop offering times without the switch. */
 export function readBookingHours(raw: unknown): BookingHours {
   let v: unknown = raw;
   if (typeof v === "string") { try { v = JSON.parse(v); } catch { v = null; } }
   if (!v || typeof v !== "object" || Array.isArray(v)) return DEFAULT_BOOKING_HOURS;
   const out: BookingHours = {};
-  let any = false;
+  let anyDay = false;
   for (let d = 0; d < 7; d++) {
     const day = (v as Record<string, unknown>)[String(d)];
     const wins: [Hhmm, Hhmm][] = [];
     if (Array.isArray(day)) {
+      anyDay = true;
       for (const w of day) {
         if (!Array.isArray(w) || w.length !== 2) continue;
         const a = toMin(String(w[0])), b = toMin(String(w[1]));
@@ -100,9 +102,8 @@ export function readBookingHours(raw: unknown): BookingHours {
     }
     wins.sort((x, y) => toMin(x[0]) - toMin(y[0]));
     out[String(d)] = wins;
-    if (wins.length) any = true;
   }
-  return any ? out : DEFAULT_BOOKING_HOURS;
+  return anyDay ? out : DEFAULT_BOOKING_HOURS;
 }
 
 /** Org row → settings with every default applied (missing columns = defaults). */
@@ -213,8 +214,9 @@ export function isSlotOpen(s: BookingSettings, visits: BusyVisit[], now: LocalNo
   return openSlots(s, visits, now).some((d) => d.date === date && d.slots.includes(fromMin(toMin(start))));
 }
 
-/** A schedule row → BusyVisit. The time comes from `start_time` when set,
- *  else from the "🕐 2:30pm" in the note (`parseTime` is day-plan's
+/** A schedule row → BusyVisit. The time comes from the "🕐 2:30pm" in the
+ *  note first, because Schedule and Dispatch retime a visit by rewriting the
+ *  note; `start_time` is only the fallback (`parseTime` is day-plan's
  *  parseSchedTime, injected to keep this file import-free). The length comes
  *  from `duration_min`, else the linked job's labor hours (one crew, capped
  *  at a workday), else the default appointment length. */
@@ -223,7 +225,10 @@ export function visitFromRow(
   parseTime: (note?: string | null) => string,
   jobHours?: number | null,
 ): BusyVisit {
-  const start = (row.start_time && Number.isFinite(toMin(row.start_time)) ? row.start_time : parseTime(row.note)) || null;
+  const fromNote = parseTime(row.note);
+  const raw = fromNote && Number.isFinite(toMin(fromNote)) ? fromNote
+    : row.start_time && Number.isFinite(toMin(row.start_time)) ? row.start_time : "";
+  const start = raw ? fromMin(toMin(raw)) : null;
   const dur = typeof row.duration_min === "number" && row.duration_min > 0
     ? row.duration_min
     : typeof jobHours === "number" && jobHours > 0 ? Math.min(600, Math.round(jobHours * 60)) : null;

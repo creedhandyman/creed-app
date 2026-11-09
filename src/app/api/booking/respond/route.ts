@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOwner, serviceClient } from "@/lib/api-auth";
 import { tryReadBlob } from "@/lib/job-blob";
 import { sendEmail } from "@/lib/email";
-import { fmt12, fmtDay, googleCalendarUrl, readBookingSettings } from "@/lib/booking";
+import { fmt12, fmtDay, fromMin, googleCalendarUrl, readBookingSettings, toMin } from "@/lib/booking";
+import { parseSchedTime } from "@/lib/day-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -40,14 +41,17 @@ export async function POST(req: NextRequest) {
 
   if (action === "confirm") {
     const note = String(row.note || "").replace("⏳ Online booking request", "✅ Booked online");
-    const { error: upErr } = await supabase.from("schedule")
+    const { data: upd, error: upErr } = await supabase.from("schedule")
       .update({ booking_status: "confirmed", note })
-      .eq("id", row.id).eq("booking_status", "requested");
+      .eq("id", row.id).eq("booking_status", "requested").select("id");
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
+    // Someone else answered it between our read and this write.
+    if (!upd?.length) return NextResponse.json({ error: "That booking was already answered." }, { status: 409 });
   } else {
-    const { error: delErr } = await supabase.from("schedule")
-      .delete().eq("id", row.id).eq("booking_status", "requested");
+    const { data: del, error: delErr } = await supabase.from("schedule")
+      .delete().eq("id", row.id).eq("booking_status", "requested").select("id");
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+    if (!del?.length) return NextResponse.json({ error: "That booking was already answered." }, { status: 409 });
   }
 
   // Record the answer on the lead (merged onto the server's current blob).
@@ -72,17 +76,20 @@ export async function POST(req: NextRequest) {
   // Confirmation email with an add-to-calendar link. Best-effort. A decline
   // sends nothing automatically — the owner calls or texts them personally.
   let emailed = false;
-  if (action === "confirm" && customerEmail && row.start_time) {
+  // The note's time wins: Schedule and Dispatch retime by rewriting the note.
+  const rawStart = parseSchedTime(row.note) || row.start_time || "";
+  const startTime = rawStart && Number.isFinite(toMin(rawStart)) ? fromMin(toMin(rawStart)) : "";
+  if (action === "confirm" && customerEmail && startTime) {
     const { data: org } = await supabase.from("organizations")
       .select("name, phone, booking_tz, booking_slot_min").eq("id", orgId).maybeSingle();
     const s = readBookingSettings(org as Record<string, unknown> | null);
     const name = String(org?.name || "");
     const date = String(row.sched_date).slice(0, 10);
-    const when = `${fmtDay(date)} at ${fmt12(row.start_time)}`;
+    const when = `${fmtDay(date)} at ${fmt12(startTime)}`;
     const cal = googleCalendarUrl({
       title: `${name} visit`,
       date,
-      start: row.start_time,
+      start: startTime,
       durationMin: row.duration_min || s.slotMin,
       tz: s.tz,
       location: String(row.job || ""),

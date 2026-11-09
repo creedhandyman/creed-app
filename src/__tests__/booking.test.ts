@@ -95,7 +95,13 @@ describe("readBookingHours", () => {
   it("falls back to the defaults for junk", () => {
     expect(readBookingHours(null)).toBe(DEFAULT_BOOKING_HOURS);
     expect(readBookingHours("not json")).toBe(DEFAULT_BOOKING_HOURS);
-    expect(readBookingHours({ "1": [["10:00", "09:00"]] })).toBe(DEFAULT_BOOKING_HOURS);
+    expect(readBookingHours({ foo: 1 })).toBe(DEFAULT_BOOKING_HOURS);
+  });
+  it("keeps every day closed when the owner closed them all", () => {
+    const closed = { "0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [] };
+    const h = readBookingHours(closed);
+    expect(Object.values(h).every((w) => w.length === 0)).toBe(true);
+    expect(openSlots({ ...base, hours: h }, [], { date: "2026-11-09", minutes: 0 })).toEqual([]);
   });
   it("keeps good windows, sorts them, drops bad ones", () => {
     const h = readBookingHours(JSON.stringify({ "6": [["13:00", "15:00"], ["8:00", "11:00"], ["x", "y"]] }));
@@ -119,8 +125,12 @@ describe("visitFromRow", () => {
     expect(visitFromRow({ sched_date: TUE, note: "🕐 2:30pm · AppFolio WO #1" }, parseSchedTime))
       .toEqual({ date: TUE, endDate: null, start: "14:30", durationMin: null });
   });
-  it("prefers start_time + duration_min, else the job's hours", () => {
-    expect(visitFromRow({ sched_date: TUE, note: "🕐 9:00", start_time: "13:30", duration_min: 90 }, parseSchedTime).start).toBe("13:30");
+  it("prefers the note's time (a retimed visit) over start_time", () => {
+    expect(visitFromRow({ sched_date: TUE, note: "🕐 9:00", start_time: "13:30", duration_min: 90 }, parseSchedTime).start).toBe("09:00");
+    expect(visitFromRow({ sched_date: TUE, note: "no time here", start_time: "13:30" }, parseSchedTime).start).toBe("13:30");
+  });
+  it("uses duration_min, else the job's hours", () => {
+    expect(visitFromRow({ sched_date: TUE, note: "🕐 9:00", duration_min: 90 }, parseSchedTime).durationMin).toBe(90);
     expect(visitFromRow({ sched_date: TUE, note: "🕐 9:00" }, parseSchedTime, 1.5).durationMin).toBe(90);
   });
 });

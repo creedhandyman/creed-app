@@ -55,7 +55,7 @@ export default function BookingRequests({ schedule }: { schedule: ScheduleEntry[
         {requests.length === 1 ? "1 online booking to confirm" : `${requests.length} online bookings to confirm`}
       </div>
       {requests.map((e) => {
-        const start = e.start_time || parseSchedTime(e.note);
+        const start = parseSchedTime(e.note) || e.start_time;
         const who = (e.note || "").split("⏳ Online booking request ·")[1]?.trim() || "";
         return (
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid var(--color-border-dark-2)", flexWrap: "wrap" }}>

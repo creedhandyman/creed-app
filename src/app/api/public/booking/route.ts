@@ -127,6 +127,22 @@ export async function POST(req: NextRequest) {
     const scheduleId = hold.id;
     const releaseHold = async () => { await supabase.from("schedule").delete().eq("id", scheduleId); };
 
+    // The unique index only stops two holds at the SAME start. Two requests at
+    // overlapping starts (1:30 and 2:00) can both pass the check above, so
+    // check again now that our hold is written, against everything but it.
+    // If both collide, both give the time back; neither customer is booked
+    // into a double.
+    try {
+      const others = await loadBusyVisits(supabase, orgId, now.date, s.daysAhead, scheduleId);
+      if (!isSlotOpen(s, others, now, date, start)) {
+        await releaseHold();
+        return NextResponse.json({ error: "Sorry, that time was just taken. Please pick another.", taken: true }, { status: 409 });
+      }
+    } catch (e) {
+      await releaseHold().catch(() => {});
+      throw e;
+    }
+
     try {
       // 2) Customer — same match rule as /api/leads: phone, then email.
       let customerId: string | null = null;
