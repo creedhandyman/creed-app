@@ -354,6 +354,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   to set on the Messaging Service: incoming → `/api/sms/inbound`, status
   callbacks are requested per message → `/api/sms/status` (both check
   X-Twilio-Signature against `TWILIO_AUTH_TOKEN` and the `siteOrigin()` URL).
+  The job card's Text chip and the Message customer button use the same
+  switch (`auto_sms_enroute`): when on, their send strip gets a Send text
+  button that POSTs `/api/sms` `{ jobId, kind: "message", recipient:
+  "client" | "resident", body }`; the server looks the number up on the job
+  (`pickedRecipient`), checks STOP and logs `kind = 'message'`. Off = the
+  strip opens the phone's Messages as before. Send quote / Follow up / Send
+  invoice still open Messages.
 
 - AI usage logging (Phase 0 cost measurement — `/api/ai` writes one row per call):
   ```sql

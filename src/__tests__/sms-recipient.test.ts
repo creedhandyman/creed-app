@@ -1,4 +1,4 @@
-import { isPropertyManager, textRecipient } from "../lib/sms-recipient";
+import { isPropertyManager, pickedRecipient, textRecipient } from "../lib/sms-recipient";
 
 const blob = (o: Record<string, unknown>) => JSON.stringify({ rooms: [], ...o });
 const pmCo = { type: "property_manager", name: "Keyrenter Wichita", phone: "316-555-0100", email: "pm@example.com" };
@@ -54,5 +54,27 @@ describe("textRecipient", () => {
     const r = textRecipient("enroute", { rooms: null }, { type: "individual", name: "No Phone" });
     expect(r).toMatchObject({ ok: false, reason: "no_customer_phone" });
     expect(textRecipient("enroute", { rooms: null }, null)).toMatchObject({ ok: false, reason: "no_customer_phone" });
+  });
+});
+
+describe("pickedRecipient (Text chip / Message customer)", () => {
+  const job = { rooms: blob({ residentName: "Maria Lopez", residentPhone: "316 555 0142" }), client: "Jane" };
+
+  it("texts the linked customer for the client pick", () => {
+    expect(pickedRecipient("client", job, homeowner)).toEqual({ ok: true, phone: "+13165550199", name: "Jane Smith", role: "customer" });
+    expect(pickedRecipient("client", job, pmCo)).toMatchObject({ ok: true, phone: "+13165550100", role: "property_manager" });
+  });
+
+  it("texts the resident on file for the resident pick", () => {
+    expect(pickedRecipient("resident", job, pmCo)).toEqual({ ok: true, phone: "+13165550142", name: "Maria Lopez", role: "resident" });
+  });
+
+  it("sends nothing when the picked contact has no number", () => {
+    const r = pickedRecipient("resident", { rooms: null }, homeowner);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("no_resident_phone");
+    const c = pickedRecipient("client", job, { type: "individual", name: "No Phone" });
+    expect(c.ok).toBe(false);
+    if (!c.ok) expect(c.reason).toBe("no_customer_phone");
   });
 });
