@@ -63,6 +63,15 @@ export interface Organization {
   sms_terms_url?: string;
   site_published?: boolean;
   site_slug?: string;
+  /** Online booking (/book/[slug]). OFF by default. The rest of the
+   *  booking_* settings are read through lib/booking.ts readBookingSettings. */
+  booking_enabled?: boolean;
+  booking_hours?: unknown;           // jsonb {"0".."6": [["HH:MM","HH:MM"], …]}
+  booking_slot_min?: number;         // default 120
+  booking_buffer_min?: number;       // default 30
+  booking_min_notice_hours?: number; // default 24
+  booking_days_ahead?: number;       // default 21
+  booking_tz?: string;               // default America/Chicago
   trip_fee?: number;
   /** Org-wide minimum billable labor hours per quote. If the sum of all
    *  line-item hours falls below this, the quote bills at
@@ -408,6 +417,12 @@ export interface ScheduleEntry {
    *  the `job` address text. */
   job_id?: string | null;
   note: string;
+  /** "HH:MM" 24h. Only online bookings write it so far; everything else
+   *  keeps the time in the note ("🕐 13:30"). */
+  start_time?: string | null;
+  duration_min?: number | null;
+  /** Online booking hold: "requested" until the owner confirms. */
+  booking_status?: "requested" | "confirmed" | null;
   created_at?: string;
 }
 

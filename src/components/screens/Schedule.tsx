@@ -6,6 +6,7 @@ import { db } from "@/lib/supabase";
 import { peekNavIntent, clearNavIntent, goWithIntent } from "@/lib/nav-intent";
 import { parseSchedTime, parseSchedCrew, entryJob, isJobScheduled } from "@/lib/day-plan";
 import { stripNoteParts } from "@/lib/dispatch-week";
+import BookingRequests from "@/components/BookingRequests";
 import type { ScheduleEntry } from "@/lib/types";
 import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
@@ -444,6 +445,9 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
           <button onClick={() => stepView(1)} aria-label={t("sched.next")} style={{ width: 34, height: 34, borderRadius: 8, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark-2)", color: "var(--color-dim)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Icon name="next" size={14} /></button>
         </div>
       } />
+
+      {/* Online booking requests waiting on a Confirm / Decline. */}
+      {isAdmin && <BookingRequests schedule={schedule} />}
 
       {/* Property typeahead — searches scheduled entries by job address.
           Selecting a suggestion jumps the calendar to that entry's date

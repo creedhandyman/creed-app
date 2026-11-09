@@ -495,6 +495,27 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `/api/portal/me` selects so the customer's downloaded copy matches. Until the
   migration runs, saving toasts "column does not exist" (best-effort) but the
   PDF falls back to 50% / 30 days.
+- Online booking (**NOT yet run in prod**, file
+  `supabase/migrations/20261109190000_online_booking.sql`, idempotent): org
+  `booking_enabled` (default FALSE) + `booking_hours` jsonb (weekday "0"–"6" →
+  [["HH:MM","HH:MM"]…], default Mon–Fri 9:30–12 + 1:30–6) + `booking_slot_min`
+  120 / `booking_buffer_min` 30 / `booking_min_notice_hours` 24 /
+  `booking_days_ahead` 21 / `booking_tz` America/Chicago; schedule
+  `start_time` TEXT, `duration_min` INT, `booking_status`
+  ('requested'|'confirmed'|NULL) + a partial unique index (org, day, start)
+  on booking rows. Public page `/book/[slug]` → `/api/public/booking`
+  (GET open times, POST a request: holds the slot as a `requested` schedule
+  row FIRST, then customer/address/job with status **lead** — same shape as
+  /api/leads, `rooms.booking` records the ask — plus the owner alert and a
+  "request received" email). Owner answers on the Schedule
+  (`components/BookingRequests.tsx` → `/api/booking/respond`, owner/manager):
+  Confirm keeps the time + emails a Google Calendar link, Decline deletes the
+  hold; the job stays a lead either way. Slot math lives ONLY in
+  `lib/booking.ts` (tested): one crew per business, a visit must fit inside one
+  work window (lunch never booked), untimed or multi-day visits block the whole
+  day, times fall back to the note's 🕐 when `start_time` is empty (no
+  backfill). Settings card: `components/BookingSettings.tsx` (Ops → Settings).
+  Texting / deposit hooks are marked `HOOK(texting)` / `HOOK(payments)`.
 - Schedule ↔ job link (**ALREADY RUN in prod 2026-10-02**, migration
   `schedule_job_id`, backfilled to the latest job at that address created on/
   before the entry's date): `ALTER TABLE schedule ADD COLUMN job_id uuid;`.

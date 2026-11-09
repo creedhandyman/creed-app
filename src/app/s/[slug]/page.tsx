@@ -107,6 +107,11 @@ export default function SlugSitePage() {
               <Icon name="phone" size={18} color="#fff" /> Call Now
             </a>
           )}
+          {org.booking_enabled === true && slug && (
+            <a href={`/book/${slug}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 28px", borderRadius: 12, fontSize: 17, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".04em", background: "transparent", color: pc, textDecoration: "none", border: `1px solid ${pc}` }}>
+              <Icon name="schedule" size={18} color={pc} /> Book Online
+            </a>
+          )}
           <a href={`/review?org=${org.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 28px", borderRadius: 12, fontSize: 17, fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: ".04em", background: "transparent", color: pc, textDecoration: "none", border: `1px solid ${pc}` }}>
             <Icon name="star" size={18} color={pc} /> Leave a Review
           </a>

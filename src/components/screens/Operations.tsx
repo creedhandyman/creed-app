@@ -19,6 +19,7 @@ import { goWithIntent } from "@/lib/nav-intent";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
+import BookingSettings from "../BookingSettings";
 
 /**
  * Catches render-time crashes inside an Ops sub-tab so the whole tab
@@ -421,6 +422,9 @@ function OpsSettings() {
           <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>Added as extra lines at the bottom of every quote PDF.</div>
         </div>
       </div>
+
+      {/* Online booking — public /book/[slug] page, OFF by default. */}
+      <BookingSettings org={org} saveOrg={saveOrg} />
 
       {/* Trade Rates */}
       <div className="cd mb">
