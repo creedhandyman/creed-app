@@ -16,15 +16,25 @@
  * The customer's phone comes from the linked Customer (job.customer_id). With
  * no phone on file the buttons disable with an explanatory tooltip.
  *
- * Property-manager jobs: when the job has a resident/tenant contact on file
- * (rooms blob, lib/resident) with their own phone, a "Send to" chip row in
- * the popup switches the text between the client (PM) and the tenant — each
- * gets a correctly-addressed message, sent separately. Tenant variants never
- * include the total or the status/pay link (pricing is the PM's business).
+ * Property-manager jobs (customer type property_manager): these visit texts
+ * go to the RESIDENT on file (rooms blob, lib/resident), never the property
+ * manager (lib/sms-recipient). No resident number = the buttons are disabled
+ * with a note to add one. Resident texts never include the total or the
+ * status/pay link (pricing is the PM's business). Other jobs with a separate
+ * tenant phone keep the "Send to" chip row in the native-Messages mode.
+ *
+ * Business number: when the owner turns on "Text from the business number"
+ * (organizations.auto_sms_enroute, Operations → Settings) the popup's main
+ * button sends through Twilio via /api/sms with just the job + kind + the
+ * edited draft; the server picks the number, skips anyone who replied STOP
+ * and logs it. Open Messages / Copy stay as the fallback.
  */
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { residentContact } from "@/lib/resident";
+import { isPropertyManager, type RecipientRole } from "@/lib/sms-recipient";
+import { textBody } from "@/lib/sms-templates";
+import { apiFetch } from "@/lib/api";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 
@@ -54,18 +64,24 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
   const showToast = useStore((s) => s.showToast);
 
   const customer = job?.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
-  const clientPhone = customer?.phone || "";
-  // Tenant/resident contact from the job blob — only a separate recipient
-  // when they have their OWN phone (same number = same person, no chips).
+  const pm = isPropertyManager(customer);
+  // Visit texts on a property-manager job never go to the manager.
+  const clientPhone = pm ? "" : customer?.phone || "";
+  // Tenant/resident contact from the job blob. On a PM job it's the only
+  // recipient; elsewhere it's a separate chip only when they have their OWN
+  // phone (same number = same person, no chips).
   const res = job ? residentContact(job.rooms) : { name: "", phone: "", email: "" };
-  const tenantPhone =
-    res.phone && res.phone.replace(/[^\d]/g, "") !== clientPhone.replace(/[^\d]/g, "") ? res.phone : "";
+  const tenantPhone = pm
+    ? res.phone
+    : res.phone && res.phone.replace(/[^\d]/g, "") !== clientPhone.replace(/[^\d]/g, "") ? res.phone : "";
   const orgName = org?.name || "us";
+  const businessSend = org?.auto_sms_enroute === true;
+  const [sending, setSending] = useState(false);
 
   const [open, setOpen] = useState<TemplateKey | null>(null);
   const [lateMinutes, setLateMinutes] = useState<number>(15);
   const [draft, setDraft] = useState("");
-  const [to, setTo] = useState<"client" | "tenant">("client");
+  const [to, setTo] = useState<"client" | "tenant">(pm ? "tenant" : "client");
   const phone = to === "tenant" ? tenantPhone : clientPhone;
 
   const statusUrl = useMemo(() => {
@@ -73,33 +89,24 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
     return `${window.location.origin}/status?job=${job.id}`;
   }, [job]);
 
+  // Same words the server and timers use (lib/sms-templates).
   const buildTemplate = (kind: TemplateKey, minutes: number, recipient: "client" | "tenant"): string => {
     if (!job) return "";
-    const greet = (recipient === "tenant" ? res.name : job.client || customer?.name || "").split(/\s+/)[0] || "";
-    const helloLine = greet ? `Hi ${greet}! ` : "";
-    if (kind === "enroute") {
-      // Tenant variant skips the status link — that page shows the quote
-      // total, which is between the contractor and the paying client.
-      return recipient === "tenant"
-        ? `${helloLine}This is ${orgName} — we're on our way to ${job.property}.`
-        : `${helloLine}This is ${orgName} — we're on our way to ${job.property}. ` +
-          `Track your job: ${statusUrl}`;
-    }
-    if (kind === "late") {
-      return (
-        `${helloLine}Quick heads-up from ${orgName} — we're running about ` +
-        `${minutes} minutes late to ${job.property}. Thanks for your patience!`
-      );
-    }
-    return recipient === "tenant"
-      ? `${helloLine}Work at ${job.property} is complete — thanks for having us! — ${orgName}`
-      : `${helloLine}Work at ${job.property} is complete. ` +
-        `Total: $${(job.total || 0).toFixed(2)}. View & pay: ${statusUrl}`;
+    const role: RecipientRole = recipient === "tenant" ? "resident" : pm ? "property_manager" : "customer";
+    return textBody(kind, {
+      role,
+      name: recipient === "tenant" ? res.name : job.client || customer?.name || "",
+      business: orgName,
+      property: job.property,
+      minutes,
+      amount: job.total || 0,
+      link: statusUrl,
+    });
   };
 
   const openTemplate = (k: TemplateKey) => {
     if (!clientPhone && !tenantPhone) {
-      showToast("No phone on file for this customer", "warning");
+      showToast(pm ? "No resident number on this job" : "No phone on file for this customer", "warning");
       return;
     }
     // Keep the current recipient when they have a phone; else fall back to
@@ -119,6 +126,32 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
   // and Android. Number is stripped to digits/+ so punctuation can't break it.
   const smsHref = (text: string) => `sms:${phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(text)}`;
 
+  // Send through Twilio from the business number. The server picks the
+  // recipient from the job (resident on PM jobs), never from this screen.
+  const sendFromBusiness = async () => {
+    if (!open || sending) return;
+    setSending(true);
+    try {
+      const r = await apiFetch("/api/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, kind: open, body: draft, minutes: lateMinutes }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        showToast(data?.error || "Text didn't send", "error");
+        return;
+      }
+      const who = (data?.name || "").split(/\s+/)[0];
+      showToast(who ? `Texted ${who}` : "Text sent", "success");
+      setOpen(null);
+    } catch {
+      showToast("Text didn't send. Check your connection.", "error");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const copyMsg = async () => {
     try {
       await navigator.clipboard.writeText(draft);
@@ -133,7 +166,9 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
   const anyPhone = clientPhone || tenantPhone;
   const noPhoneTitle = anyPhone
     ? undefined
-    : "No phone on file — link a customer with a phone number to enable.";
+    : pm
+      ? "No resident number on this job. Add the resident phone on this job to enable."
+      : "No phone on file — link a customer with a phone number to enable.";
 
   const renderTrigger = (a: (typeof ACTIONS)[number]) => {
     const active = open === a.key;
@@ -229,7 +264,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
           ))}
         </div>
       )}
-      {clientPhone && tenantPhone ? (
+      {!businessSend && clientPhone && tenantPhone ? (
         // PM job with a tenant on file: pick who this update goes to. Each
         // recipient gets their own correctly-addressed text, sent separately
         // (never a group thread between the manager and the tenant).
@@ -260,7 +295,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         </div>
       ) : null}
       <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
-        To {phone} · edit before sending if needed
+        To {to === "tenant" && res.name ? `${res.name.split(/\s+/)[0]} (resident) · ` : ""}{phone} · edit before sending if needed
       </div>
       <textarea
         value={draft}
@@ -279,10 +314,21 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         }}
       />
       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        {businessSend && (
+          <button
+            type="button"
+            className="bb"
+            disabled={sending || !draft.trim()}
+            onClick={sendFromBusiness}
+            style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
+          >
+            <Icon name="send" size={15} color="#fff" /> {sending ? "Sending…" : "Send text"}
+          </button>
+        )}
         <a
           href={smsHref(draft)}
           onClick={() => setOpen(null)}
-          className="bb"
+          className={businessSend ? "bo" : "bb"}
           style={{
             flex: 1,
             textAlign: "center",
@@ -294,7 +340,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
             fontSize: 14,
           }}
         >
-          <Icon name="send" size={15} color="#fff" /> Open Messages
+          {businessSend ? "Messages" : <><Icon name="send" size={15} color="#fff" /> Open Messages</>}
         </a>
         <button type="button" className="bo" onClick={copyMsg} style={{ fontSize: 14 }}>
           Copy
@@ -310,7 +356,9 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         </button>
       </div>
       <div className="dim" style={{ fontSize: 11.5, marginTop: 7, lineHeight: 1.4 }}>
-        Opens your phone&apos;s Messages with the text ready — it sends from your number, so replies come to you.
+        {businessSend
+          ? "Send text goes from your business number. Replies show up in your notifications."
+          : "Opens your phone's Messages with the text ready. It sends from your number, so replies come to you."}
       </div>
     </div>
   ) : null;
@@ -323,6 +371,11 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         </div>
       )}
       <div style={{ display: "flex", gap: 6 }}>{ACTIONS.map(renderTrigger)}</div>
+      {pm && !tenantPhone && variant === "grid" && (
+        <div style={{ fontSize: 12.5, color: "var(--color-warning)" }}>
+          No resident number on this job, so these texts are off. Property managers aren&apos;t texted for visits.
+        </div>
+      )}
       {popup}
     </div>
   );

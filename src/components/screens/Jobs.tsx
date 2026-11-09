@@ -29,6 +29,7 @@ import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours } from "@/lib/dates";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes, cityContext } from "@/lib/geo";
 import { residentContact } from "@/lib/resident";
+import { isPropertyManager } from "@/lib/sms-recipient";
 import {
   CADENCES,
   CADENCE_LABELS,
@@ -634,7 +635,10 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
 
   // Client + (optional) tenant recipient list for the send strip. The tenant
   // only becomes a separate chip when they have their OWN phone number.
-  const stripRecipients = (job: Job, clientMsg: string): { label: string; phone: string; msg: string }[] => {
+  // visit: an on-the-way / scheduled / done update. On a property-manager job
+  // those go to the resident first (lib/sms-recipient's rule); money texts
+  // (quote, invoice) keep the paying client first.
+  const stripRecipients = (job: Job, clientMsg: string, visit = false): { label: string; phone: string; msg: string }[] => {
     const cust = job.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
     const clientPhone = cust?.phone || "";
     const list = [{ label: (job.client || cust?.name || "Client").split(/\s+/).slice(0, 2).join(" "), phone: clientPhone, msg: clientMsg }];
@@ -646,6 +650,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         msg: tenantUpdateMsg(job, res.name),
       });
     }
+    if (visit && list.length > 1 && isPropertyManager(cust)) list.reverse();
     return list;
   };
 
@@ -705,8 +710,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       default:
         msg = `Hi ${name}! Here's an update on your job at ${prop}:${url ? ` ${url}` : ""}`;
     }
-    const recipients = stripRecipients(job, msg);
-    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg, kind: job.status === "quoted" ? "quote" : undefined, recipients, to: 0 });
+    const visit = job.status === "scheduled" || job.status === "active" || job.status === "complete";
+    const recipients = stripRecipients(job, msg, visit);
+    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: job.status === "quoted" ? "quote" : undefined, recipients, to: 0 });
   };
 
   // Paid-to-date / balance — what the customer actually still owes.

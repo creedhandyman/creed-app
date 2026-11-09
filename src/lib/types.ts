@@ -86,6 +86,13 @@ export interface Organization {
   review_request_enabled?: boolean;
   /** Auto-follow-up on unanswered quotes (cron /api/quotes/followup). Opt-in. */
   quote_followup_enabled?: boolean;
+  /** Automatic customer texts (Twilio). All opt-in, OFF by default:
+   *  On the way / Running late / Job done send from the business number;
+   *  day-before visit reminders (cron /api/sms/reminders); unpaid invoice
+   *  reminders (cron /api/invoices/reminders). */
+  auto_sms_enroute?: boolean;
+  auto_sms_reminder?: boolean;
+  auto_sms_invoice?: boolean;
   review_request_delay_hours?: number;        // default 24
   review_request_channel?: "sms" | "email" | "both"; // default "sms"
   /** Custom template. Supports {customer_name}, {business_name},
