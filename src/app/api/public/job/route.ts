@@ -84,7 +84,15 @@ export async function GET(req: NextRequest) {
         const { data: sw, error: swErr } = await supabase
           .from("organizations").select("tips_enabled").eq("id", job.org_id).maybeSingle();
         if (!swErr && sw) tips_enabled = sw.tips_enabled === true;
-        org = { ...rest, privacy_url, sms_terms_url, tips_enabled };
+        // Card on file: offer "save my card" only when the business turned it
+        // on and the job is linked to a customer record to save it on.
+        let card_on_file_enabled = false;
+        if (job.customer_id) {
+          const { data: cof, error: cofErr } = await supabase
+            .from("organizations").select("card_on_file_enabled").eq("id", job.org_id).maybeSingle();
+          if (!cofErr && cof) card_on_file_enabled = cof.card_on_file_enabled === true;
+        }
+        org = { ...rest, privacy_url, sms_terms_url, tips_enabled, card_on_file_enabled };
       }
     }
 

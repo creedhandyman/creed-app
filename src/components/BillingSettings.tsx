@@ -411,7 +411,7 @@ function CheckoutOptions({ org, setOrg }: { org: Organization; setOrg: (o: Organ
     const orgs = await db.get<Organization>("organizations", { id: org.id });
     if (orgs.length) setOrg(orgs[0]);
   };
-  const row = (key: "ach_enabled" | "tips_enabled", label: string, help: string) => (
+  const row = (key: "ach_enabled" | "tips_enabled" | "card_on_file_enabled", label: string, help: string) => (
     <div style={{ marginTop: 12 }}>
       <label className="row" style={{ gap: 8, cursor: "pointer" }}>
         <input
@@ -430,6 +430,7 @@ function CheckoutOptions({ org, setOrg }: { org: Organization; setOrg: (o: Organ
       <div style={{ fontSize: 14, fontWeight: 600 }}>{t("billing.checkoutOptions")}</div>
       {row("ach_enabled", t("billing.achToggle"), t("billing.achHelp"))}
       {row("tips_enabled", t("billing.tipsToggle"), t("billing.tipsHelp"))}
+      {row("card_on_file_enabled", t("billing.cardOnFileToggle"), t("billing.cardOnFileHelp"))}
     </div>
   );
 }

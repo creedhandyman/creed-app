@@ -6,6 +6,7 @@ import { visitCadence } from "@/lib/memberships";
 import { fulfillJobPayment, paymentFromCheckoutSession, recordJobRefund } from "@/lib/payment-fulfillment";
 import { stripeExcessRefunder } from "@/lib/stripe-refund";
 import { notifyBankPayment } from "@/lib/bank-payment-notify";
+import { saveCardFromCheckout } from "@/lib/payments/saved-card";
 import { findOrgIdForSub, orgUpdateFromSubscription } from "@/lib/stripe-subscription";
 
 export const dynamic = "force-dynamic";
@@ -196,6 +197,8 @@ export async function POST(req: NextRequest) {
           // Unknown job / org mismatch => silently skipped, as before.
           const failed = await fulfillCheckoutJobPayment(session, stripe);
           if (failed) return failed;
+          // "Save my card" ticked: keep the card on the customer (best-effort).
+          await saveCardFromCheckout(supabase, stripe, session);
         } else if (meta.job_id && session.payment_status === "unpaid") {
           // Bank transfer (ACH): the customer authorized it but the money takes
           // a few business days to clear. Nothing is recorded on the job yet —

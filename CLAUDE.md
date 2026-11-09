@@ -1089,6 +1089,35 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   "Bank payment started", and the ledger row lands on
   async_payment_succeeded (a failure alerts "Bank payment failed").
 
+- Card on file (`supabase/migrations/20261109130000_card_on_file.sql`):
+  ```sql
+  ALTER TABLE organizations ADD COLUMN IF NOT EXISTS card_on_file_enabled BOOLEAN NOT NULL DEFAULT false;
+  ALTER TABLE customers ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+  ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_payment_method_id TEXT;
+  ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_brand TEXT;
+  ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_last4 TEXT;
+  ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_exp TEXT;
+  ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_saved_at TIMESTAMPTZ;
+  ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_consent JSONB;
+  ```
+  Switch: Ops → Billing & Payments → Checkout options ("Let customers save a
+  card for later"), default OFF. With it on, a job linked to a customer record
+  shows an unticked "save my card" box on the /status pay card; ticking it adds
+  `setup_future_usage: off_session` on the CARD option only (never a bank
+  account) and a platform-account Stripe Customer. The webhook's
+  checkout.session.completed stores brand / last 4 / expiry + the consent
+  text (lib/payments/saved-card.ts `saveCardFromCheckout`). The job screen then
+  shows "Charge Visa ••4242" (owner/manager, confirm dialog) →
+  `/api/payments/charge-saved`: off-session destination charge for the live
+  balance, platform fee with the monthly cap (lib/payments/fee-cap.ts, shared
+  with /api/checkout), idempotency key per (job, amount, paid-to-date),
+  recorded through fulfillJobPayment with the PaymentIntent id as the ledger
+  session id. A decline / authentication_required returns a plain message
+  pointing to a pay link; nothing retries on its own. Removal: the job screen
+  (`DELETE /api/payments/saved-card`) or the customer portal
+  (`DELETE /api/portal/saved-card`), both detach the card in Stripe. No
+  automatic charging on completion yet.
+
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices.)
 

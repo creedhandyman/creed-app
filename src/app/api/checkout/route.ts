@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
-import { computePlatformFee, currentPeriodStart } from "@/lib/platform-fee";
+import { platformFeeFor } from "@/lib/payments/fee-cap";
+import { CARD_CONSENT_VERSION } from "@/lib/payments/saved-card";
 import {
   checkoutCancelUrl,
   checkoutExpiresAt,
@@ -30,7 +31,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: NextRequest) {
   try {
-    const { jobId, amount, tipPct } = await req.json();
+    const { jobId, amount, tipPct, saveCard } = await req.json();
     if (!jobId) {
       return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
     }
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     const supabase = serviceClient();
     const { data: job, error: jobErr } = await supabase
       .from("jobs")
-      .select("id, total, property, client, org_id, status")
+      .select("id, total, property, client, org_id, status, customer_id")
       .eq("id", jobId)
       .single();
     if (jobErr || !job) {
@@ -91,6 +92,25 @@ export async function POST(req: NextRequest) {
         tipsEnabled = sw.tips_enabled === true;
       }
     }
+    // Card on file: its own best-effort read (its own migration), and only for
+    // a job linked to a customer record the card can be saved on.
+    let saveCardFor: { customerId: string; stripeCustomerId: string | null; consentVersion: string } | null = null;
+    if (saveCard === true && job.customer_id) {
+      const { data: cof, error: cofErr } = await supabase
+        .from("organizations").select("card_on_file_enabled").eq("id", job.org_id).maybeSingle();
+      if (!cofErr && cof?.card_on_file_enabled === true) {
+        const { data: cust, error: custErr } = await supabase
+          .from("customers").select("id, stripe_customer_id")
+          .eq("id", job.customer_id).eq("org_id", job.org_id).maybeSingle();
+        if (!custErr && cust) {
+          saveCardFor = {
+            customerId: cust.id,
+            stripeCustomerId: cust.stripe_customer_id || null,
+            consentVersion: CARD_CONSENT_VERSION,
+          };
+        }
+      }
+    }
     const orgName = org?.name || "Service Provider";
     const stripeAccountId = org?.stripe_account_id || "";
     // No payout account = the charge would land on Creed's platform account,
@@ -103,41 +123,8 @@ export async function POST(req: NextRequest) {
     }
     const plan = org?.subscription_plan ?? null;
 
-    // ── Platform fee (capped monthly sum, computed stateless) ────────────────
-    // Sum platform fees already confirmed this calendar month. If the
-    // platform_fee_cents / paid_at columns don't exist yet (migration pending),
-    // we fall back to 0 — fee still applies, just without cap enforcement.
-    let feesCollectedCents = 0;
-    try {
-      const periodStart = currentPeriodStart();
-      // Sum fees from the PAYMENTS LEDGER for this period. This captures fees on
-      // DEPOSITS too — a deposit's job isn't status='paid' yet, so the old
-      // jobs.status='paid' query missed those fees and let the monthly cap be
-      // exceeded. Refunds set their charge row's fee to 0/prorated, so the sum
-      // self-corrects. Falls back to the paid-jobs sum pre-migration.
-      const { data: payRows, error: payErr } = await supabase
-        .from("payments")
-        .select("platform_fee_cents")
-        .eq("org_id", job.org_id)
-        .gte("created_at", periodStart.toISOString());
-      if (!payErr && payRows) {
-        feesCollectedCents = payRows.reduce((sum, r) => sum + (Number(r.platform_fee_cents) || 0), 0);
-      } else {
-        const { data: capRows } = await supabase
-          .from("jobs")
-          .select("platform_fee_cents")
-          .eq("org_id", job.org_id)
-          .eq("status", "paid")
-          .gte("paid_at", periodStart.toISOString())
-          .not("platform_fee_cents", "is", null);
-        feesCollectedCents = (capRows ?? []).reduce((sum, r) => sum + (Number(r.platform_fee_cents) || 0), 0);
-      }
-    } catch {
-      // Migration hasn't run yet — proceed without cap enforcement.
-    }
-
-    const platformFeeCents = computePlatformFee(amountCents, plan, feesCollectedCents);
-    // ────────────────────────────────────────────────────────────────────────
+    // Platform fee on the job amount, with the monthly cap (lib/payments/fee-cap.ts).
+    const platformFeeCents = await platformFeeFor(supabase, job.org_id, plan, amountCents);
 
     // Tip: only a percent from the picker, only where lib/tips.ts allows it.
     const tipCents = tipAllowed({ tipsEnabled, jobStatus: job.status, payAmount, balance })
@@ -159,6 +146,7 @@ export async function POST(req: NextRequest) {
       platformFeeCents,
       kind: paymentKind,
       allowBankTransfer: achEnabled,
+      saveCard: saveCardFor,
       // session_id lets /payment/success verify server-side before flipping status.
       successUrl: `${origin}/payment/success?job_id=${job.id}&session_id={CHECKOUT_SESSION_ID}`,
       // Cancelling returns the customer to the job page they paid from (the
