@@ -71,3 +71,38 @@ export function textRecipient(
     role: pm ? "property_manager" : "customer",
   };
 }
+
+/**
+ * A free-form job message (the job card's Text chip and the Message customer
+ * button). The owner picks WHO in the send strip ("client" = the linked
+ * customer, "resident" = the resident on file), but the number always comes
+ * from the job itself, never from the screen, so a text can only reach a
+ * contact already on that job.
+ */
+export type MessagePick = "client" | "resident";
+
+export function pickedRecipient(
+  pick: MessagePick,
+  job: { rooms: unknown; client?: string | null },
+  customer: RecipientCustomer | null | undefined,
+): Recipient {
+  if (pick === "resident") {
+    const res = residentContact(job.rooms);
+    const phone = normalizePhone(res.phone);
+    if (!phone) {
+      return { ok: false, reason: "no_resident_phone", message: "No resident number on this job." };
+    }
+    return { ok: true, phone, name: res.name, role: "resident" };
+  }
+  const pm = isPropertyManager(customer);
+  const phone = normalizePhone(customer?.phone);
+  if (!phone) {
+    return { ok: false, reason: "no_customer_phone", message: "No phone number on this customer." };
+  }
+  return {
+    ok: true,
+    phone,
+    name: (pm ? customer?.name : customer?.name || job.client) || "",
+    role: pm ? "property_manager" : "customer",
+  };
+}

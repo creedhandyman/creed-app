@@ -58,7 +58,8 @@ export interface LoggedSmsInput {
   jobId?: string | null;
   to: string;
   body: string;
-  kind: SmsKind;
+  /** "message" = a free-form text from the Text chip / Message customer. */
+  kind: SmsKind | "message";
   role: RecipientRole;
   /** Profile id of the person who tapped send (null for the timers). */
   sentBy?: string | null;

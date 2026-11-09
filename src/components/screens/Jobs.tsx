@@ -29,7 +29,7 @@ import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours } from "@/lib/dates";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes, cityContext } from "@/lib/geo";
 import { residentContact } from "@/lib/resident";
-import { isPropertyManager } from "@/lib/sms-recipient";
+import { isPropertyManager, type MessagePick } from "@/lib/sms-recipient";
 import {
   CADENCES,
   CADENCE_LABELS,
@@ -349,10 +349,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // PM jobs with a tenant on file get `recipients` (client + tenant, each
   // with its own pre-addressed message) and a "Send to" chip row; `to` is
   // the active index. Switching recipients replaces the draft.
+  // business: opened from the Text chip or Message customer. With the org's
+  // "Text from the business number" switch on, the strip's main button sends
+  // through Twilio (/api/sms, kind "message") instead of opening Messages.
+  // Each recipient's `pick` tells the server which job contact it is; the
+  // server looks the number up itself.
   const [sendStrip, setSendStrip] = useState<{
     jobId: string; phone: string; msg: string; kind?: "invoice" | "quote";
-    recipients?: { label: string; phone: string; msg: string }[]; to?: number;
+    recipients?: { label: string; phone: string; msg: string; pick: MessagePick }[]; to?: number;
+    business?: boolean;
   } | null>(null);
+  const [stripSending, setStripSending] = useState(false);
   // Bring a freshly opened send strip into view (it sits under the CTA, which
   // may be scrolled off on a long detail screen).
   const sendStripRef = useRef<HTMLDivElement>(null);
@@ -638,16 +645,19 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // visit: an on-the-way / scheduled / done update. On a property-manager job
   // those go to the resident first (lib/sms-recipient's rule); money texts
   // (quote, invoice) keep the paying client first.
-  const stripRecipients = (job: Job, clientMsg: string, visit = false): { label: string; phone: string; msg: string }[] => {
+  const stripRecipients = (job: Job, clientMsg: string, visit = false): { label: string; phone: string; msg: string; pick: MessagePick }[] => {
     const cust = job.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
     const clientPhone = cust?.phone || "";
-    const list = [{ label: (job.client || cust?.name || "Client").split(/\s+/).slice(0, 2).join(" "), phone: clientPhone, msg: clientMsg }];
+    const list: { label: string; phone: string; msg: string; pick: MessagePick }[] = [
+      { label: (job.client || cust?.name || "Client").split(/\s+/).slice(0, 2).join(" "), phone: clientPhone, msg: clientMsg, pick: "client" },
+    ];
     const res = residentContact(job.rooms);
     if (res.phone && res.phone.replace(/[^\d]/g, "") !== clientPhone.replace(/[^\d]/g, "")) {
       list.push({
         label: res.name ? `${t("jobs.tenantLabel")} · ${res.name.split(/\s+/)[0]}` : t("jobs.tenantLabel"),
         phone: res.phone,
         msg: tenantUpdateMsg(job, res.name),
+        pick: "resident",
       });
     }
     if (visit && list.length > 1 && isPropertyManager(cust)) list.reverse();
@@ -658,7 +668,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // text and opens the send strip (native SMS / Copy). This is the explicit
   // opt-in that replaced the old auto-copy-to-clipboard on every status change.
   // followUp: a nudge on a quote that already went out (the "Follow up" CTA).
-  const messageCustomer = async (job: Job, opts?: { followUp?: boolean }) => {
+  // business: the Text chip / Message customer button (see sendStrip).
+  const messageCustomer = async (job: Job, opts?: { followUp?: boolean; business?: boolean }) => {
     const orgName = org?.name || "us";
     const prop = job.property || "your property";
     const name = job.client || "there";
@@ -712,7 +723,37 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     }
     const visit = job.status === "scheduled" || job.status === "active" || job.status === "complete";
     const recipients = stripRecipients(job, msg, visit);
-    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: job.status === "quoted" ? "quote" : undefined, recipients, to: 0 });
+    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: job.status === "quoted" ? "quote" : undefined, recipients, to: 0, business: !!opts?.business });
+  };
+
+  // Send the open strip's text from the business number (Twilio). The server
+  // picks the number from the job and the chosen contact, skips anyone who
+  // replied STOP and logs the text. Counts as "sent" like Open Messages does.
+  const sendStripFromBusiness = async (markIfClient: () => void) => {
+    if (!sendStrip || stripSending || !sendStrip.msg.trim()) return;
+    const pick = sendStrip.recipients?.[sendStrip.to ?? 0]?.pick ?? "client";
+    const toast = useStore.getState().showToast;
+    setStripSending(true);
+    try {
+      const r = await apiFetch("/api/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: sendStrip.jobId, kind: "message", recipient: pick, body: sendStrip.msg }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast(data?.error || t("jobs.textNotSent"), "error");
+        return;
+      }
+      markIfClient();
+      const who = String(data?.name || "").split(/\s+/)[0];
+      toast(who ? t("jobs.textedName").replace("{name}", who) : t("jobs.textSent"), "success");
+      setSendStrip(null);
+    } catch {
+      toast(t("jobs.textNotSentOffline"), "error");
+    } finally {
+      setStripSending(false);
+    }
   };
 
   // Paid-to-date / balance — what the customer actually still owes.
@@ -1098,7 +1139,7 @@ ${invoicePhotosHtml}
                     </a>
                   )}
                   {digits && (
-                    <button type="button" className="bo" onClick={() => { void messageCustomer(dj); }} style={chip}>
+                    <button type="button" className="bo" onClick={() => { void messageCustomer(dj, { business: true }); }} style={chip}>
                       <Icon name="send" size={13} /> {t("jobs.textCustomer")}
                     </button>
                   )}
@@ -1182,7 +1223,7 @@ ${invoicePhotosHtml}
           {(dj.client || dj.customer_id) && !(onEditJob && dj.status === "quoted") && (
             <button
               className="bo mb"
-              onClick={() => messageCustomer(dj)}
+              onClick={() => messageCustomer(dj, { business: true })}
               style={{ width: "100%", padding: "10px", fontFamily: "Oswald", fontSize: 15, letterSpacing: ".3px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
               <Icon name="send" size={15} /> {t("jobs.messageCustomer")}
@@ -1194,6 +1235,8 @@ ${invoicePhotosHtml}
             // only fire for the client recipient (index 0).
             const toClient = !sendStrip.recipients || (sendStrip.to ?? 0) === 0;
             const markIfClient = (quiet?: boolean) => { if (toClient) markSent(sendStrip.jobId, sendStrip.kind, quiet); };
+            // Text chip / Message customer + the business-number switch on.
+            const viaBusiness = !!sendStrip.business && org?.auto_sms_enroute === true;
             return (
             <div ref={sendStripRef} style={{ marginBottom: 12, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
               {(sendStrip.recipients?.length ?? 0) > 1 && (
@@ -1227,17 +1270,31 @@ ${invoicePhotosHtml}
                 style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, border: "1px solid var(--color-border-dark-2)", background: "var(--color-dark-bg)", color: "inherit", resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
               />
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                {viaBusiness && (
+                  <button
+                    type="button"
+                    className="bb"
+                    disabled={stripSending || !sendStrip.msg.trim() || !sendStrip.phone}
+                    onClick={() => { void sendStripFromBusiness(() => markIfClient(true)); }}
+                    style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
+                  >
+                    <Icon name="send" size={15} color="#fff" /> {stripSending ? t("jobs.sendingText") : t("jobs.sendText")}
+                  </button>
+                )}
                 <a
                   href={`sms:${sendStrip.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(sendStrip.msg)}`}
                   onClick={() => { markIfClient(); setSendStrip(null); }}
-                  className="bb"
+                  className={viaBusiness ? "bo" : "bb"}
                   style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
                 >
-                  <Icon name="send" size={15} color="#fff" /> {t("jobs.openMessages")}
+                  {viaBusiness ? t("jobs.messagesShort") : <><Icon name="send" size={15} color="#fff" /> {t("jobs.openMessages")}</>}
                 </a>
                 <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); markIfClient(true); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast(t("jobs.copyFailed"), "error"); } }} style={{ fontSize: 14 }}>{t("common.copy")}</button>
                 <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label={t("common.cancel")} style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
               </div>
+              {viaBusiness && (
+                <div className="dim" style={{ fontSize: 11.5, marginTop: 7, lineHeight: 1.4 }}>{t("jobs.sendTextHelp")}</div>
+              )}
             </div>
             );
           })()}
