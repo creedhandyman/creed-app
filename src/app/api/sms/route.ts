@@ -33,6 +33,7 @@ export const dynamic = "force-dynamic";
  * (or TWILIO_FROM_NUMBER).
  */
 const JOB_KINDS: SmsKind[] = ["enroute", "late", "complete"];
+const MAX_MESSAGE = 1000;
 
 interface Body {
   to?: string;
@@ -76,8 +77,13 @@ async function jobText(req: NextRequest, body: Body): Promise<NextResponse> {
   const kind = body.kind as SmsKind;
   if (!isMessage && !JOB_KINDS.includes(kind)) return NextResponse.json({ error: "Unknown text type" }, { status: 400 });
   const pick: MessagePick = body.recipient === "resident" ? "resident" : "client";
-  const draft = typeof body.body === "string" ? body.body.trim().slice(0, 1000) : "";
-  if (isMessage && !draft) return NextResponse.json({ error: "Write a message first" }, { status: 400 });
+  const raw = typeof body.body === "string" ? body.body.trim() : "";
+  if (isMessage && !raw) return NextResponse.json({ error: "Write a message first" }, { status: 400 });
+  // A typed message is the owner's own words: refuse rather than cut it short.
+  if (isMessage && raw.length > MAX_MESSAGE) {
+    return NextResponse.json({ error: `That message is too long. Keep it under ${MAX_MESSAGE} characters.` }, { status: 400 });
+  }
+  const draft = raw.slice(0, MAX_MESSAGE);
   if (!smsConfigured()) {
     return NextResponse.json({ error: "Texting isn't set up on the server yet (Twilio settings missing)." }, { status: 503 });
   }

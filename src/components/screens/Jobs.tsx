@@ -731,14 +731,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // replied STOP and logs the text. Counts as "sent" like Open Messages does.
   const sendStripFromBusiness = async (markIfClient: () => void) => {
     if (!sendStrip || stripSending || !sendStrip.msg.trim()) return;
-    const pick = sendStrip.recipients?.[sendStrip.to ?? 0]?.pick ?? "client";
+    const sent = sendStrip;
+    const pick = sent.recipients?.[sent.to ?? 0]?.pick ?? "client";
     const toast = useStore.getState().showToast;
     setStripSending(true);
     try {
       const r = await apiFetch("/api/sms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: sendStrip.jobId, kind: "message", recipient: pick, body: sendStrip.msg }),
+        body: JSON.stringify({ jobId: sent.jobId, kind: "message", recipient: pick, body: sent.msg }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -748,7 +749,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       markIfClient();
       const who = String(data?.name || "").split(/\s+/)[0];
       toast(who ? t("jobs.textedName").replace("{name}", who) : t("jobs.textSent"), "success");
-      setSendStrip(null);
+      // Close only the strip that was sent; a draft opened or edited while
+      // the text was on its way stays put.
+      setSendStrip((cur) => (cur && cur.jobId === sent.jobId && cur.msg === sent.msg && (cur.to ?? 0) === (sent.to ?? 0) ? null : cur));
     } catch {
       toast(t("jobs.textNotSentOffline"), "error");
     } finally {
@@ -1266,6 +1269,7 @@ ${invoicePhotosHtml}
               <textarea
                 value={sendStrip.msg}
                 onChange={(e) => setSendStrip({ ...sendStrip, msg: e.target.value })}
+                maxLength={viaBusiness ? 1000 : undefined}
                 rows={5}
                 style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, border: "1px solid var(--color-border-dark-2)", background: "var(--color-dark-bg)", color: "inherit", resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
               />
