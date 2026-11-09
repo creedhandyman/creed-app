@@ -7,6 +7,9 @@
  * - When the page can't confirm the payment it never says the card went
  *   through: Stripe not showing it paid reads as not completed, anything else
  *   (our save failed, no connection) reads as still being confirmed.
+ * - A bank transfer (pending) is started, not received: it says the money is
+ *   on its way and not to pay again.
+ * - A tip is thanked separately and never counted toward the invoice.
  */
 export interface SuccessCopyInput {
   /** The verify call failed. notPaid = Stripe says the session isn't paid. */
@@ -17,6 +20,10 @@ export interface SuccessCopyInput {
     fullyPaid?: boolean;
     /** The job's work is finished (complete / invoiced / paid). */
     workDone?: boolean;
+    /** A bank transfer that hasn't cleared yet. */
+    pending?: boolean;
+    /** Tip on this payment, in dollars (0/absent = none). */
+    tipPaid?: number;
   } | null;
 }
 
@@ -52,10 +59,21 @@ export function paymentSuccessCopy({ error, result }: SuccessCopyInput): Success
     };
   }
   if (result) {
+    const tip = Number(result.tipPaid) || 0;
+    if (result.pending) {
+      const tipNote = tip > 0.004 ? `, plus your ${money(tip)} tip,` : "";
+      return {
+        title: "Bank payment started",
+        body: `Thank you! Your bank payment of ${money(result.paidNow)}${tipNote} is on its way. It usually clears in about 4 business days, and your job page updates when it does. Please don't pay again.`,
+        tone: "#8cc0ff",
+        icon: "✓",
+      };
+    }
+    const tipThanks = tip > 0.004 ? ` Thanks also for the ${money(tip)} tip!` : "";
     if (result.fullyPaid) {
       return {
         title: "Paid in full",
-        body: `Thank you! We received ${money(result.paidNow)} and your invoice is paid in full.`,
+        body: `Thank you! We received ${money(result.paidNow)} and your invoice is paid in full.${tipThanks}`,
         tone: "#00cc66",
         icon: "✓",
       };
@@ -63,7 +81,7 @@ export function paymentSuccessCopy({ error, result }: SuccessCopyInput): Success
     const due = result.workDone ? "due now" : "due when the work is complete";
     return {
       title: "Payment received",
-      body: `Thank you! We received ${money(result.paidNow)}. Remaining balance: ${money(result.balance)}, ${due}.`,
+      body: `Thank you! We received ${money(result.paidNow)}. Remaining balance: ${money(result.balance)}, ${due}.${tipThanks}`,
       tone: "#00cc66",
       icon: "✓",
     };

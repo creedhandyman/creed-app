@@ -303,7 +303,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `we_1TLVCV…` posts to `https://creedhm.com/api/stripe/webhook` and listens to
   7 events: checkout.session.completed, customer.subscription.created/updated/
   deleted, invoice.paid, invoice.payment_failed, charge.refunded — `www` is the served origin, matching the Stripe routes' hardcoded
-  fallback). SEO metadata does NOT follow this env var: `app/layout.tsx`'s
+  fallback). Bank transfer (ACH) checkout also needs
+  checkout.session.async_payment_succeeded and
+  checkout.session.async_payment_failed added to that endpoint, plus ACH
+  Direct Debit turned on in the Stripe dashboard; without them a bank payment
+  never lands on the job. SEO metadata does NOT follow this env var: `app/layout.tsx`'s
   `metadataBase`, every marketing page's canonical, robots.txt and the sitemap
   use `src/lib/seo.ts` `SEO_ORIGIN` (hardcoded `https://www.creedhm.com`).
   **Portal magic-link emails/texts derive their origin from this**, via
@@ -1062,6 +1066,28 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   tech; backfill with `UPDATE referrals SET referred_by_user_id = '<uid>'
   WHERE …` to make old ones count. Until the column exists, adding a
   referral from the Quests tab toasts a "column does not exist" error.
+
+- Bank transfer (ACH) and tips at checkout
+  (`supabase/migrations/20261109120000_bank_transfer_and_tips.sql`):
+  ```sql
+  ALTER TABLE organizations ADD COLUMN IF NOT EXISTS ach_enabled BOOLEAN NOT NULL DEFAULT false;
+  ALTER TABLE organizations ADD COLUMN IF NOT EXISTS tips_enabled BOOLEAN NOT NULL DEFAULT false;
+  ALTER TABLE payments ADD COLUMN IF NOT EXISTS tip_cents INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'stripe';
+  ```
+  Both switches live in Ops → Billing & Payments → Checkout options (owner or
+  manager, once Stripe is connected) and default OFF. Until this runs the
+  switches can't save and checkout behaves exactly as before (card only, no
+  tip): every read of the new columns is a separate best-effort query. Money
+  rules: lib/tips.ts (who may tip, server works out the cents),
+  lib/payments/stripe-checkout.ts (the Stripe adapter of the payment layer;
+  a second processor such as Banccard would add its own builder and record
+  payments.provider). A tip is its own line item, never pays down the
+  balance, and carries no platform fee; `payments.amount` stays the job part
+  only. A bank payment finishes checkout "unpaid": the owner gets a "Bank
+  payment on its way" alert (lib/bank-payment-notify.ts), the customer sees
+  "Bank payment started", and the ledger row lands on
+  async_payment_succeeded (a failure alerts "Bank payment failed").
 
 (The app handles missing columns gracefully — db helpers toast the
 "column does not exist" error so the user notices.)

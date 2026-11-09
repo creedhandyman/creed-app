@@ -31,6 +31,25 @@ export async function POST(req: NextRequest) {
       expand: ["payment_intent"],
     });
 
+    // Bank transfer (ACH): the checkout finished but the money takes a few
+    // business days to clear. Not an error, and nothing to record yet — the
+    // webhook records it on checkout.session.async_payment_succeeded. Only for
+    // a session made for THIS job.
+    if (
+      session.status === "complete" &&
+      session.payment_status === "unpaid" &&
+      session.metadata?.job_id === jobId
+    ) {
+      const pay = paymentFromCheckoutSession(session);
+      return NextResponse.json({
+        ok: true,
+        pending: true,
+        paidNow: pay.paidNow,
+        tipPaid: pay.tipCents / 100,
+        ...(await successExtras(jobId, pay.orgId)),
+      });
+    }
+
     if (session.payment_status !== "paid") {
       return NextResponse.json(
         { error: "Payment not completed", status: session.payment_status },
@@ -64,6 +83,7 @@ export async function POST(req: NextRequest) {
         paidNow: pay.paidNow,
         platformFeeCents: pay.platformFeeCents,
         kind: pay.kind,
+        tipCents: pay.tipCents,
         source: "verify-payment",
         refundExcess: stripeExcessRefunder(stripe),
       });
@@ -78,30 +98,42 @@ export async function POST(req: NextRequest) {
     const { result, orgId } = fulfilled;
     const paidNow = pay.paidNow;
 
-    // For the success page: who was paid (their branding, not Creed's) and a
-    // way back to the job page. Best-effort — never fail a verified payment.
-    let business: { name?: string; logo_url?: string | null; brand_color?: string | null } | null = null;
-    let statusUrl: string | null = null;
-    try {
-      const { data: org } = await supabase
-        .from("organizations").select("name, logo_url, brand_color").eq("id", orgId).maybeSingle();
-      business = org || null;
-    } catch { /* */ }
-    try {
-      statusUrl = `${siteOrigin()}/status?job=${jobId}&t=${encodeURIComponent(signJobToken(jobId))}`;
-    } catch { /* PORTAL_SESSION_SECRET unset */ }
-    // Whether the work is finished, so a balance left on a done job reads as
-    // due now rather than "when the work is complete". Best-effort.
-    let workDone = false;
-    try {
-      const { data: j } = await supabase.from("jobs").select("status").eq("id", jobId).maybeSingle();
-      workDone = isWorkDone(j?.status);
-    } catch { /* */ }
-
-    return NextResponse.json({ ok: true, ...result, paidNow, workDone, business, statusUrl });
+    const extras = await successExtras(jobId, orgId);
+    return NextResponse.json({ ok: true, ...result, paidNow, tipPaid: pay.tipCents / 100, ...extras });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("verify-payment error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+/**
+ * For the success page: who was paid (their branding, not Creed's), a way back
+ * to the job page, and whether the work is finished (so a balance left on a
+ * done job reads as due now rather than "when the work is complete").
+ * Best-effort — never fails a verified payment.
+ */
+async function successExtras(jobId: string, orgId: string | null) {
+  const supabase = serviceClient();
+  let business: { name?: string; logo_url?: string | null; brand_color?: string | null } | null = null;
+  let statusUrl: string | null = null;
+  let workDone = false;
+  let jobOrgId = orgId;
+  try {
+    const { data: j } = await supabase.from("jobs").select("status, org_id").eq("id", jobId).maybeSingle();
+    workDone = isWorkDone(j?.status);
+    // The job's own org wins: the branding shown is always the job's business.
+    jobOrgId = j?.org_id || jobOrgId || null;
+  } catch { /* */ }
+  if (jobOrgId) {
+    try {
+      const { data: org } = await supabase
+        .from("organizations").select("name, logo_url, brand_color").eq("id", jobOrgId).maybeSingle();
+      business = org || null;
+    } catch { /* */ }
+  }
+  try {
+    statusUrl = `${siteOrigin()}/status?job=${jobId}&t=${encodeURIComponent(signJobToken(jobId))}`;
+  } catch { /* PORTAL_SESSION_SECRET unset */ }
+  return { business, statusUrl, workDone };
 }

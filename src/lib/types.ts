@@ -86,6 +86,10 @@ export interface Organization {
   review_request_enabled?: boolean;
   /** Auto-follow-up on unanswered quotes (cron /api/quotes/followup). Opt-in. */
   quote_followup_enabled?: boolean;
+  /** Offer bank transfer (ACH) at checkout as well as card. Opt-in. */
+  ach_enabled?: boolean;
+  /** Ask the customer for a tip on a final payment (lib/tips.ts). Opt-in. */
+  tips_enabled?: boolean;
   review_request_delay_hours?: number;        // default 24
   review_request_channel?: "sms" | "email" | "both"; // default "sms"
   /** Custom template. Supports {customer_name}, {business_name},

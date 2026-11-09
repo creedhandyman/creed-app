@@ -45,6 +45,7 @@ export default function BillingSettings() {
             <p className="dim" style={{ fontSize: 13 }}>
               {t("billing.connectedHelp")}
             </p>
+            {isOwner && org && <CheckoutOptions org={org} setOrg={setOrg} />}
           </div>
         ) : (
           <div>
@@ -395,6 +396,40 @@ function PromoCodeForm({ orgId }: { orgId: string }) {
       >
         Cancel
       </button>
+    </div>
+  );
+}
+
+/** Checkout choices for customers paying through Stripe. Both start OFF
+ *  (organizations.ach_enabled / tips_enabled, added by the bank transfer and
+ *  tips migration). Bank transfer also needs ACH Direct Debit turned on in
+ *  the Stripe dashboard. */
+function CheckoutOptions({ org, setOrg }: { org: Organization; setOrg: (o: Organization) => void }) {
+  const save = async (u: Partial<Organization>) => {
+    const ok = await db.patch("organizations", org.id, u);
+    if (!ok) return;
+    const orgs = await db.get<Organization>("organizations", { id: org.id });
+    if (orgs.length) setOrg(orgs[0]);
+  };
+  const row = (key: "ach_enabled" | "tips_enabled", label: string, help: string) => (
+    <div style={{ marginTop: 12 }}>
+      <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={org[key] === true}
+          onChange={(e) => save({ [key]: e.target.checked })}
+          style={{ width: 16, height: 16, cursor: "pointer" }}
+        />
+        <span style={{ fontSize: 15, fontWeight: 500 }}>{label}</span>
+      </label>
+      <div className="dim" style={{ fontSize: 13, marginTop: 4, marginLeft: 24 }}>{help}</div>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--color-border, #2a2a3a)" }}>
+      <div style={{ fontSize: 14, fontWeight: 600 }}>{t("billing.checkoutOptions")}</div>
+      {row("ach_enabled", t("billing.achToggle"), t("billing.achHelp"))}
+      {row("tips_enabled", t("billing.tipsToggle"), t("billing.tipsHelp"))}
     </div>
   );
 }

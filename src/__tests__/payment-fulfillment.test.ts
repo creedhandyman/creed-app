@@ -8,6 +8,7 @@ import {
   fulfillJobPayment,
   paymentFromCheckoutSession,
   recordJobRefund,
+  refundJobShareCents,
 } from "@/lib/payment-fulfillment";
 
 // ── A tiny in-memory stand-in for the supabase-js query builder ─────────────
@@ -252,7 +253,7 @@ test("paymentFromCheckoutSession reads amount, intent, fee and kind", () => {
   } as unknown as Stripe.Checkout.Session;
   expect(paymentFromCheckoutSession(s)).toEqual({
     jobId: JOB, orgId: ORG, sessionId: "cs_1", paymentIntentId: "pi_9",
-    paidNow: 123.45, platformFeeCents: 62, kind: "deposit",
+    paidNow: 123.45, platformFeeCents: 62, kind: "deposit", tipCents: 0,
   });
   const old = { id: "cs_2", amount_total: null, payment_intent: "pi_s", metadata: { amount_cents: "5000", platform_fee_cents: "-3" } } as unknown as Stripe.Checkout.Session;
   expect(paymentFromCheckoutSession(old)).toMatchObject({
@@ -317,4 +318,40 @@ test("legacy refund (no ledger row) prorates the job's own fee by org; unknown i
   expect(tables.jobs[0].platform_fee_cents).toBe(60);
   expect(await recordJobRefund(db, { paymentIntentId: "pi_none", chargeCents: 1, refundedCents: 1, fullyRefunded: true }))
     .toEqual({ ok: false, reason: "no_job" });
+});
+
+// ── Tips ────────────────────────────────────────────────────────────────────
+
+test("a tip comes off Stripe's total so it never pays down the job", () => {
+  const s = {
+    id: "cs_t", amount_total: 115000, payment_intent: "pi_t",
+    metadata: { job_id: JOB, org_id: ORG, platform_fee_cents: "500", amount_cents: "100000", tip_cents: "15000", kind: "balance" },
+  } as unknown as Stripe.Checkout.Session;
+  expect(paymentFromCheckoutSession(s)).toMatchObject({ paidNow: 1000, tipCents: 15000, platformFeeCents: 500 });
+  // No amount_total (old session): the job part from the metadata, tip already apart.
+  const old = { ...s, amount_total: null } as unknown as Stripe.Checkout.Session;
+  expect(paymentFromCheckoutSession(old)).toMatchObject({ paidNow: 1000, tipCents: 15000 });
+});
+
+test("a tipped final payment settles the job and stores the tip apart", async () => {
+  const { db, tables } = fakeDb({ jobs: [job({ amount_paid: 0 })], payments: [] });
+  await fulfillJobPayment(db, charge("cs_tip", 1000, { tipCents: 15000 }));
+  const row = tables.payments[0];
+  expect(row.amount).toBe(1000);
+  expect(row.tip_cents).toBe(15000);
+  expect(tables.jobs[0].status).toBe("paid");
+});
+
+test("an untipped payment doesn't write tip_cents (works before the migration)", async () => {
+  const { db, tables } = fakeDb({ jobs: [job({ amount_paid: 0 })], payments: [] });
+  await fulfillJobPayment(db, charge("cs_none", 400));
+  expect("tip_cents" in tables.payments[0]).toBe(false);
+});
+
+test("refund on a tipped charge comes off the job part first, capped at it", () => {
+  // $1,150 charge with a $150 tip.
+  expect(refundJobShareCents(30000, 115000, 15000)).toBe(30000);
+  expect(refundJobShareCents(115000, 115000, 15000)).toBe(100000);
+  expect(refundJobShareCents(5000, 115000, 0)).toBe(5000);
+  expect(refundJobShareCents(-5, 115000, 15000)).toBe(0);
 });

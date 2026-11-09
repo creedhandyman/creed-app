@@ -7,6 +7,8 @@ import {
   expireOpenJobSessions,
   type CheckoutSessionsApi,
 } from "@/lib/checkout-sessions";
+import { buildJobCheckoutParams } from "@/lib/payments/stripe-checkout";
+import { cleanTipPct, tipAllowed, tipCentsFor } from "@/lib/tips";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +22,15 @@ export const dynamic = "force-dynamic";
  *     allowed), so it can't exceed the invoice.
  *   - the platform fee is computed here from the org's subscription plan and
  *     their running monthly total — neither value is accepted from the caller.
+ *   - a tip is accepted only as a PERCENT from the picker (lib/tips.ts), only
+ *     when the business turned tips on and the customer pays the whole balance
+ *     of finished work; the cents are worked out here. The fee is never taken
+ *     on the tip.
+ *   - bank transfer (ACH) is offered only when the business turned it on.
  */
 export async function POST(req: NextRequest) {
   try {
-    const { jobId, amount } = await req.json();
+    const { jobId, amount, tipPct } = await req.json();
     if (!jobId) {
       return NextResponse.json({ error: "Missing jobId" }, { status: 400 });
     }
@@ -31,7 +38,7 @@ export async function POST(req: NextRequest) {
     const supabase = serviceClient();
     const { data: job, error: jobErr } = await supabase
       .from("jobs")
-      .select("id, total, property, client, org_id")
+      .select("id, total, property, client, org_id, status")
       .eq("id", jobId)
       .single();
     if (jobErr || !job) {
@@ -68,6 +75,22 @@ export async function POST(req: NextRequest) {
       .select("name, stripe_account_id, subscription_plan")
       .eq("id", job.org_id)
       .single();
+    // The bank-transfer / tip switches, read separately + best-effort so an org
+    // whose database hasn't had the migration yet still checks out (card only,
+    // no tip) instead of failing the payment.
+    let achEnabled = false;
+    let tipsEnabled = false;
+    {
+      const { data: sw, error: swErr } = await supabase
+        .from("organizations")
+        .select("ach_enabled, tips_enabled")
+        .eq("id", job.org_id)
+        .maybeSingle();
+      if (!swErr && sw) {
+        achEnabled = sw.ach_enabled === true;
+        tipsEnabled = sw.tips_enabled === true;
+      }
+    }
     const orgName = org?.name || "Service Provider";
     const stripeAccountId = org?.stripe_account_id || "";
     // No payout account = the charge would land on Creed's platform account,
@@ -116,58 +139,35 @@ export async function POST(req: NextRequest) {
     const platformFeeCents = computePlatformFee(amountCents, plan, feesCollectedCents);
     // ────────────────────────────────────────────────────────────────────────
 
+    // Tip: only a percent from the picker, only where lib/tips.ts allows it.
+    const tipCents = tipAllowed({ tipsEnabled, jobStatus: job.status, payAmount, balance })
+      ? tipCentsFor(amountCents, cleanTipPct(tipPct))
+      : 0;
+
     const origin = req.headers.get("origin") || "https://www.creedhm.com";
     const referer = req.headers.get("referer") || "";
     const cancelUrl = checkoutCancelUrl(origin, referer);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionParams: any = {
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `Property Repairs — ${job.property || "Job"}`,
-              description: `${orgName} · Invoice for ${job.client || "Client"}`,
-            },
-            unit_amount: amountCents,
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      // An hour, not Stripe's default 24 h: an abandoned page can't be paid
-      // later on top of a newer one (see lib/checkout-sessions.ts).
-      expires_at: checkoutExpiresAt(),
+    // The session itself (line items, ACH, fee routing, metadata) is built by
+    // the payment layer — see lib/payments/stripe-checkout.ts.
+    const sessionParams = buildJobCheckoutParams({
+      job,
+      orgName,
+      destinationAccountId: stripeAccountId,
+      amountCents,
+      tipCents,
+      platformFeeCents,
+      kind: paymentKind,
+      allowBankTransfer: achEnabled,
       // session_id lets /payment/success verify server-side before flipping status.
-      success_url: `${origin}/payment/success?job_id=${job.id}&session_id={CHECKOUT_SESSION_ID}`,
+      successUrl: `${origin}/payment/success?job_id=${job.id}&session_id={CHECKOUT_SESSION_ID}`,
       // Cancelling returns the customer to the job page they paid from (the
       // /status link they were texted), not a dead-end "cancelled" page.
-      cancel_url: cancelUrl,
-      metadata: {
-        job_id: job.id,
-        org_id: job.org_id,
-        property: job.property || "",
-        client: job.client || "",
-        // Stored so verify-payment can record the fee without recomputing.
-        platform_fee_cents: String(platformFeeCents),
-        // What this charge actually is, for the payments ledger. verify-payment
-        // prefers Stripe's own session.amount_total, but this is the fallback.
-        amount_cents: String(amountCents),
-        kind: paymentKind,
-      },
-    };
-
-    // Route payment to the org's connected account. application_fee_amount is
-    // the capped Creed platform fee — omitted entirely when 0 (Pro or at-cap)
-    // because Stripe rejects application_fee_amount: 0 on destination charges.
-    sessionParams.payment_intent_data = {
-      transfer_data: { destination: stripeAccountId },
-    };
-    if (platformFeeCents > 0) {
-      sessionParams.payment_intent_data.application_fee_amount = platformFeeCents;
-    }
+      cancelUrl,
+      // An hour, not Stripe's default 24 h: an abandoned page can't be paid
+      // later on top of a newer one (see lib/checkout-sessions.ts).
+      expiresAt: checkoutExpiresAt(),
+    });
 
     const Stripe = (await import("stripe")).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);

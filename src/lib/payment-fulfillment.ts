@@ -23,6 +23,9 @@ export interface RecordPaymentInput {
   paidNow: number;               // dollars charged in this session
   platformFeeCents: number;
   kind: string;                  // deposit | balance | payment
+  /** Tip on this charge, in cents. Stored in payments.tip_cents and kept OUT
+   *  of `amount` / paidNow, so it never pays down the job balance. */
+  tipCents?: number;
 }
 
 export interface RecordPaymentResult {
@@ -40,6 +43,7 @@ export async function recordJobPayment(
   p: RecordPaymentInput,
 ): Promise<RecordPaymentResult> {
   const { jobId, orgId, sessionId, paymentIntentId, paidNow, platformFeeCents, kind } = p;
+  const tipCents = Math.max(0, Math.round(Number(p.tipCents) || 0));
 
   // Ledger insert. UNIQUE stripe_session_id makes this idempotent across the
   // redirect + the webhook + a page refresh. A duplicate => no-op. A missing
@@ -47,7 +51,7 @@ export async function recordJobPayment(
   let ledgerOk = true;
   let alreadyRecorded = false;
   {
-    const { error: payErr } = await supabase.from("payments").insert({
+    const row: Record<string, unknown> = {
       org_id: orgId,
       job_id: jobId,
       amount: paidNow,
@@ -55,7 +59,18 @@ export async function recordJobPayment(
       stripe_session_id: sessionId,
       stripe_payment_intent_id: paymentIntentId,
       platform_fee_cents: platformFeeCents,
-    });
+    };
+    // Only write tip_cents when there IS a tip, so a database that hasn't had
+    // the tips migration yet keeps recording ordinary payments untouched.
+    if (tipCents > 0) row.tip_cents = tipCents;
+    let { error: payErr } = await supabase.from("payments").insert(row);
+    if (payErr && tipCents > 0 && /tip_cents/i.test(payErr.message)) {
+      // Pre-migration: no tip_cents column. Record the payment without it
+      // rather than lose it (the tip still reached the business in Stripe).
+      console.error("[payments] tip_cents column missing; tip not recorded:", payErr.message);
+      delete row.tip_cents;
+      ({ error: payErr } = await supabase.from("payments").insert(row));
+    }
     if (payErr) {
       if (payErr.code === "23505" || /duplicate key|unique/i.test(payErr.message)) alreadyRecorded = true;
       else if (isMissingTable(payErr)) ledgerOk = false;
@@ -174,6 +189,8 @@ export interface FulfillPaymentInput {
   paidNow: number;                // dollars
   platformFeeCents: number;
   kind: string;
+  /** Tip on this charge in cents (0/absent = none). Never part of paidNow. */
+  tipCents?: number;
   /** Don't schedule the review-request text even if this settles the job. */
   skipReview?: boolean;
   /** Owner/manager alert: default on. `false` = none (bulk cleanups);
@@ -226,6 +243,7 @@ export async function fulfillJobPayment(
     paidNow: p.paidNow,
     platformFeeCents: p.platformFeeCents,
     kind: p.kind,
+    tipCents: p.tipCents,
   });
 
   // Only ask for a review once the job is actually settled — never after a
@@ -286,24 +304,33 @@ export interface CheckoutPayment {
   orgId: string | null;           // metadata.org_id (older sessions: absent)
   sessionId: string;
   paymentIntentId: string | null;
-  paidNow: number;                // dollars ACTUALLY charged
+  /** Dollars charged for the JOB — Stripe's total minus any tip. */
+  paidNow: number;
   platformFeeCents: number;
   kind: string;
+  /** Tip in cents (metadata.tip_cents; 0 for sessions without one). */
+  tipCents: number;
 }
 
 export function paymentFromCheckoutSession(session: Stripe.Checkout.Session): CheckoutPayment {
   const meta = (session.metadata as Record<string, string> | null) || {};
   const pi = session.payment_intent;
+  const tipCents = Math.max(0, Math.round(Number(meta.tip_cents) || 0));
+  // Stripe's amount_total is authoritative; the checkout metadata is a
+  // fallback for sessions created before it existed. amount_total includes the
+  // tip line, so the tip comes off before it can pay down the job balance.
+  const totalCents = session.amount_total != null
+    ? Math.max(0, Number(session.amount_total) - tipCents)
+    : Math.max(0, Number(meta.amount_cents ?? 0));
   return {
     jobId: meta.job_id || null,
     orgId: meta.org_id || null,
     sessionId: session.id,
     paymentIntentId: typeof pi === "string" ? pi : pi?.id ?? null,
-    // Stripe's amount_total is authoritative; the checkout metadata is a
-    // fallback for sessions created before it existed.
-    paidNow: Math.max(0, Number(session.amount_total ?? meta.amount_cents ?? 0)) / 100,
+    paidNow: totalCents / 100,
     platformFeeCents: Math.max(0, Number(meta.platform_fee_cents) || 0),
     kind: meta.kind || "payment",
+    tipCents,
   };
 }
 
@@ -336,7 +363,6 @@ export async function recordJobRefund(
   const piId = r.paymentIntentId;
   const isFullRefund = r.fullyRefunded && r.refundedCents >= r.chargeCents;
   const keptFraction = r.chargeCents > 0 ? (r.chargeCents - r.refundedCents) / r.chargeCents : 0;
-  const refunded = Math.round(r.refundedCents) / 100;
 
   // Resolve the job from the PAYMENTS LEDGER first: it records every
   // charge's PaymentIntent, so refunding a DEPOSIT still finds its job.
@@ -374,6 +400,18 @@ export async function recordJobRefund(
     }
   }
   if (!jobId || !orgId) return { ok: false, reason: "no_job" };
+
+  // A charge that carried a tip: only the JOB share of the refund comes off
+  // paid-to-date (the tip was never counted toward it). Read separately and
+  // best-effort so a database without the tip_cents column refunds exactly as
+  // before.
+  let tipOnCharge = 0;
+  if (chargeRow) {
+    const { data: tipRow, error: tipErr } = await supabase
+      .from("payments").select("tip_cents").eq("id", chargeRow.id).maybeSingle();
+    if (!tipErr) tipOnCharge = Math.max(0, Number(tipRow?.tip_cents) || 0);
+  }
+  const refunded = refundJobShareCents(r.refundedCents, r.chargeCents, tipOnCharge) / 100;
 
   // Prorate THIS charge's own fee — never the job's cumulative fee,
   // which on a multi-payment job also contains other charges' fees.
@@ -432,6 +470,21 @@ export async function recordJobRefund(
     console.error("[refund] ledger update failed:", e);
   }
   return { ok: true, jobId, orgId, amountPaid, reverted };
+}
+
+/**
+ * How much of a refund comes off the job's paid-to-date, in cents. With no tip
+ * it's the whole refund. With a tip, the refund counts against the job part
+ * first and is capped at it: a full refund removes exactly the job amount (the
+ * tip was never counted toward paid-to-date), and the automatic overpayment
+ * refund (always job money) comes off in full.
+ */
+export function refundJobShareCents(refundedCents: number, chargeCents: number, tipCents: number): number {
+  const refunded = Math.max(0, Math.round(Number(refundedCents) || 0));
+  const charge = Math.max(0, Math.round(Number(chargeCents) || 0));
+  const tip = Math.max(0, Math.round(Number(tipCents) || 0));
+  if (!tip || charge <= 0 || tip >= charge) return refunded;
+  return Math.min(refunded, charge - tip);
 }
 
 /**
