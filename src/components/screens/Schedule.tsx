@@ -290,6 +290,10 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
       // single→single edits so the column isn't referenced pre-migration.
       if (endDate) patch.end_date = endDate;
       else if (editSched.end_date) patch.end_date = null;
+      // Online-booking rows also keep the time in start_time (their per-slot
+      // unique index): keep it in step with the note, or clear it with it.
+      // Only on those rows, so others never reference the column early.
+      if (editSched.booking_status) patch.start_time = parseSchedTime(note) || null;
       // Failed write (already toasted) — keep the modal open to retry.
       if (!await db.patch("schedule", editSched.id, patch)) return;
       // Tell the crew: added → booked, moved → changed, dropped → taken off.
