@@ -282,6 +282,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   flow (MediaRecorder → Whisper → AI). Without it, Voice Walk falls
   back to Web Speech transcripts (incomplete on iOS Safari but
   functional on desktop Chrome).
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_MESSAGING_SERVICE_SID`
+  (preferred: the A2P 10DLC campaign's Messaging Service) or
+  `TWILIO_FROM_NUMBER` — the only Twilio sender is `lib/sms.ts`
+  (`smsConfigured()` says whether texting can work).
 - `NOTIFY_SMS_ENABLED` — set to `"1"` to turn ON the SMS channel for
   notifications (job-assigned / new-lead). Unset/`"0"` = in-app feed only
   (the v1 default — texting is the fast-follow). Reuses the existing
@@ -333,6 +337,23 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 - (Stripe / Supabase keys per existing setup.)
 
 ## Schema migrations the user should run in Supabase
+
+- Automatic customer texts (**NOT YET RUN**, 2026-11-09): run
+  `supabase/migrations/20261109_automatic_texts.sql` in the SQL editor. Adds the
+  three OFF-by-default switches `organizations.auto_sms_enroute /
+  auto_sms_reminder / auto_sms_invoice` (Operations → Settings → Automatic
+  Texts), `jobs.invoice_sent_at / invoice_reminder_count / invoice_reminder_at`
+  (+ a trigger that stamps `invoice_sent_at` whenever a job moves into
+  `invoiced`), `schedule.reminder_sent_at`, the `sms_messages` log and
+  `sms_opt_outs` (service-role only), and the `text_reply` / `invoice_reminder`
+  / `visit_reminder` notification types. Routing lives in
+  `lib/sms-recipient.ts` (visit texts on a property-manager job go to the
+  resident, never the PM; no resident number = nothing sent; invoices go to
+  whoever pays). Crons: `/api/sms/reminders` (23:00 UTC) and
+  `/api/invoices/reminders` (16:00 UTC), both `?dry=1`-able. Twilio webhooks
+  to set on the Messaging Service: incoming → `/api/sms/inbound`, status
+  callbacks are requested per message → `/api/sms/status` (both check
+  X-Twilio-Signature against `TWILIO_AUTH_TOKEN` and the `siteOrigin()` URL).
 
 - AI usage logging (Phase 0 cost measurement — `/api/ai` writes one row per call):
   ```sql

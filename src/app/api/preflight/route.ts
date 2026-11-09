@@ -38,7 +38,10 @@ const REQUIRED_ENV = [
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
 ] as const;
 
-const SMS_ENV = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"] as const;
+const SMS_ENV = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] as const;
+// One of these two is enough: a Messaging Service (preferred, carries the
+// A2P 10DLC campaign) or a single sending number.
+const SMS_SENDER_ENV = ["TWILIO_MESSAGING_SERVICE_SID", "TWILIO_FROM_NUMBER"] as const;
 const PUSH_ENV = ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "NEXT_PUBLIC_VAPID_PUBLIC_KEY"] as const;
 
 // Migration checks. PostgREST doesn't expose information_schema, so each
@@ -76,6 +79,12 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "profiles.status", table: "profiles", column: "status" },
   // Quote sent tracking (dashboard To send vs Waiting on customer).
   { key: "jobs.quote_sent_at", table: "jobs", column: "quote_sent_at" },
+  // Automatic customer texts (supabase/migrations/20261109_automatic_texts.sql).
+  { key: "sms_messages", table: "sms_messages", column: "id" },
+  { key: "sms_opt_outs", table: "sms_opt_outs", column: "id" },
+  { key: "organizations.auto_sms_enroute", table: "organizations", column: "auto_sms_enroute" },
+  { key: "jobs.invoice_sent_at", table: "jobs", column: "invoice_sent_at" },
+  { key: "schedule.reminder_sent_at", table: "schedule", column: "reminder_sent_at" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {
@@ -113,6 +122,10 @@ export async function GET(req: NextRequest) {
   for (const name of SMS_ENV) {
     env[name] = !!process.env[name];
     if (smsEnabled && !env[name]) blockers.push(`${name} missing (NOTIFY_SMS_ENABLED=1 needs it)`);
+  }
+  for (const name of SMS_SENDER_ENV) env[name] = !!process.env[name];
+  if (smsEnabled && !SMS_SENDER_ENV.some((n) => env[n])) {
+    blockers.push("TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM_NUMBER missing (NOTIFY_SMS_ENABLED=1 needs one)");
   }
   // Push vars required only when push is (partially) configured — all three
   // must then be present or subscriptions/sends silently fail.

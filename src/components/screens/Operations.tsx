@@ -452,6 +452,7 @@ function OpsSettings() {
           flywheel without the owner having to remember. */}
       <ReviewAutomationCard org={org} saveOrg={saveOrg} />
       <QuoteFollowupCard org={org} saveOrg={saveOrg} />
+      <AutoTextsCard org={org} saveOrg={saveOrg} />
     </div>
   );
 }
@@ -489,6 +490,56 @@ function QuoteFollowupCard({
           {enabled ? t("ops.enabled") : t("ops.disabled")} — {t("ops.quoteFollowupToggle")}
         </span>
       </label>
+    </div>
+  );
+}
+
+/** Automatic customer texts through Twilio. Three switches on the
+ *  organizations row, all OFF by default (they text customers on the
+ *  business's behalf, so the owner opts in). Needs the Twilio settings on
+ *  Vercel and supabase/migrations/20261109_automatic_texts.sql. */
+function AutoTextsCard({
+  org,
+  saveOrg,
+}: {
+  org: NonNullable<ReturnType<typeof useStore.getState>["org"]>;
+  saveOrg: (u: Record<string, unknown>) => Promise<void>;
+}) {
+  const rows: { key: "auto_sms_enroute" | "auto_sms_reminder" | "auto_sms_invoice"; label: string; help: string }[] = [
+    { key: "auto_sms_enroute", label: t("ops.autoTextEnroute"), help: t("ops.autoTextEnrouteHelp") },
+    { key: "auto_sms_reminder", label: t("ops.autoTextReminder"), help: t("ops.autoTextReminderHelp") },
+    { key: "auto_sms_invoice", label: t("ops.autoTextInvoice"), help: t("ops.autoTextInvoiceHelp") },
+  ];
+  return (
+    <div className="cd">
+      <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Icon name="send" size={16} color="var(--color-primary)" />
+        {t("ops.autoTexts")}
+      </h4>
+      <div className="dim" style={{ fontSize: 14, marginBottom: 12 }}>
+        {t("ops.autoTextsHelp")}
+      </div>
+      {rows.map((r) => {
+        const on = org[r.key] === true;
+        return (
+          <div key={r.key} style={{ marginBottom: 12 }}>
+            <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={async (e) => {
+                  await saveOrg({ [r.key]: e.target.checked });
+                }}
+                style={{ width: 16, height: 16, cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 15, fontWeight: 500 }}>
+                {on ? t("ops.enabled") : t("ops.disabled")} — {r.label}
+              </span>
+            </label>
+            <div className="dim" style={{ fontSize: 13.5, marginTop: 2, marginLeft: 24 }}>{r.help}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
