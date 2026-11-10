@@ -285,8 +285,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     also receipt/tax/render/transcribe) + the logged OpenAI helper.
   - Quest bonuses: a `quest_payouts` row with `bonus_amount 0` = DISMISSED
     (`isDismissedPayout`) — Payroll's ✕; counts as handled, never as a win.
-  - Known flaky test: `promo-timed.test.ts` fails by 1 h across the November
-    DST change (local-time month math in promo-timed/trial) — not a regression.
+  - `promo-timed.ts promoEnd` steps months in UTC (2026-11-10), so its test
+    passes in any local time zone; it used to fail by 1 h in Central across
+    the November DST change.
 
 ## Required env vars (Vercel)
 

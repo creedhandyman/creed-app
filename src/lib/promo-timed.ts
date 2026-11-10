@@ -35,10 +35,13 @@ export function findTimedPromo(code: string): TimedPromo | null {
 }
 
 /** New free-access end: `months` from now, but never shorter than what the
- *  org already has (a longer trial isn't cut short). */
+ *  org already has (a longer trial isn't cut short). The month step is done
+ *  in UTC, so the result is the same instant whatever time zone the code runs
+ *  in (the server is UTC; local-time math moved it an hour when the span
+ *  crossed a daylight-saving change). */
 export function promoEnd(months: number, currentEnd: Date, now = new Date()): Date {
   const end = new Date(now);
-  end.setMonth(end.getMonth() + months);
+  end.setUTCMonth(end.getUTCMonth() + months);
   return currentEnd > end ? currentEnd : end;
 }
 
