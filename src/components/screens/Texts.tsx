@@ -97,8 +97,12 @@ export default function Texts({ openJob, initial, clearInitial }: Props) {
       setThreads(list);
       setListError(false);
       // A bell tap names a job, not a number: open that job's conversation.
+      // A property-manager job can have two (the manager and the resident),
+      // so prefer the one with unread texts, which is the one that just
+      // texted; else the most recent.
       if (wantJob.current) {
-        const hit = list.find((x) => x.jobId === wantJob.current);
+        const onJob = list.filter((x) => x.jobId === wantJob.current);
+        const hit = onJob.find((x) => x.unread > 0) || onJob[0];
         wantJob.current = null;
         if (hit) setOpen(hit.phone);
       }
