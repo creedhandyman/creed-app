@@ -12,6 +12,7 @@ import RecurringMemberships from "./RecurringMemberships";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
+import SettingsCategories from "../SettingsCategories";
 import { Icon, type IconName } from "../Icon";
 import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
@@ -202,16 +203,7 @@ function OpsSettings() {
   let licensed: string[] = [];
   try { licensed = org.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
 
-  return (
-    <div>
-      {/* Beta preflight — one-tap deployment readiness check. Platform
-          operators only: customers shouldn't see env vars / migrations. */}
-      {isPlatformAdmin(userEmail) && <PreflightPanel />}
-
-      {/* Branding & Business Info — logo, name, phone, address, license # */}
-      <BrandingSettings />
-
-      {/* Licensed Trades */}
+  const licensedCard = (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="safety" size={15} color="var(--color-primary)" /> {t("ops.licensedTrades")}</h4>
         <div className="dim" style={{ fontSize: 14, marginBottom: 8 }}>{t("ops.licensedHelp")}</div>
@@ -239,8 +231,9 @@ function OpsSettings() {
           })}
         </div>
       </div>
+  );
 
-      {/* Quote Settings */}
+  const quoteSettingsCard = (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="trending" size={16} color="var(--color-primary)" />
@@ -356,9 +349,9 @@ function OpsSettings() {
           </div>
         </div>
       </div>
+  );
 
-      {/* Quote terms — drive the bottom "Notes & Exclusions" of every quote
-          PDF so it reflects this business, not a fixed template. */}
+  const quoteTermsCard = (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="doc" size={16} color="var(--color-primary)" />
@@ -421,8 +414,9 @@ function OpsSettings() {
           <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>Added as extra lines at the bottom of every quote PDF.</div>
         </div>
       </div>
+  );
 
-      {/* Trade Rates */}
+  const tradeRatesCard = (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="money" size={16} color="var(--color-primary)" />
@@ -446,13 +440,41 @@ function OpsSettings() {
           </div>
         ))}
       </div>
+  );
 
-      {/* Review Automation — auto-schedules a review-request SMS / email
-          N hours after a Stripe-paid invoice. Wires the gamification quest
-          flywheel without the owner having to remember. */}
-      <ReviewAutomationCard org={org} saveOrg={saveOrg} />
-      <QuoteFollowupCard org={org} saveOrg={saveOrg} />
-    </div>
+  return (
+    <SettingsCategories
+      categories={[
+        {
+          id: "business", icon: "briefcase", title: t("ops.cat.business"), sub: t("ops.cat.businessSub"),
+          content: (<><BrandingSettings part="business" />{licensedCard}</>),
+        },
+        {
+          id: "brand", icon: "paint", title: t("ops.cat.brand"), sub: t("ops.cat.brandSub"),
+          content: <BrandingSettings part="brand" />,
+        },
+        {
+          id: "pricing", icon: "money", title: t("ops.cat.pricing"), sub: t("ops.cat.pricingSub"),
+          content: (<>{quoteSettingsCard}{tradeRatesCard}</>),
+        },
+        {
+          id: "terms", icon: "doc", title: t("ops.cat.terms"), sub: t("ops.cat.termsSub"),
+          content: quoteTermsCard,
+        },
+        {
+          id: "messages", icon: "send", title: t("ops.cat.messages"), sub: t("ops.cat.messagesSub"),
+          // Review Automation auto-schedules a review-request SMS / email N hours
+          // after a Stripe-paid invoice; follow-up nudges unanswered quotes; the
+          // text-messaging links go in the approval page's consent box.
+          content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
+        },
+        // Beta preflight — one-tap deployment readiness check. Platform
+        // operators only: customers shouldn't see env vars / migrations.
+        ...(isPlatformAdmin(userEmail)
+          ? [{ id: "system", icon: "settings", title: t("ops.cat.system"), sub: t("ops.cat.systemSub"), content: <PreflightPanel /> }]
+          : []),
+      ]}
+    />
   );
 }
 

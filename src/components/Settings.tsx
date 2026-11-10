@@ -20,6 +20,7 @@ import { isPushSupported, isSubscribed, enablePush, disablePush } from "@/lib/pu
 import { SUPPORT_EMAIL } from "@/lib/platform-admin";
 import { apiFetch } from "@/lib/api";
 import CalendarSubscribe from "./CalendarSubscribe";
+import SettingsCategories from "./SettingsCategories";
 
 interface Props {
   onClose: () => void;
@@ -113,49 +114,8 @@ export default function Settings({ onClose }: Props) {
   const roleLabel = user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "";
   const startYear = user.start_date ? String(user.start_date).slice(0, 7) : "";
 
-  return (
-    <div className="fi" style={{ maxWidth: 500, margin: "0 auto", padding: "16px 12px" }}>
-      <input ref={avatarRef} type="file" accept="image/*" style={{ display: "none" }}
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); }} />
-
-      {/* Topbar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <button
-          onClick={onClose}
-          aria-label="Back"
-          style={{ width: 30, height: 30, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit", flexShrink: 0 }}
-        >
-          <Icon name="back" size={17} />
-        </button>
-        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("settings.title")}</span>
-      </div>
-
-      {/* Profile head — avatar (tap camera to change) + name + role · org */}
-      <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 16 }}>
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <div style={{ width: 62, height: 62, borderRadius: "50%", overflow: "hidden", background: "var(--color-card-dark-3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 700, fontSize: 21, color: darkMode ? "#cdd6e6" : "#5a6175" }}>
-            {user.photo_url
-              ? <img src={user.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
-              : initials}
-          </div>
-          <button
-            onClick={() => avatarRef.current?.click()}
-            disabled={avatarBusy}
-            aria-label="Change photo"
-            style={{ position: "absolute", right: -3, bottom: -3, width: 24, height: 24, borderRadius: "50%", background: "var(--color-primary)", border: "2px solid var(--color-dark-bg, #0a0a0f)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: avatarBusy ? 0.5 : 1 }}
-          >
-            <Icon name="camera" size={12} color="#fff" />
-          </button>
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19 }}>{user.name}</div>
-          <div style={{ fontSize: 13, color: "var(--color-success)" }}>{roleLabel}{org?.name ? ` · ${org.name}` : ""}</div>
-        </div>
-      </div>
-
-      {/* Profile */}
+  const profileSection = (
       <div className="section">
-        <div className="seclabel"><Icon name="worker" size={13} /> {t("settings.yourProfile")}</div>
         <div className="drow">
           <span className="l">{t("settings.name")}</span>
           {editingName ? (
@@ -175,8 +135,9 @@ export default function Settings({ onClose }: Props) {
         <div className="drow"><span className="l">{t("settings.roleEmp")}</span><span className="v">{roleLabel || "—"}{user.emp_num ? ` · ${user.emp_num}` : ""}</span></div>
         <div className="drow"><span className="l">Rate · started</span><span className="v">{user.rate ? `$${user.rate}/hr` : t("settings.rateNotSet")}{startYear ? ` · ${startYear}` : ""}</span></div>
       </div>
+  );
 
-      {/* Notifications */}
+  const notificationsSection = (
       <div className="section">
         <div className="seclabel"><Icon name="bell" size={13} /> {t("settings.notifications")}</div>
         <div className="dim" style={{ fontSize: 13, margin: "2px 0 8px" }}>{t("settings.notifDesc")}</div>
@@ -222,12 +183,10 @@ export default function Settings({ onClose }: Props) {
           </div>
         )}
       </div>
+  );
 
-      <CalendarSubscribe />
-
-      {/* Appearance */}
+  const appearanceSection = (
       <div className="section">
-        <div className="seclabel"><Icon name="paint" size={13} /> {t("settings.appearance")}</div>
         <div className="drow">
           <span className="l">{t("settings.darkMode")}</span>
           <Sw on={darkMode} onTap={toggleDark} />
@@ -260,10 +219,10 @@ export default function Settings({ onClose }: Props) {
           <Sw on={grizzTips} onTap={() => { const next = !grizzTips; setTipsEnabled(next, user.id); if (next) undismissGs(user.id); setGrizzTips(next); }} />
         </div>
       </div>
+  );
 
-      {/* Security */}
+  const passwordSection = (
       <div className="section">
-        <div className="seclabel"><Icon name="safety" size={13} /> {t("settings.changePassword")}</div>
         {!showPassword ? (
           <div className="drow" onClick={() => setShowPassword(true)} style={{ cursor: "pointer" }}>
             <span className="l">{t("settings.changePassword")}</span>
@@ -296,12 +255,10 @@ export default function Settings({ onClose }: Props) {
           </div>
         )}
       </div>
+  );
 
-      {/* Quest Bonuses — owner config, unchanged logic (business-adjacent but
-          kept here until it gets a home in Ops → Settings). */}
-      {isOwner && (
+  const questsSection = (
         <div className="section">
-          <div className="seclabel"><Icon name="quest" size={13} /> {t("settings.questBonuses")}</div>
           <div className="dim" style={{ fontSize: 13, margin: "2px 0 8px" }}>Toggle quests on/off and set custom bonus amounts for your team.</div>
           {(() => {
             const defaultQuests = [
@@ -368,8 +325,59 @@ export default function Settings({ onClose }: Props) {
             });
           })()}
         </div>
-      )}
+  );
 
+  return (
+    <div className="fi" style={{ maxWidth: 500, margin: "0 auto", padding: "16px 12px" }}>
+      <input ref={avatarRef} type="file" accept="image/*" style={{ display: "none" }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); }} />
+
+      {/* Topbar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <button
+          onClick={onClose}
+          aria-label="Back"
+          style={{ width: 30, height: 30, borderRadius: 9, background: darkMode ? "var(--color-card-dark-3)" : "var(--color-card-light)", border: `1px solid ${darkMode ? "var(--color-border-dark-2)" : "var(--color-border-light)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "inherit", flexShrink: 0 }}
+        >
+          <Icon name="back" size={17} />
+        </button>
+        <span style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 21, letterSpacing: ".5px", textTransform: "uppercase" }}>{t("settings.title")}</span>
+      </div>
+
+      {/* Profile head — avatar (tap camera to change) + name + role · org */}
+      <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 16 }}>
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <div style={{ width: 62, height: 62, borderRadius: "50%", overflow: "hidden", background: "var(--color-card-dark-3)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Oswald", fontWeight: 700, fontSize: 21, color: darkMode ? "#cdd6e6" : "#5a6175" }}>
+            {user.photo_url
+              ? <img src={user.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+              : initials}
+          </div>
+          <button
+            onClick={() => avatarRef.current?.click()}
+            disabled={avatarBusy}
+            aria-label="Change photo"
+            style={{ position: "absolute", right: -3, bottom: -3, width: 24, height: 24, borderRadius: "50%", background: "var(--color-primary)", border: "2px solid var(--color-dark-bg, #0a0a0f)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: avatarBusy ? 0.5 : 1 }}
+          >
+            <Icon name="camera" size={12} color="#fff" />
+          </button>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: "Oswald", fontWeight: 700, fontSize: 19 }}>{user.name}</div>
+          <div style={{ fontSize: 13, color: "var(--color-success)" }}>{roleLabel}{org?.name ? ` · ${org.name}` : ""}</div>
+        </div>
+      </div>
+
+      <SettingsCategories
+        categories={[
+          { id: "profile", icon: "worker", title: t("settings.yourProfile"), sub: t("settings.cat.profileSub"), content: profileSection },
+          { id: "notifications", icon: "bell", title: t("settings.cat.notifCal"), sub: t("settings.cat.notifCalSub"), content: (<>{notificationsSection}<CalendarSubscribe /></>) },
+          { id: "appearance", icon: "paint", title: t("settings.appearance"), sub: t("settings.cat.appearanceSub"), content: appearanceSection },
+          { id: "password", icon: "safety", title: t("settings.cat.password"), sub: t("settings.cat.passwordSub"), content: passwordSection },
+          // Quest Bonuses — owner config (business-adjacent; kept in personal Settings).
+          ...(isOwner ? [{ id: "quests", icon: "quest", title: t("settings.questBonuses"), sub: t("settings.cat.questsSub"), content: questsSection }] : []),
+        ]}
+        footer={(
+          <>
       {/* Sign out + version + delete. Logout wipes the offline queues, so
           ask first when changes haven't synced or the user is on the clock. */}
       <button
@@ -421,6 +429,9 @@ export default function Settings({ onClose }: Props) {
         </button>
         )}
       </div>
+          </>
+        )}
+      />
     </div>
   );
 }

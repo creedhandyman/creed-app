@@ -15,7 +15,10 @@ const BRAND_PRESETS = ["#2E75B6", "#0E9F6E", "#C0392B", "#7C3AED", "#E8772E", "#
  * address/license number + the public URL slug. Org-level config;
  * admin-only. Lives in Operations → Settings.
  */
-export default function BrandingSettings() {
+export default function BrandingSettings({ part }: { part?: "business" | "brand" | "texting" } = {}) {
+  // Settings groups show one slice at a time (business info / brand + public card /
+  // text-messaging links); with no `part` everything renders, as before.
+  const show = (p: string) => !part || part === p;
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const setOrg = useStore((s) => s.setOrg);
@@ -216,6 +219,7 @@ export default function BrandingSettings() {
       {/* Logo — clicking the label opens the file picker (most reliable
           cross-browser pattern, including iOS Safari where programmatic
           .click() on a display:none input is flaky). */}
+      {show("business") && (
       <div className="cd mb" style={{ textAlign: "center", padding: 18 }}>
         <img
           src={previewSrc}
@@ -302,8 +306,10 @@ export default function BrandingSettings() {
           PNG, JPG, WEBP, or SVG · square or wide images work best
         </div>
       </div>
+      )}
 
       {/* Brand color — threads through app accents, the card, and PDFs */}
+      {show("brand") && (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="paint" size={16} color="var(--color-primary)" /> Brand color
@@ -397,8 +403,10 @@ export default function BrandingSettings() {
           Text auto-flips for readability. Job-status colors (quoted / active / paid…) stay fixed — they carry meaning.
         </div>
       </div>
+      )}
 
       {/* Primary trade — tailors rate, materials, checklist, units, Grizz copy, starters */}
+      {show("business") && (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name={tradeConfig(org.primary_trade).icon} size={16} color="var(--color-primary)" />
@@ -421,8 +429,10 @@ export default function BrandingSettings() {
           materials, inspection checklist, and quote units. Per-trade rates you set by hand stay put.
         </div>
       </div>
+      )}
 
       {/* Editable business info */}
+      {show("business") && (
       <div className="cd mb">
         <h4
           style={{
@@ -492,8 +502,10 @@ export default function BrandingSettings() {
           </div>
         ))}
       </div>
+      )}
 
       {/* Public card content — headline + services shown on /card/[slug]. */}
+      {show("brand") && (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="card" size={16} color="var(--color-primary)" />
@@ -602,8 +614,10 @@ export default function BrandingSettings() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Text messaging — policy links for the approval page's consent box. */}
+      {show("texting") && (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="phone" size={16} color="var(--color-primary)" />
@@ -643,6 +657,7 @@ export default function BrandingSettings() {
           </div>
         ))}
       </div>
+      )}
     </>
   );
 }

@@ -134,6 +134,19 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   (`components/TopBar.tsx`, styles `.topbar*` in globals.css): [back] [icon tile] TITLE … [right
   slot]. `color` = the screen's nav hue (VerticalNav TAB_COLOR); `onBack` only on screens reached
   from More / a deep link. Don't hand-roll a new title row.
+- **Settings = short category lists (2026-11-09)**: both the personal Settings
+  gear and Ops → Settings render `components/SettingsCategories.tsx` — a list of
+  rows (icon · title · one-line "what's inside"); tapping one opens just that
+  category's settings with a back button (phone back too). Add a new setting
+  INSIDE the right category (or add a category), never as another long section.
+  Personal: Profile · Notifications & calendar · Appearance · Password · Quest
+  bonuses (owner). Business: Business info (logo/name/address/license/primary
+  trade + licensed trades) · Brand & public card · Pricing & taxes (quote
+  settings + trade rates) · Quote terms · Customer messages (quote follow-up,
+  review requests, text-messaging links) · System check (platform admins).
+  `BrandingSettings` takes `part="business" | "brand" | "texting"` to show one
+  slice (no `part` = all). The setup checklist's "open Business settings" links
+  land on the list, not a category.
 - **Icons**: import from `<Icon name="..." />`. Curated set in
   `Icon.tsx`. Inline emoji in flowing copy (✅ status, ⭐ ratings) is
   fine; UI affordances should be Lucide.
