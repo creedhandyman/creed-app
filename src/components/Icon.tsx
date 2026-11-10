@@ -95,6 +95,7 @@ import {
   Fence,
   Share2,
   ExternalLink,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 
@@ -201,6 +202,7 @@ const ICONS: Record<string, LucideIcon> = {
   calc: Calculator,
   folder: Folder,
   tip: Lightbulb,
+  texts: MessageSquare,
 };
 
 export type IconName = keyof typeof ICONS | string;

@@ -384,7 +384,7 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   strip opens the phone's Messages as before. Send quote / Follow up / Send
   invoice still open Messages.
 
-- Customer text replies, build 1 (**NOT YET RUN**, 2026-11-10): run
+- Customer text replies, build 1 (**RUN in prod** 2026-11-10, columns + functions checked): run
   `supabase/migrations/20261110_text_replies.sql` in the SQL editor (safe to
   re-run). Adds to `sms_messages`: `direction` ('out' default | 'in'),
   `from_phone`, `contact_phone` (the customer's number on both sides = the
@@ -406,8 +406,30 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   note, no push. "Yes" is START only from an opted-out number. `sendLoggedSms`
   writes `direction`/`contact_phone` and falls back to the old row shape if
   the migration hasn't run. Before it runs, replies still alert as before.
-  Builds 2-3 (Texts screen + reply box, job/customer tabs, Make a lead) are in
-  the plan doc "Creed: receiving Twilio replies (plan)".
+  Build 3 (job/customer Texts tabs, Link to customer) is in the plan doc
+  "Creed: receiving Twilio replies (plan)".
+
+- Texts screen, build 2 (**NOT YET RUN**, 2026-11-11): run
+  `supabase/migrations/20261111_texts_default_business.sql` once (data only:
+  businesses with `auto_sms_enroute` on and `job_text_via = 'phone'` switch to
+  `'business'`, Bernard's "switch the buttons to the business number once
+  replies work"; re-running flips anyone who switched back). The screen
+  itself needs no schema change. `screens/Texts.tsx` (page id `texts`; More
+  hub tile, side menu row and More-slot badge only when `auto_sms_enroute` is
+  on): one row per `contact_phone`, conversation view, reply box. Rules in
+  `lib/sms-threads.ts` (tested: `summarizeThreads`, `crewJobIds`,
+  `canSeeThread`, `replyRole`, `checkReply`); loads in
+  `lib/sms-threads-server.ts` (`openThread` = org + phone + crew check, used
+  by every route). Routes: `GET /api/sms/threads` (list, `?count=1` = unread
+  for the badge, polled every 60s by `lib/texts-client.ts`), `GET|POST
+  /api/sms/thread` (read / mark read), `POST /api/sms/reply` (always the
+  business number via `sendLoggedSms`: STOP check + log, only to a number
+  that's already a conversation), `POST /api/sms/lead` (Make a lead on an
+  unknown number, owners/managers: new customer with that phone + lead job,
+  conversation moved onto them). Owners/managers see every conversation; crew
+  only those touching a job they're on (👷 schedule names from 30 days ago on,
+  or requested tech). A reply push opens `/?texts=<phone>` (AppShell reads it);
+  a `text_reply` bell row opens its job's conversation.
 
 - AI usage logging (Phase 0 cost measurement — `/api/ai` writes one row per call):
   ```sql

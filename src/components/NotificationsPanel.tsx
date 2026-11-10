@@ -12,6 +12,8 @@ interface Props {
   onOpenJob?: (jobId: string) => void;
   /** Open Operations on a sub-tab — join requests → Team, payday alerts → Payroll. */
   onOpenOps?: (tab?: string) => void;
+  /** Open Texts on a conversation — a customer's text reply. */
+  onOpenTexts?: (target?: { phone?: string; jobId?: string }) => void;
 }
 
 /** Compact relative time — "just now", "5m", "3h", "2d", else a date. */
@@ -40,9 +42,12 @@ const META: Record<NotificationType, { icon: IconName; color: string }> = {
   job_scheduled: { icon: "schedule", color: "#f5c400" },
   quote_viewed: { icon: "eye", color: "#3ee08f" },
   quote_followup: { icon: "send", color: "#8cc0ff" },
+  text_reply: { icon: "texts", color: "#38bdf8" },
+  invoice_reminder: { icon: "receipt", color: "#f5b400" },
+  visit_reminder: { icon: "schedule", color: "#f5c400" },
 };
 
-export default function NotificationsPanel({ onClose, onOpenJob, onOpenOps }: Props) {
+export default function NotificationsPanel({ onClose, onOpenJob, onOpenOps, onOpenTexts }: Props) {
   const notifications = useStore((s) => s.notifications);
   const markRead = useStore((s) => s.markNotificationRead);
   const markAll = useStore((s) => s.markAllNotificationsRead);
@@ -75,6 +80,8 @@ export default function NotificationsPanel({ onClose, onOpenJob, onOpenOps }: Pr
   // Where a row goes when tapped: its job, else (no job) the Ops area the
   // alert is about. null = read-only row.
   const routeOf = (n: AppNotification): (() => void) | null => {
+    // A customer's text opens the conversation (its job's, else the list).
+    if (n.type === "text_reply" && onOpenTexts) return () => onOpenTexts(n.job_id ? { jobId: n.job_id } : undefined);
     if (n.job_id && onOpenJob) return () => onOpenJob(n.job_id!);
     if (n.type === "join_request" && onOpenOps) return () => onOpenOps("team");
     if (n.type === "payroll_alert" && onOpenOps) return () => onOpenOps("payroll");

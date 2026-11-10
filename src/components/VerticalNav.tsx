@@ -4,6 +4,7 @@ import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
 import { useNavLayout } from "@/lib/nav-layout";
 import { Icon, type IconName } from "./Icon";
+import { useTextsStore } from "@/lib/texts-client";
 
 interface NavItem {
   id: string;
@@ -42,6 +43,7 @@ const OVERFLOW_TABS: Record<string, { icon: IconName; labelKey: string }> = {
   workvision: { icon: "worker", labelKey: "nav.work" },
   troubleshoot: { icon: "troubleshoot", labelKey: "nav.fixit" },
   flip: { icon: "trending", labelKey: "nav.flip" },
+  texts: { icon: "texts", labelKey: "nav.texts" },
 };
 
 // Per-tab signature color, shown only when that tab is the active one.
@@ -64,6 +66,7 @@ const TAB_COLOR: Record<string, string> = {
   troubleshoot: "#94a3b8",// Fix-it — slate
   flip: "#ffcc00",        // Flip Mode — gold
   customers: "#3ee08f",   // Customers (side menu) — mint, like its More-hub tile
+  texts: "#38bdf8",       // Texts — sky
 };
 
 interface Props {
@@ -89,10 +92,13 @@ const useLeadCount = () => useStore((s) => s.jobs.filter((j) => j.status === "le
 // Unread bell notifications light Home (the bell lives on the dashboard), so
 // a tech on Time / Work mode still sees there's something.
 const useUnreadCount = () => useStore((s) => s.notifications.filter((n) => !n.read_at).length);
+// Unread customer texts light More (Texts lives in the More hub).
+const useTextsUnread = () => useTextsStore((s) => s.unread);
 
 function TabBar({ page, setPage, isAdmin, bottom }: Props & { bottom: boolean }) {
   const leadCount = useLeadCount();
   const unreadCount = useUnreadCount();
+  const textsUnread = useTextsUnread();
   const items = bottom ? [...NAV_ITEMS].reverse() : NAV_ITEMS;
   // We're on an overflow page (or the hub itself) whenever the current page
   // isn't one of the 4 base tabs — that's when the More slot lights up.
@@ -120,6 +126,7 @@ function TabBar({ page, setPage, isAdmin, bottom }: Props & { bottom: boolean })
         // Leads are an owner/manager queue — crew can't act on them.
         const showLeadDot = !!isAdmin && item.id === "jobs" && leadCount > 0;
         const showBellDot = item.id === "dash" && unreadCount > 0;
+        const showTextsDot = isMore && navPage !== "texts" && textsUnread > 0;
 
         return (
           <button
@@ -154,6 +161,19 @@ function TabBar({ page, setPage, isAdmin, bottom }: Props & { bottom: boolean })
                 }}
               >
                 {leadCount > 9 ? "9+" : leadCount}
+              </span>
+            )}
+            {showTextsDot && (
+              <span
+                aria-label={`${textsUnread} unread ${textsUnread === 1 ? "text" : "texts"}`}
+                style={{
+                  position: "absolute", top: 2, right: 6, minWidth: 14, height: 14, padding: "0 4px", borderRadius: 7,
+                  background: "#38bdf8", color: "#04131c", fontSize: 11, fontFamily: "Oswald",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: "0 0 0 2px var(--color-dark-bg), 0 0 8px rgba(56,189,248,0.6)",
+                }}
+              >
+                {textsUnread > 9 ? "9+" : textsUnread}
               </span>
             )}
             {showBellDot && (
@@ -193,6 +213,8 @@ function SideNav({ page, setPage, isAdmin, opsTab, openOps, openSettings, right 
   const org = useStore((s) => s.org);
   const leadCount = useLeadCount();
   const unreadCount = useUnreadCount();
+  const textsUnread = useTextsUnread();
+  const textingOn = org?.auto_sms_enroute === true;
   const navPage = page === "workvision" ? "time" : page;
   const onOps = navPage === "ops";
 
@@ -211,6 +233,7 @@ function SideNav({ page, setPage, isAdmin, opsTab, openOps, openSettings, right 
       pageItem("jobs", "jobs", t("nav.jobs"), isAdmin ? leadCount : 0),
       pageItem("sched", "schedule", t("nav.sched")),
       pageItem("time", "time", t("nav.time")),
+      ...(textingOn ? [pageItem("texts", "texts", t("nav.texts"), textsUnread)] : []),
     ] },
     ...(isAdmin ? [{ key: "biz", label: t("nav.groupBusiness"), items: [
       opsItem("customers", "clients", t("more.customers")),

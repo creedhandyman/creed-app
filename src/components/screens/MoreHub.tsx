@@ -7,6 +7,7 @@ import UserGuideModal from "@/components/UserGuideModal";
 import Grizz from "@/components/Grizz";
 import { t } from "@/lib/i18n";
 import { useBackLayer } from "@/lib/back-layer";
+import { useTextsStore } from "@/lib/texts-client";
 
 interface Props {
   setPage: (p: string) => void;
@@ -27,6 +28,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
   const org = useStore((s) => s.org);
   const darkMode = useStore((s) => s.darkMode);
   const [showGuide, setShowGuide] = useState(false);
+  const textsUnread = useTextsStore((s) => s.unread);
   // Android back closes Ask Grizz instead of leaving More.
   useBackLayer(showGuide, () => setShowGuide(false));
 
@@ -42,8 +44,12 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
   const isAdmin = user?.role === "owner" || user?.role === "manager";
 
   const tiles: {
-    id: string; icon: IconName; name: string; sub: string; color: string; tint: string; onClick: () => void;
+    id: string; icon: IconName; name: string; sub: string; color: string; tint: string; onClick: () => void; badge?: number;
   }[] = [
+    // Customer texts on the business number — only for businesses that text.
+    ...(org?.auto_sms_enroute === true
+      ? [{ id: "texts", icon: "texts" as IconName, name: t("more.texts"), sub: t("more.textsSub"), color: "#38bdf8", tint: "rgba(56,189,248,.16)", onClick: () => setPage("texts"), badge: textsUnread }]
+      : []),
     { id: "time", icon: "time", name: t("more.time"), sub: t("more.timeSub"), color: "#13c06a", tint: "rgba(19,192,106,.16)", onClick: () => setPage("time") },
     { id: "quests", icon: "trophy", name: t("more.quests"), sub: t("more.questsSub"), color: "var(--color-violet)", tint: "rgba(157,78,221,.16)", onClick: () => setPage("quests") },
     isAdmin
@@ -93,7 +99,12 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
           // odd last one across both columns so the grid fills evenly.
           const spanFull = tiles.length % 2 === 1 && i === tiles.length - 1;
           return (
-            <div key={tile.id} className="cd" onClick={tile.onClick} style={{ cursor: "pointer", padding: 14, ...(spanFull ? { gridColumn: "1 / -1" } : {}) }}>
+            <div key={tile.id} className="cd" onClick={tile.onClick} style={{ cursor: "pointer", padding: 14, position: "relative", ...(spanFull ? { gridColumn: "1 / -1" } : {}) }}>
+              {!!tile.badge && (
+                <span style={{ position: "absolute", top: 10, right: 10, minWidth: 20, height: 20, padding: "0 6px", borderRadius: 10, background: tile.color, color: "#04131c", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {tile.badge > 99 ? "99+" : tile.badge}
+                </span>
+              )}
               <div style={{ width: 40, height: 40, borderRadius: 12, background: tile.tint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10, overflow: "hidden" }}>
                 {tile.id === "grizz"
                   ? <Grizz pose="point" size={30} />

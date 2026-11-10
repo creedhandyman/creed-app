@@ -24,9 +24,11 @@ interface Props {
   openJob?: (jobId: string) => void;
   /** Open Operations on a specific sub-tab — used by the getting-started card. */
   openOps?: (tab?: string) => void;
+  /** Open Texts on a job's conversation (a customer text-reply bell row). */
+  openTexts?: (target?: { phone?: string; jobId?: string }) => void;
 }
 
-export default function Dashboard({ setPage, openSettings, openJob, openOps }: Props) {
+export default function Dashboard({ setPage, openSettings, openJob, openOps, openTexts }: Props) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const isAdmin = user.role === "owner" || user.role === "manager";
@@ -184,7 +186,7 @@ export default function Dashboard({ setPage, openSettings, openJob, openOps }: P
         </div>
       </div>
 
-      {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} onOpenJob={openJob} onOpenOps={openOps} />}
+      {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} onOpenJob={openJob} onOpenOps={openOps} onOpenTexts={openTexts} />}
 
       {isAdmin && openOps && <GettingStarted setPage={setPage} openOps={openOps} />}
 
