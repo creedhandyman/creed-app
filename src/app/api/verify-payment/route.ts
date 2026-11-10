@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
-import { fulfillJobPayment, paymentFromCheckoutSession } from "@/lib/payment-fulfillment";
+import { fulfillJobPayment, isBankPaymentPending, paymentFromCheckoutSession } from "@/lib/payment-fulfillment";
 import { stripeExcessRefunder } from "@/lib/stripe-refund";
 import { signJobToken } from "@/lib/job-token";
 import { siteOrigin } from "@/lib/site-url";
@@ -34,12 +34,9 @@ export async function POST(req: NextRequest) {
     // Bank transfer (ACH): the checkout finished but the money takes a few
     // business days to clear. Not an error, and nothing to record yet — the
     // webhook records it on checkout.session.async_payment_succeeded. Only for
-    // a session made for THIS job.
-    if (
-      session.status === "complete" &&
-      session.payment_status === "unpaid" &&
-      session.metadata?.job_id === jobId
-    ) {
+    // a session made for THIS job, and only while it's still clearing: a failed
+    // bank payment falls through to "Payment not completed" below.
+    if (isBankPaymentPending(session) && session.metadata?.job_id === jobId) {
       const pay = paymentFromCheckoutSession(session);
       return NextResponse.json({
         ok: true,

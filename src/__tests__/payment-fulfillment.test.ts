@@ -7,6 +7,7 @@ import { notifyJobPaid } from "@/lib/notify-server";
 import {
   fulfillJobPayment,
   paymentFromCheckoutSession,
+  isBankPaymentPending,
   recordJobRefund,
   refundJobShareCents,
 } from "@/lib/payment-fulfillment";
@@ -354,4 +355,18 @@ test("refund on a tipped charge comes off the job part first, capped at it", () 
   expect(refundJobShareCents(115000, 115000, 15000)).toBe(100000);
   expect(refundJobShareCents(5000, 115000, 0)).toBe(5000);
   expect(refundJobShareCents(-5, 115000, 15000)).toBe(0);
+});
+
+// ── Bank transfer still clearing ────────────────────────────────────────────
+
+test("a bank payment is pending only while Stripe shows it processing", () => {
+  const sess = (payment_intent: unknown, over: Record<string, unknown> = {}) =>
+    ({ status: "complete", payment_status: "unpaid", payment_intent, ...over }) as unknown as Stripe.Checkout.Session;
+  expect(isBankPaymentPending(sess({ id: "pi_1", status: "processing" }))).toBe(true);
+  // Failed: Stripe sends the intent back for a new payment method.
+  expect(isBankPaymentPending(sess({ id: "pi_1", status: "requires_payment_method" }))).toBe(false);
+  expect(isBankPaymentPending(sess({ id: "pi_1", status: "canceled" }))).toBe(false);
+  expect(isBankPaymentPending(sess("pi_1"))).toBe(true);
+  expect(isBankPaymentPending(sess({ id: "pi_1", status: "processing" }, { payment_status: "paid" }))).toBe(false);
+  expect(isBankPaymentPending(sess({ id: "pi_1", status: "processing" }, { status: "open" }))).toBe(false);
 });

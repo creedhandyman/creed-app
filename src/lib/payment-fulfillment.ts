@@ -533,3 +533,14 @@ export async function scheduleReviewRequest(
     status: "scheduled",
   });
 }
+
+/** A bank transfer (ACH) checkout that's finished but still clearing. Once the
+ *  bank payment fails the session stays complete and unpaid, so the
+ *  PaymentIntent's status decides: only "processing" is still on its way. An
+ *  unexpanded intent (just its id) keeps the old reading. */
+export function isBankPaymentPending(session: Stripe.Checkout.Session): boolean {
+  if (session.status !== "complete" || session.payment_status !== "unpaid") return false;
+  const pi = session.payment_intent;
+  if (pi && typeof pi === "object") return pi.status === "processing";
+  return true;
+}
