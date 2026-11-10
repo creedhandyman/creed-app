@@ -352,7 +352,7 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Schema migrations the user should run in Supabase
 
-- Automatic customer texts (**NOT YET RUN**, 2026-11-09): run
+- Automatic customer texts (**RUN in prod**: tables/columns present 2026-11-10): run
   `supabase/migrations/20261109_automatic_texts.sql` in the SQL editor. Adds the
   three OFF-by-default switches `organizations.auto_sms_enroute /
   auto_sms_reminder / auto_sms_invoice` (Operations → Settings → Automatic
@@ -370,13 +370,38 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   X-Twilio-Signature against `TWILIO_AUTH_TOKEN` and the `siteOrigin()` URL).
   The job card's Text chip and the Message customer button send from the
   business number only when Ops sets `organizations.job_text_via =
-  'business'` (default `'phone'`, **migration
-  `20261110_job_text_via.sql` NOT YET RUN**) AND `auto_sms_enroute` is on;
+  'business'` (default `'phone'`, migration
+  `20261110_job_text_via.sql`, **RUN in prod**: column present 2026-11-10) AND `auto_sms_enroute` is on;
   then their send strip gets a Send text button that POSTs `/api/sms` `{ jobId, kind: "message", recipient:
   "client" | "resident", body }`; the server looks the number up on the job
   (`pickedRecipient`), checks STOP and logs `kind = 'message'`. Off = the
   strip opens the phone's Messages as before. Send quote / Follow up / Send
   invoice still open Messages.
+
+- Customer text replies, build 1 (**NOT YET RUN**, 2026-11-10): run
+  `supabase/migrations/20261110_text_replies.sql` in the SQL editor (safe to
+  re-run). Adds to `sms_messages`: `direction` ('out' default | 'in'),
+  `from_phone`, `contact_phone` (the customer's number on both sides = the
+  conversation key), `customer_id`, `match_status`, `read_at`, `media`; a
+  UNIQUE index on `twilio_sid` (Twilio retries saved once); the
+  `sms_customers_by_phone(last10)` lookup (expression index, no new customers
+  column) and `sms_add_job_photos(job, org, urls[])` (atomic append to the
+  job blob's photos). Both functions are service-role only.
+  `/api/sms/inbound` now saves every incoming text (`lib/sms-inbound.ts`
+  `pickMatch`, tested: thread we texted in 60 days → one customer's newest
+  open job → one resident on a 180-day job → several (newest job, flagged) →
+  unknown (only if exactly ONE org has `auto_sms_enroute` on) → held (no org,
+  shown to no one); every org shares the sending number, so a text only goes
+  to an org that texted it or has it on file). After the TwiML reply
+  (`after()`), photos are copied from Twilio (basic auth) into
+  `receipts/sms/{org}/…` and onto the job; owners, managers and the job's crew
+  (schedule-note names + requested_tech) get a bell + app push, never a text
+  (`dispatchNotifications` `channels`), one per 5-minute burst. STOP = bell
+  note, no push. "Yes" is START only from an opted-out number. `sendLoggedSms`
+  writes `direction`/`contact_phone` and falls back to the old row shape if
+  the migration hasn't run. Before it runs, replies still alert as before.
+  Builds 2-3 (Texts screen + reply box, job/customer tabs, Make a lead) are in
+  the plan doc "Creed: receiving Twilio replies (plan)".
 
 - AI usage logging (Phase 0 cost measurement — `/api/ai` writes one row per call):
   ```sql

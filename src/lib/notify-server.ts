@@ -168,9 +168,15 @@ export async function dispatchNotifications(
     /** Optional distinct SMS text. Falls back to `${title} — ${body}`. */
     smsBody?: string;
     recipients: NotifyRecipient[];
+    /** Turn a channel off for this notification (both on by default). A
+     *  customer's text reply is app push only (owner's choice, 2026-11-10);
+     *  an opt-out is a bell row with no push. */
+    channels?: { push?: boolean; sms?: boolean };
   },
 ): Promise<{ created: number; texted: number; pushed: number; failures: number }> {
   const { orgId, type, title, body, jobId, smsBody, recipients } = params;
+  const pushOn = params.channels?.push !== false;
+  const smsOn = params.channels?.sms !== false;
 
   // De-dup recipients by id, drop anyone opted out of this event.
   const seen = new Set<string>();
@@ -198,13 +204,15 @@ export async function dispatchNotifications(
   }
 
   // Web push — best-effort, independent of the SMS channel.
-  const pushed = await sendPush(
-    supabase,
-    targets.map((t) => t.id),
-    { title, body, url: "/" },
-  );
+  const pushed = pushOn
+    ? await sendPush(
+      supabase,
+      targets.map((t) => t.id),
+      { title, body, url: "/" },
+    )
+    : 0;
 
-  if (!SMS_ENABLED) return { created: targets.length, texted: 0, pushed, failures: 0 };
+  if (!SMS_ENABLED || !smsOn) return { created: targets.length, texted: 0, pushed, failures: 0 };
 
   // SMS — best-effort, in parallel.
   const text = (smsBody || `${title} — ${body}`).slice(0, 600);
@@ -423,11 +431,24 @@ export async function notifyQuoteFollowup(
  */
 export async function notifyManagers(
   supabase: SupabaseClient,
-  p: { orgId: string; jobId?: string | null; type: "text_reply" | "invoice_reminder" | "visit_reminder"; title: string; body: string },
+  p: {
+    orgId: string;
+    jobId?: string | null;
+    type: "text_reply" | "invoice_reminder" | "visit_reminder";
+    title: string;
+    body: string;
+    /** Crew names to include besides the owners/managers (e.g. the crew on the job). */
+    crewNames?: string[];
+    channels?: { push?: boolean; sms?: boolean };
+  },
 ): Promise<void> {
   try {
     if (!p.orgId) return;
-    const recipients = await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" });
+    const recipients = await resolveRecipients(supabase, p.orgId, {
+      managers: true,
+      names: p.crewNames,
+      event: "none",
+    });
     if (!recipients.length) return;
     await dispatchNotifications(supabase, {
       orgId: p.orgId,
@@ -436,6 +457,7 @@ export async function notifyManagers(
       body: p.body,
       jobId: p.jobId || null,
       recipients,
+      channels: p.channels,
     });
   } catch (e) {
     // eslint-disable-next-line no-console

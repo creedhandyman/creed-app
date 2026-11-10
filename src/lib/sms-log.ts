@@ -12,9 +12,8 @@ import type { RecipientRole, SmsKind } from "@/lib/sms-recipient";
  * The opt-out read and the log write are best-effort: before the migration
  * runs (tables missing) the text still goes out, it just isn't logged.
  */
-export const OPT_OUT_WORDS = ["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "REVOKE", "OPTOUT"];
-export const OPT_IN_WORDS = ["START", "UNSTOP", "YES"];
-export const HELP_WORDS = ["HELP", "INFO"];
+// The keyword lists live with the incoming-text rules (lib/sms-inbound).
+export { OPT_OUT_WORDS, OPT_IN_WORDS, HELP_WORDS } from "@/lib/sms-inbound";
 
 /** Twilio error: the number has opted out of this sender. */
 export const TWILIO_UNSUBSCRIBED = 21610;
@@ -90,19 +89,24 @@ async function log(
   to: string,
   r: { status: string; sid?: string; error?: string },
 ) {
+  const row = {
+    org_id: m.orgId,
+    job_id: m.jobId || null,
+    to_phone: to,
+    recipient_role: m.role,
+    kind: m.kind,
+    body: m.body.slice(0, 1600),
+    twilio_sid: r.sid || null,
+    status: r.status,
+    error: r.error ? r.error.slice(0, 500) : null,
+    sent_by: m.sentBy || null,
+  };
   try {
-    await supabase.from("sms_messages").insert({
-      org_id: m.orgId,
-      job_id: m.jobId || null,
-      to_phone: to,
-      recipient_role: m.role,
-      kind: m.kind,
-      body: m.body.slice(0, 1600),
-      twilio_sid: r.sid || null,
-      status: r.status,
-      error: r.error ? r.error.slice(0, 500) : null,
-      sent_by: m.sentBy || null,
-    });
+    // direction + contact_phone put sent texts in the same conversation as
+    // the replies (migration 20261110_text_replies.sql). Before it runs those
+    // columns don't exist, so retry with the original shape.
+    const { error } = await supabase.from("sms_messages").insert({ ...row, direction: "out", contact_phone: to });
+    if (error) await supabase.from("sms_messages").insert(row);
   } catch {
     /* best-effort */
   }
