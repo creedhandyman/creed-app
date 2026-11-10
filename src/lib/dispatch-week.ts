@@ -277,7 +277,7 @@ export interface SchedulePost {
 export interface SchedulePatch {
   entryId: string;
   job: string;
-  patch: { sched_date?: string; note?: string };
+  patch: { sched_date?: string; note?: string; start_time?: string | null };
   moved: boolean;
   retimed: boolean;
   recrewed: boolean;
@@ -344,7 +344,16 @@ export function planWrites(plan: WeekPlan, { booked, crew, replanBooked }: {
     const moved = day !== e.sched_date;
     if (!retimed && !recrewed && !moved) continue;
     const patch: SchedulePatch["patch"] = {};
-    if (retimed || recrewed) patch.note = composeNote(e.note, time, crewNames);
+    if (retimed || recrewed) {
+      patch.note = composeNote(e.note, time, crewNames);
+      // Online-booking rows also keep the time in start_time (their per-slot
+      // unique index); keep it in step with the note. Only those rows, so
+      // other rows never reference the column before its migration runs.
+      if (e.booking_status) {
+        const m = hhmmToMin(time);
+        patch.start_time = m == null ? null : minToHhmm(m);
+      }
+    }
     if (moved) patch.sched_date = day;
     patches.push({ entryId, job: e.job, patch, moved, retimed, recrewed });
   }

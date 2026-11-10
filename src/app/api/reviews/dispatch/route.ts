@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
 import { residentContact } from "@/lib/resident";
 import { smsConsentGranted } from "@/lib/sms-consent";
-import { normalizePhone, sendSms } from "@/lib/sms";
+import { normalizePhone, sendSms, smsConfigured } from "@/lib/sms";
 import { cronAuth } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
@@ -89,8 +89,8 @@ function firstName(full: string | null | undefined): string {
  *  line). Keeps this cron's own error wording, which lands in
  *  review_requests.error for the owner to read. */
 async function sendReviewSms(to: string, body: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_FROM_NUMBER) {
-    return { ok: false, error: "Twilio not configured (TWILIO_ACCOUNT_SID/TOKEN/FROM_NUMBER)" };
+  if (!smsConfigured()) {
+    return { ok: false, error: "Twilio not configured (TWILIO_ACCOUNT_SID/TOKEN + MESSAGING_SERVICE_SID or FROM_NUMBER)" };
   }
   if (!normalizePhone(to)) return { ok: false, error: "No valid phone number on customer record" };
   const r = await sendSms(to, body);

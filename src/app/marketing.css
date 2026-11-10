@@ -114,6 +114,8 @@
 .mkt .appshot figcaption { margin-top: 16px; }
 .mkt .appshot figcaption b { display: block; font-family: Oswald, sans-serif; font-weight: 600; font-size: 19px; letter-spacing: .3px; }
 .mkt .appshot figcaption span { display: block; margin-top: 6px; font-size: 14.5px; color: var(--mmuted); line-height: 1.5; }
+.mkt .demovid { max-width: 960px; margin: 40px auto 0; border-radius: 18px; overflow: hidden; border: 1px solid #2a2a3a; box-shadow: 0 30px 70px -30px rgba(46, 117, 182, .55), 0 20px 50px -24px rgba(0, 0, 0, .85); background: #04070d; }
+.mkt .demovid video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
 .mkt .appshotnote { margin-top: 22px; text-align: center; font-size: 12.5px; color: var(--mdim); }
 .mkt .replaces { text-align: center; padding: 66px 0; background: radial-gradient(700px 360px at 50% 50%, rgba(157, 78, 221, .1), transparent 70%); }
 .mkt .repchips { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 30px; }
