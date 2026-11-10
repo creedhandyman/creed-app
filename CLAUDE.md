@@ -697,7 +697,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   a `rejected` row (or no row at all) = the cron isn't reaching/authing.
 - `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
 - `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
-- `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;`
+- `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;` — was NOT in prod until
+  2026-11-10 (file `supabase/migrations/20261110_review_requested_at.sql`): without it
+  `scheduleReviewRequest` errors silently and no review request is ever queued.
 - `ALTER TABLE time_entries ADD COLUMN paid_at TIMESTAMPTZ;`
   (Payroll now sets this instead of deleting the row, so Team Stats
   can compute lifetime hours/earnings. Existing rows have it NULL =
@@ -1033,6 +1035,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   would have landed on the platform) and returns plain errors; cancel returns
   to the referring /status page. /payment/success uses verify-payment's
   fullyPaid/balance + the org's logo + a signed /status link.
+- Contact info from the quote description (2026-11-10): `lib/contact-extract.ts`
+  (pure, tested) reads names/phones/emails typed into Quick Quote text or a
+  lead's `leadDescription` ("Tenant: Mary 316-555-0142", "Customer: Joe …",
+  or unlabeled). `components/ContactFound.tsx` shows them on the quote editor
+  under the customer card; one tap links/creates/fills the customer (never a
+  property manager's record, never overwrites a filled field; the org's and
+  team's own numbers are skipped) and hands the resident to QuoteForge, which
+  saves it on the blob via `buildQuoteSave` identity.resident →
+  residentName/Phone/Email (non-empty only). Job detail also edits resident email.
 - Review-Request automation (v1):
   ```
   CREATE TABLE IF NOT EXISTS review_requests (

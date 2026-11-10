@@ -67,6 +67,9 @@ import { evaluateLine, matchingRuleIds, uniqueSuggestionDetail, type ScopeRule, 
 import { loadScopeRules } from "@/lib/scope-rules-client";
 import { isPdfFile } from "@/lib/pdf-detect";
 import { GrizzFace } from "../Grizz";
+import ContactFound from "../ContactFound";
+import { residentContact } from "@/lib/resident";
+import type { FoundContact } from "@/lib/contact-extract";
 
 
 /** Sub-screen header colours = the hub card that opens them (Quick Quote gold,
@@ -327,6 +330,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // strings stay populated alongside for back-compat.
   const [customerId, setCustomerId] = useState<string | undefined>(undefined);
   const [addressId, setAddressId] = useState<string | undefined>(undefined);
+  // Contact info typed into the description (ContactFound card): the text it
+  // was read from, and a resident confirmed this session (saved with the quote).
+  const [contactSource, setContactSource] = useState("");
+  const [residentPatch, setResidentPatch] = useState<FoundContact | null>(null);
+  const resetContact = () => { setContactSource(""); setResidentPatch(null); };
   const [rooms, setRooms] = useState<Room[]>([]);
   // Scope-check rules (finish work, trim-out, cleanup a quote tends to forget).
   const [scopeRules, setScopeRules] = useState<ScopeRule[]>([]);
@@ -711,9 +719,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setAddressId(job.address_id || undefined);
     setEditingId(job.id);
     leadSeedRef.current = null;
+    setResidentPatch(null);
 
     try {
       const data = readBlob(job.rooms);
+      setContactSource(typeof data?.leadDescription === "string" ? data.leadDescription : "");
       // A new lead (public intake form) stores work-order details as
       // { leadDescription, leadPhotos } with no quote rooms yet. "Build Quote"
       // lands here — instead of a blank editor, seed the Quick Quote flow with
@@ -978,7 +988,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     // saved before the strip may still carry the stamp).
     try { parsed = stripAiHrs(JSON.parse(tpl.template_rooms) as Room[]); } catch { /* */ }
     setEditingId(null);
-    setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined);
+    setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined); resetContact();
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
     setTieredQuote(false); setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
@@ -1304,6 +1314,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           );
         }
         if (result.client && !client) setClient(result.client);
+        // Names / phones / emails typed into the description → offered as the
+        // job's customer + resident (ContactFound card).
+        setContactSource(rawText);
         // Carry Quick Quote photos into the job's gallery as "before" photos
         // so they save with the job when the user hits Save (previously the
         // photos only existed transiently for the AI call).
@@ -1865,6 +1878,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         editing: !!editingId, property: prop, client, customerId, addressId,
         createdBy: user.name, trade: dominantTrade(rooms),
         today: new Date().toISOString().split("T")[0],
+        resident: residentPatch,
       },
     });
     // A save that drops finished work-order tasks is worth a console trace.
@@ -1923,6 +1937,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setClient("");
     setCustomerId(undefined);
     setAddressId(undefined);
+    resetContact();
     setWorkers([]);
     setCustomWorkOrder(null);
     setEditingId(null);
@@ -2108,7 +2123,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     // start, so the next quote doesn't patch the lead's row.
     if (editingId) {
       setEditingId(null); setProp(""); setClient("");
-      setCustomerId(undefined); setAddressId(undefined); setJobPhotos([]);
+      setCustomerId(undefined); setAddressId(undefined); setJobPhotos([]); resetContact();
     }
   };
   const exitBuilding = () => { setMode(null); setParsing(false); setParseStatus(""); setInspParseFailed(false); };
@@ -2715,6 +2730,28 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           compact
         />
       </div>}
+      {!templateEdit && contactSource.trim() && (() => {
+        const saved = editingId ? jobs.find((j) => j.id === editingId) : null;
+        const onFile = residentContact(saved?.rooms);
+        const merged: FoundContact = {
+          name: residentPatch?.name || onFile.name,
+          phone: residentPatch?.phone || onFile.phone,
+          email: residentPatch?.email || onFile.email,
+        };
+        return (
+          <ContactFound
+            sourceText={contactSource}
+            customerId={customerId}
+            client={client}
+            setCustomerId={setCustomerId}
+            setClient={setClient}
+            residentOnFile={merged}
+            onResident={(r) => setResidentPatch((p) => ({
+              name: r.name || p?.name || "", phone: r.phone || p?.phone || "", email: r.email || p?.email || "",
+            }))}
+          />
+        );
+      })()}
 
       {/* Totals — gold glow; figures sit next to each other, not stacked. */}
       <div

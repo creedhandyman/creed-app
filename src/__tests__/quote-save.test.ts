@@ -264,3 +264,22 @@ describe("dominantTrade", () => {
     expect(dominantTrade([{ name: "Supplies", items: [item("a", "x", { laborHrs: 0 })] }])).toBe("Supplies");
   });
 });
+
+describe("resident details from the quote screen", () => {
+  it("writes the confirmed resident onto the blob", () => {
+    const { blob } = buildQuoteSave(input({ identity: { ...input().identity, resident: { name: " Mary Jones ", phone: "(316) 555-0142", email: "" } } }));
+    expect(blob.residentName).toBe("Mary Jones");
+    expect(blob.residentPhone).toBe("(316) 555-0142");
+    expect(blob.residentEmail).toBeUndefined();
+  });
+  it("never blanks a resident already on the job", () => {
+    const prevBlob = { rooms: [], residentName: "Mary", residentPhone: "316-555-0142" };
+    const { blob } = buildQuoteSave(input({
+      prev: { blob: prevBlob, status: "quoted" },
+      identity: { ...input().identity, editing: true, resident: { name: "", phone: "", email: "m@example.com" } },
+    }));
+    expect(blob.residentName).toBe("Mary");
+    expect(blob.residentPhone).toBe("316-555-0142");
+    expect(blob.residentEmail).toBe("m@example.com");
+  });
+});
