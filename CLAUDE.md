@@ -2363,7 +2363,13 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Receipts & photos**: an X on each job photo (owner/manager, one confirm)
   removes it via `lib/job-write.ts removePhoto` through `patchBlob`, so it is
   written onto the server's blob and stays removed. The file itself stays in
-  the bucket.
+  the bucket. (5) **Lead → Build quote no longer auto-runs the AI**: QuoteForge
+  opens Quick Quote holding the prospect's request (`leadReview`: gold card,
+  "Customer's request" label), the owner reads / edits it, and Generate builds
+  from the edited text. The saved `leadDescription` keeps the customer's
+  original words. Unchanged: a lead that already has a server AI draft
+  (`leadDraft`, CTA "Review draft quote") still opens that draft, which was
+  built from the original request.
 
 - **Quote PDF photos (2026-11-10)**: the PDF downloads each photo at its stored
   size, so it now shows at most `MAX_PDF_PHOTOS` (12, before photos first;

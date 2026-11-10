@@ -351,9 +351,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [quickPhotos, setQuickPhotos] = useState<string[]>([]);
   const [quickDesc, setQuickDesc] = useState("");
-  // Set when "Build Quote" on a lead seeds quickDesc/quickPhotos — the effect
-  // below fires the AI build once those have committed to state.
-  const [leadBuildPending, setLeadBuildPending] = useState(false);
+  // Set when "Build Quote" on a lead seeds quickDesc/quickPhotos. The quote is
+  // NOT built yet: the Quick Quote screen opens on the prospect's request so
+  // the owner can read and edit it, and the AI runs from the edited text when
+  // they tap Generate. (It used to auto-run the moment the lead opened.)
+  const [leadReview, setLeadReview] = useState(false);
   // A lead whose AI-built quote is still waiting as an edit draft opens the
   // Resume / Discard card instead of re-running the AI. Its request is kept
   // here so Discard can seed Quick Quote the original way.
@@ -654,7 +656,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setQuickDesc(seed.desc);
       setQuickPhotos(seed.photos);
       setMode("quick");
-      setLeadBuildPending(true);
+      setLeadReview(true);
     }
   };
   // Write the draft as you edit (debounced). Paused while a Resume/Discard
@@ -735,8 +737,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // A new lead (public intake form) stores work-order details as
       // { leadDescription, leadPhotos } with no quote rooms yet. "Build Quote"
       // lands here — instead of a blank editor, seed the Quick Quote flow with
-      // those details and auto-run the AI build (deferred to the effect below so
-      // quickPhotos commits before doAiParse reads it). editingId stays this
+      // those details and stop there, so the request can be reviewed and edited
+      // before anything is built (Generate runs the AI). editingId stays this
       // job, so saving promotes the same lead row to a quote.
       const leadPhotos = Array.isArray(data?.leadPhotos) ? data.leadPhotos : [];
       // The server already drafted a quote from the request (lib/lead-draft.ts)
@@ -761,7 +763,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           setQuickDesc(data.leadDescription || "");
           setQuickPhotos(leadPhotos);
           setMode("quick");
-          setLeadBuildPending(true);
+          setLeadReview(true);
           clearEditJob?.();
           return;
         }
@@ -867,15 +869,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setMode("edit");
     clearEditJob?.();
   }, [editJobId, jobs, clearEditJob]);
-
-  // Auto-run the AI build for a "Build Quote" off a lead, once the seeded
-  // quickDesc/quickPhotos have committed (so doAiParse reads the right photos).
-  useEffect(() => {
-    if (!leadBuildPending) return;
-    setLeadBuildPending(false);
-    doAiParse(quickDesc || "Analyze these photos and quote all repairs needed.", null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadBuildPending]);
 
   // Add-item form state
   // nr  = trade bucket (Painting, Carpentry, Plumbing…) — picks the parent
@@ -2129,7 +2122,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
 
   // ── Leaving a mode (the ← buttons AND the phone's back button) ──────────
   const exitQuick = () => {
-    setMode(null); setQuickPhotos([]); setQuickDesc("");
+    setMode(null); setQuickPhotos([]); setQuickDesc(""); setLeadReview(false);
     // Leaving a lead's Quick Quote: detach from the lead like a fresh
     // start, so the next quote doesn't patch the lead's row.
     if (editingId) {
@@ -2444,16 +2437,25 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           </div>
         )}
 
-        {/* Description */}
-        <div className="cd mb">
+        {/* Description. On a lead it opens holding the prospect's own request:
+            review it, fix or add detail, then Generate builds from this text. */}
+        <div className="cd mb" style={leadReview ? { border: `1px solid ${QF_HUE.gold}` } : undefined}>
+          {leadReview && (
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 9, fontSize: 13.5, lineHeight: 1.45 }}>
+              <span style={{ flexShrink: 0, marginTop: 2, display: "inline-flex" }}><Icon name="edit" size={14} color={QF_HUE.gold} /></span>
+              <span>
+                <b style={{ fontWeight: 600 }}>{t("qf.leadReviewTitle")}</b> {t("qf.leadReviewHelp")}
+              </span>
+            </div>
+          )}
           <label style={{ fontSize: 14, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".08em" }}>
-            Describe the issue
+            {leadReview ? t("qf.leadRequestLabel") : "Describe the issue"}
           </label>
           <textarea
             value={quickDesc}
             onChange={(e) => setQuickDesc(e.target.value)}
             placeholder="e.g. Kitchen faucet leaking from base, bathroom door won't close properly, 3 outlet covers missing..."
-            style={{ height: 100, marginTop: 4 }}
+            style={{ height: leadReview ? 150 : 100, marginTop: 4 }}
           />
         </div>
 
