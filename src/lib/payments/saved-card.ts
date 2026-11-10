@@ -50,6 +50,26 @@ export function savedCardFromPaymentMethod(pm: unknown): SavedCardInfo | null {
   };
 }
 
+/**
+ * Whether a checkout's card may still go on file. A webhook can arrive late or
+ * be resent, so an older checkout must not put back a card that was since
+ * replaced or removed: the card must still be attached to its Stripe customer
+ * (a replaced or removed card is detached), and no newer save may be on the
+ * row. Pure.
+ */
+export function cardSaveIsCurrent(
+  pm: unknown,
+  prevAcceptedAt: string | null | undefined,
+  sessionCreatedSec: number | null | undefined,
+): boolean {
+  const p = pm as { customer?: unknown } | null;
+  if (!p || typeof p !== "object" || !p.customer) return false;
+  const prev = prevAcceptedAt ? Date.parse(prevAcceptedAt) : NaN;
+  const ours = Number(sessionCreatedSec) * 1000;
+  if (Number.isFinite(prev) && Number.isFinite(ours) && ours > 0 && prev > ours) return false;
+  return true;
+}
+
 /** "Visa ••4242" style label for a saved card. */
 export function savedCardLabel(brand?: string | null, last4?: string | null): string {
   if (!last4) return "";
@@ -82,9 +102,12 @@ export async function saveCardFromCheckout(
 
     // The card it replaces, so it can be detached in Stripe (best-effort).
     const { data: prev } = await supabase
-      .from("customers").select("card_payment_method_id")
+      .from("customers").select("card_payment_method_id, card_consent")
       .eq("id", meta.customer_id).eq("org_id", meta.org_id).maybeSingle();
-    const oldPm = (prev as { card_payment_method_id?: string | null } | null)?.card_payment_method_id;
+    const prevRow = prev as { card_payment_method_id?: string | null; card_consent?: { accepted_at?: string } | null } | null;
+    const oldPm = prevRow?.card_payment_method_id;
+    // A late or resent webhook for an older checkout: leave the current card be.
+    if (!cardSaveIsCurrent(pi.payment_method, prevRow?.card_consent?.accepted_at, session.created)) return false;
 
     const { error } = await supabase
       .from("customers")
@@ -221,4 +244,26 @@ export function savedCardFailureMessage(err: unknown): string {
     return "The card was declined. Send the customer a pay link instead.";
   }
   return "Couldn't charge the card just now. Trying again won't charge twice, or send the customer a pay link.";
+}
+
+/**
+ * The job payment carried by a succeeded off-session saved-card charge, read
+ * from the PaymentIntent's own metadata (buildSavedCardChargeParams), or null
+ * for any other PaymentIntent. Lets the webhook record a charge whose request
+ * died before it could save it. Pure.
+ */
+export function savedCardPaymentFromIntent(pi: Stripe.PaymentIntent): {
+  jobId: string; orgId: string; paidNow: number; platformFeeCents: number; kind: string;
+} | null {
+  const meta = (pi.metadata as Record<string, string> | null) || {};
+  if (meta.card_on_file !== "1" || !meta.job_id || !meta.org_id || pi.status !== "succeeded") return null;
+  const cents = Number(meta.amount_cents) || Number(pi.amount_received) || Number(pi.amount) || 0;
+  if (cents <= 0) return null;
+  return {
+    jobId: meta.job_id,
+    orgId: meta.org_id,
+    paidNow: cents / 100,
+    platformFeeCents: Number(meta.platform_fee_cents) || 0,
+    kind: meta.kind || "payment",
+  };
 }

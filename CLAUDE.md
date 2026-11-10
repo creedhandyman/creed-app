@@ -325,7 +325,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   checkout.session.async_payment_succeeded and
   checkout.session.async_payment_failed added to that endpoint, plus ACH
   Direct Debit turned on in the Stripe dashboard; without them a bank payment
-  never lands on the job. SEO metadata does NOT follow this env var: `app/layout.tsx`'s
+  never lands on the job. Card on file also needs payment_intent.succeeded
+  on that endpoint, so a saved-card charge whose request died is still
+  recorded. SEO metadata does NOT follow this env var: `app/layout.tsx`'s
   `metadataBase`, every marketing page's canonical, robots.txt and the sitemap
   use `src/lib/seo.ts` `SEO_ORIGIN` (hardcoded `https://www.creedhm.com`).
   **Portal magic-link emails/texts derive their origin from this**, via

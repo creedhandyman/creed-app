@@ -2,6 +2,8 @@ import { buildJobCheckoutParams, type JobCheckoutInput } from "@/lib/payments/st
 import {
   buildSavedCardChargeParams,
   cardConsentText,
+  cardSaveIsCurrent,
+  savedCardPaymentFromIntent,
   savedCardChargeKey,
   savedCardFailureMessage,
   savedCardFromPaymentMethod,
@@ -97,4 +99,28 @@ test("a failed charge always points to a pay link", () => {
   expect(savedCardFailureMessage({ type: "StripeCardError", code: "card_declined" })).toMatch(/declined.*pay link/);
   expect(savedCardFailureMessage({ code: "expired_card", type: "StripeCardError" })).toMatch(/expired.*pay link/);
   expect(savedCardFailureMessage(new Error("socket hang up"))).toMatch(/won't charge twice/);
+});
+
+test("a late or resent checkout webhook never puts back an old card", () => {
+  const attached = { id: "pm_a", customer: "cus_1" };
+  const t = Date.parse("2026-11-09T12:00:00Z") / 1000;
+  expect(cardSaveIsCurrent(attached, null, t)).toBe(true);
+  expect(cardSaveIsCurrent(attached, "2026-11-09T11:00:00Z", t)).toBe(true);
+  // A newer save is already on the row.
+  expect(cardSaveIsCurrent(attached, "2026-11-09T13:00:00Z", t)).toBe(false);
+  // Replaced or removed since: Stripe has detached it.
+  expect(cardSaveIsCurrent({ id: "pm_a", customer: null }, null, t)).toBe(false);
+  expect(cardSaveIsCurrent(null, null, t)).toBe(false);
+});
+
+test("the webhook can record a saved-card charge from its own metadata", () => {
+  const params = buildSavedCardChargeParams({
+    job: { id: "job-1", org_id: "org-1" }, orgName: "Creed HM", destinationAccountId: "acct_1",
+    stripeCustomerId: "cus_1", paymentMethodId: "pm_1", amountCents: 25000, platformFeeCents: 125, kind: "balance",
+  });
+  const pi = { id: "pi_1", status: "succeeded", amount: 25000, metadata: params.metadata } as unknown as Parameters<typeof savedCardPaymentFromIntent>[0];
+  expect(savedCardPaymentFromIntent(pi)).toEqual({ jobId: "job-1", orgId: "org-1", paidNow: 250, platformFeeCents: 125, kind: "balance" });
+  // Checkout's PaymentIntents, and anything not succeeded, are left alone.
+  expect(savedCardPaymentFromIntent({ ...pi, metadata: {} } as typeof pi)).toBeNull();
+  expect(savedCardPaymentFromIntent({ ...pi, status: "processing" } as typeof pi)).toBeNull();
 });
