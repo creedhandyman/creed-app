@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/sms";
-import { clearOptOut, HELP_WORDS, OPT_IN_WORDS, OPT_OUT_WORDS, recordOptOut } from "@/lib/sms-log";
+import { clearOptOut, isOptedOut, recordOptOut } from "@/lib/sms-log";
+import { isYes, keywordOf, photosFrom } from "@/lib/sms-inbound";
+import { alertOptOut, alertReply, matchInbound, saveInbound, savePhotos } from "@/lib/sms-inbound-server";
 import { formParams, validTwilioSignature } from "@/lib/twilio-signature";
-import { notifyManagers } from "@/lib/notify-server";
 import { siteOrigin } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
@@ -13,12 +14,19 @@ export const dynamic = "force-dynamic";
  * https://www.creedhm.com/api/sms/inbound, HTTP POST).
  *
  *  - Rejects anything without a valid X-Twilio-Signature.
+ *  - Works out whose text it is (lib/sms-inbound pickMatch: the business that
+ *    texted that number, else a customer or resident with that number) and
+ *    saves it on sms_messages as direction 'in' (migration
+ *    20261110_text_replies.sql). Twilio retries are saved once (by MessageSid).
  *  - STOP words: the number goes on sms_opt_outs (Twilio also blocks it and
- *    sends its own confirmation, so we reply with nothing).
- *  - START words: the number comes off sms_opt_outs.
+ *    sends its own confirmation, so we reply with nothing) + a bell note.
+ *  - START words: the number comes off sms_opt_outs ("Yes" only counts from
+ *    a number that opted out; from anyone else it's an ordinary reply).
  *  - HELP: replies with the business name and how to stop.
- *  - Anything else: the owner/managers of the business that last texted that
- *    number get an in-app notification with the reply, linked to the job.
+ *  - Anything else: after replying to Twilio, photos are copied into storage
+ *    and onto the job, and owners, managers and the job's crew get a bell
+ *    notification + app push (never a text). One alert per 5-minute burst.
+ * Before the migration runs nothing is saved, but the alert still goes out.
  */
 const twiml = (msg?: string) =>
   new NextResponse(
@@ -39,46 +47,47 @@ export async function POST(req: NextRequest) {
   }
 
   const from = normalizePhone(params.From);
+  const to = normalizePhone(params.To);
   const text = (params.Body || "").trim();
-  const word = text.toUpperCase().replace(/[^A-Z]/g, "");
+  const sid = params.MessageSid || params.SmsSid || "";
+  const photos = photosFrom(params);
   if (!from) return twiml();
 
   const supabase = serviceClient();
-  // The business that last texted this number (sms_messages), for routing.
-  const { data: last } = await supabase
-    .from("sms_messages")
-    .select("org_id, job_id")
-    .eq("to_phone", from)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  const orgId = (last?.[0]?.org_id as string | undefined) || null;
-  const jobId = (last?.[0]?.job_id as string | undefined) || null;
+  // "Yes" is START only from a number that opted out; otherwise it's a reply.
+  const keyword = keywordOf(text, isYes(text) && (await isOptedOut(supabase, from)));
+  const match = await matchInbound(supabase, from);
+  const saved = await saveInbound(supabase, { sid, from, to, body: text, kind: keyword || "reply", match });
+  if (saved.duplicate) return twiml(); // Twilio retry of a text we already handled
 
-  if (OPT_OUT_WORDS.includes(word)) {
-    await recordOptOut(supabase, from, "stop_reply", orgId);
+  if (keyword === "stop") {
+    await recordOptOut(supabase, from, "stop_reply", match.orgId);
+    after(() => alertOptOut(supabase, from, match));
     return twiml();
   }
-  if (OPT_IN_WORDS.includes(word)) {
+  if (keyword === "start") {
     await clearOptOut(supabase, from);
     return twiml();
   }
-
-  let business = "";
-  if (orgId) {
-    const { data: org } = await supabase.from("organizations").select("name").eq("id", orgId).maybeSingle();
-    business = (org as { name?: string | null } | null)?.name || "";
-  }
-  if (HELP_WORDS.includes(word)) {
+  if (keyword === "help") {
+    let business = "";
+    if (match.orgId) {
+      const { data: org } = await supabase.from("organizations").select("name").eq("id", match.orgId).maybeSingle();
+      business = (org as { name?: string | null } | null)?.name || "";
+    }
     return twiml(`${business || "This number"} sends job updates and reminders. Reply STOP to stop texts.`);
   }
 
-  if (orgId && text) {
-    await notifyManagers(supabase, {
-      orgId,
-      jobId,
-      type: "text_reply",
-      title: "Customer texted back",
-      body: `From the number ending ${from.slice(-4)}: ${text.slice(0, 300)}`,
+  if (text || photos.length) {
+    after(async () => {
+      const stored = await savePhotos(supabase, {
+        sid,
+        messageId: saved.id,
+        orgId: match.orgId,
+        jobId: match.jobId,
+        photos,
+      });
+      await alertReply(supabase, { from, text, photoCount: stored.length || photos.length, match, messageId: saved.id, createdAt: saved.createdAt });
     });
   }
   return twiml();
