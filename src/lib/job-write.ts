@@ -69,6 +69,14 @@ export const addPhoto = (photo: { url: string } & Delta): Change => (blob) => {
   return photos.some((p) => p?.url === photo.url) ? SKIP : { photos: [...photos, photo] };
 };
 
+/** Take a photo off the job by url. Runs against the SERVER's current blob
+ *  (like every patchBlob change), so the removal is written for good and a
+ *  photo someone else added meanwhile is untouched. Nothing to remove = no write. */
+export const removePhoto = (url: string): Change => (blob) => {
+  const photos: { url?: string }[] = Array.isArray(blob.photos) ? blob.photos : [];
+  return photos.some((p) => p?.url === url) ? { photos: photos.filter((p) => p?.url !== url) } : SKIP;
+};
+
 export function createBlobWriter(remote: BlobRemote, local?: BlobLocal) {
   // One chain per job. Each entry is a promise that never rejects.
   const chains = new Map<string, Promise<unknown>>();

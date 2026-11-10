@@ -29,6 +29,8 @@ import { db } from "@/lib/supabase";
 import { t, getLang } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import RouteMap, { type MapCrew, type MapRoute } from "@/components/RouteMap";
+import Fold from "@/components/Fold";
+import CrewMap from "./CrewMap";
 import { liveFixLabel } from "@/components/LocationSharingNote";
 import { LIVE_FRESH_MIN } from "@/lib/crew-location";
 import { geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
@@ -372,60 +374,6 @@ export default function DispatchAssistant({ setPage, week: weekProp, onNextWeek 
 
   return (
     <div>
-      {/* ── Crew right now ── */}
-      {showLive && (
-        <div className="section">
-          <div className="seclabel" style={{ justifyContent: "space-between" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><Icon name="gps" size={13} /> {t("disp.crewNow")}</span>
-            <button type="button" onClick={() => setPage("map")} style={{ background: "none", border: "none", color: "var(--color-primary)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, letterSpacing: 0, textTransform: "none", fontFamily: "inherit" }}>
-              <Icon name="map" size={12} color="var(--color-primary)" /> {t("disp.crewMap")}
-            </button>
-          </div>
-          {live.filter((c) => c.fix || c.onJob || c.next).map((c) => {
-            const here = locOf(c);
-            const nextPt = pt(c.next?.address);
-            const eta = here && nextPt ? etaBetween(here, nextPt) : null;
-            const status = c.onJob
-              ? `${t("disp.onClockAt")} ${c.onJob.address}${c.onJob.since ? ` · ${t("disp.since")} ${c.onJob.since}` : ""}`
-              : c.fix?.kind === "live"
-                ? `${t("disp.lastLive")} ${c.fix.time}`
-                : c.fix
-                  ? `${t("disp.lastSeen")} ${c.fix.time} (${c.fix.kind === "out" ? t("disp.clockedOut") : t("disp.clockedIn")})`
-                  : t("disp.noLocation");
-            // On the clock: say where the dot comes from (live vs the clock-in stamp).
-            const fresh = c.fix?.kind === "live" && (c.fix.ageMin ?? Infinity) <= LIVE_FRESH_MIN;
-            const source = c.onJob && c.fix
-              ? c.fix.kind === "live" ? liveFixLabel(c.fix.ageMin ?? 0, c.fix.time) : t("disp.lastStamp").replace("{time}", c.fix.time)
-              : "";
-            return (
-              <div key={c.id} className="drow" style={{ alignItems: "flex-start", justifyContent: "flex-start", gap: 10 }}>
-                {avatar(c.id, c.name, 30)}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 14 }}>
-                    {c.name}
-                    {c.onJob && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 6px var(--color-success)" }} />}
-                    {source && <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 500, whiteSpace: "nowrap", color: fresh ? "var(--color-success)" : "var(--color-dim)" }}>{source}</span>}
-                  </div>
-                  <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis" }}>{status}</div>
-                  {c.next && (
-                    <div style={{ fontSize: 13, marginTop: 3, color: eta ? "#8cc0ff" : "var(--color-dim)", lineHeight: 1.35, display: "flex", alignItems: "baseline", gap: 5 }}>
-                      <span style={{ flexShrink: 0, alignSelf: "center", display: "inline-flex" }}><Icon name="navigation" size={11} color={eta ? "#8cc0ff" : "var(--color-dim)"} /></span>
-                      <span>
-                        {eta
-                          ? <><b style={{ fontWeight: 600 }}>{firstName(c.name)} {t("disp.is")} ~{eta.min} {t("disp.minFrom")}</b> {c.next.address}</>
-                          : <>{t("disp.nextStop")}: {c.next.address}</>}
-                        {c.next.time ? <span className="dim"> · {fmtClock(c.next.time)}</span> : null}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <div className="dim" style={{ fontSize: 11.5, padding: "6px 0 2px", lineHeight: 1.4 }}>{t("disp.gpsNote")}</div>
-        </div>
-      )}
-
       {/* ── Plan the week: options ── */}
       <div className="section">
         <div className="seclabel" style={{ justifyContent: "space-between" }}>
@@ -681,6 +629,60 @@ export default function DispatchAssistant({ setPage, week: weekProp, onNextWeek 
         <div className="dim" style={{ fontSize: 12, textAlign: "center", margin: "6px 0 4px" }}>{t("disp.applyNote")}</div>
         <div className="dim" style={{ fontSize: 11.5, textAlign: "center", marginBottom: 12, lineHeight: 1.4 }}>{t("disp.distanceNote")}</div>
       </>)}
+
+      {/* ── Crew right now + the crew map — folded until asked for, so the tab
+          opens on just "Plan the week". The map is the same one as the Crew Map
+          screen (who is where today, the day's stops), so picking people and
+          jobs and seeing them on the map happens here. ── */}
+      <Fold title={t("disp.crewNowMap")} icon="map">
+        {showLive && (
+          <div className="section">
+          {live.filter((c) => c.fix || c.onJob || c.next).map((c) => {
+            const here = locOf(c);
+            const nextPt = pt(c.next?.address);
+            const eta = here && nextPt ? etaBetween(here, nextPt) : null;
+            const status = c.onJob
+              ? `${t("disp.onClockAt")} ${c.onJob.address}${c.onJob.since ? ` · ${t("disp.since")} ${c.onJob.since}` : ""}`
+              : c.fix?.kind === "live"
+                ? `${t("disp.lastLive")} ${c.fix.time}`
+                : c.fix
+                  ? `${t("disp.lastSeen")} ${c.fix.time} (${c.fix.kind === "out" ? t("disp.clockedOut") : t("disp.clockedIn")})`
+                  : t("disp.noLocation");
+            // On the clock: say where the dot comes from (live vs the clock-in stamp).
+            const fresh = c.fix?.kind === "live" && (c.fix.ageMin ?? Infinity) <= LIVE_FRESH_MIN;
+            const source = c.onJob && c.fix
+              ? c.fix.kind === "live" ? liveFixLabel(c.fix.ageMin ?? 0, c.fix.time) : t("disp.lastStamp").replace("{time}", c.fix.time)
+              : "";
+            return (
+              <div key={c.id} className="drow" style={{ alignItems: "flex-start", justifyContent: "flex-start", gap: 10 }}>
+                {avatar(c.id, c.name, 30)}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 14 }}>
+                    {c.name}
+                    {c.onJob && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-success)", boxShadow: "0 0 6px var(--color-success)" }} />}
+                    {source && <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 500, whiteSpace: "nowrap", color: fresh ? "var(--color-success)" : "var(--color-dim)" }}>{source}</span>}
+                  </div>
+                  <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis" }}>{status}</div>
+                  {c.next && (
+                    <div style={{ fontSize: 13, marginTop: 3, color: eta ? "#8cc0ff" : "var(--color-dim)", lineHeight: 1.35, display: "flex", alignItems: "baseline", gap: 5 }}>
+                      <span style={{ flexShrink: 0, alignSelf: "center", display: "inline-flex" }}><Icon name="navigation" size={11} color={eta ? "#8cc0ff" : "var(--color-dim)"} /></span>
+                      <span>
+                        {eta
+                          ? <><b style={{ fontWeight: 600 }}>{firstName(c.name)} {t("disp.is")} ~{eta.min} {t("disp.minFrom")}</b> {c.next.address}</>
+                          : <>{t("disp.nextStop")}: {c.next.address}</>}
+                        {c.next.time ? <span className="dim"> · {fmtClock(c.next.time)}</span> : null}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          <div className="dim" style={{ fontSize: 11.5, padding: "6px 0 2px", lineHeight: 1.4 }}>{t("disp.gpsNote")}</div>
+          </div>
+        )}
+        <CrewMap embedded />
+      </Fold>
     </div>
   );
 }

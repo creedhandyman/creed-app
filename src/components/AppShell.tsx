@@ -23,7 +23,7 @@ import Coachmark from "./Coachmark";
 import OfflineBanner from "./OfflineBanner";
 import { t } from "@/lib/i18n";
 import { useCrewHeartbeat } from "@/lib/crew-heartbeat";
-import { useTextsUnreadPoll } from "@/lib/texts-client";
+import { useTextsUnreadPoll, TEXTS_TAB_VISIBLE } from "@/lib/texts-client";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -55,7 +55,7 @@ export default function AppShell() {
   // clock with the app open (never off the clock / in the background).
   useCrewHeartbeat(!!user.org_id);
   // Unread customer texts on the More tab (only businesses that text).
-  useTextsUnreadPoll(textingOn);
+  useTextsUnreadPoll(textingOn && TEXTS_TAB_VISIBLE);
 
   // ── Hardware/gesture back = in-app back (Android PWA) ──────────────
   // The app navigates by state, not URLs, so the system back button saw an

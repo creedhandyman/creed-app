@@ -2346,6 +2346,25 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Things that still bug me / open follow-ups
 
+- **Walkthrough batch 1 (2026-11-10)**: (1) **Texts tab hidden** — texting isn't
+  live yet. `lib/texts-client.ts TEXTS_TAB_VISIBLE = false` hides the side-menu
+  item, the More hub tile, the unread dot and its poll; the screen still opens
+  from a text-reply notification, and the job / customer Texts cards are
+  unchanged. Flip the constant to bring the tab back. (2) **Schedule**: tapping
+  a JOB in Week or Day view opens a job sheet (`visitCard` — Edit / Open job /
+  Start / On the way buttons, the same card as the selected-day list); tapping
+  the rest of a Week day row still drills into Day view. (3) **Dispatch tab**
+  opens on just "Plan the week": `components/Fold.tsx` (collapsed header row,
+  body rendered only while open) wraps "Crew right now · map" (the live crew
+  rows + `<CrewMap embedded />`, the same map as the Crew Map screen), "Needs
+  scheduling" and "This week · by tech". Folds start closed for owner/manager
+  and open for crew (who have nothing else on the tab). The worker-filter row
+  and the day-detail / Print / Start card are hidden on Dispatch. (4) **Jobs →
+  Receipts & photos**: an X on each job photo (owner/manager, one confirm)
+  removes it via `lib/job-write.ts removePhoto` through `patchBlob`, so it is
+  written onto the server's blob and stays removed. The file itself stays in
+  the bucket.
+
 - **Quote PDF photos (2026-11-10)**: the PDF downloads each photo at its stored
   size, so it now shows at most `MAX_PDF_PHOTOS` (12, before photos first;
   `export-pdf.ts pdfPhotos`), and the print page (`print-template.ts`) REMOVES

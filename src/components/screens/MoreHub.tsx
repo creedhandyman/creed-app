@@ -7,7 +7,7 @@ import UserGuideModal from "@/components/UserGuideModal";
 import Grizz from "@/components/Grizz";
 import { t } from "@/lib/i18n";
 import { useBackLayer } from "@/lib/back-layer";
-import { useTextsStore } from "@/lib/texts-client";
+import { useTextsStore, TEXTS_TAB_VISIBLE } from "@/lib/texts-client";
 
 interface Props {
   setPage: (p: string) => void;
@@ -47,7 +47,7 @@ export default function MoreHub({ setPage, openSettings, openOps }: Props) {
     id: string; icon: IconName; name: string; sub: string; color: string; tint: string; onClick: () => void; badge?: number;
   }[] = [
     // Customer texts on the business number — only for businesses that text.
-    ...(org?.auto_sms_enroute === true
+    ...(TEXTS_TAB_VISIBLE && org?.auto_sms_enroute === true
       ? [{ id: "texts", icon: "texts" as IconName, name: t("more.texts"), sub: t("more.textsSub"), color: "#38bdf8", tint: "rgba(56,189,248,.16)", onClick: () => setPage("texts"), badge: textsUnread }]
       : []),
     { id: "time", icon: "time", name: t("more.time"), sub: t("more.timeSub"), color: "#13c06a", tint: "rgba(19,192,106,.16)", onClick: () => setPage("time") },

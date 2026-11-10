@@ -4,7 +4,7 @@ import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
 import { useNavLayout } from "@/lib/nav-layout";
 import { Icon, type IconName } from "./Icon";
-import { useTextsStore } from "@/lib/texts-client";
+import { useTextsStore, TEXTS_TAB_VISIBLE } from "@/lib/texts-client";
 
 interface NavItem {
   id: string;
@@ -126,7 +126,7 @@ function TabBar({ page, setPage, isAdmin, bottom }: Props & { bottom: boolean })
         // Leads are an owner/manager queue — crew can't act on them.
         const showLeadDot = !!isAdmin && item.id === "jobs" && leadCount > 0;
         const showBellDot = item.id === "dash" && unreadCount > 0;
-        const showTextsDot = isMore && navPage !== "texts" && textsUnread > 0;
+        const showTextsDot = TEXTS_TAB_VISIBLE && isMore && navPage !== "texts" && textsUnread > 0;
 
         return (
           <button
@@ -214,7 +214,7 @@ function SideNav({ page, setPage, isAdmin, opsTab, openOps, openSettings, right 
   const leadCount = useLeadCount();
   const unreadCount = useUnreadCount();
   const textsUnread = useTextsUnread();
-  const textingOn = org?.auto_sms_enroute === true;
+  const textingOn = TEXTS_TAB_VISIBLE && org?.auto_sms_enroute === true;
   const navPage = page === "workvision" ? "time" : page;
   const onOps = navPage === "ops";
 

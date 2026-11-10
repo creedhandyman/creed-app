@@ -1,4 +1,4 @@
-import { createBlobWriter, addPhoto, SKIP, type BlobRemote, type BlobLocal } from "../lib/job-write";
+import { createBlobWriter, addPhoto, removePhoto, SKIP, type BlobRemote, type BlobLocal } from "../lib/job-write";
 
 /** In-memory server + screen copy, with latency and failure injection. */
 function world(initial: Record<string, string | null>) {
@@ -135,6 +135,34 @@ describe("addPhoto", () => {
     const { patchBlob } = createBlobWriter(w.remote, w.local);
     await patchBlob("j1", addPhoto({ url: "u1" }));
     expect(w.blob("j1").photos).toEqual([{ url: "u1" }]);
+  });
+});
+
+describe("removePhoto", () => {
+  it("takes the photo off the job and it stays off", async () => {
+    const w = world({ j1: JSON.stringify({ jobNotes: "keep me", photos: [{ url: "u0", type: "before" }, { url: "u1", type: "work" }] }) });
+    const { patchBlob } = createBlobWriter(w.remote, w.local);
+    expect(await patchBlob("j1", removePhoto("u1"))).toEqual({ ok: true, changed: true });
+    expect(w.blob("j1").photos).toEqual([{ url: "u0", type: "before" }]);
+    expect(w.blob("j1").jobNotes).toBe("keep me");
+    // a second tap (or a retry) has nothing left to remove
+    expect(await patchBlob("j1", removePhoto("u1"))).toEqual({ ok: true, changed: false });
+  });
+
+  it("keeps a photo that was added on another phone in the meantime", async () => {
+    const w = world({ j1: JSON.stringify({ photos: [{ url: "u0" }, { url: "u1" }] }) });
+    const { patchBlob } = createBlobWriter(w.remote, w.local);
+    // The screen still holds the old list; the server gained u2 before our write.
+    w.f.beforeRead = () => { w.server.set("j1", JSON.stringify({ photos: [{ url: "u0" }, { url: "u1" }, { url: "u2" }] })); w.f.beforeRead = undefined; };
+    await patchBlob("j1", removePhoto("u0"));
+    expect(w.blob("j1").photos).toEqual([{ url: "u1" }, { url: "u2" }]);
+  });
+
+  it("removing the last photo leaves an empty list", async () => {
+    const w = world({ j1: JSON.stringify({ photos: [{ url: "u0" }] }) });
+    const { patchBlob } = createBlobWriter(w.remote, w.local);
+    await patchBlob("j1", removePhoto("u0"));
+    expect(w.blob("j1").photos).toEqual([]);
   });
 });
 

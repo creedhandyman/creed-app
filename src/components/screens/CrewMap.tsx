@@ -38,7 +38,10 @@ import type { Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 interface Props {
-  setPage: (p: string) => void;
+  setPage?: (p: string) => void;
+  /** Shown inside another screen (the Dispatch tab): no title bar, a shorter
+   *  map, and Refresh moves beside the date. */
+  embedded?: boolean;
 }
 
 /** Per-tech path colors — assigned by crew order, recycled if the roster
@@ -66,7 +69,7 @@ const esc = (s: string) =>
 type StampPt = { lat: number; lng: number; kind: "in" | "out" | "live"; time: string; job: string; ageMin?: number };
 
 // setPage stays in Props for AppShell's uniform call; Back walks history.
-export default function CrewMap(_props: Props) {
+export default function CrewMap({ embedded }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<LeafletMap | null>(null);
   const [note, setNote] = useState(t("loc.loadingMap"));
@@ -254,11 +257,11 @@ export default function CrewMap(_props: Props) {
 
   return (
     <div className="fi">
-      <TopBar title={t("loc.crewMap")} icon="map" color="#3ee08f" onBack={() => window.history.back()} right={
+      {!embedded && <TopBar title={t("loc.crewMap")} icon="map" color="#3ee08f" onBack={() => window.history.back()} right={
         <button className="bo" onClick={() => setRefreshKey((k) => k + 1)} style={{ fontSize: 13, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}>
           <Icon name="refresh" size={13} /> {t("loc.refresh")}
         </button>
-      } />
+      } />}
 
       {/* Date lookback — the whole map re-renders for the chosen day. */}
       <div className="row mb" style={{ alignItems: "center", gap: 6 }}>
@@ -278,13 +281,18 @@ export default function CrewMap(_props: Props) {
         >
           →
         </button>
+        {embedded && (
+          <button className="bo" onClick={() => setRefreshKey((k) => k + 1)} aria-label={t("loc.refresh")} style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center" }}>
+            <Icon name="refresh" size={14} />
+          </button>
+        )}
       </div>
 
       {note && <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>{note}</div>}
 
       <div
         ref={mapRef}
-        style={{ height: "calc(100dvh - 300px)", minHeight: 360, borderRadius: 14, overflow: "hidden", border: "1px solid var(--color-border-dark, #1e1e2e)" }}
+        style={{ height: embedded ? 340 : "calc(100dvh - 300px)", minHeight: embedded ? 0 : 360, borderRadius: 14, overflow: "hidden", border: "1px solid var(--color-border-dark, #1e1e2e)" }}
       />
 
       <div className="dim" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>

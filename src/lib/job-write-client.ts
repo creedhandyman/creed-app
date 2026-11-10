@@ -10,7 +10,7 @@ import { useStore } from "./store";
 import { tryReadBlob } from "./job-blob";
 import { createBlobWriter, type BlobLocal, type BlobRemote } from "./job-write";
 
-export { SKIP, addPhoto, type Change, type WriteResult } from "./job-write";
+export { SKIP, addPhoto, removePhoto, type Change, type WriteResult } from "./job-write";
 
 const remote: BlobRemote = {
   async read(jobId) {

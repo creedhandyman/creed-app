@@ -9,6 +9,15 @@ import { apiFetch } from "./api";
  * open and visible (every 60s, plus whenever the app comes back to the
  * front). The Texts screen refreshes it right after it marks texts read.
  */
+/**
+ * Texting isn't live in the app yet (owner, 2026-11-10), so the Texts tab is
+ * hidden everywhere it's offered: the side menu, the More hub tile and the
+ * unread dot on More (and the unread poll that feeds them). The screen itself
+ * still exists and still opens from a text-reply notification, so a customer's
+ * reply is never unreadable. Flip this to true to bring the tab back.
+ */
+export const TEXTS_TAB_VISIBLE = false;
+
 interface TextsState {
   unread: number;
   setUnread: (n: number) => void;

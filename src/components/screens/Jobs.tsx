@@ -49,7 +49,7 @@ import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
-import { patchBlob, runSerialized } from "@/lib/job-write-client";
+import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
 import { readDiscount } from "@/lib/quote-blob";
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
@@ -839,6 +839,17 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       toast(t("jobs.recordFailed"), "error");
       setRecordPay((r) => (r ? { ...r, busy: false } : r));
     }
+  };
+
+  // The X on a job photo: one confirm, then the photo comes off the job for
+  // good (lib/job-write removePhoto, merged onto the server's blob).
+  const removeJobPhoto = async (jobId: string, url: string) => {
+    const st = useStore.getState();
+    if (!await st.showConfirm(t("jobs.removePhotoTitle"), t("jobs.removePhotoBody"), { danger: true, confirmLabel: t("common.remove") })) return;
+    const r = await patchBlob(jobId, removePhoto(url));
+    if (r.ok) st.showToast(t("jobs.photoRemoved"), "success");
+    else if (r.reason === "network" || r.reason === "no-job" || r.reason === "unreadable") st.showToast(t("jobs.photoNotRemoved"), "error");
+    // "rejected": the database write already showed its own message.
   };
 
   const deleteJob = async (id: string) => {
@@ -1975,11 +1986,25 @@ ${invoicePhotosHtml}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 8 }}>
                     {photos.map((p, i) => (
                       <div
-                        key={i}
+                        key={p.url || i}
                         onClick={() => p.url && setViewPhoto(p.url)}
                         style={{ position: "relative", aspectRatio: "1", borderRadius: 8, overflow: "hidden", border: "1px solid var(--color-border-dark)", cursor: "pointer" }}
                       >
                         <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        {/* Remove this photo right here (owner / manager). Written
+                            through patchBlob onto the server's copy, so it stays
+                            removed, the same rule as deleting in the quote editor. */}
+                        {isAdmin && p.url && (
+                          <button
+                            type="button"
+                            aria-label={t("jobs.removePhoto")}
+                            title={t("jobs.removePhoto")}
+                            onClick={(e) => { e.stopPropagation(); void removeJobPhoto(sj.id, p.url); }}
+                            style={{ position: "absolute", top: 3, right: 3, width: 24, height: 24, minHeight: 0, padding: 0, borderRadius: "50%", background: "rgba(0,0,0,.68)", border: "1px solid rgba(255,255,255,.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          >
+                            <Icon name="close" size={13} color="#fff" />
+                          </button>
+                        )}
                         {p.type && (
                           <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, fontSize: 9, textAlign: "center", background: "rgba(0,0,0,.55)", color: "#fff", padding: "1px 0", textTransform: "capitalize" }}>{p.type}</span>
                         )}

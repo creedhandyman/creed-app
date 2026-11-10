@@ -17,6 +17,8 @@ import SmsNotifyButtons from "../SmsNotifyButtons";
 import { statusColor } from "@/lib/status";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, hasGeocodeCache, cityContext } from "@/lib/geo";
 import DispatchAssistant from "./DispatchAssistant";
+import Fold from "@/components/Fold";
+import { useBackLayer } from "@/lib/back-layer";
 
 /* ── Day-route optimizer ────────────────────────────────────────────
    Orders the day's stops to minimize drive miles (nearest-neighbor +
@@ -439,6 +441,74 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     useStore.getState().showToast(t("sched.removedFromSchedule"), "info");
   };
 
+  // One visit's card: address (opens Maps), time · crew · note, Edit / Open
+  // job / Start, and the On the way buttons. Shown in the selected-day list
+  // and in the sheet a tap on a job opens (Week + Day views). onAct runs
+  // before Edit so the sheet can close and let the edit sheet take over.
+  const visitCard = (s: typeof schedule[number], onAct?: () => void) => {
+      // Match the schedule entry's free-text property string back
+      // to a real Job row so we can wire SMS notifications. Last-
+      // updated wins on duplicates so the most recent quote at
+      // that address is what we text about.
+      const linkedJob = jobForEntry(s);
+      return (
+        <div key={s.id} className="sep" style={{ fontSize: 14, padding: "8px 0" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", marginBottom: linkedJob ? 6 : 0, gap: 6 }}>
+            <div style={{ minWidth: 0 }}>
+              <b
+                onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
+                style={{ color: "var(--color-primary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                title={t("sched.openInMaps")}
+              ><Icon name="mapPin" size={12} color="var(--color-primary)" /> {s.job}</b>
+              {(() => {
+                const time = parseTime(s.note);
+                const crew = parseWorkers(s.note);
+                const freeform = stripNoteParts(s.note);
+                const bits = [time ? fmt12(time) : "", crew.join(", "), freeform].filter(Boolean);
+                return bits.length ? <div className="dim" style={{ fontSize: 12 }}>{bits.join(" · ")}</div> : null;
+              })()}
+            </div>
+            {/* marginLeft auto keeps the buttons right-aligned when
+                a long address wraps them onto their own line. */}
+            <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: "auto" }}>
+              <button
+                className="bo"
+                onClick={() => { onAct?.(); openEdit(s); }}
+                style={{ fontSize: 13, padding: "4px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}
+              >
+                <Icon name="edit" size={12} /> {t("common.edit")}
+              </button>
+              {linkedJob && (
+                <button
+                  className="bo"
+                  onClick={() => {
+                    // Jobs reads this to open straight to the job's detail.
+                    goWithIntent(setPage, { page: "jobs", jobId: linkedJob.id });
+                  }}
+                  style={{ fontSize: 13, padding: "4px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
+                  <Icon name="jobs" size={12} /> {t("sched.openJob")}
+                </button>
+              )}
+              <button
+                className="bb"
+                onClick={() => setPage("workvision")}
+                style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}
+              >
+                <Icon name="start" size={12} color="#fff" /> {t("sched.start")}
+              </button>
+            </div>
+          </div>
+          {linkedJob && <SmsNotifyButtons jobId={linkedJob.id} compact />}
+        </div>
+      );
+  };
+
+  // The job sheet: tap a job in Week or Day view to act on it right there.
+  const [visitSheet, setVisitSheet] = useState<{ id: typeof schedule[number]["id"]; day: string } | null>(null);
+  const sheetEntry = visitSheet ? schedule.find((e) => e.id === visitSheet.id) || null : null;
+  useBackLayer(!!sheetEntry, () => setVisitSheet(null));
+
   return (
     <div className="fi">
       {/* Topbar — title + date nav (tap label = today) */}
@@ -598,6 +668,21 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
         );
       })()}
 
+      {/* Job sheet — a job tapped in Week or Day view. */}
+      {sheetEntry && visitSheet && (
+        <div className="sheet-overlay" onClick={() => setVisitSheet(null)}>
+          <div className="cd sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+              <h4 style={{ fontSize: 15, color: "var(--color-primary)" }}>
+                {new Date(visitSheet.day + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </h4>
+              <button className="bo" onClick={() => setVisitSheet(null)} aria-label={t("common.close")} style={{ padding: "4px 10px" }}><Icon name="close" size={14} /></button>
+            </div>
+            {visitCard(sheetEntry, () => setVisitSheet(null))}
+          </div>
+        </div>
+      )}
+
       {/* View toggle (Day / Week / Month) */}
       <div style={{ display: "flex", gap: 5, marginBottom: 11 }}>
         {(["day", "week", "month", "dispatch"] as const).map((v) => (
@@ -617,7 +702,9 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
         ))}
       </div>
 
-      {/* Worker filter — ALL + each tech (filters every view) */}
+      {/* Worker filter — ALL + each tech (filters Day / Week / Month; hidden on
+          Dispatch, which has its own crew pick and nothing for this to filter). */}
+      {view !== "dispatch" && (
       <div style={{ display: "flex", gap: 9, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
         {[{ id: null as string | null, short: t("sched.crew"), badge: t("sched.all") }, ...profiles.map((p) => ({ id: p.name, short: p.name.split(" ")[0], badge: initialsOf(p.name) }))].map((w) => {
           const wOn = workerFilter === w.id;
@@ -630,6 +717,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
           );
         })}
       </div>
+      )}
 
       {/* ── DAY VIEW — time-rail blocks + Unscheduled ── */}
       {view === "day" && (() => {
@@ -653,9 +741,8 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
               return (
                 <div key={s.id} style={{ display: "flex", gap: 9, marginBottom: 8 }}>
                   <div style={{ width: 44, flexShrink: 0, fontSize: 12, color: "var(--color-dim)", fontFamily: "Oswald", fontWeight: 600, paddingTop: 11, textAlign: "right" }}>{time ? fmt12(time) : "—"}</div>
-                  {/* Open the VIEWED day's detail (not sched_date — that jumped a
-                      multi-day job back to its first day), then scroll to it. */}
-                  <div onClick={() => { setSelectedDay(ds); setTimeout(() => document.getElementById("schedule-day-detail")?.scrollIntoView({ behavior: "smooth", block: "center" }), 60); }} style={{ flex: 1, position: "relative", overflow: "hidden", background: darkMode ? "#16161f" : "#fff", border: "1px solid var(--color-border-dark)", borderRadius: 13, padding: "10px 11px 10px 15px", cursor: "pointer" }}>
+                  {/* Tap → the job sheet for the VIEWED day (edit / open / start). */}
+                  <div onClick={() => setVisitSheet({ id: s.id, day: ds })} style={{ flex: 1, position: "relative", overflow: "hidden", background: darkMode ? "#16161f" : "#fff", border: "1px solid var(--color-border-dark)", borderRadius: 13, padding: "10px 11px 10px 15px", cursor: "pointer" }}>
                     <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: color, boxShadow: darkMode ? `0 0 10px ${color}, 0 0 20px -2px ${color}` : "none" }} />
                     <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15, letterSpacing: ".3px" }}>{s.job}</div>
                     <div style={{ fontSize: 12, color: "var(--color-dim)", marginTop: 2 }}>{meta}{(() => { const sp = dayOfSpan(s, ds); return sp ? ` · ${t("sched.day")} ${sp.idx} ${t("sched.ofDay")} ${sp.total}` : ""; })()}</div>
@@ -703,7 +790,8 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
             const isToday = ds === todayStr;
             const totalHrs = dayEntries.reduce((sum, e) => sum + (jobForEntry(e)?.total_hrs || 0), 0);
             return (
-              // Tap a day row → drill into that day in Day view.
+              // Tap a JOB → its sheet (edit / open / start right there). Tap anywhere
+              // else on the day row → drill into that day in Day view.
               <div key={i} onClick={() => { setView("day"); setViewDate(new Date(d)); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ background: darkMode ? "#16161f" : "#fff", border: `1px solid ${isToday ? "rgba(46,139,255,.5)" : "var(--color-border-dark)"}`, boxShadow: isToday ? "0 0 0 1px rgba(46,139,255,.2)" : "none", borderRadius: 13, padding: "10px 11px", marginBottom: 8, opacity: dayEntries.length ? 1 : 0.5, cursor: "pointer" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: dayEntries.length ? 7 : 0 }}>
                   <div style={{ fontFamily: "Oswald", fontWeight: 600, fontSize: 15 }}>{DAY_NAMES[d.getDay()]}<span style={{ color: "var(--color-dim)", fontWeight: 400, fontSize: 13, marginLeft: 5 }}>{MONTH_NAMES[d.getMonth()].slice(0, 3)} {d.getDate()}</span></div>
@@ -720,7 +808,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
                   if (workerFilter) { const others = crew.filter((n) => n !== workerFilter); wlabel = others.length ? `+${others.map((n) => n.split(" ")[0]).join(", ")}` : t("sched.solo"); }
                   else { wlabel = crew.map((n) => initialsOf(n)).join(" "); }
                   return (
-                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, padding: "5px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4 }}>
+                    <div key={s.id} role="button" onClick={(e) => { e.stopPropagation(); setVisitSheet({ id: s.id, day: ds }); }} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, padding: "7px 8px", borderRadius: 8, background: "var(--color-card-dark-2)", marginBottom: 4, cursor: "pointer" }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, boxShadow: `0 0 6px ${color}`, flexShrink: 0 }} />
                       <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.job}{time ? ` · ${fmt12(time)}` : ""}{(() => { const sp = dayOfSpan(s, ds); return sp ? ` · ${t("sched.dayShort")}${sp.idx}/${sp.total}` : ""; })()}</span>
                       {wlabel && <span style={{ fontSize: 11, color: "var(--color-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{wlabel}</span>}
@@ -790,10 +878,9 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
             {/* Dispatch Assistant (admins) — crew right now + plan the viewed
                 week's routes. The week follows the arrows up top (its Monday). */}
             {isAdmin && <DispatchAssistant setPage={setPage} week={weekDates[1]} onNextWeek={() => stepView(1)} />}
-            {/* Needs scheduling — pool of unassigned jobs (book one by hand) */}
-            <div style={{ fontSize: 12.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: isAdmin ? "16px 2px 8px" : "2px 2px 8px", display: "flex", alignItems: "center", gap: 7 }}>
-              <Icon name="folder" size={13} color="var(--color-dim)" /> {t("sched.needsScheduling")} ({needScheduling.length})
-            </div>
+            {/* Needs scheduling — pool of unassigned jobs (book one by hand). Folded
+                for owners/managers so the tab opens on just "Plan the week". */}
+            <Fold title={t("sched.needsScheduling")} icon="folder" count={needScheduling.length} defaultOpen={!isAdmin}>
             {needScheduling.length === 0 ? (
               <div className="cd" style={{ textAlign: "center", padding: 14, marginBottom: 10 }}><p className="dim" style={{ fontSize: 13 }}>{t("sched.everythingAssigned")} ✓</p></div>
             ) : (<>
@@ -802,11 +889,10 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
               {quotedJobs.length > 0 && groupHeader(t("sched.quotedWaiting"))}
               {quotedJobs.map(dispatchRow)}
             </>)}
+            </Fold>
 
-            {/* This week, grouped by tech — tap a job to edit / move it */}
-            <div style={{ fontSize: 12.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "16px 2px 8px", display: "flex", alignItems: "center", gap: 7 }}>
-              <Icon name="worker" size={13} color="var(--color-dim)" /> {t("sched.thisWeekByTech")}
-            </div>
+            {/* This week, grouped by tech — tap a job to edit / move it. Folded too. */}
+            <Fold title={t("sched.thisWeekByTech")} icon="worker" count={weekEntries.length} defaultOpen={!isAdmin}>
             {profiles.map((p) => {
               const mine = weekEntries.filter((s) => entryWorkers(s).includes(p.name)).sort((a, b) => a.sched_date.localeCompare(b.sched_date));
               return (
@@ -835,11 +921,13 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
                 </div>
               );
             })}
+            </Fold>
           </div>
         );
       })()}
 
-      {/* Selected-day detail + actions */}
+      {/* Selected-day detail + actions (hidden on Dispatch to keep that tab calm) */}
+      {view !== "dispatch" && (<>
       <div className="cd mb">
 
         {/* Day detail panel */}
@@ -856,64 +944,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
               {dayItems.length === 0 ? (
                 <p className="dim" style={{ fontSize: 13 }}>{t("sched.noJobs")}</p>
               ) : (
-                dayItems.map((s) => {
-                  // Match the schedule entry's free-text property string back
-                  // to a real Job row so we can wire SMS notifications. Last-
-                  // updated wins on duplicates so the most recent quote at
-                  // that address is what we text about.
-                  const linkedJob = jobForEntry(s);
-                  return (
-                    <div key={s.id} className="sep" style={{ fontSize: 14, padding: "8px 0" }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", marginBottom: linkedJob ? 6 : 0, gap: 6 }}>
-                        <div style={{ minWidth: 0 }}>
-                          <b
-                            onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(s.job)}`, "_blank")}
-                            style={{ color: "var(--color-primary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
-                            title={t("sched.openInMaps")}
-                          ><Icon name="mapPin" size={12} color="var(--color-primary)" /> {s.job}</b>
-                          {(() => {
-                            const time = parseTime(s.note);
-                            const crew = parseWorkers(s.note);
-                            const freeform = stripNoteParts(s.note);
-                            const bits = [time ? fmt12(time) : "", crew.join(", "), freeform].filter(Boolean);
-                            return bits.length ? <div className="dim" style={{ fontSize: 12 }}>{bits.join(" · ")}</div> : null;
-                          })()}
-                        </div>
-                        {/* marginLeft auto keeps the buttons right-aligned when
-                            a long address wraps them onto their own line. */}
-                        <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: "auto" }}>
-                          <button
-                            className="bo"
-                            onClick={() => openEdit(s)}
-                            style={{ fontSize: 13, padding: "4px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}
-                          >
-                            <Icon name="edit" size={12} /> {t("common.edit")}
-                          </button>
-                          {linkedJob && (
-                            <button
-                              className="bo"
-                              onClick={() => {
-                                // Jobs reads this to open straight to the job's detail.
-                                goWithIntent(setPage, { page: "jobs", jobId: linkedJob.id });
-                              }}
-                              style={{ fontSize: 13, padding: "4px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}
-                            >
-                              <Icon name="jobs" size={12} /> {t("sched.openJob")}
-                            </button>
-                          )}
-                          <button
-                            className="bb"
-                            onClick={() => setPage("workvision")}
-                            style={{ fontSize: 14, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}
-                          >
-                            <Icon name="start" size={12} color="#fff" /> {t("sched.start")}
-                          </button>
-                        </div>
-                      </div>
-                      {linkedJob && <SmsNotifyButtons jobId={linkedJob.id} compact />}
-                    </div>
-                  );
-                })
+                dayItems.map((s) => visitCard(s))
               )}
             </div>
           );
@@ -1010,6 +1041,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
           </span>
         </p>
       </div>
+      </>)}
     </div>
   );
 }
