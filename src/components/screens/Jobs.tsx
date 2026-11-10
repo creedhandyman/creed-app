@@ -1238,8 +1238,10 @@ ${invoicePhotosHtml}
             // only fire for the client recipient (index 0).
             const toClient = !sendStrip.recipients || (sendStrip.to ?? 0) === 0;
             const markIfClient = (quiet?: boolean) => { if (toClient) markSent(sendStrip.jobId, sendStrip.kind, quiet); };
-            // Text chip / Message customer + the business-number switch on.
-            const viaBusiness = !!sendStrip.business && org?.auto_sms_enroute === true;
+            // Text chip / Message customer, Ops set to send them from the
+            // business number, and the business-number switch on. Anything
+            // else (including the default) opens the phone's Messages.
+            const viaBusiness = !!sendStrip.business && org?.job_text_via === "business" && org?.auto_sms_enroute === true;
             return (
             <div ref={sendStripRef} style={{ marginBottom: 12, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
               {(sendStrip.recipients?.length ?? 0) > 1 && (

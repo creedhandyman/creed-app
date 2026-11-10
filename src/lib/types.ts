@@ -102,6 +102,11 @@ export interface Organization {
   auto_sms_enroute?: boolean;
   auto_sms_reminder?: boolean;
   auto_sms_invoice?: boolean;
+  /** How the job card's Text chip and Message customer button send:
+   *  "phone" (default, also when absent) opens the phone's Messages;
+   *  "business" sends from the business number, and only while
+   *  auto_sms_enroute is on (supabase/migrations/20261110_job_text_via.sql). */
+  job_text_via?: "phone" | "business";
   review_request_delay_hours?: number;        // default 24
   review_request_channel?: "sms" | "email" | "both"; // default "sms"
   /** Custom template. Supports {customer_name}, {business_name},
