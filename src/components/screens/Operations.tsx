@@ -20,6 +20,7 @@ import { goWithIntent } from "@/lib/nav-intent";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
+import BookingSettings from "../BookingSettings";
 
 /**
  * Catches render-time crashes inside an Ops sub-tab so the whole tab
@@ -462,11 +463,16 @@ function OpsSettings() {
           content: quoteTermsCard,
         },
         {
+          id: "booking", icon: "schedule", title: t("ops.cat.booking"), sub: t("ops.cat.bookingSub"),
+          // Public /book/[slug] page, OFF by default.
+          content: <BookingSettings org={org} saveOrg={saveOrg} />,
+        },
+        {
           id: "messages", icon: "send", title: t("ops.cat.messages"), sub: t("ops.cat.messagesSub"),
           // Review Automation auto-schedules a review-request SMS / email N hours
           // after a Stripe-paid invoice; follow-up nudges unanswered quotes; the
           // text-messaging links go in the approval page's consent box.
-          content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
+          content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><AutoTextsCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
         },
         // Beta preflight — one-tap deployment readiness check. Platform
         // operators only: customers shouldn't see env vars / migrations.
@@ -511,6 +517,56 @@ function QuoteFollowupCard({
           {enabled ? t("ops.enabled") : t("ops.disabled")} — {t("ops.quoteFollowupToggle")}
         </span>
       </label>
+    </div>
+  );
+}
+
+/** Automatic customer texts through Twilio. Three switches on the
+ *  organizations row, all OFF by default (they text customers on the
+ *  business's behalf, so the owner opts in). Needs the Twilio settings on
+ *  Vercel and supabase/migrations/20261109_automatic_texts.sql. */
+function AutoTextsCard({
+  org,
+  saveOrg,
+}: {
+  org: NonNullable<ReturnType<typeof useStore.getState>["org"]>;
+  saveOrg: (u: Record<string, unknown>) => Promise<void>;
+}) {
+  const rows: { key: "auto_sms_enroute" | "auto_sms_reminder" | "auto_sms_invoice"; label: string; help: string }[] = [
+    { key: "auto_sms_enroute", label: t("ops.autoTextEnroute"), help: t("ops.autoTextEnrouteHelp") },
+    { key: "auto_sms_reminder", label: t("ops.autoTextReminder"), help: t("ops.autoTextReminderHelp") },
+    { key: "auto_sms_invoice", label: t("ops.autoTextInvoice"), help: t("ops.autoTextInvoiceHelp") },
+  ];
+  return (
+    <div className="cd">
+      <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Icon name="send" size={16} color="var(--color-primary)" />
+        {t("ops.autoTexts")}
+      </h4>
+      <div className="dim" style={{ fontSize: 14, marginBottom: 12 }}>
+        {t("ops.autoTextsHelp")}
+      </div>
+      {rows.map((r) => {
+        const on = org[r.key] === true;
+        return (
+          <div key={r.key} style={{ marginBottom: 12 }}>
+            <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={async (e) => {
+                  await saveOrg({ [r.key]: e.target.checked });
+                }}
+                style={{ width: 16, height: 16, cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 15, fontWeight: 500 }}>
+                {on ? t("ops.enabled") : t("ops.disabled")} — {r.label}
+              </span>
+            </label>
+            <div className="dim" style={{ fontSize: 13.5, marginTop: 2, marginLeft: 24 }}>{r.help}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }

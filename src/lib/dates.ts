@@ -59,3 +59,12 @@ export function formatHours(decimalHrs?: number | null): string {
   if (h) return `${h}h`;
   return `${m}m`;
 }
+
+/** YYYY-MM-DD for `now` + `addDays` in an IANA time zone (default Central). */
+export function ymdInZone(now: number, addDays = 0, timeZone = "America/Chicago"): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
+    .formatToParts(new Date(now));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const d = new Date(Date.UTC(get("year"), get("month") - 1, get("day") + addDays));
+  return d.toISOString().slice(0, 10);
+}

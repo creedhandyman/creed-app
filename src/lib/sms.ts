@@ -4,44 +4,63 @@
 // lib/notify-server (crew/owner alerts) and the review-request cron. Every
 // text gets the STOP opt-out line (withOptOut).
 import { withOptOut } from "@/lib/sms-consent";
+import { normalizePhone } from "@/lib/phone";
 
-/** Loose US → E.164. "+" prefixes are kept; bare 10/11-digit US numbers get +1. */
-export function normalizePhone(raw: string | null | undefined): string {
-  const v = (raw || "").trim();
-  if (!v) return "";
-  if (v.startsWith("+")) return "+" + v.slice(1).replace(/\D/g, "");
-  const digits = v.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return digits ? `+${digits}` : "";
-}
+// Kept exported from here so existing imports keep working.
+export { normalizePhone };
 
 export interface SmsResult {
   ok: boolean;
   sid?: string;
   error?: string;
   status: number;
+  /** Twilio error code, e.g. 21610 = the number replied STOP. */
+  code?: number;
 }
 
-export async function sendSms(to: string, body: string): Promise<SmsResult> {
+/**
+ * True when Twilio can send: account SID + auth token, plus either a Messaging
+ * Service (TWILIO_MESSAGING_SERVICE_SID, preferred: it carries the A2P 10DLC
+ * campaign and handles STOP) or a single sending number (TWILIO_FROM_NUMBER).
+ */
+export function smsConfigured(): boolean {
+  return !!(
+    process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_AUTH_TOKEN &&
+    (process.env.TWILIO_MESSAGING_SERVICE_SID || process.env.TWILIO_FROM_NUMBER)
+  );
+}
+
+export interface SendSmsOptions {
+  /** Absolute URL Twilio posts delivery updates to (/api/sms/status). */
+  statusCallback?: string;
+}
+
+export async function sendSms(to: string, body: string, opts: SendSmsOptions = {}): Promise<SmsResult> {
   const dest = normalizePhone(to);
   const text = (body || "").trim();
   if (!dest || !text) return { ok: false, error: "Missing to or body", status: 400 };
 
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
+  const service = process.env.TWILIO_MESSAGING_SERVICE_SID;
   const from = process.env.TWILIO_FROM_NUMBER;
-  if (!sid || !token || !from) {
+  if (!sid || !token || (!service && !from)) {
     return {
       ok: false,
-      error: "SMS not configured — TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER must be set on Vercel.",
+      error: "SMS not configured — set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_MESSAGING_SERVICE_SID (or TWILIO_FROM_NUMBER) on Vercel.",
       status: 503,
     };
   }
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-  const form = new URLSearchParams({ To: dest, From: from, Body: withOptOut(text) });
+  const form = new URLSearchParams({ To: dest, Body: withOptOut(text) });
+  // A Messaging Service wins over a bare number: it is what the 10DLC
+  // campaign is registered on.
+  if (service) form.set("MessagingServiceSid", service);
+  else form.set("From", from as string);
+  if (opts.statusCallback) form.set("StatusCallback", opts.statusCallback);
 
   const res = await fetch(url, {
     method: "POST",
@@ -54,7 +73,8 @@ export async function sendSms(to: string, body: string): Promise<SmsResult> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = (data as { message?: string }).message || `Twilio responded ${res.status}`;
-    return { ok: false, error: msg, status: res.status };
+    const code = (data as { code?: number }).code;
+    return { ok: false, error: msg, status: res.status, ...(code ? { code } : {}) };
   }
   return { ok: true, sid: (data as { sid?: string }).sid, status: 200 };
 }

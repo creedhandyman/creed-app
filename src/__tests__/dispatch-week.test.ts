@@ -140,6 +140,16 @@ describe("toPlanInput + planWrites", () => {
     expect(s7.recrewed && s7.retimed).toBe(true);
     expect(s7.patch.note).toMatch(/^🕐 \d{2}:\d{2} · 👷 (Ann Lee|Bo Diaz)$/);
     expect(s7.patch.sched_date).toBeUndefined();
+    expect("start_time" in s7.patch).toBe(false); // not an online booking
+  });
+
+  it("keeps an online booking's start_time in step with its retimed note", () => {
+    const sched = [schedule[0], { ...schedule[1], booking_status: "confirmed" as const }];
+    const { pool, booked } = collectWeek({ jobs, schedule: sched, timeEntries: [], crew, days: [MON], includeQuoted: false, dayMin: 540 });
+    const { input } = toPlanInput({ pool, booked, coords, days: [MON], crew, replanBooked: false, leaveOut: [], base: shop, timeOff });
+    const writes = planWrites(planWeek(input), { booked, crew, replanBooked: false });
+    const s7 = writes.patches.find((p) => p.entryId === "s7")!;
+    expect(s7.patch.start_time).toBe(s7.patch.note!.match(/🕐 (\d{2}:\d{2})/)![1]);
   });
 
   it("leaving a job out keeps it off the plan", () => {

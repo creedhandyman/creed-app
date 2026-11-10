@@ -29,7 +29,7 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:creedhandyman@gmail.c
 const PUSH_ENABLED = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 
 // join_request rows are written by a DB trigger (profiles insert), not here.
-export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved" | "job_scheduled" | "quote_viewed" | "quote_followup";
+export type NotificationType = "job_assigned" | "new_lead" | "payment_received" | "payroll_alert" | "join_request" | "quote_approved" | "job_scheduled" | "quote_viewed" | "quote_followup" | "text_reply" | "invoice_reminder" | "visit_reminder";
 
 export interface NotifyRecipient {
   /** Recipient profile id. */
@@ -410,6 +410,36 @@ export async function notifyQuoteFollowup(
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("[notify] quote-followup notification failed:", e);
+  }
+}
+
+/**
+ * Tell the org's owners/managers about an automatic-text event: a customer
+ * texted back (text_reply), an unpaid invoice reminder went out / couldn't
+ * (invoice_reminder), or a day-before visit reminder couldn't go out
+ * (visit_reminder). Needs those values in notifications_type_check
+ * (supabase/migrations/20261109_automatic_texts.sql); before that runs the
+ * insert fails and this is a logged no-op. Never throws.
+ */
+export async function notifyManagers(
+  supabase: SupabaseClient,
+  p: { orgId: string; jobId?: string | null; type: "text_reply" | "invoice_reminder" | "visit_reminder"; title: string; body: string },
+): Promise<void> {
+  try {
+    if (!p.orgId) return;
+    const recipients = await resolveRecipients(supabase, p.orgId, { managers: true, event: "none" });
+    if (!recipients.length) return;
+    await dispatchNotifications(supabase, {
+      orgId: p.orgId,
+      type: p.type,
+      title: p.title,
+      body: p.body,
+      jobId: p.jobId || null,
+      recipients,
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(`[notify] ${p.type} notification failed:`, e);
   }
 }
 

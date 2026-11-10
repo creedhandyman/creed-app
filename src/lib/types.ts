@@ -63,6 +63,15 @@ export interface Organization {
   sms_terms_url?: string;
   site_published?: boolean;
   site_slug?: string;
+  /** Online booking (/book/[slug]). OFF by default. The rest of the
+   *  booking_* settings are read through lib/booking.ts readBookingSettings. */
+  booking_enabled?: boolean;
+  booking_hours?: unknown;           // jsonb {"0".."6": [["HH:MM","HH:MM"], …]}
+  booking_slot_min?: number;         // default 120
+  booking_buffer_min?: number;       // default 30
+  booking_min_notice_hours?: number; // default 24
+  booking_days_ahead?: number;       // default 21
+  booking_tz?: string;               // default America/Chicago
   trip_fee?: number;
   /** Org-wide minimum billable labor hours per quote. If the sum of all
    *  line-item hours falls below this, the quote bills at
@@ -86,6 +95,13 @@ export interface Organization {
   review_request_enabled?: boolean;
   /** Auto-follow-up on unanswered quotes (cron /api/quotes/followup). Opt-in. */
   quote_followup_enabled?: boolean;
+  /** Automatic customer texts (Twilio). All opt-in, OFF by default:
+   *  On the way / Running late / Job done send from the business number;
+   *  day-before visit reminders (cron /api/sms/reminders); unpaid invoice
+   *  reminders (cron /api/invoices/reminders). */
+  auto_sms_enroute?: boolean;
+  auto_sms_reminder?: boolean;
+  auto_sms_invoice?: boolean;
   review_request_delay_hours?: number;        // default 24
   review_request_channel?: "sms" | "email" | "both"; // default "sms"
   /** Custom template. Supports {customer_name}, {business_name},
@@ -408,6 +424,12 @@ export interface ScheduleEntry {
    *  the `job` address text. */
   job_id?: string | null;
   note: string;
+  /** "HH:MM" 24h. Only online bookings write it so far; everything else
+   *  keeps the time in the note ("🕐 13:30"). */
+  start_time?: string | null;
+  duration_min?: number | null;
+  /** Online booking hold: "requested" until the owner confirms. */
+  booking_status?: "requested" | "confirmed" | null;
   created_at?: string;
 }
 
