@@ -38,6 +38,10 @@ export interface JobCheckoutInput {
   kind: string;
   /** Offer bank transfer (ACH) as well as card. */
   allowBankTransfer: boolean;
+  /** The customer ticked "save my card" (card on file, lib/payments/saved-card.ts).
+   *  stripeCustomerId = their existing Stripe Customer, if any; otherwise
+   *  Checkout creates one. Only the card is saved, never a bank account. */
+  saveCard?: { customerId: string; stripeCustomerId?: string | null; consentVersion: string } | null;
   successUrl: string;
   cancelUrl: string;
   /** Unix seconds. */
@@ -111,6 +115,21 @@ export function buildJobCheckoutParams(i: JobCheckoutInput): StripeSessionParams
     params.payment_method_options = {
       us_bank_account: { verification_method: "automatic" },
     };
+  }
+
+  if (i.saveCard?.customerId) {
+    // Save the CARD for later off-session charges. Set on the card option, not
+    // the whole PaymentIntent, so a bank transfer is never saved.
+    params.payment_method_options = {
+      ...(params.payment_method_options || {}),
+      card: { setup_future_usage: "off_session" },
+    };
+    if (i.saveCard.stripeCustomerId) params.customer = i.saveCard.stripeCustomerId;
+    else params.customer_creation = "always";
+    params.metadata.save_card = "1";
+    params.metadata.customer_id = i.saveCard.customerId;
+    params.metadata.card_consent_version = i.saveCard.consentVersion;
+    params.metadata.org_name = i.orgName;
   }
 
   return params;

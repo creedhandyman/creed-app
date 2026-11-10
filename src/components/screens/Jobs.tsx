@@ -2,6 +2,7 @@
 import { leadDraftTotal } from "@/lib/lead-draft-info";
 import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
 import { apiFetch, getStatusLink } from "@/lib/api";
+import { savedCardLabel } from "@/lib/payments/saved-card";
 import { markQuoteSent, sentAgo } from "@/lib/quote-send";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
@@ -9,7 +10,7 @@ import { db } from "@/lib/supabase";
 import { signReceiptPaths, isPrivatePath } from "@/lib/receipt-storage";
 import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
-import type { Job } from "@/lib/types";
+import type { Customer, Job } from "@/lib/types";
 import StatusSheet, { statusLabel } from "../StatusSheet";
 import PrintSheet from "../PrintSheet";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
@@ -797,6 +798,60 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     if (kind !== "invoice") return;
     const job = jobs.find((j) => j.id === jobId);
     if (job?.status === "complete") void setStatus(jobId, "invoiced").then((ok) => { if (ok && !quiet) toast(t("jobs.invoiceMarkedSent"), "success"); });
+  };
+
+  // Card on file (lib/payments/saved-card.ts): charge what's owed to the
+  // customer's saved card after a confirm, or remove the card. The server
+  // clamps the amount to the live balance and won't charge twice on a retry.
+  const [cardBusy, setCardBusy] = useState(false);
+  const chargeSavedCard = async (job: Job, cust: Customer, amount: number) => {
+    const card = savedCardLabel(cust.card_brand, cust.card_last4);
+    const ok = await useStore.getState().showConfirm(
+      t("jobs.chargeCardTitle"),
+      t("jobs.chargeCardBody").replace("{amt}", amount.toFixed(2)).replace("{name}", cust.name || "").replace("{card}", card),
+      { confirmLabel: t("jobs.chargeCard").replace("{card}", card) },
+    );
+    if (!ok) return;
+    setCardBusy(true);
+    try {
+      const res = await apiFetch("/api/payments/charge-saved", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: job.id, amount }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        useStore.getState().showToast(t("jobs.chargeCardDone").replace("{amt}", Number(data.paidNow || amount).toFixed(2)), "success");
+      } else {
+        useStore.getState().showToast(data?.error || t("jobs.failedCreatePayment"), "error");
+      }
+    } catch {
+      useStore.getState().showToast(t("jobs.failedCreatePayment"), "error");
+    } finally {
+      setCardBusy(false);
+      await loadAll().catch(() => { /* next refresh picks it up */ });
+    }
+  };
+  const removeSavedCard = async (cust: Customer) => {
+    const card = savedCardLabel(cust.card_brand, cust.card_last4);
+    const ok = await useStore.getState().showConfirm(
+      t("jobs.removeCardTitle"),
+      t("jobs.removeCardBody").replace("{name}", cust.name || "").replace("{card}", card),
+      { danger: true, confirmLabel: t("jobs.removeCard") },
+    );
+    if (!ok) return;
+    try {
+      const res = await apiFetch("/api/payments/saved-card", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId: cust.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      useStore.getState().showToast(res.ok ? t("jobs.removeCardDone") : (data?.error || "Couldn't remove the card."), res.ok ? "success" : "error");
+    } catch {
+      useStore.getState().showToast("Couldn't remove the card.", "error");
+    }
+    await loadAll().catch(() => { /* next refresh picks it up */ });
   };
 
   const openRecordPay = (job: Job) => {
@@ -1636,6 +1691,17 @@ ${invoicePhotosHtml}
                     <Icon name="qr" size={14} /> {t("jobs.collectNow")}
                   </button>
                 )}
+                {/* Card on file: owner/manager, switch on, a saved card on the job's customer. */}
+                {(() => {
+                  const cust = dj.customer_id ? customers.find((c) => c.id === dj.customer_id) : undefined;
+                  if (!isAdmin || !org?.card_on_file_enabled || !org?.stripe_connected || !cust?.card_last4) return null;
+                  if (dj.status === "paid" || balanceDue <= 0) return null;
+                  return (
+                    <button className="bo" disabled={cardBusy} onClick={() => { void chargeSavedCard(dj, cust, balanceDue); }} style={btn}>
+                      <Icon name="pay" size={14} /> {t("jobs.chargeCard").replace("{card}", savedCardLabel(cust.card_brand, cust.card_last4))}
+                    </button>
+                  );
+                })()}
                 {/* Owner/manager only; when invoiced it's already the CTA. */}
                 {isAdmin && dj.status !== "paid" && dj.status !== "invoiced" && balanceDue > 0 && (
                   <button className="bg" onClick={() => openRecordPay(dj)} style={btn}>
@@ -1643,6 +1709,16 @@ ${invoicePhotosHtml}
                   </button>
                 )}
               </div>
+              {(() => {
+                const cust = dj.customer_id ? customers.find((c) => c.id === dj.customer_id) : undefined;
+                if (!isAdmin || !org?.card_on_file_enabled || !cust?.card_last4) return null;
+                return (
+                  <div className="dim" style={{ fontSize: 12.5, paddingTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                    <Icon name="pay" size={12} /> {savedCardLabel(cust.card_brand, cust.card_last4)}{cust.card_exp ? ` · ${cust.card_exp}` : ""}
+                    <span onClick={() => { void removeSavedCard(cust); }} style={{ marginLeft: "auto", cursor: "pointer", textDecoration: "underline" }}>{t("jobs.removeCard")}</span>
+                  </div>
+                );
+              })()}
               {dj.status !== "paid" && balanceDue > 0 && !org?.stripe_connected && user.role === "owner" && openOps && (
                 <div onClick={() => openOps("billing")} className="dim" style={{ fontSize: 13, paddingTop: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                   <Icon name="money" size={13} /> {t("jobs.connectStripeHint")} <Icon name="next" size={13} />

@@ -6,6 +6,7 @@ import { visitCadence } from "@/lib/memberships";
 import { fulfillJobPayment, paymentFromCheckoutSession, recordJobRefund } from "@/lib/payment-fulfillment";
 import { stripeExcessRefunder } from "@/lib/stripe-refund";
 import { notifyBankPayment } from "@/lib/bank-payment-notify";
+import { saveCardFromCheckout, savedCardPaymentFromIntent } from "@/lib/payments/saved-card";
 import { findOrgIdForSub, orgUpdateFromSubscription } from "@/lib/stripe-subscription";
 
 export const dynamic = "force-dynamic";
@@ -196,6 +197,8 @@ export async function POST(req: NextRequest) {
           // Unknown job / org mismatch => silently skipped, as before.
           const failed = await fulfillCheckoutJobPayment(session, stripe);
           if (failed) return failed;
+          // "Save my card" ticked: keep the card on the customer (best-effort).
+          await saveCardFromCheckout(supabase, stripe, session);
         } else if (meta.job_id && session.payment_status === "unpaid") {
           // Bank transfer (ACH): the customer authorized it but the money takes
           // a few business days to clear. Nothing is recorded on the job yet —
@@ -217,6 +220,34 @@ export async function POST(req: NextRequest) {
         if (meta.job_id && session.payment_status === "paid") {
           const failed = await fulfillCheckoutJobPayment(session, stripe);
           if (failed) return failed;
+        }
+        break;
+      }
+
+      case "payment_intent.succeeded": {
+        // A saved-card charge from the job screen. The charge route records it
+        // itself; this catches one whose request died after Stripe charged.
+        // Idempotent on the PaymentIntent id (the route's ledger key too).
+        // Checkout's own PaymentIntents carry no card_on_file and are skipped.
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const pay = savedCardPaymentFromIntent(pi);
+        if (pay) {
+          try {
+            await fulfillJobPayment(supabase, {
+              jobId: pay.jobId,
+              expectOrgId: pay.orgId,
+              sessionId: pi.id,
+              paymentIntentId: pi.id,
+              paidNow: pay.paidNow,
+              platformFeeCents: pay.platformFeeCents,
+              kind: pay.kind,
+              source: "webhook",
+              refundExcess: stripeExcessRefunder(stripe),
+            });
+          } catch (e) {
+            console.error("[webhook] saved-card charge not recorded:", e);
+            return NextResponse.json({ error: "Payment not recorded yet, retry" }, { status: 500 });
+          }
         }
         break;
       }

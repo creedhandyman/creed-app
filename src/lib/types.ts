@@ -99,6 +99,8 @@ export interface Organization {
   ach_enabled?: boolean;
   /** Ask the customer for a tip on a final payment (lib/tips.ts). Opt-in. */
   tips_enabled?: boolean;
+  /** Let customers save a card at checkout and the owner charge it later. Opt-in. */
+  card_on_file_enabled?: boolean;
   /** Automatic customer texts (Twilio). All opt-in, OFF by default:
    *  On the way / Running late / Job done send from the business number;
    *  day-before visit reminders (cron /api/sms/reminders); unpaid invoice
@@ -192,6 +194,14 @@ export interface Customer {
   notes?: string;
   created_at?: string;
   updated_at?: string;
+  /** Card on file (lib/payments/saved-card.ts). Display details only; the
+   *  card itself stays with Stripe. */
+  stripe_customer_id?: string | null;
+  card_payment_method_id?: string | null;
+  card_brand?: string | null;
+  card_last4?: string | null;
+  card_exp?: string | null;
+  card_saved_at?: string | null;
 }
 
 export interface Address {

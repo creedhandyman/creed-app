@@ -27,6 +27,7 @@ import { statusColor } from "@/lib/status";
 import { receiptsForJob } from "@/lib/job-entries";
 import { Icon } from "@/components/Icon";
 import { readBlob } from "@/lib/job-blob";
+import { savedCardLabel } from "@/lib/payments/saved-card";
 
 const PRIMARY = "#2E75B6";
 const GOLD = "#f5b400";
@@ -354,6 +355,10 @@ export default function PortalPage() {
         {/* Your membership — active card(s) OR the join upsell; nothing if
             the org has no plans / no Stripe. */}
         <MembershipArea memberships={memberships} plans={data.plans || []} accent={accent} />
+
+        {/* Card on file — shown only when one is saved; the customer can
+            remove it themselves (detached in Stripe). */}
+        {customer.card_last4 && <SavedCardRow customer={customer} orgName={org?.name || "this business"} />}
 
         {/* Your properties — one card per deduped address */}
         {groups.length > 0 && (
@@ -1000,6 +1005,42 @@ function RenderingsSection({ jobs }: { jobs: Job[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ─── Card on file: what's saved, and a self-serve Remove ─── */
+function SavedCardRow({ customer, orgName }: { customer: Customer; orgName: string }) {
+  const [state, setState] = useState<"" | "ask" | "busy" | "gone" | "error">("");
+  if (state === "gone") return null;
+  const remove = async () => {
+    setState("busy");
+    try {
+      const res = await fetch("/api/portal/saved-card", { method: "DELETE" });
+      setState(res.ok ? "gone" : "error");
+    } catch {
+      setState("error");
+    }
+  };
+  return (
+    <div className="card" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <Icon name="pay" size={16} color="#7fb6ff" />
+      <div style={{ flex: 1, minWidth: 180 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>Card on file: {savedCardLabel(customer.card_brand, customer.card_last4)}</div>
+        <div className="muted" style={{ fontSize: 12.5 }}>
+          {state === "error" ? "Couldn't remove it just now. Please try again." : `${orgName} can charge it for work you've approved.`}
+        </div>
+      </div>
+      {state === "ask" ? (
+        <>
+          <button onClick={remove} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 8, border: "1px solid #C00000", background: "transparent", color: "#ff8888", cursor: "pointer" }}>Remove card</button>
+          <button onClick={() => setState("")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 8, border: "1px solid #2a2a3a", background: "transparent", color: "#9a9aa8", cursor: "pointer" }}>Keep</button>
+        </>
+      ) : (
+        <button onClick={() => setState("ask")} disabled={state === "busy"} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 8, border: "1px solid #2a2a3a", background: "transparent", color: "#9a9aa8", cursor: "pointer" }}>
+          {state === "busy" ? "Removing…" : "Remove"}
+        </button>
+      )}
     </div>
   );
 }

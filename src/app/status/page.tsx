@@ -9,6 +9,7 @@ import { itemInTier, tierDeltas } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
 import { payPlan } from "@/lib/pay-plan";
 import { TIP_PCTS, tipAllowed, tipCentsFor } from "@/lib/tips";
+import { cardConsentText } from "@/lib/payments/saved-card";
 import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
 import { readQuoteSettings } from "@/lib/quote-blob";
@@ -161,6 +162,8 @@ function StatusContent() {
   // Tip on a final payment (lib/tips.ts). Only a percent goes to the server;
   // it works the cents out itself and re-checks that a tip is allowed.
   const [tipPct, setTipPct] = useState(0);
+  // Card on file: the customer's own tick, unticked by default.
+  const [saveCard, setSaveCard] = useState(false);
 
   const getPos = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     const canvas = canvasRef.current;
@@ -327,6 +330,7 @@ function StatusContent() {
           orgName: org.name,
           stripeAccountId: org.stripe_account_id,
           tipPct: tipOk ? tipPct : 0,
+          saveCard: org.card_on_file_enabled === true && saveCard,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -795,6 +799,12 @@ function StatusContent() {
               <p style={{ fontSize: 12, color: "#8a8a99", textAlign: "center", margin: "7px 0 0" }}>
                 Includes a ${tipAmount.toFixed(2)} tip. Thank you!
               </p>
+            )}
+            {org?.card_on_file_enabled && (
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, color: "#9a9aa8", margin: "10px 0 0", cursor: "pointer", lineHeight: 1.4 }}>
+                <input type="checkbox" checked={saveCard} onChange={(e) => setSaveCard(e.target.checked)} style={{ marginTop: 2, width: 15, height: 15, flexShrink: 0 }} />
+                <span>(Optional) {cardConsentText(org.name)} Only applies if you pay by card.</span>
+              </label>
             )}
             {billing && payError && <p style={{ fontSize: 13, color: "#ff8888", textAlign: "center", margin: "9px 0 0" }}>{payError}</p>}
             <p style={{ fontSize: 12, color: "#666", textAlign: "center", margin: "9px 0 0" }}>
