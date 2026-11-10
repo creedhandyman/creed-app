@@ -5,6 +5,8 @@ import { computeNextFire } from "@/lib/recurring";
 import { visitCadence } from "@/lib/memberships";
 import { fulfillJobPayment, paymentFromCheckoutSession, recordJobRefund } from "@/lib/payment-fulfillment";
 import { stripeExcessRefunder } from "@/lib/stripe-refund";
+import { notifyBankPayment } from "@/lib/bank-payment-notify";
+import { saveCardFromCheckout, savedCardPaymentFromIntent } from "@/lib/payments/saved-card";
 import { findOrgIdForSub, orgUpdateFromSubscription } from "@/lib/stripe-subscription";
 
 export const dynamic = "force-dynamic";
@@ -118,6 +120,39 @@ async function syncMembership(sub: Stripe.Subscription): Promise<void> {
   });
 }
 
+/**
+ * Record a paid Checkout session against its job (deposit / balance / invoice,
+ * card or a cleared bank transfer). Returns a 500 response when the charge went
+ * through but couldn't be saved, so Stripe RETRIES the event (it does, for up
+ * to 3 days); null otherwise. Retrying is safe: the ledger insert is
+ * idempotent on the session id.
+ */
+async function fulfillCheckoutJobPayment(
+  session: Stripe.Checkout.Session,
+  stripe: Stripe,
+): Promise<NextResponse | null> {
+  const meta = (session.metadata as Record<string, string> | null) || {};
+  const pay = paymentFromCheckoutSession(session);
+  try {
+    await fulfillJobPayment(supabase, {
+      jobId: meta.job_id,
+      expectOrgId: pay.orgId,
+      sessionId: pay.sessionId,
+      paymentIntentId: pay.paymentIntentId,
+      paidNow: pay.paidNow,
+      platformFeeCents: pay.platformFeeCents,
+      kind: pay.kind,
+      tipCents: pay.tipCents,
+      source: "webhook",
+      refundExcess: stripeExcessRefunder(stripe),
+    });
+    return null;
+  } catch (e) {
+    console.error("[webhook] one-time payment fulfillment failed:", e);
+    return NextResponse.json({ error: "Payment not recorded yet, retry" }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const Stripe = (await import("stripe")).default;
@@ -160,13 +195,49 @@ export async function POST(req: NextRequest) {
           // the tab before /payment/success runs still gets their payment
           // recorded — the redirect is no longer the only fulfillment path.
           // Unknown job / org mismatch => silently skipped, as before.
+          const failed = await fulfillCheckoutJobPayment(session, stripe);
+          if (failed) return failed;
+          // "Save my card" ticked: keep the card on the customer (best-effort).
+          await saveCardFromCheckout(supabase, stripe, session);
+        } else if (meta.job_id && session.payment_status === "unpaid") {
+          // Bank transfer (ACH): the customer authorized it but the money takes
+          // a few business days to clear. Nothing is recorded on the job yet —
+          // checkout.session.async_payment_succeeded records it. Tell the owner
+          // it's coming so they don't chase the customer meanwhile.
           const pay = paymentFromCheckoutSession(session);
+          if (pay.orgId && pay.jobId) {
+            await notifyBankPayment(supabase, { jobId: pay.jobId, orgId: pay.orgId, amount: pay.paidNow, stage: "started" });
+          }
+        }
+        break;
+      }
+
+      case "checkout.session.async_payment_succeeded": {
+        // A bank transfer cleared. Record it exactly like a card payment
+        // (idempotent on the session id, so a resent event records once).
+        const session = event.data.object as Stripe.Checkout.Session;
+        const meta = (session.metadata as Record<string, string> | null) || {};
+        if (meta.job_id && session.payment_status === "paid") {
+          const failed = await fulfillCheckoutJobPayment(session, stripe);
+          if (failed) return failed;
+        }
+        break;
+      }
+
+      case "payment_intent.succeeded": {
+        // A saved-card charge from the job screen. The charge route records it
+        // itself; this catches one whose request died after Stripe charged.
+        // Idempotent on the PaymentIntent id (the route's ledger key too).
+        // Checkout's own PaymentIntents carry no card_on_file and are skipped.
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const pay = savedCardPaymentFromIntent(pi);
+        if (pay) {
           try {
             await fulfillJobPayment(supabase, {
-              jobId: meta.job_id,
+              jobId: pay.jobId,
               expectOrgId: pay.orgId,
-              sessionId: pay.sessionId,
-              paymentIntentId: pay.paymentIntentId,
+              sessionId: pi.id,
+              paymentIntentId: pi.id,
               paidNow: pay.paidNow,
               platformFeeCents: pay.platformFeeCents,
               kind: pay.kind,
@@ -174,14 +245,20 @@ export async function POST(req: NextRequest) {
               refundExcess: stripeExcessRefunder(stripe),
             });
           } catch (e) {
-            // The charge went through but couldn't be saved. Answer 500 so
-            // Stripe RETRIES this event (it does, for up to 3 days). Acking 200
-            // here meant a customer who closed the tab before the success page
-            // loaded was charged with nothing recorded. Retrying is safe: the
-            // ledger insert is idempotent on the session id.
-            console.error("[webhook] one-time payment fulfillment failed:", e);
+            console.error("[webhook] saved-card charge not recorded:", e);
             return NextResponse.json({ error: "Payment not recorded yet, retry" }, { status: 500 });
           }
+        }
+        break;
+      }
+
+      case "checkout.session.async_payment_failed": {
+        // A bank transfer didn't go through: nothing was recorded, so the job
+        // still owes it. Alert the owner.
+        const session = event.data.object as Stripe.Checkout.Session;
+        const pay = paymentFromCheckoutSession(session);
+        if (pay.jobId && pay.orgId) {
+          await notifyBankPayment(supabase, { jobId: pay.jobId, orgId: pay.orgId, amount: pay.paidNow, stage: "failed" });
         }
         break;
       }

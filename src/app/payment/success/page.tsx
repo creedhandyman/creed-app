@@ -9,6 +9,8 @@ interface VerifyResult {
   balance?: number;
   fullyPaid?: boolean;
   workDone?: boolean;
+  pending?: boolean;
+  tipPaid?: number;
   business?: { name?: string; logo_url?: string | null; brand_color?: string | null } | null;
   statusUrl?: string | null;
 }

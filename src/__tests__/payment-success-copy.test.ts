@@ -39,3 +39,18 @@ test("finished-work statuses match the job page's billing view", () => {
   expect(isWorkDone("accepted")).toBe(false);
   expect(isWorkDone(null)).toBe(false);
 });
+
+test("a bank transfer is started, not received, and says not to pay again", () => {
+  const c = paymentSuccessCopy({ result: { paidNow: 1000, balance: 1000, fullyPaid: false, workDone: true, pending: true } });
+  expect(c.title).toBe("Bank payment started");
+  expect(c.body).toMatch(/\$1000\.00 is on its way/);
+  expect(c.body).toMatch(/don't pay again/);
+  expect(c.body).not.toMatch(/received/);
+});
+
+test("a tip is thanked separately and named on a pending bank payment", () => {
+  const paid = paymentSuccessCopy({ result: { paidNow: 1000, balance: 0, fullyPaid: true, workDone: true, tipPaid: 150 } });
+  expect(paid.body).toBe("Thank you! We received $1000.00 and your invoice is paid in full. Thanks also for the $150.00 tip!");
+  const bank = paymentSuccessCopy({ result: { paidNow: 1000, pending: true, tipPaid: 150 } });
+  expect(bank.body).toMatch(/\$1000\.00, plus your \$150\.00 tip, is on its way/);
+});

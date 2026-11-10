@@ -78,7 +78,21 @@ export async function GET(req: NextRequest) {
         // point of collection, and most orgs never set custom URLs.
         if (!privacy_url) privacy_url = "https://www.creedhm.com/privacy";
         if (!sms_terms_url) sms_terms_url = "https://www.creedhm.com/terms";
-        org = { ...rest, privacy_url, sms_terms_url };
+        // The tip switch, read separately + best-effort so the page still
+        // loads for a database that hasn't had the tips migration yet.
+        let tips_enabled = false;
+        const { data: sw, error: swErr } = await supabase
+          .from("organizations").select("tips_enabled").eq("id", job.org_id).maybeSingle();
+        if (!swErr && sw) tips_enabled = sw.tips_enabled === true;
+        // Card on file: offer "save my card" only when the business turned it
+        // on and the job is linked to a customer record to save it on.
+        let card_on_file_enabled = false;
+        if (job.customer_id) {
+          const { data: cof, error: cofErr } = await supabase
+            .from("organizations").select("card_on_file_enabled").eq("id", job.org_id).maybeSingle();
+          if (!cofErr && cof) card_on_file_enabled = cof.card_on_file_enabled === true;
+        }
+        org = { ...rest, privacy_url, sms_terms_url, tips_enabled, card_on_file_enabled };
       }
     }
 

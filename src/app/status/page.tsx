@@ -8,6 +8,8 @@ import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { itemInTier, tierDeltas } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
 import { payPlan } from "@/lib/pay-plan";
+import { TIP_PCTS, tipAllowed, tipCentsFor } from "@/lib/tips";
+import { cardConsentText } from "@/lib/payments/saved-card";
 import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
 import { readQuoteSettings } from "@/lib/quote-blob";
@@ -157,6 +159,11 @@ function StatusContent() {
   const orgDepositPct = Number(org?.deposit_pct ?? 50);
   const [depositLoading, setDepositLoading] = useState(false);
   const [payError, setPayError] = useState("");
+  // Tip on a final payment (lib/tips.ts). Only a percent goes to the server;
+  // it works the cents out itself and re-checks that a tip is allowed.
+  const [tipPct, setTipPct] = useState(0);
+  // Card on file: the customer's own tick, unticked by default.
+  const [saveCard, setSaveCard] = useState(false);
 
   const getPos = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     const canvas = canvasRef.current;
@@ -304,9 +311,10 @@ function StatusContent() {
       // the server clamps to the balance as well). A finished job defaults to
       // the whole balance but the customer can still pick part now.
       const billing = job.status === "complete" || job.status === "invoiced";
-      const { amount } = payPlan({
+      const { amount, balanceDue: owed } = payPlan({
         total: baseTotal, paid: Number(job.amount_paid) || 0, orgDepositPct, billing, pick: depositPick,
       });
+      const tipOk = tipAllowed({ tipsEnabled: org.tips_enabled, jobStatus: job.status, payAmount: amount, balance: owed });
       if (amount <= 0) {
         setDepositLoading(false);
         return;
@@ -321,6 +329,8 @@ function StatusContent() {
           amount,
           orgName: org.name,
           stripeAccountId: org.stripe_account_id,
+          tipPct: tipOk ? tipPct : 0,
+          saveCard: org.card_on_file_enabled === true && saveCard,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -371,6 +381,8 @@ function StatusContent() {
   const billing = job.status === "complete" || job.status === "invoiced";
   const plan = payPlan({ total: effectiveTotal, paid: paidToDate, orgDepositPct, billing, pick: depositPick });
   const { balanceDue, amount: payAmount, remaining: remainingAfterPay } = plan;
+  const showTip = tipAllowed({ tipsEnabled: org?.tips_enabled, jobStatus: job.status, payAmount, balance: balanceDue });
+  const tipAmount = showTip ? tipCentsFor(Math.round(payAmount * 100), tipPct) / 100 : 0;
   const showPayCard = job.total > 0 && job.status !== "paid" && !!org?.stripe_connected && balanceDue > 0
     && (billing || !!job.client_signature);
   // Only surface the picker when the options actually differ in price — a
@@ -758,9 +770,42 @@ function StatusContent() {
                 ))}
               </div>
             )}
+            {showTip && (
+              <>
+                <div style={{ fontSize: 12.5, color: "#8a8a99", margin: "0 0 6px" }}>Add a tip?</div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 11 }}>
+                  {[0, ...TIP_PCTS].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setTipPct(p)}
+                      style={{
+                        flex: 1, padding: "9px 0", borderRadius: 9, fontSize: 13.5, fontFamily: "Oswald, sans-serif",
+                        background: tipPct === p ? "rgba(46,117,182,.14)" : "transparent",
+                        color: tipPct === p ? "#acd2ff" : "#8a8a99",
+                        border: `1px solid ${tipPct === p ? "rgba(46,117,182,.9)" : "#2a2a3a"}`,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {p === 0 ? "No tip" : `${p}%`}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <button className="btn glow-gold" onClick={startDeposit} disabled={depositLoading || payAmount <= 0}>
-              <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${payAmount.toFixed(2)} now`}
+              <Icon name="pay" size={17} /> {depositLoading ? "Redirecting…" : `Pay $${(payAmount + tipAmount).toFixed(2)} now`}
             </button>
+            {tipAmount > 0 && (
+              <p style={{ fontSize: 12, color: "#8a8a99", textAlign: "center", margin: "7px 0 0" }}>
+                Includes a ${tipAmount.toFixed(2)} tip. Thank you!
+              </p>
+            )}
+            {org?.card_on_file_enabled && (
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, color: "#9a9aa8", margin: "10px 0 0", cursor: "pointer", lineHeight: 1.4 }}>
+                <input type="checkbox" checked={saveCard} onChange={(e) => setSaveCard(e.target.checked)} style={{ marginTop: 2, width: 15, height: 15, flexShrink: 0 }} />
+                <span>(Optional) {cardConsentText(org.name)} Only applies if you pay by card.</span>
+              </label>
+            )}
             {billing && payError && <p style={{ fontSize: 13, color: "#ff8888", textAlign: "center", margin: "9px 0 0" }}>{payError}</p>}
             <p style={{ fontSize: 12, color: "#666", textAlign: "center", margin: "9px 0 0" }}>
               Secure checkout via Stripe.
