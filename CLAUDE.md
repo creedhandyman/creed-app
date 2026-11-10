@@ -394,10 +394,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `20261111_texts_default_business.sql` is moot, don't run it.
   `auto_sms_enroute` no longer sends anything: it only turns on the Texts
   screen + inbound reply routing (Ops label: "show replies to the business
-  number in Texts"). STILL through Twilio by hand: the Texts screen's reply
-  box (`/api/sms/reply`), left for the owner to decide. Planned, not built:
-  each business gets its own Twilio number for its automatic texts instead of
-  all sharing one.
+  number in Texts"). EXCEPTION, owner's decision (2026-11-10): the Texts
+  screen's reply box (`/api/sms/reply`) KEEPS sending from the business
+  number; don't move it to Messages. It changes later, in the update that
+  moves texting fully over to Twilio. Planned, not built: each business gets
+  its own Twilio number for its automatic texts instead of all sharing one.
 
 - Customer text replies, build 1 (**RUN in prod** 2026-11-10, columns + functions checked): run
   `supabase/migrations/20261110_text_replies.sql` in the SQL editor (safe to
