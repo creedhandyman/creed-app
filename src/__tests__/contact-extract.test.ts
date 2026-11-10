@@ -116,6 +116,11 @@ describe("planContactFill", () => {
     expect(plan.customer).toEqual({ name: "", phone: "(316) 555-0123", email: "", mode: "fill", matchId: "c1", matchName: "Jane Smith" });
   });
 
+  it("won't put an unlabeled stranger's number on the picked customer", () => {
+    const plan = planContactFill({ found: extractContacts("Gate latch broken, call Mary Jones at 316-555-0142"), linked: jane, clientName: "Jane Smith", residentOnFile: none, customers: [jane] });
+    expect(plan.customer).toBeNull();
+  });
+
   it("won't put someone else's number on the picked customer", () => {
     const plan = planContactFill({ found: extractContacts("Customer: Robert King 316-555-0123"), linked: jane, clientName: "Jane Smith", residentOnFile: none, customers: [jane] });
     expect(plan.customer).toBeNull();

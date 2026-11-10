@@ -208,7 +208,9 @@ export function planContactFill(input: {
   const target = pm ? res : cus;
   if (!target.phone) target.phone = found.loose.phone;
   if (!target.email) target.email = found.loose.email;
-  if (!target.name && (target === res ? true : !linked)) target.name = found.loose.name;
+  // Carry the loose name too, even with a customer picked: it's what tells a
+  // picked customer's own number from someone else's (nameOk below).
+  if (!target.name) target.name = found.loose.name;
 
   // Resident: only the blanks.
   const resOffer: FoundContact = {

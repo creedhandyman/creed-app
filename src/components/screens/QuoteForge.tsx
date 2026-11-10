@@ -542,6 +542,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab,
     templateEdit,
+    contactSource, residentPatch,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const draftHasContent = (d: any) =>
@@ -559,6 +560,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setProp(d.prop || ""); setClient(d.client || "");
       setCustomerId(d.customerId || undefined); setAddressId(d.addressId || undefined);
       setText(d.text || ""); setQuickDesc(d.quickDesc || ""); setQuickPhotos(d.quickPhotos || []);
+      setContactSource(typeof d.contactSource === "string" ? d.contactSource : ""); setResidentPatch(d.residentPatch ?? null);
       setRooms(d.rooms || []); setWorkers(d.workers || []); setJobPhotos(d.jobPhotos || []);
       woKnownIdsRef.current = quoteItemIds(d.rooms || []);
       setCustomWorkOrder(d.customWorkOrder ?? null);
@@ -605,6 +607,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     customWorkOrder: customWorkOrder ? customWorkOrder.map(({ src: _src, ...s }) => s) : null,
     discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop,
+    residentPatch,
   });
   const writeEditDraft = (id: string, snap: string) => {
     try { localStorage.setItem(editDraftKey(id), JSON.stringify({ v: 1, savedAt: Date.now(), base: editLoadedHashRef.current, state: JSON.parse(snap) })); } catch { /* */ }
@@ -618,6 +621,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       if (d) {
         setProp(d.prop || ""); setClient(d.client || "");
         setCustomerId(d.customerId || undefined); setAddressId(d.addressId || undefined);
+        setResidentPatch(d.residentPatch ?? null);
         setRooms(d.rooms || []); setWorkers(d.workers || []); setJobPhotos(d.jobPhotos || []);
         woKnownIdsRef.current = quoteItemIds(d.rooms || []);
         setCustomWorkOrder(d.customWorkOrder ?? null);
@@ -664,7 +668,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const t = setTimeout(() => writeEditDraft(id, snap), 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, prop, client, customerId, addressId, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, editingId, editDraftOffer]);
+  }, [mode, prop, client, customerId, addressId, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, residentPatch, editingId, editDraftOffer]);
 
   // Show the "resume" card whenever we land on the hub with a saved draft.
   useEffect(() => {
@@ -683,7 +687,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const t = setTimeout(() => { try { localStorage.setItem(DRAFT_KEY, snapshot); } catch { /* */ } }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab, editJobId, editingId]);
+  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, contactSource, residentPatch, tab, editJobId, editingId]);
 
   // Flush immediately when the app is backgrounded/closed — the 600ms debounce
   // may not fire if the user leaves right after typing. Ref keeps the latest

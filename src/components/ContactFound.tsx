@@ -100,11 +100,12 @@ export default function ContactFound({
             ...(phone ? { phone } : {}),
             ...(email ? { email } : {}),
           });
-          if (created) {
-            setCustomerId(created.id);
-            setClient(created.name);
-            done.push(`customer ${created.name}`);
-          }
+          // Failed (upsertCustomer already toasted why): keep the card and
+          // the reviewed details so Add can be tapped again.
+          if (!created) return;
+          setCustomerId(created.id);
+          setClient(created.name);
+          done.push(`customer ${created.name}`);
         } else if (pc.matchId) {
           const existing = customers.find((c) => c.id === pc.matchId);
           if (existing) {

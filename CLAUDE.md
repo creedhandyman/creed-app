@@ -697,9 +697,9 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   a `rejected` row (or no row at all) = the cron isn't reaching/authing.
 - `ALTER TABLE jobs ADD COLUMN archived BOOLEAN DEFAULT FALSE;`
 - `ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;`
-- `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;` — was NOT in prod until
-  2026-11-10 (file `supabase/migrations/20261110_review_requested_at.sql`): without it
-  `scheduleReviewRequest` errors silently and no review request is ever queued.
+- `ALTER TABLE jobs ADD COLUMN review_requested_at TIMESTAMPTZ;` — **RUN in prod 2026-11-10**
+  (file `supabase/migrations/20261110_review_requested_at.sql`, column checked); before
+  that `scheduleReviewRequest` errored silently and no review request was ever queued.
 - `ALTER TABLE time_entries ADD COLUMN paid_at TIMESTAMPTZ;`
   (Payroll now sets this instead of deleting the row, so Team Stats
   can compute lifetime hours/earnings. Existing rows have it NULL =
