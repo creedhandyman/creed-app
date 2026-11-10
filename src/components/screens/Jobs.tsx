@@ -1460,11 +1460,11 @@ ${invoicePhotosHtml}
             </div>
             {/* Resident (tenant) contact — review requests go HERE when set,
                 so a PM client isn't asked to review every work order. Saved
-                on the rooms blob (residentName/residentPhone); AppFolio
+                on the rooms blob (residentName/Phone/Email); AppFolio
                 imports pre-fill via tenantName/tenantPhone (lib/resident). */}
             {(() => {
               const res = residentContact(dj.rooms);
-              const saveResident = (field: "residentName" | "residentPhone", val: string) => {
+              const saveResident = (field: "residentName" | "residentPhone" | "residentEmail", val: string) => {
                 if (val === (((readBlob(dj.rooms)[field]) as string) || "")) return; // unchanged / blank stays blank
                 return patchBlob(dj.id, { [field]: val }).then((r) => { if (r.ok && r.changed) void loadAll(); });
               };
@@ -1480,6 +1480,11 @@ ${invoicePhotosHtml}
                     <span className="l">{t("jobs.residentPhone")}</span>
                     <input key={`rp-${dj.id}`} type="tel" defaultValue={res.phone} placeholder="—" aria-label={t("jobs.residentPhone")}
                       onBlur={(e) => saveResident("residentPhone", e.target.value.trim())} style={inputStyle} />
+                  </div>
+                  <div className="drow">
+                    <span className="l">{t("jobs.residentEmail")}</span>
+                    <input key={`re-${dj.id}`} type="email" defaultValue={res.email} placeholder="—" aria-label={t("jobs.residentEmail")}
+                      onBlur={(e) => saveResident("residentEmail", e.target.value.trim())} style={inputStyle} />
                   </div>
                   <div className="dim" style={{ fontSize: 12, padding: "2px 0 4px" }}>{t("jobs.residentHint")}</div>
                 </>

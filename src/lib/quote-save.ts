@@ -93,6 +93,10 @@ export interface QuoteSaveInput {
     createdBy: string; trade: string;
     /** YYYY-MM-DD, used only when creating. */
     today: string;
+    /** Resident (tenant) details confirmed on the quote screen (ContactFound).
+     *  Only non-empty fields are written, so a save never blanks a resident
+     *  already on the job (lib/resident.ts reads these keys). */
+    resident?: { name?: string; phone?: string; email?: string } | null;
   };
 }
 
@@ -177,8 +181,14 @@ export function buildQuoteSave(input: QuoteSaveInput): QuoteSaveResult {
   const mergedPhotos = [...prevPhotos, ...jobPhotos.filter((ph) => !seenUrls.has(ph.url))];
 
   // ── The blob: prior first (unknown keys survive), then the keys QuoteForge owns ──
+  const res = input.identity.resident;
+  const residentKeys: Record<string, string> = {};
+  if (res?.name?.trim()) residentKeys.residentName = res.name.trim();
+  if (res?.phone?.trim()) residentKeys.residentPhone = res.phone.trim();
+  if (res?.email?.trim()) residentKeys.residentEmail = res.email.trim();
   const blob: RoomsBlob = {
     ...prevData,
+    ...residentKeys,
     rooms,
     workers: input.workers,
     photos: mergedPhotos,
