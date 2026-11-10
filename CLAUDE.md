@@ -381,8 +381,16 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   then their send strip gets a Send text button that POSTs `/api/sms` `{ jobId, kind: "message", recipient:
   "client" | "resident", body }`; the server looks the number up on the job
   (`pickedRecipient`), checks STOP and logs `kind = 'message'`. Off = the
-  strip opens the phone's Messages as before. Send quote / Follow up / Send
-  invoice still open Messages.
+  strip opens the phone's Messages as before. **One-tap sending**: Send
+  quote / Follow up / Send invoice (Jobs send strip), the quote editor's
+  `SendSheet` and Work mode's "Complete & invoice" step (after Complete Job,
+  owner/manager, while a balance is owed) use the same path when
+  `lib/job-send.ts sendsFromBusiness(org)` is true (`job_text_via =
+  'business'` + `auto_sms_enroute`). `lib/job-text-client.ts sendJobMessage`
+  is the one client call; `quote_sent_at` / complete→invoiced are stamped
+  ONLY after the server confirms the send. The phone's Messages / Copy stay
+  as the secondary buttons and still stamp on tap (nothing can confirm
+  those). No migration.
 
 - Customer text replies, build 1 (**RUN in prod** 2026-11-10, columns + functions checked): run
   `supabase/migrations/20261110_text_replies.sql` in the SQL editor (safe to

@@ -1,5 +1,5 @@
 "use client";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getStatusLink } from "@/lib/api";
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useStore, clockDeps } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
@@ -8,6 +8,8 @@ import { t } from "@/lib/i18n";
 import { makeGuide, extractZip, classify } from "@/lib/parser";
 import { formatHours, parseEntryDate } from "@/lib/dates";
 import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
+import { balanceOf, invoiceText, sendsFromBusiness, MAX_JOB_MESSAGE } from "@/lib/job-send";
+import { sendJobMessage } from "@/lib/job-text-client";
 import { FINISHED, stopsForDay, fmtClock } from "@/lib/day-plan";
 import { stripNoteParts } from "@/lib/dispatch-week";
 import type { Job } from "@/lib/types";
@@ -648,16 +650,67 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       closedElsewhereRef.current ? t("wv.jobDoneShiftClosed") : t("wv.jobDoneToast").replace("{hrs}", formatHours(hrs)),
       closedElsewhereRef.current ? "warning" : "success",
     );
-    // Pop the review-request modal before navigating away — last chance to
-    // capture the client's goodwill while the work is fresh in their mind.
-    // Same rule as Jobs' Request Review (respects the org's opt-out).
+    // "Complete & invoice": while money is still owed, offer to send the
+    // invoice right here instead of a second trip through Jobs. Owner /
+    // manager only (sending the bill is theirs, like sending the quote).
+    const doneJob: Job = { ...(useStore.getState().jobs.find((j) => j.id === activeJob.id) || activeJob), status: "complete" };
+    if ((user.role === "owner" || user.role === "manager") && balanceOf(doneJob).due > 0.009) {
+      const { org, customers } = useStore.getState();
+      let url = "";
+      try { url = await getStatusLink(doneJob.id); } catch { url = ""; }
+      setInvoiceStep({
+        job: doneJob,
+        phone: customers.find((c) => c.id === doneJob.customer_id)?.phone || "",
+        msg: invoiceText(doneJob, { url, orgName: org?.name, payOnline: !!org?.stripe_connected }),
+      });
+      return; // the step's buttons carry on to finishAfterComplete
+    }
+    finishAfterComplete(doneJob);
+  };
+
+  // What follows a completed job once the invoice step is done or skipped:
+  // the review-request prompt (last chance to capture the client's goodwill
+  // while the work is fresh; same rule as Jobs' Request Review, respects the
+  // org's opt-out), else back to the dashboard.
+  const finishAfterComplete = (job: Job) => {
     const { org, reviewRequests } = useStore.getState();
-    if (shouldPromptReview(activeJob, org, reviewRequests)) {
-      setReviewJob({ ...activeJob, status: "complete" });
+    if (shouldPromptReview(job, org, reviewRequests)) {
+      setReviewJob({ ...job, status: "complete" });
       // Don't navigate immediately; the modal's onClose will handle that.
       return;
     }
     setPage("dash");
+  };
+
+  // The "Complete & invoice" step (see completeJob). The job flips to
+  // Invoiced only when the invoice really went: from the business number
+  // that means the server confirmed the text; with the phone's own Messages
+  // app it's the tap, as on the Jobs screen (nothing can confirm that send).
+  const [invoiceStep, setInvoiceStep] = useState<{ job: Job; phone: string; msg: string; busy?: boolean } | null>(null);
+  const markInvoiced = async (job: Job): Promise<boolean> => {
+    const ok = await transitionJob(job.id, "invoiced", {
+      jobs: () => useStore.getState().jobs,
+      timeEntries: () => useStore.getState().timeEntries,
+      fallbackJob: job,
+    });
+    void loadAll();
+    return ok;
+  };
+  const closeInvoiceStep = (job: Job) => { setInvoiceStep(null); finishAfterComplete(job); };
+  const sendInvoiceFromBusiness = async () => {
+    if (!invoiceStep || invoiceStep.busy || !invoiceStep.msg.trim()) return;
+    const step = invoiceStep;
+    const toast = useStore.getState().showToast;
+    setInvoiceStep({ ...step, busy: true });
+    const r = await sendJobMessage(step.job.id, "client", step.msg);
+    if (!r.ok) {
+      // Not sent: nothing is stamped, the draft stays open to retry.
+      toast(r.offline ? t("jobs.textNotSentOffline") : r.error || t("jobs.textNotSent"), "error");
+      setInvoiceStep((cur) => (cur ? { ...cur, busy: false } : cur));
+      return;
+    }
+    if (await markInvoiced(step.job)) toast(t("jobs.invoiceMarkedSent"), "success");
+    closeInvoiceStep(step.job);
   };
 
   // Drives the review-request modal — populated by completeJob when a fresh
@@ -826,6 +879,58 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         jobId={activeJob?.id}
         onSaved={saveRenderedPhoto}
       />
+      {/* "Complete & invoice" — after Complete Job, while money is owed. */}
+      {invoiceStep && (() => {
+        const step = invoiceStep;
+        const viaBusiness = sendsFromBusiness(useStore.getState().org);
+        const due = balanceOf(step.job).due;
+        return (
+          <div className="sheet-overlay" onClick={() => { if (!step.busy) closeInvoiceStep(step.job); }}>
+            <div className="cd sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+              <h4 style={{ fontSize: 17, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 7 }}>
+                <Icon name="send" size={16} color="var(--color-success)" /> {t("wv.invoiceStepTitle")}
+              </h4>
+              <p className="dim" style={{ fontSize: 13.5, marginBottom: 8 }}>
+                {t("wv.invoiceStepSub").replace("{amt}", due.toFixed(2))}
+              </p>
+              <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
+                {step.phone ? t("jobs.sendToEdit").replace("{phone}", step.phone) : t("jobs.noPhoneOnFile")}
+              </div>
+              <textarea
+                value={step.msg}
+                onChange={(e) => setInvoiceStep({ ...step, msg: e.target.value })}
+                maxLength={viaBusiness ? MAX_JOB_MESSAGE : undefined}
+                rows={6}
+                style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
+              />
+              <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                {viaBusiness && (
+                  <button type="button" className="bg" disabled={!!step.busy || !step.msg.trim() || !step.phone}
+                    onClick={() => { void sendInvoiceFromBusiness(); }}
+                    style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>
+                    <Icon name="send" size={15} /> {step.busy ? t("jobs.sendingText") : t("jobs.sendInvoice")}
+                  </button>
+                )}
+                <a
+                  href={`sms:${step.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(step.msg)}`}
+                  onClick={() => { if (step.busy) return; void markInvoiced(step.job); closeInvoiceStep(step.job); }}
+                  className={viaBusiness ? "bo" : "bg"}
+                  style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, ...(viaBusiness ? { color: "inherit" } : {}) }}
+                >
+                  <Icon name="send" size={15} /> {viaBusiness ? t("jobs.messagesShort") : t("jobs.openMessages")}
+                </a>
+              </div>
+              <button type="button" className="bo" disabled={!!step.busy} onClick={() => closeInvoiceStep(step.job)}
+                style={{ width: "100%", marginTop: 8, fontSize: 14 }}>
+                {t("wv.invoiceNotNow")}
+              </button>
+              {viaBusiness && (
+                <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.4 }}>{t("jobs.sendTextHelp")}</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       {/* Review-request modal — pops after a successful completeJob to
           capture the client's goodwill before we navigate away. Closing
           the modal (any path) finishes the navigation to dashboard. */}
