@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
-import { describe, viewerOf, visibleThreads } from "@/lib/sms-threads-server";
+import { bellThreadPhone } from "@/lib/sms-threads";
+import { describe, viewerOf, visibleThreadsWithRows } from "@/lib/sms-threads-server";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,9 @@ export const dynamic = "force-dynamic";
  *
  * GET /api/sms/threads?count=1: just { unread } for the More tab badge.
  *
+ * Also { bellPhone } when ?job=<id>&at=<iso> is given: the conversation a
+ * text-reply bell row (job + time) is about (lib/sms-threads bellThreadPhone).
+ *
  * Before the text replies migration (20261110_text_replies.sql) the columns
  * don't exist: answers { threads: [], unread: 0, ready: false }.
  */
@@ -22,9 +26,9 @@ export async function GET(req: NextRequest) {
   const supabase = serviceClient();
   const viewer = await viewerOf(supabase, { ...prof, orgId: prof.orgId });
 
-  let threads;
+  let threads, rows;
   try {
-    threads = await visibleThreads(supabase, viewer);
+    ({ threads, rows } = await visibleThreadsWithRows(supabase, viewer));
   } catch {
     return NextResponse.json({ threads: [], unread: 0, ready: false });
   }
@@ -32,8 +36,11 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get("count")) return NextResponse.json({ unread });
 
   const info = await describe(supabase, viewer.orgId, threads);
+  const job = req.nextUrl.searchParams.get("job");
+  const bellPhone = job ? bellThreadPhone(rows, job, req.nextUrl.searchParams.get("at")) : null;
   return NextResponse.json({
     unread,
+    bellPhone,
     admin: viewer.admin,
     threads: threads.map((t) => ({
       phone: t.phone,

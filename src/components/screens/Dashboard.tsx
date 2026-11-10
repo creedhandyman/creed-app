@@ -25,7 +25,7 @@ interface Props {
   /** Open Operations on a specific sub-tab — used by the getting-started card. */
   openOps?: (tab?: string) => void;
   /** Open Texts on a job's conversation (a customer text-reply bell row). */
-  openTexts?: (target?: { phone?: string; jobId?: string }) => void;
+  openTexts?: (target?: { phone?: string; jobId?: string; at?: string }) => void;
 }
 
 export default function Dashboard({ setPage, openSettings, openJob, openOps, openTexts }: Props) {

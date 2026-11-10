@@ -63,7 +63,7 @@ interface Thread {
 interface Props {
   openJob: (jobId: string) => void;
   /** Open straight onto one conversation (a push or bell tap). */
-  initial?: { phone?: string; jobId?: string } | null;
+  initial?: { phone?: string; jobId?: string; at?: string } | null;
   clearInitial?: () => void;
 }
 
@@ -78,7 +78,9 @@ export default function Texts({ openJob, initial, clearInitial }: Props) {
   const [threads, setThreads] = useState<ThreadRow[] | null>(null);
   const [listError, setListError] = useState(false);
   const [open, setOpen] = useState<string | null>(initial?.phone || null);
-  const wantJob = useRef<string | null>(initial?.jobId || null);
+  const wantJob = useRef<{ jobId: string; at?: string } | null>(
+    initial?.jobId ? { jobId: initial.jobId, at: initial.at } : null,
+  );
 
   useEffect(() => {
     if (initial) clearInitial?.();
@@ -90,21 +92,25 @@ export default function Texts({ openJob, initial, clearInitial }: Props) {
 
   const loadList = useCallback(async () => {
     try {
-      const r = await apiFetch("/api/sms/threads");
+      const want = wantJob.current;
+      const qs = want
+        ? `?job=${encodeURIComponent(want.jobId)}${want.at ? `&at=${encodeURIComponent(want.at)}` : ""}`
+        : "";
+      const r = await apiFetch(`/api/sms/threads${qs}`);
       if (!r.ok) throw new Error(String(r.status));
-      const j = (await r.json()) as { threads?: ThreadRow[]; unread?: number };
+      const j = (await r.json()) as { threads?: ThreadRow[]; unread?: number; bellPhone?: string | null };
       const list = j.threads || [];
       setThreads(list);
       setListError(false);
-      // A bell tap names a job, not a number: open that job's conversation.
-      // A property-manager job can have two (the manager and the resident),
-      // so prefer the one with unread texts, which is the one that just
-      // texted; else the most recent.
-      if (wantJob.current) {
-        const onJob = list.filter((x) => x.jobId === wantJob.current);
-        const hit = onJob.find((x) => x.unread > 0) || onJob[0];
+      // A bell tap names a job and a time, not a number. A property-manager
+      // job can have two conversations (the manager and the resident), so the
+      // server picks the one whose text came in at that alert (bellPhone);
+      // else the job's conversation with unread texts, else its newest.
+      if (want) {
         wantJob.current = null;
-        if (hit) setOpen(hit.phone);
+        const onJob = list.filter((x) => x.jobId === want.jobId);
+        const hit = j.bellPhone || (onJob.find((x) => x.unread > 0) || onJob[0])?.phone;
+        if (hit) setOpen(hit);
       }
     } catch {
       setListError(true);

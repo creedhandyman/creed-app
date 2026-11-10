@@ -40,7 +40,7 @@ export default function AppShell() {
   const [opsInitialTab, setOpsInitialTab] = useState<string | null>(null);
   // Deep-link target for Texts: a push opens a phone number's conversation,
   // a bell row opens its job's conversation.
-  const [textsTarget, setTextsTarget] = useState<{ phone?: string; jobId?: string } | null>(null);
+  const [textsTarget, setTextsTarget] = useState<{ phone?: string; jobId?: string; at?: string } | null>(null);
   const user = useStore((s) => s.user)!;
   const textingOn = useStore((s) => s.org?.auto_sms_enroute === true);
   const darkMode = useStore((s) => s.darkMode);
@@ -150,7 +150,7 @@ export default function AppShell() {
   };
 
   // Open Texts, optionally on one conversation (notification / push).
-  const goToTexts = (target?: { phone?: string; jobId?: string }) => {
+  const goToTexts = (target?: { phone?: string; jobId?: string; at?: string }) => {
     setTextsTarget(target || null);
     goToPage("texts");
   };

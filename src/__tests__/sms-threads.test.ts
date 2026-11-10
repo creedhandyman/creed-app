@@ -1,4 +1,4 @@
-import { canSeeThread, checkReply, crewJobIds, MAX_REPLY, previewOf, replyRole, summarizeThreads, type TextRow } from "../lib/sms-threads";
+import { bellThreadPhone, canSeeThread, checkReply, crewJobIds, MAX_REPLY, previewOf, replyRole, summarizeThreads, type TextRow } from "../lib/sms-threads";
 
 const row = (over: Partial<TextRow>): TextRow => ({
   id: Math.random().toString(36).slice(2),
@@ -107,5 +107,25 @@ describe("checkReply", () => {
     expect(checkReply(42)).toMatchObject({ ok: false });
     expect(checkReply(" Tuesday works ")).toEqual({ ok: true, text: "Tuesday works" });
     expect(checkReply("x".repeat(MAX_REPLY + 1))).toMatchObject({ ok: false });
+  });
+});
+
+describe("bellThreadPhone", () => {
+  const rows = [
+    row({ contact_phone: "+1mgr", job_id: "j1", created_at: "2026-11-10T10:00:00Z" }),
+    row({ contact_phone: "+1res", job_id: "j1", created_at: "2026-11-10T10:05:00Z" }),
+    row({ contact_phone: "+1res", job_id: "j1", direction: "out", created_at: "2026-11-10T10:20:00Z" }),
+    row({ contact_phone: "+1other", job_id: "j2", created_at: "2026-11-10T10:01:00Z" }),
+  ];
+
+  it("the number that texted on that job just before the alert", () => {
+    expect(bellThreadPhone(rows, "j1", "2026-11-10T10:00:01Z")).toBe("+1mgr");
+    expect(bellThreadPhone(rows, "j1", "2026-11-10T10:05:01Z")).toBe("+1res");
+  });
+
+  it("else the job's newest received text, else nothing", () => {
+    expect(bellThreadPhone(rows, "j1", "2026-11-10T09:00:00Z")).toBe("+1res");
+    expect(bellThreadPhone(rows, "j1", undefined)).toBe("+1res");
+    expect(bellThreadPhone(rows, "j9", "2026-11-10T10:00:01Z")).toBeNull();
   });
 });

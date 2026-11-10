@@ -111,6 +111,29 @@ export function summarizeThreads(rows: TextRow[]): ThreadSummary[] {
   return out.sort((a, b) => (a.lastAt < b.lastAt ? 1 : a.lastAt > b.lastAt ? -1 : 0));
 }
 
+/**
+ * Which conversation a text-reply bell row is about. The bell row knows only
+ * its job and when it was made, and a property-manager job can have two
+ * conversations (the manager and the resident). So: the number whose text on
+ * that job came in last at or before the alert; else the newest text on the
+ * job (clock skew); else null.
+ */
+export function bellThreadPhone(
+  rows: Pick<TextRow, "direction" | "contact_phone" | "job_id" | "created_at">[],
+  jobId: string,
+  at: string | null | undefined,
+): string | null {
+  const onJob = rows
+    .filter((r) => r.direction === "in" && r.job_id === jobId && r.contact_phone)
+    .sort(byNewest);
+  const atMs = at ? Date.parse(at) : NaN;
+  if (!Number.isNaN(atMs)) {
+    const hit = onJob.find((r) => Date.parse(r.created_at) <= atMs);
+    if (hit) return hit.contact_phone;
+  }
+  return onJob[0]?.contact_phone || null;
+}
+
 export const isAdminRole = (role: string | null | undefined) => role === "owner" || role === "manager";
 
 /**

@@ -80,8 +80,18 @@ export async function loadRows(supabase: SupabaseClient, orgId: string, phone?: 
 
 /** The caller's conversations, newest first (crew: only their jobs'). */
 export async function visibleThreads(supabase: SupabaseClient, v: Viewer): Promise<ThreadSummary[]> {
-  const rows = await loadRows(supabase, v.orgId);
-  return summarizeThreads(rows).filter((t) => canSeeThread(v.role, t.jobIds, v.myJobs));
+  return (await visibleThreadsWithRows(supabase, v)).threads;
+}
+
+/** visibleThreads plus the rows behind them (only the visible conversations'). */
+export async function visibleThreadsWithRows(
+  supabase: SupabaseClient,
+  v: Viewer,
+): Promise<{ threads: ThreadSummary[]; rows: TextRow[] }> {
+  const all = await loadRows(supabase, v.orgId);
+  const threads = summarizeThreads(all).filter((t) => canSeeThread(v.role, t.jobIds, v.myJobs));
+  const phones = new Set(threads.map((t) => t.phone));
+  return { threads, rows: all.filter((r) => r.contact_phone && phones.has(r.contact_phone)) };
 }
 
 export interface ThreadInfo {

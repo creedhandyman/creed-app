@@ -13,7 +13,7 @@ interface Props {
   /** Open Operations on a sub-tab — join requests → Team, payday alerts → Payroll. */
   onOpenOps?: (tab?: string) => void;
   /** Open Texts on a conversation — a customer's text reply. */
-  onOpenTexts?: (target?: { phone?: string; jobId?: string }) => void;
+  onOpenTexts?: (target?: { phone?: string; jobId?: string; at?: string }) => void;
 }
 
 /** Compact relative time — "just now", "5m", "3h", "2d", else a date. */
@@ -81,7 +81,7 @@ export default function NotificationsPanel({ onClose, onOpenJob, onOpenOps, onOp
   // alert is about. null = read-only row.
   const routeOf = (n: AppNotification): (() => void) | null => {
     // A customer's text opens the conversation (its job's, else the list).
-    if (n.type === "text_reply" && onOpenTexts) return () => onOpenTexts(n.job_id ? { jobId: n.job_id } : undefined);
+    if (n.type === "text_reply" && onOpenTexts) return () => onOpenTexts(n.job_id ? { jobId: n.job_id, at: n.created_at || undefined } : undefined);
     if (n.job_id && onOpenJob) return () => onOpenJob(n.job_id!);
     if (n.type === "join_request" && onOpenOps) return () => onOpenOps("team");
     if (n.type === "payroll_alert" && onOpenOps) return () => onOpenOps("payroll");
