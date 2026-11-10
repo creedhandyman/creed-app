@@ -1165,6 +1165,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_saved_at TIMESTAMPTZ;
   ALTER TABLE customers ADD COLUMN IF NOT EXISTS card_consent JSONB;
   ```
+  Run the whole file: it also adds the `customers_protect_saved_card`
+  trigger, which keeps browser (anon / authenticated) writes from changing
+  the saved-card columns, so only server routes can point a customer at a
+  Stripe card.
   Switch: Ops → Billing & Payments → Checkout options ("Let customers save a
   card for later"), default OFF. With it on, a job linked to a customer record
   shows an unticked "save my card" box on the /status pay card; ticking it adds
