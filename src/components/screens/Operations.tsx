@@ -523,7 +523,9 @@ function QuoteFollowupCard({
 
 /** Automatic customer texts through Twilio. Three switches on the
  *  organizations row, all OFF by default (they text customers on the
- *  business's behalf, so the owner opts in). Needs the Twilio settings on
+ *  business's behalf, so the owner opts in). auto_sms_enroute no longer
+ *  sends anything itself: it turns on the Texts screen and the routing of
+ *  customer replies to this business. Needs the Twilio settings on
  *  Vercel and supabase/migrations/20261109_automatic_texts.sql. */
 function AutoTextsCard({
   org,
@@ -567,37 +569,9 @@ function AutoTextsCard({
           </div>
         );
       })}
-      {/* Job messages: how the job card's Text chip and Message customer
-          button send. Phone is the default (and what a missing column reads
-          as); the business number also needs the first switch above. */}
-      <div style={{ marginTop: 4, paddingTop: 12, borderTop: "1px solid var(--color-border-dark-2)" }}>
-        <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>{t("ops.jobTextVia")}</div>
-        {([
-          { v: "phone" as const, label: t("ops.jobTextViaPhone") },
-          { v: "business" as const, label: t("ops.jobTextViaBusiness") },
-        ]).map((o) => {
-          const cur = org.job_text_via === "business" ? "business" : "phone";
-          return (
-            <label key={o.v} className="row" style={{ gap: 8, cursor: "pointer", marginBottom: 6 }}>
-              <input
-                type="radio"
-                name="job_text_via"
-                checked={cur === o.v}
-                onChange={async () => {
-                  await saveOrg({ job_text_via: o.v });
-                }}
-                style={{ width: 16, height: 16, cursor: "pointer" }}
-              />
-              <span style={{ fontSize: 14.5 }}>{o.label}</span>
-            </label>
-          );
-        })}
-        <div className="dim" style={{ fontSize: 13.5, marginTop: 2, marginLeft: 24 }}>
-          {org.job_text_via === "business" && org.auto_sms_enroute !== true
-            ? <span style={{ color: "var(--color-warning)" }}>{t("ops.jobTextViaNeedsSwitch")}</span>
-            : t("ops.jobTextViaHelp")}
-        </div>
-      </div>
+      {/* Texts sent by hand (quotes, invoices, On the way, job messages)
+          always open the phone's Messages app; there is no setting for it.
+          organizations.job_text_via is no longer read. */}
     </div>
   );
 }

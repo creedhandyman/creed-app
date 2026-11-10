@@ -56,7 +56,6 @@ import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 import { stripAiHrs } from "@/lib/ai-hours";
 import SendSheet from "../SendSheet";
 import { markQuoteSent } from "@/lib/quote-send";
-import { sendsFromBusiness } from "@/lib/job-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import GuideShopTools, { type ShopItem as GuideShopItem } from "../GuideShopTools";
@@ -3756,8 +3755,6 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           email={sendSheet.email}
           subject={sendSheet.subject}
           message={sendSheet.message}
-          jobId={sendSheet.jobId}
-          viaBusiness={sendsFromBusiness(useStore.getState().org)}
           onClose={() => setSendSheet(null)}
           onSent={(via) => {
             const jobId = sendSheet.jobId;

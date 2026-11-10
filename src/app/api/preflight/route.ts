@@ -83,8 +83,6 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "sms_messages", table: "sms_messages", column: "id" },
   { key: "sms_opt_outs", table: "sms_opt_outs", column: "id" },
   { key: "organizations.auto_sms_enroute", table: "organizations", column: "auto_sms_enroute" },
-  // Text chip / Message customer: phone or business number (20261110_job_text_via.sql).
-  { key: "organizations.job_text_via", table: "organizations", column: "job_text_via" },
   { key: "jobs.invoice_sent_at", table: "jobs", column: "invoice_sent_at" },
   { key: "schedule.reminder_sent_at", table: "schedule", column: "reminder_sent_at" },
 ];

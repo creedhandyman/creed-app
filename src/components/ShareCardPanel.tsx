@@ -1,5 +1,5 @@
 "use client";
-import { apiFetch } from "@/lib/api";
+import { smsHref } from "@/lib/job-send";
 /**
  * Share-card panel — rendered inside the dashboard's "My business
  * card" tap-to-expand modal. Contains:
@@ -43,7 +43,6 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
   const user = useStore((s) => s.user);
   const showToast = useStore((s) => s.showToast);
   const darkMode = useStore((s) => s.darkMode);
-  const [smsBusy, setSmsBusy] = useState(false);
 
   const slug = org?.site_slug || "";
   // Tag the share URL with the current tech's id so any lead that
@@ -97,39 +96,12 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
     copy();
   };
 
-  // SMS path — when there's a target customer, fire the existing /api/sms
-  // endpoint (Twilio). Otherwise fall back to a tel-style prompt asking
-  // for a number. Worst case, open the device's SMS composer.
-  const sms = async (msgPrefix?: string) => {
+  // SMS path — sent by hand, so it goes from the sender's own phone: open
+  // Messages with the text (and the customer's number, when there is one)
+  // filled in. Never Twilio.
+  const sms = (msgPrefix?: string) => {
     const message = `${msgPrefix ?? `${org.name} contact card:`} ${cardUrl}`;
-    const phone = customer?.phone;
-    if (phone) {
-      setSmsBusy(true);
-      try {
-        const res = await apiFetch("/api/sms", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ to: phone, body: message }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          // Twilio fail-open — open the native SMS composer so the
-          // contractor can still send the message manually.
-          window.location.href = `sms:${phone}?body=${encodeURIComponent(message)}`;
-          showToast(data?.error || "Twilio send failed — opening SMS app", "warning");
-          return;
-        }
-        showToast(`Texted ${customer.name}`, "success");
-      } catch (e) {
-        window.location.href = `sms:${phone}?body=${encodeURIComponent(message)}`;
-        showToast(e instanceof Error ? e.message : "Falling back to SMS app", "warning");
-      } finally {
-        setSmsBusy(false);
-      }
-      return;
-    }
-    // No customer — just open the device's SMS app with the link.
-    window.location.href = `sms:?body=${encodeURIComponent(message)}`;
+    window.location.href = smsHref(customer?.phone, message);
   };
 
   const email = () => {
@@ -171,7 +143,6 @@ export default function ShareCardPanel({ customer, noTitle }: Props) {
         <button
           className="bo"
           onClick={() => sms(customer ? customSms : undefined)}
-          disabled={smsBusy}
           style={{ fontSize: 14, padding: "5px 10px" }}
           title={customer?.phone ? `Text ${customer.phone}` : "Open SMS composer"}
         >

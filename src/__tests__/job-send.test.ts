@@ -1,17 +1,21 @@
-import { balanceOf, invoiceText, sendsFromBusiness } from "@/lib/job-send";
+import { balanceOf, invoiceText, smsHref } from "@/lib/job-send";
 
-describe("sendsFromBusiness", () => {
-  it("needs Ops set to the business number AND the business-number switch on", () => {
-    expect(sendsFromBusiness({ job_text_via: "business", auto_sms_enroute: true })).toBe(true);
-    expect(sendsFromBusiness({ job_text_via: "business", auto_sms_enroute: false })).toBe(false);
-    expect(sendsFromBusiness({ job_text_via: "phone", auto_sms_enroute: true })).toBe(false);
+describe("smsHref", () => {
+  it("opens Messages with the number and the text filled in", () => {
+    expect(smsHref("(316) 555-0142", "Hi Dana! Total due: $300.00")).toBe(
+      "sms:3165550142?&body=Hi%20Dana!%20Total%20due%3A%20%24300.00",
+    );
   });
 
-  it("defaults to the phone's own Messages app", () => {
-    expect(sendsFromBusiness(null)).toBe(false);
-    expect(sendsFromBusiness(undefined)).toBe(false);
-    expect(sendsFromBusiness({})).toBe(false);
-    expect(sendsFromBusiness({ auto_sms_enroute: true })).toBe(false);
+  it("keeps a leading + and survives a link and line breaks in the text", () => {
+    const href = smsHref("+1 316-555-0142", "Pay here:\nhttps://x.test/status?job=1&t=abc");
+    expect(href.startsWith("sms:+13165550142?&body=")).toBe(true);
+    expect(decodeURIComponent(href.split("body=")[1])).toBe("Pay here:\nhttps://x.test/status?job=1&t=abc");
+  });
+
+  it("with no number still opens Messages with the text", () => {
+    expect(smsHref("", "hello")).toBe("sms:?&body=hello");
+    expect(smsHref(null, "hello")).toBe("sms:?&body=hello");
   });
 });
 

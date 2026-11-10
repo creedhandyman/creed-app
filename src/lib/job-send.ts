@@ -1,17 +1,22 @@
 /**
- * Sending a quote or an invoice to the customer: the rules shared by the Jobs
- * send strip, the quote editor's Send sheet and Work mode's "Complete &
- * invoice" step. PURE (tested in job-send.test.ts); the network call lives in
- * lib/job-text-client.ts.
+ * Sending a quote, an invoice or a job update to the customer BY HAND: the
+ * rules shared by the Jobs send strip, Work mode's "Complete & invoice" step,
+ * the On the way buttons, the customer page and the share card. PURE (tested
+ * in job-send.test.ts).
+ *
+ * The rule (owner, 2026-11-10): Twilio sends only Creed's AUTOMATIC texts
+ * (review requests, reminders, auto replies and other system texts). Anything
+ * a business sends a customer by hand goes through the phone's own Messages
+ * app, from the sender's own number, with the number and the text filled in.
  */
 
-/** True when texts to the customer go out from the business number (Twilio):
- *  Ops is set to "business number" AND the business-number switch is on.
- *  Anything else (including the default) uses the phone's own Messages app. */
-export function sendsFromBusiness(
-  org: { job_text_via?: string | null; auto_sms_enroute?: boolean | null } | null | undefined,
-): boolean {
-  return org?.job_text_via === "business" && org?.auto_sms_enroute === true;
+/** An `sms:` link that opens the phone's Messages app with the number and the
+ *  text filled in. "?&body=" is the form that prefills the body on BOTH iOS
+ *  and Android; the number is stripped to digits/+ so punctuation can't break
+ *  it. No number = Messages opens with the text and the sender picks a contact. */
+export function smsHref(phone: string | null | undefined, body: string): string {
+  const to = (phone || "").replace(/[^\d+]/g, "");
+  return `sms:${to}?&body=${encodeURIComponent(body)}`;
 }
 
 /** Paid-to-date and what the customer still owes, to the cent. */
@@ -38,6 +43,3 @@ export function invoiceText(
   if (o.url) lines.push("", o.payOnline ? `View & pay online: ${o.url}` : `View your invoice: ${o.url}`);
   return lines.join("\n");
 }
-
-/** Longest text the server accepts for a job message (see /api/sms). */
-export const MAX_JOB_MESSAGE = 1000;

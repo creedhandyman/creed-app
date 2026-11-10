@@ -6,12 +6,11 @@
  * message can be tweaked, then sends via the phone's NATIVE Messages app
  * (an `sms:` deep link prefilled with the number + body).
  *
- * Why native instead of server Twilio: a solo handyman rarely has Twilio +
- * A2P 10DLC carrier registration set up, so the old /api/sms path mostly
- * errored out ("SMS not configured" / carrier-filtered). A native sms: link
- * always works on a phone, costs nothing, and — crucially — sends from the
+ * Always native, never Twilio (owner rule, 2026-11-10): the business number
+ * is for Creed's automatic texts only; anything sent by hand goes from the
  * contractor's own number, so the customer's reply comes straight back to
- * them. A "Copy" button is the desktop fallback (no SMS handler there).
+ * them. A native sms: link always works on a phone and costs nothing. A
+ * "Copy" button is the desktop fallback (no SMS handler there).
  *
  * The customer's phone comes from the linked Customer (job.customer_id). With
  * no phone on file the buttons disable with an explanatory tooltip.
@@ -21,20 +20,14 @@
  * manager (lib/sms-recipient). No resident number = the buttons are disabled
  * with a note to add one. Resident texts never include the total or the
  * status/pay link (pricing is the PM's business). Other jobs with a separate
- * tenant phone keep the "Send to" chip row in the native-Messages mode.
- *
- * Business number: when the owner turns on "Text from the business number"
- * (organizations.auto_sms_enroute, Operations → Settings) the popup's main
- * button sends through Twilio via /api/sms with just the job + kind + the
- * edited draft; the server picks the number, skips anyone who replied STOP
- * and logs it. Open Messages / Copy stay as the fallback.
+ * tenant phone get a "Send to" chip row.
  */
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { residentContact } from "@/lib/resident";
 import { isPropertyManager, type RecipientRole } from "@/lib/sms-recipient";
 import { textBody } from "@/lib/sms-templates";
-import { apiFetch } from "@/lib/api";
+import { smsHref as buildSmsHref } from "@/lib/job-send";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 
@@ -75,8 +68,6 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
     ? res.phone
     : res.phone && res.phone.replace(/[^\d]/g, "") !== clientPhone.replace(/[^\d]/g, "") ? res.phone : "";
   const orgName = org?.name || "us";
-  const businessSend = org?.auto_sms_enroute === true;
-  const [sending, setSending] = useState(false);
 
   const [open, setOpen] = useState<TemplateKey | null>(null);
   const [lateMinutes, setLateMinutes] = useState<number>(15);
@@ -122,35 +113,8 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
     if (open) setDraft(buildTemplate(open, lateMinutes, rcpt));
   };
 
-  // sms: deep link. "?&body=" is the form that prefills the body on BOTH iOS
-  // and Android. Number is stripped to digits/+ so punctuation can't break it.
-  const smsHref = (text: string) => `sms:${phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(text)}`;
-
-  // Send through Twilio from the business number. The server picks the
-  // recipient from the job (resident on PM jobs), never from this screen.
-  const sendFromBusiness = async () => {
-    if (!open || sending) return;
-    setSending(true);
-    try {
-      const r = await apiFetch("/api/sms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId, kind: open, body: draft, minutes: lateMinutes }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        showToast(data?.error || "Text didn't send", "error");
-        return;
-      }
-      const who = (data?.name || "").split(/\s+/)[0];
-      showToast(who ? `Texted ${who}` : "Text sent", "success");
-      setOpen(null);
-    } catch {
-      showToast("Text didn't send. Check your connection.", "error");
-    } finally {
-      setSending(false);
-    }
-  };
+  // sms: deep link with the number + text filled in (lib/job-send.ts).
+  const smsHref = (text: string) => buildSmsHref(phone, text);
 
   const copyMsg = async () => {
     try {
@@ -264,7 +228,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
           ))}
         </div>
       )}
-      {!businessSend && clientPhone && tenantPhone ? (
+      {clientPhone && tenantPhone ? (
         // PM job with a tenant on file: pick who this update goes to. Each
         // recipient gets their own correctly-addressed text, sent separately
         // (never a group thread between the manager and the tenant).
@@ -314,21 +278,10 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         }}
       />
       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-        {businessSend && (
-          <button
-            type="button"
-            className="bb"
-            disabled={sending || !draft.trim()}
-            onClick={sendFromBusiness}
-            style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
-          >
-            <Icon name="send" size={15} color="#fff" /> {sending ? "Sending…" : "Send text"}
-          </button>
-        )}
         <a
           href={smsHref(draft)}
           onClick={() => setOpen(null)}
-          className={businessSend ? "bo" : "bb"}
+          className="bb"
           style={{
             flex: 1,
             textAlign: "center",
@@ -340,7 +293,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
             fontSize: 14,
           }}
         >
-          {businessSend ? "Messages" : <><Icon name="send" size={15} color="#fff" /> Open Messages</>}
+          <Icon name="send" size={15} color="#fff" /> Open Messages
         </a>
         <button type="button" className="bo" onClick={copyMsg} style={{ fontSize: 14 }}>
           Copy
@@ -356,9 +309,7 @@ export default function SmsNotifyButtons({ jobId, compact, variant = "row" }: Pr
         </button>
       </div>
       <div className="dim" style={{ fontSize: 11.5, marginTop: 7, lineHeight: 1.4 }}>
-        {businessSend
-          ? "Send text goes from your business number. Replies show up in your notifications."
-          : "Opens your phone's Messages with the text ready. It sends from your number, so replies come to you."}
+        Opens your phone&apos;s Messages with the text ready. It sends from your number, so replies come to you.
       </div>
     </div>
   ) : null;

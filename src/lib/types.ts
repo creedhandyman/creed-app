@@ -102,16 +102,15 @@ export interface Organization {
   /** Let customers save a card at checkout and the owner charge it later. Opt-in. */
   card_on_file_enabled?: boolean;
   /** Automatic customer texts (Twilio). All opt-in, OFF by default:
-   *  On the way / Running late / Job done send from the business number;
-   *  day-before visit reminders (cron /api/sms/reminders); unpaid invoice
-   *  reminders (cron /api/invoices/reminders). */
+   *  auto_sms_enroute turns on the Texts screen + routes customer replies to
+   *  this business (it no longer sends anything: hand-sent texts open the
+   *  phone's Messages); day-before visit reminders (cron /api/sms/reminders);
+   *  unpaid invoice reminders (cron /api/invoices/reminders). */
   auto_sms_enroute?: boolean;
   auto_sms_reminder?: boolean;
   auto_sms_invoice?: boolean;
-  /** How the job card's Text chip and Message customer button send:
-   *  "phone" (default, also when absent) opens the phone's Messages;
-   *  "business" sends from the business number, and only while
-   *  auto_sms_enroute is on (supabase/migrations/20261110_job_text_via.sql). */
+  /** NO LONGER READ (2026-11-10): hand-sent texts always open the phone's
+   *  Messages app. The column still exists in the database. */
   job_text_via?: "phone" | "business";
   review_request_delay_hours?: number;        // default 24
   review_request_channel?: "sms" | "email" | "both"; // default "sms"

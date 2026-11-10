@@ -8,8 +8,7 @@ import { t } from "@/lib/i18n";
 import { makeGuide, extractZip, classify } from "@/lib/parser";
 import { formatHours, parseEntryDate } from "@/lib/dates";
 import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
-import { balanceOf, invoiceText, sendsFromBusiness, MAX_JOB_MESSAGE } from "@/lib/job-send";
-import { sendJobMessage } from "@/lib/job-text-client";
+import { balanceOf, invoiceText, smsHref } from "@/lib/job-send";
 import { FINISHED, stopsForDay, fmtClock } from "@/lib/day-plan";
 import { stripNoteParts } from "@/lib/dispatch-week";
 import type { Job } from "@/lib/types";
@@ -682,36 +681,25 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     setPage("dash");
   };
 
-  // The "Complete & invoice" step (see completeJob). The job flips to
-  // Invoiced only when the invoice really went: from the business number
-  // that means the server confirmed the text; with the phone's own Messages
-  // app it's the tap, as on the Jobs screen (nothing can confirm that send).
-  const [invoiceStep, setInvoiceStep] = useState<{ job: Job; phone: string; msg: string; busy?: boolean } | null>(null);
-  const markInvoiced = async (job: Job): Promise<boolean> => {
-    const ok = await transitionJob(job.id, "invoiced", {
+  // The "Complete & invoice" step (see completeJob). The invoice goes from
+  // the owner's own phone: Open Messages is an sms: link with the customer's
+  // number and the text filled in (hand-sent texts never use Twilio). Tapping
+  // it, or Copy, is what flips the job to Invoiced, the same rule as the Jobs
+  // send strip; "Not now" leaves it Complete (To invoice).
+  const [invoiceStep, setInvoiceStep] = useState<{ job: Job; phone: string; msg: string } | null>(null);
+  const invoiceStepSent = (job: Job) => {
+    setInvoiceStep(null);
+    void transitionJob(job.id, "invoiced", {
       jobs: () => useStore.getState().jobs,
       timeEntries: () => useStore.getState().timeEntries,
       fallbackJob: job,
+    }).then((ok) => {
+      void loadAll();
+      if (ok) useStore.getState().showToast(t("jobs.invoiceMarkedSent"), "success");
     });
-    void loadAll();
-    return ok;
+    finishAfterComplete(job);
   };
-  const closeInvoiceStep = (job: Job) => { setInvoiceStep(null); finishAfterComplete(job); };
-  const sendInvoiceFromBusiness = async () => {
-    if (!invoiceStep || invoiceStep.busy || !invoiceStep.msg.trim()) return;
-    const step = invoiceStep;
-    const toast = useStore.getState().showToast;
-    setInvoiceStep({ ...step, busy: true });
-    const r = await sendJobMessage(step.job.id, "client", step.msg);
-    if (!r.ok) {
-      // Not sent: nothing is stamped, the draft stays open to retry.
-      toast(r.offline ? t("jobs.textNotSentOffline") : r.error || t("jobs.textNotSent"), "error");
-      setInvoiceStep((cur) => (cur ? { ...cur, busy: false } : cur));
-      return;
-    }
-    if (await markInvoiced(step.job)) toast(t("jobs.invoiceMarkedSent"), "success");
-    closeInvoiceStep(step.job);
-  };
+  const skipInvoiceStep = (job: Job) => { setInvoiceStep(null); finishAfterComplete(job); };
 
   // Drives the review-request modal — populated by completeJob when a fresh
   // completion happens, cleared on close (which also navigates to dashboard).
@@ -882,16 +870,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
       {/* "Complete & invoice" — after Complete Job, while money is owed. */}
       {invoiceStep && (() => {
         const step = invoiceStep;
-        const viaBusiness = sendsFromBusiness(useStore.getState().org);
-        const due = balanceOf(step.job).due;
         return (
-          <div className="sheet-overlay" onClick={() => { if (!step.busy) closeInvoiceStep(step.job); }}>
+          <div className="sheet-overlay" onClick={() => skipInvoiceStep(step.job)}>
             <div className="cd sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
               <h4 style={{ fontSize: 17, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 7 }}>
                 <Icon name="send" size={16} color="var(--color-success)" /> {t("wv.invoiceStepTitle")}
               </h4>
               <p className="dim" style={{ fontSize: 13.5, marginBottom: 8 }}>
-                {t("wv.invoiceStepSub").replace("{amt}", due.toFixed(2))}
+                {t("wv.invoiceStepSub").replace("{amt}", balanceOf(step.job).due.toFixed(2))}
               </p>
               <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
                 {step.phone ? t("jobs.sendToEdit").replace("{phone}", step.phone) : t("jobs.noPhoneOnFile")}
@@ -899,34 +885,39 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
               <textarea
                 value={step.msg}
                 onChange={(e) => setInvoiceStep({ ...step, msg: e.target.value })}
-                maxLength={viaBusiness ? MAX_JOB_MESSAGE : undefined}
                 rows={6}
                 style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
               />
               <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                {viaBusiness && (
-                  <button type="button" className="bg" disabled={!!step.busy || !step.msg.trim() || !step.phone}
-                    onClick={() => { void sendInvoiceFromBusiness(); }}
-                    style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}>
-                    <Icon name="send" size={15} /> {step.busy ? t("jobs.sendingText") : t("jobs.sendInvoice")}
-                  </button>
-                )}
                 <a
-                  href={`sms:${step.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(step.msg)}`}
-                  onClick={() => { if (step.busy) return; void markInvoiced(step.job); closeInvoiceStep(step.job); }}
-                  className={viaBusiness ? "bo" : "bg"}
-                  style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, ...(viaBusiness ? { color: "inherit" } : {}) }}
+                  href={smsHref(step.phone, step.msg)}
+                  onClick={() => invoiceStepSent(step.job)}
+                  className="bg"
+                  style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
                 >
-                  <Icon name="send" size={15} /> {viaBusiness ? t("jobs.messagesShort") : t("jobs.openMessages")}
+                  <Icon name="send" size={15} /> {t("jobs.openMessages")}
                 </a>
+                <button
+                  type="button"
+                  className="bo"
+                  style={{ fontSize: 14 }}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(step.msg);
+                      useStore.getState().showToast(t("jobs.messageCopiedSend"), "success");
+                      invoiceStepSent(step.job);
+                    } catch {
+                      useStore.getState().showToast(t("jobs.copyFailed"), "error");
+                    }
+                  }}
+                >
+                  {t("common.copy")}
+                </button>
               </div>
-              <button type="button" className="bo" disabled={!!step.busy} onClick={() => closeInvoiceStep(step.job)}
-                style={{ width: "100%", marginTop: 8, fontSize: 14 }}>
+              <button type="button" className="bo" onClick={() => skipInvoiceStep(step.job)} style={{ width: "100%", marginTop: 8, fontSize: 14 }}>
                 {t("wv.invoiceNotNow")}
               </button>
-              {viaBusiness && (
-                <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.4 }}>{t("jobs.sendTextHelp")}</div>
-              )}
+              <div className="dim" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.4 }}>{t("jobs.openMessagesHelp")}</div>
             </div>
           </div>
         );

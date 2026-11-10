@@ -1,5 +1,6 @@
 "use client";
 import { apiFetch } from "@/lib/api";
+import { smsHref } from "@/lib/job-send";
 /**
  * CustomerDetail — full edit + address management + related work.
  *
@@ -166,27 +167,9 @@ export default function CustomerDetail({ customerId, onBack, embedded, onOpenJob
     if (!link) return;
     const orgName = org?.name || "us";
     const message = `Your customer portal link from ${orgName}: ${link} (expires in 14 days)`;
-    try {
-      const res = await apiFetch("/api/sms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: customer.phone, body: message }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        // Twilio fail-open — fall back to opening the native SMS app
-        // so Bernard can still get the link to the customer.
-        console.error("[CustomerDetail] portal SMS failed", res.status, data?.error);
-        window.location.href = `sms:${customer.phone}?body=${encodeURIComponent(message)}`;
-        showToast(t("cust.textFailed"), "warning");
-        return;
-      }
-      showToast(`Texted ${customer.name}`, "success");
-    } catch (e) {
-      console.error("[CustomerDetail] portal SMS failed", e);
-      window.location.href = `sms:${customer.phone}?body=${encodeURIComponent(message)}`;
-      showToast(t("cust.textFailed"), "warning");
-    }
+    // Sent by hand, so it goes from the owner's own phone: open Messages with
+    // the number and the link filled in (never Twilio).
+    window.location.href = smsHref(customer.phone, message);
   };
 
   const sendPortalEmail = async () => {

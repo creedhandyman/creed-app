@@ -374,23 +374,30 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   to set on the Messaging Service: incoming → `/api/sms/inbound`, status
   callbacks are requested per message → `/api/sms/status` (both check
   X-Twilio-Signature against `TWILIO_AUTH_TOKEN` and the `siteOrigin()` URL).
-  The job card's Text chip and the Message customer button send from the
-  business number only when Ops sets `organizations.job_text_via =
-  'business'` (default `'phone'`, migration
-  `20261110_job_text_via.sql`, **RUN in prod**: column present 2026-11-10) AND `auto_sms_enroute` is on;
-  then their send strip gets a Send text button that POSTs `/api/sms` `{ jobId, kind: "message", recipient:
-  "client" | "resident", body }`; the server looks the number up on the job
-  (`pickedRecipient`), checks STOP and logs `kind = 'message'`. Off = the
-  strip opens the phone's Messages as before. **One-tap sending**: Send
-  quote / Follow up / Send invoice (Jobs send strip), the quote editor's
-  `SendSheet` and Work mode's "Complete & invoice" step (after Complete Job,
-  owner/manager, while a balance is owed) use the same path when
-  `lib/job-send.ts sendsFromBusiness(org)` is true (`job_text_via =
-  'business'` + `auto_sms_enroute`). `lib/job-text-client.ts sendJobMessage`
-  is the one client call; `quote_sent_at` / complete→invoiced are stamped
-  ONLY after the server confirms the send. The phone's Messages / Copy stay
-  as the secondary buttons and still stamp on tap (nothing can confirm
-  those). No migration.
+  **HAND-SENT TEXTS NEVER USE TWILIO (owner rule, 2026-11-10).** Twilio sends
+  only Creed's automatic texts (review requests, visit / invoice reminders,
+  quote follow-ups, portal login links the customer asks for, crew alerts,
+  STOP / HELP replies). Anything a business sends a customer by hand opens
+  the phone's own Messages app with the number + text filled in
+  (`lib/job-send.ts smsHref`, an `sms:` link): Send quote / Follow up / Send
+  invoice / Send reminder / Text chip / Message customer (Jobs send strip),
+  the quote editor's `SendSheet`, On the way / Running late / Job done
+  (`SmsNotifyButtons`), the customer page's portal-link text, the share-card
+  text, and Work mode's **"Complete & invoice"** step (after Complete Job,
+  owner/manager, while a balance is owed: prefilled invoice text → Open
+  Messages / Copy / Not now; Open Messages or Copy flips complete→invoiced,
+  same as the Jobs strip). `quote_sent_at` / invoiced are stamped on the tap
+  (nothing can confirm a send from the phone's own app). `/api/sms` POST is a
+  410 stub now (it used to send these, incl. a `{to, body}` shape any
+  signed-in account could aim anywhere). `organizations.job_text_via` is NO
+  LONGER READ and its Ops radio is gone (column left in place; no migration);
+  `20261111_texts_default_business.sql` is moot, don't run it.
+  `auto_sms_enroute` no longer sends anything: it only turns on the Texts
+  screen + inbound reply routing (Ops label: "show replies to the business
+  number in Texts"). STILL through Twilio by hand: the Texts screen's reply
+  box (`/api/sms/reply`), left for the owner to decide. Planned, not built:
+  each business gets its own Twilio number for its automatic texts instead of
+  all sharing one.
 
 - Customer text replies, build 1 (**RUN in prod** 2026-11-10, columns + functions checked): run
   `supabase/migrations/20261110_text_replies.sql` in the SQL editor (safe to

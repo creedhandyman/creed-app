@@ -4,8 +4,7 @@ import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
 import { apiFetch, getStatusLink } from "@/lib/api";
 import { savedCardLabel } from "@/lib/payments/saved-card";
 import { markQuoteSent, sentAgo } from "@/lib/quote-send";
-import { balanceOf, invoiceText as buildInvoiceText, sendsFromBusiness, MAX_JOB_MESSAGE } from "@/lib/job-send";
-import { sendJobMessage } from "@/lib/job-text-client";
+import { balanceOf, invoiceText as buildInvoiceText, smsHref } from "@/lib/job-send";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
@@ -355,19 +354,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // PM jobs with a tenant on file get `recipients` (client + tenant, each
   // with its own pre-addressed message) and a "Send to" chip row; `to` is
   // the active index. Switching recipients replaces the draft.
-  // business: opened from the Text chip, Message customer, Send quote /
-  // Follow up or Send invoice. With Ops set to the business number (and the
-  // business-number switch on), the strip's main button sends through Twilio
-  // (/api/sms, kind "message") instead of opening Messages, and a quote /
-  // invoice is only stamped sent once that send succeeds.
-  // Each recipient's `pick` tells the server which job contact it is; the
-  // server looks the number up itself.
+  // A text sent by hand ALWAYS goes from the owner's own phone (the sms:
+  // link, number + message filled in), never through Twilio: the business
+  // number is for Creed's automatic texts only.
   const [sendStrip, setSendStrip] = useState<{
     jobId: string; phone: string; msg: string; kind?: "invoice" | "quote";
     recipients?: { label: string; phone: string; msg: string; pick: MessagePick }[]; to?: number;
-    business?: boolean;
   } | null>(null);
-  const [stripSending, setStripSending] = useState(false);
   // Bring a freshly opened send strip into view (it sits under the CTA, which
   // may be scrolled off on a long detail screen).
   const sendStripRef = useRef<HTMLDivElement>(null);
@@ -676,8 +669,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // text and opens the send strip (native SMS / Copy). This is the explicit
   // opt-in that replaced the old auto-copy-to-clipboard on every status change.
   // followUp: a nudge on a quote that already went out (the "Follow up" CTA).
-  // business: the Text chip / Message customer button (see sendStrip).
-  const messageCustomer = async (job: Job, opts?: { followUp?: boolean; business?: boolean }) => {
+  const messageCustomer = async (job: Job, opts?: { followUp?: boolean }) => {
     const orgName = org?.name || "us";
     const prop = job.property || "your property";
     const name = job.client || "there";
@@ -731,35 +723,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     }
     const visit = job.status === "scheduled" || job.status === "active" || job.status === "complete";
     const recipients = stripRecipients(job, msg, visit);
-    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: job.status === "quoted" ? "quote" : undefined, recipients, to: 0, business: !!opts?.business });
-  };
-
-  // Send the open strip's text from the business number (Twilio). The server
-  // picks the number from the job and the chosen contact, skips anyone who
-  // replied STOP and logs the text. Counts as "sent" like Open Messages does.
-  const sendStripFromBusiness = async (markIfClient: () => void) => {
-    if (!sendStrip || stripSending || !sendStrip.msg.trim()) return;
-    const sent = sendStrip;
-    const pick = sent.recipients?.[sent.to ?? 0]?.pick ?? "client";
-    const toast = useStore.getState().showToast;
-    setStripSending(true);
-    try {
-      const r = await sendJobMessage(sent.jobId, pick, sent.msg);
-      if (!r.ok) {
-        toast(r.offline ? t("jobs.textNotSentOffline") : r.error || t("jobs.textNotSent"), "error");
-        return;
-      }
-      // Only now (the server confirmed the text went out) does a quote count
-      // as sent or an invoice flip the job to Invoiced.
-      markIfClient();
-      const who = r.name.split(/\s+/)[0];
-      toast(who ? t("jobs.textedName").replace("{name}", who) : t("jobs.textSent"), "success");
-      // Close only the strip that was sent; a draft opened or edited while
-      // the text was on its way stays put.
-      setSendStrip((cur) => (cur && cur.jobId === sent.jobId && cur.msg === sent.msg && (cur.to ?? 0) === (sent.to ?? 0) ? null : cur));
-    } finally {
-      setStripSending(false);
-    }
+    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: job.status === "quoted" ? "quote" : undefined, recipients, to: 0 });
   };
 
   // Paid-to-date / balance — what the customer actually still owes.
@@ -774,7 +738,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     let url = "";
     try { url = await getStatusLink(job.id); } catch { url = ""; }
     const recipients = stripRecipients(job, invoiceText(job, url));
-    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: "invoice", recipients, to: 0, business: true });
+    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: "invoice", recipients, to: 0 });
   };
   // A follow-up re-stamps quote_sent_at too — it's the "last contacted" mark.
   // quiet: the caller already toasted (Copy says "copied"; one toast slot).
@@ -1099,8 +1063,8 @@ ${invoicePhotosHtml}
       case "quoted":
         if (!onEditJob) return null;
         return !dj.quote_sent_at
-          ? { label: t("jobs.sendQuote"), icon: "send", onClick: () => { void messageCustomer(dj, { business: true }); } }
-          : { label: t("jobs.followUp"), icon: "send", onClick: () => { void messageCustomer(dj, { followUp: true, business: true }); } };
+          ? { label: t("jobs.sendQuote"), icon: "send", onClick: () => { void messageCustomer(dj); } }
+          : { label: t("jobs.followUp"), icon: "send", onClick: () => { void messageCustomer(dj, { followUp: true }); } };
       case "accepted":  return { label: t("jobs.schedule"), icon: "schedule", onClick: () => (onScheduleJob ? onScheduleJob(dj.property, dj.id) : setPage("sched")) };
       case "scheduled": return { label: t("jobs.markActive"), icon: "play", onClick: () => setStatus(dj.id, "active") };
       case "active":    return { label: t("jobs.markComplete"), icon: "check", onClick: () => setStatus(dj.id, "complete") };
@@ -1188,7 +1152,7 @@ ${invoicePhotosHtml}
                     </a>
                   )}
                   {digits && (
-                    <button type="button" className="bo" onClick={() => { void messageCustomer(dj, { business: true }); }} style={chip}>
+                    <button type="button" className="bo" onClick={() => { void messageCustomer(dj); }} style={chip}>
                       <Icon name="send" size={13} /> {t("jobs.textCustomer")}
                     </button>
                   )}
@@ -1272,7 +1236,7 @@ ${invoicePhotosHtml}
           {(dj.client || dj.customer_id) && !(onEditJob && dj.status === "quoted") && (
             <button
               className="bo mb"
-              onClick={() => messageCustomer(dj, { business: true })}
+              onClick={() => messageCustomer(dj)}
               style={{ width: "100%", padding: "10px", fontFamily: "Oswald", fontSize: 15, letterSpacing: ".3px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
               <Icon name="send" size={15} /> {t("jobs.messageCustomer")}
@@ -1284,10 +1248,6 @@ ${invoicePhotosHtml}
             // only fire for the client recipient (index 0).
             const toClient = !sendStrip.recipients || (sendStrip.to ?? 0) === 0;
             const markIfClient = (quiet?: boolean) => { if (toClient) markSent(sendStrip.jobId, sendStrip.kind, quiet); };
-            // Text chip / Message customer, Ops set to send them from the
-            // business number, and the business-number switch on. Anything
-            // else (including the default) opens the phone's Messages.
-            const viaBusiness = !!sendStrip.business && sendsFromBusiness(org);
             return (
             <div ref={sendStripRef} style={{ marginBottom: 12, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
               {(sendStrip.recipients?.length ?? 0) > 1 && (
@@ -1317,36 +1277,22 @@ ${invoicePhotosHtml}
               <textarea
                 value={sendStrip.msg}
                 onChange={(e) => setSendStrip({ ...sendStrip, msg: e.target.value })}
-                maxLength={viaBusiness ? MAX_JOB_MESSAGE : undefined}
                 rows={5}
                 style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, border: "1px solid var(--color-border-dark-2)", background: "var(--color-dark-bg)", color: "inherit", resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
               />
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                {viaBusiness && (
-                  <button
-                    type="button"
-                    className="bb"
-                    disabled={stripSending || !sendStrip.msg.trim() || !sendStrip.phone}
-                    onClick={() => { void sendStripFromBusiness(() => markIfClient(true)); }}
-                    style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
-                  >
-                    <Icon name="send" size={15} color="#fff" /> {stripSending ? t("jobs.sendingText") : t("jobs.sendText")}
-                  </button>
-                )}
                 <a
-                  href={`sms:${sendStrip.phone.replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(sendStrip.msg)}`}
+                  href={smsHref(sendStrip.phone, sendStrip.msg)}
                   onClick={() => { markIfClient(); setSendStrip(null); }}
-                  className={viaBusiness ? "bo" : "bb"}
+                  className="bb"
                   style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
                 >
-                  {viaBusiness ? t("jobs.messagesShort") : <><Icon name="send" size={15} color="#fff" /> {t("jobs.openMessages")}</>}
+                  <Icon name="send" size={15} color="#fff" /> {t("jobs.openMessages")}
                 </a>
                 <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); markIfClient(true); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast(t("jobs.copyFailed"), "error"); } }} style={{ fontSize: 14 }}>{t("common.copy")}</button>
                 <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label={t("common.cancel")} style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
               </div>
-              {viaBusiness && (
-                <div className="dim" style={{ fontSize: 11.5, marginTop: 7, lineHeight: 1.4 }}>{t("jobs.sendTextHelp")}</div>
-              )}
+              <div className="dim" style={{ fontSize: 11.5, marginTop: 7, lineHeight: 1.4 }}>{t("jobs.openMessagesHelp")}</div>
             </div>
             );
           })()}
