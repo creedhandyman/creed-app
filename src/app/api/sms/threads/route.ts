@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
-import { bellThreadPhone } from "@/lib/sms-threads";
-import { describe, viewerOf, visibleThreadsWithRows } from "@/lib/sms-threads-server";
+import { bellThreadPhone, type TextRow, type ThreadSummary } from "@/lib/sms-threads";
+import { describe, threadsFor, viewerOf, visibleThreadsWithRows } from "@/lib/sms-threads-server";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,10 @@ export const dynamic = "force-dynamic";
  * Also { bellPhone } when ?job=<id>&at=<iso> is given: the conversation a
  * text-reply bell row (job + time) is about (lib/sms-threads bellThreadPhone).
  *
+ * GET /api/sms/threads?forJob=<id> or ?forCustomer=<id>: only the
+ * conversations touching that job or customer (the Texts card on the job and
+ * customer pages), same visibility rules.
+ *
  * Before the text replies migration (20261110_text_replies.sql) the columns
  * don't exist: answers { threads: [], unread: 0, ready: false }.
  */
@@ -26,9 +30,16 @@ export async function GET(req: NextRequest) {
   const supabase = serviceClient();
   const viewer = await viewerOf(supabase, { ...prof, orgId: prof.orgId });
 
-  let threads, rows;
+  const forJob = req.nextUrl.searchParams.get("forJob");
+  const forCustomer = req.nextUrl.searchParams.get("forCustomer");
+  let threads: ThreadSummary[];
+  let rows: TextRow[] = [];
   try {
-    ({ threads, rows } = await visibleThreadsWithRows(supabase, viewer));
+    if (forJob || forCustomer) {
+      threads = await threadsFor(supabase, viewer, forJob ? { jobId: forJob } : { customerId: forCustomer as string });
+    } else {
+      ({ threads, rows } = await visibleThreadsWithRows(supabase, viewer));
+    }
   } catch {
     return NextResponse.json({ threads: [], unread: 0, ready: false });
   }

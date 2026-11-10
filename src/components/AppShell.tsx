@@ -40,7 +40,7 @@ export default function AppShell() {
   const [opsInitialTab, setOpsInitialTab] = useState<string | null>(null);
   // Deep-link target for Texts: a push opens a phone number's conversation,
   // a bell row opens its job's conversation.
-  const [textsTarget, setTextsTarget] = useState<{ phone?: string; jobId?: string; at?: string } | null>(null);
+  const [textsTarget, setTextsTarget] = useState<{ phone?: string; jobId?: string; at?: string; onJob?: string } | null>(null);
   const user = useStore((s) => s.user)!;
   const textingOn = useStore((s) => s.org?.auto_sms_enroute === true);
   const darkMode = useStore((s) => s.darkMode);
@@ -150,7 +150,7 @@ export default function AppShell() {
   };
 
   // Open Texts, optionally on one conversation (notification / push).
-  const goToTexts = (target?: { phone?: string; jobId?: string; at?: string }) => {
+  const goToTexts = (target?: { phone?: string; jobId?: string; at?: string; onJob?: string }) => {
     setTextsTarget(target || null);
     goToPage("texts");
   };
@@ -176,7 +176,7 @@ export default function AppShell() {
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
-        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string, id?: string) => { setScheduleJobName(name); setScheduleJobId(id || null); goToPage("sched"); }} initialDetailJobId={jobDetailId} clearInitialDetail={() => setJobDetailId(null)} openOps={goToOps} />;
+        return <Jobs setPage={goToPage} onEditJob={isAdmin ? goToEditJob : undefined} onScheduleJob={(name: string, id?: string) => { setScheduleJobName(name); setScheduleJobId(id || null); goToPage("sched"); }} initialDetailJobId={jobDetailId} clearInitialDetail={() => setJobDetailId(null)} openOps={goToOps} openTexts={goToTexts} />;
       case "sched":
         return <Schedule setPage={goToPage} preSelectJob={scheduleJobName} preSelectJobId={scheduleJobId} />;
       case "time":
@@ -186,7 +186,7 @@ export default function AppShell() {
       case "ops":
         // Open to everyone — Operations.tsx filters its sub-tabs by role
         // so non-admins only see HR (the consolidated time-off home).
-        return <Operations setPage={goToPage} initialTab={opsInitialTab ?? undefined} />;
+        return <Operations setPage={goToPage} initialTab={opsInitialTab ?? undefined} openTexts={goToTexts} />;
       case "workvision":
         return <WorkVision setPage={goToPage} />;
       case "quests":

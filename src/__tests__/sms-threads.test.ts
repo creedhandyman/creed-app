@@ -1,4 +1,4 @@
-import { bellThreadPhone, canSeeThread, checkReply, crewJobIds, MAX_REPLY, previewOf, replyRole, summarizeThreads, type TextRow } from "../lib/sms-threads";
+import { bellThreadPhone, canAssign, canSeeThread, rowsToAssign, checkReply, crewJobIds, MAX_REPLY, previewOf, replyRole, summarizeThreads, type TextRow } from "../lib/sms-threads";
 
 const row = (over: Partial<TextRow>): TextRow => ({
   id: Math.random().toString(36).slice(2),
@@ -43,6 +43,15 @@ describe("summarizeThreads", () => {
 
   it("skips rows with no contact number (sent before the migration)", () => {
     expect(summarizeThreads([row({ contact_phone: null })])).toEqual([]);
+  });
+
+  it("lists every customer the conversation touches", () => {
+    const [t] = summarizeThreads([
+      row({ customer_id: "c1", created_at: "2026-11-01T00:00:00Z" }),
+      row({ customer_id: "c2", created_at: "2026-11-02T00:00:00Z" }),
+      row({ customer_id: "c1", created_at: "2026-11-03T00:00:00Z" }),
+    ]);
+    expect(t.customerIds).toEqual(["c1", "c2"]);
   });
 
   it("match comes from the newest received text", () => {
@@ -127,5 +136,25 @@ describe("bellThreadPhone", () => {
     expect(bellThreadPhone(rows, "j1", "2026-11-10T09:00:00Z")).toBe("+1res");
     expect(bellThreadPhone(rows, "j1", undefined)).toBe("+1res");
     expect(bellThreadPhone(rows, "j9", "2026-11-10T10:00:01Z")).toBeNull();
+  });
+});
+
+describe("re-filing a conversation", () => {
+  it("takes texts with no job and texts on the guessed job, nothing else", () => {
+    const rows = [
+      { id: "a", job_id: null },
+      { id: "b", job_id: "guess" },
+      { id: "c", job_id: "other" },
+    ];
+    expect(rowsToAssign(rows, "guess")).toEqual(["a", "b"]);
+    expect(rowsToAssign(rows, null)).toEqual(["a"]);
+  });
+
+  it("only unknown, Check match or just-linked conversations", () => {
+    expect(canAssign({ match: "unknown", jobId: null, customerId: null })).toBe(true);
+    expect(canAssign({ match: "several", jobId: "j", customerId: "c" })).toBe(true);
+    expect(canAssign({ match: "linked", jobId: "j", customerId: "c" })).toBe(true);
+    expect(canAssign({ match: "thread", jobId: "j", customerId: "c" })).toBe(false);
+    expect(canAssign({ match: "customer", jobId: null, customerId: "c" })).toBe(false);
   });
 });

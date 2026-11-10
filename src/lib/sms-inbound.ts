@@ -19,7 +19,9 @@
  * a business that texted that number or has it on file.
  */
 
-export type MatchStatus = "thread" | "customer" | "resident" | "several" | "unknown" | "held";
+/** "linked": not picked here; set when an owner files the conversation by hand
+ *  (Texts: Link to customer / Move to job), and then followed like "thread". */
+export type MatchStatus = "thread" | "customer" | "resident" | "several" | "unknown" | "held" | "linked";
 
 export interface InboundMatch {
   orgId: string | null;
@@ -31,7 +33,8 @@ export interface InboundMatch {
 }
 
 export interface MatchInput {
-  /** Our newest logged text to this number in the last 60 days. */
+  /** Our newest logged text to this number in the last 60 days, or their
+   *  newest text that an owner filed by hand (match "linked"). */
   thread: { orgId: string; jobId: string | null; customerId: string | null } | null;
   /** Customers (any business) whose phone ends in the same 10 digits. */
   customers: { id: string; orgId: string; name: string }[];

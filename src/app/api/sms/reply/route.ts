@@ -8,7 +8,7 @@ import { openThread } from "@/lib/sms-threads-server";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/sms/reply { phone, body }: answer a conversation on the Texts
+ * POST /api/sms/reply { phone, body, jobId? }: answer a conversation on the Texts
  * screen from the business number. Always the business number, whatever the
  * Ops "Text and Message customer buttons send from" setting says, because the
  * conversation lives there.
@@ -18,10 +18,11 @@ export const dynamic = "force-dynamic";
  * number; replying to an unknown number is fine because they texted first.
  * Same path as every other business text (lib/sms-log sendLoggedSms): the
  * STOP list is checked and the reply is logged on the conversation, on its
- * newest job.
+ * newest job, or on `jobId` when the conversation was opened from that job's
+ * page and touches it.
  */
 export async function POST(req: NextRequest) {
-  let body: { phone?: unknown; body?: unknown };
+  let body: { phone?: unknown; body?: unknown; jobId?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -43,9 +44,10 @@ export async function POST(req: NextRequest) {
   }
 
   const [t] = summarizeThreads(o.rows);
+  const onJob = typeof body.jobId === "string" && t.jobIds.includes(body.jobId) ? body.jobId : t.jobId;
   const r = await sendLoggedSms(supabase, {
     orgId: o.viewer.orgId,
-    jobId: t.jobId,
+    jobId: onJob,
     customerId: t.customerId,
     to: o.phone,
     body: words.text,

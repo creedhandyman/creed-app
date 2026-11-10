@@ -94,6 +94,38 @@ export async function visibleThreadsWithRows(
   return { threads, rows: all.filter((r) => r.contact_phone && phones.has(r.contact_phone)) };
 }
 
+/**
+ * The caller's conversations that touch one job or one customer (the Texts
+ * card on the job and customer pages). Finds the numbers from that job's or
+ * customer's own texts first, so an old conversation isn't missed by the
+ * list's newest-600 window. Throws on a database error.
+ */
+export async function threadsFor(
+  supabase: SupabaseClient,
+  v: Viewer,
+  on: { jobId?: string; customerId?: string },
+): Promise<ThreadSummary[]> {
+  if (!on.jobId && !on.customerId) return [];
+  let q = supabase.from("sms_messages").select("contact_phone").eq("org_id", v.orgId).not("contact_phone", "is", null);
+  q = on.jobId ? q.eq("job_id", on.jobId) : q.eq("customer_id", on.customerId as string);
+  const { data, error } = await q.order("created_at", { ascending: false }).limit(500);
+  if (error) throw new Error(error.message);
+  const phones = [...new Set(((data || []) as { contact_phone: string | null }[]).map((r) => r.contact_phone).filter((x): x is string => !!x))].slice(0, 20);
+  if (!phones.length) return [];
+  const { data: rows, error: e2 } = await supabase
+    .from("sms_messages")
+    .select(COLS)
+    .eq("org_id", v.orgId)
+    .in("contact_phone", phones)
+    .order("created_at", { ascending: false })
+    .limit(LIST_ROWS);
+  if (e2) throw new Error(e2.message);
+  const list = ((rows || []) as TextRow[]).map((r) => ({ ...r, direction: r.direction === "in" ? ("in" as const) : ("out" as const) }));
+  return summarizeThreads(list)
+    .filter((t) => (on.jobId ? t.jobIds.includes(on.jobId) : t.customerIds.includes(on.customerId as string)))
+    .filter((t) => canSeeThread(v.role, t.jobIds, v.myJobs));
+}
+
 export interface ThreadInfo {
   /** Customer or resident name, "" when unknown. */
   name: string;

@@ -409,7 +409,7 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Build 3 (job/customer Texts tabs, Link to customer) is in the plan doc
   "Creed: receiving Twilio replies (plan)".
 
-- Texts screen, build 2 (**NOT YET RUN**, 2026-11-11): run
+- Texts screen, build 2 (RUN 2026-11-10): ran
   `supabase/migrations/20261111_texts_default_business.sql` once (data only:
   businesses with `auto_sms_enroute` on and `job_text_via = 'phone'` switch to
   `'business'`, Bernard's "switch the buttons to the business number once
@@ -430,6 +430,19 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   only those touching a job they're on (👷 schedule names from 30 days ago on,
   or requested tech). A reply push opens `/?texts=<phone>` (AppShell reads it);
   a `text_reply` bell row opens its job's conversation.
+- Texts, build 3 (no database change): `components/TextsCard.tsx` lists a
+  job's or customer's conversations (`GET /api/sms/threads?forJob=` /
+  `?forCustomer=`, `threadsFor` in `lib/sms-threads-server.ts`) on the job
+  detail (section before Work) and CustomerDetail (card before Related work);
+  tapping opens the conversation, from a job filtered to that job's texts
+  (`/api/sms/thread?job=`, replies logged on that job) and closing returns to
+  the job. `POST /api/sms/assign` (owners/managers; only unknown, `several`
+  or just-`linked` conversations, `canAssign`): Link to customer (their
+  newest open job; saves the number on a customer with none) or Move to job.
+  Re-files the texts with no job or on the guessed job (`rowsToAssign`),
+  marks received ones `match_status = 'linked'`, copies their photos onto the
+  new job (they stay on the old one). `matchInbound` rule 1 also follows the
+  newest `linked` received text, so later texts land where the owner put them.
 
 - AI usage logging (Phase 0 cost measurement — `/api/ai` writes one row per call):
   ```sql

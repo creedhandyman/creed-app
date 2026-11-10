@@ -21,6 +21,7 @@ import type { CustomerType, Address, Job } from "@/lib/types";
 import { statusColor } from "@/lib/status";
 import { INTERVAL_LABEL } from "@/lib/memberships";
 import EquipmentSection from "./EquipmentSection";
+import TextsCard from "../TextsCard";
 
 interface Props {
   customerId: string;
@@ -29,6 +30,8 @@ interface Props {
   embedded?: boolean;
   /** Opens a related job's detail (Ops wires it to Jobs). */
   onOpenJob?: (id: string) => void;
+  /** Opens one of the customer's conversations on the Texts screen. */
+  onOpenTexts?: (target: { phone: string }) => void;
 }
 
 const TYPE_LABEL: Record<CustomerType, string> = {
@@ -54,7 +57,7 @@ const fmtDate = (s: string | undefined) => {
   return d || "";
 };
 
-export default function CustomerDetail({ customerId, onBack, embedded, onOpenJob }: Props) {
+export default function CustomerDetail({ customerId, onBack, embedded, onOpenJob, onOpenTexts }: Props) {
   const customer = useStore((s) => s.customers.find((c) => c.id === customerId));
   const allAddresses = useStore((s) => s.addresses);
   const jobs = useStore((s) => s.jobs);
@@ -737,6 +740,9 @@ export default function CustomerDetail({ customerId, onBack, embedded, onOpenJob
           </div>
         )}
       </div>
+
+      {/* Texts on the business number with this customer (none = nothing shown) */}
+      {onOpenTexts && <TextsCard customerId={customer.id} variant="card" onOpen={onOpenTexts} />}
 
       {/* Related work */}
       <div className="cd mb">

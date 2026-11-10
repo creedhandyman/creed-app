@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
-import { summarizeThreads } from "@/lib/sms-threads";
+import { canAssign, summarizeThreads } from "@/lib/sms-threads";
 import { describe, openThread } from "@/lib/sms-threads-server";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
  * One conversation on the Texts screen.
  *   GET  /api/sms/thread?phone=+13165550142  both sides, oldest first, with
  *        the name, job, STOP state and whether texting is on.
+ *        &job=<id> (opened from a job page): only the texts on that job,
+ *        when the conversation spans more than one (onlyJob says so).
  *   POST /api/sms/thread { phone }           mark its received texts read.
  * Same visibility as the list: owners/managers any conversation in their
  * business, crew only conversations on their jobs.
@@ -29,15 +31,21 @@ export async function GET(req: NextRequest) {
     supabase.from("organizations").select("auto_sms_enroute").eq("id", o.viewer.orgId).maybeSingle(),
   ]);
   const texting = (orgRes.data as { auto_sms_enroute?: boolean } | null)?.auto_sms_enroute === true;
+  const want = req.nextUrl.searchParams.get("job");
+  const onlyJob = want && summary.jobIds.length > 1 && summary.jobIds.includes(want) ? want : null;
+  const shown = onlyJob ? o.rows.filter((r) => r.job_id === onlyJob) : o.rows;
   return NextResponse.json({
     phone: o.phone,
-    jobId: summary.jobId,
+    jobId: onlyJob || summary.jobId,
+    customerId: summary.customerId,
+    onlyJob,
     match: summary.match,
+    canAssign: o.viewer.admin && canAssign(summary),
     unread: summary.unread,
     texting,
     admin: o.viewer.admin,
     ...info[o.phone],
-    messages: [...o.rows].reverse().map((r) => ({
+    messages: [...shown].reverse().map((r) => ({
       id: r.id,
       direction: r.direction,
       body: r.body || "",

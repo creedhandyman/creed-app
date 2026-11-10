@@ -52,6 +52,8 @@ export interface ThreadSummary {
   /** Every job the conversation touches (crew visibility). */
   jobIds: string[];
   customerId: string | null;
+  /** Every customer the conversation touches (the customer page's Texts). */
+  customerIds: string[];
   /** The newest received text's match (thread, customer, several, unknown…). */
   match: string | null;
   role: RecipientRole;
@@ -103,6 +105,7 @@ export function summarizeThreads(rows: TextRow[]): ThreadSummary[] {
       jobId: jobIds[0] || null,
       jobIds,
       customerId: sorted.find((r) => r.customer_id)?.customer_id || null,
+      customerIds: [...new Set(sorted.map((r) => r.customer_id).filter((x): x is string => !!x))],
       match: sorted.find((r) => r.direction === "in")?.match_status || null,
       role: replyRole(sorted),
       count: sorted.length,
@@ -132,6 +135,22 @@ export function bellThreadPhone(
     if (hit) return hit.contact_phone;
   }
   return onJob[0]?.contact_phone || null;
+}
+
+/**
+ * The texts that "Link to customer" / "Move to job" re-files: everything in
+ * the conversation not on a job yet, plus everything on the job Creed guessed
+ * (`fromJob`). Only offered on unknown-number and Check-match conversations,
+ * where every text on the guessed job got there by that guess, and right
+ * after a link (match "linked") so a wrong pick can be fixed.
+ */
+export function rowsToAssign(rows: Pick<TextRow, "id" | "job_id">[], fromJob: string | null): string[] {
+  return rows.filter((r) => !r.job_id || (!!fromJob && r.job_id === fromJob)).map((r) => r.id);
+}
+
+/** May an owner/manager re-file this conversation (Link to customer / Move to job)? */
+export function canAssign(t: Pick<ThreadSummary, "match" | "jobId" | "customerId">): boolean {
+  return t.match === "several" || t.match === "linked" || (!t.jobId && !t.customerId);
 }
 
 export const isAdminRole = (role: string | null | undefined) => role === "owner" || role === "manager";

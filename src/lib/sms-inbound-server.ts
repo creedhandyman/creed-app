@@ -27,20 +27,23 @@ export async function matchInbound(supabase: SupabaseClient, from: string): Prom
   const digits = last10(from);
   const input: MatchInput = { thread: null, customers: [], customerJobs: [], residentJobs: [], textingOrgs: [] };
 
-  // 1. Our newest text to this number. Incoming rows have to_phone = our
-  //    number, so this only ever finds texts we sent.
+  // 1. Our newest text to this number (incoming rows have to_phone = our
+  //    number, so to_phone only finds texts we sent), or their newest text
+  //    an owner filed by hand on the Texts screen (match_status "linked"),
+  //    so a conversation stays where they put it.
   try {
+    const q = JSON.stringify(from);
     const { data } = await supabase
       .from("sms_messages")
-      .select("org_id, job_id")
-      .eq("to_phone", from)
+      .select("org_id, job_id, customer_id")
+      .or(`to_phone.eq.${q},and(from_phone.eq.${q},match_status.eq.linked)`)
       .gte("created_at", daysAgo(THREAD_DAYS))
       .order("created_at", { ascending: false })
       .limit(1);
-    const t = data?.[0] as { org_id?: string | null; job_id?: string | null } | undefined;
+    const t = data?.[0] as { org_id?: string | null; job_id?: string | null; customer_id?: string | null } | undefined;
     if (t?.org_id) {
-      let customerId: string | null = null;
-      if (t.job_id) {
+      let customerId: string | null = t.customer_id || null;
+      if (!customerId && t.job_id) {
         const { data: job } = await supabase.from("jobs").select("customer_id").eq("id", t.job_id).maybeSingle();
         customerId = (job as { customer_id?: string | null } | null)?.customer_id || null;
       }
