@@ -26,6 +26,7 @@ import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import RecordApprovalSheet from "../RecordApprovalSheet";
 import SmsNotifyButtons from "../SmsNotifyButtons";
+import TextsCard from "../TextsCard";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours } from "@/lib/dates";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes, cityContext } from "@/lib/geo";
@@ -137,9 +138,11 @@ interface Props {
   clearInitialDetail?: () => void;
   /** Open an Operations area (e.g. "billing" to connect Stripe). */
   openOps?: (tab?: string) => void;
+  /** Open a conversation on the Texts screen (the job's Texts section). */
+  openTexts?: (target: { phone: string; onJob?: string }) => void;
 }
 
-export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJobId, clearInitialDetail, openOps }: Props) {
+export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJobId, clearInitialDetail, openOps, openTexts }: Props) {
   const user = useStore((s) => s.user)!;
   const org = useStore((s) => s.org);
   const profiles = useStore((s) => s.profiles);
@@ -1730,6 +1733,9 @@ ${invoicePhotosHtml}
               );
             })()}
           </div>
+
+          {/* Texts: this job's conversations on the business number (none = nothing shown) */}
+          {openTexts && <TextsCard jobId={dj.id} variant="section" onOpen={openTexts} />}
 
           {/* Work */}
           <div className="section">

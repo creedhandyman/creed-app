@@ -754,7 +754,12 @@ const TILE_STYLE: Record<OpsTab, { icon: IconName; color: string; bg: string }> 
   settings:   { icon: "settings", color: "#aab2c0", bg: "rgba(138,138,153,.18)" },
 };
 
-export default function Operations({ setPage, initialTab }: { setPage: (p: string) => void; initialTab?: string }) {
+export default function Operations({ setPage, initialTab, openTexts }: {
+  setPage: (p: string) => void;
+  initialTab?: string;
+  /** Open a conversation on the Texts screen (a customer's Texts card). */
+  openTexts?: (target: { phone: string }) => void;
+}) {
   const user = useStore((s) => s.user);
   const isAdmin = user?.role === "owner" || user?.role === "manager";
   const profiles = useStore((s) => s.profiles);
@@ -920,6 +925,7 @@ export default function Operations({ setPage, initialTab }: { setPage: (p: strin
                 onOpenJob={(id) => {
                   goWithIntent(setPage, { page: "jobs", jobId: id });
                 }}
+                onOpenTexts={openTexts}
               />
             )
             : <Customers setPage={setPage} onSelect={setSelectedCustomerId} />}

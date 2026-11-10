@@ -9,6 +9,7 @@ import { fmtWhen, refreshTextsUnread } from "@/lib/texts-client";
 import { useBackLayer } from "@/lib/back-layer";
 import TopBar from "@/components/TopBar";
 import { Icon } from "@/components/Icon";
+import { statusLabel } from "@/components/StatusSheet";
 
 /**
  * Texts: customer conversations on the business number (build 2 of
@@ -50,6 +51,11 @@ interface Msg {
 interface Thread {
   phone: string;
   jobId: string | null;
+  customerId: string | null;
+  /** Showing only the texts on this job (opened from its page). */
+  onlyJob: string | null;
+  /** Owner/manager on an unknown or Check-match conversation: may re-file it. */
+  canAssign: boolean;
   match: string | null;
   name: string;
   address: string;
@@ -62,8 +68,10 @@ interface Thread {
 
 interface Props {
   openJob: (jobId: string) => void;
-  /** Open straight onto one conversation (a push or bell tap). */
-  initial?: { phone?: string; jobId?: string; at?: string } | null;
+  /** Open straight onto one conversation (a push or bell tap, or a job or
+   *  customer page's Texts card; onJob = from that job's page: show only its
+   *  texts, and closing goes back to the job). */
+  initial?: { phone?: string; jobId?: string; at?: string; onJob?: string } | null;
   clearInitial?: () => void;
 }
 
@@ -78,6 +86,13 @@ export default function Texts({ openJob, initial, clearInitial }: Props) {
   const [threads, setThreads] = useState<ThreadRow[] | null>(null);
   const [listError, setListError] = useState(false);
   const [open, setOpen] = useState<string | null>(initial?.phone || null);
+  const fromJob = useRef<string | null>(initial?.phone && initial.onJob ? initial.onJob : null);
+  const close = useCallback(() => {
+    const back = fromJob.current;
+    fromJob.current = null;
+    setOpen(null);
+    if (back) openJob(back);
+  }, [openJob]);
   const wantJob = useRef<{ jobId: string; at?: string } | null>(
     initial?.jobId ? { jobId: initial.jobId, at: initial.at } : null,
   );
@@ -88,7 +103,7 @@ export default function Texts({ openJob, initial, clearInitial }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useBackLayer(!!open, () => setOpen(null));
+  useBackLayer(!!open, close);
 
   const loadList = useCallback(async () => {
     try {
@@ -128,7 +143,7 @@ export default function Texts({ openJob, initial, clearInitial }: Props) {
   }, [open, loadList]);
 
   if (open) {
-    return <Conversation phone={open} onBack={() => setOpen(null)} openJob={openJob} darkMode={darkMode} />;
+    return <Conversation phone={open} onJob={fromJob.current} onBack={close} openJob={openJob} darkMode={darkMode} />;
   }
 
   return (
@@ -200,7 +215,16 @@ function statusLine(m: Msg): { text: string; bad: boolean } | null {
   return { text: t("texts.sent"), bad: false };
 }
 
-function Conversation({ phone, onBack, openJob, darkMode }: { phone: string; onBack: () => void; openJob: (id: string) => void; darkMode: boolean }) {
+function Conversation({
+  phone, onJob, onBack, openJob, darkMode,
+}: {
+  phone: string;
+  /** Opened from this job's page: only its texts, until Show all. */
+  onJob: string | null;
+  onBack: () => void;
+  openJob: (id: string) => void;
+  darkMode: boolean;
+}) {
   const showToast = useStore((s) => s.showToast);
   const loadAll = useStore((s) => s.loadAll);
   const [th, setTh] = useState<Thread | null>(null);
@@ -208,6 +232,8 @@ function Conversation({ phone, onBack, openJob, darkMode }: { phone: string; onB
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [making, setMaking] = useState(false);
+  const [filterJob, setFilterJob] = useState<string | null>(onJob);
+  const [picking, setPicking] = useState<"customer" | "job" | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const lastId = useRef<string>("");
 
@@ -220,7 +246,7 @@ function Conversation({ phone, onBack, openJob, darkMode }: { phone: string; onB
 
   const load = useCallback(async () => {
     try {
-      const r = await apiFetch(`/api/sms/thread?phone=${encodeURIComponent(phone)}`);
+      const r = await apiFetch(`/api/sms/thread?phone=${encodeURIComponent(phone)}${filterJob ? `&job=${encodeURIComponent(filterJob)}` : ""}`);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
         setError((j as { error?: string }).error || t("texts.loadFailed"));
@@ -233,7 +259,7 @@ function Conversation({ phone, onBack, openJob, darkMode }: { phone: string; onB
     } catch {
       setError(t("texts.loadFailed"));
     }
-  }, [phone, markRead]);
+  }, [phone, filterJob, markRead]);
 
   useEffect(() => {
     load();
@@ -257,7 +283,7 @@ function Conversation({ phone, onBack, openJob, darkMode }: { phone: string; onB
     if (!body || sending) return;
     setSending(true);
     try {
-      const r = await apiFetch("/api/sms/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, body }) });
+      const r = await apiFetch("/api/sms/reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, body, ...(th?.onlyJob ? { jobId: th.onlyJob } : {}) }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) showToast((j as { error?: string }).error || t("texts.sendFailed"), "error");
       else setDraft("");
@@ -283,6 +309,27 @@ function Conversation({ phone, onBack, openJob, darkMode }: { phone: string; onB
       }
     } catch {
       showToast(t("texts.leadFailed"), "error");
+    } finally {
+      setMaking(false);
+    }
+  };
+
+  const assign = async (target: { customerId: string } | { jobId: string }) => {
+    setPicking(null);
+    if (making) return;
+    setMaking(true);
+    try {
+      const r = await apiFetch("/api/sms/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, ...target }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) showToast((j as { error?: string }).error || t("texts.moveFailed"), "error");
+      else {
+        showToast(t("texts.moved"), "success");
+        loadAll();
+        setFilterJob(null);
+        await load();
+      }
+    } catch {
+      showToast(t("texts.moveFailed"), "error");
     } finally {
       setMaking(false);
     }
@@ -327,9 +374,38 @@ function Conversation({ phone, onBack, openJob, darkMode }: { phone: string; onB
         </div>
       )}
 
-      {th?.match === "several" && (
+      {th?.canAssign && (
+        <div className="mb" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "0 4px" }}>
+          {th.match === "several" && (
+            <span style={{ flex: "1 1 200px", fontSize: 13, color: "var(--color-warning)" }}>{t("texts.several")}</span>
+          )}
+          {unknown && <span className="dim" style={{ flex: "1 1 200px", fontSize: 13 }}>{t("texts.linkHint")}</span>}
+          <button className="bo" onClick={() => setPicking("customer")} disabled={making} style={{ padding: "6px 12px", fontSize: 13 }}>
+            {t("texts.linkCustomer")}
+          </button>
+          <button className="bo" onClick={() => setPicking("job")} disabled={making} style={{ padding: "6px 12px", fontSize: 13 }}>
+            {t("texts.moveJob")}
+          </button>
+        </div>
+      )}
+      {th?.match === "several" && !th.canAssign && (
         <div className="mb" style={{ fontSize: 13, color: "var(--color-warning)", padding: "0 4px" }}>{t("texts.several")}</div>
       )}
+
+      {th?.onlyJob && (
+        <div className="mb dim" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "0 4px" }}>
+          <span style={{ flex: 1 }}>{t("texts.onlyThisJob")}</span>
+          <button className="bo" onClick={() => setFilterJob(null)} style={{ padding: "4px 10px", fontSize: 12.5 }}>{t("texts.showAll")}</button>
+        </div>
+      )}
+
+      <PickSheet
+        open={!!picking}
+        kind={picking || "customer"}
+        customerId={th?.customerId || null}
+        onPick={(id) => assign(picking === "customer" ? { customerId: id } : { jobId: id })}
+        onClose={() => setPicking(null)}
+      />
 
       {error && !th && <div className="cd" style={{ textAlign: "center", padding: 24 }}>{error}</div>}
 
@@ -400,6 +476,84 @@ function Conversation({ phone, onBack, openJob, darkMode }: { phone: string; onB
       )}
       {/* Scrolled into view on a new text, so the reply box shows too. */}
       <div ref={endRef} />
+    </div>
+  );
+}
+
+/**
+ * Pick where an unknown or Check-match conversation belongs: a customer
+ * (Link to customer) or a job (Move to job). Searches what's already loaded.
+ * A customer's own jobs come first when the conversation has a customer.
+ */
+function PickSheet({
+  open, kind, customerId, onPick, onClose,
+}: {
+  open: boolean;
+  kind: "customer" | "job";
+  customerId: string | null;
+  onPick: (id: string) => void;
+  onClose: () => void;
+}) {
+  const customers = useStore((s) => s.customers) ?? [];
+  const jobs = useStore((s) => s.jobs);
+  const [q, setQ] = useState("");
+  // Phone back closes the sheet, not the conversation.
+  useBackLayer(open, onClose);
+  useEffect(() => {
+    if (!open) setQ("");
+  }, [open]);
+  if (!open) return null;
+
+  const needle = q.trim().toLowerCase();
+  const rows: { id: string; title: string; sub: string }[] =
+    kind === "customer"
+      ? customers
+          .filter((c) => !needle || `${c.name} ${c.phone || ""} ${c.primary_contact || ""}`.toLowerCase().includes(needle))
+          .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+          .slice(0, 40)
+          .map((c) => ({ id: c.id, title: c.name || "—", sub: [c.primary_contact, c.phone].filter(Boolean).join(" · ") }))
+      : jobs
+          .filter((j) => !j.archived)
+          .filter((j) => !needle || `${j.property} ${j.client}`.toLowerCase().includes(needle))
+          .sort((a, b) => {
+            const mine = Number(b.customer_id === customerId && !!customerId) - Number(a.customer_id === customerId && !!customerId);
+            return mine || (b.job_date || "").localeCompare(a.job_date || "");
+          })
+          .slice(0, 40)
+          .map((j) => ({ id: j.id, title: j.property || "—", sub: [j.client, statusLabel(j.status), j.job_date].filter(Boolean).join(" · ") }));
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="cd sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, paddingTop: 18 }}>
+        <h3 style={{ fontFamily: "Oswald", fontSize: 18, textTransform: "uppercase", marginBottom: 6 }}>
+          {kind === "customer" ? t("texts.linkCustomer") : t("texts.moveJob")}
+        </h3>
+        <div className="dim" style={{ fontSize: 13, marginBottom: 10 }}>
+          {kind === "customer" ? t("texts.linkCustomerHint") : t("texts.moveJobHint")}
+        </div>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={kind === "customer" ? t("texts.searchCustomers") : t("texts.searchJobs")}
+          autoFocus
+          style={{ width: "100%", marginBottom: 8 }}
+        />
+        <div style={{ maxHeight: "50vh", overflowY: "auto" }}>
+          {rows.length === 0 && <div className="dim" style={{ fontSize: 13.5, padding: "10px 2px" }}>{t("texts.noMatches")}</div>}
+          {rows.map((r) => (
+            <div key={r.id} className="linkrow" onClick={() => onPick(r.id)} style={{ cursor: "pointer" }}>
+              <span style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
+                {r.sub && <span className="dim" style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sub}</span>}
+              </span>
+              <Icon name="next" size={15} style={{ color: "var(--color-dim)", flexShrink: 0 }} />
+            </div>
+          ))}
+        </div>
+        <button className="bo" type="button" onClick={onClose} style={{ marginTop: 12, width: "100%" }}>
+          {t("common.cancel")}
+        </button>
+      </div>
     </div>
   );
 }
