@@ -12,6 +12,7 @@ import RecurringMemberships from "./RecurringMemberships";
 import TeamStats from "../TeamStats";
 import BillingSettings from "../BillingSettings";
 import BrandingSettings from "../BrandingSettings";
+import SettingsCategories from "../SettingsCategories";
 import { Icon, type IconName } from "../Icon";
 import TopBar from "@/components/TopBar";
 import { t } from "@/lib/i18n";
@@ -19,6 +20,7 @@ import { goWithIntent } from "@/lib/nav-intent";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
+import BookingSettings from "../BookingSettings";
 
 /**
  * Catches render-time crashes inside an Ops sub-tab so the whole tab
@@ -202,16 +204,7 @@ function OpsSettings() {
   let licensed: string[] = [];
   try { licensed = org.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
 
-  return (
-    <div>
-      {/* Beta preflight — one-tap deployment readiness check. Platform
-          operators only: customers shouldn't see env vars / migrations. */}
-      {isPlatformAdmin(userEmail) && <PreflightPanel />}
-
-      {/* Branding & Business Info — logo, name, phone, address, license # */}
-      <BrandingSettings />
-
-      {/* Licensed Trades */}
+  const licensedCard = (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="safety" size={15} color="var(--color-primary)" /> {t("ops.licensedTrades")}</h4>
         <div className="dim" style={{ fontSize: 14, marginBottom: 8 }}>{t("ops.licensedHelp")}</div>
@@ -239,8 +232,9 @@ function OpsSettings() {
           })}
         </div>
       </div>
+  );
 
-      {/* Quote Settings */}
+  const quoteSettingsCard = (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="trending" size={16} color="var(--color-primary)" />
@@ -356,9 +350,9 @@ function OpsSettings() {
           </div>
         </div>
       </div>
+  );
 
-      {/* Quote terms — drive the bottom "Notes & Exclusions" of every quote
-          PDF so it reflects this business, not a fixed template. */}
+  const quoteTermsCard = (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="doc" size={16} color="var(--color-primary)" />
@@ -421,8 +415,9 @@ function OpsSettings() {
           <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>Added as extra lines at the bottom of every quote PDF.</div>
         </div>
       </div>
+  );
 
-      {/* Trade Rates */}
+  const tradeRatesCard = (
       <div className="cd mb">
         <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="money" size={16} color="var(--color-primary)" />
@@ -446,13 +441,46 @@ function OpsSettings() {
           </div>
         ))}
       </div>
+  );
 
-      {/* Review Automation — auto-schedules a review-request SMS / email
-          N hours after a Stripe-paid invoice. Wires the gamification quest
-          flywheel without the owner having to remember. */}
-      <ReviewAutomationCard org={org} saveOrg={saveOrg} />
-      <QuoteFollowupCard org={org} saveOrg={saveOrg} />
-    </div>
+  return (
+    <SettingsCategories
+      categories={[
+        {
+          id: "business", icon: "briefcase", title: t("ops.cat.business"), sub: t("ops.cat.businessSub"),
+          content: (<><BrandingSettings part="business" />{licensedCard}</>),
+        },
+        {
+          id: "brand", icon: "paint", title: t("ops.cat.brand"), sub: t("ops.cat.brandSub"),
+          content: <BrandingSettings part="brand" />,
+        },
+        {
+          id: "pricing", icon: "money", title: t("ops.cat.pricing"), sub: t("ops.cat.pricingSub"),
+          content: (<>{quoteSettingsCard}{tradeRatesCard}</>),
+        },
+        {
+          id: "terms", icon: "doc", title: t("ops.cat.terms"), sub: t("ops.cat.termsSub"),
+          content: quoteTermsCard,
+        },
+        {
+          id: "booking", icon: "schedule", title: t("ops.cat.booking"), sub: t("ops.cat.bookingSub"),
+          // Public /book/[slug] page, OFF by default.
+          content: <BookingSettings org={org} saveOrg={saveOrg} />,
+        },
+        {
+          id: "messages", icon: "send", title: t("ops.cat.messages"), sub: t("ops.cat.messagesSub"),
+          // Review Automation auto-schedules a review-request SMS / email N hours
+          // after a Stripe-paid invoice; follow-up nudges unanswered quotes; the
+          // text-messaging links go in the approval page's consent box.
+          content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><AutoTextsCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
+        },
+        // Beta preflight — one-tap deployment readiness check. Platform
+        // operators only: customers shouldn't see env vars / migrations.
+        ...(isPlatformAdmin(userEmail)
+          ? [{ id: "system", icon: "settings", title: t("ops.cat.system"), sub: t("ops.cat.systemSub"), content: <PreflightPanel /> }]
+          : []),
+      ]}
+    />
   );
 }
 
@@ -489,6 +517,56 @@ function QuoteFollowupCard({
           {enabled ? t("ops.enabled") : t("ops.disabled")} — {t("ops.quoteFollowupToggle")}
         </span>
       </label>
+    </div>
+  );
+}
+
+/** Automatic customer texts through Twilio. Three switches on the
+ *  organizations row, all OFF by default (they text customers on the
+ *  business's behalf, so the owner opts in). Needs the Twilio settings on
+ *  Vercel and supabase/migrations/20261109_automatic_texts.sql. */
+function AutoTextsCard({
+  org,
+  saveOrg,
+}: {
+  org: NonNullable<ReturnType<typeof useStore.getState>["org"]>;
+  saveOrg: (u: Record<string, unknown>) => Promise<void>;
+}) {
+  const rows: { key: "auto_sms_enroute" | "auto_sms_reminder" | "auto_sms_invoice"; label: string; help: string }[] = [
+    { key: "auto_sms_enroute", label: t("ops.autoTextEnroute"), help: t("ops.autoTextEnrouteHelp") },
+    { key: "auto_sms_reminder", label: t("ops.autoTextReminder"), help: t("ops.autoTextReminderHelp") },
+    { key: "auto_sms_invoice", label: t("ops.autoTextInvoice"), help: t("ops.autoTextInvoiceHelp") },
+  ];
+  return (
+    <div className="cd">
+      <h4 style={{ fontSize: 16, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Icon name="send" size={16} color="var(--color-primary)" />
+        {t("ops.autoTexts")}
+      </h4>
+      <div className="dim" style={{ fontSize: 14, marginBottom: 12 }}>
+        {t("ops.autoTextsHelp")}
+      </div>
+      {rows.map((r) => {
+        const on = org[r.key] === true;
+        return (
+          <div key={r.key} style={{ marginBottom: 12 }}>
+            <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={async (e) => {
+                  await saveOrg({ [r.key]: e.target.checked });
+                }}
+                style={{ width: 16, height: 16, cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 15, fontWeight: 500 }}>
+                {on ? t("ops.enabled") : t("ops.disabled")} — {r.label}
+              </span>
+            </label>
+            <div className="dim" style={{ fontSize: 13.5, marginTop: 2, marginLeft: 24 }}>{r.help}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }

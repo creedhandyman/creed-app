@@ -22,6 +22,7 @@ export const config = {
     "/api/transcribe",
     "/api/sms",
     "/api/leads",
+    "/api/public/booking",
     "/api/waitlist",
     "/api/checkout",
     "/api/verify-payment",
@@ -50,6 +51,9 @@ const LIMITS: Record<string, number> = {
   "/api/transcribe": 30,
   "/api/sms": 3,
   "/api/leads": 5,
+  // Online booking: the page GETs open times on load and again after a
+  // "just taken" reply, then POSTs once.
+  "/api/public/booking": 15,
   "/api/waitlist": 5,
   "/api/checkout": 10,
   "/api/verify-payment": 15,

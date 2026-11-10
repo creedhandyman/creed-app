@@ -134,6 +134,20 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   (`components/TopBar.tsx`, styles `.topbar*` in globals.css): [back] [icon tile] TITLE … [right
   slot]. `color` = the screen's nav hue (VerticalNav TAB_COLOR); `onBack` only on screens reached
   from More / a deep link. Don't hand-roll a new title row.
+- **Settings = short category lists (2026-11-09)**: both the personal Settings
+  gear and Ops → Settings render `components/SettingsCategories.tsx` — a list of
+  rows (icon · title · one-line "what's inside"); tapping one opens just that
+  category's settings with a back button (phone back too). Add a new setting
+  INSIDE the right category (or add a category), never as another long section.
+  Personal: Profile · Notifications & calendar · Appearance · Password · Quest
+  bonuses (owner). Business: Business info (logo/name/address/license/primary
+  trade + licensed trades) · Brand & public card · Pricing & taxes (quote
+  settings + trade rates) · Quote terms · Online booking · Customer messages
+  (automatic texts, quote follow-up, review requests, text-messaging links) ·
+  System check (platform admins).
+  `BrandingSettings` takes `part="business" | "brand" | "texting"` to show one
+  slice (no `part` = all). The setup checklist's "open Business settings" links
+  land on the list, not a category.
 - **Icons**: import from `<Icon name="..." />`. Curated set in
   `Icon.tsx`. Inline emoji in flowing copy (✅ status, ⭐ ratings) is
   fine; UI affordances should be Lucide.
@@ -282,6 +296,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   flow (MediaRecorder → Whisper → AI). Without it, Voice Walk falls
   back to Web Speech transcripts (incomplete on iOS Safari but
   functional on desktop Chrome).
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_MESSAGING_SERVICE_SID`
+  (preferred: the A2P 10DLC campaign's Messaging Service) or
+  `TWILIO_FROM_NUMBER` — the only Twilio sender is `lib/sms.ts`
+  (`smsConfigured()` says whether texting can work).
 - `NOTIFY_SMS_ENABLED` — set to `"1"` to turn ON the SMS channel for
   notifications (job-assigned / new-lead). Unset/`"0"` = in-app feed only
   (the v1 default — texting is the fast-follow). Reuses the existing
@@ -337,6 +355,30 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 - (Stripe / Supabase keys per existing setup.)
 
 ## Schema migrations the user should run in Supabase
+
+- Automatic customer texts (**NOT YET RUN**, 2026-11-09): run
+  `supabase/migrations/20261109_automatic_texts.sql` in the SQL editor. Adds the
+  three OFF-by-default switches `organizations.auto_sms_enroute /
+  auto_sms_reminder / auto_sms_invoice` (Operations → Settings → Automatic
+  Texts), `jobs.invoice_sent_at / invoice_reminder_count / invoice_reminder_at`
+  (+ a trigger that stamps `invoice_sent_at` whenever a job moves into
+  `invoiced`), `schedule.reminder_sent_at`, the `sms_messages` log and
+  `sms_opt_outs` (service-role only), and the `text_reply` / `invoice_reminder`
+  / `visit_reminder` notification types. Routing lives in
+  `lib/sms-recipient.ts` (visit texts on a property-manager job go to the
+  resident, never the PM; no resident number = nothing sent; invoices go to
+  whoever pays). Crons: `/api/sms/reminders` (23:00 UTC) and
+  `/api/invoices/reminders` (16:00 UTC), both `?dry=1`-able. Twilio webhooks
+  to set on the Messaging Service: incoming → `/api/sms/inbound`, status
+  callbacks are requested per message → `/api/sms/status` (both check
+  X-Twilio-Signature against `TWILIO_AUTH_TOKEN` and the `siteOrigin()` URL).
+  The job card's Text chip and the Message customer button use the same
+  switch (`auto_sms_enroute`): when on, their send strip gets a Send text
+  button that POSTs `/api/sms` `{ jobId, kind: "message", recipient:
+  "client" | "resident", body }`; the server looks the number up on the job
+  (`pickedRecipient`), checks STOP and logs `kind = 'message'`. Off = the
+  strip opens the phone's Messages as before. Send quote / Follow up / Send
+  invoice still open Messages.
 
 - AI usage logging (Phase 0 cost measurement — `/api/ai` writes one row per call):
   ```sql
@@ -499,6 +541,27 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `/api/portal/me` selects so the customer's downloaded copy matches. Until the
   migration runs, saving toasts "column does not exist" (best-effort) but the
   PDF falls back to 50% / 30 days.
+- Online booking (**NOT yet run in prod**, file
+  `supabase/migrations/20261109190000_online_booking.sql`, idempotent): org
+  `booking_enabled` (default FALSE) + `booking_hours` jsonb (weekday "0"–"6" →
+  [["HH:MM","HH:MM"]…], default Mon–Fri 9:30–12 + 1:30–6) + `booking_slot_min`
+  120 / `booking_buffer_min` 30 / `booking_min_notice_hours` 24 /
+  `booking_days_ahead` 21 / `booking_tz` America/Chicago; schedule
+  `start_time` TEXT, `duration_min` INT, `booking_status`
+  ('requested'|'confirmed'|NULL) + a partial unique index (org, day, start)
+  on booking rows. Public page `/book/[slug]` → `/api/public/booking`
+  (GET open times, POST a request: holds the slot as a `requested` schedule
+  row FIRST, then customer/address/job with status **lead** — same shape as
+  /api/leads, `rooms.booking` records the ask — plus the owner alert and a
+  "request received" email). Owner answers on the Schedule
+  (`components/BookingRequests.tsx` → `/api/booking/respond`, owner/manager):
+  Confirm keeps the time + emails a Google Calendar link, Decline deletes the
+  hold; the job stays a lead either way. Slot math lives ONLY in
+  `lib/booking.ts` (tested): one crew per business, a visit must fit inside one
+  work window (lunch never booked), untimed or multi-day visits block the whole
+  day, times fall back to the note's 🕐 when `start_time` is empty (no
+  backfill). Settings card: `components/BookingSettings.tsx` (Ops → Settings).
+  Texting / deposit hooks are marked `HOOK(texting)` / `HOOK(payments)`.
 - Schedule ↔ job link (**ALREADY RUN in prod 2026-10-02**, migration
   `schedule_job_id`, backfilled to the latest job at that address created on/
   before the entry's date): `ALTER TABLE schedule ADD COLUMN job_id uuid;`.
