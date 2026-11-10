@@ -430,6 +430,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setQuickUploading(false);
   };
   const [jobPhotos, setJobPhotos] = useState<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
+  // The photos a saved quote opened with. On save, one of these that's no
+  // longer in jobPhotos was deleted on purpose (lib/quote-save.ts); without
+  // it every saved photo was written straight back.
+  const loadedPhotosRef = useRef<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
   const [showRender, setShowRender] = useState(false);
   // Send sheet (Text / Email / Copy / Share) for the saved quote.
   const [sendSheet, setSendSheet] = useState<{ jobId: string; phone: string; email: string; subject: string; message: string } | null>(null);
@@ -825,16 +829,17 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // photos back — including the inspection photos collected when the quote
       // was first built. Without this, re-opening a saved quote dropped them and
       // Render reported "add an inspection photo to preview the finish".
+      loadedPhotosRef.current = [];
       if (Array.isArray(data?.photos)) {
-        setJobPhotos(
-          (data.photos as { url?: string; label?: string; type?: string }[])
-            .filter((p) => p && typeof p.url === "string")
-            .map((p) => ({
-              url: p.url as string,
-              label: typeof p.label === "string" ? p.label : "",
-              type: p.type === "after" || p.type === "work" ? p.type : "before",
-            })),
-        );
+        const opened = (data.photos as { url?: string; label?: string; type?: string }[])
+          .filter((p) => p && typeof p.url === "string")
+          .map((p) => ({
+            url: p.url as string,
+            label: typeof p.label === "string" ? p.label : "",
+            type: (p.type === "after" || p.type === "work" ? p.type : "before") as "before" | "after" | "work",
+          }));
+        loadedPhotosRef.current = opened;
+        setJobPhotos(opened);
       } else if (leadDraftRooms && leadPhotos.length) {
         // The customer's photos ride along as "before" photos (Quick Quote does the same).
         setJobPhotos((leadPhotos as unknown[]).filter((u): u is string => typeof u === "string").map((url) => ({ url, label: "Customer photo", type: "before" as const })));
@@ -1871,6 +1876,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       rooms,
       workers: workers.map((wid) => ({ id: wid, name: profiles.find((x) => x.id === wid)?.name || "" })),
       jobPhotos,
+      // Only for the quote these were loaded from (a new quote has no prior photos).
+      loadedPhotos: editingId ? loadedPhotosRef.current : [],
       steps: syncedSteps,
       guideSteps: guide.steps,
       guideState: { customTools, customShop, checkedTools, checkedShop, removedGuideShop },

@@ -95,6 +95,19 @@ interface ExportOptions {
 const esc = (s: string) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/** Most photos the quote PDF shows. Every one is downloaded at its stored size
+ *  before the PDF can be saved, so a job with dozens made the PDF take minutes
+ *  on a phone (or never finish). */
+export const MAX_PDF_PHOTOS = 12;
+
+/** The photos the PDF shows: "before" photos first (they explain the quote),
+ *  then the rest in saved order, capped at MAX_PDF_PHOTOS. */
+export function pdfPhotos<T extends { type?: string }>(photos: T[]): T[] {
+  const before = photos.filter((p) => p.type === "before");
+  const rest = photos.filter((p) => p.type !== "before");
+  return [...before, ...rest].slice(0, MAX_PDF_PHOTOS);
+}
+
 export function exportQuotePdf(opts: ExportOptions) {
   const {
     property,
@@ -737,14 +750,15 @@ ${breakdownHtml}
 
 ${photos.length > 0 ? `
 <h2>Project Photos</h2>
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;page-break-inside:avoid">
-  ${photos
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:${photos.length > MAX_PDF_PHOTOS ? 6 : 16}px;page-break-inside:avoid">
+  ${pdfPhotos(photos)
     .map(
       (p) =>
         `<div style="text-align:center"><img src="${esc(p.url)}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:6px;border:1px solid #ddd" /></div>`,
     )
     .join("")}
 </div>
+${photos.length > MAX_PDF_PHOTOS ? `<div class="dim" style="font-size:11px;margin-bottom:16px">Showing ${MAX_PDF_PHOTOS} of ${photos.length} photos.</div>` : ""}
 ` : ""}
 
 ${renders.length > 0 ? `

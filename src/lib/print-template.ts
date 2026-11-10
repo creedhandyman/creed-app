@@ -399,8 +399,10 @@ export function wrapPrint(brand: PrintBrand, bodyHtml: string): string {
     ${printFooter(brand)}
   </div>
   <script>
-    // Wait for images (logo + photos) to load before printing. Falls
-    // through after 6s if any image hangs so the user isn't stuck.
+    // Wait for images (logo + photos) to load before printing. After 6s any
+    // image that still hasn't loaded is REMOVED first: printing with photos
+    // still downloading left phones stuck on the print preview, unable to
+    // save the PDF. A missing photo beats a PDF that never saves.
     (function () {
       var imgs = Array.prototype.slice.call(document.images || []);
       function ready(img) {
@@ -420,7 +422,19 @@ export function wrapPrint(brand: PrintBrand, bodyHtml: string): string {
         else { img.addEventListener("load", check); img.addEventListener("error", check); }
       });
       // Hard timeout so we never block forever
-      setTimeout(function () { if (!fired) { fired = true; fire(); } }, 6000);
+      setTimeout(function () {
+        if (fired) return;
+        fired = true;
+        imgs.forEach(function (img) {
+          if (ready(img)) return;
+          // Stop the download and take the photo (and its grid cell) out.
+          var cell = img.parentNode;
+          img.removeAttribute("src");
+          if (cell && cell.parentNode && cell.children.length === 1 && cell.tagName === "DIV") cell.parentNode.removeChild(cell);
+          else if (cell) cell.removeChild(img);
+        });
+        setTimeout(fire, 150);
+      }, 6000);
     })();
   </script>
 </body>

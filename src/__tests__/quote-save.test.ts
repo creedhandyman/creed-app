@@ -206,6 +206,48 @@ describe("photos", () => {
     }));
     expect(blob.photos).toEqual([{ url: "u1", type: "after" }, { url: "u2", type: "rendered" }, { url: "u3", label: "x", type: "before" }]);
   });
+
+  it("a photo deleted in the editor stays deleted", () => {
+    const { blob } = buildQuoteSave(input({
+      prev: { status: "quoted", blob: { photos: [{ url: "u1", type: "before" }, { url: "u2", type: "work" }, { url: "u3", type: "after" }] } },
+      identity: editing,
+      loadedPhotos: [{ url: "u1", type: "before" }, { url: "u2", type: "work" }, { url: "u3", type: "after" }],
+      jobPhotos: [{ url: "u1", label: "", type: "before" }],
+    }));
+    expect(blob.photos).toEqual([{ url: "u1", type: "before" }]);
+  });
+
+  it("deleting every photo leaves none", () => {
+    const { blob } = buildQuoteSave(input({
+      prev: { status: "quoted", blob: { photos: [{ url: "u1", type: "before" }] } },
+      identity: editing,
+      loadedPhotos: [{ url: "u1", type: "before" }],
+      jobPhotos: [],
+    }));
+    expect(blob.photos).toEqual([]);
+  });
+
+  it("keeps a photo added in Work mode while the quote was open, even when others are deleted", () => {
+    const { blob } = buildQuoteSave(input({
+      // u9 was uploaded from Work mode after the editor opened: saved, but never on the editor's screen.
+      prev: { status: "active", blob: { photos: [{ url: "u1", type: "before" }, { url: "u2", type: "before" }, { url: "u9", type: "after" }] } },
+      identity: editing,
+      loadedPhotos: [{ url: "u1", type: "before" }, { url: "u2", type: "before" }],
+      jobPhotos: [{ url: "u2", label: "", type: "before" }],
+    }));
+    expect(blob.photos).toEqual([{ url: "u2", type: "before" }, { url: "u9", type: "after" }]);
+  });
+
+  it("saves a Before / Work / After tag changed in the editor, and leaves untouched tags alone", () => {
+    const { blob } = buildQuoteSave(input({
+      // The editor shows a "rendered" photo as "before"; untouched, it must stay "rendered".
+      prev: { status: "quoted", blob: { photos: [{ url: "u1", type: "before" }, { url: "u2", type: "rendered" }] } },
+      identity: editing,
+      loadedPhotos: [{ url: "u1", type: "before" }, { url: "u2", type: "before" }],
+      jobPhotos: [{ url: "u1", label: "", type: "after" }, { url: "u2", label: "", type: "before" }],
+    }));
+    expect(blob.photos).toEqual([{ url: "u1", type: "after" }, { url: "u2", type: "rendered" }]);
+  });
 });
 
 describe("Good-Better-Best locking", () => {

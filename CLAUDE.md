@@ -2346,6 +2346,15 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Things that still bug me / open follow-ups
 
+- **Quote PDF photos (2026-11-10)**: the PDF downloads each photo at its stored
+  size, so it now shows at most `MAX_PDF_PHOTOS` (12, before photos first;
+  `export-pdf.ts pdfPhotos`), and the print page (`print-template.ts`) REMOVES
+  any image still loading after 6 s before it prints (printing half-loaded left
+  phones stuck on the preview, unable to save). Work mode shrinks library
+  uploads to 1600px like the camera. NOT done: photos already stored at full
+  size are still heavy (they'd need re-processing in storage), and deleting a
+  photo from a quote does not delete its file from the bucket.
+
 - **Notifications follow-ups**: the in-app feed shipped (see "Big systems"
   above). Remaining: (a) flip `NOTIFY_SMS_ENABLED=1` on Vercel + verify a
   real text lands once a tech has a phone on file; (b) web push (PWA +

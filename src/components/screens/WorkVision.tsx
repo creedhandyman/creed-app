@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Fragment } from "react";
 import { useStore, clockDeps } from "@/lib/store";
 import { db, supabase } from "@/lib/supabase";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
+import { compressImage } from "@/lib/image";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip, classify } from "@/lib/parser";
 import { formatHours, parseEntryDate } from "@/lib/dates";
@@ -358,8 +359,13 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Type defaults to whatever is currently selected on the segmented
   // control above (state-driven), but a caller can pin a specific type
   // — e.g. when we ever wire up a "Before / Working / After" radio set.
-  const uploadWorkPhoto = async (file: File, typeOverride?: "before" | "work" | "after") => {
+  const uploadWorkPhoto = async (picked: File, typeOverride?: "before" | "work" | "after") => {
     if (!activeJob) return;
+    // A photo picked from the phone's library is the original (several MB);
+    // bring it down to the in-app camera's size (1600px) so job photos, the
+    // quote PDF and the customer's page load fast. Camera shots are already
+    // that size, and anything that isn't a readable image is left as it is.
+    const file = picked.size > 700_000 ? await compressImage(picked, 1600, 0.8) : picked;
     const ext = file.name.split(".").pop() || "jpg";
     const path = `gallery/${activeJob.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
     const tag0 = typeOverride ?? photoType;

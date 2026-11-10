@@ -13,7 +13,12 @@
  *    all three — a mis-tag never hides a task). A quote with lines never saves an
  *    empty work order.
  *  - PHOTOS: every existing photo is kept; new ones are appended unless their url
- *    is already there.
+ *    is already there. The exception is what the owner did on purpose in the
+ *    editor, worked out against `loadedPhotos` (the list the editor opened with):
+ *    a photo it opened with that is no longer on screen was DELETED and is
+ *    dropped; one whose Before / Work / After tag changed takes the new tag. A
+ *    photo added elsewhere while the quote was open (Work mode) was never in
+ *    `loadedPhotos`, so it is still kept.
  *  - PRIOR BLOB: spread first, so keys QuoteForge doesn't own (jobNotes, approval,
  *    leadDraft, future keys) survive an edit-save; the keys it owns are then
  *    written explicitly so CLEARING one (no discount, Auto crew…) really clears.
@@ -60,6 +65,9 @@ export interface QuoteSaveInput {
   /** Crew on the quote, already resolved to names. */
   workers: { id: string; name: string }[];
   jobPhotos: Photo[];
+  /** The photos the editor opened this saved quote with (as shown on its Photos
+   *  tab). Omitted / empty = nothing was deleted or re-tagged on purpose. */
+  loadedPhotos?: Photo[];
   /** Work-order tasks after syncing with the quote (the edited work order, else the generated guide steps). */
   steps: GuideStep[];
   /** The generated guide steps — the fallback when `steps` comes back empty for a quote with lines. */
@@ -175,8 +183,19 @@ export function buildQuoteSave(input: QuoteSaveInput): QuoteSaveResult {
     .filter((w) => w.done && !usedPrior.has(w))
     .map((w) => `${w.room} — ${w.detail}`);
 
-  // ── Photos: keep every existing one, append new ones by url ──
-  const prevPhotos: Photo[] = Array.isArray(prevData.photos) ? (prevData.photos as Photo[]) : [];
+  // ── Photos: keep every existing one, append new ones by url — minus the
+  //    ones the owner deleted in the editor, plus their tag changes ──
+  const onScreen = new Map(jobPhotos.map((ph) => [ph.url, ph]));
+  const loaded = input.loadedPhotos || [];
+  const deleted = new Set(loaded.filter((ph) => !onScreen.has(ph.url)).map((ph) => ph.url));
+  const retagged = new Map<string, string>();
+  for (const was of loaded) {
+    const now = onScreen.get(was.url);
+    if (now && now.type && now.type !== was.type) retagged.set(was.url, now.type);
+  }
+  const prevPhotos: Photo[] = (Array.isArray(prevData.photos) ? (prevData.photos as Photo[]) : [])
+    .filter((ph) => !deleted.has(ph.url))
+    .map((ph) => (retagged.has(ph.url) ? { ...ph, type: retagged.get(ph.url) } : ph));
   const seenUrls = new Set(prevPhotos.map((ph) => ph.url));
   const mergedPhotos = [...prevPhotos, ...jobPhotos.filter((ph) => !seenUrls.has(ph.url))];
 
