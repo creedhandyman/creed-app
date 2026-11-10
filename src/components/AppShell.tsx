@@ -18,10 +18,12 @@ import Operations from "./screens/Operations";
 import WorkVision from "./screens/WorkVision";
 import MoreHub from "./screens/MoreHub";
 import FlipAnalyzer from "./screens/FlipAnalyzer";
+import Texts from "./screens/Texts";
 import Coachmark from "./Coachmark";
 import OfflineBanner from "./OfflineBanner";
 import { t } from "@/lib/i18n";
 import { useCrewHeartbeat } from "@/lib/crew-heartbeat";
+import { useTextsUnreadPoll } from "@/lib/texts-client";
 
 export default function AppShell() {
   const [page, setPage] = useState("dash");
@@ -36,7 +38,11 @@ export default function AppShell() {
   // Deep-link target sub-tab for Operations (the More hub's Customers tile
   // opens Operations on its customers sub-tab).
   const [opsInitialTab, setOpsInitialTab] = useState<string | null>(null);
+  // Deep-link target for Texts: a push opens a phone number's conversation,
+  // a bell row opens its job's conversation.
+  const [textsTarget, setTextsTarget] = useState<{ phone?: string; jobId?: string; at?: string } | null>(null);
   const user = useStore((s) => s.user)!;
+  const textingOn = useStore((s) => s.org?.auto_sms_enroute === true);
   const darkMode = useStore((s) => s.darkMode);
   // Bumped when the CURRENT tab is tapped again → the screen remounts at its
   // top level (job list, Ops hub…), the way phone apps behave. Not for the
@@ -48,6 +54,8 @@ export default function AppShell() {
   // Live crew location: a fix every few minutes while THIS phone is on the
   // clock with the app open (never off the clock / in the background).
   useCrewHeartbeat(!!user.org_id);
+  // Unread customer texts on the More tab (only businesses that text).
+  useTextsUnreadPoll(textingOn);
 
   // ── Hardware/gesture back = in-app back (Android PWA) ──────────────
   // The app navigates by state, not URLs, so the system back button saw an
@@ -72,6 +80,15 @@ export default function AppShell() {
       let sp: string | null = null;
       try { sp = sessionStorage.getItem("c_start_page"); if (sp) sessionStorage.removeItem("c_start_page"); } catch { /* storage blocked */ }
       if (sp === "qf") { window.history.pushState({ ...cur, creedPage: "qf" }, ""); setPage("qf"); }
+      // A text-reply push opens "/?texts=<phone>": land on that conversation
+      // (on top of Home, so back returns there) and tidy the address.
+      const tp = new URLSearchParams(window.location.search).get("texts");
+      if (tp) {
+        window.history.replaceState({ ...cur, creedPage: "dash" }, "", "/");
+        window.history.pushState({ ...cur, creedPage: "texts" }, "");
+        setTextsTarget({ phone: tp });
+        setPage("texts");
+      }
     }, 0);
     const onPop = (e: PopStateEvent) => {
       const st = (e.state || {}) as { creedPage?: string; creedSettings?: boolean };
@@ -132,6 +149,12 @@ export default function AppShell() {
     goToPage("ops");
   };
 
+  // Open Texts, optionally on one conversation (notification / push).
+  const goToTexts = (target?: { phone?: string; jobId?: string; at?: string }) => {
+    setTextsTarget(target || null);
+    goToPage("texts");
+  };
+
   // Open a specific job's detail screen (from a notification).
   const goToJob = (jobId: string) => {
     setJobDetailId(jobId);
@@ -149,7 +172,7 @@ export default function AppShell() {
   const renderPage = () => {
     switch (page) {
       case "dash":
-        return <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
+        return <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} openTexts={goToTexts} />;
       case "qf":
         return <QuoteForge setPage={goToPage} editJobId={editJobId} clearEditJob={() => setEditJobId(null)} />;
       case "jobs":
@@ -180,6 +203,8 @@ export default function AppShell() {
       case "flip":
         // Flip Mode deals are investor money — owners/managers only.
         return isAdmin ? <FlipAnalyzer setPage={goToPage} /> : <Dashboard setPage={goToPage} openSettings={openSettingsNav} openJob={goToJob} openOps={goToOps} />;
+      case "texts":
+        return <Texts openJob={goToJob} initial={textsTarget} clearInitial={() => setTextsTarget(null)} />;
       case "more":
         return <MoreHub setPage={goToPage} openSettings={openSettingsNav} openOps={goToOps} />;
       default:

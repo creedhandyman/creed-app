@@ -289,6 +289,8 @@ export async function alertReply(
     body: `${who}: ${(t.text || "(photo)").slice(0, 300)}${photos}`,
     crewNames,
     channels: { push: true, sms: false },
+    // Tapping the push opens this conversation on the Texts screen.
+    url: `/?texts=${encodeURIComponent(t.from)}`,
   });
 }
 

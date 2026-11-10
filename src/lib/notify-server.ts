@@ -172,6 +172,9 @@ export async function dispatchNotifications(
      *  customer's text reply is app push only (owner's choice, 2026-11-10);
      *  an opt-out is a bell row with no push. */
     channels?: { push?: boolean; sms?: boolean };
+    /** Where tapping the push opens (default "/"). A text reply opens its
+     *  conversation: "/?texts=<phone>" (AppShell reads it). */
+    url?: string;
   },
 ): Promise<{ created: number; texted: number; pushed: number; failures: number }> {
   const { orgId, type, title, body, jobId, smsBody, recipients } = params;
@@ -208,7 +211,7 @@ export async function dispatchNotifications(
     ? await sendPush(
       supabase,
       targets.map((t) => t.id),
-      { title, body, url: "/" },
+      { title, body, url: params.url || "/" },
     )
     : 0;
 
@@ -440,6 +443,7 @@ export async function notifyManagers(
     /** Crew names to include besides the owners/managers (e.g. the crew on the job). */
     crewNames?: string[];
     channels?: { push?: boolean; sms?: boolean };
+    url?: string;
   },
 ): Promise<void> {
   try {
@@ -458,6 +462,7 @@ export async function notifyManagers(
       jobId: p.jobId || null,
       recipients,
       channels: p.channels,
+      url: p.url,
     });
   } catch (e) {
     // eslint-disable-next-line no-console

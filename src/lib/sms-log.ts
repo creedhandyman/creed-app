@@ -55,6 +55,8 @@ export async function clearOptOut(supabase: SupabaseClient, phone: string) {
 export interface LoggedSmsInput {
   orgId: string;
   jobId?: string | null;
+  /** The conversation's customer, when known (the Texts screen's replies). */
+  customerId?: string | null;
   to: string;
   body: string;
   /** "message" = a free-form text from the Text chip / Message customer. */
@@ -105,7 +107,12 @@ async function log(
     // direction + contact_phone put sent texts in the same conversation as
     // the replies (migration 20261110_text_replies.sql). Before it runs those
     // columns don't exist, so retry with the original shape.
-    const { error } = await supabase.from("sms_messages").insert({ ...row, direction: "out", contact_phone: to });
+    const { error } = await supabase.from("sms_messages").insert({
+      ...row,
+      direction: "out",
+      contact_phone: to,
+      ...(m.customerId ? { customer_id: m.customerId } : {}),
+    });
     if (error) await supabase.from("sms_messages").insert(row);
   } catch {
     /* best-effort */
