@@ -117,6 +117,8 @@ export interface SavedInbound {
   /** true = Twilio already delivered this exact text: do nothing more. */
   duplicate: boolean;
   id: string | null;
+  /** The saved row's created_at: the burst check only looks at texts before it. */
+  createdAt: string | null;
 }
 
 /** Save an incoming text on the sms_messages log. */
@@ -141,12 +143,13 @@ export async function saveInbound(
         twilio_sid: t.sid || null,
         status: "received",
       })
-      .select("id")
+      .select("id, created_at")
       .maybeSingle();
-    if (error) return { saved: false, duplicate: error.code === "23505", id: null };
-    return { saved: true, duplicate: false, id: (data as { id?: string } | null)?.id || null };
+    if (error) return { saved: false, duplicate: error.code === "23505", id: null, createdAt: null };
+    const row = data as { id?: string; created_at?: string } | null;
+    return { saved: true, duplicate: false, id: row?.id || null, createdAt: row?.created_at || null };
   } catch {
-    return { saved: false, duplicate: false, id: null };
+    return { saved: false, duplicate: false, id: null, createdAt: null };
   }
 }
 
@@ -236,10 +239,15 @@ async function crewForJob(supabase: SupabaseClient, orgId: string, jobId: string
   return [...names].filter(Boolean);
 }
 
-/** True when this person already texted in the last 5 minutes (one alert per burst). */
-async function recentlyAlerted(supabase: SupabaseClient, from: string, messageId: string | null): Promise<boolean> {
-  if (!messageId) return false;
+/**
+ * True when this person already texted in the 5 minutes BEFORE this text (one
+ * alert per burst). Only earlier texts count, so the first text of a burst
+ * always alerts even when the later ones are saved before its alert runs.
+ */
+async function recentlyAlerted(supabase: SupabaseClient, from: string, messageId: string | null, createdAt: string | null): Promise<boolean> {
+  if (!messageId || !createdAt) return false;
   try {
+    const since = new Date(new Date(createdAt).getTime() - 5 * 60_000).toISOString();
     const { data, error } = await supabase
       .from("sms_messages")
       .select("id")
@@ -247,7 +255,8 @@ async function recentlyAlerted(supabase: SupabaseClient, from: string, messageId
       .eq("contact_phone", from)
       .neq("id", messageId)
       .eq("kind", "reply")
-      .gte("created_at", new Date(Date.now() - 5 * 60_000).toISOString())
+      .gte("created_at", since)
+      .lt("created_at", createdAt)
       .limit(1);
     return !error && !!data?.length;
   } catch {
@@ -258,11 +267,11 @@ async function recentlyAlerted(supabase: SupabaseClient, from: string, messageId
 /** Bell + app push to owners, managers and the crew on the job. Never a text (owner's choice). */
 export async function alertReply(
   supabase: SupabaseClient,
-  t: { from: string; text: string; photoCount: number; match: InboundMatch; messageId: string | null },
+  t: { from: string; text: string; photoCount: number; match: InboundMatch; messageId: string | null; createdAt: string | null },
 ): Promise<void> {
   const { match } = t;
   if (!match.orgId) return; // held: no business gets it
-  if (await recentlyAlerted(supabase, t.from, t.messageId)) return;
+  if (await recentlyAlerted(supabase, t.from, t.messageId, t.createdAt)) return;
 
   const who = match.name || prettyPhone(t.from);
   const photos = t.photoCount ? ` [${t.photoCount} photo${t.photoCount > 1 ? "s" : ""}]` : "";

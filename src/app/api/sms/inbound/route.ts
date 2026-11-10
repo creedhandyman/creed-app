@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
         jobId: match.jobId,
         photos,
       });
-      await alertReply(supabase, { from, text, photoCount: stored.length || photos.length, match, messageId: saved.id });
+      await alertReply(supabase, { from, text, photoCount: stored.length || photos.length, match, messageId: saved.id, createdAt: saved.createdAt });
     });
   }
   return twiml();
