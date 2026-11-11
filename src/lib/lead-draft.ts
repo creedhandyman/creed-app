@@ -89,8 +89,17 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
     : "Analyze these photos and quote all repairs needed.";
   const result = await aiParsePdf(text, images, org.default_rate || 55, licensedTrades, extractZip(lead.property), undefined, {
     getCorrections: async () => {
-      const { data } = await supabase.from("price_corrections").select("*").eq("org_id", orgId).limit(2000);
+      // Newest first, like the app's own read — the calibration and the
+      // grounding both treat the first row seen as the latest word.
+      const { data } = await supabase.from("price_corrections").select("*").eq("org_id", orgId)
+        .order("created_at", { ascending: false }).limit(2000);
       return (data || []) as Awaited<ReturnType<NonNullable<ParserDeps["getCorrections"]>>>;
+    },
+    getPriceBook: async () => {
+      const { data } = await supabase.from("price_book")
+        .select("item_name, labor_hours, labor_hours_low, labor_hours_high, unit, scope, active, meta")
+        .eq("active", true).or(`org_id.is.null,org_id.eq.${orgId}`).limit(1000);
+      return (data || []) as Awaited<ReturnType<NonNullable<ParserDeps["getPriceBook"]>>>;
     },
     callAi: async (body) => {
       const { status, data } = await callClaude(body, { orgId, callType: "lead_draft" });
@@ -108,7 +117,12 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   let blob: Record<string, unknown> = {};
   try { blob = typeof cur.rooms === "string" ? JSON.parse(cur.rooms) : (cur.rooms || {}); } catch { /* */ }
   if (Array.isArray(blob.rooms) && blob.rooms.length) return { ok: false, reason: "already quoted" };
-  blob.leadDraft = { v: 1, rooms, estDays: result.estDays > 0 ? result.estDays : null, total, at: new Date().toISOString() };
+  blob.leadDraft = {
+    v: 1, rooms, estDays: result.estDays > 0 ? result.estDays : null, total, at: new Date().toISOString(),
+    // What the AI flagged (sub work, adjusted hours, possible double-charge)
+    // — the editor shows it when the owner opens the draft.
+    notes: (result.notes || []).slice(0, 12),
+  };
   const { error } = await supabase.from("jobs").update({ rooms: JSON.stringify(blob) }).eq("id", jobId).eq("status", "lead");
   if (error) return { ok: false, reason: error.message };
 

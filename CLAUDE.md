@@ -2315,6 +2315,53 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   **Legacy cap lowered to 1.15x (0de85c7, 2026-10-08)** after "quotes slightly
   high": big quotes were 1.45–1.9x aiHrs. Raw basis still caps at 1.5x. The
   learned-durations prompt no longer says "actuals consistently exceed quotes".
+  **Accuracy pass (2026-11-10)** — an audit of real data found the AI's own
+  hours ran ~19% OVER the clock on 18 raw-basis jobs (129h vs 105h), yet the
+  factor could only raise. Changes:
+  - **Calibration works both ways, and is shrunk.** Raw basis: `overall = 1 +
+    trust(n) × (actual/ai − 1)`, a trade = `overall + trust(n_trade) ×
+    (ratio − overall)`, `trust(n) = n / (n + RAW_PRIOR_JOBS)` (10) — a handful
+    of jobs moves it part of the way only. `calibrationFactor(cal, bucket)`
+    clamps raw to `RAW_FACTOR_MIN` 0.85 … `RAW_FACTOR_MAX` 1.5 and legacy to
+    1 … `LEGACY_FACTOR_MAX` 1.15 (legacy still never trims). `calibratedHours`
+    applies it: ±5% dead band; a raise scales every line; a TRIM touches only
+    lines ≥ 1h (owner edits cut big lines and RAISE small ones), never T&M
+    lines, never below the flooring per-sqft minimum (`flooringFloorHrs`).
+    Creed's factor on 2026-11-10 ≈ 0.92. Trims show as a note. Tested in
+    `labor-calibration.test.ts` (incl. the real 18-job snapshot).
+  - **Grounding replaces the old "learned pricing" lessons**
+    (`lib/quote-grounding.ts`, pure, tested). The old block keyed on a line's
+    whole text, so it mostly echoed one quote's own edit chain. Now each
+    parse gets only what MATCHES THE REQUEST (matched per sentence/line of the
+    request, IDF-weighted word overlap ≥ 0.7, ≥ 2 shared words): YOUR PAST
+    WORK (`pastWorkFrom`: an edit chain collapses to where the owner left it,
+    the room prefix is dropped so a task learned in one room applies in
+    another, clocked hours shown only when within 0.5–2x of the quote, median
+    across jobs), REPAIR KNOWLEDGE BASE (`price_book` rows, scope H/HP, hour
+    ranges — was loaded 2026-10-29 but never read by the quoter), and SHOP
+    MATERIAL COSTS (materials-db items named in the request + median receipt
+    prices, same ZIP first — the shop list had not been sent since July).
+    It is its own uncached system block after the corrections block.
+    `ParserDeps.getPriceBook` feeds the server-side lead draft.
+  - **A cut-off reply no longer loses the quote**: `lib/json-salvage.ts`
+    `salvageJson` keeps every complete line of a reply that hit max_tokens
+    (was: "invalid JSON", whole parse thrown away) and a note says the quote
+    may be missing its last items. Report text cap raised 30k → 60k chars
+    (`INPUT_TEXT_CAP`), with a note when a report is still cut.
+  - **AI notes are shown** (they never were): QuoteForge `aiNotes` → a
+    dismissible "Check before you send" card above Scope check (sub-trade
+    flags, hour adjustments, cut-off warnings); lead drafts carry
+    `leadDraft.notes`.
+  - learning.ts writes `__job__:` rows for every finished job (it skipped
+    jobs within 0.5h of the quote, biasing the legacy ratio up); lead-draft
+    reads corrections newest-first.
+  NOT changed, on purpose: the prompt's "hours historically run LOW" nudge and
+  the PAST JOB DURATIONS block (dropping them together with a downward factor
+  would compound) — revisit once the factor settles. Known gaps: a job
+  reopened after completion keeps its `__jobraw__` rows; `/api/ai`
+  MAX_TOKENS_CEILING is still 16000 (2 of 136 parses hit it). The grounding's
+  effect on live quotes has not been measured — compare `aiHrs` vs clocked on
+  jobs quoted after this date.
 - **Models**: quote parse, ping, voice walk, AI Assist, lead draft and the tax
   lookup are `claude-sonnet-5-5`. **Receipt scan (`/api/ai/receipt`, effort
   medium) and Troubleshoot (effort low) moved to `claude-haiku-5-5` on

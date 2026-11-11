@@ -4,6 +4,8 @@ import { apiFetch } from "./api";
 import { MATERIALS_DB } from "./materials-db";
 import { TRADE_CATEGORY_LIST, canonicalDetail, isSuppliesOnlyLine } from "./line-canon";
 import { withTimeout } from "./pdf-detect";
+import { buildGrounding, type KbRow } from "./quote-grounding";
+import { salvageJson } from "./json-salvage";
 
 /* ====== PDF LOADING ====== */
 
@@ -651,6 +653,32 @@ const RAW_MIN_HOURS = 40; // Σ AI hours across those jobs
 const RAW_MIN_TRADE_JOBS = 3; // a trade's own ratio, else the raw overall
 const RAW_MAX_JOBS = 25;
 const RAW_BATCH_MS = 2 * 60 * 1000;
+// How much to believe the measured ratio: n jobs count against a prior of
+// RAW_PRIOR_JOBS jobs that say "the AI is right" (factor 1). Job-to-job spread
+// is wide (one job clocks 0.2x its estimate, the next 2.2x), so 10 jobs in
+// are still half noise — the factor moves n/(n+10) of the way to the measured
+// ratio: 8 jobs → 44%, 18 → 64%, 25 → 71%.
+const RAW_PRIOR_JOBS = 10;
+/** Enforced range of the labor factor. The raw basis is measured against the
+ *  AI's own hours, so it may also trim (never more than 15%: an under-clocked
+ *  job must not be able to gut a quote). The legacy basis only ever raises. */
+export const RAW_FACTOR_MIN = 0.85;
+export const RAW_FACTOR_MAX = 1.5;
+export const LEGACY_FACTOR_MAX = 1.15;
+/** Inside ±5% the calibration leaves the AI's hours alone. */
+export const FACTOR_DEAD_BAND = 0.05;
+
+/** The factor a trade bucket's AI hours are multiplied by: the trade's own
+ *  measured ratio, else the overall one, clamped to the basis's range. */
+export function calibrationFactor(
+  cal: Pick<LaborCalibration, "byTrade" | "overall" | "basis">,
+  bucket: string,
+): number {
+  const measured = cal.byTrade[bucket.trim().toLowerCase()] ?? cal.overall;
+  return cal.basis === "raw"
+    ? Math.min(RAW_FACTOR_MAX, Math.max(RAW_FACTOR_MIN, measured))
+    : Math.min(LEGACY_FACTOR_MAX, Math.max(1, measured));
+}
 
 /**
  * The labor calibration, from price_corrections rows already sorted
@@ -707,11 +735,17 @@ export function laborCalibrationFrom(rows: CalibrationRow[]): LaborCalibration {
     q += est; a += act;
   }
   if (recentJobs.length >= RAW_MIN_JOBS && q >= RAW_MIN_HOURS) {
+    // Shrink toward "no adjustment" by how many jobs back the reading, then
+    // shrink each trade's own ratio toward that overall figure the same way.
+    const trust = (n: number) => n / (n + RAW_PRIOR_JOBS);
+    const overall = 1 + trust(recentJobs.length) * (a / q - 1);
     const byTrade: Record<string, number> = {};
     for (const [trade, s] of Object.entries(sums)) {
-      if (s.jobs.size >= RAW_MIN_TRADE_JOBS && s.q > 0) byTrade[trade] = s.a / s.q;
+      if (s.jobs.size >= RAW_MIN_TRADE_JOBS && s.q > 0) {
+        byTrade[trade] = overall + trust(s.jobs.size) * (s.a / s.q - overall);
+      }
     }
-    return { byTrade, overall: a / q, basis: "raw" };
+    return { byTrade, overall, basis: "raw" };
   }
 
   // Legacy: final quoted vs actual. Per-trade ratio needs >=2 completed jobs in
@@ -732,6 +766,44 @@ export function laborCalibrationFrom(rows: CalibrationRow[]): LaborCalibration {
   }
   const overall = n >= 3 && sumQ > 0 ? sumA / sumQ : 1;
   return { byTrade, overall, basis: n > 0 ? "history" : "none" };
+}
+
+/**
+ * The per-sqft labor MINIMUM for an area flooring line (0 = not one): LVP
+ * replacing an old floor 1h/28 sqft, install-only 1h/35, carpet 1h/50, tile
+ * 1h/18. validateQuote raises fresh AI hours to it, and the labor calibration
+ * never trims a line below it.
+ */
+export function flooringFloorHrs(it: Pick<RoomItem, "detail" | "comment" | "sqft">): number {
+  const sqft = Number(it.sqft) || 0;
+  if (sqft < 40) return 0; // tiny rooms: the flat estimate is fine
+  const txt = `${it.detail} ${it.comment}`.toLowerCase();
+  if (!/floor|lvp|laminate|vinyl[\s-]?plank|carpet|\btile\b/i.test(txt)) return 0;
+  const isTile = /\btile\b/.test(txt);
+  const isCarpet = /carpet/.test(txt) && !/lvp|laminate|vinyl|tile/.test(txt);
+  const hasDemo = /remov|haul|tear|rip|existing|replac|demo/.test(txt);
+  const sqftPerHr = isTile ? 18 : isCarpet ? 50 : hasDemo ? 28 : 35;
+  return Math.round((sqft / sqftPerHr) * 10) / 10;
+}
+
+/**
+ * One line's hours after the labor calibration. Raising scales every line.
+ * Trimming (factor < 1, raw basis only) is deliberately narrower — a low
+ * quote is the expensive mistake:
+ *   - lines under an hour stay (the owner RAISES small lines when editing);
+ *   - T&M lines stay (their hours are the assessment visit, not an estimate);
+ *   - a flooring line never drops below its per-sqft minimum.
+ */
+export function calibratedHours(
+  it: Pick<RoomItem, "detail" | "comment" | "sqft" | "laborHrs" | "tnm">,
+  factor: number,
+): number {
+  const h = it.laborHrs || 0;
+  if (h <= 0 || Math.abs(factor - 1) < FACTOR_DEAD_BAND) return h;
+  const scaled = Math.round(h * factor * 10) / 10;
+  if (factor > 1) return scaled;
+  if (h < 1 || it.tnm === true) return h;
+  return Math.min(h, Math.max(scaled, flooringFloorHrs(it)));
 }
 
 /* ====== POST-PARSE VALIDATION ====== */
@@ -920,21 +992,12 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phanto
     // 413 sqft living-room floor came back at 8h instead of ~15h). Enforce the
     // floor deterministically: RAISE laborHrs to the sqft-derived minimum, never
     // lower it, so a large room can't end up with fewer hours than a small one.
-    const AREA_WORK = /floor|lvp|laminate|vinyl[\s-]?plank|carpet|\btile\b/i;
     rooms = rooms.map((r) => ({
       ...r,
       items: r.items.map((it) => {
-        const sqft = Number(it.sqft) || 0;
-        if (sqft < 40) return it; // tiny rooms: the flat estimate is fine
-        const txt = `${it.detail} ${it.comment}`.toLowerCase();
-        if (!AREA_WORK.test(txt)) return it;
-        const isTile = /\btile\b/.test(txt);
-        const isCarpet = /carpet/.test(txt) && !/lvp|laminate|vinyl|tile/.test(txt);
-        const hasDemo = /remov|haul|tear|rip|existing|replac|demo/.test(txt);
-        const sqftPerHr = isTile ? 18 : isCarpet ? 50 : hasDemo ? 28 : 35;
-        const floorHrs = Math.round((sqft / sqftPerHr) * 10) / 10;
-        if ((it.laborHrs || 0) < floorHrs) {
-          console.warn(`VALIDATION: Flooring floor — "${it.detail}" ${it.laborHrs}h → ${floorHrs}h (${sqft} sqft @ ${sqftPerHr}/h)`);
+        const floorHrs = flooringFloorHrs(it);
+        if (floorHrs > 0 && (it.laborHrs || 0) < floorHrs) {
+          console.warn(`VALIDATION: Flooring floor — "${it.detail}" ${it.laborHrs}h → ${floorHrs}h (${it.sqft} sqft)`);
           return { ...it, laborHrs: floorHrs };
         }
         return it;
@@ -1377,6 +1440,10 @@ export function extractZip(address: string | undefined | null): string {
 // the request body, so they bypass these caps and we can send all of them
 // up to Anthropic's per-request image limit (BATCH_MAX_URL_COUNT).
 const BATCH_TARGET_BYTES = 3 * 1024 * 1024;
+// Report text sent to the model, in characters (~15k tokens). Single-unit PDF
+// reports used to stop at 30,000 — a long report silently lost its last rooms.
+// Past this cap the owner is now told (a note on the quote).
+const INPUT_TEXT_CAP = 60000;
 const BATCH_MAX_COUNT = 20;
 // Anthropic's documented per-request image cap. Plenty of headroom for any
 // inspection PDF Bernard's likely to upload.
@@ -1476,6 +1543,32 @@ export interface ParserDeps {
   }>>;
   /** Send the Anthropic request body; resolves like fetch's Response. */
   callAi?: (body: Record<string, unknown>) => Promise<Response>;
+  /** The repair knowledge base (price_book: shared rows + this org's). */
+  getPriceBook?: () => Promise<KbRow[]>;
+}
+
+/** price_book for the signed-in app: read once per page load through RLS
+ *  (shared rows + this org's own). Silent on any failure — the knowledge base
+ *  is grounding, quotes must work without it. */
+let _priceBook: Promise<KbRow[]> | null = null;
+function loadPriceBook(): Promise<KbRow[]> {
+  if (!_priceBook) {
+    _priceBook = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("price_book")
+          .select("item_name, labor_hours, labor_hours_low, labor_hours_high, unit, scope, active, meta")
+          .eq("active", true)
+          .limit(1000);
+        if (error || !Array.isArray(data)) { _priceBook = null; return []; }
+        return data as KbRow[];
+      } catch {
+        _priceBook = null;
+        return [];
+      }
+    })();
+  }
+  return _priceBook;
 }
 
 export async function aiParsePdf(
@@ -1558,9 +1651,15 @@ async function aiParsePdfSingle(
     // Legacy basis capped at 1.15, not 1.5: it's pinned at its cap by pre-Aug-6
     // jobs, and on top of the prompt's "take the HIGHER" nudge x1.5 put big
     // quotes ~1.45-1.9x the model's own hours (2026-10-08, owner: "quotes
-    // slightly high"). The raw basis is measured against aiHrs, so it keeps 1.5.
+    // slightly high"). The raw basis is measured against aiHrs, so it keeps 1.5
+    // — and, since 2026-11-10, may also TRIM (to 0.85): the first 18 raw jobs
+    // clocked ~19% under the AI's hours and the owner's own edits cut big
+    // lines ~27%, but a one-way factor could never act on that.
     const calFactor = (bucket: string) =>
-      Math.min(laborCalBasis === "raw" ? 1.5 : 1.15, Math.max(1, laborCalByTrade[bucket.trim().toLowerCase()] ?? laborCalOverall));
+      calibrationFactor({ byTrade: laborCalByTrade, overall: laborCalOverall, basis: laborCalBasis }, bucket);
+    // The item-level history (quote edits, hand-added lines, completed-job
+    // lines, receipt prices) — matched to this request by buildGrounding below.
+    let groundingRows: Parameters<typeof buildGrounding>[0]["corrections"] = [];
     try {
       const corrections = deps?.getCorrections ? await deps.getCorrections() : await db.get<{
         item_name: string; original_hours: number; corrected_hours: number;
@@ -1613,42 +1712,11 @@ async function aiParsePdfSingle(
           }
         });
 
-        type Bucket = { hrsAdj: number[]; matAdj: number[]; count: number };
-        const byItem: Record<string, { local: Bucket; other: Bucket }> = {};
-        const newBucket = (): Bucket => ({ hrsAdj: [], matAdj: [], count: 0 });
-        itemCorrections.slice(0, 200).forEach((c) => {
-          const key = c.item_name.toLowerCase().replace(/[^a-z\s]/g, "").trim();
-          if (!key) return;
-          if (!byItem[key]) byItem[key] = { local: newBucket(), other: newBucket() };
-          const isLocal = !!(propertyZip && c.zip && c.zip === propertyZip);
-          const bucket = isLocal ? byItem[key].local : byItem[key].other;
-          if (c.corrected_hours !== c.original_hours) bucket.hrsAdj.push(c.corrected_hours);
-          if (c.corrected_mat_cost !== c.original_mat_cost) bucket.matAdj.push(c.corrected_mat_cost);
-          bucket.count++;
-        });
-        const formatLesson = (item: string, b: Bucket): string | null => {
-          const parts = [];
-          if (b.hrsAdj.length) {
-            const avgHrs = b.hrsAdj.reduce((a, x) => a + x, 0) / b.hrsAdj.length;
-            parts.push(`typically ${avgHrs.toFixed(1)}h`);
-          }
-          if (b.matAdj.length) {
-            const avgMat = b.matAdj.reduce((a, x) => a + x, 0) / b.matAdj.length;
-            parts.push(`materials ~$${avgMat.toFixed(0)}`);
-          }
-          return parts.length ? `- ${item}: ${parts.join(", ")}` : null;
-        };
-        const localLessons: string[] = [];
-        const otherLessons: string[] = [];
-        Object.entries(byItem).forEach(([item, v]) => {
-          if (v.local.count >= 2) {
-            const l = formatLesson(item, v.local);
-            if (l) localLessons.push(l);
-          } else if (v.other.count >= 2) {
-            const l = formatLesson(item, v.other);
-            if (l) otherLessons.push(l);
-          }
-        });
+        // Everything else is item-level history. It used to be boiled down here
+        // into "LEARNED PRICING" lessons keyed on a line's whole text (so only
+        // the same quote edited twice ever produced one) — buildGrounding now
+        // matches it to the request instead (lib/quote-grounding.ts).
+        groundingRows = itemCorrections;
         // Format job-level calibrations: "Plumbing: avg 8.5h quoted vs 11h
         // actual across 4 jobs (local: 12h actual)" — gives the AI sizing
         // context grounded in this team's real outcomes.
@@ -1674,7 +1742,7 @@ async function aiParsePdfSingle(
         laborCalOverall = cal.overall;
         laborCalBasis = cal.basis;
 
-        if (localLessons.length || otherLessons.length || jobCalLines.length) {
+        if (jobCalLines.length) {
           correctionsPrompt = "";
           if (jobCalLines.length) {
             correctionsPrompt += `\nPAST JOB DURATIONS — this team's ACTUAL hours from completed work vs what was quoted. Use them to size similar work, especially where local data exists:\n${jobCalLines.join("\n")}\n`;
@@ -1688,19 +1756,20 @@ async function aiParsePdfSingle(
               correctionsPrompt += `These actual hours already include this team's setup, staging, supply runs, coordination and cleanup. Keep each line's FULL TASK LIFECYCLE hours, but do NOT apply the SCALE OVERHEAD WITH JOB SIZE uplift and do NOT add a separate "Job setup, staging & cleanup" line.\n`;
             }
           }
-          if (localLessons.length && propertyZip) {
-            correctionsPrompt += `\nLEARNED PRICING — LOCAL TO ZIP ${propertyZip} (prefer these for same-area jobs):\n${localLessons.slice(0, 25).join("\n")}\n`;
-          }
-          if (otherLessons.length) {
-            const heading = propertyZip
-              ? `\nLEARNED PRICING — REGIONAL (other ZIPs, use as fallback):`
-              : `\nLEARNED PRICING (from past job corrections by this team — use these when applicable):`;
-            correctionsPrompt += `${heading}\n${otherLessons.slice(0, 20).join("\n")}\n`;
-          }
           correctionsPrompt += "\n";
         }
       }
     } catch { /* corrections not available, continue without */ }
+
+    // Grounding matched to THIS request: the team's own similar lines (quoted
+    // and clocked), what it pays for the materials involved, and the repair
+    // knowledge base's hours for the tasks named. Best-effort — empty when
+    // nothing on file resembles the request (a photo-only quote, a new shop).
+    let groundingPrompt = "";
+    try {
+      const kb = deps ? (deps.getPriceBook ? await deps.getPriceBook() : []) : await loadPriceBook();
+      groundingPrompt = buildGrounding({ request: text, corrections: groundingRows, kb, zip: propertyZip }).prompt;
+    } catch { /* grounding is optional */ }
 
     // Build content array with text + images. Each image is either a
     // URL-sourced fetch (Anthropic pulls it directly) or inline base64 —
@@ -1730,6 +1799,8 @@ async function aiParsePdfSingle(
     // Pre-process text: strip summary table, clean noise
     let cleanText = text;
     let multiUnit = false;
+    // The report text ran past INPUT_TEXT_CAP and its tail was not sent.
+    let inputCut = false;
     // Structured text the app compiled from its OWN inspection data
     // (compileInspectionText, via aiParseInspection). It has no summary/detail
     // duplication, and repeats lines room after room BY DESIGN ("Condition: P
@@ -1860,6 +1931,7 @@ async function aiParsePdfSingle(
       // to unit A's (same rooms, same items), so whole-document dedup would
       // silently delete the second unit's findings.
       if (!multiUnit && !structuredInspection) cleanText = deduped.join("\n");
+      inputCut = cleanText.length > INPUT_TEXT_CAP;
 
       content.push({
         type: "text",
@@ -1868,7 +1940,7 @@ async function aiParsePdfSingle(
               multiUnit
                 ? `\nThis property has MULTIPLE UNITS: prefix every line item's "detail" with its unit (e.g. "Unit B — Bathroom — Re-caulk tub"), and quote each unit's work separately — never merge identical findings across units.`
                 : ""
-            }\n\n${cleanText.slice(0, 60000)}`
+            }\n\n${cleanText.slice(0, INPUT_TEXT_CAP)}`
           : multiUnit
           ? `IMPORTANT: This report covers MULTIPLE UNITS at similar addresses (duplex / multi-unit property). Keep each unit's findings SEPARATE and correctly labeled:
 - Prefix every line item's "detail" with its unit, e.g. "1105 — Kitchen — Replace sprayer" or "Unit B — Bathroom — Re-caulk tub".
@@ -1876,8 +1948,8 @@ async function aiParsePdfSingle(
 - Attribute each finding to the unit whose section of the report it appears in.
 - Set "property" to the shared address covering all units (e.g. "1105 & 1107 W 51st St N").
 
-${cleanText.slice(0, 60000)}`
-          : `IMPORTANT: This text is from the DETAILED ROOM BREAKDOWN section ONLY. The summary table has been removed. Each room section below should be processed ONCE. Do NOT create duplicate entries.\n\n${cleanText.slice(0, 30000)}`,
+${cleanText.slice(0, INPUT_TEXT_CAP)}`
+          : `IMPORTANT: This text is from the DETAILED ROOM BREAKDOWN section ONLY. The summary table has been removed. Each room section below should be processed ONCE. Do NOT create duplicate entries.\n\n${cleanText.slice(0, INPUT_TEXT_CAP)}`,
       });
     }
 
@@ -1916,6 +1988,9 @@ ${cleanText.slice(0, 60000)}`
         ...(correctionsPrompt
           ? [{ type: "text", text: correctionsPrompt, cache_control: { type: "ephemeral" } }]
           : []),
+        // Per-request grounding — changes with every request, so it sits
+        // AFTER the cached blocks and carries no cache breakpoint.
+        ...(groundingPrompt ? [{ type: "text", text: groundingPrompt }] : []),
         {
           type: "text",
           text:
@@ -1965,11 +2040,23 @@ ${cleanText.slice(0, 60000)}`
 
     // Extract JSON from response (text blocks only — see aiText)
     const responseText = aiText(data.content);
-    const jsonMatch =
-      responseText.match(/\{[\s\S]*\}/) || [];
-    if (!jsonMatch[0]) { setAiError("AI returned no parseable quote JSON"); return null; }
-
-    const parsed = JSON.parse(jsonMatch[0]);
+    // A very long quote can run into the output limit and stop mid-item.
+    // salvageJson keeps every complete line item instead of throwing the
+    // whole quote away (2 of the last 136 parses ended that way).
+    const salvaged = salvageJson(responseText);
+    const parsed = salvaged?.value as {
+      rooms?: Array<{ name: string; items: Array<Omit<RoomItem, "id">> }>;
+      property?: string; client?: string; notes?: unknown; crewSize?: number; estDays?: number;
+    } | null;
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.rooms)) {
+      setAiError(
+        data.stop_reason === "max_tokens"
+          ? "This report is too long to quote in one pass — split it into two uploads (for example interior and exterior)."
+          : "AI returned no parseable quote JSON",
+      );
+      return null;
+    }
+    const outputCut = salvaged?.truncated === true || data.stop_reason === "max_tokens";
 
     // A number (or numeric string like "2.5") ≥ 0 is kept as-is; anything else
     // — omitted, null, "", "TBD" — falls back to 0.5h. (Number("") is 0, so a
@@ -1986,7 +2073,7 @@ ${cleanText.slice(0, 60000)}`
     const rooms: Room[] = (parsed.rooms || []).map(
       (r: { name: string; items: Array<Omit<RoomItem, "id">> }) => ({
         name: r.name,
-        items: r.items.map((it) => ({
+        items: (r.items || []).map((it) => ({
           ...it,
           id: crypto.randomUUID().slice(0, 8),
           // Default only when the model OMITTED hours. An explicit 0 is
@@ -2029,28 +2116,34 @@ ${cleanText.slice(0, 60000)}`
 
     // ── LABOR-HOURS CALIBRATION (deterministic) ──
     // The prompt-side quoted-vs-actual history is advisory; this is the
-    // enforcement. Completed jobs run 30-80% over quoted hours on bigger
-    // work, so scale each trade bucket's laborHrs UP by the measured
-    // actual/estimate ratio — never down (low quotes are the failure mode),
-    // clamped at +50% per parse. Every line keeps the model's own hours as
+    // enforcement: scale each trade bucket's laborHrs by the measured
+    // actual/estimate ratio (calibrationFactor — the legacy basis only ever
+    // raises, to +15%; the raw basis ranges 0.85–1.5 and is shrunk toward 1
+    // by how many jobs back it). Every line keeps the model's own hours as
     // aiHrs, so at completion learning.ts can compare clocked hours with what
     // the MODEL said (not with the already-scaled quote) — that's what lets
     // the factor come back down when it's no longer needed (laborCalibrationFrom).
+    // Since 2026-11-10 the raw basis works both ways (calibratedHours): when
+    // this team's finished jobs clock UNDER the AI's hours it trims — lines of
+    // an hour or more only, never below a flooring minimum, at most 15%.
     const calAdjustments: string[] = [];
+    const calTrims: string[] = [];
     const calibratedRooms = validatedRooms.map((room) => {
       const factor = calFactor(room.name);
-      if (factor < 1.05 || room.items.length === 0) {
+      if (Math.abs(factor - 1) < FACTOR_DEAD_BAND || room.items.length === 0) {
         return { ...room, items: room.items.map((it) => ({ ...it, aiHrs: it.laborHrs || 0 })) };
       }
-      calAdjustments.push(`${room.name} +${Math.round((factor - 1) * 100)}%`);
-      return {
-        ...room,
-        items: room.items.map((it) => ({
-          ...it,
-          aiHrs: it.laborHrs || 0,
-          laborHrs: Math.round((it.laborHrs || 0) * factor * 10) / 10,
-        })),
-      };
+      const items = room.items.map((it) => ({
+        ...it,
+        aiHrs: it.laborHrs || 0,
+        laborHrs: calibratedHours(it, factor),
+      }));
+      if (items.some((it) => it.laborHrs !== it.aiHrs)) {
+        const pct = Math.round(Math.abs(factor - 1) * 100);
+        if (factor > 1) calAdjustments.push(`${room.name} +${pct}%`);
+        else calTrims.push(`${room.name} −${pct}%`);
+      }
+      return { ...room, items };
     });
 
     let notes: string[] = Array.isArray(parsed.notes)
@@ -2067,6 +2160,21 @@ ${cleanText.slice(0, 60000)}`
     if (calAdjustments.length) {
       notes.push(
         `Labor hours adjusted up from your completed-job history (${calAdjustments.join(", ")}) — edit down if this job should run lean.`,
+      );
+    }
+    if (calTrims.length) {
+      notes.push(
+        `Labor hours trimmed from your completed-job history (${calTrims.join(", ")}) — your recent jobs finished under the AI's estimate. Small tasks and flooring minimums were left alone; edit up if this job is a hard one.`,
+      );
+    }
+    if (outputCut) {
+      notes.push(
+        `This quote was very long and the AI's answer was cut off — the last items may be missing. Check the end of the list against the report and add anything that isn't there.`,
+      );
+    }
+    if (inputCut) {
+      notes.push(
+        `The report text is longer than one pass can read — the last part was not sent. Check that the final rooms are quoted, or upload the rest as a second report.`,
       );
     }
     // Cross-trade echo check: the same finding billed in two trades (one of

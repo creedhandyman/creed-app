@@ -489,6 +489,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // The AI parse's own day estimate (rooms blob `data.estDays`) — it counts
   // dry/cure waits that add days but no labor hours. Feeds estimateDays().
   const [aiEstDays, setAiEstDays] = useState<number | null>(null);
+  // What the AI flagged while building this quote (work for a sub, hours it
+  // adjusted from job history, a possible double-charge, a cut-off report).
+  // Shown once above the lines until dismissed; not saved with the quote.
+  const [aiNotes, setAiNotes] = useState<string[]>([]);
   // Which tier you're currently organizing in the editor (UI-only, not saved).
   // The 3 total tiles double as this switch; each line item then shows ONE
   // include checkbox for the active tier, so tagging an item never overwrites
@@ -826,6 +830,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCrewSize(q.crewSize);
       // A lead's AI draft carries its own estimate until the first save.
       setAiEstDays(q.estDays ?? readEstDays(data?.leadDraft?.estDays));
+      setAiNotes(
+        leadDraftRooms && Array.isArray(data?.leadDraft?.notes)
+          ? (data.leadDraft.notes as unknown[]).filter((n): n is string => typeof n === "string")
+          : [],
+      );
       setTierNames(q.tierNames);
       // Restore the photo gallery so the Photos tab + AI Render get the quote's
       // photos back — including the inspection photos collected when the quote
@@ -992,7 +1001,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined); resetContact();
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
-    setTieredQuote(false); setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
+    setTieredQuote(false); setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
@@ -1145,6 +1154,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // parse — skipCaps so a second cap pass can't clamp calibrated hours.
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
         setAiEstDays(result.estDays > 0 ? result.estDays : null);
+        setAiNotes(result.notes || []);
         setParsing(false);
         setParseStatus("");
         return;
@@ -1338,6 +1348,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // hours (the real-world test saw a 10.4h line reset to 8h).
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
         setAiEstDays(result.estDays > 0 ? result.estDays : null);
+        setAiNotes(result.notes || []);
         setParsing(false);
         setParseStatus("");
         setMode("edit");
@@ -1959,7 +1970,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setLaborRate(null);
     setMinLaborHours(null);
     setTieredQuote(false);
-    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
+    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     savingRef.current = false;
     // Land on the job just saved (Jobs opens its detail from this intent).
     if (savedId) setNavIntent({ page: "jobs", jobId: savedId });
@@ -2149,7 +2160,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     setLaborRate(null);
     setMinLaborHours(null);
     setTieredQuote(false);
-    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null);
+    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
   };
   // Inspector registers its own "leave the walkthrough" (keeps findings in the
   // Resume slot) so back from its room list behaves like its ← button.
@@ -3142,6 +3153,25 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             Minimum service charge applied — {effectiveMinHrs} hr min
             (actual labor: {thRaw.toFixed(2)} hr).
           </span>
+        </div>
+      )}
+
+      {/* What the AI flagged while building the quote */}
+      {aiNotes.length > 0 && (
+        <div className="cd mb">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+            <h4 style={{ fontSize: 15, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icon name="alert" size={16} color="#f5b400" />{t("qf.aiNotesTitle")}
+            </h4>
+            <button className="bo" style={{ fontSize: 12, padding: "4px 9px", flexShrink: 0 }} onClick={() => setAiNotes([])}>
+              {t("qf.aiNotesDismiss")}
+            </button>
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.45 }}>
+            {aiNotes.map((n, i) => (
+              <li key={i} style={{ marginBottom: 4 }}>{n}</li>
+            ))}
+          </ul>
         </div>
       )}
 

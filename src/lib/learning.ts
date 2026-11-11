@@ -126,7 +126,10 @@ export async function recordJobOutcome(
     for (const trade of trades) {
       const te = tradeEst[trade];
       const ta = te * scale;
-      if (Math.abs(ta - te) > 0.5) {
+      // Always written (was: only when off by more than half an hour). Leaving
+      // the on-target trades out meant the quoted-vs-actual history only ever
+      // held the misses, so its ratio could not settle at 1.
+      {
         await logCorrection({
           item_name: `__job__:${trade}`,
           original_hours: round2(te),
@@ -143,7 +146,7 @@ export async function recordJobOutcome(
     }
   } else {
     const trade = job.trade || "General";
-    if (Math.abs(actualHrs - estHrs) > 0.5) {
+    {
       await logCorrection({
         item_name: `__job__:${trade}`,
         original_hours: round2(estHrs),
