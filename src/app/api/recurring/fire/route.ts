@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { computeNextFire, type Cadence } from "@/lib/recurring";
+import { computeNextFire, recurringDueCutoff, recurringVisitDay, recurringVisitNote, type Cadence } from "@/lib/recurring";
 import { visitCadence } from "@/lib/memberships";
 import { cronAuth } from "@/lib/cron-auth";
 
@@ -10,8 +10,11 @@ export const dynamic = "force-dynamic";
  * Recurring Jobs cron endpoint.
  *
  * Triggered by Vercel cron (see vercel.json). Scans recurring_jobs for
- * active templates whose next_fire_at has elapsed, creates a new jobs
- * row from each template's saved rooms blob, then stamps last_fired_at
+ * active templates due by the end of today (Central), creates a new jobs
+ * row from each template's saved rooms blob AND puts the visit on the
+ * calendar (a schedule row on the visit day at the template's hour; before
+ * 2026-11-11 the job was created as "scheduled" with nothing on the calendar,
+ * so nobody saw it), then stamps last_fired_at
  * and recomputes next_fire_at using the shared cadence helper in
  * src/lib/recurring.ts (same code the UI uses to preview the next fire,
  * so what the user sees = what the server will do).
@@ -102,7 +105,7 @@ export async function GET(req: NextRequest) {
     // Two predicates: due now, OR never-fired (next_fire_at IS NULL) so
     // a freshly-created template without a precomputed next_fire_at still
     // gets picked up on the next cron tick.
-    query = query.or(`next_fire_at.lte.${nowIso},next_fire_at.is.null`);
+    query = query.or(`next_fire_at.lte.${recurringDueCutoff(now.getTime())},next_fire_at.is.null`);
   }
 
   const { data, error } = await query;
@@ -129,7 +132,7 @@ export async function GET(req: NextRequest) {
     const totals = parsed.totals ?? parsed.data ?? {};
 
     const title = (r.title || "").trim() || "Recurring service";
-    const jobDate = now.toISOString().split("T")[0];
+    const jobDate = recurringVisitDay(r.next_fire_at, now.getTime());
 
     const insertRow = {
       org_id: r.org_id,
@@ -159,6 +162,20 @@ export async function GET(req: NextRequest) {
     if (jobErr || !jobIns) {
       errors.push({ id: r.id, error: `job insert failed: ${jobErr?.message || "no row returned"}` });
       continue;
+    }
+
+    // Put the visit on the calendar. If this fails the job still exists and
+    // shows under "Needs scheduling" (status scheduled, nothing booked), so
+    // it's reported but doesn't stop the run.
+    const { error: schedErr } = await supabase.from("schedule").insert({
+      org_id: r.org_id,
+      sched_date: jobDate,
+      job: r.property || r.client || title,
+      job_id: (jobIns as { id: string }).id,
+      note: recurringVisitNote(r.hour, title),
+    });
+    if (schedErr) {
+      errors.push({ id: r.id, error: `job created (${(jobIns as { id: string }).id}) but not put on the calendar: ${schedErr.message}` });
     }
 
     const nextFire = computeNextFire(now, r.cadence, {

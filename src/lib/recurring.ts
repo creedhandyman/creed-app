@@ -5,6 +5,8 @@
  * will compute when it actually fires.
  */
 
+import { ymdInZone } from "./dates";
+
 export type Cadence =
   | "weekly"
   | "biweekly"
@@ -99,6 +101,30 @@ export function computeNextFire(
     else next.setMonth(next.getMonth() + 1);
   }
   return next;
+}
+
+/** The calendar day a recurring visit is for: the day its `next_fire_at`
+ *  falls on (Central), never earlier than today (a template that fires late
+ *  books today, not a day already gone). */
+export function recurringVisitDay(nextFireAt: string | null | undefined, nowMs: number): string {
+  const today = ymdInZone(nowMs);
+  const t = nextFireAt ? Date.parse(nextFireAt) : NaN;
+  if (!Number.isFinite(t)) return today;
+  const day = ymdInZone(t);
+  return day > today ? day : today;
+}
+
+/** Everything due by the end of today (Central), as an ISO cutoff. The cron
+ *  runs once, early in the morning: a visit due at 9 AM today has to fire on
+ *  THIS run, not tomorrow's. (06:00 UTC = midnight CST / 1 AM CDT.) */
+export function recurringDueCutoff(nowMs: number): string {
+  return `${ymdInZone(nowMs, 1)}T06:00:00.000Z`;
+}
+
+/** The schedule note for a recurring visit: "🕐 09:00 · Recurring: Gutters". */
+export function recurringVisitNote(hour: number | null | undefined, title: string): string {
+  const h = Math.min(23, Math.max(0, Math.round(typeof hour === "number" ? hour : 9)));
+  return `🕐 ${String(h).padStart(2, "0")}:00 · Recurring: ${title}`;
 }
 
 /** Human-readable "Next: Mon Jan 6, 9am" for the Recurring list rows. */

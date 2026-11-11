@@ -12,6 +12,11 @@
  *      stamps the serviced unit's equipment.last_service_at — both
  *      best-effort: a failure never undoes or blocks the completion.
  *
+ * A job already paid in full (the customer paid up front) has nothing left to
+ * bill: marking it complete or invoiced writes "paid" instead, with paid_at,
+ * and tells the caller through `onSettled` (Jobs queues the review request
+ * there). Completion side effects still run.
+ *
  * UI questions (Jobs' "Paid but $X still owed", Work mode's finish-time and
  * unchecked-task prompts) stay in the screens, BEFORE calling this.
  *
@@ -19,6 +24,7 @@
  */
 import { db } from "./supabase";
 import { recordJobOutcome, jobActualHours, jobHasOpenEntries } from "./learning";
+import { isPaidUp } from "./job-send";
 import type { Job, Organization, ReviewRequest, TimeEntry } from "./types";
 
 export interface TransitionCtx {
@@ -32,6 +38,8 @@ export interface TransitionCtx {
   actualHours?: (job: Job) => number;
   /** Runs after the status write lands, before the side effects. */
   afterWrite?: () => Promise<void>;
+  /** Runs when a prepaid job went straight to "paid" (see the header). */
+  onSettled?: (jobId: string) => void;
   /** Test seams. */
   patch?: (table: string, id: string, patch: Record<string, unknown>) => Promise<boolean>;
   recordOutcome?: typeof recordJobOutcome;
@@ -42,8 +50,14 @@ export interface TransitionCtx {
  *  status write landed (side-effect failures don't change that). */
 export async function transitionJob(jobId: string, to: Job["status"], ctx: TransitionCtx): Promise<boolean> {
   const patch = ctx.patch ?? ((t, id, p) => db.patch(t, id, p));
-  if (!(await patch("jobs", jobId, { status: to }))) return false;
+  const before = ctx.jobs().find((j) => j.id === jobId) || ctx.fallbackJob;
+  const settles = (to === "complete" || to === "invoiced") && !!before && before.status !== "paid" && isPaidUp(before);
+  const write: Record<string, unknown> = settles
+    ? { status: "paid", paid_at: before?.paid_at || new Date(ctx.now?.() ?? Date.now()).toISOString() }
+    : { status: to };
+  if (!(await patch("jobs", jobId, write))) return false;
   if (ctx.afterWrite) await ctx.afterWrite();
+  if (settles) { try { ctx.onSettled?.(jobId); } catch { /* best-effort */ } }
 
   if (to === "complete") {
     const jobs = ctx.jobs();

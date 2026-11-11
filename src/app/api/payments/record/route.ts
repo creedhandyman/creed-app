@@ -15,7 +15,11 @@ export const dynamic = "force-dynamic";
  * recordJobPayment as Stripe charges, so paid-to-date, the balance and the
  * "paid only when covered" rule are identical either way.
  *
- * Body: { jobId, amount (dollars), method: cash|check|card|other, ref, skipReview? }
+ * Body: { jobId, amount (dollars), method: cash|check|card|other, ref, skipReview?, markPaid? }
+ *   markPaid = true → the owner picked the Paid status by hand, so a payment
+ *   that covers the job flips it to "paid" even if it was never marked
+ *   complete. Without it, paying a job in full before the work is done is a
+ *   prepayment: the money is recorded and the job stays where it is.
  *   ref = a client-generated uuid per tap → the idempotency key (a retried
  *   or double-tapped save can't record the payment twice).
  *   skipReview = true → don't schedule the automated review-request text
@@ -31,7 +35,7 @@ export async function POST(req: NextRequest) {
   if (prof instanceof NextResponse) return prof;
 
   const body = (await req.json().catch(() => ({}))) as {
-    jobId?: string; amount?: number; method?: string; ref?: string; skipReview?: boolean;
+    jobId?: string; amount?: number; method?: string; ref?: string; skipReview?: boolean; markPaid?: boolean;
   };
   const skipReview = body.skipReview === true;
   const amount = Math.round((Number(body.amount) || 0) * 100) / 100;
@@ -59,6 +63,7 @@ export async function POST(req: NextRequest) {
       platformFeeCents: 0,
       kind: method,
       skipReview,
+      forcePaid: body.markPaid === true,
       notify: skipReview ? false : { excludeUserId: prof.userId },
       source: "payments/record",
     });

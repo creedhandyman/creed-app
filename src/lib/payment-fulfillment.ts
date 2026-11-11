@@ -18,6 +18,13 @@ export interface RecordPaymentInput {
   jobTotal: number;              // dollars
   jobFeeCents: number;           // existing jobs.platform_fee_cents (fallback only)
   jobPaidAt: string | null;      // preserve an already-set paid_at
+  /** The job's status right now. A payment that covers the total only flips
+   *  the job to "paid" once the work is done (complete / invoiced / paid);
+   *  before that it is a prepayment and the job keeps its place in the
+   *  pipeline. Absent = unknown, treated as work done (the old behavior). */
+  jobStatus?: string | null;
+  /** The owner chose the Paid status by hand: flip it whatever the status. */
+  forcePaid?: boolean;
   sessionId: string;             // Stripe Checkout session id — the idempotency key
   paymentIntentId: string | null;
   paidNow: number;               // dollars charged in this session
@@ -33,6 +40,10 @@ export interface RecordPaymentResult {
   total: number;
   balance: number;
   fullyPaid: boolean;
+  /** The job is now "paid": fully paid AND its work is done (or the owner
+   *  marked it Paid by hand). A job paid in full up front is fullyPaid but
+   *  not settled; it settles when it is completed (lib/job-transition). */
+  settled: boolean;
   alreadyRecorded: boolean;
   /** Dollars refunded right away because this charge overpaid the job. */
   refundedExcess?: number;
@@ -121,7 +132,12 @@ export async function recordJobPayment(
     platform_fee_cents:
       ledgerFeeCents ?? (Number(p.jobFeeCents) || 0) + (alreadyRecorded ? 0 : platformFeeCents),
   };
-  if (fullyPaid) {
+  // Paid in full BEFORE the work is done is a prepayment, not a finished job:
+  // flipping it to "paid" took it off the Active tab and the crew's lists and
+  // queued the review request before anyone had shown up. It stays where it
+  // is and settles when the job is completed (lib/job-transition).
+  const settled = fullyPaid && (!!p.forcePaid || p.jobStatus == null || workIsDone(p.jobStatus));
+  if (settled) {
     patch.status = "paid";
     patch.paid_at = p.jobPaidAt || new Date().toISOString();
   }
@@ -129,7 +145,7 @@ export async function recordJobPayment(
   const error = await patchJob(supabase, jobId, orgId, patch);
   if (error) throw new Error(error);
 
-  return { amountPaid, total, balance, fullyPaid, alreadyRecorded };
+  return { amountPaid, total, balance, fullyPaid, settled, alreadyRecorded };
 }
 
 // ── Shared ledger plumbing (payments AND refunds) ───────────────────────────
@@ -157,6 +173,11 @@ function isMissingTable(e: { code?: string; message: string }): boolean {
 /** A paid-to-date that covers the total (1¢ slack) — the ONLY thing that makes a job "paid". */
 function coversTotal(amountPaid: number, total: number): boolean {
   return total > 0 && amountPaid >= total - 0.01;
+}
+
+/** Statuses where the work itself is finished, so full payment closes the job. */
+function workIsDone(status: string): boolean {
+  return status === "complete" || status === "invoiced" || status === "paid";
 }
 
 /** Org-scoped jobs update. Pre-migration (no amount_paid column) it retries
@@ -193,6 +214,9 @@ export interface FulfillPaymentInput {
   tipCents?: number;
   /** Don't schedule the review-request text even if this settles the job. */
   skipReview?: boolean;
+  /** The owner chose the Paid status by hand (Jobs → Paid → record the
+   *  payment): the job becomes "paid" even if it was never marked complete. */
+  forcePaid?: boolean;
   /** Owner/manager alert: default on. `false` = none (bulk cleanups);
    *  `{excludeUserId}` = everyone but the person who recorded it. */
   notify?: boolean | { excludeUserId: string };
@@ -226,7 +250,7 @@ export async function fulfillJobPayment(
 ): Promise<FulfillPaymentResult> {
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
-    .select("id, org_id, total, platform_fee_cents, paid_at")
+    .select("id, org_id, total, platform_fee_cents, paid_at, status")
     .eq("id", p.jobId)
     .maybeSingle();
   if (jobErr || !job) return { ok: false, reason: "job_not_found" };
@@ -238,6 +262,8 @@ export async function fulfillJobPayment(
     jobTotal: Number(job.total) || 0,
     jobFeeCents: Number(job.platform_fee_cents) || 0,
     jobPaidAt: job.paid_at ?? null,
+    jobStatus: job.status ?? null,
+    forcePaid: p.forcePaid,
     sessionId: p.sessionId,
     paymentIntentId: p.paymentIntentId,
     paidNow: p.paidNow,
@@ -247,8 +273,9 @@ export async function fulfillJobPayment(
   });
 
   // Only ask for a review once the job is actually settled — never after a
-  // deposit. Best-effort; the cron at /api/reviews/dispatch sends it later.
-  if (result.fullyPaid && !p.skipReview) {
+  // deposit, and never for a job paid up front whose work isn't done yet.
+  // Best-effort; the cron at /api/reviews/dispatch sends it later.
+  if (result.settled && !p.skipReview) {
     await scheduleReviewRequest(supabase, job.id).catch((e) => {
       console.error(`[${p.source}] review-request schedule failed:`, e);
     });

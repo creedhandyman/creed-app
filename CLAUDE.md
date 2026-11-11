@@ -1282,6 +1282,35 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Jobs that got lost (2026-11-11)**: four holes where a job dropped out of
+  every list. (1) **Paid up front**: `recordJobPayment` flips a job to "paid"
+  only when the money covers the total AND the work is done (status complete /
+  invoiced / paid) or the owner chose Paid by hand (`forcePaid`; the Jobs Paid
+  choice and bulk Paid send `markPaid` to `/api/payments/record`). Otherwise it
+  is a prepayment: `amount_paid` is recorded, status and `paid_at` are left,
+  no review request (`result.settled` false, `fullyPaid` true). The job closes
+  when it's completed: `transitionJob` writes "paid" + `paid_at` instead of
+  complete / invoiced for a job that `isPaidUp` (lib/job-send), and calls
+  `onSettled`; the Jobs single-job status change then POSTs
+  `/api/reviews/queue` (any org member, job must be "paid") so the automatic
+  review text still goes out. Bulk changes and Work mode don't queue it (Work
+  mode already shows the review prompt). Job detail shows "Paid in full ·
+  closes when the job is completed"; /status shows Paid. (2) **Recurring
+  jobs**: `/api/recurring/fire` now also inserts the schedule row (visit day =
+  `recurringVisitDay`, note `recurringVisitNote`), and fires everything due by
+  the end of today Central (`recurringDueCutoff`), not just what's due by the
+  3 AM run. Membership visits still get no calendar row (no promised day).
+  (3) **"scheduled" with nothing on the calendar** now shows in every
+  needs-scheduling list (`day-plan readyToBook`: Schedule day + Dispatch
+  lists, Home "to schedule", the Dispatch planner pool), and Unschedule on a
+  job's LAST visit moves it back (`statusAfterUnschedule`: approved or never
+  sent → accepted, sent but unapproved → quoted). (4) **Reminders**: a second
+  cron, `/api/sms/reminders/today` (14:00 UTC; calls the same route with `when=today`), texts "today" for visits
+  the evening run missed (booked after it, or moved); it skips visits booked
+  that same morning or already started. Moving a visit to another day clears
+  `schedule.reminder_sent_at`. Tests: `lost-jobs.test.ts` + additions to
+  `payment-fulfillment.test.ts` / `job-transition.test.ts`.
+
 - **AI draft quotes for website leads (2026-10-24)**: `/api/leads` (public
   intake: the creedhandyman.com form + the app's /lead/<slug> page) now runs
   `lib/lead-draft.ts draftLeadQuote` in Next's `after()` (route maxDuration

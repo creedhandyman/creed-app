@@ -19,6 +19,9 @@ export interface TextVars {
   minutes?: number;
   /** Day-before reminder: "HH:MM" 24h, or "" when the visit has no time. */
   time?: string;
+  /** Reminder sent the morning OF the visit (booked or moved after the
+   *  evening run): says "today" instead of "tomorrow". */
+  sameDay?: boolean;
   /** Job done (customer): the job total. Invoice: the balance still due. */
   amount?: number;
   /** Status / pay link (customers and property managers only). */
@@ -56,7 +59,7 @@ export function textBody(kind: SmsKind, v: TextVars): string {
         : `${hi}Work at ${prop} is complete. Total: ${money(v.amount)}.${link ? ` View & pay: ${link}` : ""}`;
     case "reminder": {
       const at = clock12(v.time);
-      return `${hi}This is ${biz}. A reminder that we'll be at ${prop} tomorrow${at ? ` at ${at}` : ""}. See you then!`;
+      return `${hi}This is ${biz}. A reminder that we'll be at ${prop} ${v.sameDay ? "today" : "tomorrow"}${at ? ` at ${at}` : ""}. See you then!`;
     }
     case "invoice":
       return `${hi}A friendly reminder from ${biz}: ${money(v.amount)} is still due for the work at ${prop}.${link ? ` View & pay: ${link}` : ""}`;

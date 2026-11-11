@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { peekNavIntent, clearNavIntent, goWithIntent } from "@/lib/nav-intent";
-import { parseSchedTime, parseSchedCrew, entryJob, isJobScheduled } from "@/lib/day-plan";
+import { parseSchedTime, parseSchedCrew, entryJob, isJobScheduled, readyToBook, statusAfterUnschedule } from "@/lib/day-plan";
 import { stripNoteParts } from "@/lib/dispatch-week";
 import BookingRequests from "@/components/BookingRequests";
 import type { ScheduleEntry } from "@/lib/types";
@@ -287,6 +287,9 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     if (editSched) {
       // Edit / move an existing entry.
       const patch: Record<string, unknown> = { sched_date: dropTarget, note };
+      // Moved to another day: the customer was reminded about the OLD day (or
+      // not yet at all), so let the reminder go out again for the new one.
+      if (editSched.sched_date !== dropTarget) patch.reminder_sent_at = null;
       // Set end_date for a multi-day range, or clear it when an existing
       // multi-day entry is shortened to a single day. Left untouched for
       // single→single edits so the column isn't referenced pre-migration.
@@ -438,6 +441,15 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     sendScheduleNotices(noticesFor(editSched, null));
     setArmedJob(null); setDropTarget(null); setQsNote("");
     await loadAll();
+    // That was the job's last visit: take it back out of "scheduled", or it
+    // sits there with nothing on the calendar. Read from the fresh load, so
+    // a delete that failed (entry still there) changes nothing.
+    const fresh = useStore.getState();
+    const linked = entryJob(editSched, fresh.jobs);
+    if (linked && !fresh.schedule.some((e) => e.id === editSched.id) && !isJobScheduled(linked, fresh.schedule)) {
+      const back = statusAfterUnschedule(linked);
+      if (back && await db.patch("jobs", linked.id, { status: back })) await loadAll();
+    }
     useStore.getState().showToast(t("sched.removedFromSchedule"), "info");
   };
 
@@ -724,7 +736,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
         const ds = ymd(viewDate);
         const dayEntries = schedule.filter((s) => spansDay(s, ds) && matchesWorker(s))
           .sort((a, b) => (parseTime(a.note) || "99:99").localeCompare(parseTime(b.note) || "99:99"));
-        const unscheduled = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !isScheduled(j));
+        const unscheduled = jobs.filter((j) => !j.archived && (readyToBook(j.status) || j.status === "quoted") && !isScheduled(j));
         return (
           <div className="mb">
             {dayEntries.length === 0 && (
@@ -850,9 +862,9 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
 
       {/* ── DISPATCH VIEW — assign jobs to days + techs ── */}
       {view === "dispatch" && (() => {
-        const needScheduling = jobs.filter((j) => !j.archived && (j.status === "accepted" || j.status === "quoted") && !isScheduled(j));
+        const needScheduling = jobs.filter((j) => !j.archived && (readyToBook(j.status) || j.status === "quoted") && !isScheduled(j));
         // Approved work is ready to book — list it ahead of quotes still waiting on the customer.
-        const approvedJobs = needScheduling.filter((j) => j.status === "accepted");
+        const approvedJobs = needScheduling.filter((j) => readyToBook(j.status));
         const quotedJobs = needScheduling.filter((j) => j.status === "quoted");
         const groupHeader = (label: string) => (
           <div style={{ fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--color-dim)", fontWeight: 600, margin: "8px 2px 6px" }}>{label}</div>

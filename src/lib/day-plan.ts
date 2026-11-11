@@ -92,6 +92,23 @@ export function entryJob(e: Pick<ScheduleEntry, "job" | "job_id">, jobs: Job[]):
 /** Is this job on the calendar? Linked entries count only for their own job.
  *  A legacy (unlinked) entry at the same address counts only if it isn't
  *  older than the job — an old job's visit must not hide a new one there. */
+/** Work that's ready to book. "scheduled" counts too: a job can carry that
+ *  status with NOTHING on the calendar (a recurring or membership visit the
+ *  cron just created, or a visit that was removed), and it used to appear in
+ *  no "needs scheduling" list at all. Always pair with !isJobScheduled. */
+export const readyToBook = (status?: string | null): boolean => status === "accepted" || status === "scheduled";
+
+/** What a job goes back to when its last calendar visit is removed: approved
+ *  work stays approved; a quote that was sent and never approved goes back to
+ *  waiting on the customer. Null = leave the status alone. */
+export function statusAfterUnschedule(
+  job: Pick<Job, "status" | "client_signature" | "approved_at" | "quote_sent_at">,
+): Job["status"] | null {
+  if (job.status !== "scheduled") return null;
+  const approved = !!job.client_signature || !!job.approved_at;
+  return !approved && job.quote_sent_at ? "quoted" : "accepted";
+}
+
 export const isJobScheduled = (j: { id: string; property: string; created_at?: string }, schedule: ScheduleEntry[]) =>
   schedule.some((e) => e.job_id
     ? e.job_id === j.id

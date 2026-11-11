@@ -12,7 +12,12 @@ import { notifyManagers } from "@/lib/notify-server";
 export const dynamic = "force-dynamic";
 
 /**
- * Daily cron (5 PM Central): day-before visit reminders.
+ * Daily cron (5 PM Central): day-before visit reminders. A second run each
+ * morning (`/api/sms/reminders/today` = `?when=today`, 14:00 UTC = 8 AM CST / 9 AM CDT) catches the visits
+ * the evening run couldn't: booked after it ran, or moved onto today/tomorrow
+ * after their reminder had gone out (Schedule clears `reminder_sent_at` when a
+ * visit changes day). It texts "today", and skips a visit whose time has
+ * already passed.
  *
  * Opt-in per business (organizations.auto_sms_reminder, Operations → Settings,
  * OFF by default). For each schedule row on TOMORROW (Central time) that is
@@ -29,7 +34,7 @@ export const dynamic = "force-dynamic";
 const MAX_PER_RUN = 100;
 const SKIP_STATUSES = new Set(["complete", "invoiced", "paid"]);
 
-interface SchedRow { id: number; org_id: string; job_id: string; sched_date: string; note: string | null }
+interface SchedRow { id: number; org_id: string; job_id: string; sched_date: string; note: string | null; created_at?: string | null }
 interface JobRow {
   id: string; org_id: string; property: string | null; client: string | null;
   customer_id: string | null; rooms: string | null; status: string | null; archived: boolean | null;
@@ -38,6 +43,7 @@ interface JobRow {
 async function handle(req: NextRequest): Promise<NextResponse> {
   if (!cronAuth(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const dry = req.nextUrl.searchParams.get("dry") === "1";
+  const sameDay = req.nextUrl.searchParams.get("when") === "today";
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
   const { data: orgs, error: oErr } = await supabase
@@ -53,10 +59,12 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   const orgName = new Map<string, string>(orgs.map((o) => [o.id as string, (o.name as string) || ""]));
 
   // Central time for now (every business on Creed is in Wichita today).
-  const tomorrow = ymdInZone(Date.now(), 1);
+  // `tomorrow` = the visit day this run reminds about (today on the morning run).
+  const tomorrow = ymdInZone(Date.now(), sameDay ? 0 : 1);
+  const nowHHMM = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Chicago", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
   const { data: rows, error: sErr } = await supabase
     .from("schedule")
-    .select("id, org_id, job_id, sched_date, note")
+    .select("id, org_id, job_id, sched_date, note, created_at")
     .in("org_id", [...orgName.keys()])
     .eq("sched_date", tomorrow)
     .not("job_id", "is", null)
@@ -101,6 +109,13 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     const customer = job.customer_id ? customers.get(job.customer_id) : undefined;
     const to = textRecipient("reminder", job, customer);
     const time = parseSchedTime(row.note);
+    // Morning-of run: a visit that has already started needs no reminder,
+    // and neither does one booked this same morning (they just agreed to it).
+    const bookedToday = !!row.created_at && ymdInZone(Date.parse(row.created_at)) === tomorrow;
+    if (sameDay && (bookedToday || (!!time && time.padStart(5, "0") <= nowHHMM))) {
+      results.push({ schedule_id: row.id, job_id: job.id, via: "skipped" });
+      continue;
+    }
 
     if (dry) {
       results.push({ schedule_id: row.id, job_id: job.id, via: to.ok ? `sms:${to.role}` : "owner", ...(to.ok ? {} : { error: to.reason }) });
@@ -121,7 +136,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
         jobId: job.id,
         type: "visit_reminder",
         title: "Reminder not sent",
-        body: `Tomorrow's reminder for ${job.property || "a job"} didn't go out. ${to.message}`,
+        body: `${sameDay ? "Today" : "Tomorrow"}'s reminder for ${job.property || "a job"} didn't go out. ${to.message}`,
       });
       results.push({ schedule_id: row.id, job_id: job.id, via: "owner", error: to.reason });
       continue;
@@ -133,6 +148,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       business: orgName.get(job.org_id),
       property: job.property,
       time,
+      sameDay,
     });
     const r = await sendLoggedSms(supabase, { orgId: job.org_id, jobId: job.id, to: to.phone, body, kind: "reminder", role: to.role });
     results.push({ schedule_id: row.id, job_id: job.id, via: r.ok ? `sms:${to.role}` : "failed", ...(r.ok ? {} : { error: r.error }) });

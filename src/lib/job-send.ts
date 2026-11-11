@@ -26,6 +26,14 @@ export function balanceOf(job: { total?: number | null; amount_paid?: number | n
   return { paid, due };
 }
 
+/** Paid in full: a real total, money received, nothing left owing. On a job
+ *  whose work isn't done yet this is a prepayment (the job keeps its status
+ *  until it is completed, then goes straight to Paid). */
+export function isPaidUp(job: { total?: number | null; amount_paid?: number | null }): boolean {
+  const { paid, due } = balanceOf(job);
+  return (Number(job.total) || 0) > 0 && paid > 0 && due <= 0.009;
+}
+
 /** The invoice text: the balance and the job link (the customer pays there). */
 export function invoiceText(
   job: { client?: string | null; property?: string | null; total?: number | null; amount_paid?: number | null },
