@@ -2327,7 +2327,8 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     applies it: ±5% dead band; a raise scales every line; a TRIM touches only
     lines ≥ 1h (owner edits cut big lines and RAISE small ones), never T&M
     lines, never below the flooring per-sqft minimum (`flooringFloorHrs`).
-    Creed's factor on 2026-11-10 ≈ 0.92. Trims show as a note. Tested in
+    Creed's factor on 2026-11-10 ≈ 0.95 overall (General 0.85, Carpentry
+    0.94; the other trades sit inside the dead band). Trims show as a note. Tested in
     `labor-calibration.test.ts` (incl. the real 18-job snapshot).
   - **Grounding replaces the old "learned pricing" lessons**
     (`lib/quote-grounding.ts`, pure, tested). The old block keyed on a line's
@@ -2357,8 +2358,14 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     reads corrections newest-first.
   NOT changed, on purpose: the prompt's "hours historically run LOW" nudge and
   the PAST JOB DURATIONS block (dropping them together with a downward factor
-  would compound) — revisit once the factor settles. Known gaps: a job
-  reopened after completion keeps its `__jobraw__` rows; `/api/ai`
+  would compound) — revisit once the factor settles. 
+  **Reopened jobs don't teach** (`lib/learning-rows.ts`, tested): clients
+  can't delete price_corrections rows, so on READ the quoter drops the
+  `job_completion` rows (line hours + `__job__`/`__jobraw__`) of any job whose
+  current status is back before complete (`ParserDeps.getJobStatuses`; the
+  app asks Supabase for those job ids' statuses each parse). Unknown status
+  (deleted job, failed lookup) keeps the rows; finishing the job again
+  writes fresh ones. Known gap: `/api/ai`
   MAX_TOKENS_CEILING is still 16000 (2 of 136 parses hit it). The grounding's
   effect on live quotes has not been measured — compare `aiHrs` vs clocked on
   jobs quoted after this date.

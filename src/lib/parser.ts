@@ -6,6 +6,7 @@ import { TRADE_CATEGORY_LIST, canonicalDetail, isSuppliesOnlyLine } from "./line
 import { withTimeout } from "./pdf-detect";
 import { buildGrounding, type KbRow } from "./quote-grounding";
 import { salvageJson } from "./json-salvage";
+import { completionJobIds, dropUnfinishedJobRows } from "./learning-rows";
 
 /* ====== PDF LOADING ====== */
 
@@ -1545,6 +1546,20 @@ export interface ParserDeps {
   callAi?: (body: Record<string, unknown>) => Promise<Response>;
   /** The repair knowledge base (price_book: shared rows + this org's). */
   getPriceBook?: () => Promise<KbRow[]>;
+  /** Current status of these jobs, by id (see learning-rows.ts). */
+  getJobStatuses?: (ids: string[]) => Promise<Record<string, string>>;
+}
+
+/** Job statuses for the signed-in app (RLS = own org). Silent on failure:
+ *  no statuses means every learning row counts, as before. */
+async function loadJobStatuses(ids: string[]): Promise<Record<string, string>> {
+  try {
+    const { data, error } = await supabase.from("jobs").select("id, status").in("id", ids.slice(0, 500));
+    if (error || !Array.isArray(data)) return {};
+    return Object.fromEntries(data.map((j) => [j.id as string, j.status as string]));
+  } catch {
+    return {};
+  }
 }
 
 /** price_book for the signed-in app: read once per page load through RLS
@@ -1661,11 +1676,22 @@ async function aiParsePdfSingle(
     // lines, receipt prices) — matched to this request by buildGrounding below.
     let groundingRows: Parameters<typeof buildGrounding>[0]["corrections"] = [];
     try {
-      const corrections = deps?.getCorrections ? await deps.getCorrections() : await db.get<{
+      const fetched = deps?.getCorrections ? await deps.getCorrections() : await db.get<{
         item_name: string; original_hours: number; corrected_hours: number;
         original_mat_cost: number; corrected_mat_cost: number; trade: string;
         zip?: string; job_id?: string; source?: string; created_at?: string;
       }>("price_corrections");
+      // A job moved back out of "complete" is not finished: leave its
+      // completion rows out of the calibration and the past-work list.
+      let corrections = fetched;
+      const doneIds = completionJobIds(fetched);
+      if (doneIds.length > 0) {
+        let statuses: Record<string, string> = {};
+        try {
+          statuses = deps ? (deps.getJobStatuses ? await deps.getJobStatuses(doneIds) : {}) : await loadJobStatuses(doneIds);
+        } catch { /* keep every row */ }
+        corrections = dropUnfinishedJobRows(fetched, statuses);
+      }
       if (corrections.length > 0) {
         // Smarter weighting: process newest-first so recent corrections survive
         // the per-item cap and keep the model current, and de-dupe

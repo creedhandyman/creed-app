@@ -95,6 +95,10 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
         .order("created_at", { ascending: false }).limit(2000);
       return (data || []) as Awaited<ReturnType<NonNullable<ParserDeps["getCorrections"]>>>;
     },
+    getJobStatuses: async (ids) => {
+      const { data } = await supabase.from("jobs").select("id, status").eq("org_id", orgId).in("id", ids.slice(0, 500));
+      return Object.fromEntries((data || []).map((j: { id: string; status: string }) => [j.id, j.status]));
+    },
     getPriceBook: async () => {
       const { data } = await supabase.from("price_book")
         .select("item_name, labor_hours, labor_hours_low, labor_hours_high, unit, scope, active, meta")
