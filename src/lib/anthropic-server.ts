@@ -7,6 +7,15 @@
  * own model / max_tokens / tools; this owns the key, headers, fallback + log.
  */
 import { logAiUsage, type AiUsageLog } from "./ai-usage";
+import { readMessageStream } from "./anthropic-stream";
+
+/** Replies allowed to run longer than this are read as a stream, so a slow
+ *  one can be stopped at the deadline and returned partial instead of dying
+ *  with the server function (see anthropic-stream.ts). */
+export const STREAM_ABOVE_TOKENS = 16000;
+/** How long a streamed reply may run. The routes that make long calls allow
+ *  300s; this leaves room for auth, the usage log and the response. */
+export const STREAM_DEADLINE_MS = 255_000;
 
 // Approx Anthropic $/million tokens for cost estimation (Phase 0 measurement).
 // Estimates only — refine against the real invoice; used for relative tracking.
@@ -24,6 +33,7 @@ const PRICING: Record<string, { in: number; out: number; cacheWrite: number; cac
 export async function callClaude(
   body: Record<string, unknown>,
   log: AiUsageLog,
+  opts: { deadlineMs?: number } = {},
 ): Promise<{ status: number; data: Record<string, unknown> }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { status: 500, data: { error: "ANTHROPIC_API_KEY not configured" } };
@@ -35,7 +45,9 @@ export async function callClaude(
   // check stop_reason (the parse, AI Assist and Troubleshoot do). If the
   // fallback option itself is ever rejected, retry once without it rather
   // than break every AI call.
-  const send = (b: Record<string, unknown>, beta?: string) =>
+  const startedAt = Date.now();
+  const stream = Number(body.max_tokens) > STREAM_ABOVE_TOKENS && body.stream === undefined;
+  const post = (b: Record<string, unknown>, beta?: string) =>
     fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -44,17 +56,29 @@ export async function callClaude(
         "anthropic-version": "2023-06-01",
         ...(beta ? { "anthropic-beta": beta } : {}),
       },
-      body: JSON.stringify(b),
+      body: JSON.stringify(stream ? { ...b, stream: true } : b),
     });
+  const send = async (b: Record<string, unknown>, beta?: string): Promise<{ status: number; data: Record<string, unknown> }> => {
+    const response = await post(b, beta);
+    if (!stream || !response.ok || !response.body) return { status: response.status, data: await response.json() };
+    const { message, error } = await readMessageStream(response.body, {
+      deadlineAt: startedAt + (opts.deadlineMs ?? STREAM_DEADLINE_MS),
+    });
+    // An error after the stream opened (overloaded, …) — report it the way a
+    // failed non-streamed call would be.
+    if (error) return { status: 502, data: { type: "error", error } };
+    return { status: response.status, data: message };
+  };
   const withFallback = body.model === "claude-sonnet-5-5" && body.fallbacks === undefined;
   let response = withFallback
     ? await send({ ...body, fallbacks: "default" }, "server-side-fallback-2026-07-01")
     : await send(body);
-  let data = await response.json();
-  if (withFallback && response.status === 400 && /fallback|beta/i.test(String(data?.error?.message ?? ""))) {
-    console.warn("[ai] server-side fallback rejected — retrying without it:", data?.error?.message);
+  let data = response.data;
+  const errMessage = (d: Record<string, unknown>) => String((d.error as { message?: unknown } | undefined)?.message ?? "");
+  if (withFallback && response.status === 400 && /fallback|beta/i.test(errMessage(data))) {
+    console.warn("[ai] server-side fallback rejected — retrying without it:", errMessage(data));
     response = await send(body);
-    data = await response.json();
+    data = response.data;
   }
 
   // Phase 0 — best-effort AI usage logging. Never blocks or breaks the

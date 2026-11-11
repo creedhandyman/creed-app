@@ -3,15 +3,16 @@ import { requireAuth } from "@/lib/api-auth";
 import { callClaude } from "@/lib/anthropic-server";
 
 export const dynamic = "force-dynamic";
-// A quote parse is a non-streaming call that writes ~10-13K tokens; say so
+// A quote parse writes up to 32K tokens and can take minutes; say so
 // explicitly rather than lean on the platform default (15s off Fluid compute
-// would fail every parse).
+// would fail every parse). callClaude streams the long ones and stops at its
+// own deadline inside this limit, returning the partial reply.
 export const maxDuration = 300;
 
 // Defense-in-depth on top of auth: cap the work a single call can request so a
 // compromised/abusive session can't run up the Anthropic bill, and never let
 // the caller pick a non-Claude model.
-const MAX_TOKENS_CEILING = 16000;
+const MAX_TOKENS_CEILING = 32000;
 const MAX_BODY_BYTES = 6_000_000; // inspection pages ride as base64 image blocks
 
 export async function POST(req: NextRequest) {

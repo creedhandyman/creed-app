@@ -106,7 +106,8 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
       return (data || []) as Awaited<ReturnType<NonNullable<ParserDeps["getPriceBook"]>>>;
     },
     callAi: async (body) => {
-      const { status, data } = await callClaude(body, { orgId, callType: "lead_draft" });
+      // The lead route has already spent part of its 300s saving the lead.
+      const { status, data } = await callClaude(body, { orgId, callType: "lead_draft" }, { deadlineMs: 230_000 });
       return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
     },
   });

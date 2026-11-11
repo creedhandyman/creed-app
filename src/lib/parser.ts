@@ -1535,6 +1535,9 @@ const setAiError = (m: string) => { _lastAiError = m; };
  * phone — the server drafting a quote for a website lead (lib/lead-draft.ts).
  * Omitted = the app's normal path (db.get with the user's session + /api/ai).
  */
+/** Output room for one quote parse. /api/ai clamps to its own ceiling. */
+export const PARSE_MAX_TOKENS = 32000;
+
 export interface ParserDeps {
   /** This org's price_corrections rows (learned pricing + labor calibration). */
   getCorrections?: () => Promise<Array<{
@@ -2003,7 +2006,10 @@ ${cleanText.slice(0, INPUT_TEXT_CAP)}`
       // thinking tokens on the bill or eating the output budget).
       thinking: { type: "between_tools" },
       output_config: { effort: "high" },
-      max_tokens: 16000,
+      // Room for a whole-house make-ready (a line is ~100 tokens). Replies
+      // this long are streamed server-side and stopped at a deadline, so a
+      // slow one comes back cut off (salvaged below), never lost.
+      max_tokens: PARSE_MAX_TOKENS,
       // Prompt caching: static rules FIRST (cache-hot on every call), then the
       // per-org learned-pricing block (cache-hot within a same-ZIP session),
       // then the volatile per-job header LAST so it never busts the cached

@@ -101,6 +101,54 @@ describe("callClaude", () => {
     expect(inserts[0]).toMatchObject({ call_type: "other", input_tokens: 0, est_cost: 0 });
   });
 
+  it("streams a long-output call, and returns a partial reply at the deadline", async () => {
+    const enc = new TextEncoder();
+    const sse = (ev: Record<string, unknown>) => `data: ${JSON.stringify(ev)}
+
+`;
+    const head =
+      sse({ type: "message_start", message: { model: "claude-sonnet-5-5", content: [], stop_reason: null, usage: { input_tokens: 1000, output_tokens: 1 } } }) +
+      sse({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }) +
+      sse({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: '{"rooms":[' } });
+    const tail =
+      sse({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "]}" } }) +
+      sse({ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 20000 } }) +
+      sse({ type: "message_stop" });
+    const reply = (chunks: string[], hang: boolean) => {
+      let i = 0;
+      return {
+        status: 200, ok: true,
+        body: new ReadableStream<Uint8Array>({
+          pull(c) {
+            if (i < chunks.length) c.enqueue(enc.encode(chunks[i++]));
+            else if (!hang) c.close();
+            else return new Promise<void>(() => undefined);
+          },
+        }),
+      } as unknown as Response;
+    };
+    const sent: Record<string, unknown>[] = [];
+    let next = reply([head, tail], false);
+    global.fetch = jest.fn(async (_u: unknown, init?: RequestInit) => { sent.push(JSON.parse(String(init?.body))); return next; }) as typeof fetch;
+
+    const done = await callClaude({ model: "claude-sonnet-5-5", max_tokens: 32000, messages: [] }, { callType: "parse" });
+    expect(sent[0]).toMatchObject({ stream: true, max_tokens: 32000, fallbacks: "default" });
+    expect(done.status).toBe(200);
+    expect(done.data).toMatchObject({ stop_reason: "end_turn", content: [{ type: "text", text: '{"rooms":[]}' }] });
+    expect(inserts[0]).toMatchObject({ call_type: "parse", output_tokens: 20000 });
+
+    next = reply([head], true);
+    const cut = await callClaude({ model: "claude-sonnet-5-5", max_tokens: 32000, messages: [] }, { callType: "parse" }, { deadlineMs: 40 });
+    expect(cut.status).toBe(200);
+    expect(cut.data).toMatchObject({ stop_reason: "max_tokens", cut: "deadline", content: [{ type: "text", text: '{"rooms":[' }] });
+  });
+
+  it("does not stream ordinary calls", async () => {
+    fakeFetch([{ status: 200, body: okReply }]);
+    await callClaude({ model: "claude-sonnet-5-5", max_tokens: 16000, messages: [] }, {});
+    expect((calls[0].body as Record<string, unknown>).stream).toBeUndefined();
+  });
+
   it("leaves non-5.5 models and an explicit fallbacks value alone", async () => {
     fakeFetch([{ status: 200, body: okReply }]);
     await callClaude({ model: "claude-sonnet-5", messages: [] }, {});

@@ -2365,8 +2365,20 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   current status is back before complete (`ParserDeps.getJobStatuses`; the
   app asks Supabase for those job ids' statuses each parse). Unknown status
   (deleted job, failed lookup) keeps the rows; finishing the job again
-  writes fresh ones. Known gap: `/api/ai`
-  MAX_TOKENS_CEILING is still 16000 (2 of 136 parses hit it). The grounding's
+  writes fresh ones.
+  **Output cap 16000 → 32000 for the quote parse** (`PARSE_MAX_TOKENS`;
+  `/api/ai` MAX_TOKENS_CEILING 32000). A reply that long can outlast the
+  route's 300s limit, which would lose the whole quote, so `callClaude`
+  STREAMS any call with `max_tokens` > `STREAM_ABOVE_TOKENS` (16000) and
+  rebuilds the normal message object (`lib/anthropic-stream.ts`
+  `readMessageStream`, tested). At `STREAM_DEADLINE_MS` (255s; lead draft
+  230s) it cancels the stream and returns what was written with
+  `stop_reason: "max_tokens"` + `cut: "deadline"` — the parser's salvage then
+  keeps every complete line. Calls at ≤ 16000 are unchanged (not streamed).
+  Don't raise `maxDuration` past 300 without checking the Vercel plan/Fluid
+  setting (a rejected value fails the build). Not measured: how fast Sonnet
+  5.5 actually writes — if cut-off notes show up on big quotes with
+  `cut: "deadline"`, time is the limit, not tokens. The grounding's
   effect on live quotes has not been measured — compare `aiHrs` vs clocked on
   jobs quoted after this date.
 - **Models**: quote parse, ping, voice walk, AI Assist, lead draft and the tax
