@@ -1282,6 +1282,19 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
 
 ## Big systems shipped recently (for context)
 
+- **Follow-ups (2026-11-11)**: (1) A lead that opens on its automatic draft
+  (`leadDraft`) shows an "Automatic draft" card in the quote editor with
+  **Edit request & rebuild** (QuoteForge `leadDraftSeed`, only while the job
+  is still a lead): one confirm, then the Quick Quote review step with the
+  customer's text + photos; Generate replaces the draft's lines. (2) The X on
+  a job photo now also deletes the stored file: after the blob write lands,
+  Jobs POSTs `/api/jobs/photo-file` (owner/manager). It deletes only a
+  job-photo file (`lib/photo-file.ts jobPhotoPath`: gallery/, quickquote/,
+  leads/, portal-leads/, inspections/, ai-renders/ in the public bucket;
+  never logos, avatars, card, equipment or sms/) that NO job's `rooms` text
+  still mentions (any business), so a photo shared with another job, a lead
+  or a render's source stays. Any doubt = the file is kept.
+
 - **Jobs that got lost (2026-11-11)**: four holes where a job dropped out of
   every list. (1) **Paid up front**: `recordJobPayment` flips a job to "paid"
   only when the money covers the total AND the work is done (status complete /

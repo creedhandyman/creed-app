@@ -864,7 +864,16 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     const st = useStore.getState();
     if (!await st.showConfirm(t("jobs.removePhotoTitle"), t("jobs.removePhotoBody"), { danger: true, confirmLabel: t("common.remove") })) return;
     const r = await patchBlob(jobId, removePhoto(url));
-    if (r.ok) st.showToast(t("jobs.photoRemoved"), "success");
+    if (r.ok) {
+      st.showToast(t("jobs.photoRemoved"), "success");
+      // Now that it's off the job, delete the stored file too, unless another
+      // job still uses it (the server checks). Best-effort and silent.
+      void apiFetch("/api/jobs/photo-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, url }),
+      }).catch(() => { /* the file just stays in storage */ });
+    }
     else if (r.reason === "network" || r.reason === "no-job" || r.reason === "unreadable") st.showToast(t("jobs.photoNotRemoved"), "error");
     // "rejected": the database write already showed its own message.
   };

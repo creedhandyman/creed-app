@@ -356,6 +356,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // the owner can read and edit it, and the AI runs from the edited text when
   // they tap Generate. (It used to auto-run the moment the lead opened.)
   const [leadReview, setLeadReview] = useState(false);
+  // Set when a lead opens on the quote the server already drafted from the
+  // request (leadDraft). That draft was built before anyone read the request,
+  // so the editor offers "Edit request & rebuild": back to the Quick Quote
+  // review step with the customer's text and photos, then Generate.
+  const [leadDraftSeed, setLeadDraftSeed] = useState<{ id: string; desc: string; photos: string[] } | null>(null);
   // A lead whose AI-built quote is still waiting as an edit draft opens the
   // Resume / Discard card instead of re-running the AI. Its request is kept
   // here so Discard can seed Quick Quote the original way.
@@ -733,6 +738,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setAddressId(job.address_id || undefined);
     setEditingId(job.id);
     leadSeedRef.current = null;
+    setLeadDraftSeed(null);
     setResidentPatch(null);
 
     try {
@@ -784,6 +790,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       } else if (leadDraftRooms) {
         loadedRooms = validateQuote(leadDraftRooms, { skipCaps: true });
         setRooms(loadedRooms);
+        setLeadDraftSeed({
+          id: job.id,
+          desc: typeof data?.leadDescription === "string" ? data.leadDescription : "",
+          photos: (leadPhotos as unknown[]).filter((u): u is string => typeof u === "string"),
+        });
         useStore.getState().showToast("AI draft from the customer's request — check it, then Send", "info");
       }
       if (data?.workers?.length) {
@@ -2734,6 +2745,32 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             <button className="bb" style={{ fontSize: 13, padding: "6px 14px" }} onClick={resumeEditDraft}>Resume</button>
             <button className="bo" style={{ fontSize: 13, padding: "6px 14px" }} onClick={discardEditDraft}>Discard</button>
           </div>
+        </div>
+      )}
+
+      {/* A lead opened on its automatic draft: the request can still be
+          edited and the quote rebuilt from it (only until it's saved as a quote). */}
+      {leadDraftSeed && leadDraftSeed.id === editingId && jobs.find((j) => j.id === editingId)?.status === "lead" && (
+        <div className="cd mb" style={{ border: `1px solid ${QF_HUE.gold}` }}>
+          <div style={{ fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="sparkle" size={15} color={QF_HUE.gold} /> {t("qf.leadDraftTitle")}
+          </div>
+          <div className="dim" style={{ fontSize: 12.5, marginTop: 4 }}>{t("qf.leadDraftHelp")}</div>
+          <button
+            className="bo"
+            style={{ fontSize: 13, padding: "6px 14px", marginTop: 10 }}
+            onClick={async () => {
+              const seed = leadDraftSeed;
+              if (!await useStore.getState().showConfirm(t("qf.leadDraftRebuildTitle"), t("qf.leadDraftRebuildBody"), { confirmLabel: t("qf.leadDraftRebuild") })) return;
+              setQuickDesc(seed.desc);
+              setQuickPhotos(seed.photos);
+              setLeadDraftSeed(null);
+              setLeadReview(true);
+              setMode("quick");
+            }}
+          >
+            {t("qf.leadDraftRebuild")}
+          </button>
         </div>
       )}
 
