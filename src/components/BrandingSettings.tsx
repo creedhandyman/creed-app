@@ -134,7 +134,7 @@ export default function BrandingSettings({ part }: { part?: "business" | "brand"
     setSavingSlug(true);
     try {
       // Uniqueness check — any other org claiming this slug blocks the save.
-      const existing = await db.get<Organization>("organizations", { site_slug: normalized });
+      const existing = await db.get<Organization>("org_public", { site_slug: normalized });
       const taken = existing.some((o) => o.id !== org.id);
       if (taken) {
         useStore.getState().showToast("That slug is taken, try another", "error");

@@ -21,7 +21,7 @@ function ReviewContent() {
 
   useEffect(() => {
     if (orgId) {
-      db.get<Organization>("organizations", { id: orgId }).then((orgs) => {
+      db.get<Organization>("org_public", { id: orgId }).then((orgs) => {
         if (orgs.length) setOrgData(orgs[0]);
       });
       // Public page (signed-out customers): the anon role may only read a

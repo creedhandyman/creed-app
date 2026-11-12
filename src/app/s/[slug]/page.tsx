@@ -38,7 +38,7 @@ export default function SlugSitePage() {
 
   useEffect(() => {
     if (!slug) { setLoading(false); return; }
-    db.get<Organization>("organizations", { site_slug: slug }).then(async (orgs) => {
+    db.get<Organization>("org_public", { site_slug: slug }).then(async (orgs) => {
       if (!orgs.length) { setLoading(false); return; }
       const o = orgs[0];
       setOrg(o);
@@ -192,7 +192,7 @@ export default function SlugSitePage() {
         )}
 
         {/* Work Order Form */}
-        <WorkOrderForm orgId={org.id} primaryColor={pc} />
+        <WorkOrderForm slug={org.site_slug || slug} primaryColor={pc} />
 
         {/* Contact */}
         <div style={{ padding: "40px 0", borderTop: "1px solid #1e1e2e", textAlign: "center" }}>
