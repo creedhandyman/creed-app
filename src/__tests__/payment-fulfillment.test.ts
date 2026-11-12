@@ -370,3 +370,33 @@ test("a bank payment is pending only while Stripe shows it processing", () => {
   expect(isBankPaymentPending(sess({ id: "pi_1", status: "processing" }, { payment_status: "paid" }))).toBe(false);
   expect(isBankPaymentPending(sess({ id: "pi_1", status: "processing" }, { status: "open" }))).toBe(false);
 });
+
+// ── Paid in full BEFORE the work is done (2026-11-11) ───────────────────────
+test("paying in full up front records the money but leaves the job in the pipeline", async () => {
+  const { db, tables } = fakeDb({ jobs: [job({ status: "scheduled" })], organizations: [{ id: ORG }] });
+  const r = await fulfillJobPayment(db, charge("cs_pre", 1000));
+  expect(r.ok && r.result).toMatchObject({ amountPaid: 1000, balance: 0, fullyPaid: true, settled: false });
+  expect(tables.jobs[0]).toMatchObject({ status: "scheduled", amount_paid: 1000, paid_at: null });
+  // No review request for work nobody has done yet.
+  expect(tables.review_requests ?? []).toHaveLength(0);
+  // The owner still hears the money came in.
+  expect(notify).toHaveBeenCalledTimes(1);
+});
+
+test("full payment after the work is done settles the job (complete and invoiced)", async () => {
+  for (const status of ["complete", "invoiced"]) {
+    const { db, tables } = fakeDb({ jobs: [job({ status })], organizations: [{ id: ORG }] });
+    const r = await fulfillJobPayment(db, charge(`cs_${status}`, 1000));
+    expect(r.ok && r.result).toMatchObject({ fullyPaid: true, settled: true });
+    expect(tables.jobs[0].status).toBe("paid");
+    expect(tables.review_requests).toHaveLength(1);
+  }
+});
+
+test("the owner choosing Paid by hand settles a job that was never marked complete", async () => {
+  const { db, tables } = fakeDb({ jobs: [job({ status: "active" })], organizations: [{ id: ORG }] });
+  const r = await fulfillJobPayment(db, charge("manual_x", 1000, { paymentIntentId: null, forcePaid: true }));
+  expect(r.ok && r.result).toMatchObject({ fullyPaid: true, settled: true });
+  expect(tables.jobs[0].status).toBe("paid");
+  expect(tables.jobs[0].paid_at).toBeTruthy();
+});

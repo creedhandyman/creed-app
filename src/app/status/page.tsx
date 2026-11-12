@@ -383,6 +383,9 @@ function StatusContent() {
   const { balanceDue, amount: payAmount, remaining: remainingAfterPay } = plan;
   const showTip = tipAllowed({ tipsEnabled: org?.tips_enabled, jobStatus: job.status, payAmount, balance: balanceDue });
   const tipAmount = showTip ? tipCentsFor(Math.round(payAmount * 100), tipPct) / 100 : 0;
+  // Paid in full, including up front before the work is done (the job keeps
+  // its status until it's completed, so status alone can't say "paid").
+  const paidUp = job.status === "paid" || (effectiveTotal > 0 && paidToDate > 0 && balanceDue <= 0.009);
   const showPayCard = job.total > 0 && job.status !== "paid" && !!org?.stripe_connected && balanceDue > 0
     && (billing || !!job.client_signature);
   // Only surface the picker when the options actually differ in price — a
@@ -600,7 +603,7 @@ function StatusContent() {
         {job.total > 0 && (
           <div className="total">
             <div style={{ minWidth: 0 }}>
-              <div className="lbl" style={{ margin: 0, color: "#3ee08f" }}>{job.status === "paid" ? "Amount Paid" : showTierPicker ? "Your Option" : "Quote Total"}</div>
+              <div className="lbl" style={{ margin: 0, color: "#3ee08f" }}>{paidUp ? "Amount Paid" : showTierPicker ? "Your Option" : "Quote Total"}</div>
               <div className="n">${effectiveTotal.toLocaleString()}</div>
               {discount && (
                 <div style={{ fontSize: 13, color: "#3ee08f", marginTop: 3 }}>
@@ -612,7 +615,7 @@ function StatusContent() {
                 </div>
               )}
             </div>
-            <span className="chip" style={{ background: "rgba(0,204,102,.16)", color: "#3ee08f" }}>{job.status === "paid" ? "Paid" : "Quote"}</span>
+            <span className="chip" style={{ background: "rgba(0,204,102,.16)", color: "#3ee08f" }}>{paidUp ? "Paid" : "Quote"}</span>
           </div>
         )}
 

@@ -19,7 +19,7 @@
  * disagree with the calendar it's planning.
  */
 import type { CrewLocation, Job, Profile, ScheduleEntry, TimeEntry, TimeOffRequest } from "./types";
-import { stopsForDay, entryJob, isJobScheduled, parseSchedTime, parseSchedCrew, localYmd, isEntryOnDay } from "./day-plan";
+import { stopsForDay, entryJob, isJobScheduled, readyToBook, parseSchedTime, parseSchedCrew, localYmd, isEntryOnDay } from "./day-plan";
 import { isStaleOpenEntry } from "./shift";
 import { clockMinutes, formatClock } from "./mileage-days";
 import { liveFixFor, stampMs } from "./crew-location";
@@ -149,9 +149,9 @@ export function collectWeek({ jobs, schedule, timeEntries, crew, days, includeQu
 
   const pool: PoolJob[] = jobs
     .filter((j) => !j.archived && !!j.property?.trim()
-      && (j.status === "accepted" || (includeQuoted && j.status === "quoted"))
+      && (readyToBook(j.status) || (includeQuoted && j.status === "quoted"))
       && !isJobScheduled(j, schedule))
-    .sort((a, b) => Number(a.status !== "accepted") - Number(b.status !== "accepted")
+    .sort((a, b) => Number(!readyToBook(a.status)) - Number(!readyToBook(b.status))
       || (a.created_at || "").localeCompare(b.created_at || ""))
     .map((job) => {
       const hrs = job.total_hrs || 0;
@@ -227,7 +227,7 @@ export function toPlanInput({ pool, booked, coords, days, crew, replanBooked, le
     flex.push({
       key, jobId: p.job.id, address: p.job.property, pt, totalMin: p.totalMin,
       crew: p.crew, minDays: p.minDays,
-      leadId: p.techId, isNew: true, phase: p.job.status === "accepted" ? 0 : 1,
+      leadId: p.techId, isNew: true, phase: readyToBook(p.job.status) ? 0 : 1,
     });
   }
 

@@ -2,6 +2,8 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+
+
 - **AI draft quotes for website leads (2026-10-24)**: `/api/leads` (public
   intake: the creedhandyman.com form + the app's /lead/<slug> page) now runs
   `lib/lead-draft.ts draftLeadQuote` in Next's `after()` (route maxDuration

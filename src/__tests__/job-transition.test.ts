@@ -108,3 +108,37 @@ describe("shouldPromptReview", () => {
     expect(shouldPromptReview(j, null, [...rows, { job_id: "j1", status: "scheduled" as const, created_at: "2026-04-01" }])).toBe(false);
   });
 });
+
+describe("a job paid in full up front", () => {
+  const prepaid = job({ status: "active", total: 400, amount_paid: 400 });
+
+  it("goes straight to paid when completed, and still learns from the hours", async () => {
+    const settled: string[] = [];
+    const { c, writes, outcomes } = ctx({ jobsList: [prepaid], onSettled: (id) => settled.push(id) });
+    expect(await transitionJob("j1", "complete", c)).toBe(true);
+    expect(writes[0]).toEqual({ table: "jobs", id: "j1", patch: { status: "paid", paid_at: "2026-10-28T12:00:00.000Z" } });
+    expect(outcomes).toHaveLength(1);
+    expect(settled).toEqual(["j1"]);
+  });
+
+  it("goes to paid instead of invoiced (nothing left to bill)", async () => {
+    const { c, writes } = ctx({ jobsList: [prepaid] });
+    await transitionJob("j1", "invoiced", c);
+    expect(writes[0].patch.status).toBe("paid");
+  });
+
+  it("a deposit, a $0 job, or any other status change is left alone", async () => {
+    const cases: [Partial<Job>, Job["status"]][] = [
+      [{ total: 400, amount_paid: 200 }, "complete"],
+      [{ total: 0, amount_paid: 0 }, "complete"],
+      [{ total: 400, amount_paid: 400 }, "scheduled"],
+    ];
+    for (const [over, to] of cases) {
+      const onSettled = jest.fn();
+      const { c, writes } = ctx({ jobsList: [job(over)], onSettled });
+      await transitionJob("j1", to, c);
+      expect(writes[0].patch).toEqual({ status: to });
+      expect(onSettled).not.toHaveBeenCalled();
+    }
+  });
+});

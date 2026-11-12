@@ -4,7 +4,7 @@ import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
 import { apiFetch, getStatusLink } from "@/lib/api";
 import { savedCardLabel } from "@/lib/payments/saved-card";
 import { markQuoteSent, sentAgo } from "@/lib/quote-send";
-import { balanceOf, invoiceText as buildInvoiceText, smsHref } from "@/lib/job-send";
+import { balanceOf, isPaidUp, invoiceText as buildInvoiceText, smsHref } from "@/lib/job-send";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
@@ -370,7 +370,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Record a payment taken outside Stripe (cash/check/…). `ref` is minted
   // when the sheet opens → the server's idempotency key for this payment.
   // confirmOver: an amount above the balance was tapped once — the next tap saves.
-  const [recordPay, setRecordPay] = useState<{ jobId: string; amount: string; method: "cash" | "check" | "card" | "other"; ref: string; busy?: boolean; confirmOver?: boolean } | null>(null);
+  const [recordPay, setRecordPay] = useState<{ jobId: string; amount: string; method: "cash" | "check" | "card" | "other"; ref: string; busy?: boolean; confirmOver?: boolean; markPaid?: boolean } | null>(null);
   // Status → Paid while money is still owed: ask how before writing anything
   // (record the payment, or just mark it). Cancel leaves the status alone.
   const [paidChoice, setPaidChoice] = useState<{ jobId: string; due: number } | null>(null);
@@ -457,11 +457,23 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // Side effects (AI learning + equipment stamp on complete) live in
   // lib/job-transition, shared with Work mode's Complete Job. Learning here
   // also counts hours recovered from pay_history (getJobLabor).
-  const applyStatus = (id: string, status: string): Promise<boolean> =>
+  // `review`: a job the customer paid up front goes straight to Paid when it
+  // is completed; the single-job path queues the automatic review request
+  // then (bulk changes don't, so a batch can't text every customer in it).
+  const applyStatus = (id: string, status: string, opts?: { review?: boolean }): Promise<boolean> =>
     transitionJob(id, status as Job["status"], {
       jobs: () => useStore.getState().jobs,
       timeEntries: () => useStore.getState().timeEntries,
       actualHours: (j) => getJobLabor(j).totalHrs,
+      onSettled: opts?.review
+        ? (jobId) => {
+            void apiFetch("/api/reviews/queue", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ jobId }),
+            }).catch(() => { /* best-effort: Request review is still on the job */ });
+          }
+        : undefined,
     });
 
   // Resolves true only when the status was written; false when the paid
@@ -483,7 +495,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         if (!await useStore.getState().showConfirm(t("jobs.incompleteItems"), `${unchecked} ${unchecked !== 1 ? t("jobs.workOrderItemsPlural") : t("jobs.workOrderItemSingular")} ${t("jobs.stillUncheckedMarkComplete")}`)) return false;
       }
     }
-    const ok = await applyStatus(id, status);
+    const ok = await applyStatus(id, status, { review: true });
     loadAll();
 
     // Status changes are intentionally SILENT. Previously every flip (a)
@@ -564,7 +576,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             headers: { "Content-Type": "application/json" },
             // skipReview: a bulk cleanup must not text every customer in the
             // batch a review request (the single-job sheet still schedules it).
-            body: JSON.stringify({ jobId: j.id, amount, method, ref: crypto.randomUUID(), skipReview: true }),
+            // markPaid: the owner chose Paid, so it closes even if never completed.
+            body: JSON.stringify({ jobId: j.id, amount, method, ref: crypto.randomUUID(), skipReview: true, markPaid: true }),
           });
           if (res.ok) { ok++; recorded += amount; } else failed++;
         } catch { failed++; }
@@ -809,9 +822,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     await loadAll().catch(() => { /* next refresh picks it up */ });
   };
 
-  const openRecordPay = (job: Job) => {
+  // markPaid: opened from the Paid status choice, so a payment covering the
+  // job closes it as Paid even if it was never marked complete. Opened from
+  // Record payment it's just money in: a job paid in full before the work is
+  // done stays where it is and closes when it's completed.
+  const openRecordPay = (job: Job, markPaid = false) => {
     const { due } = balanceOf(job);
-    setRecordPay({ jobId: job.id, amount: due > 0 ? due.toFixed(2) : "", method: "cash", ref: crypto.randomUUID() });
+    setRecordPay({ jobId: job.id, amount: due > 0 ? due.toFixed(2) : "", method: "cash", ref: crypto.randomUUID(), markPaid });
   };
   const saveRecordPay = async () => {
     if (!recordPay || recordPay.busy) return;
@@ -828,13 +845,13 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       const res = await apiFetch("/api/payments/record", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: recordPay.jobId, amount, method: recordPay.method, ref: recordPay.ref }),
+        body: JSON.stringify({ jobId: recordPay.jobId, amount, method: recordPay.method, ref: recordPay.ref, markPaid: recordPay.markPaid === true }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast(data.error || t("jobs.recordFailed"), "error"); setRecordPay((r) => (r ? { ...r, busy: false } : r)); return; }
       setRecordPay(null);
       await loadAll();
-      toast(data.fullyPaid ? t("jobs.paidInFull") : t("jobs.paymentRecordedBalance").replace("{due}", Number(data.balance || 0).toFixed(2)), "success");
+      toast(data.fullyPaid ? t(data.settled === false ? "jobs.paidUpFront" : "jobs.paidInFull") : t("jobs.paymentRecordedBalance").replace("{due}", Number(data.balance || 0).toFixed(2)), "success");
     } catch {
       toast(t("jobs.recordFailed"), "error");
       setRecordPay((r) => (r ? { ...r, busy: false } : r));
@@ -847,7 +864,16 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     const st = useStore.getState();
     if (!await st.showConfirm(t("jobs.removePhotoTitle"), t("jobs.removePhotoBody"), { danger: true, confirmLabel: t("common.remove") })) return;
     const r = await patchBlob(jobId, removePhoto(url));
-    if (r.ok) st.showToast(t("jobs.photoRemoved"), "success");
+    if (r.ok) {
+      st.showToast(t("jobs.photoRemoved"), "success");
+      // Now that it's off the job, delete the stored file too, unless another
+      // job still uses it (the server checks). Best-effort and silent.
+      void apiFetch("/api/jobs/photo-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, url }),
+      }).catch(() => { /* the file just stays in storage */ });
+    }
     else if (r.reason === "network" || r.reason === "no-job" || r.reason === "unreadable") st.showToast(t("jobs.photoNotRemoved"), "error");
     // "rejected": the database write already showed its own message.
   };
@@ -1197,6 +1223,14 @@ ${invoicePhotosHtml}
                 {/* A deposit is in but the job isn't paid off — say what's left. */}
                 {(dj.amount_paid || 0) > 0 && dj.status !== "paid" && (() => {
                   const { paid, due } = balanceOf(dj);
+                  // Paid up front: nothing owed, the work just isn't done yet.
+                  if (isPaidUp(dj)) {
+                    return (
+                      <div style={{ fontSize: 12, marginTop: -2, color: "var(--color-success)" }}>
+                        {t("jobs.prepaidTag")}
+                      </div>
+                    );
+                  }
                   return (
                     <div className="dim" style={{ fontSize: 12, marginTop: -2 }}>
                       {t("jobs.paidDue").replace("{paid}", paid.toFixed(2)).replace("{due}", due.toFixed(2))}
@@ -2616,7 +2650,7 @@ ${invoicePhotosHtml}
               {pj?.property && <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>{pj.property}</div>}
               <p style={{ fontSize: 14, margin: "0 0 14px", lineHeight: 1.45 }}>{t("jobs.paidOwedBody")}</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <button className="bg" style={full} onClick={() => { setPaidChoice(null); if (pj) openRecordPay(pj); }}>
+                <button className="bg" style={full} onClick={() => { setPaidChoice(null); if (pj) openRecordPay(pj, true); }}>
                   <Icon name="checkCircle" size={15} /> {t("jobs.recordPayment")}
                 </button>
                 <button

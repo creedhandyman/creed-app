@@ -9,7 +9,7 @@ import { statusColor } from "@/lib/status";
 import { goWithIntent } from "@/lib/nav-intent";
 import {
   stopsForDay, techDayStops, nextStopFrom, crewStatus, myDay, dayPhase, needMatch, needsNudge,
-  balanceDue, isJobScheduled, fmtClock, localYmd, addDaysYmd, NEED_TAB,
+  balanceDue, isJobScheduled, readyToBook, fmtClock, localYmd, addDaysYmd, NEED_TAB,
   type DayStop, type NeedKey,
 } from "@/lib/day-plan";
 import type { TimeEntry } from "@/lib/types";
@@ -167,7 +167,7 @@ export function OwnerDay({ setPage, openJob, openOps }: {
   const waiting = bucket("waiting");
   const toInvoice = bucket("toInvoice");
   const unpaid = bucket("unpaid");
-  const toSchedule = jobs.filter((j) => j.status === "accepted" && !j.archived && !isJobScheduled(j, schedule));
+  const toSchedule = jobs.filter((j) => readyToBook(j.status) && !j.archived && !isJobScheduled(j, schedule));
   const pendingTimeOff = timeOffRequests.filter((r) => r.status === "pending");
   const actionable = stale.length + leads.length + pendingMembers.length + pendingTimeOff.length + toSchedule.length + toSend.length + toInvoice.length;
   const caughtUp = dataReady && actionable === 0;

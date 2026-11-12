@@ -451,7 +451,7 @@ export default function DispatchAssistant({ setPage, week: weekProp, onNextWeek 
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.job.property}</span>
                 <span className="dim" style={{ fontSize: 12.5 }}>
-                  {fmtDur(p.totalMin)}{p.estimated ? ` (${t("disp.estHours")})` : ""}{p.crew > 1 ? ` · ${t("disp.crewOf")} ${p.crew}` : ""} · {p.job.status === "accepted" ? t("disp.approved") : t("disp.quoted")}
+                  {fmtDur(p.totalMin)}{p.estimated ? ` (${t("disp.estHours")})` : ""}{p.crew > 1 ? ` · ${t("disp.crewOf")} ${p.crew}` : ""} · {p.job.status === "quoted" ? t("disp.quoted") : t("disp.approved")}
                   {p.techId ? ` · ${t("disp.requested")}: ${firstName(nameOf(p.techId))}` : ""}
                 </span>
                 {near && <span style={{ display: "block", fontSize: 12, color: "#8cc0ff" }}>{t("disp.closestNow")} {firstName(near.name)} ~{near.min} min{near.busy ? ` (${t("disp.onAJob")})` : ""}</span>}
