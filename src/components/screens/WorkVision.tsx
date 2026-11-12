@@ -2,9 +2,8 @@
 import { apiFetch, getStatusLink } from "@/lib/api";
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useStore, clockDeps } from "@/lib/store";
-import { db, supabase } from "@/lib/supabase";
+import { db } from "@/lib/supabase";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
-import { compressImage } from "@/lib/image";
 import { t } from "@/lib/i18n";
 import { makeGuide, extractZip, classify } from "@/lib/parser";
 import { formatHours, parseEntryDate } from "@/lib/dates";
@@ -26,6 +25,9 @@ import { LONG_SHIFT_MS } from "@/lib/shift";
 import { useFinishTime } from "../FinishTimeModal";
 import ReviewRequestModal from "../ReviewRequestModal";
 import CameraModal from "../CameraModal";
+import PhotoTypePicker, { photoTagTint } from "../PhotoTypePicker";
+import { uploadJobPhoto, type JobPhotoTag } from "@/lib/job-photo-upload";
+import { defaultPhotoTag } from "@/lib/photo-tag";
 import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
 import { patchBlob, runSerialized, settled, addPhoto } from "@/lib/job-write-client";
 import { readLocalClock, clockIn as runClockIn, clockOut as runClockOut, resolveClockInJobId, pickableJobs } from "@/lib/clock";
@@ -97,7 +99,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // only counts type==="after" photos as completion photos. Tech can
   // flip this to "before" or "work" before snapping if needed. A fresh job
   // starts on "before" instead (one-time pick per job, further down).
-  const [photoType, setPhotoType] = useState<"before" | "work" | "after">("after");
+  const [photoType, setPhotoType] = useState<JobPhotoTag>("after");
   // Guide tab: tap-to-check tools and shopping items, plus custom additions.
   // Persisted into the job's `rooms` blob (same place workOrder lives) so
   // they survive remounts AND show up in the Jobs tab — Bernard wanted the
@@ -191,10 +193,10 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   useEffect(() => {
     if (!activeJob || photoTypeJobRef.current === activeJob.id) return;
     photoTypeJobRef.current = activeJob.id;
-    const photos: { type?: string }[] = Array.isArray(jobData?.photos) ? jobData.photos : [];
-    const hasBefore = photos.some((p) => p.type === "before");
-    if (!hasBefore && !workOrder.some((w) => w.done)) setPhotoType("before");
-    else if (workOrder.length > 0 && workOrder.every((w) => w.done)) setPhotoType("after");
+    // (lib/photo-tag — the same rule the Jobs tab's photo section starts on;
+    // no status here, so a reopened finished job still follows its tasks.)
+    const pick = defaultPhotoTag(Array.isArray(jobData?.photos) ? jobData.photos : [], workOrder);
+    if (pick) setPhotoType(pick);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.id]);
 
@@ -359,48 +361,11 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
   // Type defaults to whatever is currently selected on the segmented
   // control above (state-driven), but a caller can pin a specific type
   // — e.g. when we ever wire up a "Before / Working / After" radio set.
-  const uploadWorkPhoto = async (picked: File, typeOverride?: "before" | "work" | "after") => {
+  const uploadWorkPhoto = async (picked: File, typeOverride?: JobPhotoTag) => {
     if (!activeJob) return;
-    // A photo picked from the phone's library is the original (several MB);
-    // bring it down to the in-app camera's size (1600px) so job photos, the
-    // quote PDF and the customer's page load fast. Camera shots are already
-    // that size, and anything that isn't a readable image is left as it is.
-    const file = picked.size > 700_000 ? await compressImage(picked, 1600, 0.8) : picked;
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `gallery/${activeJob.id}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-    const tag0 = typeOverride ?? photoType;
-    // Offline → stash the photo and attach it to the job on reconnect (the
-    // pre-computed `path` makes the replay idempotent). Never lose the shot.
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      const ok = await enqueueUpload("job-photo", file, { jobId: activeJob.id, path, tag: tag0, ext });
-      if (ok) { bumpPendingUploads(); useStore.getState().showToast("Photo saved offline — uploads when you reconnect", "info"); }
-      else useStore.getState().showToast("Couldn't save photo offline (storage full)", "error");
-      return;
-    }
-    const { error } = await supabase.storage.from("receipts").upload(path, file);
-    if (error) {
-      // A transport failure while nominally online — queue it rather than lose it.
-      if (isNetworkError(error)) {
-        const ok = await enqueueUpload("job-photo", file, { jobId: activeJob.id, path, tag: tag0, ext });
-        if (ok) { bumpPendingUploads(); useStore.getState().showToast("Photo saved — uploads when you reconnect", "info"); return; }
-      }
-      console.error("[WorkVision] photo upload failed:", error);
-      useStore.getState().showToast(t("wv.photoUploadFailed"), "error");
-      return;
-    }
-    const { data: urlData } = supabase.storage.from("receipts").getPublicUrl(path);
-    if (!urlData?.publicUrl) return;
-    const publicUrl = urlData.publicUrl;
-    const tag = typeOverride ?? photoType;
-    const wrote = await patchBlob(activeJob.id, addPhoto({ url: publicUrl, label: "", type: tag }));
-    if (!wrote.ok) {
-      // A refused write was already toasted by db.patch; say so for the rest.
-      if (wrote.reason !== "rejected") useStore.getState().showToast(t("wv.photoUploadFailed"), "error");
-      return;
-    }
-    await loadAll();
-    const tagLabel = tag === "after" ? "Completion" : tag === "before" ? "Before" : "Work";
-    useStore.getState().showToast(`${tagLabel} photo saved`, "success");
+    // One path for every job photo (lib/job-photo-upload): shrink, upload or
+    // queue offline, append to the job with its tag, toast.
+    await uploadJobPhoto(activeJob.id, picked, typeOverride ?? photoType);
   };
 
   // ── Receipt upload (matches Jobs.tsx flow) ──────────────────────
@@ -1507,32 +1472,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
         <div>
           {/* Before / Work / After tag toggle — sets the type the next
               photo is saved as (matches the mock's .ptoggle). */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            {([
-              { key: "before" as const, label: t("wv.before"), bg: "rgba(255,136,0,.16)", bd: "rgba(255,136,0,.5)", fg: "#ffb15e" },
-              { key: "work" as const, label: t("wv.work"), bg: "rgba(46,139,255,.16)", bd: "rgba(46,139,255,.5)", fg: "#9fc4ff" },
-              { key: "after" as const, label: t("wv.after"), bg: "rgba(0,204,102,.16)", bd: "rgba(0,204,102,.5)", fg: "#3ee08f" },
-            ]).map((opt) => {
-              const active = photoType === opt.key;
-              return (
-                <button
-                  key={opt.key}
-                  onClick={() => setPhotoType(opt.key)}
-                  aria-pressed={active}
-                  style={{
-                    flex: 1, textAlign: "center", fontFamily: "Oswald", fontWeight: 600, fontSize: 13, letterSpacing: ".04em",
-                    padding: 10, borderRadius: 9,
-                    background: active ? opt.bg : "var(--color-card-dark-3)",
-                    border: `1px solid ${active ? opt.bd : "var(--color-border-dark-2)"}`,
-                    color: active ? opt.fg : "var(--color-dim)",
-                    cursor: "pointer",
-                  }}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+          <PhotoTypePicker value={photoType} onChange={setPhotoType} />
 
           {(() => {
             const allPhotos: JobPhoto[] = jobData?.photos || [];
@@ -1541,10 +1481,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
             const regular = allPhotos.filter((p) => p.type !== "rendered");
             const rendered = allPhotos.filter((p) => p.type === "rendered");
             const latest = regular[regular.length - 1];
-            const tagTint = (type?: string) =>
-              type === "before" ? { bg: "rgba(255,136,0,.3)", fg: "#ffb15e" }
-              : type === "after" ? { bg: "rgba(0,204,102,.3)", fg: "#3ee08f" }
-              : { bg: "rgba(46,139,255,.3)", fg: "#9fc4ff" };
+            const tagTint = photoTagTint;
             const pactTile: React.CSSProperties = {
               flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
               fontSize: 12.5, fontWeight: 600, padding: "9px 4px", borderRadius: 10,

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { peekNavIntent, clearNavIntent, goWithIntent } from "@/lib/nav-intent";
-import { parseSchedTime, parseSchedCrew, entryJob, isJobScheduled, readyToBook, statusAfterUnschedule } from "@/lib/day-plan";
+import { parseSchedTime, parseSchedCrew, entryJob, isJobScheduled, readyToBook, afterVisitRemoved } from "@/lib/day-plan";
 import { stripNoteParts } from "@/lib/dispatch-week";
 import BookingRequests from "@/components/BookingRequests";
 import type { ScheduleEntry } from "@/lib/types";
@@ -190,7 +190,8 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
   // The exact job being scheduled (schedule.job_id). null = address-only
   // (legacy entry being edited, or a job we couldn't identify).
   const [armedJobId, setArmedJobId] = useState<string | null>(preSelectJobId || null);
-  const arm = (j: { id: string; property: string }) => { setArmedJob(j.property); setArmedJobId(j.id); };
+  // Arming a job from a list books a NEW visit (never edits an old entry).
+  const arm = (j: { id: string; property: string }) => { setEditSched(null); setArmedJob(j.property); setArmedJobId(j.id); };
   const [dropTarget, setDropTarget] = useState<string | null>(preSelectJob ? defaultDay() : null);
   // Last-used time and workers persist between drops so back-to-back
   // scheduling sessions don't require re-typing the same defaults.
@@ -328,6 +329,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
       }
     } catch { /* ignore quota errors */ }
     const wasEdit = !!editSched;
+    setEditSched(null);
     setArmedJob(null);
     setDropTarget(null);
     // Keep qsTime + qsWorkers as-is; only the note clears so it doesn't
@@ -435,22 +437,31 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
     setQsNote(stripNoteParts(s.note));
   };
   const deleteSched = async () => {
-    if (!editSched) return;
-    if (!await useStore.getState().showConfirm(t("sched.removeFromSchedule"), `${t("sched.unscheduleConfirm")} ${editSched.job}?`)) return;
-    await db.del("schedule", editSched.id);
-    sendScheduleNotices(noticesFor(editSched, null));
-    setArmedJob(null); setDropTarget(null); setQsNote("");
-    await loadAll();
-    // That was the job's last visit: take it back out of "scheduled", or it
-    // sits there with nothing on the calendar. Read from the fresh load, so
-    // a delete that failed (entry still there) changes nothing.
-    const fresh = useStore.getState();
-    const linked = entryJob(editSched, fresh.jobs);
-    if (linked && !fresh.schedule.some((e) => e.id === editSched.id) && !isJobScheduled(linked, fresh.schedule)) {
-      const back = statusAfterUnschedule(linked);
-      if (back && await db.patch("jobs", linked.id, { status: back })) await loadAll();
-    }
+    const target = editSched;
+    if (!target) return;
+    if (!await useStore.getState().showConfirm(t("sched.removeFromSchedule"), `${t("sched.unscheduleConfirm")} ${target.job}?`)) return;
+    // A failed delete (already toasted) keeps the sheet open to retry.
+    if (!await db.del("schedule", target.id)) return;
+    sendScheduleNotices(noticesFor(target, null));
+    setEditSched(null); setArmedJob(null); setArmedJobId(null); setDropTarget(null); setQsNote("");
+    // Show it NOW: drop the visit from the store and, if it was the job's
+    // last one, put the job back to its pre-scheduled status — so it's in
+    // Dispatch's "Needs scheduling" (and Unscheduled) right away, not after
+    // the next reload (lib/day-plan afterVisitRemoved).
+    const st = useStore.getState();
+    const r = afterVisitRemoved(target, st.schedule, st.jobs);
+    const back = r.status;
+    const jobId = r.job?.id;
+    useStore.setState({
+      schedule: r.schedule,
+      ...(back && jobId ? { jobs: st.jobs.map((j) => (j.id === jobId ? { ...j, status: back } : j)) } : {}),
+    });
     useStore.getState().showToast(t("sched.removedFromSchedule"), "info");
+    // That was the job's last visit: take it back out of "scheduled" on the
+    // server too, then sync. (A load already in flight may briefly hand back
+    // the old list; the fresh load queued behind it settles it.)
+    if (back && jobId) await db.patch("jobs", jobId, { status: back });
+    await loadAll();
   };
 
   // One visit's card: address (opens Maps), time · crew · note, Edit / Open
@@ -578,7 +589,7 @@ export default function Schedule({ setPage, preSelectJob, preSelectJobId }: Prop
           Shared pop-up style (.sheet-overlay / .sheet): bottom sheet on phones,
           centered card on wide screens. */}
       {armedJob && dropTarget && (() => {
-        const close = () => { setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); };
+        const close = () => { setEditSched(null); setArmedJob(null); setDropTarget(null); setQsTime(""); setQsWorkers([]); setQsNote(""); };
         // Pill toggle — same look for day chips and crew chips.
         const pill = (sel: boolean): React.CSSProperties => ({
           minHeight: 36, padding: "6px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600,

@@ -27,6 +27,7 @@ import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
 import RecordApprovalSheet from "../RecordApprovalSheet";
 import SmsNotifyButtons from "../SmsNotifyButtons";
+import JobPhotos from "../JobPhotos";
 import TextsCard from "../TextsCard";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours } from "@/lib/dates";
@@ -1721,6 +1722,17 @@ ${invoicePhotosHtml}
           {/* Texts: this job's conversations on the business number (none = nothing shown) */}
           {openTexts && <TextsCard jobId={dj.id} variant="section" onOpen={openTexts} />}
 
+          {/* Photos — add one right here with Work mode's Before / Work / After
+              picker (same tags, same upload path); X removes (owner/manager). */}
+          <JobPhotos
+            key={`ph-${dj.id}`}
+            jobId={dj.id}
+            rooms={dj.rooms}
+            status={dj.status}
+            onRemove={isAdmin ? (url) => void removeJobPhoto(dj.id, url) : undefined}
+            onView={setViewPhoto}
+          />
+
           {/* Work */}
           <div className="section">
             <div className="seclabel"><Icon name="list" size={13} /> {t("nav.work")}</div>
@@ -2007,47 +2019,16 @@ ${invoicePhotosHtml}
               )}
             </div>
 
-            {/* Job photos (before / work / after / rendered) — these live on the
-                rooms.photos blob in the PUBLIC bucket, so they render directly.
-                Previously this screen showed receipts only. */}
-            {(() => {
-              const ph = readBlob(sj.rooms).photos;
-              const photos: { url: string; label?: string; type?: string }[] = Array.isArray(ph) ? ph : [];
-              if (!photos.length) return null;
-              return (
-                <div className="section">
-                  <div className="seclabel"><Icon name="camera" size={13} /> Job Photos ({photos.length})</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 8 }}>
-                    {photos.map((p, i) => (
-                      <div
-                        key={p.url || i}
-                        onClick={() => p.url && setViewPhoto(p.url)}
-                        style={{ position: "relative", aspectRatio: "1", borderRadius: 8, overflow: "hidden", border: "1px solid var(--color-border-dark)", cursor: "pointer" }}
-                      >
-                        <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        {/* Remove this photo right here (owner / manager). Written
-                            through patchBlob onto the server's copy, so it stays
-                            removed, the same rule as deleting in the quote editor. */}
-                        {isAdmin && p.url && (
-                          <button
-                            type="button"
-                            aria-label={t("jobs.removePhoto")}
-                            title={t("jobs.removePhoto")}
-                            onClick={(e) => { e.stopPropagation(); void removeJobPhoto(sj.id, p.url); }}
-                            style={{ position: "absolute", top: 3, right: 3, width: 24, height: 24, minHeight: 0, padding: 0, borderRadius: "50%", background: "rgba(0,0,0,.68)", border: "1px solid rgba(255,255,255,.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-                          >
-                            <Icon name="close" size={13} color="#fff" />
-                          </button>
-                        )}
-                        {p.type && (
-                          <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, fontSize: 9, textAlign: "center", background: "rgba(0,0,0,.55)", color: "#fff", padding: "1px 0", textTransform: "capitalize" }}>{p.type}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            {/* Job photos — the same section as the job card (JobPhotos):
+                Before / Work / After picker, Camera / Upload, X to remove. */}
+            <JobPhotos
+              key={`ph-${sj.id}`}
+              jobId={sj.id}
+              rooms={sj.rooms}
+              status={sj.status}
+              onRemove={isAdmin ? (url) => void removeJobPhoto(sj.id, url) : undefined}
+              onView={setViewPhoto}
+            />
           </>
         )}
       </>

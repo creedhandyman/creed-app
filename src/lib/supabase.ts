@@ -238,12 +238,16 @@ export const db = {
     }
   },
 
-  del: async (table: string, id: string): Promise<void> => {
+  /** Resolves true when the delete landed, false when it failed (already
+   *  toasted). */
+  del: async (table: string, id: string): Promise<boolean> => {
     try {
       const { error } = await supabase.from(table).delete().eq("id", id);
       if (error) throw error;
+      return true;
     } catch (err) {
       reportDbError(table, "delete", err);
+      return false;
     }
   },
 };

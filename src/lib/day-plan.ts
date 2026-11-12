@@ -114,6 +114,25 @@ export const isJobScheduled = (j: { id: string; property: string; created_at?: s
     ? e.job_id === j.id
     : e.job === j.property && (!j.created_at || e.sched_date >= j.created_at.slice(0, 10)));
 
+/**
+ * What changes when one visit comes off the calendar — applied to the store
+ * the moment the delete lands, so the job is back in every "needs
+ * scheduling" list right away instead of after the next reload.
+ *   schedule: the list without that entry.
+ *   job / status: the entry's job and the status it goes back to when that
+ *   was its LAST visit (statusAfterUnschedule); status null = leave it.
+ */
+export function afterVisitRemoved(
+  entry: Pick<ScheduleEntry, "id" | "job" | "job_id">,
+  schedule: ScheduleEntry[],
+  jobs: Job[],
+): { schedule: ScheduleEntry[]; job: Job | undefined; status: Job["status"] | null } {
+  const rest = schedule.filter((e) => e.id !== entry.id);
+  const job = entryJob(entry, jobs);
+  const status = job && !isJobScheduled(job, rest) ? statusAfterUnschedule(job) : null;
+  return { schedule: rest, job, status };
+}
+
 /** Multi-day: an entry covers sched_date..end_date (end_date absent = one day). */
 const spansDay = (s: { sched_date: string; end_date?: string }, day: string) =>
   day >= s.sched_date && day <= (s.end_date || s.sched_date);

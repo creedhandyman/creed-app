@@ -272,6 +272,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     QuoteForge's whole-blob saves, and the server routes (approve /
     record-approval / lead-draft keep their own status-guarded writes).
     Tested at the interface with fake adapters (`job-write.test.ts`).
+  - `lib/job-photo-upload.ts uploadJobPhoto(jobId, file, tag)` — every job
+    photo (Work mode + the Jobs tab's `JobPhotos` section) with the shared
+    `PhotoTypePicker` (Before / Work / After) and `lib/photo-tag.ts
+    defaultPhotoTag`. `day-plan afterVisitRemoved` — what the store drops /
+    the job's status goes back to when a visit is deleted (applied at once).
   - `lib/nav-intent.ts` for every deep link; day-plan / dispatch-week
     `parseSchedTime` / `parseSchedCrew` / `stripNoteParts` for 🕐/👷 notes.
   - Server: `lib/cron-auth.ts` `cronAuth`; `lib/payment-fulfillment.ts`
