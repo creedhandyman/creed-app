@@ -6,7 +6,15 @@
 // result instead of throwing, and reports a clear error when RESEND_API_KEY is
 // unset so callers can log and move on without failing the request.
 
-export type EmailResult = { ok: true } | { ok: false; error: string };
+export type EmailResult = { ok: true; id?: string } | { ok: false; error: string };
+
+/** Extras for marketing mail (campaigns): a display-name From, the business's
+ *  own address as Reply-To, and the List-Unsubscribe headers. */
+export interface EmailOptions {
+  from?: string;
+  replyTo?: string;
+  headers?: Record<string, string>;
+}
 
 /**
  * Send a transactional email through Resend. `html` is optional — when given,
@@ -18,6 +26,7 @@ export async function sendEmail(
   subject: string,
   body: string,
   html?: string,
+  opts: EmailOptions = {},
 ): Promise<EmailResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
@@ -26,9 +35,11 @@ export async function sendEmail(
   if (!to || !to.includes("@")) {
     return { ok: false, error: "No valid email on customer record" };
   }
-  const from = process.env.RESEND_FROM_EMAIL || "reviews@creedhandyman.com";
+  const from = opts.from || process.env.RESEND_FROM_EMAIL || "reviews@creedhandyman.com";
   const payload: Record<string, unknown> = { from, to: [to], subject, text: body };
   if (html) payload.html = html;
+  if (opts.replyTo) payload.reply_to = opts.replyTo;
+  if (opts.headers && Object.keys(opts.headers).length) payload.headers = opts.headers;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -41,5 +52,7 @@ export async function sendEmail(
     const data = await res.json().catch(() => ({} as { message?: string }));
     return { ok: false, error: (data as { message?: string }).message || `Resend ${res.status}` };
   }
-  return { ok: true };
+  const data = await res.json().catch(() => ({} as { id?: string }));
+  const id = (data as { id?: unknown }).id;
+  return typeof id === "string" ? { ok: true, id } : { ok: true };
 }

@@ -68,6 +68,8 @@ interface PortalData {
   plans?: PortalPlan[];
   stripe_connected?: boolean;
   org: PortalOrg | null;
+  /** The customer's referral link — only when the business has referrals on. */
+  referral?: { link: string; reward_cents: number; credit_cents: number; referred: number } | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -355,6 +357,9 @@ export default function PortalPage() {
         {/* Your membership — active card(s) OR the join upsell; nothing if
             the org has no plans / no Stripe. */}
         <MembershipArea memberships={memberships} plans={data.plans || []} accent={accent} />
+
+        {/* Refer a friend — only when the business turned referrals on. */}
+        {data.referral && <ReferralCard referral={data.referral} orgName={org?.name || "us"} accent={accent} />}
 
         {/* Card on file — shown only when one is saved; the customer can
             remove it themselves (detached in Stripe). */}
@@ -678,6 +683,50 @@ function JoinPlanCard({ plan }: { plan: PortalPlan }) {
         <Icon name="sparkle" size={14} color="#d8b6ff" /> {busy ? "Opening…" : "Join now"}
       </button>
       {err && <div role="alert" style={{ marginTop: 8, fontSize: 12.5, color: "#ff8a8a", textAlign: "center" }}>{err}</div>}
+    </div>
+  );
+}
+
+/* ─── Refer a friend ─── */
+function ReferralCard({ referral, orgName, accent }: {
+  referral: NonNullable<PortalData["referral"]>;
+  orgName: string;
+  accent: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const dollars = (c: number) => `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)}`;
+  const share = async () => {
+    const text = `I use ${orgName} for work around the house. You can request a quote here: ${referral.link}`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title: orgName, text, url: referral.link });
+        return;
+      }
+    } catch { /* cancelled — fall through to copy */ }
+    try {
+      await navigator.clipboard.writeText(referral.link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* */ }
+  };
+  return (
+    <div style={{ background: "#12121a", border: "1px solid #1e1e2e", borderRadius: 14, padding: "12px 13px", margin: "10px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 15 }}>
+        <Icon name="share" size={14} color={accent} /> Refer a friend
+      </div>
+      <div style={{ fontSize: 13, color: "#bbb", marginTop: 4, lineHeight: 1.45 }}>
+        {referral.reward_cents > 0
+          ? `Send a friend your link. When they pay for their first job, you get ${dollars(referral.reward_cents)} off your next one.`
+          : "Send a friend your link so they can request a quote."}
+      </div>
+      {(referral.credit_cents > 0 || referral.referred > 0) && (
+        <div style={{ fontSize: 12.5, color: "#7dffb8", marginTop: 6 }}>
+          {referral.credit_cents > 0 ? `${dollars(referral.credit_cents)} credit waiting for your next job` : `${referral.referred} referred so far`}
+        </div>
+      )}
+      <button onClick={share} className="btn" style={{ marginTop: 10, padding: 10, fontSize: 13, borderRadius: 10, width: "100%" }}>
+        <Icon name={copied ? "check" : "share"} size={14} /> {copied ? "Link copied" : "Share my link"}
+      </button>
     </div>
   );
 }

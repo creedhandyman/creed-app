@@ -65,6 +65,7 @@ import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, 
 import { readBlob, jobBlob } from "@/lib/job-blob";
 import { evaluateLine, matchingRuleIds, uniqueSuggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
 import { loadScopeRules } from "@/lib/scope-rules-client";
+import { REFERRAL_DISCOUNT_LABEL, fmtCents } from "@/lib/referrals";
 import { isPdfFile } from "@/lib/pdf-detect";
 import { GrizzFace } from "../Grizz";
 import ContactFound from "../ContactFound";
@@ -461,6 +462,29 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // null = no discount; on save, persisted as `data.discount` so reloads
   // round-trip.
   const [discount, setDiscount] = useState<JobDiscount | null>(null);
+  // Customer referrals: credit this quote's customer has earned (earned, not
+  // yet used), and which of those credits the "Referral credit" discount on
+  // this quote uses. After a successful save they're marked used
+  // (/api/referrals/apply). Only loaded while referrals are on.
+  const referralsOn = useStore((s) => s.org?.referrals_enabled === true);
+  const [referralCredit, setReferralCredit] = useState<{ ids: string[]; cents: number } | null>(null);
+  const referralUseRef = useRef<string[]>([]);
+  useEffect(() => {
+    setReferralCredit(null);
+    referralUseRef.current = [];
+    if (!referralsOn || !customerId) return;
+    let live = true;
+    apiFetch(`/api/customers/marketing?id=${encodeURIComponent(customerId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { referrals?: { id: string; status: string; reward_cents: number | null }[] } | null) => {
+        if (!live || !j?.referrals) return;
+        const earned = j.referrals.filter((r) => r.status === "earned" && Number(r.reward_cents) > 0);
+        const cents = earned.reduce((t, r) => t + (Number(r.reward_cents) || 0), 0);
+        setReferralCredit(cents > 0 ? { ids: earned.map((r) => r.id), cents } : null);
+      })
+      .catch(() => { /* offline: no credit button */ });
+    return () => { live = false; };
+  }, [referralsOn, customerId]);
   // Per-quote labor-rate override (Feature 2). null = use the org/user
   // default; a positive number overrides for THIS quote only. Lives on
   // the rooms JSON blob as `data.laborRate` (no schema change).
@@ -1935,6 +1959,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       useStore.setState({ jobs: prev ? st.jobs.map((j) => (j.id === savedId ? merged : j)) : [merged, ...st.jobs] });
     }
     useStore.getState().showToast(t(editingId ? "qf.jobUpdated" : "qf.jobCreated") + ": " + prop, "success");
+    // Referral credit used on this quote → mark it used, so it can't go on
+    // another job too. Best-effort: a failure leaves the credit available.
+    if (savedId && discount?.label === REFERRAL_DISCOUNT_LABEL && referralUseRef.current.length) {
+      const ids = referralUseRef.current;
+      referralUseRef.current = [];
+      setReferralCredit(null);
+      for (const referralId of ids) {
+        void apiFetch("/api/referrals/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referralId, jobId: savedId }),
+        }).catch(() => { /* stays earned */ });
+      }
+    }
 
     // Saved: the screen IS the saved version now — drop its edit draft and
     // make this the new baseline.
@@ -2999,6 +3037,18 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
               );
             })}
           </div>
+          {referralCredit && discount?.label !== REFERRAL_DISCOUNT_LABEL && (
+            <button
+              className="bo"
+              onClick={() => {
+                referralUseRef.current = referralCredit.ids;
+                setDiscount({ type: "fixed", value: referralCredit.cents / 100, label: REFERRAL_DISCOUNT_LABEL });
+              }}
+              style={{ fontSize: 12.5, padding: "3px 10px", width: "auto" }}
+            >
+              Use {fmtCents(referralCredit.cents)} referral credit
+            </button>
+          )}
           {discount ? (
             <>
               <input

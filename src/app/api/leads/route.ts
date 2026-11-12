@@ -4,6 +4,7 @@ import { dispatchNotifications, resolveRecipients } from "@/lib/notify-server";
 import { siteOrigin } from "@/lib/site-url";
 import { applySmsConsent } from "@/lib/sms-consent";
 import { draftLeadQuote } from "@/lib/lead-draft";
+import { findReferrer, recordReferralLead } from "@/lib/referrals-server";
 
 export const dynamic = "force-dynamic";
 // The AI draft quote runs after the response (see `after` below) — a parse
@@ -43,6 +44,9 @@ interface Body {
   /** Profile.id of the technician whose share-link / QR brought the
    *  visitor here. Set by /card and /lead from ?tech=… or sessionStorage. */
   referrer_tech_id?: string;
+  /** A customer's referral code (the ?ref=… on their share link). Only
+   *  counts while the business has referrals on (lib/referrals-server.ts). */
+  referral_code?: string;
 }
 
 const trim = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
@@ -146,6 +150,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       if (data?.length) customerId = data[0].id;
     }
 
+    const createdNewCustomer = !customerId;
     if (!customerId) {
       const { data, error } = await supabase
         .from("customers")
@@ -185,6 +190,12 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       addressId = data.id;
     }
 
+    // Referral (best-effort, off unless the business turned referrals on):
+    // who shared the link this lead came in on.
+    const referrer = body.referral_code
+      ? await findReferrer(supabase, orgId, body.referral_code)
+      : null;
+
     // Lead job. Free-text `property` and `client` fields stay populated
     // so existing print templates and Jobs-list rendering work unchanged.
     // The structured link lives at customer_id / address_id.
@@ -199,6 +210,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       rooms: JSON.stringify({
         leadDescription: description,
         leadPhotos: photos,
+        ...(referrer && createdNewCustomer && referrer.id !== customerId ? { leadReferredBy: referrer.name || "a customer" } : {}),
         // Consent record per CTIA 5.1.2: when, where, the exact wording
         // shown, and the requester's IP (phone + name are on the lead).
         ...(typeof body.sms_consent === "boolean"
@@ -221,6 +233,13 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     }).select("id").single();
     if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 });
 
+    const referral = referrer
+      ? await recordReferralLead(supabase, {
+          orgId, referrer, leadCustomerId: customerId, createdNewCustomer, leadJobId: jobRow.id,
+        })
+      : null;
+    const referredBy = referral?.credited ? (referral.referrerName || "a customer") : null;
+
     // Notify the team a new lead landed. Owners/managers triage leads; the
     // referring tech (if the lead came in via their share link) gets it too
     // for attribution. Best-effort — never fail the lead capture if this
@@ -241,7 +260,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
           orgId,
           type: "new_lead",
           title: "New lead",
-          body: addressLine ? `${name} · ${addressLine}` : name,
+          body: (addressLine ? `${name} · ${addressLine}` : name) + (referredBy ? ` · referred by ${referredBy}` : ""),
           jobId: jobRow.id,
           smsBody: `New lead: ${name}${phone ? ` (${phone})` : ""} — ${summary}.${origin ? ` ${origin}` : ""}`,
           recipients,

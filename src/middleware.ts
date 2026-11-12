@@ -37,6 +37,8 @@ export const config = {
     "/api/portal/request-link",
     "/api/portal/request-link-email",
     "/api/portal/send-link",
+    "/api/campaigns/draft",
+    "/api/unsubscribe",
   ],
 };
 
@@ -64,6 +66,9 @@ const LIMITS: Record<string, number> = {
   "/api/portal/request-link": 2,
   "/api/portal/request-link-email": 2,
   "/api/portal/send-link": 5,
+  // AI-written campaign draft (cost-bearing) and the public unsubscribe.
+  "/api/campaigns/draft": 5,
+  "/api/unsubscribe": 10,
 };
 const DEFAULT_LIMIT = 12; // e.g. /api/stripe/* (connect, portal, …)
 const WINDOW_SEC = 60;

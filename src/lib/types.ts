@@ -121,6 +121,13 @@ export interface Organization {
    *  unset, the template uses a generic "reply with a star rating 1-5"
    *  fallback. */
   google_review_url?: string;
+  /** Email campaigns (Ops → Campaigns). OFF by default; the owner turns it
+   *  on in Business settings → Customer messages. */
+  campaigns_enabled?: boolean;
+  /** Customer referrals (share link + credit). OFF by default. */
+  referrals_enabled?: boolean;
+  /** What a referrer earns, in cents, when the friend pays their first job. */
+  referral_reward_cents?: number | null;
   created_at?: string;
 }
 
@@ -206,6 +213,12 @@ export interface Customer {
   card_last4?: string | null;
   card_exp?: string | null;
   card_saved_at?: string | null;
+  /** Set when the customer unsubscribed from marketing email (link in a
+   *  campaign, a spam complaint, or the owner's "Don't email"). The app can
+   *  set it but never clear it (DB trigger). */
+  email_unsubscribed_at?: string | null;
+  /** This customer's own referral code (?ref=… on their share link). */
+  referral_code?: string | null;
 }
 
 export interface Address {

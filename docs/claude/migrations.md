@@ -2,6 +2,18 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
+- Email campaigns + customer referrals (**NOT yet run in prod**): run
+  `supabase/migrations/20261112170000_campaigns_and_referrals.sql`. Adds the
+  OFF-by-default switches `organizations.campaigns_enabled /
+  referrals_enabled` and `referral_reward_cents` (default 2500), the
+  customer columns `email_unsubscribed_at` and `referral_code` (backfilled,
+  unique), a trigger `customers_protect_marketing` (the app can set an
+  unsubscribe but never clear it, and can't set or change a referral code),
+  and the tables `campaigns`, `campaign_sends`, `customer_referrals` (RLS:
+  owners/managers read their own business; every write is server-side).
+  Until it runs, the new switches in Customer messages can't save and the
+  new screens stay hidden; nothing else changes.
+
 - Automatic customer texts (**RUN in prod**: tables/columns present 2026-11-10): run
   `supabase/migrations/20261109_automatic_texts.sql` in the SQL editor. Adds the
   three OFF-by-default switches `organizations.auto_sms_enroute /

@@ -21,6 +21,8 @@ import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
 import BookingSettings from "../BookingSettings";
+import Campaigns from "./Campaigns";
+import { CampaignsCard, ReferralsCard } from "../MarketingSettings";
 
 /**
  * Catches render-time crashes inside an Ops sub-tab so the whole tab
@@ -472,7 +474,7 @@ function OpsSettings() {
           // Review Automation auto-schedules a review-request SMS / email N hours
           // after a Stripe-paid invoice; follow-up nudges unanswered quotes; the
           // text-messaging links go in the approval page's consent box.
-          content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><AutoTextsCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
+          content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><AutoTextsCard org={org} saveOrg={saveOrg} /><CampaignsCard org={org} saveOrg={saveOrg} /><ReferralsCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
         },
         // Beta preflight — one-tap deployment readiness check. Platform
         // operators only: customers shouldn't see env vars / migrations.
@@ -708,11 +710,11 @@ function ReviewAutomationCard({
   );
 }
 
-type OpsTab = "payroll" | "financials" | "customers" | "recurring" | "hr" | "team" | "billing" | "settings";
+type OpsTab = "payroll" | "financials" | "customers" | "recurring" | "campaigns" | "hr" | "team" | "billing" | "settings";
 
 const AREA_LABEL_KEY: Record<OpsTab, string> = {
   payroll: "ops.payroll", financials: "ops.financials", customers: "ops.customers", recurring: "ops.recurring",
-  hr: "ops.hr", team: "ops.team", billing: "ops.billing", settings: "ops.settings",
+  campaigns: "ops.campaigns", hr: "ops.hr", team: "ops.team", billing: "ops.billing", settings: "ops.settings",
 };
 const areaLabel = (tab: OpsTab): string => t(AREA_LABEL_KEY[tab]);
 
@@ -722,6 +724,7 @@ const TILE_STYLE: Record<OpsTab, { icon: IconName; color: string; bg: string }> 
   financials: { icon: "trending", color: "#8cc0ff", bg: "rgba(46,139,255,.14)" },
   customers:  { icon: "clients",  color: "#3ee08f", bg: "rgba(0,204,102,.14)" },
   recurring:  { icon: "refresh",  color: "#3aa0ff", bg: "rgba(58,160,255,.14)" },
+  campaigns:  { icon: "mail",     color: "#ff8fb1", bg: "rgba(255,95,145,.14)" },
   hr:         { icon: "card",     color: "#ffb15e", bg: "rgba(255,136,0,.16)" },
   team:       { icon: "worker",   color: "#c9a6ff", bg: "rgba(157,78,221,.16)" },
   billing:    { icon: "receipt",  color: "#f5b400", bg: "rgba(245,180,0,.16)" },
@@ -757,8 +760,10 @@ export default function Operations({ setPage, initialTab, openTexts }: {
 
   // tab = null → the launcher hub (admins). A non-null tab opens that
   // area's detail. Non-admins skip the hub entirely (HR is their root).
-  const validTabs: OpsTab[] = ["payroll", "financials", "customers", "recurring", "hr", "team", "billing", "settings"];
-  const adminOnly: OpsTab[] = ["payroll", "financials", "customers", "recurring", "team", "billing", "settings"];
+  // Campaigns only exists while the owner has email campaigns turned on.
+  const campaignsOn = org?.campaigns_enabled === true;
+  const validTabs: OpsTab[] = ["payroll", "financials", "customers", "recurring", ...(campaignsOn ? (["campaigns"] as OpsTab[]) : []), "hr", "team", "billing", "settings"];
+  const adminOnly: OpsTab[] = ["payroll", "financials", "customers", "recurring", "campaigns", "team", "billing", "settings"];
   const [tab, setTab] = useState<OpsTab | null>(() => {
     // Deep-link (e.g. More hub → Customers) opens a specific area, but a
     // non-admin can't reach an admin-only area — bounce them to HR.
@@ -808,6 +813,7 @@ export default function Operations({ setPage, initialTab, openTexts }: {
     financials: `${fmtMoney(revenueMonth)} · ${monthLabel}`,
     customers: `${customers.length} ${customers.length === 1 ? t("ops.clientSingular") : t("ops.clientPlural")}`,
     recurring: `${recurringJobs.filter((r) => r.is_active).length} recurring · ${membershipPlans.filter((p) => p.is_active).length} plans`,
+    campaigns: t("ops.campaignsSub"),
     hr: pendingTimeOffCount ? `${pendingTimeOffCount} ${t("ops.timeOffPending")}` : t("ops.timeOffPto"),
     team: `${profiles.length} ${profiles.length === 1 ? t("ops.memberSingular") : t("ops.memberPlural")}`,
     billing: planLabel,
@@ -907,6 +913,9 @@ export default function Operations({ setPage, initialTab, openTexts }: {
       )}
       {tab === "recurring" && (
         <SubTabErrorBoundary label="Recurring"><RecurringMemberships /></SubTabErrorBoundary>
+      )}
+      {tab === "campaigns" && (
+        <SubTabErrorBoundary label="Campaigns"><Campaigns /></SubTabErrorBoundary>
       )}
       {tab === "hr" && (
         // Admins see it under the Ops back header (no second title); crew

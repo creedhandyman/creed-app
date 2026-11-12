@@ -23,6 +23,7 @@ import { statusColor } from "@/lib/status";
 import { INTERVAL_LABEL } from "@/lib/memberships";
 import EquipmentSection from "./EquipmentSection";
 import TextsCard from "../TextsCard";
+import CustomerMarketingCard from "../CustomerMarketingCard";
 
 interface Props {
   customerId: string;
@@ -726,6 +727,9 @@ export default function CustomerDetail({ customerId, onBack, embedded, onOpenJob
 
       {/* Texts on the business number with this customer (none = nothing shown) */}
       {onOpenTexts && <TextsCard customerId={customer.id} variant="card" onOpen={onOpenTexts} />}
+
+      {/* Email campaigns + referrals (nothing shown while both are off) */}
+      <CustomerMarketingCard customerId={customer.id} hasEmail={!!(customer.email || "").includes("@")} />
 
       {/* Related work */}
       <div className="cd mb">

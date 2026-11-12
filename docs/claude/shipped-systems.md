@@ -2,6 +2,39 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Email campaigns + customer referrals (2026-11-12, branch
+  `feature/campaigns-and-referrals`, both OFF by default)**. Switches live in
+  Ops → Business settings → Customer messages (`components/MarketingSettings.tsx`).
+  *Campaigns*: Ops → Campaigns tile appears only while `campaigns_enabled`
+  (`screens/Campaigns.tsx`). Audiences, recipient rules, merge fields and the
+  footer are pure in `lib/campaigns.ts` (tested): unsubscribed and invalid
+  emails are always skipped, each address once; "lapsed" = finished work but
+  no job in 365 days; "members" = active/past-due plan. Server:
+  `lib/campaigns-server.ts`; `/api/campaigns` (list/save draft),
+  `/count`, `/draft` (AI, rate-limited), `/send` (test → the owner's own
+  email only; real → queues `campaign_sends`), `/cancel`, and the cron
+  `/api/campaigns/dispatch` (every 15 min) that claims queued rows, re-checks
+  unsubscribes, sends ~2/s with List-Unsubscribe + one-click POST headers and
+  Reply-To the business email, and pauses (keeps the queue) if the business
+  turns campaigns off or loses its address. Every email needs the business
+  mailing address (CAN-SPAM). Unsubscribe: signed per-customer token
+  (`lib/unsubscribe-token.ts`, PORTAL_SESSION_SECRET with an "unsub:" purpose)
+  → `/u/[token]` (one tap) or the one-click POST to `/api/unsubscribe`.
+  Resend webhook `/api/resend/webhook` (Svix signature, `lib/resend-webhook.ts`,
+  fails closed) stamps delivered/opened/clicked/bounced/complained; a spam
+  complaint unsubscribes the customer. Rows stuck in `sending` are never
+  retried, so nobody is emailed twice.
+  *Referrals*: each customer's link is `/lead/{site_slug}?ref={referral_code}`
+  (needs a published site). `/api/leads` records a `pending` referral only
+  when the lead CREATED a new customer (never yourself, one referrer per new
+  customer) and adds "referred by" to the new-lead alert. The friend's first
+  recorded payment (`fulfillJobPayment` → `lib/referrals-server.ts`) turns it
+  `earned` with the business's reward. The credit shows on the customer page
+  (`components/CustomerMarketingCard.tsx`, also "Don't email") and in the
+  portal (Refer a friend card); QuoteForge offers "Use $X referral credit",
+  a fixed discount labeled "Referral credit", and marks the credit `applied`
+  after the save (`/api/referrals/apply`).
+
 - **Follow-ups (2026-11-11)**: (1) A lead that opens on its automatic draft
   (`leadDraft`) shows an "Automatic draft" card in the quote editor with
   **Edit request & rebuild** (QuoteForge `leadDraftSeed`, only while the job
