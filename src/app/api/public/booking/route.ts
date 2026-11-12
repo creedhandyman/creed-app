@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { dispatchNotifications, resolveRecipients } from "@/lib/notify-server";
 import { applySmsConsent } from "@/lib/sms-consent";
+import { recordCustomerSmsConsent } from "@/lib/sms-consent-server";
 import { draftLeadQuote } from "@/lib/lead-draft";
 import { sendEmail } from "@/lib/email";
 import { loadBookingOrg, loadBusyVisits } from "@/lib/booking-server";
@@ -211,6 +212,19 @@ export async function POST(req: NextRequest) {
       const jobId = jobRow.id as string;
 
       await supabase.from("schedule").update({ job_id: jobId }).eq("id", scheduleId);
+
+      // The booking page's text box, onto the customer too (see sms-consent).
+      if (typeof body.sms_consent === "boolean") {
+        await recordCustomerSmsConsent(supabase, customerId, orgId, {
+          granted: body.sms_consent,
+          at: new Date().toISOString(),
+          source: "online booking page",
+          phone: phone || undefined,
+          text: trim(body.sms_consent_text, 1000),
+          ip,
+          jobId,
+        }, "form");
+      }
 
       // 4) Tell the owner/managers (in-app feed + their usual channels).
       try {

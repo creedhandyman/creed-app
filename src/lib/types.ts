@@ -206,6 +206,9 @@ export interface Customer {
   card_last4?: string | null;
   card_exp?: string | null;
   card_saved_at?: string | null;
+  /** Automatic-text consent: current answer + history (lib/sms-consent.ts
+   *  CustomerSmsConsent). Absent until 20261112_customer_text_consent.sql runs. */
+  sms_consent?: unknown;
 }
 
 export interface Address {

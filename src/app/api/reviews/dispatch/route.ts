@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email";
 import { residentContact } from "@/lib/resident";
-import { smsConsentGranted } from "@/lib/sms-consent";
+import { autoTextConsent, residentTextConsent } from "@/lib/sms-consent";
+import { loadCustomersWithConsent } from "@/lib/sms-consent-server";
 import { normalizePhone, sendSms, smsConfigured } from "@/lib/sms";
 import { cronAuth } from "@/lib/cron-auth";
 
@@ -59,6 +60,8 @@ interface CustomerRow {
   name: string | null;
   phone: string | null;
   email: string | null;
+  /** customers.sms_consent (absent before its migration). */
+  sms_consent?: unknown;
 }
 
 function defaultTemplate(): string {
@@ -155,13 +158,14 @@ async function dispatchOne(
     const toPhone = resident.phone || customer?.phone || "";
     if (!toPhone) {
       errors.push("No phone on resident or customer");
-    } else if (resident.phone) {
+    } else if (resident.phone && !residentTextConsent(job.rooms, resident.phone)) {
       // Business texts need the recipient's own opt-in (A2P 10DLC / CTIA).
-      // The consent on file came from the customer (quote form / approval
-      // page) — it doesn't cover a resident on a property-management job.
-      errors.push("SMS: the resident hasn't opted in to texts");
-    } else if (!smsConsentGranted(job.rooms)) {
-      errors.push("SMS: no text-message consent on record for this customer");
+      // The customer's consent doesn't cover a resident on a
+      // property-management job; the resident's own answer (marked on the
+      // job) does.
+      errors.push("SMS: the resident hasn't agreed to texts");
+    } else if (!resident.phone && !autoTextConsent(customer, job.rooms).ok) {
+      errors.push(`SMS: ${autoTextConsent(customer, job.rooms).reason || "no text-message consent on record for this customer"}`);
     } else {
       const r = await sendReviewSms(toPhone, body);
       if (r.ok) sentAny = true; else errors.push(`SMS: ${r.error}`);
@@ -243,14 +247,12 @@ async function handleDispatch(req: NextRequest): Promise<NextResponse> {
     jobIds.length
       ? supabase.from("jobs").select("id, property, client, rooms").in("id", jobIds)
       : Promise.resolve({ data: [] as JobRow[], error: null }),
-    custIds.length
-      ? supabase.from("customers").select("id, name, phone, email").in("id", custIds)
-      : Promise.resolve({ data: [] as CustomerRow[], error: null }),
+    loadCustomersWithConsent<CustomerRow>(supabase, custIds, "id, name, phone, email"),
   ]);
 
   const orgsById = new Map<string, OrgRow>(((orgRes.data || []) as OrgRow[]).map((o) => [o.id, o]));
   const jobsById = new Map<string, JobRow>(((jobRes.data || []) as JobRow[]).map((j) => [j.id, j]));
-  const customersById = new Map<string, CustomerRow>(((custRes.data || []) as CustomerRow[]).map((c) => [c.id, c]));
+  const customersById = custRes;
 
   const results: DispatchResult[] = [];
   for (const row of rows) {

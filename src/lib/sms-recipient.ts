@@ -1,5 +1,6 @@
 import { residentContact } from "./resident";
 import { normalizePhone } from "./phone";
+import { autoTextConsent, residentTextConsent } from "./sms-consent";
 
 /**
  * Who gets an automatic text for a job. PURE (tested in sms-recipient.test.ts)
@@ -25,6 +26,8 @@ export interface RecipientCustomer {
   name?: string | null;
   phone?: string | null;
   email?: string | null;
+  /** customers.sms_consent (lib/sms-consent.ts) — absent before the migration. */
+  sms_consent?: unknown;
 }
 
 export type Recipient =
@@ -105,4 +108,28 @@ export function pickedRecipient(
     name: (pm ? customer?.name : customer?.name || job.client) || "",
     role: pm ? "property_manager" : "customer",
   };
+}
+
+/**
+ * Did the person this automatic text would go to agree to texts?
+ *   - resident: their own answer on the job (residentSmsConsent), for that
+ *     number. The customer's consent never covers a resident.
+ *   - customer / property manager: autoTextConsent (customer row + this job).
+ * Every automatic Twilio send asks this (or autoTextConsent) first.
+ */
+export function recipientConsent(
+  role: RecipientRole,
+  phone: string,
+  job: { rooms: unknown },
+  customer: RecipientCustomer | null | undefined,
+): { ok: true } | { ok: false; message: string } {
+  if (role === "resident") {
+    return residentTextConsent(job.rooms, phone)
+      ? { ok: true }
+      : { ok: false, message: "The resident hasn't agreed to automatic texts. Mark it on the job if they have." };
+  }
+  const c = autoTextConsent(customer, job.rooms);
+  return c.ok
+    ? { ok: true }
+    : { ok: false, message: `${c.reason || "No text consent on file."} Record it on the customer page if they agreed.` };
 }

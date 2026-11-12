@@ -124,7 +124,9 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      customer: customerRes.data[0],
+      // The text-consent record (IP, team member names) is internal; the
+      // portal doesn't use it.
+      customer: (({ sms_consent: _consent, ...rest }) => rest)(customerRes.data[0] as Record<string, unknown>),
       addresses: addressesRes.data || [],
       // aiHrs + the consent record's IP are internal — see ai-hours.ts.
       jobs: jobs.map((j) => ({ ...j, rooms: customerSafeBlob(j.rooms) })),

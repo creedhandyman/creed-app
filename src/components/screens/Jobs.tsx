@@ -32,6 +32,7 @@ import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours } from "@/lib/dates";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes, cityContext } from "@/lib/geo";
 import { residentContact } from "@/lib/resident";
+import { nextCustomerSmsConsent, residentSmsConsentOf, residentTextConsent } from "@/lib/sms-consent";
 import { isPropertyManager, type MessagePick } from "@/lib/sms-recipient";
 import {
   CADENCES,
@@ -1465,6 +1466,36 @@ ${invoicePhotosHtml}
                     <input key={`re-${dj.id}`} type="email" defaultValue={res.email} placeholder="—" aria-label={t("jobs.residentEmail")}
                       onBlur={(e) => saveResident("residentEmail", e.target.value.trim())} style={inputStyle} />
                   </div>
+                  {/* The resident's OWN yes to automatic texts (reminders, review
+                      requests). The customer's consent never covers them. Tied
+                      to the number on file (lib/sms-consent residentTextConsent). */}
+                  {(() => {
+                    const rc = residentSmsConsentOf(dj.rooms);
+                    const on = residentTextConsent(dj.rooms, res.phone);
+                    const setResidentConsent = (granted: boolean) => {
+                      const entry = {
+                        granted,
+                        at: new Date().toISOString(),
+                        source: granted ? "recorded by owner" : "turned off by owner",
+                        by: user.name || "",
+                        phone: res.phone,
+                      };
+                      void patchBlob(dj.id, (b) => {
+                        const next = nextCustomerSmsConsent(b.residentSmsConsent, entry, "set");
+                        return next ? { residentSmsConsent: next } : {};
+                      }).then((r) => { if (r.ok && r.changed) void loadAll(); });
+                    };
+                    return (
+                      <label className="drow" style={{ cursor: isAdmin && res.phone ? "pointer" : "default", opacity: res.phone ? 1 : 0.5 }}>
+                        <span className="l">{t("consent.residentLabel")}</span>
+                        <span className="v" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          {on && rc?.at && <span className="dim" style={{ fontSize: 12 }}>{new Date(rc.at).toLocaleDateString()}</span>}
+                          <input type="checkbox" checked={on} disabled={!isAdmin || !res.phone}
+                            onChange={(e) => setResidentConsent(e.target.checked)} style={{ width: 20, height: 20 }} />
+                        </span>
+                      </label>
+                    );
+                  })()}
                   <div className="dim" style={{ fontSize: 12, padding: "2px 0 4px" }}>{t("jobs.residentHint")}</div>
                 </>
               );

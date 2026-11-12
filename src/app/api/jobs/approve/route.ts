@@ -6,6 +6,7 @@ import { scopeFingerprint } from "@/lib/approval";
 import { applyApproval } from "@/lib/approve-job";
 import type { Room } from "@/lib/types";
 import { applySmsConsent } from "@/lib/sms-consent";
+import { recordCustomerSmsConsent } from "@/lib/sms-consent-server";
 import { notifyQuoteApproved } from "@/lib/notify-server";
 import { tryReadBlob } from "@/lib/job-blob";
 
@@ -188,6 +189,19 @@ export async function POST(req: NextRequest) {
         { error: `${updErr.message}${updErr.message.includes("approved_") ? " — has the schema migration been run? See CLAUDE.md." : ""}` },
         { status: 500 }
       );
+    }
+
+    // A "yes" in the approval page's text box also goes on the customer, so
+    // it covers their other jobs (an unchecked box never revokes).
+    if (body.smsConsent === true && job.customer_id) {
+      await recordCustomerSmsConsent(supabase, job.customer_id, job.org_id, {
+        granted: true,
+        at: nowIso,
+        source: "quote approval page",
+        text: trim(body.smsConsentText),
+        ip,
+        jobId,
+      }, "form");
     }
 
     // Tell the owner — first approval only (quoted → accepted), never on a

@@ -272,6 +272,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     QuoteForge's whole-blob saves, and the server routes (approve /
     record-approval / lead-draft keep their own status-guarded writes).
     Tested at the interface with fake adapters (`job-write.test.ts`).
+  - `lib/sms-consent.ts autoTextConsent` (+ `sms-recipient.ts
+    recipientConsent` for residents) — every AUTOMATIC Twilio text to a
+    customer asks it first (2026-11-12, see shipped-systems.md "Text consent
+    per customer"). Hand-sent texts (Messages app) never do.
   - `lib/nav-intent.ts` for every deep link; day-plan / dispatch-week
     `parseSchedTime` / `parseSchedCrew` / `stripNoteParts` for 🕐/👷 notes.
   - Server: `lib/cron-auth.ts` `cronAuth`; `lib/payment-fulfillment.ts`

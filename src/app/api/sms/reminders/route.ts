@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { cronAuth } from "@/lib/cron-auth";
 import { smsConfigured } from "@/lib/sms";
 import { sendLoggedSms } from "@/lib/sms-log";
-import { textRecipient, type RecipientCustomer } from "@/lib/sms-recipient";
+import { recipientConsent, textRecipient, type RecipientCustomer } from "@/lib/sms-recipient";
+import { loadCustomersWithConsent } from "@/lib/sms-consent-server";
 import { textBody } from "@/lib/sms-templates";
 import { parseSchedTime } from "@/lib/day-plan";
 import { ymdInZone } from "@/lib/dates";
@@ -23,8 +24,10 @@ export const dynamic = "force-dynamic";
  * OFF by default). For each schedule row on TOMORROW (Central time) that is
  * linked to a job and hasn't been reminded, text the right person
  * (lib/sms-recipient: the resident on a property-manager job, else the
- * customer) the day and time. No resident number on a PM job = nothing is
- * sent and the owner gets an in-app alert.
+ * customer) the day and time — only if that person agreed to texts
+ * (recipientConsent: the customer's consent, or the resident's own on a PM
+ * job). No number or no consent = nothing is sent and the owner gets an
+ * in-app alert to remind them by hand.
  *
  * Idempotent: each row is claimed (reminder_sent_at set where it was null)
  * BEFORE sending, so a double-fired cron can't text twice. One text per job
@@ -85,11 +88,8 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     .from("jobs").select("id, org_id, property, client, customer_id, rooms, status, archived").in("id", jobIds);
   const jobs = new Map<string, JobRow>(((jobRows || []) as JobRow[]).map((j) => [j.id, j]));
   const custIds = [...new Set([...jobs.values()].map((j) => j.customer_id).filter(Boolean) as string[])];
-  const { data: custRows } = custIds.length
-    ? await supabase.from("customers").select("id, type, name, phone, email").in("id", custIds)
-    : { data: [] };
-  const customers = new Map<string, RecipientCustomer>(
-    ((custRows || []) as (RecipientCustomer & { id: string })[]).map((c) => [c.id, c]),
+  const customers = await loadCustomersWithConsent<RecipientCustomer & { id: string }>(
+    supabase, custIds, "id, type, name, phone, email",
   );
 
   const results: { schedule_id: number; job_id: string; via: string; error?: string }[] = [];
@@ -107,7 +107,11 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     }
     doneJobs.add(job.id);
     const customer = job.customer_id ? customers.get(job.customer_id) : undefined;
-    const to = textRecipient("reminder", job, customer);
+    const found = textRecipient("reminder", job, customer);
+    const consent = found.ok ? recipientConsent(found.role, found.phone, job, customer) : null;
+    const to = found.ok && consent && !consent.ok
+      ? { ok: false as const, reason: "no_consent" as const, message: consent.message }
+      : found;
     const time = parseSchedTime(row.note);
     // Morning-of run: a visit that has already started needs no reminder,
     // and neither does one booked this same morning (they just agreed to it).
