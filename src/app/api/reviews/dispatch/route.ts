@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
  * Hourly cron — reads any review_requests rows whose scheduled_for has
  * passed and status is still "scheduled", builds the message from the
  * org template (or default), sends via Twilio SMS / Resend email
- * depending on `channel`, then patches the row's status + sent_at /
- * error.
+ * depending on `channel` (a text-only request falls back to email when
+ * the text can't go), then patches the row's status + sent_at / error.
  *
  * Authorization: lib/cron-auth.ts — CRON_SECRET bearer, or x-admin-token
  * for manual triggers from the field-test panel.
@@ -172,10 +172,14 @@ async function dispatchOne(
     }
   }
 
-  if (row.channel === "email" || row.channel === "both") {
+  // Email goes out when the channel asks for it, and as the fallback for a
+  // text-only request whose text couldn't go (no consent or no phone is the
+  // common case) — so the review ask still reaches someone with an email.
+  const emailFallback = row.channel === "sms" && !sentAny;
+  if (row.channel === "email" || row.channel === "both" || emailFallback) {
     const toEmail = resident.email || customer?.email || "";
     if (!toEmail) {
-      errors.push("No email on resident or customer");
+      errors.push(emailFallback ? "No email on resident or customer for the fallback" : "No email on resident or customer");
     } else {
       const subject = `Quick favor from ${businessName}`;
       const r = await sendEmail(toEmail, subject, body);

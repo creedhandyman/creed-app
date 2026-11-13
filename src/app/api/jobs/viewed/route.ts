@@ -43,9 +43,15 @@ export async function POST(req: NextRequest) {
     const alert = shouldNotifyView(prevAt, prevCount, now);
     const viewCount = prevCount + 1;
 
+    // A customer opening the signed link proves the quote went out, even when
+    // it was sent outside Creed (Gmail, a portal). Stamp it as sent if it
+    // isn't already, so the automatic follow-ups can see it.
+    const nowIso = new Date(now).toISOString();
+    const patch: Record<string, unknown> = { quote_view_count: viewCount, quote_viewed_at: nowIso };
+    if (!job.quote_sent_at) patch.quote_sent_at = nowIso;
     const { error } = await supabase
       .from("jobs")
-      .update({ quote_view_count: viewCount, quote_viewed_at: new Date(now).toISOString() })
+      .update(patch)
       .eq("id", jobId);
     if (error) return quiet({ counted: false }); // columns missing until the migration runs
 

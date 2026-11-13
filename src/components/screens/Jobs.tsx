@@ -1786,6 +1786,15 @@ ${invoicePhotosHtml}
           {/* Manage */}
           <div className="section">
             <div className="seclabel"><Icon name="settings" size={13} /> {t("jobs.manage")}</div>
+            {/* Sent the quote outside Creed (Gmail, a PM portal)? Marking it
+                sent moves it to Waiting on customer and starts the automatic
+                follow-up clock from today. */}
+            {dj.status === "quoted" && !dj.quote_sent_at && (
+              <div className="linkrow" onClick={() => markSent(dj.id, "quote")}>
+                <span className="lf"><span className="ic"><Icon name="checkCircle" size={15} /></span> {t("jobs.alreadySentQuote")}</span>
+                <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />
+              </div>
+            )}
             <div className="linkrow" onClick={() => setRecurringFrom(dj)}>
               <span className="lf"><span className="ic"><Icon name="refresh" size={15} /></span> {t("jobs.makeRecurring")}</span>
               <Icon name="next" size={15} style={{ color: "var(--color-dim)" }} />

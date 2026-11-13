@@ -17,7 +17,8 @@ interface Props {
  * Review-request modal — appears when a job hits "complete" or "paid" so the
  * crew can fire off a one-tap text or email asking for a review while the
  * client's experience is still fresh. Pre-fills the message with the org
- * name, property, and a /review link tied to this specific job.
+ * name, property, and the business's Google review link (or, when none is
+ * set, a /review link tied to this specific job).
  *
  * No external API: sms: and mailto: open the user's native messaging app,
  * the user taps Send there. Same pattern as the existing "Send Job to
@@ -42,8 +43,12 @@ export default function ReviewRequestModal({ job, onClose, onSent }: Props) {
       : null;
     setCustomer(c);
 
+    // The business's Google review link leads when it's set (Ops → Settings):
+    // public Google reviews are what new customers see. Creed's own /review
+    // page is the fallback for a business without one.
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const reviewUrl = `${origin}/review?org=${org?.id || ""}&job=${job.id}`;
+    const googleUrl = org?.google_review_url?.trim() || "";
+    const reviewUrl = googleUrl || `${origin}/review?org=${org?.id || ""}&job=${job.id}`;
     const orgName = org?.name || "us";
     // Greet the RESIDENT when one is on file (PM jobs) — same preference
     // the automated cron uses (lib/resident.ts).
