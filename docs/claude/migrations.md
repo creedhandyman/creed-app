@@ -2,7 +2,7 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
-- Email campaigns + customer referrals (**NOT yet run in prod**): run
+- Email campaigns + customer referrals (**run in prod 2026-11-13**):
   `supabase/migrations/20261112170000_campaigns_and_referrals.sql`. Adds the
   OFF-by-default switches `organizations.campaigns_enabled /
   referrals_enabled` and `referral_reward_cents` (default 2500), the
@@ -13,6 +13,14 @@ Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether i
   owners/managers read their own business; every write is server-side).
   Until it runs, the new switches in Customer messages can't save and the
   new screens stay hidden; nothing else changes.
+- Per-customer text consent (**run in prod 2026-11-13**):
+  `supabase/migrations/20261112_customer_text_consent.sql` in the SQL editor
+  (safe to re-run). Adds `customers.sms_consent JSONB` (current answer + up to
+  20 earlier ones; shape in `lib/sms-consent.ts` CustomerSmsConsent) and
+  backfills each customer's newest job-blob "yes". Ends with a count query.
+  Before it runs: automatic texts still work off the per-job opt-in only, and
+  the customer page's Automatic texts buttons show a save error. In preflight
+  `DB_CHECKS` as `customers.sms_consent`.
 
 - Automatic customer texts (**RUN in prod**: tables/columns present 2026-11-10): run
   `supabase/migrations/20261109_automatic_texts.sql` in the SQL editor. Adds the

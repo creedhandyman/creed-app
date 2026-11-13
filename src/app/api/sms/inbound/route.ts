@@ -2,6 +2,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/sms";
 import { clearOptOut, isOptedOut, recordOptOut } from "@/lib/sms-log";
+import { stampConsentFromReply } from "@/lib/sms-consent-server";
 import { isYes, keywordOf, photosFrom } from "@/lib/sms-inbound";
 import { alertOptOut, alertReply, matchInbound, saveInbound, savePhotos } from "@/lib/sms-inbound-server";
 import { formParams, validTwilioSignature } from "@/lib/twilio-signature";
@@ -63,10 +64,12 @@ export async function POST(req: NextRequest) {
   if (keyword === "stop") {
     await recordOptOut(supabase, from, "stop_reply", match.orgId);
     after(() => alertOptOut(supabase, from, match));
+    after(() => stampConsentFromReply(supabase, from, "stop"));
     return twiml();
   }
   if (keyword === "start") {
     await clearOptOut(supabase, from);
+    after(() => stampConsentFromReply(supabase, from, "start"));
     return twiml();
   }
   if (keyword === "help") {

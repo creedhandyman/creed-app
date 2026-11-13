@@ -7,6 +7,7 @@ import { withTimeout } from "./pdf-detect";
 import { buildGrounding, type KbRow } from "./quote-grounding";
 import { salvageJson } from "./json-salvage";
 import { completionJobIds, dropUnfinishedJobRows } from "./learning-rows";
+import { applyAiLevels } from "./tiers";
 
 /* ====== PDF LOADING ====== */
 
@@ -569,6 +570,14 @@ IMPORTANT: For full repaints, do NOT list just "1 gal" for every room — size i
 ## SPECIFIC DETAILS
 Capture from report: paint colors, hardware finishes (brushed nickel, oil-rubbed bronze), brands, sizes/dimensions, model numbers. Put in "comment" field AND material names.
 
+## SCOPE LEVELS — tag EVERY line item with "level" (three-tier quoting)
+The customer is shown three cumulative prices: Essential = every "must-fix" line, Complete = Essential + every "recommended" line, Premium = Complete + every "upgrade" line. Decide each line's level WHILE you build the quote, from the photos and the description:
+- "must-fix": what the customer asked for, anything damaged / broken / failing, safety and code items (smoke alarms, GFCI, trip hazards, active leaks), and on an inspection every D and P finding plus every explicit Maintenance action. When in doubt between must-fix and recommended, choose must-fix — never leave asked-for work out of Essential.
+- "recommended": work a good tradesman would do while already there that the customer did not ask for — worn / Fair (F) items, the related part that is about to fail (supply lines and shutoffs with a toilet swap, caulk with a tub repair), finishing work that makes the job last (prime + paint the drywall patch, seal the new grout).
+- "upgrade": a better-than-needed version or a nice-to-have. Write it as an ADD-ON priced ONLY for the extra — the upgrade materials' price difference and any extra labor — never a second full copy of a must-fix task (Premium already includes the must-fix line, so "Upgrade to a pull-down kitchen faucet (+$120 over standard)" not "Install pull-down faucet"). Offer 1–3 genuine upgrades when the job has them; do not invent upgrades for a simple repair.
+- Every must-fix and recommended line still follows all the rules above (hours, materials, trade buckets). Levels decide which tier a line is in, never its price.
+- A small job with one task: one line, "must-fix" — do NOT pad it with recommended or upgrade lines to make tiers.
+
 ## OUTPUT FORMAT — Return ONLY valid JSON:
 {
   "property": "address or empty string",
@@ -582,7 +591,8 @@ Capture from report: paint colors, hardware finishes (brushed nickel, oil-rubbed
           "condition": "D (damaged/urgent) | P (poor/needed) | F (fair/minor) | - (general)",
           "comment": "Clear work description referencing inspection finding",
           "laborHrs": 0.25,
-          "materials": [{"n": "Specific material", "c": 15}]
+          "materials": [{"n": "Specific material", "c": 15}],
+          "level": "must-fix | recommended | upgrade"
         }
       ]
     }
@@ -944,7 +954,7 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phanto
         .filter(Boolean)
         .sort()
         .join("+");
-      // Good-Better-Best: the same task priced differently per option (e.g.
+      // three-tier: the same task priced differently per option (e.g.
       // standard vs premium paint) is two real lines, not a duplicate.
       const tierKey = Array.isArray(it.tiers) ? [...it.tiers].sort().join(",") : "";
       const key = `${detailKey}|${matKey}|${tierKey}`;
@@ -2105,16 +2115,19 @@ ${cleanText.slice(0, INPUT_TEXT_CAP)}`
     const rooms: Room[] = (parsed.rooms || []).map(
       (r: { name: string; items: Array<Omit<RoomItem, "id">> }) => ({
         name: r.name,
-        items: (r.items || []).map((it) => ({
-          ...it,
+        items: (r.items || []).map((raw) => ({
+          // The AI's scope level ("level": must-fix / recommended / upgrade)
+          // becomes the line's tier membership before validation, so the
+          // dedupe key already sees an upgrade line as its own tier.
+          ...(applyAiLevels(raw as Record<string, unknown>) as Omit<RoomItem, "id">),
           id: crypto.randomUUID().slice(0, 8),
           // Default only when the model OMITTED hours. An explicit 0 is
           // intentional (a "no charge" flag/note or a materials-only line) —
           // `|| 0.5` used to turn it into billed labor, which calibration then
           // inflated further (a "no charge" HVAC note came out as 0.8h / $44).
-          laborHrs: modelHours(it.laborHrs),
-          materials: it.materials?.length
-            ? it.materials
+          laborHrs: modelHours(raw.laborHrs),
+          materials: raw.materials?.length
+            ? raw.materials
             : [{ n: "Materials", c: 0 }],
         })),
       })

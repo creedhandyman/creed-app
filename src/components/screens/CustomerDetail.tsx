@@ -24,6 +24,7 @@ import { INTERVAL_LABEL } from "@/lib/memberships";
 import EquipmentSection from "./EquipmentSection";
 import TextsCard from "../TextsCard";
 import CustomerMarketingCard from "../CustomerMarketingCard";
+import TextConsentCard from "../TextConsentCard";
 
 interface Props {
   customerId: string;
@@ -501,6 +502,9 @@ export default function CustomerDetail({ customerId, onBack, embedded, onOpenJob
           </>
         )}
       </div>
+
+      {/* Automatic texts — may Creed's number text this customer (consent on file) */}
+      <TextConsentCard customer={customer} jobs={allRelated} />
 
       {/* Portal */}
       <div className="cd mb">

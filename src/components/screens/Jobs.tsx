@@ -32,6 +32,7 @@ import { wrapPrint, openPrint } from "@/lib/print-template";
 import { formatHours } from "@/lib/dates";
 import { haversineMiles, ROAD_FACTOR, geocodeAddress, driveMinutes, cityContext } from "@/lib/geo";
 import { residentContact } from "@/lib/resident";
+import { nextCustomerSmsConsent, residentSmsConsentOf, residentTextConsent } from "@/lib/sms-consent";
 import { isPropertyManager, type MessagePick } from "@/lib/sms-recipient";
 import {
   CADENCES,
@@ -49,6 +50,7 @@ import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
+import { tierPriceLine } from "@/lib/tiers";
 import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
 import { readDiscount } from "@/lib/quote-blob";
 
@@ -702,16 +704,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           msg = `Hi ${name}! Just checking in on the quote for ${prop} — happy to answer questions or adjust anything. Review & approve here: ${url}`;
           break;
         }
-        // Good/Better/Best: job.total is the Best price — lead with the
-        // cheapest option instead (same wording as QuoteForge's Send). Once
-        // an option was picked (acceptedTier), total IS that price.
+        // Three tiers: list Essential / Complete / Premium (same wording as
+        // QuoteForge's Send). Once a tier was picked (acceptedTier), total IS
+        // that price.
         let totalLine = `Total: $${(job.total || 0).toFixed(2)}`;
         {
           // Malformed rooms → readBlob's {} → plain total.
           const d = readBlob(job.rooms);
-          const tt = d.tieredQuote && !d.acceptedTier ? d.tierTotals : null;
-          const prices = tt ? [tt.base, tt.better, tt.best].filter((v): v is number => typeof v === "number" && v > 0) : [];
-          if (prices.length) totalLine = `Options from $${Math.min(...prices).toFixed(2)}`;
+          const line = d.tieredQuote && !d.acceptedTier ? tierPriceLine(d.tierTotals as Record<string, unknown> | null) : null;
+          if (line) totalLine = line;
         }
         msg = `Hi ${name}! Here's your quote from ${orgName} for ${prop}:\n\n${totalLine}\n\nView details & approve: ${url}`;
         break;
@@ -1465,6 +1466,36 @@ ${invoicePhotosHtml}
                     <input key={`re-${dj.id}`} type="email" defaultValue={res.email} placeholder="—" aria-label={t("jobs.residentEmail")}
                       onBlur={(e) => saveResident("residentEmail", e.target.value.trim())} style={inputStyle} />
                   </div>
+                  {/* The resident's OWN yes to automatic texts (reminders, review
+                      requests). The customer's consent never covers them. Tied
+                      to the number on file (lib/sms-consent residentTextConsent). */}
+                  {(() => {
+                    const rc = residentSmsConsentOf(dj.rooms);
+                    const on = residentTextConsent(dj.rooms, res.phone);
+                    const setResidentConsent = (granted: boolean) => {
+                      const entry = {
+                        granted,
+                        at: new Date().toISOString(),
+                        source: granted ? "recorded by owner" : "turned off by owner",
+                        by: user.name || "",
+                        phone: res.phone,
+                      };
+                      void patchBlob(dj.id, (b) => {
+                        const next = nextCustomerSmsConsent(b.residentSmsConsent, entry, "set");
+                        return next ? { residentSmsConsent: next } : {};
+                      }).then((r) => { if (r.ok && r.changed) void loadAll(); });
+                    };
+                    return (
+                      <label className="drow" style={{ cursor: isAdmin && res.phone ? "pointer" : "default", opacity: res.phone ? 1 : 0.5 }}>
+                        <span className="l">{t("consent.residentLabel")}</span>
+                        <span className="v" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          {on && rc?.at && <span className="dim" style={{ fontSize: 12 }}>{new Date(rc.at).toLocaleDateString()}</span>}
+                          <input type="checkbox" checked={on} disabled={!isAdmin || !res.phone}
+                            onChange={(e) => setResidentConsent(e.target.checked)} style={{ width: 20, height: 20 }} />
+                        </span>
+                      </label>
+                    );
+                  })()}
                   <div className="dim" style={{ fontSize: 12, padding: "2px 0 4px" }}>{t("jobs.residentHint")}</div>
                 </>
               );

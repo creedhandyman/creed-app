@@ -71,7 +71,7 @@ function parseJobItems(job: Job): { items: { trade: string; item: RoomItem }[]; 
       // off the QUOTED side so actual/quoted stays clocked hours vs task
       // hours, the same basis the quoter drops it on (see isOverheadLine).
       if (isOverheadLine(it.detail)) continue;
-      // Only the SOLD scope was worked: on a Good-Better-Best quote only the
+      // Only the SOLD scope was worked: on a three-tier quote only the
       // picked option's lines were done. Counting the rest made the job look
       // faster than it was. (Legacy `optional` lines ARE billed — they roll
       // into the subtotal since 292b395 — so they stay in.)

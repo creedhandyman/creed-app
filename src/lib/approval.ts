@@ -23,7 +23,7 @@ export interface ApprovalRecord {
   /** scopeFingerprint(blob.rooms) at the moment of signing. */
   fp: string;
   /** The amount the customer approved (the picked option's total for a
-   *  Good-Better-Best quote, else the quote total they were shown). */
+   *  three-tier quote, else the quote total they were shown). */
   total: number;
   /** Server ISO timestamp of the approval. */
   at: string;
@@ -69,7 +69,7 @@ const num = (n: unknown, dp: number) => {
 
 /**
  * Order-insensitive fingerprint of a quote's billable scope: every line's
- * task text, hours, priced materials and Good-Better-Best membership. Room
+ * task text, hours, priced materials and three-tier membership. Room
  * (trade bucket) names, item ids, $0 placeholder materials and line order are
  * deliberately left out, and the task text + hours are taken in validateQuote's
  * canonical form (line-canon.ts) — reopening a saved quote in QuoteForge
@@ -119,7 +119,7 @@ const RECORD_SINCE_MS = Date.parse("2026-09-28T06:00:00Z");
  *   signed     — the items still match what the customer approved (or it's a
  *                pre-record approval there's nothing to compare against);
  *   revised    — the quote changed after they signed (items edited/added, or
- *                a picked Good-Better-Best option printed without the options);
+ *                a picked three-tier option printed without the options);
  *   unverified — approved, but the record of WHAT was approved is missing
  *                (an in-app save working from a stale copy of the job, within
  *                the ~15s before it refreshed, rewrote the blob without it), so

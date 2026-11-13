@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { TIER_NAME } from "@/lib/tiers";
 import { serviceClient } from "@/lib/api-auth";
 import { verifyJobToken } from "@/lib/job-token";
 import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
@@ -6,6 +7,7 @@ import { scopeFingerprint } from "@/lib/approval";
 import { applyApproval } from "@/lib/approve-job";
 import type { Room } from "@/lib/types";
 import { applySmsConsent } from "@/lib/sms-consent";
+import { recordCustomerSmsConsent } from "@/lib/sms-consent-server";
 import { notifyQuoteApproved } from "@/lib/notify-server";
 import { tryReadBlob } from "@/lib/job-blob";
 
@@ -32,7 +34,7 @@ interface Body {
   /** For typed: the customer's typed full name. For canvas: a
    *  base64 data URL of the inked PNG. */
   signatureValue: string;
-  /** Good-Better-Best: the option the customer picked. When the job's blob
+  /** three-tier: the option the customer picked. When the job's blob
    *  is tiered, this sets the accepted total (from the blob's tierTotals) and
    *  records which tier was chosen. Ignored for non-tiered quotes. */
   tier?: "base" | "better" | "best";
@@ -190,13 +192,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // A "yes" in the approval page's text box also goes on the customer, so
+    // it covers their other jobs (an unchecked box never revokes).
+    if (body.smsConsent === true && job.customer_id) {
+      await recordCustomerSmsConsent(supabase, job.customer_id, job.org_id, {
+        granted: true,
+        at: nowIso,
+        source: "quote approval page",
+        text: trim(body.smsConsentText),
+        ip,
+        jobId,
+      }, "form");
+    }
+
     // Tell the owner — first approval only (quoted → accepted), never on a
     // re-sign of an already-accepted job.
     if (patch.status === "accepted") {
       let option: string | null = null;
       const b = tryReadBlob(patch.rooms);
       const tk = b?.acceptedTier as string | undefined;
-      if (b?.tieredQuote && tk) option = tk === "base" ? "Base" : (b.tierNames?.[tk] || tk);
+      if (b?.tieredQuote && (tk === "base" || tk === "better" || tk === "best")) option = TIER_NAME[tk];
       await notifyQuoteApproved(supabase, {
         jobId,
         orgId: job.org_id,

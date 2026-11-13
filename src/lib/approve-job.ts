@@ -4,7 +4,7 @@
  * records for a customer who doesn't do it online (/api/jobs/record-approval),
  * so both lock the job exactly the same way:
  *   - status quoted → accepted;
- *   - Good-Better-Best: the picked option sets the job total + labor/material/
+ *   - three-tier: the picked option sets the job total + labor/material/
  *     hour totals (from the blob's stored tierTotals/tierBreakdown, computed by
  *     the editor's pricing cascade) and the crew work order is cut down to that
  *     option's tasks; `acceptedTier` is stamped;

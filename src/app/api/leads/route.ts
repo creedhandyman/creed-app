@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { dispatchNotifications, resolveRecipients } from "@/lib/notify-server";
 import { siteOrigin } from "@/lib/site-url";
 import { applySmsConsent } from "@/lib/sms-consent";
+import { recordCustomerSmsConsent } from "@/lib/sms-consent-server";
 import { draftLeadQuote } from "@/lib/lead-draft";
 import { findReferrer, recordReferralLead } from "@/lib/referrals-server";
 
@@ -239,6 +240,18 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
         })
       : null;
     const referredBy = referral?.credited ? (referral.referrerName || "a customer") : null;
+    // The quote form's text box, onto the customer too (see sms-consent).
+    if (typeof body.sms_consent === "boolean") {
+      await recordCustomerSmsConsent(supabase, customerId, orgId, {
+        granted: body.sms_consent,
+        at: new Date().toISOString(),
+        source: "website quote form",
+        phone: phone || undefined,
+        text: trim(body.sms_consent_text),
+        ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("x-real-ip") || "",
+        jobId: jobRow.id,
+      }, "form");
+    }
 
     // Notify the team a new lead landed. Owners/managers triage leads; the
     // referring tech (if the lead came in via their share link) gets it too

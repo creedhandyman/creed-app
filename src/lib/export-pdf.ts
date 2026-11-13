@@ -2,7 +2,7 @@ import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 import { resolveTaxMode, type TaxMode } from "./tax";
 import { priceCascade, rateForRoom, billedMaterial } from "./pricing";
-import { itemInTier, itemTiers, tierMembershipLabel, type TierKey } from "./tiers";
+import { itemInTier, itemTiers, tierMembershipLabel, TIER_NAME, TIER_NAMES, type TierKey } from "./tiers";
 import { approvalState, approvalPhrase, type QuoteApproval } from "./approval";
 import { estimateDays, planningCrew } from "./job-duration";
 
@@ -63,7 +63,7 @@ interface ExportOptions {
   depositPct?: number;
   quoteValidDays?: number;
   quoteTerms?: string;
-  /** Good-Better-Best tiered quote. When true (and some items are tagged
+  /** three-tier tiered quote. When true (and some items are tagged
    *  better/best), the PDF renders a compact 3-column "Choose your option"
    *  block with each cumulative option's total + what it adds. tierNames
    *  relabels the Better/Best columns. */
@@ -206,15 +206,14 @@ export function exportQuotePdf(opts: ExportOptions) {
   const taxLabel = cascade.taxLabel;
   const grandTotal = cascade.grandTotal;
 
-  // Good-Better-Best options. Each option re-runs the SAME labor/markup/
+  // three-tier options. Each option re-runs the SAME labor/markup/
   // min-floor/discount/tax cascade over ITS OWN item set (membership-based, so
   // options can be mutually exclusive). itemInTier falls back to the legacy
   // cumulative reading for pre-membership quotes.
   const tieredQuote = opts.tieredQuote === true;
-  const tierNames = {
-    better: (opts.tierNames?.better || "").trim() || "Better",
-    best: (opts.tierNames?.best || "").trim() || "Best",
-  };
+  // Names are fixed since three-tier quoting (Essential / Complete / Premium),
+  // whatever an older quote saved in opts.tierNames.
+  const tierNames = TIER_NAMES;
   // Tier items keep their ROOM (trade bucket) so tier labor bills at the
   // same per-trade rates as the headline.
   type TierPair = { room: string; it: RoomItem };
@@ -246,7 +245,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   const showTiers = tieredQuote && anySplit;
   const tierCols = showTiers
     ? [
-        { name: "Base", total: tierTotalOf(tierItemsOf("base")), items: tierItemsOf("base") },
+        { name: TIER_NAME.base, total: tierTotalOf(tierItemsOf("base")), items: tierItemsOf("base") },
         { name: tierNames.better, total: tierTotalOf(tierItemsOf("better")), items: tierItemsOf("better") },
         { name: tierNames.best, total: tierTotalOf(tierItemsOf("best")), items: tierItemsOf("best") },
       ]
@@ -280,7 +279,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     const s = (a.signatureDate || "").trim();
     return { long: s, short: s };
   };
-  // The picked Good-Better-Best option (tierCols are base, better, best).
+  // The picked three-tier option (tierCols are base, better, best).
   const acceptedIdx = signed?.acceptedTier && showTiers
     ? (["base", "better", "best"] as TierKey[]).indexOf(signed.acceptedTier)
     : -1;
@@ -314,7 +313,7 @@ export function exportQuotePdf(opts: ExportOptions) {
     .map((col, idx) => {
       const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
       const picked = idx === acceptedIdx;
-      // Base lists its scope; Better/Best list only what CHANGES vs the
+      // Essential lists its scope; Complete/Premium list only what CHANGES vs the
       // option before them — three near-identical lists hid the difference.
       const li = (pairs: TierPair[], max: number, mark = "", style = "") =>
         pairs.slice(0, max).map((a) => `<li${style ? ` style="${style}"` : ""}>${mark}${esc(a.it.detail)}</li>`).join("")
@@ -341,7 +340,7 @@ export function exportQuotePdf(opts: ExportOptions) {
             + (removed.length && kept > 0 ? ul(li(removed, 6, "− ", "color:#999;text-decoration:line-through"), true) : "");
       }
       return `<div style="border:${picked ? 3 : 2}px solid ${hue};border-radius:10px;padding:12px;page-break-inside:avoid;${acceptedIdx >= 0 && !picked ? "opacity:.55;" : ""}">
-      <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}${picked ? ` <span style="font-size:10px;background:${hue};color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px;letter-spacing:.08em">✓ Selected</span>` : ""}</div>
+      <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}${picked ? ` <span style="font-size:10px;background:${hue};color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px;letter-spacing:.08em">✓ Selected</span>` : acceptedIdx < 0 && idx === 1 ? ` <span style="font-size:10px;background:${hue};color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px;letter-spacing:.08em">Recommended</span>` : ""}</div>
       <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:${hue};margin:4px 0 2px">$${col.total.toFixed(0)}</div>
       <div style="font-size:11px;color:#666">${col.items.length} line item${col.items.length === 1 ? "" : "s"}</div>
       ${itemsList}
@@ -386,7 +385,7 @@ export function exportQuotePdf(opts: ExportOptions) {
 
   // Build summary rows per trade category (one row per category, not per
   // raw Room — so duplicate trade entries fold together).
-  // Good-Better-Best: the same per-category numbers, but per OPTION, priced
+  // three-tier: the same per-category numbers, but per OPTION, priced
   // exactly like tierTotalOf (per-trade rate, marked-up materials) so each
   // option's column sums to its price once the cascade adjustments row is
   // added. The all-lines summary below never matched any option.

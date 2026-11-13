@@ -85,6 +85,8 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "organizations.auto_sms_enroute", table: "organizations", column: "auto_sms_enroute" },
   { key: "jobs.invoice_sent_at", table: "jobs", column: "invoice_sent_at" },
   { key: "schedule.reminder_sent_at", table: "schedule", column: "reminder_sent_at" },
+  // Per-customer text consent (supabase/migrations/20261112_customer_text_consent.sql).
+  { key: "customers.sms_consent", table: "customers", column: "sms_consent" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

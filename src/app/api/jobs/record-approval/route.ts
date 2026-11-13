@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * Owner-recorded quote approval — for a homeowner who said yes in person, on
  * the phone or on a paper copy instead of on the /status page. Owner/manager
  * only, scoped to their org. Locks the job exactly like the online approval
- * (shared applyApproval): picked Good-Better-Best option → price + crew work
+ * (shared applyApproval): picked three-tier option → price + crew work
  * order, status quoted → accepted, approval record (+ how/who recorded it).
  */
 
