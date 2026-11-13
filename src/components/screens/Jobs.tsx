@@ -50,6 +50,7 @@ import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
+import { tierPriceLine } from "@/lib/tiers";
 import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
 import { readDiscount } from "@/lib/quote-blob";
 
@@ -703,16 +704,15 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           msg = `Hi ${name}! Just checking in on the quote for ${prop} — happy to answer questions or adjust anything. Review & approve here: ${url}`;
           break;
         }
-        // Good/Better/Best: job.total is the Best price — lead with the
-        // cheapest option instead (same wording as QuoteForge's Send). Once
-        // an option was picked (acceptedTier), total IS that price.
+        // Three tiers: list Essential / Complete / Premium (same wording as
+        // QuoteForge's Send). Once a tier was picked (acceptedTier), total IS
+        // that price.
         let totalLine = `Total: $${(job.total || 0).toFixed(2)}`;
         {
           // Malformed rooms → readBlob's {} → plain total.
           const d = readBlob(job.rooms);
-          const tt = d.tieredQuote && !d.acceptedTier ? d.tierTotals : null;
-          const prices = tt ? [tt.base, tt.better, tt.best].filter((v): v is number => typeof v === "number" && v > 0) : [];
-          if (prices.length) totalLine = `Options from $${Math.min(...prices).toFixed(2)}`;
+          const line = d.tieredQuote && !d.acceptedTier ? tierPriceLine(d.tierTotals as Record<string, unknown> | null) : null;
+          if (line) totalLine = line;
         }
         msg = `Hi ${name}! Here's your quote from ${orgName} for ${prop}:\n\n${totalLine}\n\nView details & approve: ${url}`;
         break;

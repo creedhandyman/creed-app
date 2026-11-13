@@ -9,7 +9,7 @@
  *    (`done`, `completed_at`) from the previously saved task — matched by the
  *    quote line's id first (so renaming a line keeps its checkmark), else by the
  *    room|detail text key, each prior task used once. Tasks are tagged with their
- *    line's Good-Better-Best option membership (by line id, then text key, else
+ *    line's three-tier option membership (by line id, then text key, else
  *    all three — a mis-tag never hides a task). A quote with lines never saves an
  *    empty work order.
  *  - PHOTOS: every existing photo is kept; new ones are appended unless their url
@@ -24,7 +24,7 @@
  *    written explicitly so CLEARING one (no discount, Auto crew…) really clears.
  *  - STATUS: a new quote starts "quoted"; an edit keeps its status (mid-job edits
  *    never demote a job), except a "lead" being quoted for the first time.
- *  - ACCEPTED OPTION: if the customer already accepted a Good-Better-Best option,
+ *  - ACCEPTED OPTION: if the customer already accepted a three-tier option,
  *    the job stays locked to it (its recomputed totals, work order pruned to it);
  *    pre-approval it locks to the headline option — never to `gt`, which
  *    double-counts mutually exclusive scope.
@@ -229,7 +229,7 @@ export function buildQuoteSave(input: QuoteSaveInput): QuoteSaveResult {
     // a later change to the org setting can't reprice it.
     materialTaxPct: s.materialTaxPct,
     materialTaxZip: s.materialTaxZip,
-    // Good-Better-Best. tierTotals / tierBreakdown are stored so the approval
+    // three-tier. tierTotals / tierBreakdown are stored so the approval
     // page + approve API read each option's price without re-deriving the math.
     tieredQuote: s.tieredQuote,
     tierNames: s.tierNames,

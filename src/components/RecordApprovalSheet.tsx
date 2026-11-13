@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { apiFetch } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import type { TierKey } from "@/lib/tiers";
+import { TIER_NAME, type TierKey } from "@/lib/tiers";
 import { readBlob } from "@/lib/job-blob";
 
 type Job = { id: string; client?: string | null; property?: string | null; total?: number | null; rooms?: unknown };
@@ -23,8 +23,7 @@ export default function RecordApprovalSheet({ job, onClose }: { job: Job; onClos
   const blob: Record<string, unknown> = readBlob(job.rooms);
   const tt = blob.tierTotals as Record<TierKey, number> | undefined;
   const tiered = blob.tieredQuote === true && !!tt;
-  const names = (blob.tierNames as { better?: string; best?: string } | undefined) || {};
-  const optName = (k: TierKey) => (k === "base" ? "Base" : names[k] || (k === "better" ? "Better" : "Best"));
+  const optName = (k: TierKey) => TIER_NAME[k];
 
   const [tier, setTier] = useState<TierKey | null>(null);
   const [via, setVia] = useState<Via>("in_person");

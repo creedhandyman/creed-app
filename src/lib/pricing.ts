@@ -3,7 +3,7 @@
  * discount (applied pre-tax, capped at the base) → tax (via computeTax's
  * per-org mode) → grand total.
  *
- * Shared by QuoteForge's live preview (headline AND each Good/Better/Best
+ * Shared by QuoteForge's live preview (headline AND each three-tier
  * tier) and export-pdf's printed quote (headline AND tier columns), so the
  * number on screen, the number on the signed PDF, and every tier option
  * are always the same math. Before this existed the cascade lived as four

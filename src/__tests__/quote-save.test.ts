@@ -250,7 +250,7 @@ describe("photos", () => {
   });
 });
 
-describe("Good-Better-Best locking", () => {
+describe("three-tier locking", () => {
   const tiered = (over: Partial<QuoteSaveInput["settings"]> = {}) => ({ ...input().settings, tieredQuote: true, ...over });
   const editing = { ...input().identity, editing: true };
 

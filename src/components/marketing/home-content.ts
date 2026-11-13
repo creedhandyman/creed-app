@@ -27,7 +27,7 @@ export const HOME_FAQ: HomeFaq[] = [
   },
   {
     q: "Can customers sign and pay online?",
-    a: "Yes. Text or email the customer a link: they review the quote, sign it, and pay a deposit or the balance by card. Offer Good / Better / Best options and they pick one before signing. Payments go to your own Stripe account.",
+    a: "Yes. Text or email the customer a link: they review the quote, sign it, and pay a deposit or the balance by card. Quotes come in three tiers (Essential, Complete and Premium) side by side, and they accept the one they want before signing. Payments go to your own Stripe account.",
   },
   {
     q: "Does it work on iPhone and Android?",

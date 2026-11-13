@@ -18,7 +18,7 @@ const FEATURES = [
 
 const STEPS = [
   { h: "Walk the job", p: "Snap photos room by room, or talk it through with Voice Walk while the app listens and takes notes." },
-  { h: "AI writes the quote", p: "An itemized estimate by trade with hours, materials and your rates — plus optional Good / Better / Best options. Tweak it in minutes." },
+  { h: "AI writes the quote", p: "An itemized estimate by trade with hours, materials and your rates — with Essential, Complete and Premium tiers side by side. Tweak it in minutes." },
   { h: "Send it, sign it, get paid", p: "Text the customer a link. They sign and pay a deposit by card; you schedule the crew, and the invoice follows the work." },
 ];
 
