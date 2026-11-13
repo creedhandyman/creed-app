@@ -5,7 +5,7 @@ import type { Job, Organization, Room } from "@/lib/types";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
-import { itemInTier, tierDeltas } from "@/lib/tiers";
+import { itemInTier, tierDeltas, visibleTiers, TIER_KEYS, TIER_NAME, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
 import { payPlan } from "@/lib/pay-plan";
 import { TIP_PCTS, tipAllowed, tipCentsFor } from "@/lib/tips";
@@ -56,13 +56,14 @@ function StatusContent() {
   const [laborRate, setLaborRate] = useState<number | null>(null);
   // Drives the status-timeline reveal (steps light up + bar fills on load).
   const [revealed, setRevealed] = useState(false);
-  // Good-Better-Best: option prices off the blob + the customer's pick. The
-  // pick drives the displayed total, the authorize amount, and the deposit.
+  // Three-tier quote (Essential / Complete / Premium): tier prices off the
+  // blob + the customer's pick. Complete (the recommended tier) starts
+  // selected. The pick drives the displayed total, the authorize amount, and
+  // the deposit.
   const [tiered, setTiered] = useState(false);
-  const [tierNames, setTierNames] = useState<{ better: string; best: string }>({ better: "Better", best: "Best" });
-  const [tierTotals, setTierTotals] = useState<{ base: number; better: number; best: number } | null>(null);
-  const [acceptedTier, setAcceptedTier] = useState<"base" | "better" | "best" | null>(null);
-  const [selectedTier, setSelectedTier] = useState<"base" | "better" | "best">("best");
+  const [tierTotals, setTierTotals] = useState<Record<TierKey, number> | null>(null);
+  const [acceptedTier, setAcceptedTier] = useState<TierKey | null>(null);
+  const [selectedTier, setSelectedTier] = useState<TierKey>(RECOMMENDED_TIER);
   // Options can differ in SCOPE at the same price (membership model), so the
   // picker must show on the split flag, not only on a price difference.
   const [tierSplit, setTierSplit] = useState(false);
@@ -89,7 +90,7 @@ function StatusContent() {
             if (q.discount) setDiscount(q.discount);
             if (Array.isArray(blob?.rooms)) setQuoteRooms(blob.rooms as Room[]);
             if (q.laborRate) setLaborRate(q.laborRate);
-            // Good-Better-Best options (computed totals live on the blob).
+            // Three-tier options (computed totals live on the blob).
             const tt = blob?.tierTotals;
             if (blob?.tieredQuote === true && tt && typeof tt.base === "number") {
               setTiered(true);
@@ -99,9 +100,14 @@ function StatusContent() {
                 better: typeof tt.better === "number" ? tt.better : tt.base,
                 best: typeof tt.best === "number" ? tt.best : tt.base,
               });
-              setTierNames(q.tierNames);
               const at = blob?.acceptedTier;
               if (at === "base" || at === "better" || at === "best") { setAcceptedTier(at); setSelectedTier(at); }
+              else {
+                // Preselect Complete, unless it adds nothing over Essential
+                // (then it isn't shown, and Essential is the same price).
+                const items = (Array.isArray(blob?.rooms) ? (blob.rooms as Room[]) : []).flatMap((rm) => rm?.items || []);
+                setSelectedTier(visibleTiers(items).includes(RECOMMENDED_TIER) ? RECOMMENDED_TIER : "base");
+              }
             }
           } catch { /* */ }
           if (data.org) setOrg(data.org as Organization);
@@ -150,6 +156,9 @@ function StatusContent() {
   // approving; the exact wording shown goes with it as proof of opt-in.
   const [smsOptIn, setSmsOptIn] = useState(false);
   const smsConsentRef = useRef<HTMLLabelElement>(null);
+  // Tier "Accept" buttons pick the tier and jump to the signature box.
+  const signCardRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [signError, setSignError] = useState("");
 
   // Deposit / Stripe checkout. The default deposit is the business's own
@@ -419,9 +428,21 @@ function StatusContent() {
     });
   })();
   const itemCount = breakdown.reduce((s, b) => s + b.count, 0);
-  // What the picked option changes vs the one before it (Better vs Base, Best
-  // vs Better) — the price cards alone didn't show the difference.
-  const tierNameOf = (k: "base" | "better" | "best") => (k === "base" ? "Base" : tierNames[k]);
+  // What the picked tier changes vs the one before it (Complete vs Essential,
+  // Premium vs Complete) — the price cards alone didn't show the difference.
+  const tierNameOf = (k: TierKey) => TIER_NAME[k];
+  // The tiers worth showing: Essential always, a higher tier only when it
+  // changes the scope (Complete with nothing recommended would repeat
+  // Essential's price). Falls back to all three if the scope didn't load.
+  const allQuoteItems = quoteRooms.flatMap((rm) => rm?.items || []);
+  const shownTiers: TierKey[] = allQuoteItems.length ? visibleTiers(allQuoteItems) : [...TIER_KEYS];
+  const acceptTier = (k: TierKey) => {
+    if (job.client_signature) return;
+    setSelectedTier(k);
+    setSignError("");
+    signCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (signMode === "type") setTimeout(() => nameInputRef.current?.focus({ preventScroll: true }), 350);
+  };
   const pickedDelta = showTierPicker
     ? tierDeltas(quoteRooms.flatMap((rm) => rm?.items || [])).find((d) => d.tier === (job.client_signature && acceptedTier ? acceptedTier : selectedTier)) || null
     : null;
@@ -530,35 +551,59 @@ function StatusContent() {
           </div>
         )}
 
-        {/* Good-Better-Best: customer picks an option (cumulative). */}
+        {/* Three-tier quote: the tiers side by side, Complete highlighted as
+            recommended, an Accept button on each (cumulative scopes). */}
         {showTierPicker && tierTotals && (
           <div className="card">
             <div className="lbl">Choose your option</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              {([
-                { key: "base", name: "Base", total: tierTotals.base, hue: "#8a8a99" },
-                { key: "better", name: tierNames.better, total: tierTotals.better, hue: "#2E75B6" },
-                { key: "best", name: tierNames.best, total: tierTotals.best, hue: "#9d4edd" },
-              ] as const).map((opt) => {
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${shownTiers.length}, minmax(0, 1fr))`, gap: 8, paddingTop: 6 }}>
+              {shownTiers.map((key) => {
+                const hue = key === "base" ? "#8a8a99" : key === "better" ? "#2E75B6" : "#9d4edd";
                 const locked = !!job.client_signature;
-                const isSel = (locked ? acceptedTier : selectedTier) === opt.key;
+                const isSel = (locked ? acceptedTier : selectedTier) === key;
+                const isRec = key === RECOMMENDED_TIER;
+                const count = allQuoteItems.filter((it) => itemInTier(it, key)).length;
                 return (
-                  <button
-                    key={opt.key}
-                    disabled={locked}
-                    onClick={() => !locked && setSelectedTier(opt.key)}
+                  <div
+                    key={key}
+                    role="button"
+                    tabIndex={locked ? -1 : 0}
+                    onClick={() => !locked && setSelectedTier(key)}
+                    onKeyDown={(e) => { if (!locked && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setSelectedTier(key); } }}
                     style={{
-                      textAlign: "center", padding: "12px 6px", borderRadius: 12,
+                      position: "relative", display: "flex", flexDirection: "column", alignItems: "center",
+                      textAlign: "center", padding: isRec ? "18px 6px 10px" : "12px 6px 10px", borderRadius: 12, minWidth: 0,
                       cursor: locked ? "default" : "pointer",
-                      border: isSel ? `2px solid ${opt.hue}` : "1px solid #1e1e2e",
-                      background: isSel ? `${opt.hue}22` : "#0d0d15",
+                      border: isSel ? `2px solid ${hue}` : isRec ? `1px solid ${hue}` : "1px solid #1e1e2e",
+                      background: isSel ? `${hue}22` : isRec ? `${hue}12` : "#0d0d15",
+                      boxShadow: isRec && !locked ? `0 0 14px ${hue}44` : "none",
                       opacity: locked && !isSel ? 0.45 : 1,
                     }}
                   >
-                    <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 13, textTransform: "uppercase", letterSpacing: ".04em", color: opt.hue, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{opt.name}</div>
-                    <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, fontWeight: 700, color: "#fff", marginTop: 4 }}>${Math.round(opt.total).toLocaleString()}</div>
-                    {isSel && <div style={{ fontSize: 11, color: opt.hue, marginTop: 3 }}>{locked ? "✓ Accepted" : "✓ Selected"}</div>}
-                  </button>
+                    {isRec && !locked && (
+                      <div style={{ position: "absolute", top: -9, left: "50%", transform: "translateX(-50%)", background: hue, color: "#fff", fontSize: 9.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap" }}>
+                        Recommended
+                      </div>
+                    )}
+                    <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 13, textTransform: "uppercase", letterSpacing: ".04em", color: hue, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{TIER_NAME[key]}</div>
+                    <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 20, fontWeight: 700, color: "#fff", marginTop: 4 }}>${Math.round(tierTotals[key]).toLocaleString()}</div>
+                    {count > 0 && <div style={{ fontSize: 11, color: "#8a8a99", marginTop: 2 }}>{count} item{count === 1 ? "" : "s"}</div>}
+                    {locked ? (
+                      isSel && <div style={{ fontSize: 11, color: hue, marginTop: 6 }}>✓ Accepted</div>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); acceptTier(key); }}
+                        style={{
+                          marginTop: 8, width: "100%", padding: "8px 0", minHeight: 0, borderRadius: 8,
+                          fontFamily: "Oswald, sans-serif", fontSize: 13, textTransform: "uppercase", letterSpacing: ".05em",
+                          border: `1px solid ${hue}`, cursor: "pointer",
+                          background: isSel ? hue : "transparent", color: isSel ? "#fff" : hue,
+                        }}
+                      >
+                        Accept
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -593,7 +638,7 @@ function StatusContent() {
             })()}
             {!job.client_signature && (
               <div style={{ fontSize: 12, color: "#8a8a99", marginTop: 8, textAlign: "center" }}>
-                Tap an option to see what it includes, then approve below.
+                Tap a tier to see what it includes, then Accept and sign below.
               </div>
             )}
           </div>
@@ -603,7 +648,7 @@ function StatusContent() {
         {job.total > 0 && (
           <div className="total">
             <div style={{ minWidth: 0 }}>
-              <div className="lbl" style={{ margin: 0, color: "#3ee08f" }}>{paidUp ? "Amount Paid" : showTierPicker ? "Your Option" : "Quote Total"}</div>
+              <div className="lbl" style={{ margin: 0, color: "#3ee08f" }}>{paidUp ? "Amount Paid" : showTierPicker ? `${TIER_NAME[job.client_signature && acceptedTier ? acceptedTier : selectedTier]} Option` : "Quote Total"}</div>
               <div className="n">${effectiveTotal.toLocaleString()}</div>
               {discount && (
                 <div style={{ fontSize: 13, color: "#3ee08f", marginTop: 3 }}>
@@ -628,7 +673,7 @@ function StatusContent() {
         )}
 
         {/* Signature + approval */}
-        <div className="card">
+        <div className="card" ref={signCardRef} style={{ scrollMarginTop: 12 }}>
           <div className="lbl">Approve &amp; Sign</div>
 
           {job.client_signature ? (
@@ -693,6 +738,7 @@ function StatusContent() {
               {signMode === "type" ? (
                 <div>
                   <input
+                    ref={nameInputRef}
                     className="in"
                     value={typedName}
                     onChange={(e) => setTypedName(e.target.value)}
@@ -703,7 +749,7 @@ function StatusContent() {
                   />
                   <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 14, color: "#8a8a99", marginBottom: 11 }}>
                     <input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} style={{ marginTop: 2, cursor: "pointer", flexShrink: 0, width: 18, height: 18, minHeight: 0, padding: 0 }} />
-                    <span>I authorize {org?.name || "this contractor"} to perform the {showTierPicker ? "selected option" : "work"} described above for ${effectiveTotal.toFixed(2)}.</span>
+                    <span>I authorize {org?.name || "this contractor"} to perform the {showTierPicker ? `${TIER_NAME[selectedTier]} option` : "work"} described above for ${effectiveTotal.toFixed(2)}.</span>
                   </label>
                   <button className="btn glow-green" onClick={submitTypedSignature} disabled={!typedName.trim() || !authorized || submittingSig}>
                     <Icon name="check" size={17} /> {submittingSig ? "Saving…" : "Approve & Sign"}

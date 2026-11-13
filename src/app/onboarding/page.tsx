@@ -168,7 +168,7 @@ export default function OnboardingPage() {
         if (!normalized) { setErr("Pick a URL slug"); setSavingStep(false); return; }
         if (normalized.length < 3) { setErr("Slug must be at least 3 characters"); setSavingStep(false); return; }
         // Uniqueness check — scope is the entire organizations table.
-        const existing = await db.get<Organization>("organizations", { site_slug: normalized });
+        const existing = await db.get<Organization>("org_public", { site_slug: normalized });
         const taken = existing.some((o) => o.id !== org.id);
         if (taken) { setErr("That URL is already taken — try another"); setSavingStep(false); return; }
         await db.patch("organizations", org.id, { site_slug: normalized });

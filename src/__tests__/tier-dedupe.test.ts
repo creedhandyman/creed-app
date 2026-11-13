@@ -17,7 +17,7 @@ const line = (id: string, tiers?: RoomItem["tiers"]): RoomItem => ({
 
 const count = (rooms: Room[]) => rooms.reduce((n, r) => n + r.items.length, 0);
 
-describe("validateQuote dedupe with Good-Better-Best", () => {
+describe("validateQuote dedupe with three-tier", () => {
   test("the same task in different options is two lines", () => {
     const rooms: Room[] = [{ name: "Painting", items: [line("a", ["base", "better"]), line("b", ["best"])] }];
     expect(count(validateQuote(rooms, { skipCaps: true }))).toBe(2);

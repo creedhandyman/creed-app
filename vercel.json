@@ -32,6 +32,10 @@
     {
       "path": "/api/invoices/reminders",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/campaigns/dispatch",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

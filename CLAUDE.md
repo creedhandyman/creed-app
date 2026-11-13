@@ -277,6 +277,10 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     `PhotoTypePicker` (Before / Work / After) and `lib/photo-tag.ts
     defaultPhotoTag`. `day-plan afterVisitRemoved` — what the store drops /
     the job's status goes back to when a visit is deleted (applied at once).
+  - `lib/sms-consent.ts autoTextConsent` (+ `sms-recipient.ts
+    recipientConsent` for residents) — every AUTOMATIC Twilio text to a
+    customer asks it first (2026-11-12, see shipped-systems.md "Text consent
+    per customer"). Hand-sent texts (Messages app) never do.
   - `lib/nav-intent.ts` for every deep link; day-plan / dispatch-week
     `parseSchedTime` / `parseSchedCrew` / `stripNoteParts` for 🕐/👷 notes.
   - Server: `lib/cron-auth.ts` `cronAuth`; `lib/payment-fulfillment.ts`
@@ -361,6 +365,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   Mark the SECRET as Sensitive in Vercel (write-only); the org id is a
   plain variable so it can be eyeballed later. Not in the preflight
   required-env list on purpose — it's optional, like Twilio.
+- `RESEND_API_KEY` / `RESEND_FROM_EMAIL` — email via Resend (`lib/email.ts`).
+  Email campaigns also read `RESEND_CAMPAIGN_FROM` (optional; the address on
+  the campaign From line, shown as "Business Name <address>"; falls back to
+  `RESEND_FROM_EMAIL`) and `RESEND_WEBHOOK_SECRET` (the `whsec_…` signing
+  secret of the Resend webhook pointed at `/api/resend/webhook`; the route
+  401s without it, so opens / clicks / bounces just aren't recorded).
 - (Stripe / Supabase keys per existing setup.)
 
 ## Reference docs (read on demand, not loaded by default)

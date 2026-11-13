@@ -1,6 +1,7 @@
 import { type SupabaseClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
 import { notifyJobPaid } from "@/lib/notify-server";
+import { creditReferralOnPayment } from "./referrals-server";
 
 /**
  * Shared job-payment fulfillment — used by BOTH /api/verify-payment (the
@@ -250,7 +251,7 @@ export async function fulfillJobPayment(
 ): Promise<FulfillPaymentResult> {
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
-    .select("id, org_id, total, platform_fee_cents, paid_at, status")
+    .select("id, org_id, customer_id, total, platform_fee_cents, paid_at, status")
     .eq("id", p.jobId)
     .maybeSingle();
   if (jobErr || !job) return { ok: false, reason: "job_not_found" };
@@ -306,6 +307,13 @@ export async function fulfillJobPayment(
         console.error(`[${p.source}] overpayment refund failed:`, e);
       }
     }
+  }
+
+  // Customer referrals: a referred customer's first payment earns the person
+  // who referred them their credit. Off unless the business turned referrals
+  // on; best-effort and never fails the payment (lib/referrals-server.ts).
+  if (!result.alreadyRecorded && p.paidNow > 0 && job.customer_id) {
+    await creditReferralOnPayment(supabase, { id: job.id, org_id: job.org_id, customer_id: job.customer_id });
   }
 
   if (!result.alreadyRecorded && p.paidNow > 0 && p.notify !== false) {

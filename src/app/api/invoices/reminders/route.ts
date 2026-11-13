@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { cronAuth } from "@/lib/cron-auth";
 import { sendEmail } from "@/lib/email";
 import { sendLoggedSms } from "@/lib/sms-log";
-import { smsConsentGranted } from "@/lib/sms-consent";
+import { autoTextConsent } from "@/lib/sms-consent";
+import { loadCustomersWithConsent } from "@/lib/sms-consent-server";
 import { isPropertyManager, textRecipient, type RecipientCustomer } from "@/lib/sms-recipient";
 import { textBody } from "@/lib/sms-templates";
 import { signJobToken } from "@/lib/job-token";
@@ -24,7 +25,8 @@ export const dynamic = "force-dynamic";
  * and 14 days after the invoice went out (lib/invoice-reminder.ts), always to
  * whoever PAYS (never a resident):
  *   - property manager: email (else the owner is alerted);
- *   - regular customer: a text if they opted in to texts, else email, else
+ *   - regular customer: a text if they agreed to texts (autoTextConsent: the
+ *     customer's answer, or an opt-in on this job), else email, else
  *     the owner is alerted.
  * The owner gets an in-app note every time.
  *
@@ -84,11 +86,8 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   if (!due.length) return NextResponse.json({ ok: true, dry, due: 0, sent: 0 });
 
   const custIds = [...new Set(due.map((x) => x.j.customer_id).filter(Boolean) as string[])];
-  const { data: custRows } = custIds.length
-    ? await supabase.from("customers").select("id, type, name, phone, email").in("id", custIds)
-    : { data: [] };
-  const customers = new Map<string, RecipientCustomer>(
-    ((custRows || []) as (RecipientCustomer & { id: string })[]).map((c) => [c.id, c]),
+  const customers = await loadCustomersWithConsent<RecipientCustomer & { id: string }>(
+    supabase, custIds, "id, type, name, phone, email",
   );
 
   const results: { job_id: string; step: number; via: InvoiceChannel | "skipped"; error?: string }[] = [];
@@ -96,7 +95,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   for (const { j, step } of due) {
     const cust = j.customer_id ? customers.get(j.customer_id) : undefined;
     const pm = isPropertyManager(cust);
-    const channel = invoiceChannel({ propertyManager: pm, consent: smsConsentGranted(j.rooms), phone: cust?.phone, email: cust?.email });
+    const channel = invoiceChannel({ propertyManager: pm, consent: autoTextConsent(cust, j.rooms).ok, phone: cust?.phone, email: cust?.email });
     if (dry) { results.push({ job_id: j.id, step, via: channel }); continue; }
 
     // Built before the claim: if signing throws (secret unset) nothing is spent.

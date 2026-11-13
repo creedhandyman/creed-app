@@ -1,4 +1,4 @@
-// Good-Better-Best tier membership.
+// Quote tier membership (Essential / Complete / Premium — was Good-Better-Best).
 //
 // Historically each quote line carried a single `tier` and the three options
 // were CUMULATIVE (base ⊆ better ⊆ best): a tier's scope was every item at or
@@ -88,6 +88,89 @@ export function tierMembershipLabel(item: TierItem, names: { better: string; bes
   const ts = itemTiers(item);
   if (ts.length === 3) return null;
   if (ts.length === 0) return "Not in any option";
-  const nm = (t: TierKey) => (t === "base" ? "Base" : names[t]);
+  void names; // names are fixed now (TIER_NAME); the param stays for callers
+  const nm = (t: TierKey) => TIER_NAME[t];
   return ts.map(nm).join(" & ") + " only";
+}
+
+// ── Three-tier quoting (2026-11-12) ─────────────────────────────────────────
+// Essential / Complete / Premium is THE way Creed quotes (it replaced the
+// renameable Good-Better-Best option). The stored keys stay base/better/best
+// so every saved quote, approval and work order keeps reading the same way;
+// only the names are fixed. Tiers are CUMULATIVE: Essential = the must-fix
+// items, Complete adds the recommended ones, Premium adds the upgrades. The AI
+// tags each line's level while it builds the quote (aiParsePdf → `level`);
+// the owner can move a line to another tier before sending.
+
+export const TIER_NAME: Record<TierKey, string> = { base: "Essential", better: "Complete", best: "Premium" };
+/** The tier the customer page highlights and the quote's headline price. */
+export const RECOMMENDED_TIER: TierKey = "better";
+export const tierName = (k: TierKey): string => TIER_NAME[k];
+/** The fixed names in the old `{better, best}` shape some callers take. */
+export const TIER_NAMES = { better: TIER_NAME.better, best: TIER_NAME.best } as const;
+
+/** The AI's scope level for a line → the tier it starts in. Accepts the
+ *  prompt's words (must-fix / recommended / upgrade) and the tier names. */
+export function levelToTier(level: unknown): TierKey | null {
+  const s = typeof level === "string" ? level.trim().toLowerCase() : "";
+  if (!s) return null;
+  if (/^(must|essential|required|base)/.test(s)) return "base";
+  if (/^(recommend|complete|better|should)/.test(s)) return "better";
+  if (/^(upgrade|premium|best|nice|optional)/.test(s)) return "best";
+  return null;
+}
+
+/** The lowest tier a line is in — its "level" (Essential = in all three).
+ *  A line in no tier reads as Premium so it never vanishes from the editor. */
+export function itemLevel(item: TierItem): TierKey {
+  const ts = itemTiers(item);
+  return TIER_KEYS.find((k) => ts.includes(k)) ?? "best";
+}
+
+/** Membership for a line moved to `level` (cumulative: it's in that tier and
+ *  every tier above it). */
+export const tiersForLevel = (level: TierKey): TierKey[] => cumulativeTiers(level);
+
+/** Stamp the AI's `level` as tier membership and drop the raw field. Lines
+ *  without a level are must-fix (in every tier). */
+export function applyAiLevels<I extends Record<string, unknown>>(item: I): Omit<I, "level"> & { tiers?: TierKey[] } {
+  const { level, ...rest } = item as I & { level?: unknown };
+  const t = levelToTier(level);
+  return t ? { ...rest, tiers: tiersForLevel(t) } : rest;
+}
+
+/** Does this quote get three tiers? Small single-item jobs get one price, and
+ *  so does a quote where every line is must-fix (three identical tiers say
+ *  nothing). */
+export function shouldOfferTiers(rooms: { items: TierItem[] }[]): boolean {
+  const items = rooms.flatMap((r) => r.items || []);
+  if (items.length < 2) return false;
+  return items.some((it) => itemLevel(it) !== "base");
+}
+
+/** The tiers worth showing a customer: Essential always, and each higher tier
+ *  only when it changes the scope of the one below it (Complete with nothing
+ *  recommended would just repeat Essential's price). */
+export function visibleTiers<T extends TierItem>(items: T[]): TierKey[] {
+  return tierDeltas(items)
+    .filter((d) => !d.prev || d.added.length > 0 || d.removed.length > 0)
+    .map((d) => d.tier);
+}
+
+/** The price line a Send text uses for a tiered quote, e.g.
+ *  "Essential $480 · Complete $725 (recommended) · Premium $1,040". A tier
+ *  priced the same as the one below it is left out (it adds nothing). */
+export function tierPriceLine(tt: Partial<Record<TierKey, unknown>> | null | undefined): string | null {
+  if (!tt) return null;
+  const fmt = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const parts: string[] = [];
+  let prev: number | null = null;
+  for (const k of TIER_KEYS) {
+    const v = tt[k];
+    if (typeof v !== "number" || !(v > 0)) continue;
+    if (prev !== null && Math.abs(v - prev) < 0.005) continue;
+    parts.push(`${TIER_NAME[k]} ${fmt(v)}${k === RECOMMENDED_TIER ? " (recommended)" : ""}`);
+    prev = v;
+  }
+  return parts.length > 1 ? parts.join(" · ") : null;
 }

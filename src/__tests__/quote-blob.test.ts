@@ -61,13 +61,10 @@ describe("readMaterialTax", () => {
 });
 
 describe("readTierNames", () => {
-  it("defaults blanks and non-strings to Better / Best", () => {
-    expect(readTierNames(undefined)).toEqual({ better: "Better", best: "Best" });
-    expect(readTierNames({ better: "  ", best: 3 })).toEqual({ better: "Better", best: "Best" });
-  });
-  it("keeps real names (untrimmed, as saved)", () => {
-    expect(readTierNames({ better: "Standard", best: "Premium" })).toEqual({ better: "Standard", best: "Premium" });
-    expect(readTierNames({ better: "Standard" })).toEqual({ better: "Standard", best: "Best" });
+  it("is always Complete / Premium — the tier names are fixed (three-tier quoting)", () => {
+    expect(readTierNames(undefined)).toEqual({ better: "Complete", best: "Premium" });
+    expect(readTierNames({ better: "  ", best: 3 })).toEqual({ better: "Complete", best: "Premium" });
+    expect(readTierNames({ better: "Standard", best: "Deluxe" })).toEqual({ better: "Complete", best: "Premium" });
   });
 });
 
@@ -75,7 +72,7 @@ describe("readQuoteSettings", () => {
   it("is all-defaults for an empty, missing or hostile blob", () => {
     const empty = {
       discount: null, laborRate: null, minLaborHours: null, taxMode: null, materialTax: null,
-      tieredQuote: false, tierNames: { better: "Better", best: "Best" }, crewSize: null, estDays: null,
+      tieredQuote: false, tierNames: { better: "Complete", best: "Premium" }, crewSize: null, estDays: null,
     };
     expect(readQuoteSettings({})).toEqual(empty);
     expect(readQuoteSettings(null)).toEqual(empty);
@@ -91,7 +88,7 @@ describe("readQuoteSettings", () => {
     });
     expect(s).toEqual({
       discount: { type: "percent", value: 10, label: "Promo" }, laborRate: 90, minLaborHours: 0, taxMode: "materials",
-      materialTax: { pct: 7.5, zip: "67202" }, tieredQuote: true, tierNames: { better: "Plus", best: "Max" },
+      materialTax: { pct: 7.5, zip: "67202" }, tieredQuote: true, tierNames: { better: "Complete", best: "Premium" },
       crewSize: 2, estDays: 3,
     });
   });

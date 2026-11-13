@@ -101,5 +101,5 @@ describe("new work goes in the option being organized", () => {
 test("optionDiffSummary names exactly the options that changed", () => {
   const before = quote();
   const after = applyAssistOps(before, { remove: [{ key: "tile" }] }, { scope: "best", newId }).rooms;
-  expect(optionDiffSummary(before, after, { better: "Better", best: "Best" })).toBe("Best −1");
+  expect(optionDiffSummary(before, after, { better: "Complete", best: "Premium" })).toBe("Premium −1");
 });

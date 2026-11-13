@@ -115,7 +115,7 @@ function CardPageInner() {
 
   useEffect(() => {
     if (!slug) { setLoading(false); return; }
-    db.get<Organization>("organizations", { site_slug: slug }).then(async (orgs) => {
+    db.get<Organization>("org_public", { site_slug: slug }).then(async (orgs) => {
       if (orgs.length) {
         const o = orgs[0];
         setOrg(o);

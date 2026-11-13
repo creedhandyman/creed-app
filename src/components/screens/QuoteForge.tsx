@@ -9,7 +9,7 @@ import { buildRenderPrompt } from "@/lib/render-prompt";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material, JobDiscount, Job } from "@/lib/types";
-import { itemInTier, itemTiers, sharedSuppliesLines, type TierKey } from "@/lib/tiers";
+import { itemInTier, itemTiers, itemLevel, tiersForLevel, shouldOfferTiers, sharedSuppliesLines, tierPriceLine, TIER_NAME, TIER_NAMES, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
 import { buildAssistJobContext, type AssistInspection } from "@/lib/assist-context";
 import { applyAssistOps, optionDiffSummary, type AssistAdd, type AssistPatch } from "@/lib/assist-ops";
 import {
@@ -65,6 +65,7 @@ import { appendTemplateRooms, canonCategory, nextSortOrder, templateCategories, 
 import { readBlob, jobBlob } from "@/lib/job-blob";
 import { evaluateLine, matchingRuleIds, uniqueSuggestionDetail, type ScopeRule, type LineScope, type ScopeState } from "@/lib/scope-rules";
 import { loadScopeRules } from "@/lib/scope-rules-client";
+import { REFERRAL_DISCOUNT_LABEL, fmtCents } from "@/lib/referrals";
 import { isPdfFile } from "@/lib/pdf-detect";
 import { GrizzFace } from "../Grizz";
 import ContactFound from "../ContactFound";
@@ -461,6 +462,29 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // null = no discount; on save, persisted as `data.discount` so reloads
   // round-trip.
   const [discount, setDiscount] = useState<JobDiscount | null>(null);
+  // Customer referrals: credit this quote's customer has earned (earned, not
+  // yet used), and which of those credits the "Referral credit" discount on
+  // this quote uses. After a successful save they're marked used
+  // (/api/referrals/apply). Only loaded while referrals are on.
+  const referralsOn = useStore((s) => s.org?.referrals_enabled === true);
+  const [referralCredit, setReferralCredit] = useState<{ ids: string[]; cents: number } | null>(null);
+  const referralUseRef = useRef<string[]>([]);
+  useEffect(() => {
+    setReferralCredit(null);
+    referralUseRef.current = [];
+    if (!referralsOn || !customerId) return;
+    let live = true;
+    apiFetch(`/api/customers/marketing?id=${encodeURIComponent(customerId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { referrals?: { id: string; status: string; reward_cents: number | null }[] } | null) => {
+        if (!live || !j?.referrals) return;
+        const earned = j.referrals.filter((r) => r.status === "earned" && Number(r.reward_cents) > 0);
+        const cents = earned.reduce((t, r) => t + (Number(r.reward_cents) || 0), 0);
+        setReferralCredit(cents > 0 ? { ids: earned.map((r) => r.id), cents } : null);
+      })
+      .catch(() => { /* offline: no credit button */ });
+    return () => { live = false; };
+  }, [referralsOn, customerId]);
   // Per-quote labor-rate override (Feature 2). null = use the org/user
   // default; a positive number overrides for THIS quote only. Lives on
   // the rooms JSON blob as `data.laborRate` (no schema change).
@@ -479,12 +503,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // before this existed → the rate for the job's ZIP (lib/material-tax.ts).
   // A saved quote keeps its rate unless its address moved to another ZIP.
   const [quoteMatTax, setQuoteMatTax] = useState<{ pct: number; zip: string } | null>(null);
-  // Good-Better-Best tiered quote (per-quote, on the rooms JSON blob). When
-  // on, each line item can be tagged base/better/best (cumulative) and the
-  // customer picks an option on the approval page. `data.tieredQuote` +
-  // `data.tierNames`; the per-item tier rides on each RoomItem (data.rooms).
+  // Three-tier quote — Essential / Complete / Premium (per-quote, on the rooms
+  // JSON blob as `data.tieredQuote`). The AI tags each line's level while it
+  // builds the quote and this turns on by itself (shouldOfferTiers); the owner
+  // can move a line between tiers, or switch tiers off for one price. Names
+  // are fixed (lib/tiers.ts TIER_NAME) — the old renameable options are gone.
   const [tieredQuote, setTieredQuote] = useState(false);
-  const [tierNames, setTierNames] = useState<{ better: string; best: string }>({ better: "Better", best: "Best" });
+  const tierNames = TIER_NAMES;
   // Crew size for this quote (rooms blob `data.crewSize`). null = Auto (the
   // PDF's per-section guess: 2 people when a trade section is over 8 hrs,
   // else 1). It does NOT change the price — labor hours are TOTAL work hours
@@ -508,7 +533,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // option being organized; reset whenever the owner switches options.
   const [nTiers, setNTiers] = useState<TierKey[] | null>(null);
   useEffect(() => { setNTiers(null); }, [editTier]);
-  const addTiers: TierKey[] = nTiers && nTiers.length ? nTiers : [editTier];
+  const addTiers: TierKey[] = nTiers && nTiers.length ? nTiers : tiersForLevel(editTier);
   // An Undo snapshot belongs to the quote it was taken on.
   useEffect(() => { setAssistUndo(null); }, [editingId, editJobId]);
   // AI Assist option scope: "all", or one option — then only that option can
@@ -581,7 +606,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCustomWorkOrder(d.customWorkOrder ?? null);
       setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
       setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
-      setTieredQuote(!!d.tieredQuote); setTierNames(d.tierNames || { better: "Better", best: "Best" });
+      setTieredQuote(!!d.tieredQuote);
       setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
       setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
       setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
@@ -642,7 +667,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setCustomWorkOrder(d.customWorkOrder ?? null);
         setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
         setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
-        setTieredQuote(!!d.tieredQuote); setTierNames(d.tierNames || { better: "Better", best: "Best" });
+        setTieredQuote(!!d.tieredQuote);
         setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
         setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
         setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
@@ -828,7 +853,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setRemovedGuideShop(Array.isArray(data?.removedGuideShop) ? data.removedGuideShop : []);
       // Per-quote settings — discount, labor-rate / min-hours / tax-mode
       // overrides (absent or invalid = inherit the org's), the materials tax it
-      // was priced with, Good-Better-Best (absent = off; legacy quotes load
+      // was priced with, three-tier (absent = off; legacy quotes load
       // non-tiered), crew size, est. days. One shared reader (lib/quote-blob.ts)
       // so this load, the printed quote, the invoice and /status can't drift.
       const q = readQuoteSettings(data);
@@ -837,7 +862,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setMinLaborHours(q.minLaborHours);
       setTaxMode(q.taxMode);
       setQuoteMatTax(q.materialTax);
-      setTieredQuote(q.tieredQuote);
+      // A lead's server AI draft was tagged by the same parser: tiers come on
+      // the same way as a fresh Quick Quote until the first save.
+      setTieredQuote(q.tieredQuote || (!!leadDraftRooms && shouldOfferTiers(leadDraftRooms)));
       setCrewSize(q.crewSize);
       // A lead's AI draft carries its own estimate until the first save.
       setAiEstDays(q.estDays ?? readEstDays(data?.leadDraft?.estDays));
@@ -846,7 +873,6 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           ? (data.leadDraft.notes as unknown[]).filter((n): n is string => typeof n === "string")
           : [],
       );
-      setTierNames(q.tierNames);
       // Restore the photo gallery so the Photos tab + AI Render get the quote's
       // photos back — including the inspection photos collected when the quote
       // was first built. Without this, re-opening a saved quote dropped them and
@@ -996,7 +1022,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     if (!add.length) { useStore.getState().showToast("That service has no lines", "warning"); return; }
     // Options on: the service goes into the option being organized, like the
     // Add tab — never silently into all three.
-    if (tieredQuote) add = add.map((r) => ({ ...r, items: r.items.map((it) => ({ ...it, tiers: [editTier] })) }));
+    if (tieredQuote) add = add.map((r) => ({ ...r, items: r.items.map((it) => ({ ...it, tiers: tiersForLevel(editTier) })) }));
     setRooms((cur) => appendTemplateRooms(cur, add, () => crypto.randomUUID().slice(0, 8)));
     setAddingService(false);
     setTab("quote");
@@ -1012,7 +1038,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined); resetContact();
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
-    setTieredQuote(false); setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
+    setTieredQuote(false); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
@@ -1164,6 +1190,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // Already validated (caps + floors) and labor-calibrated inside the
         // parse — skipCaps so a second cap pass can't clamp calibrated hours.
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
+        setTieredQuote(shouldOfferTiers(result.rooms));
         setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setAiNotes(result.notes || []);
         setParsing(false);
@@ -1358,6 +1385,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // these rooms — skipCaps so the 10h/8h cap can't re-clamp calibrated
         // hours (the real-world test saw a 10.4h line reset to 8h).
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
+        // Three tiers when the AI tagged recommended / upgrade work; a small
+        // single-item or all-must-fix job stays one price.
+        setTieredQuote(shouldOfferTiers(result.rooms));
         setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setAiNotes(result.notes || []);
         setParsing(false);
@@ -1805,7 +1835,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const { minApplies, tl, th, subtotal, discountAmount, taxAmount } = cascade;
   const gt = cascade.grandTotal;
 
-  // ── Good-Better-Best tier totals (only meaningful when tieredQuote is on).
+  // ── three-tier tier totals (only meaningful when tieredQuote is on).
   // Each option re-runs the SAME pricing cascade (min-labor floor, discount,
   // tax) over ITS OWN item set — membership-based, so options can be mutually
   // exclusive (a line can be in any combination of options). itemInTier falls
@@ -1843,9 +1873,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // For a tiered quote there's no single "all items" total — summing every
   // line double-counts mutually-exclusive options. The headline (total card,
   // saved job.total, send message) uses the most expensive real option.
-  const headlineKey: TierKey = tieredQuote
-    ? (["base", "better", "best"] as TierKey[]).reduce((a, b) => (tierTotals[b] > tierTotals[a] ? b : a), "base" as TierKey)
-    : "best";
+  // Three-tier: the headline (total card, saved job.total before the customer
+  // picks) is the recommended tier, Complete.
+  const headlineKey: TierKey = tieredQuote ? RECOMMENDED_TIER : "best";
   const headlineTotal = tieredQuote ? tierTotals[headlineKey] : gt;
   const headlineLabor = tieredQuote ? tierBreakdown[headlineKey].labor : tl;
   const headlineMat = tieredQuote ? tierBreakdown[headlineKey].mat : tm;
@@ -1935,6 +1965,20 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       useStore.setState({ jobs: prev ? st.jobs.map((j) => (j.id === savedId ? merged : j)) : [merged, ...st.jobs] });
     }
     useStore.getState().showToast(t(editingId ? "qf.jobUpdated" : "qf.jobCreated") + ": " + prop, "success");
+    // Referral credit used on this quote → mark it used, so it can't go on
+    // another job too. Best-effort: a failure leaves the credit available.
+    if (savedId && discount?.label === REFERRAL_DISCOUNT_LABEL && referralUseRef.current.length) {
+      const ids = referralUseRef.current;
+      referralUseRef.current = [];
+      setReferralCredit(null);
+      for (const referralId of ids) {
+        void apiFetch("/api/referrals/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referralId, jobId: savedId }),
+        }).catch(() => { /* stays earned */ });
+      }
+    }
 
     // Saved: the screen IS the saved version now — drop its edit draft and
     // make this the new baseline.
@@ -1981,7 +2025,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setLaborRate(null);
     setMinLaborHours(null);
     setTieredQuote(false);
-    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
+    setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     savingRef.current = false;
     // Land on the job just saved (Jobs opens its detail from this intent).
     if (savedId) setNavIntent({ page: "jobs", jobId: savedId });
@@ -2171,7 +2215,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     setLaborRate(null);
     setMinLaborHours(null);
     setTieredQuote(false);
-    setTierNames({ better: "Better", best: "Best" }); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
+    setCrewSize(null); setAiEstDays(null); setAiNotes([]);
   };
   // Inspector registers its own "leave the walkthrough" (keeps findings in the
   // Resume slot) so back from its room list behaves like its ← button.
@@ -2842,66 +2886,60 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         </div>
       </div>
 
-      {/* Good-Better-Best options (per-quote, on the rooms JSON blob). When
-          on, each line item gets a Base/Better/Best tag below; the three
-          cumulative totals preview here and the customer picks one on the
-          approval page. */}
+      {/* Three-tier quote — Essential / Complete / Premium (per-quote, on the
+          rooms JSON blob). The AI tags each line's tier while it builds the
+          quote and turns this on; each line shows its tier below and can be
+          moved. Tiers are cumulative; Complete is the recommended one (the
+          headline price and the customer page's highlighted card). */}
       <div style={{ marginTop: 8 }}>
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <span style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}>
-            Options · Good-Better-Best
+            Tiers · Essential / Complete / Premium
           </span>
           <button
             onClick={() => setTieredQuote((v) => !v)}
             className={tieredQuote ? "bb" : "bo"}
             style={{ fontSize: 12, padding: "3px 12px" }}
           >
-            {tieredQuote ? "On" : "Off"}
+            {tieredQuote ? "On" : "One price"}
           </button>
         </div>
         {tieredQuote && (
           <>
-            <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 12 }} className="dim">Tier names:</span>
-              <input value={tierNames.better} onChange={(e) => setTierNames((n) => ({ ...n, better: e.target.value }))} onBlur={(e) => { if (!e.target.value.trim()) setTierNames((n) => ({ ...n, better: "Better" })); }} placeholder="Better" style={{ flex: "1 1 90px", minWidth: 80, padding: "4px 8px", fontSize: 14 }} />
-              <input value={tierNames.best} onChange={(e) => setTierNames((n) => ({ ...n, best: e.target.value }))} onBlur={(e) => { if (!e.target.value.trim()) setTierNames((n) => ({ ...n, best: "Best" })); }} placeholder="Best" style={{ flex: "1 1 90px", minWidth: 80, padding: "4px 8px", fontSize: 14 }} />
-            </div>
-            <div style={{ fontSize: 11, color: "#888", marginTop: 10, marginBottom: 4, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}>
-              Tap a tier to organize it
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               {([
-                { key: "base", name: "Base", total: tierTotals.base, hue: "#8a8a99" },
-                { key: "better", name: tierNames.better, total: tierTotals.better, hue: "#2E75B6" },
-                { key: "best", name: tierNames.best, total: tierTotals.best, hue: "#9d4edd" },
+                { key: "base", sub: "Must-fix", hue: "#8a8a99" },
+                { key: "better", sub: "+ Recommended", hue: "#2E75B6" },
+                { key: "best", sub: "+ Upgrades", hue: "#9d4edd" },
               ] as const).map((t) => {
+                const rec = t.key === RECOMMENDED_TIER;
                 const on = editTier === t.key;
                 return (
                   <button
                     key={t.key}
                     type="button"
                     onClick={() => setEditTier(t.key)}
+                    title={`New lines go in ${TIER_NAME[t.key]}`}
                     style={{
-                      flex: 1, textAlign: "center", borderRadius: 8, padding: "7px 4px", cursor: "pointer",
-                      border: on ? `2px solid ${t.hue}` : `1px solid ${t.hue}55`,
+                      flex: 1, textAlign: "center", borderRadius: 8, padding: "7px 4px", cursor: "pointer", position: "relative",
+                      border: rec ? `2px solid ${t.hue}` : `1px solid ${t.hue}55`,
                       background: on ? `${t.hue}2e` : `${t.hue}12`,
-                      boxShadow: on ? `0 0 12px -3px ${t.hue}` : "none",
+                      boxShadow: rec ? `0 0 12px -3px ${t.hue}` : "none",
                     }}
                   >
-                    <div style={{ fontSize: 9, letterSpacing: ".06em", textTransform: "uppercase", color: t.hue, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
-                    <div style={{ fontSize: 16, fontFamily: "Oswald", fontWeight: 700, color: "#fff", marginTop: 1 }}>${t.total.toFixed(0)}</div>
+                    <div style={{ fontSize: 10, letterSpacing: ".06em", textTransform: "uppercase", color: t.hue, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {TIER_NAME[t.key]}{rec ? " ★" : ""}
+                    </div>
+                    <div style={{ fontSize: 17, fontFamily: "Oswald", fontWeight: 700, color: "#fff", marginTop: 1 }}>${tierTotals[t.key].toFixed(0)}</div>
+                    <div style={{ fontSize: 10, color: "#9a9aa8", marginTop: 1 }}>{t.sub}</div>
                   </button>
                 );
               })}
             </div>
             <div className="dim" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.45 }}>
-              {editTier === "base"
-                ? <>Organizing <b style={{ color: "#bbb" }}>Base</b>. Check the lines included in this option.</>
-                : editTier === "better"
-                ? <>Organizing <b style={{ color: "#7fb6ff" }}>{tierNames.better}</b>. Check the lines included in this option.</>
-                : <>Organizing <b style={{ color: "#c79bff" }}>{tierNames.best}</b>. Check the lines included in this option.</>}
-              {" "}Each option is independent — a line can be in any combination (or its own scope).
-              {!hasSplit && <> Nothing split yet — all three options are identical until you differentiate them.</>}
+              Each tier includes the one before it. ★ Complete is the recommended tier the customer sees highlighted.
+              Move a line with the Essential / Complete / Premium chips under it. New lines go in <b>{TIER_NAME[editTier]}</b> (tap a tier to change).
+              {!hasSplit && <> Every line is Essential right now, so all three prices match — move some lines up, or switch to one price.</>}
             </div>
           </>
         )}
@@ -2999,6 +3037,18 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
               );
             })}
           </div>
+          {referralCredit && discount?.label !== REFERRAL_DISCOUNT_LABEL && (
+            <button
+              className="bo"
+              onClick={() => {
+                referralUseRef.current = referralCredit.ids;
+                setDiscount({ type: "fixed", value: referralCredit.cents / 100, label: REFERRAL_DISCOUNT_LABEL });
+              }}
+              style={{ fontSize: 12.5, padding: "3px 10px", width: "auto" }}
+            >
+              Use {fmtCents(referralCredit.cents)} referral credit
+            </button>
+          )}
           {discount ? (
             <>
               <input
@@ -3289,7 +3339,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           <input
             value={quickDesc}
             onChange={(e) => setQuickDesc(e.target.value)}
-            placeholder={tieredQuote ? "Edit items or describe each option (Base / Better / Best)..." : "Add/edit/remove items, set labor rate, apply a discount..."}
+            placeholder={tieredQuote ? "Edit items, or move them between tiers (Essential / Complete / Premium)..." : "Add/edit/remove items, set labor rate, apply a discount..."}
             style={{ flex: 1, fontSize: 15 }}
           />
           <button
@@ -3315,7 +3365,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                   laborHrs: it.laborHrs,
                   materials: it.materials,
                   ...((it as RoomItem & { sqft?: number }).sqft ? { sqft: (it as RoomItem & { sqft?: number }).sqft } : {}),
-                  // Which Good-Better-Best options the line is in (only
+                  // Which three-tier options the line is in (only
                   // meaningful while options are on).
                   ...(tieredQuote ? { tiers: itemTiers(it) } : {}),
                 })));
@@ -3333,9 +3383,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                   minLaborHours: minLaborHours,
                   taxMode: taxMode,
                   orgTaxMode: resolveTaxMode(org?.tax_mode),
-                  options: { on: tieredQuote, names: { base: "Base", better: tierNames.better, best: tierNames.best } },
+                  options: { on: tieredQuote, names: { base: TIER_NAME.base, better: TIER_NAME.better, best: TIER_NAME.best } },
                 };
-                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" },\n  "setMinLaborHours": 2,\n  "setTaxMode": "materials"\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\`, \`setDiscount\`, \`setMinLaborHours\`, \`setTaxMode\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  - "setMinLaborHours": <number> — per-quote override of the minimum-billable-labor-hours floor. The org has an org-wide default (shown in CURRENT PRICING META as minLaborHours when set on this quote, otherwise the floor is inherited from org settings). Examples:\n      "set the minimum to 2 hours for this job" → setMinLaborHours: 2\n      "drop the minimum to 0.5 hours" → setMinLaborHours: 0.5\n      "remove the minimum on this quote" / "no minimum on this job" → setMinLaborHours: 0\n      "reset minimum to the org default" / "inherit the org minimum" → setMinLaborHours: null\n    Numeric value 0 means "disable the floor for THIS quote" (still recorded as an override). null means "inherit the org default again".\n  - "setTaxMode": "total" | "materials" | "none" — per-quote override of how tax applies. CURRENT PRICING META exposes both the per-quote override (taxMode, null when inheriting) and the org default (orgTaxMode). Examples:\n      "tax materials only" / "only tax the materials" → setTaxMode: "materials"\n      "tax everything" / "tax labor and materials" → setTaxMode: "total"\n      "no tax on this one" / "tax-exempt" / "skip the tax" → setTaxMode: "none"\n      "reset tax mode to default" / "inherit the org tax setting" → setTaxMode: null\n    null clears the per-quote override (inherits the org default).\n  OMIT these fields entirely if the user did not mention rate, discount, minimum hours, or tax mode. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nGOOD-BETTER-BEST OPTIONS. A quote can offer the customer three options (keys "base", "better", "best"; CURRENT PRICING META.options gives whether they're on and their display names — the user may call an option by its display name). Every line belongs to a SET of options via "tiers" (e.g. ["base","better","best"] = in every option, ["best"] = Best only). Options are MEMBERSHIP sets, NOT cumulative: each option's price is exactly the lines in its set, so each option must be a complete, standalone scope.\n  - add[] entries may include "tiers": [...]. To change a line's options use DELTAS in its update patch: "tiersAdd": ["best"] / "tiersRemove": ["base"] — never restate the whole set.\n  - MINIMAL CHANGES: touch ONLY the lines the request is about. Every other line keeps its options, hours, materials and wording exactly — do not return update/remove entries for them. On a big quote an unrequested change to another option is a serious error.\n  - OPTION SCOPE (when the user message names one): describe what that option needs with normal add/update/remove. Edit a line's content directly even if it's shared — the app splits it so only the scoped option gets the change; "remove" takes the line out of that option only. Alternates for the scoped option (e.g. LVP instead of patching tile, a full repaint instead of touch-ups) = add the new line + remove the line it replaces.\n  - "setOptions": true | false — turn options on/off. Include true whenever the user describes different options and they're off.\n  - "setTierNames": { "better": "...", "best": "..." } — rename the Better/Best options (Base can't be renamed). Only when asked.\n  - When the user describes what each option includes, restructure with tiers: shared work goes in all three; an upgrade that REPLACES lower-option work goes only in the higher option(s) and the replaced line is removed from those options. Example: "Base repairs the screen door, Better adds new hardware, Best replaces the door" → repair line tiers ["base","better"], hardware line ["better"], new-door line ["best"].\n  - Two lines for the same task in different options (standard vs premium) must have distinguishable details, e.g. "Living Room — Paint walls (premium paint)".\n  - SUPPLIES PER OPTION: when options are on and a trade's work differs between options, a materials-only supplies line (paint, primer, caulk, tape, rollers…) must NOT be shared across those options. Give EACH option its own supplies line sized to that option's own scope (a full repaint needs far more paint/primer than touch-ups), with the option in the detail — e.g. "Whole Property — Painting Supplies & Paint (Best)" tiers ["best"]. Replace (remove, or narrow the tiers of) any existing shared supplies line instead of leaving it in place. Do this automatically whenever you restructure options — the user shouldn't have to ask.\n  - Never leave an option with no lines. NEW work: give "tiers" for the option(s) the request names. If the request doesn't say which option it's for, OMIT "tiers" — the app puts it in the option the owner is organizing (ORGANIZING in the user message). Use ["base","better","best"] only when the user says the work is needed in every option. Don't change tiers when the request isn't about options. Omit "tiers" entirely when options stay off.\n\nJOB CONTEXT (when present in the user message) is read-only background: the saved INSPECTION (room sizes + what the tech found), WORK ORDER state, JOB NOTES and the CUSTOMER'S ORIGINAL REQUEST. Use it to do the edit right:\n  - Size area-based work (paint, flooring, drywall) from the inspection's room dimensions/sqft instead of guessing; only say "confirm on site" when the inspection has no size for that room.\n  - Keep rewritten lines faithful to what the inspection found (condition, location, notes).\n  - A work-order task the crew already FINISHED is done work: don't remove, rescope or move that line out of an option unless the user explicitly asks.\n  - Don't add lines for inspection findings, hand-added tasks or notes unless the user's request calls for them — they are context, not instructions.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
+                const editModeAddendum = `\n\n## AI ASSIST EDIT MODE — OUTPUT FORMAT OVERRIDE\n\nThe user is editing an EXISTING quote. The user message includes the current line items with their stable \`key\` field (the item id), plus a CURRENT PRICING META snapshot. Decide which combination of add / update / remove / pricing-meta operations satisfies the request.\n\nReturn ONLY this JSON shape (NO other top-level fields, NO rooms array, NO property/client/notes/crewSize/estDays):\n\n{\n  "add": [\n    { "trade": "Carpentry", "detail": "Kitchen — Replace counter tops (quartz)", "condition": "-", "comment": "...", "laborHrs": 10, "materials": [{ "n": "Quartz countertop 25 sqft", "c": 1500 }] }\n  ],\n  "update": [\n    { "key": "abcd1234", "patch": { "laborHrs": 12 } },\n    { "key": "efgh5678", "patch": { "detail": "Bedroom 2 — Replace flooring (110 sqft, tile)", "materials": [{ "n": "Tile 110 sqft (10% waste)", "c": 484 }, { "n": "Thinset / grout", "c": 83 }] } },\n    { "key": "ijkl9012", "patch": { "trade": "Plumbing" } }\n  ],\n  "remove": [\n    { "key": "mnop3456" }\n  ],\n  "setLaborRate": 65,\n  "setDiscount": { "type": "percent", "value": 10, "label": "Return customer discount" },\n  "setMinLaborHours": 2,\n  "setTaxMode": "materials"\n}\n\nADD entries must include "trade" (one of the canonical trade categories from §I) and the standard item fields. Default condition to "-" unless the user clearly describes urgent damage.\n\nUPDATE entries use the existing key and a "patch" object with ONLY the fields that change. Valid patch fields: detail, comment, condition, laborHrs, materials, trade, sqft. To MOVE an item to a different trade bucket, set patch.trade. Don't echo unchanged fields.\n\nREMOVE entries are just { "key": "..." }. Use this for "delete X" / "remove X" / "drop the X line".\n\nPRICING META (\`setLaborRate\`, \`setDiscount\`, \`setMinLaborHours\`, \`setTaxMode\`) are top-level fields, not arrays. Include them ONLY when the user explicitly asks to change them.\n  - "setLaborRate": <number> — set the per-quote labor rate (e.g. "raise the labor rate to $65/hr" → setLaborRate: 65). Use null to clear (e.g. "reset to the default rate" / "remove the rate override").\n  - "setDiscount": { "type": "percent"|"fixed", "value": <number>, "label": <string?> } — apply a discount. Examples:\n      "apply a 10% discount" → { "type": "percent", "value": 10 }\n      "take $200 off the total" → { "type": "fixed", "value": 200 }\n      "10% return customer discount" → { "type": "percent", "value": 10, "label": "Return customer discount" }\n    Use null to clear (e.g. "remove the discount" / "drop the discount").\n  - "setMinLaborHours": <number> — per-quote override of the minimum-billable-labor-hours floor. The org has an org-wide default (shown in CURRENT PRICING META as minLaborHours when set on this quote, otherwise the floor is inherited from org settings). Examples:\n      "set the minimum to 2 hours for this job" → setMinLaborHours: 2\n      "drop the minimum to 0.5 hours" → setMinLaborHours: 0.5\n      "remove the minimum on this quote" / "no minimum on this job" → setMinLaborHours: 0\n      "reset minimum to the org default" / "inherit the org minimum" → setMinLaborHours: null\n    Numeric value 0 means "disable the floor for THIS quote" (still recorded as an override). null means "inherit the org default again".\n  - "setTaxMode": "total" | "materials" | "none" — per-quote override of how tax applies. CURRENT PRICING META exposes both the per-quote override (taxMode, null when inheriting) and the org default (orgTaxMode). Examples:\n      "tax materials only" / "only tax the materials" → setTaxMode: "materials"\n      "tax everything" / "tax labor and materials" → setTaxMode: "total"\n      "no tax on this one" / "tax-exempt" / "skip the tax" → setTaxMode: "none"\n      "reset tax mode to default" / "inherit the org tax setting" → setTaxMode: null\n    null clears the per-quote override (inherits the org default).\n  OMIT these fields entirely if the user did not mention rate, discount, minimum hours, or tax mode. Do NOT echo the current values — leaving the field out means "no change".\n\nIf the user's request only adds, return empty update[] and remove[]. Same in the other directions. NEVER return both an update and a remove for the same key — pick one.\n\nTHREE-TIER QUOTE. A quote can offer the customer three cumulative tiers (keys "base" = Essential, "better" = Complete, "best" = Premium; CURRENT PRICING META.options says whether they are on and gives the names — the user calls them Essential / Complete / Premium). Each line belongs to a SET of tiers via "tiers". The normal shape is cumulative: a must-fix line is in all three (["base","better","best"]), a recommended line is in Complete and Premium (["better","best"]), an upgrade line is in Premium only (["best"]). Each tier's price is exactly the lines in its set.\n  - add[] entries may include "tiers": [...]. To move a line between tiers use DELTAS in its update patch: "tiersAdd": ["base"] / "tiersRemove": ["base"] — never restate the whole set. "Make the caulking recommended" = tiersRemove ["base"]; "make it must-fix" = tiersAdd ["base"].\n  - MINIMAL CHANGES: touch ONLY the lines the request is about. Every other line keeps its tiers, hours, materials and wording exactly — do not return update/remove entries for them. On a big quote an unrequested change to another tier is a serious error.\n  - TIER SCOPE (when the user message names one): describe what that tier needs with normal add/update/remove. Edit a line's content directly even if it's shared — the app splits it so only the scoped tier gets the change; "remove" takes the line out of that tier only.\n  - Upgrades are ADD-ONS priced only for the extra (the price difference in materials + any extra labor) — Premium already includes the must-fix and recommended lines, so never add a second full copy of a lower-tier task.\n  - "setOptions": true | false — turn tiers on/off. Include true whenever the user describes different tiers and they're off.\n  - Two lines for the same task in different tiers (standard vs premium) must have distinguishable details, e.g. "Living Room — Paint walls (premium paint upgrade)".\n  - Never leave a tier with no lines. NEW work: give "tiers" for the tier(s) the request names (cumulative: a recommended line is ["better","best"]). If the request doesn't say, OMIT "tiers" — the app puts it in the tier the owner is organizing (ORGANIZING in the user message). Don't change tiers when the request isn't about tiers. Omit "tiers" entirely when tiers stay off.\n\nJOB CONTEXT (when present in the user message) is read-only background: the saved INSPECTION (room sizes + what the tech found), WORK ORDER state, JOB NOTES and the CUSTOMER'S ORIGINAL REQUEST. Use it to do the edit right:\n  - Size area-based work (paint, flooring, drywall) from the inspection's room dimensions/sqft instead of guessing; only say "confirm on site" when the inspection has no size for that room.\n  - Keep rewritten lines faithful to what the inspection found (condition, location, notes).\n  - A work-order task the crew already FINISHED is done work: don't remove, rescope or move that line out of an option unless the user explicitly asks.\n  - Don't add lines for inspection findings, hand-added tasks or notes unless the user's request calls for them — they are context, not instructions.\n\nApply ALL pricing/material/labor rules from §I-§N above when building add[] items and update[] patches. TYPE B rules apply (condition: "-" by default).`;
                 // Read-only job context: the inspection (this session's, the
                 // quote's saved copy, or the newest inspection at this
                 // address), work-order state, job notes, original request.
@@ -3366,11 +3416,11 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                   leadDescription: typeof savedBlob.leadDescription === "string" ? savedBlob.leadDescription : null,
                 });
                 const activeScope: TierKey | null = tieredQuote && assistScope !== "all" ? assistScope : null;
-                const scopeName = activeScope ? (activeScope === "base" ? "Base" : tierNames[activeScope]) : "";
+                const scopeName = activeScope ? TIER_NAME[activeScope] : "";
                 const userMsg =
                   `Property: ${prop || "this property"}\n\n` +
                   (tieredQuote && !activeScope
-                    ? `ORGANIZING: the owner is working on the "${editTier === "base" ? "Base" : tierNames[editTier]}" option.\n\n`
+                    ? `ORGANIZING: new lines go in the "${TIER_NAME[editTier]}" tier (and the tiers above it).\n\n`
                     : "") +
                   (activeScope
                     ? `OPTION SCOPE: this request is ONLY about the "${scopeName}" option (key "${activeScope}"). Change only what that option needs; the app will keep every other option exactly as it is.\n\n`
@@ -3436,7 +3486,6 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                     setMinLaborHours?: number | null;
                     setTaxMode?: TaxMode | null;
                     setOptions?: boolean;
-                    setTierNames?: { better?: unknown; best?: unknown };
                   };
                   const adds = parsed.add ?? [];
                   const updates = parsed.update ?? [];
@@ -3450,7 +3499,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                     newId: () => crypto.randomUUID().slice(0, 8),
                     // New work with no option named goes in the option being
                     // organized — never silently into all three.
-                    defaultAddTiers: tieredQuote ? [editTier] : null,
+                    defaultAddTiers: tieredQuote ? tiersForLevel(editTier) : null,
                   });
                   const working = applied.rooms;
                   const tiersTouched = applied.tiersTouched;
@@ -3519,25 +3568,16 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                     }
                   }
 
-                  // Good-Better-Best. Lines given an option set while options
+                  // three-tier. Lines given an option set while options
                   // are off would silently do nothing, so that turns them on.
                   const optsOn = parsed.setOptions === true || (parsed.setOptions === false && !activeScope)
                     ? parsed.setOptions
                     : (tiersTouched > 0 && !tieredQuote ? true : undefined);
                   if (optsOn !== undefined && optsOn !== tieredQuote) {
                     setTieredQuote(optsOn);
-                    summary.push(optsOn ? "options on" : "options off");
+                    summary.push(optsOn ? "tiers on" : "tiers off");
                   }
-                  const tn = parsed.setTierNames;
-                  if (tn && typeof tn === "object") {
-                    const nb = typeof tn.better === "string" ? tn.better.trim().slice(0, 30) : "";
-                    const ns = typeof tn.best === "string" ? tn.best.trim().slice(0, 30) : "";
-                    if (nb || ns) {
-                      setTierNames((n) => ({ better: nb || n.better, best: ns || n.best }));
-                      summary.push("options renamed");
-                    }
-                  }
-                  if (tiersTouched) summary.push(`${tiersTouched} line${tiersTouched === 1 ? "" : "s"} sorted into options`);
+                  if (tiersTouched) summary.push(`${tiersTouched} line${tiersTouched === 1 ? "" : "s"} moved between tiers`);
                   // Backstop for the per-option supplies rule: flag a supplies
                   // line the AI left shared across options whose work differs.
                   const sharedSupplies = (optsOn ?? tieredQuote) ? sharedSuppliesLines(validated) : [];
@@ -3580,7 +3620,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             <span className="dim" style={{ fontSize: 12 }}>Change:</span>
             {([
               { key: "all", name: "All options", hue: "#8a8a99" },
-              { key: "base", name: "Base", hue: "#8a8a99" },
+              { key: "base", name: TIER_NAME.base, hue: "#8a8a99" },
               { key: "better", name: tierNames.better, hue: "#2E75B6" },
               { key: "best", name: tierNames.best, hue: "#9d4edd" },
             ] as const).map((o) => {
@@ -3603,7 +3643,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             <span className="dim" style={{ fontSize: 11, flexBasis: "100%" }}>
               {assistScope === "all"
                 ? "AI may change any option."
-                : `Only ${assistScope === "base" ? "Base" : tierNames[assistScope]} will change — other options stay exactly as they are.`}
+                : `Only ${TIER_NAME[assistScope]} will change — the other tiers stay exactly as they are.`}
             </span>
           </div>
         )}
@@ -3614,7 +3654,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             style={{ fontSize: 12, padding: "3px 10px", marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }}
             onClick={() => {
               const u = assistUndo;
-              setRooms(u.rooms); setTieredQuote(u.tieredQuote); setTierNames(u.tierNames);
+              setRooms(u.rooms); setTieredQuote(u.tieredQuote);
               setLaborRate(u.laborRate); setDiscount(u.discount); setMinLaborHours(u.minLaborHours); setTaxMode(u.taxMode);
               setAssistUndo(null);
               useStore.getState().showToast("Undid the last AI Assist change", "success");
@@ -3797,8 +3837,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             const o = useStore.getState().org;
             const statusUrl = await getStatusLink(id);
             const validDays = Number(o?.quote_valid_days) > 0 ? Number(o?.quote_valid_days) : 30;
-            const totalLine = tieredQuote
-              ? `Options from $${Math.min(tierTotals.base, tierTotals.better, tierTotals.best).toFixed(2)} — pick the one you want on the page.`
+            const tierLine = tieredQuote ? tierPriceLine(tierTotals) : null;
+            const totalLine = tierLine
+              ? `${tierLine} — pick the one you want on the page.`
               : `Total: $${headlineTotal.toFixed(2)}`;
             setSendSheet({
               jobId: id,
@@ -3873,7 +3914,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
               <h4 style={{ fontSize: 16, display: "inline-flex", alignItems: "center", gap: 7 }}><Icon name="briefcase" size={16} color="var(--color-violet)" /> Add a service</h4>
               <button className="bo" onClick={() => setAddingService(false)} style={{ padding: "4px 10px" }} aria-label="Close"><Icon name="close" size={14} /></button>
             </div>
-            <p className="dim" style={{ fontSize: 12.5, marginBottom: 10 }}>Its lines are added to this quote{tieredQuote ? ` (to the ${editTier === "base" ? "Base" : tierNames[editTier]} option)` : ""}.</p>
+            <p className="dim" style={{ fontSize: 12.5, marginBottom: 10 }}>Its lines are added to this quote{tieredQuote ? ` (as ${TIER_NAME[editTier]} work)` : ""}.</p>
             <ServiceTemplates mode="add" templates={templates} reload={reloadTemplates} onPick={addServiceToQuote} />
           </div>
         </div>
@@ -4232,33 +4273,37 @@ function QuoteTab({
                       style={{ marginTop: 3, color: "var(--color-dim)" }}
                     />
                     {tieredQuote && (() => {
-                      const et = (editTier || "base") as TierKey;
-                      const cur = itemTiers(it);                 // options this line is in
-                      const inActive = cur.includes(et);
-                      const hue = et === "base" ? "#8a8a99" : et === "better" ? "#2E75B6" : "#9d4edd";
-                      const tierLabel = (k: TierKey) => k === "base" ? "Base" : k === "better" ? (tierNames?.better || "Better") : (tierNames?.best || "Best");
-                      const note = cur.length === 0
-                        ? "in no option"
-                        : cur.length === 3
-                          ? "in all options"
-                          : `in ${cur.map((k) => tierLabel(k)).join(" + ")}`;
+                      // Move this line between tiers: one chip per tier, the
+                      // line sits in the picked tier AND every tier above it
+                      // (cumulative). An old hand-split line (not cumulative)
+                      // shows its lowest tier and is normalised on the first tap.
+                      const lvl = itemLevel(it);
+                      const cur = itemTiers(it);
+                      const custom = cur.join(",") !== tiersForLevel(lvl).join(",");
+                      const HUE: Record<TierKey, string> = { base: "#8a8a99", better: "#2E75B6", best: "#9d4edd" };
                       return (
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Toggle THIS line's membership of the active option only —
-                            // independent per tier (no cumulative stacking).
-                            const next = inActive ? cur.filter((k) => k !== et) : [...cur, et];
-                            upItem(rm.name, it.id, "tiers", next);
-                          }}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 7, cursor: "pointer" }}
-                        >
-                          <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", border: `1.5px solid ${inActive ? hue : "#555"}`, background: inActive ? hue : "transparent" }}>
-                            {inActive ? "✓" : ""}
-                          </span>
-                          <span style={{ fontSize: 11, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".03em", color: inActive ? "#cfd2da" : "#888" }}>
-                            {inActive ? `in ${tierLabel(et)}` : `add to ${tierLabel(et)}`} · <span style={{ opacity: 0.7 }}>{note}</span>
-                          </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 7, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+                          {(["base", "better", "best"] as TierKey[]).map((k) => {
+                            const on = lvl === k;
+                            return (
+                              <button
+                                key={k}
+                                type="button"
+                                aria-pressed={on}
+                                onClick={() => { if (!on || custom) upItem(rm.name, it.id, "tiers", tiersForLevel(k)); }}
+                                style={{
+                                  fontSize: 11, fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".03em",
+                                  padding: "3px 9px", minHeight: 0, borderRadius: 999, cursor: "pointer",
+                                  border: on ? `1.5px solid ${HUE[k]}` : "1px solid #3a3a48",
+                                  background: on ? `${HUE[k]}33` : "transparent",
+                                  color: on ? "#fff" : "#8a8a99",
+                                }}
+                              >
+                                {TIER_NAME[k]}
+                              </button>
+                            );
+                          })}
+                          {custom && <span style={{ fontSize: 10.5, color: "#c9a227" }}>custom split — tap a tier to reset</span>}
                         </div>
                       );
                     })()}
@@ -4679,7 +4724,7 @@ function AddItemForm({
   starterItems?: string[];
   unitsHint?: string;
   primaryBucket?: string;
-  // Good-Better-Best: which options the new line goes into (options on only).
+  // three-tier: which options the new line goes into (options on only).
   tierPick?: { names: { better: string; best: string }; selected: TierKey[]; onChange: (t: TierKey[]) => void };
 }) {
   // Suggest area names from the current quote: pull any "Bedroom 1 — …" or
@@ -4809,19 +4854,19 @@ function AddItemForm({
       </div>
       {tierPick && (
         <div className="mb">
-          <label style={{ fontSize: 12 }} className="dim">Add to option</label>
+          <label style={{ fontSize: 12 }} className="dim">Tier</label>
           <div className="row" style={{ gap: 6, marginTop: 4, flexWrap: "wrap" }}>
             {(["base", "better", "best"] as TierKey[]).map((k) => {
-              const on = tierPick.selected.includes(k);
+              // Single choice: the line goes in this tier and every tier above.
+              const on = itemLevel({ tiers: tierPick.selected }) === k;
               const hue = k === "base" ? "#8a8a99" : k === "better" ? "#2E75B6" : "#9d4edd";
-              const name = k === "base" ? "Base" : tierPick.names[k];
+              const name = TIER_NAME[k];
               return (
                 <button
                   key={k}
                   type="button"
                   onClick={() => {
-                    const next = on ? tierPick.selected.filter((x) => x !== k) : [...tierPick.selected, k];
-                    if (next.length) tierPick.onChange((["base", "better", "best"] as TierKey[]).filter((x) => next.includes(x)));
+                    tierPick.onChange(tiersForLevel(k));
                   }}
                   style={{
                     fontSize: 13, padding: "4px 12px", borderRadius: 999, cursor: "pointer",

@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { cronAuth } from "@/lib/cron-auth";
 import { sendEmail } from "@/lib/email";
 import { sendSms } from "@/lib/sms";
-import { smsConsentGranted } from "@/lib/sms-consent";
+import { autoTextConsent } from "@/lib/sms-consent";
+import { loadCustomersWithConsent } from "@/lib/sms-consent-server";
 import { signJobToken } from "@/lib/job-token";
 import { siteOrigin } from "@/lib/site-url";
 import { notifyQuoteFollowup } from "@/lib/notify-server";
@@ -20,7 +21,8 @@ export const dynamic = "force-dynamic";
  * Opt-in per business (organizations.quote_followup_enabled, Ops → Settings).
  * For each sent, still-"quoted", unsigned job, followup #1 goes out 2 days after
  * the last contact and #2 three days after that (lib/quote-followup.ts holds the
- * rules). Channel: a text only with the customer's recorded opt-in, else email,
+ * rules). Channel: a text only with the customer's recorded opt-in
+ * (autoTextConsent: customer row or this job), else email,
  * else the OWNER is alerted to reach out themselves. The owner is told what
  * happened either way, deep-linked to the job.
  *
@@ -96,10 +98,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   if (!due.length) return NextResponse.json({ ok: true, dry, due: 0, sent: 0 });
 
   const custIds = [...new Set(due.map((x) => x.j.customer_id).filter(Boolean) as string[])];
-  const { data: custs } = custIds.length
-    ? await supabase.from("customers").select("id, name, phone, email").in("id", custIds)
-    : { data: [] as CustomerRow[] };
-  const customers = new Map<string, CustomerRow>(((custs || []) as CustomerRow[]).map((c) => [c.id, c]));
+  const customers = await loadCustomersWithConsent<CustomerRow>(supabase, custIds, "id, name, phone, email");
 
   const results: { job_id: string; step: number; via: FollowupChannel | "skipped"; error?: string }[] = [];
 
@@ -108,7 +107,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     const link = `${siteOrigin()}/status?job=${encodeURIComponent(j.id)}&t=${encodeURIComponent(signJobToken(j.id))}`;
     const cust = j.customer_id ? customers.get(j.customer_id) : undefined;
     const channel = followupChannel({
-      consent: smsConsentGranted(j.rooms),
+      consent: autoTextConsent(cust, j.rooms).ok,
       phone: cust?.phone,
       email: cust?.email,
     });

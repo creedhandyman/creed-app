@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
 import { customerSafeBlob } from "@/lib/ai-hours";
+import { availableCreditCents, referralLink } from "@/lib/referrals";
+import { siteOrigin } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -123,8 +125,42 @@ export async function GET(req: NextRequest) {
       plans = planRows || [];
     }
 
+    // Customer referrals — only when the business turned them on and has a
+    // public request form to send friends to. Separate, best-effort read so
+    // the portal still loads before the referrals migration has run.
+    let referral: { link: string; reward_cents: number; credit_cents: number; referred: number } | null = null;
+    try {
+      const { data: ro } = await supabase
+        .from("organizations")
+        .select("referrals_enabled, referral_reward_cents, site_slug, site_published")
+        .eq("id", session.org_id)
+        .maybeSingle();
+      const r = ro as { referrals_enabled?: boolean; referral_reward_cents?: number | null; site_slug?: string | null; site_published?: boolean | null } | null;
+      const code = (customerRes.data[0] as { referral_code?: string | null }).referral_code;
+      const link = r?.referrals_enabled ? referralLink(siteOrigin(), r, code) : null;
+      if (link) {
+        const { data: refs } = await supabase
+          .from("customer_referrals")
+          .select("status, reward_cents")
+          .eq("org_id", session.org_id)
+          .eq("referrer_customer_id", session.customer_id);
+        const rows = (refs || []) as { status: "pending" | "earned" | "applied" | "void"; reward_cents: number | null }[];
+        referral = {
+          link,
+          reward_cents: Math.max(0, Number(r?.referral_reward_cents ?? 2500) || 0),
+          credit_cents: availableCreditCents(rows),
+          referred: rows.filter((x) => x.status !== "void").length,
+        };
+      }
+    } catch {
+      referral = null;
+    }
+
     return NextResponse.json({
-      customer: customerRes.data[0],
+      referral,
+      // The text-consent record (IP, team member names) is internal; the
+      // portal doesn't use it.
+      customer: (({ sms_consent: _consent, ...rest }) => rest)(customerRes.data[0] as Record<string, unknown>),
       addresses: addressesRes.data || [],
       // aiHrs + the consent record's IP are internal — see ai-hours.ts.
       jobs: jobs.map((j) => ({ ...j, rooms: customerSafeBlob(j.rooms) })),

@@ -38,7 +38,7 @@ async function freeSlug(name: string): Promise<string> {
   for (let n = 1; n <= 20; n++) {
     const candidate = n === 1 ? base : `${base}-${n}`;
     try {
-      const taken = await db.get<Organization>("organizations", { site_slug: candidate }, { strict: true });
+      const taken = await db.get<Organization>("org_public", { site_slug: candidate }, { strict: true });
       if (!taken.length) return candidate;
     } catch {
       return ""; // can't check → leave it unset rather than risk a clash
@@ -181,7 +181,7 @@ export default function Onboarding() {
     setSaving(true);
     setErr("");
     try {
-      const orgs = await db.get<Organization>("organizations", { id: code });
+      const orgs = await db.get<Organization>("org_public", { id: code });
       if (!orgs.length) { setErr(t("ob.joinError")); setSaving(false); return; }
       const org = orgs[0];
 

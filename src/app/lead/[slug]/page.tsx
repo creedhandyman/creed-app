@@ -44,6 +44,23 @@ function LeadIntakeInner() {
     } catch { /* */ }
   }, [params]);
 
+  // Customer referral: ?ref=<code> from a customer's share link. Kept for the
+  // visit so it survives a reload; the server only counts it while the
+  // business has referrals on.
+  const [refCode, setRefCode] = useState("");
+  useEffect(() => {
+    const fromUrl = (params.get("ref") || "").trim().toLowerCase();
+    if (/^[a-z0-9]{6,16}$/.test(fromUrl)) {
+      setRefCode(fromUrl);
+      try { sessionStorage.setItem("c_lead_ref", fromUrl); } catch { /* */ }
+      return;
+    }
+    try {
+      const stashed = sessionStorage.getItem("c_lead_ref");
+      if (stashed) setRefCode(stashed);
+    } catch { /* */ }
+  }, [params]);
+
   const [org, setOrg] = useState<Organization | null>(null);
   const [orgLoading, setOrgLoading] = useState(true);
 
@@ -65,7 +82,7 @@ function LeadIntakeInner() {
 
   useEffect(() => {
     if (!slug) { setOrgLoading(false); return; }
-    db.get<Organization>("organizations", { site_slug: slug }).then((orgs) => {
+    db.get<Organization>("org_public", { site_slug: slug }).then((orgs) => {
       if (orgs.length) setOrg(orgs[0]);
       setOrgLoading(false);
     });
@@ -131,6 +148,7 @@ function LeadIntakeInner() {
           description: (jobType ? `[${jobType}] ` : "") + description.trim(),
           photos,
           referrer_tech_id: techId || undefined,
+          referral_code: refCode || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));

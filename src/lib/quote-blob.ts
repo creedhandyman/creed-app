@@ -1,7 +1,7 @@
 /**
  * Reading a quote's per-quote SETTINGS out of a job's `rooms` blob — the
  * discount, labor-rate / minimum-hours / tax-mode overrides, the materials
- * purchase tax it was priced with, the Good-Better-Best option names, crew size
+ * purchase tax it was priced with, the three-tier option names, crew size
  * and estimated days. QuoteForge writes them on save; the editor load, the
  * printed quote (quote-pdf), the Jobs invoice and the customer /status page all
  * read them back. Each of those used to carry its own copy of the validity rules
@@ -17,6 +17,7 @@
 import type { JobDiscount } from "./types";
 import type { TaxMode } from "./tax";
 import type { RoomsBlob } from "./job-blob";
+import { TIER_NAMES } from "./tiers";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
 
@@ -47,13 +48,11 @@ export function readMaterialTax(blob: RoomsBlob | null | undefined): { pct: numb
   return { pct, zip: typeof blob?.materialTaxZip === "string" ? blob.materialTaxZip : "" };
 }
 
-/** Names of the Better / Best options, defaulting blanks to "Better" / "Best". */
-export function readTierNames(v: unknown): { better: string; best: string } {
-  const tn = v as { better?: unknown; best?: unknown } | null | undefined;
-  return {
-    better: typeof tn?.better === "string" && tn.better.trim() ? tn.better : "Better",
-    best: typeof tn?.best === "string" && tn.best.trim() ? tn.best : "Best",
-  };
+/** Names of the upper two tiers. FIXED since three-tier quoting (2026-11-12):
+ *  Complete / Premium, whatever an old quote saved (renaming is gone — one
+ *  system). Kept as a reader so callers keep their shape. */
+export function readTierNames(_v?: unknown): { better: string; best: string } {
+  return { ...TIER_NAMES };
 }
 
 export const readCrewSize = (v: unknown): number | null => (isNum(v) && v > 0 ? Math.round(v) : null);

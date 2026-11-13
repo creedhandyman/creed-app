@@ -1,7 +1,7 @@
 /**
  * Apply an AI Assist response (add / update / remove) to the quote's rooms.
  *
- * Moved out of QuoteForge so the Good-Better-Best rules can be enforced (and
+ * Moved out of QuoteForge so the three-tier rules can be enforced (and
  * tested) in code instead of trusted to the model. On a big tiered quote the
  * AI used to rewrite option memberships on lines the request wasn't about —
  * e.g. dropping eight unrelated lines out of Better, which left Better
@@ -20,7 +20,7 @@
  * tiersRemove deltas so the AI never has to restate a line's whole set.
  */
 import type { Room, RoomItem, Material } from "./types";
-import { itemTiers, TIER_KEYS, type TierKey } from "./tiers";
+import { itemTiers, TIER_KEYS, TIER_NAME, type TierKey } from "./tiers";
 
 export type AssistAdd = {
   trade?: string; detail: string; condition?: string; comment?: string;
@@ -224,7 +224,7 @@ export function optionDiffSummary(before: Room[], after: Room[], names: { better
     for (const [id, sig] of now) { if (!was.has(id)) plus++; else if (was.get(id) !== sig) edited++; }
     for (const id of was.keys()) if (!now.has(id)) minus++;
     if (plus || minus || edited) {
-      const nm = t === "base" ? "Base" : names[t];
+      const nm = t === "base" ? TIER_NAME.base : names[t];
       parts.push(`${nm} ${[plus && `+${plus}`, minus && `−${minus}`, edited && `~${edited}`].filter(Boolean).join(" ")}`);
     }
   }
