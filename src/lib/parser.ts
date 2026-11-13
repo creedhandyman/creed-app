@@ -3,6 +3,7 @@ import { db, supabase } from "./supabase";
 import { apiFetch } from "./api";
 import { MATERIALS_DB } from "./materials-db";
 import { TRADE_CATEGORY_LIST, canonicalDetail, isSuppliesOnlyLine } from "./line-canon";
+import { isPlumbingWork } from "./plumbing-trade";
 import { withTimeout } from "./pdf-detect";
 import { buildGrounding, type KbRow } from "./quote-grounding";
 import { salvageJson } from "./json-salvage";
@@ -250,7 +251,7 @@ export function foldLegacyTrade(name: string | undefined | null): string {
 // these exact 7 names — foldLegacyTrade() rescues stragglers, but the
 // prompt is the front line of defense.
 export const TRADE_CATEGORIES_PROMPT = `THE ONLY 7 VALID TRADE NAMES — use these EXACTLY, never invent others:
-- PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves, supply lines, water-line resealing at wall penetrations, dryer vents, AND water heaters / hot-water tanks (tank, tankless, gas, electric — install, replace, drain, anode, T&P valve, expansion tank).
+- PLUMBING: faucets, toilets, tubs, sinks, drains, stoppers, aerators, valves (shower/tub mixing valves, valve kits and cartridges, shut-offs, angle stops — ALWAYS Plumbing, even when the line includes opening the wall or cutting an access panel to reach them), PEX and SharkBite fittings, supply lines, water-line resealing at wall penetrations, dryer vents, AND water heaters / hot-water tanks (tank, tankless, gas, electric — install, replace, drain, anode, T&P valve, expansion tank).
 - ELECTRICAL: outlets, switches, switch/outlet plates, GFCI, light fixtures, bulbs, light covers, ceiling fans (electrical), breaker panel inspection, smoke alarms, CO detectors, fire extinguishers, doorbells/chimes.
 - CARPENTRY: doors, knobs, locks, deadbolts, hinges, blinds, curtains, curtain rods, mirrors, medicine cabinets, cabinets, drawers, countertops (laminate/butcher block/quartz/granite/solid surface — including demo, template, install, sink/faucet reset, edge profile), interior framing and re-framing (studs, blocking, headers, joists), shower wall framing, drywall blocking for grab bars / cabinets / TVs, structural sistering, window screens, window panes/glass, full window REPLACEMENTS (sash, frame, vinyl replacement windows, weatherstripping, interior/exterior trim + perimeter caulk when bundled), full door REPLACEMENTS (slab, pre-hung, sliding patio, including weatherstripping + perimeter caulk when bundled), closet rods/shelving. Demo of carpentry items (rotted framing, old cabinets, old countertops, old windows/doors being replaced) when it's labor work goes here.
 - HVAC: HVAC condenser unit, furnace, mini-split, range hood vented to exterior, HVAC filter change, thermostat replacement, ductwork. (Water heaters are PLUMBING — see above.)
@@ -266,7 +267,7 @@ FOLD-DOWN RULES (for items that used to have their own bucket):
 - Siding, gutters, downspouts, fence, gates, exterior lights, landscaping, driveway → GENERAL (repair/replace work only — REPAINTING any of them is PAINTING).
 - Debris removal, dump fees, final cleaning, interior trash-out → GENERAL.
 
-A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A water heater / hot-water tank is PLUMBING, not HVAC or Electrical (HVAC is heating/AC/ventilation, not hot water). A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER General — it's Carpentry. Caulking is NEVER General — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry. An HVAC filter is NEVER Electrical — it is HVAC. A stove/oven/appliance PART (burner knob, drip pan, heating element) is NEVER Carpentry — appliance parts are GENERAL. Paint MATERIALS (wall/trim/baseboard paint, primer) NEVER ride on a Carpentry line — a "patch holes and paint" comment is TWO lines per rule 5a (Carpentry patch, Painting paint), and a repaint-only task is PAINTING no matter what room or exterior surface it touches. If a line truly fits nowhere, choose GENERAL — do NOT invent a new trade name.`;
+A door knob NEVER goes in Painting. A ceiling light NEVER goes in Flooring. A shower or tub valve is NEVER Carpentry — the wall opening for access travels with the valve line under PLUMBING; only a separate drywall patch line goes to Carpentry. A water heater / hot-water tank is PLUMBING, not HVAC or Electrical (HVAC is heating/AC/ventilation, not hot water). A countertop NEVER goes in Flooring — countertops travel with cabinets under CARPENTRY. Interior framing is NEVER General — it's Carpentry. Caulking is NEVER General — it's Painting. A full window or door REPLACEMENT is NEVER Painting — even if the line item bundles trim painting and perimeter caulking with the install, the primary trade is Carpentry. An HVAC filter is NEVER Electrical — it is HVAC. A stove/oven/appliance PART (burner knob, drip pan, heating element) is NEVER Carpentry — appliance parts are GENERAL. Paint MATERIALS (wall/trim/baseboard paint, primer) NEVER ride on a Carpentry line — a "patch holes and paint" comment is TWO lines per rule 5a (Carpentry patch, Painting paint), and a repaint-only task is PAINTING no matter what room or exterior surface it touches. If a line truly fits nowhere, choose GENERAL — do NOT invent a new trade name.`;
 
 export const AI_SYSTEM_PROMPT_BASE = `You are a service estimate generator for a field service contractor. You produce accurate, client-ready service estimates from whatever the user provides.
 
@@ -1146,6 +1147,15 @@ export function validateQuote(rooms: Room[], opts?: { skipCaps?: boolean; phanto
       ) {
         return "Flooring";
       }
+      // Plumbing fixtures and parts (shower/tub valves, valve kits and
+      // cartridges, faucets, supply lines, shut-offs, toilets, drains, PEX,
+      // SharkBite) → Plumbing, even when the line also opens the wall or
+      // cuts an access panel. Runs BEFORE the framing / demo overrides and
+      // the "respect the AI's bucket" step: Bernard lost face on a walkthrough
+      // (2026-11-13) when "Replace two shower valves" showed under Carpentry.
+      // Follow-on patch/paint lines, accessories and casework are excluded
+      // inside isPlumbingWork (lib/plumbing-trade.ts).
+      if (isPlumbingWork(item.detail)) return "Plumbing";
       // Interior framing / studs / blocking / sistering — Carpentry.
       // "shower wall framing" pulls Plumbing+10 from \bshower\b in the
       // scorer; the framing pattern is more specific and wins.
