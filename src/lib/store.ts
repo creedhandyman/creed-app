@@ -242,6 +242,20 @@ interface AppState {
 // shared device never carries one user's in-memory data into the next
 // account's session (the offline fast-path in loadAll serves whatever is in
 // memory, so stale collections here would leak across users).
+/** Load a profile's business. A member still waiting for approval can't
+ *  read the full business record (row level security), so fall back to the
+ *  short public view for them; PendingApproval only needs the name. */
+async function loadProfileOrg(profile: Profile): Promise<Organization | null> {
+  if (!profile.org_id) return null;
+  const orgs = await db.get<Organization>("organizations", { id: profile.org_id });
+  if (orgs.length) return orgs[0];
+  if (profile.status === "pending") {
+    const pub = await db.get<Organization>("org_public", { id: profile.org_id });
+    if (pub.length) return pub[0];
+  }
+  return null;
+}
+
 const EMPTY_COLLECTIONS = {
   fullSyncAt: null,
   customers: [], addresses: [], profiles: [], pendingMembers: [], jobs: [], timeEntries: [],
@@ -297,8 +311,8 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Load org
     if (profile.org_id) {
-      const orgs = await db.get<Organization>("organizations", { id: profile.org_id });
-      if (orgs.length) { set({ org: orgs[0] }); sv("org", orgs[0]); }
+      const o = await loadProfileOrg(profile);
+      if (o) { set({ org: o }); sv("org", o); }
     }
     return null;
   },
@@ -381,8 +395,8 @@ export const useStore = create<AppState>((set, get) => ({
           set({ user: profile });
           sv("user", profile);
           if (profile.org_id) {
-            const orgs = await db.get<Organization>("organizations", { id: profile.org_id });
-            if (orgs.length) { set({ org: orgs[0] }); sv("org", orgs[0]); }
+            const o = await loadProfileOrg(profile);
+            if (o) { set({ org: o }); sv("org", o); }
           }
           return;
         }

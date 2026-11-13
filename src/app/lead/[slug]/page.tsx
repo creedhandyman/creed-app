@@ -65,7 +65,7 @@ function LeadIntakeInner() {
 
   useEffect(() => {
     if (!slug) { setOrgLoading(false); return; }
-    db.get<Organization>("organizations", { site_slug: slug }).then((orgs) => {
+    db.get<Organization>("org_public", { site_slug: slug }).then((orgs) => {
       if (orgs.length) setOrg(orgs[0]);
       setOrgLoading(false);
     });

@@ -40,7 +40,7 @@ function SitePageContent() {
   useEffect(() => {
     if (!orgId) { setLoading(false); return; }
     Promise.all([
-      db.get<Organization>("organizations", { id: orgId }),
+      db.get<Organization>("org_public", { id: orgId }),
       db.get<Review>("reviews", { org_id: orgId }),
     ]).then(([orgs, revs]) => {
       if (orgs.length) {
@@ -191,7 +191,7 @@ function SitePageContent() {
         )}
 
         {/* Work Order Form */}
-        {orgId && <WorkOrderForm orgId={orgId} primaryColor={pc} />}
+        {org.site_slug && <WorkOrderForm slug={org.site_slug} primaryColor={pc} />}
 
         {/* Contact */}
         <div style={{ padding: "40px 0", borderTop: "1px solid #1e1e2e", textAlign: "center" }}>

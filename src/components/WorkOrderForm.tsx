@@ -1,14 +1,15 @@
 "use client";
 import { useState } from "react";
-import { db } from "@/lib/supabase";
 import { useStore } from "@/lib/store";
 
 interface Props {
-  orgId: string;
+  /** The business's web address name (site_slug); the lead route finds the
+   *  business from it server-side. */
+  slug: string;
   primaryColor: string;
 }
 
-export default function WorkOrderForm({ orgId, primaryColor: pc }: Props) {
+export default function WorkOrderForm({ slug, primaryColor: pc }: Props) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -16,17 +17,28 @@ export default function WorkOrderForm({ orgId, primaryColor: pc }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const ready = !!(name.trim() && phone.trim() && description.trim());
+
+  // Goes through the public lead route (service role, org resolved from the
+  // slug) so the request becomes a real lead with an alert. It used to write
+  // a referrals row straight from the browser, which never saved for
+  // signed-out visitors.
   const submit = async () => {
-    if (!name.trim() || !description.trim()) return;
+    if (!ready) return;
     setSubmitting(true);
     try {
-      await db.post("referrals", {
-        org_id: orgId,
-        name: name.trim(),
-        source: `WORK ORDER | Phone: ${phone || "N/A"} | Address: ${address || "N/A"} | ${description.trim()}`,
-        status: "pending",
-        ref_date: new Date().toISOString().split("T")[0],
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug,
+          name: name.trim(),
+          phone: phone.trim(),
+          street: address.trim(),
+          description: description.trim(),
+        }),
       });
+      if (!res.ok) throw new Error(`lead ${res.status}`);
       setSubmitted(true);
     } catch (e) {
       console.error(e);
@@ -63,7 +75,7 @@ export default function WorkOrderForm({ orgId, primaryColor: pc }: Props) {
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="Phone number"
+            placeholder="Phone number *"
             style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #1e1e2e", background: "#12121a", color: "#e2e2e8", fontSize: 15 }}
           />
         </div>
@@ -81,13 +93,13 @@ export default function WorkOrderForm({ orgId, primaryColor: pc }: Props) {
         />
         <button
           onClick={submit}
-          disabled={submitting || !name.trim() || !description.trim()}
+          disabled={submitting || !ready}
           style={{
             width: "100%", padding: "12px", borderRadius: 8, fontSize: 18,
             fontFamily: "Oswald, sans-serif", textTransform: "uppercase",
-            background: (!name.trim() || !description.trim()) ? "#333" : pc,
+            background: !ready ? "#333" : pc,
             color: "#fff", border: "none", cursor: submitting ? "wait" : "pointer",
-            opacity: (!name.trim() || !description.trim()) ? 0.5 : 1,
+            opacity: !ready ? 0.5 : 1,
           }}
         >
           {submitting ? "Submitting..." : "📋 Submit Work Order"}
