@@ -2,6 +2,19 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Sign-up alerts for Creed itself (2026-11-13, branch `signup-notify`)**. Hourly
+  cron `/api/admin/signups` (vercel.json, minute 5) emails the platform owner when a
+  new business signs up. A sign-up = a new `organizations` row (someone finished
+  "Create a business"); crew joining a team is not one. Each run covers everything
+  created since the last successful run stopped (`result.until` in `cron_log`,
+  endpoint `signups`), one email per run; a failed send does not move the marker, so
+  the next run tries again. The first run covers the last hour only and a run never
+  reaches back more than 48 hours. Window + email text are pure in
+  `lib/signup-notify.ts` (tested). Read-only: onboarding is untouched, no migration.
+  Recipient = `SIGNUP_NOTIFY_EMAIL` env, default `bernard@creedhm.com`; needs
+  `RESEND_API_KEY`. `?dry=1` previews without sending. Why it exists: the Creed HQ
+  agent team reads that inbox to count sign-ups against its goals.
+
 - **Email campaigns + customer referrals (2026-11-12, branch
   `feature/campaigns-and-referrals`, both OFF by default)**. Switches live in
   Ops → Business settings → Customer messages (`components/MarketingSettings.tsx`).
