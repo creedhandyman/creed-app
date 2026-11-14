@@ -2,7 +2,7 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
-- Three tiers by default (2026-11-14): run
+- Three tiers by default (2026-11-14, **NOT yet run in prod**): run
   `supabase/migrations/20261114_tiered_quotes_default.sql` (safe to re-run).
   Adds `organizations.tiered_quotes_default BOOLEAN NOT NULL DEFAULT true` —
   the Pricing & taxes switch "Three tiers by default". The app reads a missing
