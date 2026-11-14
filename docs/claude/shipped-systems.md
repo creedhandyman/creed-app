@@ -574,6 +574,15 @@ Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, wh
   aiEstDays), drives both the editor's "≈ N days on site" hint and the quote
   PDF's "Estimated completion: about N working days" box under the summary
   (threaded through `quote-pdf.ts` for the customer/Jobs copies).
+- **One send menu (2026-11-14)**: the job screen's Send quote / Follow up /
+  Message customer / Send invoice open the SAME `components/SendSheet.tsx` as
+  QuoteForge's Send (Text · Email · Copy · Share, editable message) instead of
+  the old inline Messages/Copy strip. SendSheet takes optional `recipients`
+  (client + tenant chips, each with its own number / email / message) and
+  `onSent(via, to)`; Jobs only stamps quote_sent_at / complete→invoiced when
+  the recipient's `pick` is the client (Copy = quiet). Change the menu there,
+  never re-inline it. Work mode's Complete & invoice step still has its own
+  strip.
 - **Sending quotes (2026-10-02)**: QuoteForge **Send** saves first
   (`saveJob({stay:true})` keeps the editor open on the saved job and returns
   its id — no more "save once, then send" dead end) and opens `SendSheet`

@@ -4,7 +4,7 @@ import { noticesFor, sendScheduleNotices } from "@/lib/schedule-notify-client";
 import { apiFetch, getStatusLink } from "@/lib/api";
 import { savedCardLabel } from "@/lib/payments/saved-card";
 import { markQuoteSent, sentAgo } from "@/lib/quote-send";
-import { balanceOf, isPaidUp, invoiceText as buildInvoiceText, smsHref } from "@/lib/job-send";
+import { balanceOf, isPaidUp, invoiceText as buildInvoiceText } from "@/lib/job-send";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { db } from "@/lib/supabase";
@@ -54,6 +54,10 @@ import { readBlob, woKey } from "@/lib/job-blob";
 import { tierPriceLine } from "@/lib/tiers";
 import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
 import { readDiscount } from "@/lib/quote-blob";
+import SendSheet, { type SendRecipient } from "../SendSheet";
+
+/** A send-menu recipient plus who they are (only the client counts as "sent"). */
+type StripRecipient = SendRecipient & { pick: MessagePick };
 
 /* ── Closest-tech dispatch hint ─────────────────────────────────────
    Under the Requested-tech picker: ranks the crew by distance from
@@ -360,16 +364,12 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // A text sent by hand ALWAYS goes from the owner's own phone (the sms:
   // link, number + message filled in), never through Twilio: the business
   // number is for Creed's automatic texts only.
+  // Opens the SAME send menu as the quote editor's Send (components/SendSheet:
+  // Text · Email · Copy · Share), with a chip per recipient (client / tenant).
   const [sendStrip, setSendStrip] = useState<{
-    jobId: string; phone: string; msg: string; kind?: "invoice" | "quote";
-    recipients?: { label: string; phone: string; msg: string; pick: MessagePick }[]; to?: number;
+    jobId: string; kind?: "invoice" | "quote"; title: string; subject: string;
+    recipients: StripRecipient[];
   } | null>(null);
-  // Bring a freshly opened send strip into view (it sits under the CTA, which
-  // may be scrolled off on a long detail screen).
-  const sendStripRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    sendStripRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [sendStrip?.jobId]);
   // Record a payment taken outside Stripe (cash/check/…). `ref` is minted
   // when the sheet opens → the server's idempotency key for this payment.
   // confirmOver: an amount above the balance was tapped once — the next tap saves.
@@ -662,18 +662,19 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   // visit: an on-the-way / scheduled / done update. On a property-manager job
   // those go to the resident first (lib/sms-recipient's rule); money texts
   // (quote, invoice) keep the paying client first.
-  const stripRecipients = (job: Job, clientMsg: string, visit = false): { label: string; phone: string; msg: string; pick: MessagePick }[] => {
+  const stripRecipients = (job: Job, clientMsg: string, visit = false): StripRecipient[] => {
     const cust = job.customer_id ? customers.find((c) => c.id === job.customer_id) : undefined;
     const clientPhone = cust?.phone || "";
-    const list: { label: string; phone: string; msg: string; pick: MessagePick }[] = [
-      { label: (job.client || cust?.name || "Client").split(/\s+/).slice(0, 2).join(" "), phone: clientPhone, msg: clientMsg, pick: "client" },
+    const list: StripRecipient[] = [
+      { label: (job.client || cust?.name || "Client").split(/\s+/).slice(0, 2).join(" "), phone: clientPhone, email: cust?.email || "", message: clientMsg, pick: "client" },
     ];
     const res = residentContact(job.rooms);
     if (res.phone && res.phone.replace(/[^\d]/g, "") !== clientPhone.replace(/[^\d]/g, "")) {
       list.push({
         label: res.name ? `${t("jobs.tenantLabel")} · ${res.name.split(/\s+/)[0]}` : t("jobs.tenantLabel"),
         phone: res.phone,
-        msg: tenantUpdateMsg(job, res.name),
+        email: res.email,
+        message: tenantUpdateMsg(job, res.name),
         pick: "resident",
       });
     }
@@ -738,7 +739,14 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     }
     const visit = job.status === "scheduled" || job.status === "active" || job.status === "complete";
     const recipients = stripRecipients(job, msg, visit);
-    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: job.status === "quoted" ? "quote" : undefined, recipients, to: 0 });
+    const isQuote = job.status === "quoted" || job.status === "accepted";
+    setSendStrip({
+      jobId: job.id,
+      kind: job.status === "quoted" ? "quote" : undefined,
+      title: isQuote ? t("jobs.sendQuote") : job.status === "invoiced" ? t("jobs.sendInvoice") : t("jobs.messageCustomer"),
+      subject: isQuote ? `Quote — ${prop}` : job.status === "invoiced" ? `Invoice — ${prop}` : `${orgName} — ${prop}`,
+      recipients,
+    });
   };
 
   // Paid-to-date / balance — what the customer actually still owes.
@@ -753,7 +761,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     let url = "";
     try { url = await getStatusLink(job.id); } catch { url = ""; }
     const recipients = stripRecipients(job, invoiceText(job, url));
-    setSendStrip({ jobId: job.id, phone: recipients[0].phone, msg: recipients[0].msg, kind: "invoice", recipients, to: 0 });
+    setSendStrip({ jobId: job.id, kind: "invoice", title: t("jobs.sendInvoice"), subject: `Invoice — ${job.property || ""}`, recipients });
   };
   // A follow-up re-stamps quote_sent_at too — it's the "last contacted" mark.
   // quiet: the caller already toasted (Copy says "copied"; one toast slot).
@@ -1289,60 +1297,22 @@ ${invoicePhotosHtml}
               <Icon name="send" size={15} /> {t("jobs.messageCustomer")}
             </button>
           )}
-          {sendStrip && sendStrip.jobId === dj.id && (() => {
-            // Sending to the TENANT never counts as sending the quote/invoice
-            // to the customer — those stamps (quote_sent_at, complete→invoiced)
-            // only fire for the client recipient (index 0).
-            const toClient = !sendStrip.recipients || (sendStrip.to ?? 0) === 0;
-            const markIfClient = (quiet?: boolean) => { if (toClient) markSent(sendStrip.jobId, sendStrip.kind, quiet); };
-            return (
-            <div ref={sendStripRef} style={{ marginBottom: 12, background: "var(--color-card-dark)", border: "1px solid var(--color-border-dark-2)", borderRadius: 12, padding: 11 }}>
-              {(sendStrip.recipients?.length ?? 0) > 1 && (
-                <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <span className="dim" style={{ fontSize: 12.5, marginRight: 2 }}>{t("jobs.sendTo")}</span>
-                  {sendStrip.recipients!.map((r, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setSendStrip({ ...sendStrip, to: i, phone: r.phone, msg: r.msg })}
-                      style={{
-                        padding: "3px 10px", borderRadius: 99, fontSize: 12.5, fontFamily: "Oswald",
-                        background: (sendStrip.to ?? 0) === i ? "var(--color-primary)" : "transparent",
-                        color: (sendStrip.to ?? 0) === i ? "#fff" : "var(--color-dim)",
-                        border: `1px solid ${(sendStrip.to ?? 0) === i ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="dim" style={{ fontSize: 12, marginBottom: 5 }}>
-                {sendStrip.phone ? t("jobs.sendToEdit").replace("{phone}", sendStrip.phone) : t("jobs.noPhoneOnFile")}
-              </div>
-              <textarea
-                value={sendStrip.msg}
-                onChange={(e) => setSendStrip({ ...sendStrip, msg: e.target.value })}
-                rows={5}
-                style={{ width: "100%", fontSize: 14, padding: 9, borderRadius: 9, border: "1px solid var(--color-border-dark-2)", background: "var(--color-dark-bg)", color: "inherit", resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }}
-              />
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <a
-                  href={smsHref(sendStrip.phone, sendStrip.msg)}
-                  onClick={() => { markIfClient(); setSendStrip(null); }}
-                  className="bb"
-                  style={{ flex: 1, textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
-                >
-                  <Icon name="send" size={15} color="#fff" /> {t("jobs.openMessages")}
-                </a>
-                <button type="button" className="bo" onClick={async () => { try { await navigator.clipboard.writeText(sendStrip.msg); markIfClient(true); useStore.getState().showToast(t("jobs.messageCopiedSend"), "success"); } catch { useStore.getState().showToast(t("jobs.copyFailed"), "error"); } }} style={{ fontSize: 14 }}>{t("common.copy")}</button>
-                <button type="button" className="bo" onClick={() => setSendStrip(null)} aria-label={t("common.cancel")} style={{ fontSize: 14, padding: "0 11px" }}><Icon name="close" size={14} /></button>
-              </div>
-              <div className="dim" style={{ fontSize: 11.5, marginTop: 7, lineHeight: 1.4 }}>{t("jobs.openMessagesHelp")}</div>
-            </div>
-            );
-          })()}
+          {sendStrip && sendStrip.jobId === dj.id && (
+            <SendSheet
+              title={sendStrip.title}
+              subject={sendStrip.subject}
+              message={sendStrip.recipients[0]?.message || ""}
+              recipients={sendStrip.recipients}
+              onClose={() => setSendStrip(null)}
+              onSent={(via, to) => {
+                // Sending to the TENANT never counts as sending the quote /
+                // invoice to the customer — quote_sent_at and complete→invoiced
+                // only fire for the paying client. Copy is quiet (SendSheet
+                // already said "copied").
+                if (sendStrip.recipients[to]?.pick === "client") markSent(sendStrip.jobId, sendStrip.kind, via === "copy");
+              }}
+            />
+          )}
 
           {/* Lead context — the prospect's request + photos (lead jobs only) */}
           {djLead && (djLead.description || djLead.photos.length > 0) && (

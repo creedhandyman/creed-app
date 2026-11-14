@@ -10,7 +10,18 @@ import { t } from "@/lib/i18n";
  * message is editable. `onSent` fires on any of those — the caller records
  * that it went out (e.g. jobs.quote_sent_at). Opening the sheet alone does
  * not count as sent.
+ *
+ * Used by BOTH Send buttons — the quote editor's (QuoteForge) and the job
+ * screen's (Jobs: Send quote / Follow up / Message customer / Send invoice) —
+ * so the two stay the same. The job screen may pass `recipients` (client +
+ * tenant chips); `onSent` then says which one it went to.
  */
+export interface SendRecipient {
+  label: string;
+  phone: string;
+  email?: string;
+  message: string;
+}
 export interface SendSheetProps {
   title: string;
   phone?: string;
@@ -18,18 +29,28 @@ export interface SendSheetProps {
   subject: string;
   message: string;
   onClose: () => void;
-  /** How it went out — Copy only puts it on the clipboard (the caller can skip a "sent" toast). */
-  onSent: (via: "text" | "email" | "copy" | "share") => void;
+  /** Two or more people to send to (e.g. client + tenant): shows a chip per
+   *  person; picking one swaps in their number, email and message. When set,
+   *  it replaces phone / email / message. */
+  recipients?: SendRecipient[];
+  /** How it went out — Copy only puts it on the clipboard (the caller can skip
+   *  a "sent" toast). `to` = the index into `recipients` (0 without them). */
+  onSent: (via: "text" | "email" | "copy" | "share", to: number) => void;
 }
 
-export default function SendSheet({ title, phone = "", email = "", subject, message, onClose, onSent }: SendSheetProps) {
-  const [msg, setMsg] = useState(message);
-  useEffect(() => setMsg(message), [message]);
+export default function SendSheet({ title, phone: phoneProp = "", email: emailProp = "", subject, message, recipients, onClose, onSent }: SendSheetProps) {
+  const [to, setTo] = useState(0);
+  const cur = recipients?.[to];
+  const phone = cur ? cur.phone : phoneProp;
+  const email = cur ? cur.email || "" : emailProp;
+  const startMsg = cur ? cur.message : message;
+  const [msg, setMsg] = useState(startMsg);
+  useEffect(() => setMsg(startMsg), [startMsg]);
   const toast = useStore.getState().showToast;
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   const digits = phone.replace(/[^\d+]/g, "");
 
-  const sent = (via: "text" | "email" | "copy" | "share") => { onSent(via); onClose(); };
+  const sent = (via: "text" | "email" | "copy" | "share") => { onSent(via, to); onClose(); };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -38,6 +59,27 @@ export default function SendSheet({ title, phone = "", email = "", subject, mess
           <h3 style={{ fontFamily: "Oswald", fontSize: 18, textTransform: "uppercase" }}>{title}</h3>
           <button className="iconbtn" onClick={onClose} aria-label={t("common.close")}><Icon name="close" size={16} /></button>
         </div>
+        {recipients && recipients.length > 1 && (
+          <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="dim" style={{ fontSize: 12.5, marginRight: 2 }}>{t("jobs.sendTo")}</span>
+            {recipients.map((r, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setTo(i)}
+                style={{
+                  padding: "3px 10px", borderRadius: 99, fontSize: 12.5, fontFamily: "Oswald",
+                  background: to === i ? "var(--color-primary)" : "transparent",
+                  color: to === i ? "#fff" : "var(--color-dim)",
+                  border: `1px solid ${to === i ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                  cursor: "pointer",
+                }}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="dim" style={{ fontSize: 12.5, marginBottom: 6 }}>
           {phone || email ? t("send.toEdit").replace("{to}", [phone, email].filter(Boolean).join(" · ")) : t("send.noContact")}
         </div>
