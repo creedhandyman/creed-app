@@ -12,7 +12,7 @@ import { TIP_PCTS, tipAllowed, tipCentsFor } from "@/lib/tips";
 import { cardConsentText } from "@/lib/payments/saved-card";
 import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
-import { readQuoteSettings } from "@/lib/quote-blob";
+import { readQuoteSettings, readSentTier } from "@/lib/quote-blob";
 import { apiFetch } from "@/lib/api";
 
 const STATUS_STEPS = [
@@ -67,6 +67,9 @@ function StatusContent() {
   // Options can differ in SCOPE at the same price (membership model), so the
   // picker must show on the split flag, not only on a price difference.
   const [tierSplit, setTierSplit] = useState(false);
+  // Sent as ONE tier (the owner's send menu): show it as a plain one-price
+  // quote — no picker — and approve that tier (the server enforces it too).
+  const [sentOnly, setSentOnly] = useState(false);
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return; }
@@ -101,7 +104,10 @@ function StatusContent() {
                 best: typeof tt.best === "number" ? tt.best : tt.base,
               });
               const at = blob?.acceptedTier;
+              const sent = readSentTier(blob);
+              if (sent) setSentOnly(true);
               if (at === "base" || at === "better" || at === "best") { setAcceptedTier(at); setSelectedTier(at); }
+              else if (sent) setSelectedTier(sent);
               else {
                 // Preselect Complete, unless it adds nothing over Essential
                 // (then it isn't shown, and Essential is the same price).
@@ -399,7 +405,7 @@ function StatusContent() {
     && (billing || !!job.client_signature);
   // Only surface the picker when the options actually differ in price — a
   // tiered quote with nothing tagged better/best has three identical totals.
-  const showTierPicker = tiered && !!tierTotals && (tierSplit || tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
+  const showTierPicker = tiered && !sentOnly && !!tierTotals && (tierSplit || tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
 
   // Per-category quote breakdown (same aggregation as the PDF estimate
   // summary): collapse rooms by name, section total = hrs × rate + raw

@@ -55,6 +55,17 @@ export function readTierNames(_v?: unknown): { better: string; best: string } {
   return { ...TIER_NAMES };
 }
 
+/** The one tier the quote was SENT as (send menu "only Essential / Complete /
+ *  Premium"), or null = all tiers. Only meaningful on a tiered quote whose
+ *  totals include that tier — anything else reads as null. */
+export function readSentTier(blob: RoomsBlob | null | undefined): "base" | "better" | "best" | null {
+  if (blob?.tieredQuote !== true) return null;
+  const v = blob?.sentTier;
+  if (v !== "base" && v !== "better" && v !== "best") return null;
+  const tt = blob?.tierTotals as Record<string, unknown> | undefined;
+  return tt && typeof tt[v] === "number" ? v : null;
+}
+
 export const readCrewSize = (v: unknown): number | null => (isNum(v) && v > 0 ? Math.round(v) : null);
 
 export const readEstDays = (v: unknown): number | null => (isNum(v) && v > 0 ? v : null);

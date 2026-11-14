@@ -11,7 +11,7 @@ import { db } from "@/lib/supabase";
 import { signReceiptPaths, isPrivatePath } from "@/lib/receipt-storage";
 import { exportJobReport } from "@/lib/export-job-report";
 import { QRCodeSVG } from "qrcode.react";
-import type { Customer, Job } from "@/lib/types";
+import type { Customer, Job, Room } from "@/lib/types";
 import StatusSheet, { statusLabel } from "../StatusSheet";
 import PrintSheet from "../PrintSheet";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
@@ -51,10 +51,10 @@ import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
-import { tierPriceLine } from "@/lib/tiers";
+import { tierPriceLine, sendTierChoices, sentTierValue, TIER_NAME, type SendTierKey } from "@/lib/tiers";
 import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
-import { readDiscount } from "@/lib/quote-blob";
-import SendSheet, { type SendRecipient } from "../SendSheet";
+import { readDiscount, readSentTier } from "@/lib/quote-blob";
+import SendSheet, { type SendRecipient, type SendTierOption } from "../SendSheet";
 
 /** A send-menu recipient plus who they are (only the client counts as "sent"). */
 type StripRecipient = SendRecipient & { pick: MessagePick };
@@ -369,6 +369,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const [sendStrip, setSendStrip] = useState<{
     jobId: string; kind?: "invoice" | "quote"; title: string; subject: string;
     recipients: StripRecipient[];
+    /** Tiered quote: send all tiers or just one (lib/tiers sendTierChoices). */
+    tierOptions?: SendTierOption[]; tierStart?: string | null;
   } | null>(null);
   // Record a payment taken outside Stripe (cash/check/…). `ref` is minted
   // when the sheet opens → the server's idempotency key for this payment.
@@ -696,6 +698,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       try { url = await getStatusLink(job.id); } catch { url = ""; }
     }
     let msg: string;
+    let tierOptions: SendTierOption[] | undefined;
+    let tierStart: string | null = null;
     switch (job.status) {
       case "lead":
         msg = `Hi ${name}! Thanks for reaching out to ${orgName} about ${prop}. Got your request — I'll put a quote together and get back to you shortly.`;
@@ -710,13 +714,25 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
         // QuoteForge's Send). Once a tier was picked (acceptedTier), total IS
         // that price.
         let totalLine = `Total: $${(job.total || 0).toFixed(2)}`;
+        const quoteMsg = (line: string) => `Hi ${name}! Here's your quote from ${orgName} for ${prop}:\n\n${line}\n\nView details & approve: ${url}`;
         {
           // Malformed rooms → readBlob's {} → plain total.
           const d = readBlob(job.rooms);
-          const line = d.tieredQuote && !d.acceptedTier ? tierPriceLine(d.tierTotals as Record<string, unknown> | null) : null;
+          const open = d.tieredQuote && !d.acceptedTier;
+          const line = open ? tierPriceLine(d.tierTotals as Record<string, unknown> | null) : null;
           if (line) totalLine = line;
+          // Send all tiers, or just one (the customer then sees one price).
+          const choices = open
+            ? sendTierChoices(((Array.isArray(d.rooms) ? d.rooms : []) as Room[]).flatMap((r) => r?.items || []), d.tierTotals as Record<string, unknown> | null)
+            : null;
+          if (choices) {
+            tierOptions = choices.map((c) => c.key === "all"
+              ? { key: c.key, label: t("send.allTiers"), message: quoteMsg(totalLine) }
+              : { key: c.key, label: `${t("send.tierOnly").replace("{name}", TIER_NAME[c.key])} · $${Math.round(c.total ?? 0).toLocaleString()}`, message: quoteMsg(`Total: $${(c.total ?? 0).toFixed(2)}`) });
+            tierStart = readSentTier(d);
+          }
         }
-        msg = `Hi ${name}! Here's your quote from ${orgName} for ${prop}:\n\n${totalLine}\n\nView details & approve: ${url}`;
+        msg = quoteMsg(totalLine);
         break;
       }
       case "scheduled":
@@ -746,6 +762,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
       title: isQuote ? t("jobs.sendQuote") : job.status === "invoiced" ? t("jobs.sendInvoice") : t("jobs.messageCustomer"),
       subject: isQuote ? `Quote — ${prop}` : job.status === "invoiced" ? `Invoice — ${prop}` : `${orgName} — ${prop}`,
       recipients,
+      tierOptions,
+      tierStart,
     });
   };
 
@@ -1303,8 +1321,15 @@ ${invoicePhotosHtml}
               subject={sendStrip.subject}
               message={sendStrip.recipients[0]?.message || ""}
               recipients={sendStrip.recipients}
+              tierOptions={sendStrip.tierOptions}
+              tierStart={sendStrip.tierStart}
               onClose={() => setSendStrip(null)}
-              onSent={(via, to) => {
+              onSent={(via, to, tier) => {
+                // What the client was sent: one tier, or all (null) — the
+                // customer page + approval follow it (quote-blob readSentTier).
+                if (sendStrip.tierOptions && sendStrip.recipients[to]?.pick === "client") {
+                  void patchBlob(sendStrip.jobId, { sentTier: sentTierValue(tier as SendTierKey | null) });
+                }
                 // Sending to the TENANT never counts as sending the quote /
                 // invoice to the customer — quote_sent_at and complete→invoiced
                 // only fire for the paying client. Copy is quiet (SendSheet

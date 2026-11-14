@@ -14,8 +14,17 @@ import { t } from "@/lib/i18n";
  * Used by BOTH Send buttons — the quote editor's (QuoteForge) and the job
  * screen's (Jobs: Send quote / Follow up / Message customer / Send invoice) —
  * so the two stay the same. The job screen may pass `recipients` (client +
- * tenant chips); `onSent` then says which one it went to.
+ * tenant chips); `onSent` then says which one it went to. A tiered quote
+ * passes `tierOptions` (All tiers / Essential / Complete / Premium): the
+ * owner picks what the customer is sent, and `onSent` says which.
  */
+export interface SendTierOption {
+  /** "all" or a tier key (base / better / best). */
+  key: string;
+  label: string;
+  /** The client message for this choice (price line differs). */
+  message: string;
+}
 export interface SendRecipient {
   label: string;
   phone: string;
@@ -33,24 +42,33 @@ export interface SendSheetProps {
    *  person; picking one swaps in their number, email and message. When set,
    *  it replaces phone / email / message. */
   recipients?: SendRecipient[];
+  /** Tiered quote: what to send — the first option is the default ("all").
+   *  Shown for the client only (recipient 0); its message replaces theirs. */
+  tierOptions?: SendTierOption[];
+  /** The tierOptions key to start on (e.g. what was sent last time). */
+  tierStart?: string | null;
   /** How it went out — Copy only puts it on the clipboard (the caller can skip
-   *  a "sent" toast). `to` = the index into `recipients` (0 without them). */
-  onSent: (via: "text" | "email" | "copy" | "share", to: number) => void;
+   *  a "sent" toast). `to` = the index into `recipients` (0 without them);
+   *  `tier` = the picked tierOptions key (null without tier options or when
+   *  it went to someone other than the client). */
+  onSent: (via: "text" | "email" | "copy" | "share", to: number, tier: string | null) => void;
 }
 
-export default function SendSheet({ title, phone: phoneProp = "", email: emailProp = "", subject, message, recipients, onClose, onSent }: SendSheetProps) {
+export default function SendSheet({ title, phone: phoneProp = "", email: emailProp = "", subject, message, recipients, tierOptions, tierStart, onClose, onSent }: SendSheetProps) {
   const [to, setTo] = useState(0);
+  const [tierIdx, setTierIdx] = useState(() => Math.max(0, tierOptions?.findIndex((o) => o.key === tierStart) ?? 0));
   const cur = recipients?.[to];
   const phone = cur ? cur.phone : phoneProp;
   const email = cur ? cur.email || "" : emailProp;
-  const startMsg = cur ? cur.message : message;
+  const tierOpt = to === 0 && tierOptions && tierOptions.length > 1 ? tierOptions[tierIdx] ?? tierOptions[0] : null;
+  const startMsg = tierOpt ? tierOpt.message : cur ? cur.message : message;
   const [msg, setMsg] = useState(startMsg);
   useEffect(() => setMsg(startMsg), [startMsg]);
   const toast = useStore.getState().showToast;
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   const digits = phone.replace(/[^\d+]/g, "");
 
-  const sent = (via: "text" | "email" | "copy" | "share") => { onSent(via, to); onClose(); };
+  const sent = (via: "text" | "email" | "copy" | "share") => { onSent(via, to, tierOpt ? tierOpt.key : null); onClose(); };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -78,6 +96,32 @@ export default function SendSheet({ title, phone: phoneProp = "", email: emailPr
                 {r.label}
               </button>
             ))}
+          </div>
+        )}
+        {tierOpt && (
+          <div style={{ marginBottom: 8 }}>
+            <div className="dim" style={{ fontSize: 12.5, marginBottom: 4 }}>{t("send.tierPick")}</div>
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {tierOptions!.map((o, i) => (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => setTierIdx(i)}
+                  style={{
+                    padding: "4px 11px", borderRadius: 99, fontSize: 13, fontFamily: "Oswald",
+                    background: tierIdx === i ? "var(--color-primary)" : "transparent",
+                    color: tierIdx === i ? "#fff" : "inherit",
+                    border: `1px solid ${tierIdx === i ? "var(--color-primary)" : "var(--color-border-dark-2)"}`,
+                    cursor: "pointer",
+                  }}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            {tierOpt.key !== "all" && (
+              <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>{t("send.tierOnlyHelp")}</div>
+            )}
           </div>
         )}
         <div className="dim" style={{ fontSize: 12.5, marginBottom: 6 }}>

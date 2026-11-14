@@ -574,6 +574,29 @@ Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, wh
   aiEstDays), drives both the editor's "≈ N days on site" hint and the quote
   PDF's "Estimated completion: about N working days" box under the summary
   (threaded through `quote-pdf.ts` for the customer/Jobs copies).
+- **Tier builder + one-tier send (2026-11-14)**: (1) Why a small quote showed
+  three identical prices: the AI tags small jobs all must-fix (prompt: don't
+  pad), and 0adebeb turned tiers on for any 2+ line quote anyway (the
+  tiered_quotes_default migration was irrelevant — a missing column reads ON).
+  Now an AI-built quote with 2+ lines and no split runs the TIER BUILDER
+  (`lib/tier-build.ts` prompt + `parseTierBuild`, `tier-build-client.ts`
+  `aiBuildTiers`, ai_usage call_type "tiers"): it proposes up to 3 recommended
+  (Complete) + 3 upgrade (Premium, priced as the extra only) add-on lines,
+  merged with `applyAssistOps` (existing lines untouched; AI Assist's Undo
+  reverts it), or answers "too small" → tiers off + a one-line "Too small to
+  tier — reason" note. A tiered quote with no split shows that notice + Build
+  tiers with AI / Use one price instead of three equal cards. Typed / template
+  quotes don't call the AI on their own (button only). (2) The send menu
+  (`SendSheet` `tierOptions` / `tierStart`, choices from `lib/tiers.ts
+  sendTierChoices`) offers All tiers / Essential only / Complete only / Premium
+  only on an open tiered quote, in QuoteForge and on the job screen (client
+  recipient only; Follow up doesn't ask). The pick is written as
+  `rooms.sentTier` (null = all) via `patchBlob`; `quote-blob.ts readSentTier`
+  reads it (tiered + that tier priced). /status then shows that tier as a plain
+  one-price quote (no picker), the PDF (`quote-pdf.ts`) prints only that tier
+  until signed, `approve-job.ts applyApproval` locks an ONLINE approval to it
+  (owner-recorded approvals may pick any tier), and /api/jobs/approve refuses a
+  stale page that offered a different tier. Tests: `tier-build.test.ts`.
 - **One send menu (2026-11-14)**: the job screen's Send quote / Follow up /
   Message customer / Send invoice open the SAME `components/SendSheet.tsx` as
   QuoteForge's Send (Text · Email · Copy · Share, editable message) instead of

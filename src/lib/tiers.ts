@@ -182,3 +182,27 @@ export function tierPriceLine(tt: Partial<Record<TierKey, unknown>> | null | und
   }
   return parts.length > 1 ? parts.join(" · ") : null;
 }
+
+// ── Sending one tier (2026-11-14) ───────────────────────────────────────────
+// The send menu can send all tiers or just one. A one-tier send stamps
+// `sentTier` on the job blob; the customer page then shows that tier as a
+// plain one-price quote (Accept + sign as usual) and approval locks to it.
+
+export type SendTierKey = "all" | TierKey;
+
+/** The choices the send menu offers: "all" first, then each tier the customer
+ *  would see with its price. null = nothing to choose (not tiered, or only
+ *  one distinct tier). */
+export function sendTierChoices(
+  items: TierItem[],
+  tt: Partial<Record<TierKey, unknown>> | null | undefined,
+): { key: SendTierKey; total: number | null }[] | null {
+  if (!tt) return null;
+  const shown = visibleTiers(items).filter((k) => typeof tt[k] === "number" && (tt[k] as number) > 0);
+  if (shown.length < 2) return null;
+  return [{ key: "all", total: null }, ...shown.map((k) => ({ key: k as SendTierKey, total: tt[k] as number }))];
+}
+
+/** The blob value a send writes: one tier, or null for all of them. */
+export const sentTierValue = (k: SendTierKey | null | undefined): TierKey | null =>
+  k === "base" || k === "better" || k === "best" ? k : null;

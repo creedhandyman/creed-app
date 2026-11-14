@@ -1,3 +1,4 @@
+import { readSentTier } from "@/lib/quote-blob";
 import { NextRequest, NextResponse } from "next/server";
 import { TIER_NAME } from "@/lib/tiers";
 import { serviceClient } from "@/lib/api-auth";
@@ -147,7 +148,9 @@ export async function POST(req: NextRequest) {
           ? tt[t]
           : Number(job.total) || 0;
       const fpNow = scopeFingerprint(Array.isArray(current?.rooms) ? (current!.rooms as Room[]) : []);
-      if ((shownFp && shownFp !== fpNow) || (shownTotal !== null && Math.abs(shownTotal - expectedTotal) > 0.01)) {
+      // Sent as one tier since this page loaded (it offered another one).
+      const sentNow = readSentTier(current);
+      if ((shownFp && shownFp !== fpNow) || (shownTotal !== null && Math.abs(shownTotal - expectedTotal) > 0.01) || (sentNow && t !== sentNow)) {
         return NextResponse.json(
           { error: "This quote was updated after you opened it — reloading so you can review the latest version.", stale: true },
           { status: 409 },

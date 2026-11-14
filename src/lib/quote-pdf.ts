@@ -3,7 +3,8 @@ import { exportQuotePdf } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
 import { readBlob } from "./job-blob";
 import { pricingInputs } from "./pricing";
-import { readQuoteSettings } from "./quote-blob";
+import { readQuoteSettings, readSentTier } from "./quote-blob";
+import { itemInTier } from "./tiers";
 
 /**
  * The subset of Organization fields the quote PDF needs. Both the full
@@ -82,6 +83,17 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     crewSize = q.crewSize;
     estDays = q.estDays;
     tierNames = q.tierNames;
+    // Sent as ONE tier and not yet signed: the customer's PDF is that tier
+    // alone, one price, like their quote page (a signed quote prints as
+    // before — export-pdf marks the accepted tier).
+    const sent = readSentTier(data);
+    const at = data?.acceptedTier;
+    if (sent && at !== "base" && at !== "better" && at !== "best") {
+      rooms = rooms
+        .map((r) => ({ ...r, items: (r.items || []).filter((it) => itemInTier(it, sent)) }))
+        .filter((r) => r.items.length > 0);
+      tieredQuote = false;
+    }
   } catch {
     /* malformed rooms — render with defaults */
   }

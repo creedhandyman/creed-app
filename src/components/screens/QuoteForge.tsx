@@ -9,9 +9,11 @@ import { buildRenderPrompt } from "@/lib/render-prompt";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material, JobDiscount, Job } from "@/lib/types";
-import { itemInTier, itemTiers, itemLevel, tiersForLevel, shouldOfferTiers, tiersDefaultOn, sharedSuppliesLines, tierPriceLine, TIER_NAME, TIER_NAMES, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
+import { itemInTier, itemTiers, itemLevel, tiersForLevel, shouldOfferTiers, tiersDefaultOn, sendTierChoices, sentTierValue, type SendTierKey, sharedSuppliesLines, tierPriceLine, TIER_NAME, TIER_NAMES, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
 import { buildAssistJobContext, type AssistInspection } from "@/lib/assist-context";
 import { applyAssistOps, optionDiffSummary, type AssistAdd, type AssistPatch } from "@/lib/assist-ops";
+import { quoteHasTierSplit } from "@/lib/tier-build";
+import { aiBuildTiers } from "@/lib/tier-build-client";
 import {
   readPdf,
   renderPdfPages,
@@ -36,7 +38,7 @@ import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom, billedMaterial, pricingInputs } from "@/lib/pricing";
-import { readQuoteSettings, readEstDays } from "@/lib/quote-blob";
+import { readQuoteSettings, readEstDays, readSentTier } from "@/lib/quote-blob";
 import { buildQuoteSave, dominantTrade } from "@/lib/quote-save";
 import { materialTaxFor, zipTaxMap } from "@/lib/material-tax";
 import Inspector from "./Inspector";
@@ -54,7 +56,8 @@ import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 import { stripAiHrs } from "@/lib/ai-hours";
-import SendSheet from "../SendSheet";
+import SendSheet, { type SendTierOption } from "../SendSheet";
+import { patchBlob } from "@/lib/job-write-client";
 import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
 import { isPlatformAdmin } from "@/lib/platform-admin";
@@ -444,7 +447,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const loadedPhotosRef = useRef<{ url: string; label: string; type: "before" | "after" | "work" }[]>([]);
   const [showRender, setShowRender] = useState(false);
   // Send sheet (Text / Email / Copy / Share) for the saved quote.
-  const [sendSheet, setSendSheet] = useState<{ jobId: string; phone: string; email: string; subject: string; message: string } | null>(null);
+  const [sendSheet, setSendSheet] = useState<{ jobId: string; phone: string; email: string; subject: string; message: string; tierOptions?: SendTierOption[]; tierStart?: string | null } | null>(null);
   // Auto-built "after" render prompt from this quote's line items (visible
   // scope only — paint/floors/fixtures; hidden/plumbing work is skipped).
   const renderSeed = useMemo(() => buildRenderPrompt(rooms), [rooms]);
@@ -519,6 +522,13 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // quotes keep the setting they were saved with.
   const tierDefault = useStore((s) => tiersDefaultOn(s.org));
   const tierChoiceRef = useRef(false);
+  // Tier builder (lib/tier-build.ts): when every line is must-fix the three
+  // tiers cost the same, so the AI proposes Complete / Premium add-ons — or
+  // says the scope is too small to tier. `tierBuildSeq` cancels a build still
+  // running when the owner flips the switch or starts another quote.
+  const [tierBuild, setTierBuild] = useState<{ state: "running" } | { state: "tooSmall"; reason: string } | { state: "failed" } | null>(null);
+  const tierBuildSeq = useRef(0);
+  const cancelTierBuild = () => { tierBuildSeq.current++; setTierBuild(null); };
   useEffect(() => {
     if (editingId || tierChoiceRef.current || tieredQuote) return;
     if (shouldOfferTiers(rooms, tierDefault)) setTieredQuote(true);
@@ -1051,7 +1061,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined); resetContact();
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
-    setTieredQuote(false); tierChoiceRef.current = false; setCrewSize(null); setAiEstDays(null); setAiNotes([]);
+    setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild(); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
@@ -1093,6 +1103,45 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // Effective non-trade rate. Used for the PDF labor line + the
   // "Labor rate: $X.00/hour" line in the AI Assist system prompt.
   const rate = priceIn.rate;
+
+  // Ask the AI for Complete / Premium add-on lines on an all-must-fix quote.
+  // Adds go on top of whatever is on screen when the answer lands (the owner
+  // may have kept editing); nothing existing is changed. Undo = the AI Assist
+  // undo button.
+  const runTierBuild = async (base: Room[]) => {
+    const seq = ++tierBuildSeq.current;
+    setTierBuild({ state: "running" });
+    const o = useStore.getState().org;
+    let lt: string[] = [];
+    try { lt = o?.licensed_trades ? JSON.parse(o.licensed_trades) : []; } catch { /* */ }
+    const r = await aiBuildTiers(base, { property: prop, laborRate: rate, licensedTrades: lt });
+    if (seq !== tierBuildSeq.current) return; // switched off / new quote meanwhile
+    if (!r) { setTierBuild({ state: "failed" }); return; }
+    if (r.adds.length === 0) {
+      // Too small to tier: one price, and the 2+-lines default must not
+      // switch tiers straight back on.
+      tierChoiceRef.current = true;
+      setTieredQuote(false);
+      setTierBuild({ state: "tooSmall", reason: r.reason });
+      return;
+    }
+    const current = roomsRef.current;
+    setAssistUndo({ rooms: current, tieredQuote: true, tierNames, laborRate, discount, minLaborHours, taxMode });
+    const applied = applyAssistOps(current, { add: r.adds }, { newId: () => crypto.randomUUID().slice(0, 8), defaultAddTiers: null });
+    setRooms(validateQuote(applied.rooms, { skipCaps: true }));
+    setTieredQuote(true);
+    setTierBuild(null);
+    const n = r.adds.length;
+    useStore.getState().showToast(`Added ${n} Complete / Premium option${n === 1 ? "" : "s"} — check them before sending`, "success");
+  };
+  // After the AI builds a new quote: tiers per the default rule, and the
+  // builder when every line came back must-fix.
+  const autoTiers = (built: Room[]) => {
+    cancelTierBuild();
+    const on = shouldOfferTiers(built, tierDefault);
+    setTieredQuote(on);
+    if (on && !quoteHasTierSplit(built)) void runTierBuild(built);
+  };
 
   /* ── Inspection edit: open + save handlers ── */
   // Open the Inspector in edit mode for an already-saved inspection job.
@@ -1202,8 +1251,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setParseStatus("Building quote...");
         // Already validated (caps + floors) and labor-calibrated inside the
         // parse — skipCaps so a second cap pass can't clamp calibrated hours.
-        setRooms(validateQuote(result.rooms, { skipCaps: true }));
-        setTieredQuote(shouldOfferTiers(result.rooms, tierDefault));
+        const builtInsp = validateQuote(result.rooms, { skipCaps: true });
+        setRooms(builtInsp);
+        autoTiers(builtInsp);
         setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setAiNotes(result.notes || []);
         setParsing(false);
@@ -1397,10 +1447,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // aiParsePdf already validated (caps + floors) and labor-calibrated
         // these rooms — skipCaps so the 10h/8h cap can't re-clamp calibrated
         // hours (the real-world test saw a 10.4h line reset to 8h).
-        setRooms(validateQuote(result.rooms, { skipCaps: true }));
-        // Three tiers by default once there are 2+ lines; a single-item job
-        // stays one price.
-        setTieredQuote(shouldOfferTiers(result.rooms, tierDefault));
+        const built = validateQuote(result.rooms, { skipCaps: true });
+        setRooms(built);
+        // Three tiers by default once there are 2+ lines (a single-item job
+        // stays one price); all must-fix -> the tier builder fills them in.
+        autoTiers(built);
         setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setAiNotes(result.notes || []);
         setParsing(false);
@@ -2037,7 +2088,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setDiscount(null);
     setLaborRate(null);
     setMinLaborHours(null);
-    setTieredQuote(false); tierChoiceRef.current = false;
+    setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild();
     setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     savingRef.current = false;
     // Land on the job just saved (Jobs opens its detail from this intent).
@@ -2227,7 +2278,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     setDiscount(null);
     setLaborRate(null);
     setMinLaborHours(null);
-    setTieredQuote(false); tierChoiceRef.current = false;
+    setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild();
     setCrewSize(null); setAiEstDays(null); setAiNotes([]);
   };
   // Inspector registers its own "leave the walkthrough" (keeps findings in the
@@ -2910,14 +2961,48 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             Tiers · Essential / Complete / Premium
           </span>
           <button
-            onClick={() => { tierChoiceRef.current = true; setTieredQuote((v) => !v); }}
+            onClick={() => { tierChoiceRef.current = true; cancelTierBuild(); setTieredQuote((v) => !v); }}
             className={tieredQuote ? "bb" : "bo"}
             style={{ fontSize: 12, padding: "3px 12px" }}
           >
             {tieredQuote ? "On" : "One price"}
           </button>
         </div>
-        {tieredQuote && (
+        {/* All must-fix: three identical prices say nothing — say so plainly
+            and offer the tier builder instead of showing the same $ three times. */}
+        {tieredQuote && !hasSplit && (
+          <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(46,117,182,.5)", background: "rgba(46,117,182,.10)", fontSize: 13, lineHeight: 1.45 }}>
+            {tierBuild?.state === "running" ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Icon name="sparkle" size={14} /> Building Complete and Premium options for this scope…
+              </span>
+            ) : (
+              <>
+                <div>
+                  Every line is must-fix, so Essential, Complete and Premium all cost the same. Until a line moves up a tier, the customer sees <b>one price</b>.
+                  {tierBuild?.state === "failed" && <span style={{ color: "var(--color-warning, #f5b400)" }}> Couldn&apos;t build tiers just now — try again.</span>}
+                </div>
+                <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                  <button className="bb" style={{ fontSize: 12.5, padding: "5px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}
+                    disabled={rooms.every((r) => r.items.length === 0)}
+                    onClick={() => { void runTierBuild(rooms); }}>
+                    <Icon name="sparkle" size={13} color="#fff" /> Build tiers with AI
+                  </button>
+                  <button className="bo" style={{ fontSize: 12.5, padding: "5px 12px" }}
+                    onClick={() => { tierChoiceRef.current = true; cancelTierBuild(); setTieredQuote(false); }}>
+                    Use one price
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {!tieredQuote && tierBuild?.state === "tooSmall" && (
+          <div className="dim" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.45 }}>
+            Too small to tier{tierBuild.reason ? ` — ${tierBuild.reason}` : " — nothing genuine to add for Complete or Premium"}. This quote goes out as one price.
+          </div>
+        )}
+        {tieredQuote && hasSplit && (
           <>
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               {([
@@ -2952,7 +3037,6 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             <div className="dim" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.45 }}>
               Each tier includes the one before it. ★ Complete is the recommended tier the customer sees highlighted.
               Move a line with the Essential / Complete / Premium chips under it. New lines go in <b>{TIER_NAME[editTier]}</b> (tap a tier to change).
-              {!hasSplit && <> Every line is Essential right now, so all three prices match — move some lines up, or switch to one price.</>}
             </div>
           </>
         )}
@@ -3855,16 +3939,23 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             const totalLine = tierLine
               ? `${tierLine} — pick the one you want on the page.`
               : `Total: $${headlineTotal.toFixed(2)}`;
+            const msgFor = (line: string) =>
+              `Hi ${client || "there"}! Here's your quote from ${o?.name || "us"} for ${prop}.\n\n` +
+              `${line}\n\n` +
+              `Review, approve & sign here:\n${statusUrl}\n\n` +
+              `This quote is good for ${validDays} days. Thank you!`;
+            // Tiered: send all tiers, or just one (one price on the page).
+            const choices = tieredQuote ? sendTierChoices(rooms.flatMap((r) => r.items), tierTotals) : null;
             setSendSheet({
               jobId: id,
               phone: customerData?.phone || "",
               email: customerData?.email || "",
               subject: `Quote — ${prop}`,
-              message:
-                `Hi ${client || "there"}! Here's your quote from ${o?.name || "us"} for ${prop}.\n\n` +
-                `${totalLine}\n\n` +
-                `Review, approve & sign here:\n${statusUrl}\n\n` +
-                `This quote is good for ${validDays} days. Thank you!`,
+              message: msgFor(totalLine),
+              tierStart: readSentTier(jobBlob(useStore.getState().jobs.find((j) => j.id === id))),
+              tierOptions: choices?.map((c) => c.key === "all"
+                ? { key: c.key, label: t("send.allTiers"), message: msgFor(totalLine) }
+                : { key: c.key, label: `${t("send.tierOnly").replace("{name}", TIER_NAME[c.key])} · $${Math.round(c.total ?? 0).toLocaleString()}`, message: msgFor(`Total: $${(c.total ?? 0).toFixed(2)}`) }),
             });
           }}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}
@@ -3886,9 +3977,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           email={sendSheet.email}
           subject={sendSheet.subject}
           message={sendSheet.message}
+          tierOptions={sendSheet.tierOptions}
+          tierStart={sendSheet.tierStart}
           onClose={() => setSendSheet(null)}
-          onSent={(via) => {
+          onSent={(via, _to, tier) => {
             const jobId = sendSheet.jobId;
+            // What the customer was sent: one tier, or all (null). /status and
+            // the approval read it (lib/quote-blob readSentTier).
+            if (sendSheet.tierOptions || tier) void patchBlob(jobId, { sentTier: sentTierValue(tier as SendTierKey | null) });
             void markQuoteSent(jobId).then(async (ok) => {
               await loadAll();
               // Copy keeps its own "Copied — paste it" toast (nothing is sent yet).

@@ -8,12 +8,14 @@
  *     hour totals (from the blob's stored tierTotals/tierBreakdown, computed by
  *     the editor's pricing cascade) and the crew work order is cut down to that
  *     option's tasks; `acceptedTier` is stamped;
+ *   - a quote sent as ONE tier (`sentTier`) is approved online as that tier;
  *   - an approval record (scope fingerprint + approved amount, + how it was
  *     approved) goes on the rooms blob so the PDF knows what was signed.
  */
 import { itemInTier, type TierKey } from "./tiers";
 import { scopeFingerprint, type ApprovalRecord, type ApprovalVia } from "./approval";
 import { tryReadBlob } from "./job-blob";
+import { readSentTier } from "./quote-blob";
 
 type JobRow = { status?: string | null; rooms?: unknown; total?: number | string | null };
 
@@ -32,7 +34,11 @@ export function applyApproval(
   // Malformed / missing blob → null: approve on the stored total, no record.
   const blob: Record<string, unknown> | null = tryReadBlob(job.rooms);
 
-  const tier = opts.tier;
+  // A quote SENT as one tier (send menu) is approved online as that tier,
+  // whatever the request says — the customer was only offered that one.
+  // An owner-recorded approval may still pick any tier.
+  const sent = opts.via === "online" ? readSentTier(blob) : null;
+  const tier = sent ?? opts.tier;
   if (blob && (tier === "base" || tier === "better" || tier === "best")) {
     const tt = blob.tierTotals as Record<string, number> | undefined;
     if (blob.tieredQuote === true && tt && typeof tt[tier] === "number" && tt[tier] >= 0) {
