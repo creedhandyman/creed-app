@@ -139,14 +139,22 @@ export function applyAiLevels<I extends Record<string, unknown>>(item: I): Omit<
   return t ? { ...rest, tiers: tiersForLevel(t) } : rest;
 }
 
-/** Does this quote get three tiers? Small single-item jobs get one price, and
- *  so does a quote where every line is must-fix (three identical tiers say
- *  nothing). */
-export function shouldOfferTiers(rooms: { items: TierItem[] }[]): boolean {
-  const items = rooms.flatMap((r) => r.items || []);
-  if (items.length < 2) return false;
-  return items.some((it) => itemLevel(it) !== "base");
+/** Does a NEW quote start with three tiers? Yes once it has two or more lines
+ *  (2026-11-14: tiers are the default); a single-item job stays one price.
+ *  A quote whose lines are all must-fix still saves tiered — the customer page
+ *  and PDF only show the tier picker once a line sits in a higher tier
+ *  (visibleTiers / tierSplit), so it reads as one price until the owner moves
+ *  a line up. */
+export function shouldOfferTiers(rooms: { items: TierItem[] }[], defaultOn = true): boolean {
+  if (!defaultOn) return false;
+  return rooms.reduce((n, r) => n + (r.items?.length || 0), 0) >= 2;
 }
+
+/** The business's "three tiers by default" switch (Pricing & taxes). ON unless
+ *  explicitly false — a business that never touched it, or a database without
+ *  the column yet, gets tiers. */
+export const tiersDefaultOn = (org: { tiered_quotes_default?: boolean | null } | null | undefined): boolean =>
+  org?.tiered_quotes_default !== false;
 
 /** The tiers worth showing a customer: Essential always, and each higher tier
  *  only when it changes the scope of the one below it (Complete with nothing

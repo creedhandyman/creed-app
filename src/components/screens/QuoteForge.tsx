@@ -9,7 +9,7 @@ import { buildRenderPrompt } from "@/lib/render-prompt";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material, JobDiscount, Job } from "@/lib/types";
-import { itemInTier, itemTiers, itemLevel, tiersForLevel, shouldOfferTiers, sharedSuppliesLines, tierPriceLine, TIER_NAME, TIER_NAMES, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
+import { itemInTier, itemTiers, itemLevel, tiersForLevel, shouldOfferTiers, tiersDefaultOn, sharedSuppliesLines, tierPriceLine, TIER_NAME, TIER_NAMES, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
 import { buildAssistJobContext, type AssistInspection } from "@/lib/assist-context";
 import { applyAssistOps, optionDiffSummary, type AssistAdd, type AssistPatch } from "@/lib/assist-ops";
 import {
@@ -510,6 +510,19 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // are fixed (lib/tiers.ts TIER_NAME) — the old renameable options are gone.
   const [tieredQuote, setTieredQuote] = useState(false);
   const tierNames = TIER_NAMES;
+  // Tiers are the DEFAULT on a new quote (2026-11-14) unless the business
+  // turned "three tiers by default" off (Pricing & taxes, tiersDefaultOn):
+  // once a new quote has 2+ lines the effect below turns them on, however the
+  // lines got there (AI, template, typed by hand). It stops deciding as soon
+  // as someone chose — the per-quote On / One price switch, AI Assist, a
+  // restored draft — and never touches a saved quote (editingId), so existing
+  // quotes keep the setting they were saved with.
+  const tierDefault = useStore((s) => tiersDefaultOn(s.org));
+  const tierChoiceRef = useRef(false);
+  useEffect(() => {
+    if (editingId || tierChoiceRef.current || tieredQuote) return;
+    if (shouldOfferTiers(rooms, tierDefault)) setTieredQuote(true);
+  }, [rooms, editingId, tieredQuote, tierDefault]);
   // Crew size for this quote (rooms blob `data.crewSize`). null = Auto (the
   // PDF's per-section guess: 2 people when a trade section is over 8 hrs,
   // else 1). It does NOT change the price — labor hours are TOTAL work hours
@@ -606,7 +619,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCustomWorkOrder(d.customWorkOrder ?? null);
       setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
       setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
-      setTieredQuote(!!d.tieredQuote);
+      setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true;
       setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
       setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
       setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
@@ -667,7 +680,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setCustomWorkOrder(d.customWorkOrder ?? null);
         setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
         setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
-        setTieredQuote(!!d.tieredQuote);
+        setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true;
         setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
         setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
         setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
@@ -864,7 +877,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setQuoteMatTax(q.materialTax);
       // A lead's server AI draft was tagged by the same parser: tiers come on
       // the same way as a fresh Quick Quote until the first save.
-      setTieredQuote(q.tieredQuote || (!!leadDraftRooms && shouldOfferTiers(leadDraftRooms)));
+      setTieredQuote(q.tieredQuote || (!!leadDraftRooms && shouldOfferTiers(leadDraftRooms, tierDefault)));
       setCrewSize(q.crewSize);
       // A lead's AI draft carries its own estimate until the first save.
       setAiEstDays(q.estDays ?? readEstDays(data?.leadDraft?.estDays));
@@ -1038,7 +1051,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined); resetContact();
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
-    setTieredQuote(false); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
+    setTieredQuote(false); tierChoiceRef.current = false; setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
@@ -1190,7 +1203,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // Already validated (caps + floors) and labor-calibrated inside the
         // parse — skipCaps so a second cap pass can't clamp calibrated hours.
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
-        setTieredQuote(shouldOfferTiers(result.rooms));
+        setTieredQuote(shouldOfferTiers(result.rooms, tierDefault));
         setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setAiNotes(result.notes || []);
         setParsing(false);
@@ -1385,9 +1398,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // these rooms — skipCaps so the 10h/8h cap can't re-clamp calibrated
         // hours (the real-world test saw a 10.4h line reset to 8h).
         setRooms(validateQuote(result.rooms, { skipCaps: true }));
-        // Three tiers when the AI tagged recommended / upgrade work; a small
-        // single-item or all-must-fix job stays one price.
-        setTieredQuote(shouldOfferTiers(result.rooms));
+        // Three tiers by default once there are 2+ lines; a single-item job
+        // stays one price.
+        setTieredQuote(shouldOfferTiers(result.rooms, tierDefault));
         setAiEstDays(result.estDays > 0 ? result.estDays : null);
         setAiNotes(result.notes || []);
         setParsing(false);
@@ -2024,7 +2037,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setDiscount(null);
     setLaborRate(null);
     setMinLaborHours(null);
-    setTieredQuote(false);
+    setTieredQuote(false); tierChoiceRef.current = false;
     setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     savingRef.current = false;
     // Land on the job just saved (Jobs opens its detail from this intent).
@@ -2214,7 +2227,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     setDiscount(null);
     setLaborRate(null);
     setMinLaborHours(null);
-    setTieredQuote(false);
+    setTieredQuote(false); tierChoiceRef.current = false;
     setCrewSize(null); setAiEstDays(null); setAiNotes([]);
   };
   // Inspector registers its own "leave the walkthrough" (keeps findings in the
@@ -2897,7 +2910,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             Tiers · Essential / Complete / Premium
           </span>
           <button
-            onClick={() => setTieredQuote((v) => !v)}
+            onClick={() => { tierChoiceRef.current = true; setTieredQuote((v) => !v); }}
             className={tieredQuote ? "bb" : "bo"}
             style={{ fontSize: 12, padding: "3px 12px" }}
           >
@@ -3573,6 +3586,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                   const optsOn = parsed.setOptions === true || (parsed.setOptions === false && !activeScope)
                     ? parsed.setOptions
                     : (tiersTouched > 0 && !tieredQuote ? true : undefined);
+                  if (optsOn !== undefined) tierChoiceRef.current = true;
                   if (optsOn !== undefined && optsOn !== tieredQuote) {
                     setTieredQuote(optsOn);
                     summary.push(optsOn ? "tiers on" : "tiers off");
@@ -3654,7 +3668,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             style={{ fontSize: 12, padding: "3px 10px", marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }}
             onClick={() => {
               const u = assistUndo;
-              setRooms(u.rooms); setTieredQuote(u.tieredQuote);
+              setRooms(u.rooms); setTieredQuote(u.tieredQuote); tierChoiceRef.current = true;
               setLaborRate(u.laborRate); setDiscount(u.discount); setMinLaborHours(u.minLaborHours); setTaxMode(u.taxMode);
               setAssistUndo(null);
               useStore.getState().showToast("Undid the last AI Assist change", "success");

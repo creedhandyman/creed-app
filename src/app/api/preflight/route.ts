@@ -87,6 +87,8 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "schedule.reminder_sent_at", table: "schedule", column: "reminder_sent_at" },
   // Per-customer text consent (supabase/migrations/20261112_customer_text_consent.sql).
   { key: "customers.sms_consent", table: "customers", column: "sms_consent" },
+  // Three-tier default switch (supabase/migrations/20261114_tiered_quotes_default.sql).
+  { key: "organizations.tiered_quotes_default", table: "organizations", column: "tiered_quotes_default" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

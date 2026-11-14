@@ -107,6 +107,9 @@ export interface Organization {
    *  phone's Messages); day-before visit reminders (cron /api/sms/reminders);
    *  unpaid invoice reminders (cron /api/invoices/reminders). */
   auto_sms_enroute?: boolean;
+  /** New quotes with 2+ lines start as three tiers (Essential / Complete /
+   *  Premium). ON unless false — read through lib/tiers.ts tiersDefaultOn. */
+  tiered_quotes_default?: boolean | null;
   auto_sms_reminder?: boolean;
   auto_sms_invoice?: boolean;
   /** NO LONGER READ (2026-11-10): hand-sent texts always open the phone's

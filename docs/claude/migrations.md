@@ -2,6 +2,14 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
+- Three tiers by default (2026-11-14): run
+  `supabase/migrations/20261114_tiered_quotes_default.sql` (safe to re-run).
+  Adds `organizations.tiered_quotes_default BOOLEAN NOT NULL DEFAULT true` —
+  the Pricing & taxes switch "Three tiers by default". The app reads a missing
+  column as ON (`lib/tiers.ts tiersDefaultOn`), so before it runs new quotes
+  still default to tiers; only saving the switch fails. In preflight
+  `DB_CHECKS` as `organizations.tiered_quotes_default`.
+
 - Email campaigns + customer referrals (**run in prod 2026-11-13**):
   `supabase/migrations/20261112170000_campaigns_and_referrals.sql`. Adds the
   OFF-by-default switches `organizations.campaigns_enabled /

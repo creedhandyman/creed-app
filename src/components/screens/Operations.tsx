@@ -23,6 +23,7 @@ import ZipTaxRates from "../ZipTaxRates";
 import BookingSettings from "../BookingSettings";
 import Campaigns from "./Campaigns";
 import { CampaignsCard, ReferralsCard } from "../MarketingSettings";
+import { tiersDefaultOn } from "@/lib/tiers";
 
 /**
  * Catches render-time crashes inside an Ops sub-tab so the whole tab
@@ -350,6 +351,21 @@ function OpsSettings() {
             />
             <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.minLaborHoursHelp")}</div>
           </div>
+        </div>
+        {/* Three-tier default (2026-11-14). ON unless turned off; each quote
+            still has its own On / One price switch in the editor. */}
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 14 }}>
+          <div>
+            <label className="sl">{t("ops.tiersDefault")}</label>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.tiersDefaultHelp")}</div>
+          </div>
+          <button
+            className={tiersDefaultOn(org) ? "bb" : "bo"}
+            style={{ fontSize: 13, padding: "4px 14px", flexShrink: 0 }}
+            onClick={() => saveOrg({ tiered_quotes_default: !tiersDefaultOn(org) })}
+          >
+            {tiersDefaultOn(org) ? t("ops.on") : t("ops.off")}
+          </button>
         </div>
       </div>
   );

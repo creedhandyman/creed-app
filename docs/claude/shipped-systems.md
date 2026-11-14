@@ -587,6 +587,20 @@ Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, wh
   jobs — see "Day-rhythm Home" above). `/api/jobs/approve`
   fires `notifyQuoteApproved` (bell `quote_approved`, deep-links the job) on
   the FIRST approval only. Editing a saved quote no longer resets `job_date`.
+- **Three tiers are the default (2026-11-14)**: a NEW quote with 2+ lines
+  starts as Essential / Complete (recommended, headline) / Premium, however the
+  lines arrived (AI parse, lead draft, template, typed by hand) — the
+  QuoteForge effect next to `tieredQuote` + `lib/tiers.ts shouldOfferTiers`
+  (count only; it no longer needs an AI "recommended/upgrade" tag). Single-item
+  jobs stay one price. Off switch per business: Ops → Settings → Pricing &
+  taxes "Three tiers by default" (`organizations.tiered_quotes_default`, read
+  via `tiersDefaultOn`, ON unless false). Per quote: the existing On / One
+  price button; once the owner, AI Assist or a restored draft decides, the
+  auto-default stops (`tierChoiceRef`). Saved quotes (editingId) are never
+  changed — they load with what they saved. An all-must-fix tiered quote still
+  reads as one price to the customer (status picker / PDF need a split).
+  Stored tierNames (old "Better/Best") are ignored everywhere: `readTierNames`
+  returns Complete / Premium.
 - **Good-Better-Best tiered quotes**: present 3 cumulative options on a quote so
   techs upsell and the customer picks one. **No schema change — all on the rooms
   JSON blob.** Per-item `RoomItem.tier` (`base`/`better`/`best`, absent = base);
