@@ -41,6 +41,7 @@ import type { TaxMode } from "./tax";
 import type { PricedRates } from "./pricing";
 import { woKey, type RoomsBlob } from "./job-blob";
 import { itemInTier, itemTiers, type TierKey } from "./tiers";
+import { rowTier } from "./quote-totals";
 
 type Photo = { url: string; label?: string; type?: string };
 
@@ -273,7 +274,8 @@ export function buildQuoteSave(input: QuoteSaveInput): QuoteSaveResult {
   const acceptedTier = prevData.acceptedTier as string | undefined;
   if (s.tieredQuote) {
     const isAccepted = acceptedTier === "base" || acceptedTier === "better" || acceptedTier === "best";
-    const key: TierKey = isAccepted ? (acceptedTier as TierKey) : p.headlineKey;
+    // Accepted tier, else the ONE tier it was sent as, else the headline.
+    const key: TierKey = isAccepted ? (acceptedTier as TierKey) : rowTier(blob, p.headlineKey);
     total = p.tierTotals[key];
     labor = p.tierBreakdown[key].labor;
     mat = p.tierBreakdown[key].mat;

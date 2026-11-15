@@ -51,7 +51,8 @@ import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
-import { tierPriceLine, sendTierChoices, sentTierValue, type SendTierKey } from "@/lib/tiers";
+import { tierPriceLine, sendTierChoices, sentTierValue, visibleTiers, type SendTierKey } from "@/lib/tiers";
+import { sendRowPatch, jobMoney } from "@/lib/quote-totals";
 import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
 import { readDiscount, readSentTier } from "@/lib/quote-blob";
 import SendSheet, { tierSendOptions, type SendRecipient, type SendTierOption } from "../SendSheet";
@@ -719,7 +720,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
           // Malformed rooms → readBlob's {} → plain total.
           const d = readBlob(job.rooms);
           const open = d.tieredQuote && !d.acceptedTier;
-          const line = open ? tierPriceLine(d.tierTotals as Record<string, unknown> | null) : null;
+          const tierItems = ((Array.isArray(d.rooms) ? d.rooms : []) as Room[]).flatMap((r) => r?.items || []);
+          const line = open ? tierPriceLine(d.tierTotals as Record<string, unknown> | null, visibleTiers(tierItems)) : null;
           if (line) totalLine = line;
           // Send all tiers, or just one (the customer then sees one price).
           const choices = open
@@ -1125,6 +1127,8 @@ ${invoicePhotosHtml}
       // the Money pencil); once it's out, the next step is a follow-up nudge.
       case "quoted":
         if (!onEditJob) return null;
+        // Marked "quoted" but no quote was ever built: build it, don't send $0.
+        if (jobMoney(dj).state === "none") return { label: t("jobs.buildQuote"), icon: "quote", onClick: () => onEditJob(dj.id) };
         return !dj.quote_sent_at
           ? { label: t("jobs.sendQuote"), icon: "send", onClick: () => { void messageCustomer(dj); } }
           : { label: t("jobs.followUp"), icon: "send", onClick: () => { void messageCustomer(dj, { followUp: true }); } };
@@ -1326,7 +1330,15 @@ ${invoicePhotosHtml}
                 // What the client was sent: one tier, or all (null) — the
                 // customer page + approval follow it (quote-blob readSentTier).
                 if (sendStrip.tierOptions && sendStrip.recipients[to]?.pick === "client") {
-                  void patchBlob(sendStrip.jobId, { sentTier: sentTierValue(tier as SendTierKey | null) });
+                  const sent = sentTierValue(tier as SendTierKey | null);
+                  void patchBlob(sendStrip.jobId, { sentTier: sent });
+                  // The job card + invoice follow the tier that was sent.
+                  const rowPatch = sendRowPatch(dj, sent);
+                  if (rowPatch) {
+                    const id = sendStrip.jobId;
+                    useStore.setState((st) => ({ jobs: st.jobs.map((x) => (x.id === id ? { ...x, ...rowPatch } : x)) }));
+                    void db.patch("jobs", id, rowPatch);
+                  }
                 }
                 // Sending to the TENANT never counts as sending the quote /
                 // invoice to the customer — quote_sent_at and complete→invoiced
@@ -1576,7 +1588,10 @@ ${invoicePhotosHtml}
             <div className="drow">
               <span className="l">{t("jobs.quoteTotal")}</span>
               <span className="v" style={{ fontFamily: "Oswald", fontSize: 16, color: "var(--color-money)" }}>
-                ${(dj.total || 0).toFixed(0)}
+                {(() => {
+                  const m = jobMoney(dj);
+                  return m.state === "none" ? t("jobs.noQuoteYet") : m.state === "draft" ? `$${m.total.toFixed(0)} · ${t("jobs.draftTag")}` : `$${m.total.toFixed(0)}`;
+                })()}
                 {onEditJob && (
                   <button onClick={() => onEditJob(dj.id)} title={t("jobs.editQuote")} style={{ background: "transparent", border: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0, marginLeft: 6, display: "inline-flex", alignItems: "center" }}>
                     <Icon name="edit" size={13} />
@@ -1604,7 +1619,10 @@ ${invoicePhotosHtml}
             })()}
             {(() => {
               const labor = getJobLabor(dj);
-              const quoted = dj.total_hrs || 0;
+              // An unsaved AI draft shows ITS numbers; no quote at all shows
+              // dashes, never "$0 labor / $0 materials" (lib/quote-totals).
+              const money = jobMoney(dj);
+              const quoted = money.hrs || 0;
               const variancePct = quoted > 0 ? ((labor.totalHrs - quoted) / quoted) * 100 : 0;
               const overBudget = labor.totalHrs > quoted && quoted > 0;
               const underBudget = quoted > 0 && labor.totalHrs > 0 && labor.totalHrs <= quoted;
@@ -1613,11 +1631,11 @@ ${invoicePhotosHtml}
                 <div style={{ display: "flex", gap: 6, paddingTop: 8 }}>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
                     <div className="sl">{t("qf.labor")}</div>
-                    <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 16 }}>${(dj.total_labor || 0).toFixed(0)}</div>
+                    <div style={{ fontFamily: "Oswald", color: "var(--color-primary)", fontSize: 16 }}>{money.labor === null ? "—" : `$${money.labor.toFixed(0)}`}</div>
                   </div>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
                     <div className="sl">{t("qf.materials")}</div>
-                    <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 16 }}>${(dj.total_mat || 0).toFixed(0)}</div>
+                    <div style={{ fontFamily: "Oswald", color: "var(--color-warning)", fontSize: 16 }}>{money.mat === null ? "—" : `$${money.mat.toFixed(0)}`}</div>
                   </div>
                   <div style={{ flex: 1, textAlign: "center", padding: 6, borderRadius: 6, background: darkMode ? "#1a1a28" : "#f5f5f8" }}>
                     <div className="sl">{t("common.hours")}</div>

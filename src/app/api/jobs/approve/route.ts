@@ -1,6 +1,6 @@
 import { readSentTier } from "@/lib/quote-blob";
 import { NextRequest, NextResponse } from "next/server";
-import { TIER_NAME } from "@/lib/tiers";
+import { TIER_NAME, itemInTier } from "@/lib/tiers";
 import { serviceClient } from "@/lib/api-auth";
 import { verifyJobToken } from "@/lib/job-token";
 import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
@@ -164,6 +164,13 @@ export async function POST(req: NextRequest) {
     // Lock the job to what was approved (status, picked option's price +
     // work order, approval record) — shared with owner-recorded approvals.
     const tier = body.tier === "base" || body.tier === "better" || body.tier === "best" ? body.tier : null;
+    if (tier) {
+      const b = tryReadBlob(job.rooms);
+      const lines = (Array.isArray(b?.rooms) ? (b!.rooms as Room[]) : []).flatMap((r) => r?.items || []);
+      if (b?.tieredQuote === true && lines.length && !lines.some((it) => itemInTier(it, tier))) {
+        return NextResponse.json({ error: "That option has no work in it. Please pick another option.", stale: true }, { status: 409 });
+      }
+    }
     const { patch, blob, approval } = applyApproval(job, { signature: signatureValue, tier, nowIso, via: "online", ip });
     if (blob) {
       // Text-message consent from the approval page's optional box — kept

@@ -9,7 +9,7 @@ import { buildRenderPrompt } from "@/lib/render-prompt";
 import { useStore } from "@/lib/store";
 import { supabase, db } from "@/lib/supabase";
 import type { Room, RoomItem, Material, JobDiscount, Job } from "@/lib/types";
-import { itemInTier, itemTiers, itemLevel, tiersForLevel, shouldOfferTiers, tiersDefaultOn, sendTierChoices, sentTierValue, type SendTierKey, sharedSuppliesLines, tierPriceLine, TIER_NAME, TIER_NAMES, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
+import { itemInTier, itemTiers, itemLevel, tiersForLevel, shouldOfferTiers, tiersDefaultOn, sendTierChoices, sentTierValue, visibleTiers, type SendTierKey, sharedSuppliesLines, tierPriceLine, TIER_NAME, TIER_NAMES, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
 import { buildAssistJobContext, type AssistInspection } from "@/lib/assist-context";
 import { applyAssistOps, optionDiffSummary, type AssistAdd, type AssistPatch } from "@/lib/assist-ops";
 import { quoteHasTierSplit, appendRooms } from "@/lib/tier-build";
@@ -58,6 +58,7 @@ import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 import { stripAiHrs } from "@/lib/ai-hours";
 import SendSheet, { tierSendOptions, type SendTierOption } from "../SendSheet";
 import { patchBlob } from "@/lib/job-write-client";
+import { sendRowPatch } from "@/lib/quote-totals";
 import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
 import { isPlatformAdmin } from "@/lib/platform-admin";
@@ -2973,9 +2974,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         }}
       >
         {[
-          { l: "Labor", v: "$" + tl.toFixed(0) },
-          { l: "Mat'l" + (materialTaxPct > 0 ? ` +${materialTaxPct}% tax` : "") + (markupPct > 0 ? ` +${markupPct}%` : ""), v: "$" + tm.toFixed(0) },
-          { l: "Hours", v: th.toFixed(1) },
+          { l: "Labor", v: "$" + headlineLabor.toFixed(0) },
+          { l: "Mat'l" + (materialTaxPct > 0 ? ` +${materialTaxPct}% tax` : "") + (markupPct > 0 ? ` +${markupPct}%` : ""), v: "$" + headlineMat.toFixed(0) },
+          { l: "Hours", v: headlineHrs.toFixed(1) },
         ].map((x) => (
           <div key={x.l} style={{ flex: 1, textAlign: "center" }}>
             <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#e9c879", fontWeight: 600 }}>{x.l}</div>
@@ -3987,7 +3988,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             const accepted = savedBlob.acceptedTier === "base" || savedBlob.acceptedTier === "better" || savedBlob.acceptedTier === "best"
               ? (savedBlob.acceptedTier as TierKey) : null;
             const openTiers = tieredQuote && !accepted;
-            const tierLine = openTiers ? tierPriceLine(tierTotals) : null;
+            const tierLine = openTiers ? tierPriceLine(tierTotals, visibleTiers(rooms.flatMap((r) => r.items))) : null;
             const totalLine = tierLine
               ? `${tierLine} — pick the one you want on the page.`
               : `Total: $${(accepted && tieredQuote ? tierTotals[accepted] : headlineTotal).toFixed(2)}`;
@@ -4034,7 +4035,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             const jobId = sendSheet.jobId;
             // What the customer was sent: one tier, or all (null). /status and
             // the approval read it (lib/quote-blob readSentTier).
-            if (sendSheet.tierOptions || tier) void patchBlob(jobId, { sentTier: sentTierValue(tier as SendTierKey | null) });
+            if (sendSheet.tierOptions || tier) {
+              const sent = sentTierValue(tier as SendTierKey | null);
+              void patchBlob(jobId, { sentTier: sent });
+              // The job card + invoice follow the tier that was sent.
+              const row = useStore.getState().jobs.find((j) => j.id === jobId);
+              const rowPatch = row ? sendRowPatch(row, sent) : null;
+              if (rowPatch) void db.patch("jobs", jobId, rowPatch);
+            }
             void markQuoteSent(jobId).then(async (ok) => {
               await loadAll();
               // Copy keeps its own "Copied — paste it" toast (nothing is sent yet).

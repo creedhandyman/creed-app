@@ -117,7 +117,8 @@ function StatusContent() {
                 // Preselect Complete, unless it adds nothing over Essential
                 // (then it isn't shown, and Essential is the same price).
                 const items = (Array.isArray(blob?.rooms) ? (blob.rooms as Room[]) : []).flatMap((rm) => rm?.items || []);
-                setSelectedTier(visibleTiers(items).includes(RECOMMENDED_TIER) ? RECOMMENDED_TIER : "base");
+                const vis = visibleTiers(items);
+                setSelectedTier(vis.includes(RECOMMENDED_TIER) ? RECOMMENDED_TIER : (vis[0] ?? "base"));
               }
             }
           } catch { /* */ }

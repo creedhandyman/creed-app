@@ -160,15 +160,20 @@ export const tiersDefaultOn = (org: { tiered_quotes_default?: boolean | null } |
  *  only when it changes the scope of the one below it (Complete with nothing
  *  recommended would just repeat Essential's price). */
 export function visibleTiers<T extends TierItem>(items: T[]): TierKey[] {
+  // A tier with no work in it is never offered (an empty Essential used to
+  // show at about $0: just the trip fee or minimum charge).
   return tierDeltas(items)
-    .filter((d) => !d.prev || d.added.length > 0 || d.removed.length > 0)
+    .filter((d) => d.items.length > 0 && (!d.prev || d.added.length > 0 || d.removed.length > 0))
     .map((d) => d.tier);
 }
 
 /** The price line a Send text uses for a tiered quote, e.g.
  *  "Essential $480 · Complete $725 (recommended) · Premium $1,040". A tier
  *  priced the same as the one below it is left out (it adds nothing). */
-export function tierPriceLine(tt: Partial<Record<TierKey, unknown>> | null | undefined): string | null {
+export function tierPriceLine(
+  tt: Partial<Record<TierKey, unknown>> | null | undefined,
+  only?: readonly TierKey[],
+): string | null {
   if (!tt) return null;
   const fmt = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const parts: string[] = [];
@@ -176,6 +181,7 @@ export function tierPriceLine(tt: Partial<Record<TierKey, unknown>> | null | und
   for (const k of TIER_KEYS) {
     const v = tt[k];
     if (typeof v !== "number" || !(v > 0)) continue;
+    if (only && !only.includes(k)) continue; // e.g. a tier with no work in it
     if (prev !== null && Math.abs(v - prev) < 0.005) continue;
     parts.push(`${TIER_NAME[k]} ${fmt(v)}${k === RECOMMENDED_TIER ? " (recommended)" : ""}`);
     prev = v;
