@@ -205,6 +205,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   it; never re-derive "min hours defaults to 1" / "trip fee || 0" at a call
   site (`pricing-inputs.test.ts`). The ZIP materials tax stays separate
   (`material-tax.ts`).
+  **Saved quotes keep their rates (2026-11-14)**: saves write `pricedRates`
+  (default + trade rates) on the blob; readers pass `readPricedRates(blob,
+  legacy)` (quote-blob.ts) as `pricingInputs(org, {priced})` — older quotes
+  infer the rate from their saved labor. Never price a SAVED quote from the
+  org's current rates (QuoteForge load, quote-pdf, /status all do this).
 - **Money rollups**: revenue / net-profit math lives in ONE place —
   `src/lib/financials.ts` `profitSnapshot()` — consumed by the Financials
   screen AND the Ops hub KPIs (dashboard Revenue·mo mirrors its revenue
