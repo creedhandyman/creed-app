@@ -67,7 +67,9 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   const nowHHMM = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Chicago", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
   const { data: rows, error: sErr } = await supabase
     .from("schedule")
-    .select("id, org_id, job_id, sched_date, note, created_at")
+    // "*" so booking_status reads as undefined (not a query error) until the
+    // online-booking migration has run.
+    .select("*")
     .in("org_id", [...orgName.keys()])
     .eq("sched_date", tomorrow)
     .not("job_id", "is", null)
@@ -101,7 +103,18 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       results.push({ schedule_id: row.id, job_id: row.job_id, via: "skipped" });
       continue;
     }
+    // An online booking the owner hasn't confirmed yet is only a hold: telling
+    // the customer "we'll be there" would promise a visit that may be declined.
+    if ((row as { booking_status?: string | null }).booking_status === "requested") {
+      results.push({ schedule_id: row.id, job_id: job.id, via: "skipped" });
+      continue;
+    }
     if (doneJobs.has(job.id)) {
+      // Mark it too, or the morning run texts the same customer again for it.
+      if (!dry) {
+        await supabase.from("schedule").update({ reminder_sent_at: new Date().toISOString() })
+          .eq("id", row.id).is("reminder_sent_at", null);
+      }
       results.push({ schedule_id: row.id, job_id: job.id, via: "duplicate" });
       continue;
     }

@@ -141,6 +141,7 @@ describe("toPlanInput + planWrites", () => {
     expect(s7.patch.note).toMatch(/^🕐 \d{2}:\d{2} · 👷 (Ann Lee|Bo Diaz)$/);
     expect(s7.patch.sched_date).toBeUndefined();
     expect("start_time" in s7.patch).toBe(false); // not an online booking
+    expect("reminder_sent_at" in s7.patch).toBe(false); // same day: its reminder stands
   });
 
   it("keeps an online booking's start_time in step with its retimed note", () => {
@@ -260,5 +261,22 @@ describe("crewNow", () => {
       const old = crewNow({ crew, timeEntries: [], schedule: [], jobs: [], locations: [{ user_id: "b", lat: 9, lng: 9, at: at("2026-10-18T16:00:00") }], now });
       expect(old[1].fix).toBeUndefined();
     });
+  });
+});
+
+describe("planWrites: a visit moved to another day", () => {
+  it("clears its reminder so the new day gets one", () => {
+    const entry = mkEntry("s9", "12 Oak St", "2026-11-17", "🕐 09:00 · 👷 Bo Diaz", { job_id: "j9" });
+    const booked = [{
+      key: "s9@2026-11-17", entry, day: "2026-11-17", techIds: ["t2"], crewNames: ["Bo Diaz"],
+      durMin: 60, estimated: false, movable: true, external: false,
+    }];
+    const plan = {
+      routes: [{ day: "2026-11-19", techId: "t2", stops: [{ key: "s9@2026-11-17", startMin: 540, address: "12 Oak St" }] }],
+      unplaced: [], shortCrew: [], placedNew: 0, miles: 0, driveMin: 0,
+    };
+    const crewList = [{ id: "t2", name: "Bo Diaz" }];
+    const w = planWrites(plan as never, { booked: booked as never, crew: crewList as never, replanBooked: true });
+    expect(w.patches[0].patch).toMatchObject({ sched_date: "2026-11-19", reminder_sent_at: null });
   });
 });

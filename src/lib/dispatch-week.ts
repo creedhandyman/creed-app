@@ -277,7 +277,7 @@ export interface SchedulePost {
 export interface SchedulePatch {
   entryId: string;
   job: string;
-  patch: { sched_date?: string; note?: string; start_time?: string | null };
+  patch: { sched_date?: string; note?: string; start_time?: string | null; reminder_sent_at?: null };
   moved: boolean;
   retimed: boolean;
   recrewed: boolean;
@@ -354,7 +354,9 @@ export function planWrites(plan: WeekPlan, { booked, crew, replanBooked }: {
         patch.start_time = m == null ? null : minToHhmm(m);
       }
     }
-    if (moved) patch.sched_date = day;
+    // A visit moved to another day gets its reminder text again (Schedule's
+    // drag-to-move does the same).
+    if (moved) { patch.sched_date = day; patch.reminder_sent_at = null; }
     patches.push({ entryId, job: e.job, patch, moved, retimed, recrewed });
   }
   return { posts, patches };
