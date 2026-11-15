@@ -361,6 +361,7 @@ export async function POST(req: NextRequest) {
             chargeCents: charge.amount,
             refundedCents: charge.amount_refunded,
             fullyRefunded: charge.refunded,
+            originalFeeCents: typeof charge.application_fee_amount === "number" ? charge.application_fee_amount : null,
           });
         }
         break;

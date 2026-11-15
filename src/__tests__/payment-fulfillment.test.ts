@@ -286,7 +286,11 @@ test("partial refund of the deposit: fee prorated, job back to invoiced, org-sco
   }
 
   // Webhook retry, then the rest refunded: still ONE refund row, cumulative.
-  await recordJobRefund(db, { paymentIntentId: "pi_a", chargeCents: 40000, refundedCents: 10000, fullyRefunded: false });
+  await recordJobRefund(db, { paymentIntentId: "pi_a", chargeCents: 40000, refundedCents: 10000, fullyRefunded: false, originalFeeCents: 40 });
+  // A resent event prorates from the ORIGINAL fee, not the already-cut one.
+  expect(tables.payments.find((p) => p.id === "p1")!.platform_fee_cents).toBe(30);
+  await recordJobRefund(db, { paymentIntentId: "pi_a", chargeCents: 40000, refundedCents: 20000, fullyRefunded: false, originalFeeCents: 40 });
+  expect(tables.payments.find((p) => p.id === "p1")!.platform_fee_cents).toBe(20);
   await recordJobRefund(db, { paymentIntentId: "pi_a", chargeCents: 40000, refundedCents: 40000, fullyRefunded: true });
   const refunds = tables.payments.filter((p) => p.kind === "refund");
   expect(refunds).toHaveLength(1);

@@ -376,6 +376,10 @@ export interface RefundInput {
   chargeCents: number;            // charge.amount
   refundedCents: number;          // charge.amount_refunded (CUMULATIVE)
   fullyRefunded: boolean;         // charge.refunded
+  /** charge.application_fee_amount: the ORIGINAL platform fee. The stored fee
+   *  is already cut by an earlier refund, so prorating that again (a second
+   *  partial refund, or a resent event) took the fee down twice. */
+  originalFeeCents?: number | null;
 }
 
 export type RefundResult =
@@ -450,11 +454,12 @@ export async function recordJobRefund(
 
   // Prorate THIS charge's own fee — never the job's cumulative fee,
   // which on a multi-payment job also contains other charges' fees.
+  const origFee = typeof r.originalFeeCents === "number" && r.originalFeeCents >= 0 ? r.originalFeeCents : null;
   if (chargeRow) {
-    const netFee = isFullRefund ? 0 : Math.round(chargeRow.platform_fee_cents * keptFraction);
+    const netFee = isFullRefund ? 0 : Math.round((origFee ?? chargeRow.platform_fee_cents) * keptFraction);
     await supabase.from("payments").update({ platform_fee_cents: netFee }).eq("id", chargeRow.id);
   } else if (legacyFee !== null) {
-    const netFee = isFullRefund ? 0 : Math.round(legacyFee * keptFraction);
+    const netFee = isFullRefund ? 0 : Math.round((origFee ?? legacyFee) * keptFraction);
     await supabase.from("jobs").update({ platform_fee_cents: netFee }).eq("id", jobId).eq("org_id", orgId);
   }
 
