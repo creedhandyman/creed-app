@@ -21,6 +21,7 @@ function input(over: Partial<QuoteSaveInput> = {}): QuoteSaveInput {
     settings: {
       discount: null, laborRate: null, minLaborHours: null, taxMode: null, materialTaxPct: 7.5, materialTaxZip: "67202",
       tieredQuote: false, tierNames: { better: "Better", best: "Best" }, crewSize: null, estDays: null,
+      pricedRates: { rate: 55, trades: null },
     },
     pricing: {
       gt: 300, tl: 200, tm: 100, th: 2,

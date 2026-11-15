@@ -37,8 +37,8 @@ import { tradeConfig, resolvePrimaryTrade, primaryTradeToRateCategory } from "@/
 import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
-import { priceCascade, rateForRoom, billedMaterial, pricingInputs } from "@/lib/pricing";
-import { readQuoteSettings, readEstDays, readSentTier } from "@/lib/quote-blob";
+import { priceCascade, rateForRoom, billedMaterial, pricingInputs, parseTradeRates, type PricedRates } from "@/lib/pricing";
+import { readQuoteSettings, readEstDays, readSentTier, readPricedRates } from "@/lib/quote-blob";
 import { buildQuoteSave, dominantTrade } from "@/lib/quote-save";
 import { materialTaxFor, zipTaxMap } from "@/lib/material-tax";
 import Inspector from "./Inspector";
@@ -492,6 +492,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // default; a positive number overrides for THIS quote only. Lives on
   // the rooms JSON blob as `data.laborRate` (no schema change).
   const [laborRate, setLaborRate] = useState<number | null>(null);
+  // The default + trade rates a SAVED quote was priced with (null = today's
+  // org rates: a new quote, or "Use today's rate"). Keeps an old quote at its
+  // price after the owner raises their rate.
+  const [pricedRates, setPricedRates] = useState<PricedRates | null>(null);
   // Per-quote minimum-labor-hours override. null = use the org default
   // (organizations.min_labor_hours, falling back to 1). Persisted on the
   // rooms JSON blob as `data.minLaborHours`. 0 is a valid value (disables
@@ -602,7 +606,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     v: 1, savedAt: Date.now(),
     mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos,
     rooms, workers, jobPhotos, customWorkOrder,
-    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays,
+    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab,
     templateEdit,
     contactSource, residentPatch,
@@ -629,6 +633,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCustomWorkOrder(d.customWorkOrder ?? null);
       setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
       setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
+      setPricedRates(d.pricedRates ?? null);
       setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true; cancelTierBuild();
       setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
       setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
@@ -668,7 +673,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     prop, client, customerId, addressId, rooms, workers, jobPhotos,
     // `src` is the sync's session-only baseline, not an edit.
     customWorkOrder: customWorkOrder ? customWorkOrder.map(({ src: _src, ...s }) => s) : null,
-    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays,
+    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop,
     residentPatch,
   });
@@ -690,6 +695,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setCustomWorkOrder(d.customWorkOrder ?? null);
         setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
         setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
+        // Drafts written before this key keep the rates the quote loaded with.
+        if ("pricedRates" in d) setPricedRates(d.pricedRates ?? null);
         setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true; cancelTierBuild();
         setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
         setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
@@ -731,7 +738,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const t = setTimeout(() => writeEditDraft(id, snap), 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, prop, client, customerId, addressId, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, residentPatch, editingId, editDraftOffer]);
+  }, [mode, prop, client, customerId, addressId, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates, customTools, customShop, checkedTools, checkedShop, removedGuideShop, residentPatch, editingId, editDraftOffer]);
 
   // Show the "resume" card whenever we land on the hub with a saved draft.
   useEffect(() => {
@@ -750,7 +757,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const t = setTimeout(() => { try { localStorage.setItem(DRAFT_KEY, snapshot); } catch { /* */ } }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, customTools, customShop, checkedTools, checkedShop, removedGuideShop, contactSource, residentPatch, tab, editJobId, editingId]);
+  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates, customTools, customShop, checkedTools, checkedShop, removedGuideShop, contactSource, residentPatch, tab, editJobId, editingId]);
 
   // Flush immediately when the app is backgrounded/closed — the 600ms debounce
   // may not fire if the user leaves right after typing. Ref keeps the latest
@@ -885,6 +892,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       const q = readQuoteSettings(data);
       setDiscount(q.discount);
       setLaborRate(q.laborRate);
+      // The rates it was priced with (older quotes: inferred from the saved labor).
+      const today = pricingInputs(useStore.getState().org, { minLaborHours: q.minLaborHours });
+      setPricedRates(readPricedRates(data, {
+        totalLabor: job.total_labor, minHrs: today.minHrs, defaultRate: today.defaultRate, tradeRates: today.tradeRates,
+      }));
       setMinLaborHours(q.minLaborHours);
       setTaxMode(q.taxMode);
       setQuoteMatTax(q.materialTax);
@@ -1063,7 +1075,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     try { parsed = stripAiHrs(JSON.parse(tpl.template_rooms) as Room[]); } catch { /* */ }
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined); resetContact();
-    setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
+    setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setPricedRates(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
     setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild(); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
@@ -1091,7 +1103,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // Every price-driving org setting (+ the per-quote overrides) resolves in ONE
   // place — lib/pricing.ts pricingInputs — shared with the printed quote and
   // the AI lead draft, so they can't drift from this preview.
-  const priceIn = pricingInputs(org, { laborRate, minLaborHours, taxMode });
+  const priceIn = pricingInputs(org, { laborRate, minLaborHours, taxMode, priced: pricedRates });
+  // A saved quote priced at rates that are no longer the org's: offer today's.
+  const todayRate = org?.default_rate || 55;
+  const ratesChanged = !!pricedRates && (pricedRates.rate !== todayRate
+    || JSON.stringify(pricedRates.trades ?? null) !== JSON.stringify(parseTradeRates(org?.trade_rates)));
   const { defaultRate, taxPct, tripFee, markupPct } = priceIn;
   const effectiveMinHrs = priceIn.minHrs;
   const effectiveTaxMode: TaxMode = priceIn.taxMode;
@@ -2009,7 +2025,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       steps: syncedSteps,
       guideSteps: guide.steps,
       guideState: { customTools, customShop, checkedTools, checkedShop, removedGuideShop },
-      settings: { discount, laborRate, minLaborHours, taxMode, materialTaxPct, materialTaxZip: jobZip, tieredQuote, tierNames, crewSize, estDays: aiEstDays },
+      settings: { discount, laborRate, minLaborHours, taxMode, materialTaxPct, materialTaxZip: jobZip, tieredQuote, tierNames, crewSize, estDays: aiEstDays, pricedRates: { rate: defaultRate, trades: priceIn.tradeRates } },
       pricing: { gt, tl, tm, th, tierTotals, tierBreakdown, headlineKey, hasSplit },
       inspection: inspectionData,
       prev: prevJob ? { blob: jobBlob(prevJob), status: prevJob.status } : null,
@@ -2106,6 +2122,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setCheckedShop([]);
     setDiscount(null);
     setLaborRate(null);
+    setPricedRates(null);
     setMinLaborHours(null);
     setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild();
     setCrewSize(null); setAiEstDays(null); setAiNotes([]);
@@ -2296,6 +2313,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     setCheckedShop([]);
     setDiscount(null);
     setLaborRate(null);
+    setPricedRates(null);
     setMinLaborHours(null);
     setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild();
     setCrewSize(null); setAiEstDays(null); setAiNotes([]);
@@ -3085,7 +3103,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             type="number"
             min="0"
             step="1"
-            placeholder={`${org?.default_rate || defaultRate || 55}`}
+            placeholder={`${defaultRate}`}
             value={laborRate ?? ""}
             onChange={(e) => {
               const v = e.target.value;
@@ -3094,6 +3112,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             style={{ width: 64, padding: "4px 6px", fontSize: 15, textAlign: "center" }}
             title="Override the labor rate for THIS quote only. Leave empty to use the org default."
           />
+          {!laborRate && ratesChanged && (
+            <span style={{ fontSize: 12, color: "#888", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {t("qf.pricedAt").replace("{rate}", String(defaultRate))}
+              <button className="bo" style={{ fontSize: 12, padding: "2px 8px" }} onClick={() => setPricedRates(null)}>
+                {t("qf.useTodayRate").replace("{rate}", String(todayRate))}
+              </button>
+            </span>
+          )}
           {laborRate && laborRate > 0 ? (
             <button
               onClick={() => setLaborRate(null)}

@@ -38,6 +38,7 @@ import type { Room } from "./types";
 import type { GuideStep } from "./parser";
 import type { JobDiscount } from "./types";
 import type { TaxMode } from "./tax";
+import type { PricedRates } from "./pricing";
 import { woKey, type RoomsBlob } from "./job-blob";
 import { itemInTier, itemTiers, type TierKey } from "./tiers";
 
@@ -81,6 +82,8 @@ export interface QuoteSaveInput {
     materialTaxPct: number; materialTaxZip: string;
     tieredQuote: boolean; tierNames: { better: string; best: string };
     crewSize: number | null; estDays: number | null;
+    /** The default + trade labor rates these prices use (kept with the quote). */
+    pricedRates: PricedRates;
   };
   pricing: {
     gt: number; tl: number; tm: number; th: number;
@@ -229,6 +232,9 @@ export function buildQuoteSave(input: QuoteSaveInput): QuoteSaveResult {
     // a later change to the org setting can't reprice it.
     materialTaxPct: s.materialTaxPct,
     materialTaxZip: s.materialTaxZip,
+    // Same for the labor rates: raising your rate later reprices new quotes,
+    // never this one (quote-blob.ts readPricedRates).
+    pricedRates: s.pricedRates,
     // three-tier. tierTotals / tierBreakdown are stored so the approval
     // page + approve API read each option's price without re-deriving the math.
     tieredQuote: s.tieredQuote,

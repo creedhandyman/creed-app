@@ -17,7 +17,8 @@
 import type { JobDiscount } from "./types";
 import type { TaxMode } from "./tax";
 import type { RoomsBlob } from "./job-blob";
-import { TIER_NAMES } from "./tiers";
+import { TIER_NAMES, itemInTier } from "./tiers";
+import { rateForRoom, type PricedRates } from "./pricing";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
 
@@ -64,6 +65,62 @@ export function readSentTier(blob: RoomsBlob | null | undefined): "base" | "bett
   if (v !== "base" && v !== "better" && v !== "best") return null;
   const tt = blob?.tierTotals as Record<string, unknown> | undefined;
   return tt && typeof tt[v] === "number" ? v : null;
+}
+
+/**
+ * The labor rates this quote was priced with, so it keeps its price after the
+ * owner changes their rate (2026-11-14: Creed went $55 → $76 and every saved
+ * quote without a per-quote rate reopened, printed and showed the customer
+ * at $76). Saves since then store `pricedRates`. For an older quote pass
+ * `legacy` (its saved labor + today's org rates): the rate that reproduces
+ * its saved labor is used — unless today's rates already reproduce it (then
+ * null = use today's, trade rates and all). null too when a per-quote
+ * laborRate governs, or nothing sensible can be inferred.
+ */
+export function readPricedRates(
+  blob: RoomsBlob | null | undefined,
+  legacy?: { totalLabor: unknown; minHrs: number; defaultRate: number; tradeRates: Record<string, number> | null },
+): PricedRates | null {
+  const v = blob?.pricedRates as { rate?: unknown; trades?: unknown } | null | undefined;
+  if (v && isNum(v.rate) && v.rate > 0) {
+    let trades: Record<string, number> | null = null;
+    if (v.trades && typeof v.trades === "object" && !Array.isArray(v.trades)) {
+      const t: Record<string, number> = {};
+      for (const [k, r] of Object.entries(v.trades as Record<string, unknown>)) if (isNum(r) && r > 0) t[k] = r;
+      trades = Object.keys(t).length ? t : null;
+    }
+    return { rate: v.rate, trades };
+  }
+  if (!legacy || readLaborRate(blob?.laborRate)) return null;
+  type It = { laborHrs?: unknown; tiers?: unknown; tier?: unknown };
+  const rooms = (Array.isArray(blob?.rooms) ? blob!.rooms : []) as { name?: unknown; items?: It[] }[];
+  // Which lines the saved labor covers: every line, or (three-tier) one
+  // priced tier's lines with that tier's saved labor.
+  let saved = Number(legacy.totalLabor);
+  let keep: (it: It) => boolean = () => true;
+  const tb = blob?.tieredQuote === true ? (blob?.tierBreakdown as Record<string, { labor?: unknown }> | null) : null;
+  if (tb && typeof tb === "object") {
+    const k = (["base", "better", "best"] as const).find((t) => isNum(tb[t]?.labor) && (tb[t]!.labor as number) > 0);
+    if (!k) return null;
+    saved = tb[k]!.labor as number;
+    keep = (it) => itemInTier(it as Parameters<typeof itemInTier>[0], k);
+  }
+  if (!(saved > 0)) return null;
+  let hrs = 0;
+  let laborToday = 0;
+  for (const r of rooms) {
+    for (const it of r?.items || []) {
+      if (!it || !keep(it) || !isNum(it.laborHrs)) continue;
+      hrs += it.laborHrs;
+      laborToday += it.laborHrs * rateForRoom(typeof r.name === "string" ? r.name : "", { defaultRate: legacy.defaultRate, tradeRates: legacy.tradeRates });
+    }
+  }
+  if (!(hrs > 0)) return null;
+  const billedHrs = Math.max(hrs, legacy.minHrs);
+  if (hrs < legacy.minHrs) laborToday = legacy.minHrs * legacy.defaultRate;
+  if (Math.abs(laborToday - saved) <= 0.05 + saved * 0.001) return null; // today's rates still price it
+  const rate = Math.round((saved / billedHrs) * 100) / 100;
+  return rate >= 5 && rate <= 1000 ? { rate, trades: null } : null;
 }
 
 export const readCrewSize = (v: unknown): number | null => (isNum(v) && v > 0 ? Math.round(v) : null);

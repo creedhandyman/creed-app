@@ -39,6 +39,14 @@ export interface PricingOrg {
   min_labor_hours?: number | null;
 }
 
+/** The labor rates a saved quote was priced with (the default + per-trade),
+ *  kept on the quote so raising your rate later doesn't reprice quotes that
+ *  are already out (quote-blob.ts readPricedRates). */
+export interface PricedRates {
+  rate: number;
+  trades: Record<string, number> | null;
+}
+
 /** Per-quote decisions that beat the org's settings (all optional / nullable). */
 export interface PricingOverrides {
   /** "this job bills at $X/hr" — ignored unless > 0. */
@@ -46,6 +54,9 @@ export interface PricingOverrides {
   /** Per-quote minimum billable hours — 0 is honored (turns the floor off). */
   minLaborHours?: number | null;
   taxMode?: TaxMode | null;
+  /** The rates a saved quote was priced with — beat the org's CURRENT
+   *  default / trade rates (a per-quote laborRate still beats both). */
+  priced?: PricedRates | null;
 }
 
 export interface PricingInputs {
@@ -86,12 +97,13 @@ export function pricingInputs(
   org: PricingOrg | null | undefined,
   o: PricingOverrides = {},
 ): PricingInputs {
-  const defaultRate = org?.default_rate || 55;
+  const priced = o.priced && o.priced.rate > 0 ? o.priced : null;
+  const defaultRate = priced ? priced.rate : org?.default_rate || 55;
   const orgMin = org?.min_labor_hours;
   return {
     defaultRate,
     rate: o.laborRate && o.laborRate > 0 ? o.laborRate : defaultRate,
-    tradeRates: parseTradeRates(org?.trade_rates),
+    tradeRates: priced ? priced.trades : parseTradeRates(org?.trade_rates),
     markupPct: org?.markup_pct || 0,
     taxPct: org?.tax_pct || 0,
     taxMode: o.taxMode ?? resolveTaxMode(org?.tax_mode),

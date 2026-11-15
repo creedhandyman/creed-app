@@ -14,6 +14,7 @@ import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
 import { readQuoteSettings, readSentTier } from "@/lib/quote-blob";
 import { pricingInputs, quoteSections } from "@/lib/pricing";
+import { readPricedRates } from "@/lib/quote-blob";
 import { apiFetch } from "@/lib/api";
 
 const STATUS_STEPS = [
@@ -415,7 +416,10 @@ function StatusContent() {
   // quote (pricing.ts quoteSections: per-trade rate, billed materials).
   // Tiered quote: only the selected option's scope, so the itemized
   // breakdown matches the headline total (options can be exclusive).
-  const priceIn = pricingInputs(org, { laborRate });
+  const blobNow = readBlob(job.rooms);
+  const today = pricingInputs(org, { minLaborHours: readQuoteSettings(blobNow).minLaborHours });
+  const priced = readPricedRates(blobNow, { totalLabor: job.total_labor, minHrs: today.minHrs, defaultRate: today.defaultRate, tradeRates: today.tradeRates });
+  const priceIn = pricingInputs(org, { laborRate, priced });
   const breakdown = quoteSections(
     quoteRooms,
     { rate: priceIn.rate, override: laborRate, tradeRates: priceIn.tradeRates, materialTaxPct: matTaxPct, markupPct: priceIn.markupPct },

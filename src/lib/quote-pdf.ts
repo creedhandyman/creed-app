@@ -2,8 +2,8 @@ import type { Job, Room, JobDiscount } from "./types";
 import { exportQuotePdf } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
 import { readBlob } from "./job-blob";
-import { pricingInputs } from "./pricing";
-import { readQuoteSettings, readSentTier } from "./quote-blob";
+import { pricingInputs, type PricedRates } from "./pricing";
+import { readQuoteSettings, readSentTier, readPricedRates } from "./quote-blob";
 import { itemInTier } from "./tiers";
 
 /**
@@ -59,6 +59,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   let crewSize: number | null = null;
   let estDays: number | null = null;
   let tierNames: { better: string; best: string } | undefined;
+  let priced: PricedRates | null = null;
   try {
     const data = readBlob(job.rooms);
     rooms = (data?.rooms || []) as Room[];
@@ -76,6 +77,9 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     discount = q.discount;
     laborRateOverride = q.laborRate;
     minLaborHoursOverride = q.minLaborHours;
+    // The rates it was priced with, so a later rate change can't reprice it.
+    const today = pricingInputs(org, { minLaborHours: q.minLaborHours });
+    priced = readPricedRates(data, { totalLabor: job.total_labor, minHrs: today.minHrs, defaultRate: today.defaultRate, tradeRates: today.tradeRates });
     taxModeOverride = q.taxMode;
     tieredQuote = q.tieredQuote;
     // Only the rate this quote was priced with; none (or 0) = no purchase tax.
@@ -100,7 +104,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
 
   // Rate, floor, tax mode, trip fee… resolve exactly as QuoteForge's preview
   // and the AI lead draft do — one shared function (lib/pricing.ts).
-  const p = pricingInputs(org, { laborRate: laborRateOverride, minLaborHours: minLaborHoursOverride, taxMode: taxModeOverride });
+  const p = pricingInputs(org, { laborRate: laborRateOverride, minLaborHours: minLaborHoursOverride, taxMode: taxModeOverride, priced });
 
   exportQuotePdf({
     property: job.property,
