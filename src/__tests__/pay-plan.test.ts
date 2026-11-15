@@ -64,3 +64,17 @@ describe("rounding and bad input", () => {
     expect(payPlan({ ...base, total: -5 }).balanceDue).toBe(0);
   });
 });
+
+import { quotePayTotal } from "@/lib/pay-plan";
+
+describe("quotePayTotal", () => {
+  it("the tier picker sets the price only while the quote is open", () => {
+    expect(quotePayTotal({ status: "quoted", signed: false, total: 725, tierTotal: 480 })).toBe(480);
+  });
+  it("an approved, invoiced or finished job charges its own total, whatever tier is tapped", () => {
+    expect(quotePayTotal({ status: "invoiced", signed: false, total: "725", tierTotal: 480 })).toBe(725);
+    expect(quotePayTotal({ status: "complete", signed: false, total: 725, tierTotal: 480 })).toBe(725);
+    expect(quotePayTotal({ status: "quoted", signed: true, total: 725, tierTotal: 480 })).toBe(725);
+    expect(quotePayTotal({ status: "quoted", signed: false, total: 300, tierTotal: null })).toBe(300);
+  });
+});

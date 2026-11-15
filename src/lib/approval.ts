@@ -132,7 +132,11 @@ export function approvalState(
   rooms: Room[] | null | undefined,
   opts: { tiersShown: boolean },
 ): ApprovalState {
-  const pickedTier = !!(a.record?.tier || a.acceptedTier);
+  // A tier pick only needs the options printed when they differ: since
+  // three tiers became the default, an all-must-fix quote is tiered with three
+  // identical options, and its signature printed as "revised".
+  const split = (rooms || []).some((r) => (r.items || []).some((it) => itemTiers(it).length !== 3));
+  const pickedTier = !!(a.record?.tier || a.acceptedTier) && split;
   if (a.record) {
     if (a.record.fp !== scopeFingerprint(rooms)) return "revised";
     return pickedTier && !opts.tiersShown ? "revised" : "signed";

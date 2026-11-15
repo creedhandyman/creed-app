@@ -63,3 +63,16 @@ export function payPlan(i: PayPlanInput): PayPlan {
   const amount = pct === 100 ? balanceDue : partial;
   return { balanceDue, options, pct, amount, remaining: r2(Math.max(0, balanceDue - amount)), partial, canChoose };
 }
+
+/**
+ * The price the customer's quote page charges and shows. A three-tier quote's
+ * picker sets it only while the quote is still open (status "quoted", not
+ * signed). Once approved, invoiced or finished, the job's own total rules:
+ * a job moved forward without an online approval used to let the customer tap
+ * the cheapest tier on the pay card and pay that as "a deposit", leaving the
+ * rest owed forever (a one-tier send had the same gap).
+ */
+export function quotePayTotal(o: { status?: string | null; signed: boolean; total: unknown; tierTotal: number | null }): number {
+  if (o.tierTotal !== null && !o.signed && o.status === "quoted") return o.tierTotal;
+  return Number(o.total) || 0;
+}

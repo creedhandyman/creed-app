@@ -7,7 +7,7 @@ import { Icon } from "@/components/Icon";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { itemInTier, tierDeltas, visibleTiers, TIER_KEYS, TIER_NAME, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
 import { scopeFingerprint } from "@/lib/approval";
-import { payPlan } from "@/lib/pay-plan";
+import { payPlan, quotePayTotal } from "@/lib/pay-plan";
 import { TIP_PCTS, tipAllowed, tipCentsFor } from "@/lib/tips";
 import { cardConsentText } from "@/lib/payments/saved-card";
 import { smsConsentGranted } from "@/lib/sms-consent";
@@ -325,7 +325,10 @@ function StatusContent() {
       // Tier-aware: deposit on the customer's picked option, not the stored
       // (Best-scope) job.total. Post-approval job.total already equals this,
       // but compute it explicitly so the deposit can never bill the wrong tier.
-      const baseTotal = tiered && tierTotals ? tierTotals[selectedTier] : job.total;
+      const baseTotal = quotePayTotal({
+        status: job.status, signed: !!job.client_signature, total: job.total,
+        tierTotal: tiered && tierTotals ? tierTotals[selectedTier] : null,
+      });
       // The same plan the button label shows (lib/pay-plan.ts): never more
       // than what's still owed — a deposit already taken is subtracted (and
       // the server clamps to the balance as well). A finished job defaults to
@@ -391,7 +394,12 @@ function StatusContent() {
   // The customer's selected option drives the headline total + authorize
   // amount before approval; after approval job.total is already the locked
   // accepted total, so the two agree.
-  const effectiveTotal = tiered && tierTotals ? tierTotals[selectedTier] : (job.total || 0);
+  const effectiveTotal = quotePayTotal({
+    status: job.status, signed: !!job.client_signature, total: job.total,
+    tierTotal: tiered && tierTotals ? tierTotals[selectedTier] : null,
+  });
+  // The picker is live only while the quote is open (see quotePayTotal).
+  const tierChoiceOpen = !job.client_signature && job.status === "quoted";
   // What the deposit button will ACTUALLY charge — clamped to the outstanding
   // balance (same math as startDeposit), so the label can never disagree with
   // the charge for a customer who already paid a deposit.
@@ -557,7 +565,7 @@ function StatusContent() {
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${shownTiers.length}, minmax(0, 1fr))`, gap: 8, paddingTop: 6 }}>
               {shownTiers.map((key) => {
                 const hue = key === "base" ? "#8a8a99" : key === "better" ? "#2E75B6" : "#9d4edd";
-                const locked = !!job.client_signature;
+                const locked = !tierChoiceOpen;
                 const isSel = (locked ? acceptedTier : selectedTier) === key;
                 const isRec = key === RECOMMENDED_TIER;
                 const count = allQuoteItems.filter((it) => itemInTier(it, key)).length;
