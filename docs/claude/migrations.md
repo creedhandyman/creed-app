@@ -2,7 +2,12 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
-- Three tiers by default (2026-11-14, **NOT yet run in prod**): run
+- Duplicate guards + photo bucket limits (**run in prod 2026-11-15**):
+  `supabase/migrations/20261115_duplicate_guards_and_bucket_limits.sql`. Unique
+  index on `review_requests(job_id)` and on
+  `customer_memberships(stripe_subscription_id)`; the `receipts` bucket takes
+  images and PDFs only, 25 MB each.
+- Three tiers by default (2026-11-14, **run in prod**, column confirmed 2026-11-15): file
   `supabase/migrations/20261114_tiered_quotes_default.sql` (safe to re-run).
   Adds `organizations.tiered_quotes_default BOOLEAN NOT NULL DEFAULT true` —
   the Pricing & taxes switch "Three tiers by default". The app reads a missing
@@ -293,7 +298,7 @@ Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether i
   `/api/portal/me` selects so the customer's downloaded copy matches. Until the
   migration runs, saving toasts "column does not exist" (best-effort) but the
   PDF falls back to 50% / 30 days.
-- Online booking (**NOT yet run in prod**, file
+- Online booking (**run in prod**, columns + slot index confirmed 2026-11-15, file
   `supabase/migrations/20261109190000_online_booking.sql`, idempotent): org
   `booking_enabled` (default FALSE) + `booking_hours` jsonb (weekday "0"–"6" →
   [["HH:MM","HH:MM"]…], default Mon–Fri 9:30–12 + 1:30–6) + `booking_slot_min`
