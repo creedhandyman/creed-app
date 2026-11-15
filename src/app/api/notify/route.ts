@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dispatchNotifications, resolveRecipients, type ResolvedRecipient } from "@/lib/notify-server";
 import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
+import { siteOrigin } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
     const job = jobs[0];
 
     const property = job.property || "a job";
-    const origin = req.headers.get("origin") || `https://${req.headers.get("host") || ""}`;
+    const origin = siteOrigin(); // never the request's Origin/Host header
 
     const result = await dispatchNotifications(supabase, {
       orgId,

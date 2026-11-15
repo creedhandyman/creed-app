@@ -50,10 +50,13 @@ export async function GET(
 
     // Mark as used immediately so a stolen link can't be replayed
     // alongside a legitimate redemption (race window is tiny but real).
-    await supabase
+    const { data: claimed } = await supabase
       .from("portal_tokens")
       .update({ used_at: new Date().toISOString() })
-      .eq("id", t.id);
+      .eq("id", t.id)
+      .is("used_at", null)
+      .select("id");
+    if (!claimed?.length) return fail("used");
 
     const cookie = buildSessionCookie(t.customer_id, t.org_id);
     const res = NextResponse.redirect(`${origin}/portal`);

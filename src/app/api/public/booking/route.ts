@@ -7,6 +7,7 @@ import { draftLeadQuote } from "@/lib/lead-draft";
 import { sendEmail } from "@/lib/email";
 import { loadBookingOrg, loadBusyVisits } from "@/lib/booking-server";
 import { openSlots, isSlotOpen, localNow, fmt12, fmtDay, fromMin, toMin } from "@/lib/booking";
+import { escapeLike } from "@/lib/like-escape";
 import { clientIp, addressTag, memoryLimit, publicFormLimit, formLimitMessage } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -169,7 +170,7 @@ export async function POST(req: NextRequest) {
         if (data?.length) customerId = data[0].id;
       }
       if (!customerId && email) {
-        const { data } = await supabase.from("customers").select("id").eq("org_id", orgId).ilike("email", email).limit(1);
+        const { data } = await supabase.from("customers").select("id").eq("org_id", orgId).ilike("email", escapeLike(email)).limit(1);
         if (data?.length) customerId = data[0].id;
       }
       if (!customerId) {

@@ -93,7 +93,7 @@ interface ExportOptions {
 }
 
 const esc = (s: string) =>
-  String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 /** Most photos the quote PDF shows. Every one is downloaded at its stored size
  *  before the PDF can be saved, so a job with dozens made the PDF take minutes
@@ -122,8 +122,10 @@ export function exportQuotePdf(opts: ExportOptions) {
   const orgLicense = opts.orgLicense || "";
   const orgAddress = opts.orgAddress || "";
   const orgLogo = opts.orgLogo || "";
-  const accent = opts.accent || "#2E75B6";
-  const accent2 = opts.accent2 || "#1f5d94";
+  // Only a real hex colour: these go into style attributes and <style> raw.
+  const hexOnly = (v?: string) => (typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim()) ? v.trim() : "");
+  const accent = hexOnly(opts.accent) || "#2E75B6";
+  const accent2 = hexOnly(opts.accent2) || "#1f5d94";
   const depositPct = typeof opts.depositPct === "number" ? opts.depositPct : 50;
   const validDays = typeof opts.quoteValidDays === "number" && opts.quoteValidDays > 0 ? opts.quoteValidDays : 30;
   const quoteTerms = (opts.quoteTerms || "").trim();

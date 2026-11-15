@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { generatePortalToken } from "@/lib/portal-session";
 import { portalRedeemUrl } from "@/lib/site-url";
 import { sendEmail } from "@/lib/email";
+import { escapeLike } from "@/lib/like-escape";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
     const { data: customers, error } = await supabase
       .from("customers")
       .select("id, org_id, name, email")
-      .ilike("email", email)
+      .ilike("email", escapeLike(email))
       .limit(10);
     if (error) {
       console.error("portal/request-link-email lookup error:", error);

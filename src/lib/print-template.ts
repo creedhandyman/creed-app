@@ -34,8 +34,9 @@ const ACCENT = "#2E75B6";
  * the document <head>.
  */
 export function printStyles(brand?: { accent?: string; accent2?: string }): string {
-  const accent = brand?.accent || ACCENT;
-  const accent2 = brand?.accent2 || shade(accent, -38);
+  const hex = (v?: string) => (typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim()) ? v.trim() : "");
+  const accent = hex(brand?.accent) || ACCENT;
+  const accent2 = hex(brand?.accent2) || shade(accent, -38);
   const grad = `linear-gradient(135deg, ${accent}, ${accent2})`;
   const ink = brandInk(accent);
   return `
@@ -477,7 +478,8 @@ function escape(s: string): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/'/g, "&#39;");
 }
 function escapeAttr(s: string): string {
   return escape(s).replace(/"/g, "&quot;");

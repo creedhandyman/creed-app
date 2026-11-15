@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as Body;
     const phoneInput = (body.phone || "").trim();
     const digits = normalizePhoneDigits(phoneInput);
-    if (digits.length < 7) {
+    if (digits.length < 10) {
       return NextResponse.json({ error: "Enter a valid phone number" }, { status: 400 });
     }
 

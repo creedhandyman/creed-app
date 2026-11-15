@@ -7,6 +7,8 @@ import { recordCustomerSmsConsent } from "@/lib/sms-consent-server";
 import { draftLeadQuote } from "@/lib/lead-draft";
 import { findReferrer, recordReferralLead } from "@/lib/referrals-server";
 import { ymdInZone } from "@/lib/dates";
+import { isSupabaseStorageUrl } from "@/lib/api-auth";
+import { escapeLike } from "@/lib/like-escape";
 import { clientIp, addressTag, memoryLimit, publicFormLimit, formLimitMessage } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -103,7 +105,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     const description = trim(body.description, 4000);
     // Photos are links the form uploaded — https only, a handful at most.
     const photos = (Array.isArray(body.photos) ? body.photos : [])
-      .filter((p): p is string => typeof p === "string" && /^https:\/\//i.test(p) && p.length <= 600)
+      .filter((p): p is string => typeof p === "string" && p.length <= 600 && !/["'<>\s]/.test(p) && isSupabaseStorageUrl(p))
       .slice(0, 12);
     // referrer_tech_id is a UUID of a profile row. We don't validate it
     // against the profiles table here — invalid values will simply not
@@ -172,7 +174,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
         .from("customers")
         .select("id")
         .eq("org_id", orgId)
-        .ilike("email", email)
+        .ilike("email", escapeLike(email))
         .limit(1);
       if (data?.length) customerId = data[0].id;
     }

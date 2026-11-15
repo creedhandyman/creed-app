@@ -67,6 +67,16 @@ export async function POST(req: NextRequest) {
         ? await stripe.subscriptions.retrieve(session.subscription)
         : (session.subscription as Stripe.Subscription);
 
+    // A customer MEMBERSHIP checkout is also a subscription session carrying
+    // an org_id. It is not the business's own Creed plan: syncing it here let
+    // a $1 membership mark an org "active" (paywall bypass), and a cancelled
+    // one mark another business "canceled". The webhook already skips these.
+    const sMeta = (session.metadata || {}) as Record<string, string>;
+    const subMeta = (sub.metadata || {}) as Record<string, string>;
+    if (sMeta.membership === "1" || subMeta.membership === "1" || sMeta.plan_id || subMeta.membership_plan_id) {
+      return NextResponse.json({ ok: false, reason: "not-a-creed-subscription" });
+    }
+
     // Session metadata is the most reliable — we stamped it ourselves in
     // create-checkout-session and it's available right here.
     const sessionOrgId = (session.metadata as Record<string, string> | null)?.org_id;

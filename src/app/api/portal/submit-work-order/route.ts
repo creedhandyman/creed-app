@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
 import { ymdInZone } from "@/lib/dates";
+import { isSupabaseStorageUrl } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
     const description = (body.description || "").trim();
     const addressId = (body.addressId || "").trim() || null;
     const photos = Array.isArray(body.photos)
-      ? body.photos.filter((p) => typeof p === "string").slice(0, 12)
+      ? body.photos.filter((p) => typeof p === "string" && p.length <= 600 && !/["'<>\s]/.test(p) && isSupabaseStorageUrl(p)).slice(0, 12)
       : [];
     if (!description) {
       return NextResponse.json({ error: "Describe what you need done" }, { status: 400 });
