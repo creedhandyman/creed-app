@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, PORTAL_COOKIE_NAME } from "@/lib/portal-session";
+import { ymdInZone } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
         "(address pending)"
       : "(no specific address)";
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = ymdInZone(Date.now()); // the business's date, not UTC's
     const { error: jobErr } = await supabase.from("jobs").insert({
       org_id: session.org_id,
       property: addressLine,

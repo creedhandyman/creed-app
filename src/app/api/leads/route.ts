@@ -6,6 +6,7 @@ import { applySmsConsent } from "@/lib/sms-consent";
 import { recordCustomerSmsConsent } from "@/lib/sms-consent-server";
 import { draftLeadQuote } from "@/lib/lead-draft";
 import { findReferrer, recordReferralLead } from "@/lib/referrals-server";
+import { ymdInZone } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 // The AI draft quote runs after the response (see `after` below) — a parse
@@ -200,7 +201,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     // Lead job. Free-text `property` and `client` fields stay populated
     // so existing print templates and Jobs-list rendering work unchanged.
     // The structured link lives at customer_id / address_id.
-    const today = new Date().toISOString().split("T")[0];
+    const today = ymdInZone(Date.now()); // the business's date, not UTC's
     const { data: jobRow, error: jobErr } = await supabase.from("jobs").insert({
       org_id: orgId,
       property: addressLine || street || "(address pending)",

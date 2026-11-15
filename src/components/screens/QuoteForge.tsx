@@ -74,6 +74,7 @@ import { GrizzFace } from "../Grizz";
 import ContactFound from "../ContactFound";
 import { residentContact } from "@/lib/resident";
 import type { FoundContact } from "@/lib/contact-extract";
+import { todayYmd } from "@/lib/schedule-notify";
 
 
 /** Sub-screen header colours = the hub card that opens them (Quick Quote gold,
@@ -1330,7 +1331,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
           client: data.client,
           ...(data.customer_id ? { customer_id: data.customer_id } : {}),
           ...(data.address_id ? { address_id: data.address_id } : {}),
-          job_date: new Date().toISOString().split("T")[0],
+          job_date: todayYmd(),
           rooms: JSON.stringify({
             inspection: {
               type: data.inspection_type || "move-out",
@@ -2032,7 +2033,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       identity: {
         editing: !!editingId, property: prop, client, customerId, addressId,
         createdBy: user.name, trade: dominantTrade(rooms),
-        today: new Date().toISOString().split("T")[0],
+        today: todayYmd(), // local date: after 7 PM Central, UTC is already tomorrow
         resident: residentPatch,
       },
     });

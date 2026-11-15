@@ -3,6 +3,7 @@ import { getAuthedProfile, serviceClient } from "@/lib/api-auth";
 import { prettyPhone } from "@/lib/sms-inbound";
 import { summarizeThreads } from "@/lib/sms-threads";
 import { openThread } from "@/lib/sms-threads-server";
+import { ymdInZone } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
       property: "(address pending)",
       client: name,
       customer_id: cust.id,
-      job_date: new Date().toISOString().split("T")[0],
+      job_date: ymdInZone(Date.now()),
       rooms: JSON.stringify({ leadDescription: description || "Texted the business number", leadPhotos: photos }),
       total: 0,
       total_labor: 0,

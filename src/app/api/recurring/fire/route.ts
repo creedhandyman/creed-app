@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { computeNextFire, recurringDueCutoff, recurringVisitDay, recurringVisitNote, type Cadence } from "@/lib/recurring";
 import { visitCadence } from "@/lib/memberships";
 import { cronAuth } from "@/lib/cron-auth";
+import { ymdInZone } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -267,7 +268,7 @@ export async function GET(req: NextRequest) {
           org_id: m.org_id,
           property: "",
           client: cust?.name || "",
-          job_date: now.toISOString().split("T")[0],
+          job_date: ymdInZone(now.getTime()),
           rooms: finalRoomsText,
           total: Number(totals.total ?? 0),
           total_labor: Number(totals.total_labor ?? 0),

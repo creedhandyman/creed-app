@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { readBlob } from "@/lib/job-blob";
+import { ymdInZone } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
   if (orgId instanceof NextResponse) return orgId;
 
   const supabase = serviceClient();
-  const today = new Date().toISOString().split("T")[0];
+  const today = ymdInZone(Date.now()); // after 7 PM Central, UTC is already tomorrow
 
   const [{ data: schedule, error: schedErr }, { data: jobs, error: jobsErr }] = await Promise.all([
     supabase
