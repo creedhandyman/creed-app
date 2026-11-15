@@ -171,10 +171,20 @@ export function nextCustomerSmsConsent(
   if (!head) return null;
   const p = customerSmsConsentOf(prev);
   if (mode === "form" && !head.granted && p) return null;
+  // A STOP reply outlasts a checkbox: the lead / booking / approval forms
+  // must not switch texts back on for that number (they did, 2026-11-14).
+  // Only the customer's START reply or the owner ("set") does.
+  if (mode === "form" && isStopReply(p) && (!p?.phone || !head.phone || p.phone === head.phone)) return null;
   const history = p
     ? [cleanEntry(p) as SmsConsentEntry, ...(p.history || [])].slice(0, CONSENT_HISTORY_MAX)
     : [];
   return history.length ? { ...head, history } : head;
+}
+
+/** The customer replied STOP to a text. Their own "no" to the carrier: only
+ *  their START reply or the owner recording a new answer undoes it. */
+export function isStopReply(e: { granted?: unknown; source?: unknown } | null | undefined): boolean {
+  return !!e && e.granted === false && typeof e.source === "string" && /^replied stop$/i.test(e.source.trim());
 }
 
 export interface AutoTextConsent {
@@ -204,6 +214,10 @@ export function autoTextConsent(
   for (const r of jobRooms) {
     const x = smsConsentOf(r);
     if (x?.granted && (!j || when(x.at) > when(j.at))) j = x;
+  }
+  // A STOP reply beats a newer "yes" on a job (a web form box).
+  if (c && isStopReply(c)) {
+    return { ok: false, via: "customer", record: c, reason: "This customer replied STOP. They can text START to get texts again." };
   }
   if (j && (!c || when(j.at) > when(c.at))) return { ok: true, via: "job", record: cleanEntry(j) };
   if (c) {
