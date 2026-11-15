@@ -10,6 +10,7 @@ import {
   isBankPaymentPending,
   recordJobRefund,
   refundJobShareCents,
+  ownExcess,
 } from "@/lib/payment-fulfillment";
 
 // ── A tiny in-memory stand-in for the supabase-js query builder ─────────────
@@ -353,12 +354,97 @@ test("an untipped payment doesn't write tip_cents (works before the migration)",
   expect("tip_cents" in tables.payments[0]).toBe(false);
 });
 
-test("refund on a tipped charge comes off the job part first, capped at it", () => {
+test("a refund the owner makes on a tipped charge comes off the tip first", () => {
   // $1,150 charge with a $150 tip.
-  expect(refundJobShareCents(30000, 115000, 15000)).toBe(30000);
-  expect(refundJobShareCents(115000, 115000, 15000)).toBe(100000);
-  expect(refundJobShareCents(5000, 115000, 0)).toBe(5000);
+  expect(refundJobShareCents(15000, 115000, 15000)).toBe(0);      // just the tip: the job stays paid
+  expect(refundJobShareCents(5000, 115000, 15000)).toBe(0);       // part of the tip
+  expect(refundJobShareCents(30000, 115000, 15000)).toBe(15000);  // tip, then $150 of the job
+  expect(refundJobShareCents(115000, 115000, 15000)).toBe(100000); // everything: exactly the job part
+  expect(refundJobShareCents(5000, 115000, 0)).toBe(5000);        // no tip: the whole refund
   expect(refundJobShareCents(-5, 115000, 15000)).toBe(0);
+});
+
+test("the automatic overpayment refund is job money even on a tipped charge", () => {
+  // $300 of the $1,150 charge was refunded automatically (overpayment).
+  expect(refundJobShareCents(30000, 115000, 15000, 30000)).toBe(30000);
+  // …then the owner also refunds the $150 tip: nothing more comes off the job.
+  expect(refundJobShareCents(45000, 115000, 15000, 30000)).toBe(30000);
+  // …then $100 more: that part is job money.
+  expect(refundJobShareCents(55000, 115000, 15000, 30000)).toBe(40000);
+});
+
+test("refunding only the tip leaves a paid job paid", async () => {
+  const { db, tables } = fakeDb({
+    jobs: [job({ status: "paid", amount_paid: 1000, paid_at: "2026-11-01T00:00:00Z" })],
+    payments: [{ id: "p1", org_id: ORG, job_id: JOB, amount: 1000, kind: "payment", stripe_session_id: "cs_a", stripe_payment_intent_id: "pi_a", platform_fee_cents: 50, tip_cents: 15000 }],
+  });
+  const asked = jest.fn(async () => 0);
+  const r = await recordJobRefund(db, { paymentIntentId: "pi_a", chargeCents: 115000, refundedCents: 15000, fullyRefunded: false, overpaymentRefundedCents: asked });
+  expect(asked).toHaveBeenCalledTimes(1); // the charge has a tip, so the refunds are looked up
+  expect(r).toMatchObject({ ok: true, amountPaid: 1000, reverted: false });
+  expect(tables.jobs[0]).toMatchObject({ status: "paid", amount_paid: 1000 });
+
+  // An untipped charge never asks Stripe.
+  const plain = fakeDb({
+    jobs: [job({ status: "paid", amount_paid: 1000 })],
+    payments: [{ id: "p1", org_id: ORG, job_id: JOB, amount: 1000, kind: "payment", stripe_session_id: "cs_a", stripe_payment_intent_id: "pi_a", platform_fee_cents: 50 }],
+  });
+  const never = jest.fn(async () => 0);
+  await recordJobRefund(plain.db, { paymentIntentId: "pi_a", chargeCents: 100000, refundedCents: 20000, fullyRefunded: false, overpaymentRefundedCents: never });
+  expect(never).not.toHaveBeenCalled();
+  expect(plain.tables.jobs[0]).toMatchObject({ status: "invoiced", amount_paid: 800 });
+});
+
+// ── Two charges landing together ────────────────────────────────────────────
+
+test("two cards at once: paid-to-date ends at the ledger's sum, whichever write lands last", async () => {
+  const { db, tables } = fakeDb({ jobs: [job()] });
+  // Card B's row lands in the ledger just after card A summed it (A read
+  // $400) and before A writes: A's write would leave paid-to-date at $400.
+  const realFrom = (db as unknown as { from: (t: string) => unknown }).from;
+  let sums = 0;
+  (db as unknown as { from: (t: string) => unknown }).from = (table: string) => {
+    const b = realFrom(table) as { select: (c?: string) => unknown; then: unknown };
+    if (table === "payments") {
+      const sel = b.select.bind(b);
+      b.select = (c?: string) => {
+        const out = sel(c);
+        if (c === "*" && ++sums === 1) {
+          // Slip card B in right after A's first SUM is taken.
+          const then = (out as { then: (res: (v: unknown) => unknown) => unknown }).then.bind(out);
+          (out as { then: unknown }).then = (res: (v: unknown) => unknown) => then((v: unknown) => {
+            tables.payments.push({ id: "rowB", org_id: ORG, job_id: JOB, amount: 600, kind: "payment", stripe_session_id: "cs_b", stripe_payment_intent_id: "pi_cs_b", platform_fee_cents: 50 });
+            return res(v);
+          });
+        }
+        return out;
+      };
+    }
+    return b;
+  };
+  const r = await fulfillJobPayment(db, charge("cs_a", 400, { kind: "deposit" }));
+  expect(r.ok && r.result).toMatchObject({ amountPaid: 1000, fullyPaid: true });
+  expect(tables.jobs[0]).toMatchObject({ amount_paid: 1000, status: "paid" });
+});
+
+test("two cards at once, both for the full amount: only the later charge is refunded", async () => {
+  const refundExcess = jest.fn(async () => true);
+  // Both rows are already in the ledger when each call sums it (the worst
+  // case: before, each saw "over by $1,000" and each refunded $1,000).
+  const { db } = fakeDb({
+    jobs: [job()],
+    payments: [
+      { id: "a", org_id: ORG, job_id: JOB, amount: 1000, kind: "payment", stripe_session_id: "cs_a", stripe_payment_intent_id: "pi_cs_a", platform_fee_cents: 50, created_at: "2026-11-14T18:00:00.100000+00:00" },
+      { id: "b", org_id: ORG, job_id: JOB, amount: 1000, kind: "payment", stripe_session_id: "cs_b", stripe_payment_intent_id: "pi_cs_b", platform_fee_cents: 50, created_at: "2026-11-14T18:00:00.200000+00:00" },
+    ],
+  });
+  expect(ownExcess([{ stripe_session_id: "cs_a", amount: 1000 }, { stripe_session_id: "cs_b", amount: 1000 }], "cs_a", 1000, 1000, 2000)).toBe(0);
+  expect(ownExcess([{ stripe_session_id: "cs_a", amount: 1000 }, { stripe_session_id: "cs_b", amount: 1000 }], "cs_b", 1000, 1000, 2000)).toBe(1000);
+  // A refund already on the books isn't refunded again.
+  expect(ownExcess([{ stripe_session_id: "cs_a", amount: 1000 }, { stripe_session_id: "cs_b", amount: 1000 }, { stripe_session_id: "refund_pi", amount: -1000 }], "cs_b", 1000, 1000, 1000)).toBe(0);
+  // Ledger unreadable → the whole-job figure, capped at this charge.
+  expect(ownExcess(null, "cs_b", 300, 1000, 1500)).toBe(300);
+  void db; void refundExcess;
 });
 
 // ── Bank transfer still clearing ────────────────────────────────────────────

@@ -362,6 +362,14 @@ export async function POST(req: NextRequest) {
             refundedCents: charge.amount_refunded,
             fullyRefunded: charge.refunded,
             originalFeeCents: typeof charge.application_fee_amount === "number" ? charge.application_fee_amount : null,
+            // Only read (one Stripe call) when the charge carried a tip: which
+            // of its refunds were our automatic overpayment refund.
+            overpaymentRefundedCents: async () => {
+              const list = await stripe.refunds.list({ charge: charge.id, limit: 100 });
+              return list.data
+                .filter((rf) => rf.metadata?.creed_reason === "overpayment" && rf.status !== "failed" && rf.status !== "canceled")
+                .reduce((s, rf) => s + (rf.amount || 0), 0);
+            },
           });
         }
         break;

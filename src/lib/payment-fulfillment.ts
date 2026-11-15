@@ -46,6 +46,10 @@ export interface RecordPaymentResult {
    *  not settled; it settles when it is completed (lib/job-transition). */
   settled: boolean;
   alreadyRecorded: boolean;
+  /** Dollars of THIS charge that went past the job total. When two charges
+   *  land together only the later one carries the extra (see ownExcess), so
+   *  the two can't both be refunded. */
+  ownExcess: number;
   /** Dollars refunded right away because this charge overpaid the job. */
   refundedExcess?: number;
 }
@@ -101,12 +105,16 @@ export async function recordJobPayment(
     .from("jobs").select("amount_paid").eq("id", jobId).maybeSingle();
   const priorPaid = paidErr ? 0 : Number(paidRow?.amount_paid) || 0;
 
+  const total = Math.round((Number(p.jobTotal) || 0) * 100) / 100;
+
   // Paid-to-date = SUM(ledger). Fees likewise, so refund proration stays honest.
-  let amountPaid: number;
-  let ledgerFeeCents: number | null = null;
-  if (ledgerOk) {
-    const sums = await sumLedger(supabase, jobId);
-    if (sums) {
+  // `figure` turns one reading of the ledger into what the job row should say.
+  const figure = (sums: LedgerSums | null) => {
+    let amountPaid: number;
+    let ledgerFeeCents: number | null = null;
+    if (!ledgerOk) {
+      amountPaid = paidNow;
+    } else if (sums) {
       amountPaid = sums.amountPaid;
       ledgerFeeCents = sums.feeCents;
     } else {
@@ -114,54 +122,118 @@ export async function recordJobPayment(
       // rather than clobbering it with just this charge (would lose a deposit).
       amountPaid = priorPaid + (alreadyRecorded ? 0 : paidNow);
     }
-  } else {
-    amountPaid = paidNow;
-  }
-  amountPaid = Math.round(amountPaid * 100) / 100;
-
-  const total = Math.round((Number(p.jobTotal) || 0) * 100) / 100;
-  // A deposit records against the job but must NOT mark it paid — only a
-  // paid-to-date that covers the total flips the status.
-  const fullyPaid = coversTotal(amountPaid, total);
-  const balance = Math.round(Math.max(0, total - amountPaid) * 100) / 100;
-
-  const patch: Record<string, unknown> = {
-    amount_paid: amountPaid,
-    // A cash/check payment (no intent) must not wipe a card payment's id —
-    // the refund webhook relies on it.
-    ...(paymentIntentId ? { stripe_payment_intent_id: paymentIntentId } : {}),
-    platform_fee_cents:
-      ledgerFeeCents ?? (Number(p.jobFeeCents) || 0) + (alreadyRecorded ? 0 : platformFeeCents),
+    amountPaid = Math.round(amountPaid * 100) / 100;
+    // A deposit records against the job but must NOT mark it paid — only a
+    // paid-to-date that covers the total flips the status.
+    const fullyPaid = coversTotal(amountPaid, total);
+    const patch: Record<string, unknown> = {
+      amount_paid: amountPaid,
+      // A cash/check payment (no intent) must not wipe a card payment's id —
+      // the refund webhook relies on it.
+      ...(paymentIntentId ? { stripe_payment_intent_id: paymentIntentId } : {}),
+      platform_fee_cents:
+        ledgerFeeCents ?? (Number(p.jobFeeCents) || 0) + (alreadyRecorded ? 0 : platformFeeCents),
+    };
+    // Paid in full BEFORE the work is done is a prepayment, not a finished job:
+    // flipping it to "paid" took it off the Active tab and the crew's lists and
+    // queued the review request before anyone had shown up. It stays where it
+    // is and settles when the job is completed (lib/job-transition).
+    const settled = fullyPaid && (!!p.forcePaid || p.jobStatus == null || workIsDone(p.jobStatus));
+    if (settled) {
+      patch.status = "paid";
+      patch.paid_at = p.jobPaidAt || new Date().toISOString();
+    }
+    return { amountPaid, ledgerFeeCents, fullyPaid, settled, patch, sums };
   };
-  // Paid in full BEFORE the work is done is a prepayment, not a finished job:
-  // flipping it to "paid" took it off the Active tab and the crew's lists and
-  // queued the review request before anyone had shown up. It stays where it
-  // is and settles when the job is completed (lib/job-transition).
-  const settled = fullyPaid && (!!p.forcePaid || p.jobStatus == null || workIsDone(p.jobStatus));
-  if (settled) {
-    patch.status = "paid";
-    patch.paid_at = p.jobPaidAt || new Date().toISOString();
-  }
 
-  const error = await patchJob(supabase, jobId, orgId, patch);
+  let cur = figure(ledgerOk ? await sumLedger(supabase, jobId) : null);
+  const error = await patchJob(supabase, jobId, orgId, cur.patch);
   if (error) throw new Error(error);
 
-  return { amountPaid, total, balance, fullyPaid, settled, alreadyRecorded };
+  // Two charges landing at once (two cards, or a card while cash is being
+  // recorded): each sums the ledger, then writes. The one that summed FIRST
+  // can write LAST, leaving paid-to-date short by the other charge. So read
+  // the ledger again after writing, and write again while it says something
+  // else than what we put on the job. Whoever writes last always checks.
+  if (ledgerOk) {
+    for (let i = 0; i < 3; i++) {
+      const again = await sumLedger(supabase, jobId);
+      if (!again) break;
+      if (Math.abs(again.amountPaid - cur.amountPaid) < 0.005 && again.feeCents === cur.ledgerFeeCents) {
+        cur = { ...cur, sums: again };
+        break;
+      }
+      cur = figure(again);
+      const err2 = await patchJob(supabase, jobId, orgId, cur.patch);
+      if (err2) throw new Error(err2);
+    }
+  }
+
+  const { amountPaid, fullyPaid, settled } = cur;
+  const balance = Math.round(Math.max(0, total - amountPaid) * 100) / 100;
+  return {
+    amountPaid, total, balance, fullyPaid, settled, alreadyRecorded,
+    ownExcess: ownExcess(cur.sums?.rows ?? null, sessionId, paidNow, total, amountPaid),
+  };
+}
+
+/**
+ * How many dollars of ONE charge went past the job total. Charges are taken
+ * in the order they were recorded: the running total through this charge,
+ * less the job total, capped at this charge (and at what the whole ledger is
+ * over by, so a refund already on the books isn't refunded again). Two
+ * charges that land together both read the same order, so only the LATER one
+ * carries the extra — before this each saw "over by $X" and each refunded $X,
+ * handing the customer all their money back.
+ */
+export function ownExcess(
+  rows: LedgerRow[] | null,
+  sessionId: string,
+  paidNow: number,
+  total: number,
+  amountPaid: number,
+): number {
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const cap = (over: number) => r2(Math.max(0, Math.min(over, paidNow)));
+  if (!(total > 0)) return 0;
+  const overall = r2(amountPaid - total);
+  const mine = rows ? rows.findIndex((r) => r.stripe_session_id === sessionId) : -1;
+  if (!rows || mine < 0) return cap(overall); // ledger not readable: the old whole-job rule
+  const through = rows.slice(0, mine + 1).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  return cap(Math.min(r2(through - total), overall));
 }
 
 // ── Shared ledger plumbing (payments AND refunds) ───────────────────────────
 
-/** SUM of a job's ledger rows (amount, platform fee). null = the read failed. */
+export interface LedgerRow {
+  id?: string | null;
+  amount?: number | string | null;
+  platform_fee_cents?: number | null;
+  stripe_session_id?: string | null;
+  created_at?: string | null;
+}
+interface LedgerSums { amountPaid: number; feeCents: number; rows: LedgerRow[] }
+
+/** A job's ledger rows in the order they were recorded (created_at, then id
+ *  so two callers always agree), with their SUMs. null = the read failed. */
 async function sumLedger(
   supabase: SupabaseClient,
   jobId: string,
-): Promise<{ amountPaid: number; feeCents: number } | null> {
-  const { data: rows, error } = await supabase
-    .from("payments").select("amount, platform_fee_cents").eq("job_id", jobId);
-  if (error || !rows) return null;
+): Promise<LedgerSums | null> {
+  const { data, error } = await supabase
+    .from("payments").select("*").eq("job_id", jobId);
+  if (error || !data) return null;
+  const rows = (data as LedgerRow[]).map((r, i) => ({ r, i })).sort((a, b) => {
+    const ta = a.r.created_at || "", tb = b.r.created_at || "";
+    if (ta && tb && ta !== tb) return ta < tb ? -1 : 1;
+    const ia = a.r.id || "", ib = b.r.id || "";
+    if (ta && tb && ia && ib && ia !== ib) return ia < ib ? -1 : 1;
+    return a.i - b.i;
+  }).map((x) => x.r);
   return {
     amountPaid: Math.round(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0) * 100) / 100,
     feeCents: rows.reduce((s, r) => s + (Number(r.platform_fee_cents) || 0), 0),
+    rows,
   };
 }
 
@@ -289,9 +361,12 @@ export async function fulfillJobPayment(
   // the Stripe idempotency key backs that up). The charge.refunded webhook then
   // writes the negative ledger row, bringing amount_paid back to the total.
   let refundedExcess = 0;
+  // What the whole job is over by (for the owner's alert) vs what THIS charge
+  // is over by (what gets refunded): when two cards land together only the
+  // later charge carries the extra, so they can't both be refunded.
   const excess = Math.round((result.amountPaid - result.total) * 100) / 100;
-  if (!result.alreadyRecorded && p.refundExcess && p.paymentIntentId && result.total > 0 && excess > 0.01) {
-    const amountCents = Math.round(Math.min(excess, p.paidNow) * 100);
+  if (!result.alreadyRecorded && p.refundExcess && p.paymentIntentId && result.total > 0 && result.ownExcess > 0.01) {
+    const amountCents = Math.round(result.ownExcess * 100);
     if (amountCents > 0) {
       try {
         const ok = await p.refundExcess({
@@ -380,6 +455,10 @@ export interface RefundInput {
    *  is already cut by an earlier refund, so prorating that again (a second
    *  partial refund, or a resent event) took the fee down twice. */
   originalFeeCents?: number | null;
+  /** Cents of this charge's refunds that were Creed's own automatic
+   *  OVERPAYMENT refund (Stripe refund metadata creed_reason "overpayment").
+   *  Asked only when the charge carried a tip — see refundJobShareCents. */
+  overpaymentRefundedCents?: () => Promise<number>;
 }
 
 export type RefundResult =
@@ -450,7 +529,12 @@ export async function recordJobRefund(
       .from("payments").select("tip_cents").eq("id", chargeRow.id).maybeSingle();
     if (!tipErr) tipOnCharge = Math.max(0, Number(tipRow?.tip_cents) || 0);
   }
-  const refunded = refundJobShareCents(r.refundedCents, r.chargeCents, tipOnCharge) / 100;
+  let overpayCents = 0;
+  if (tipOnCharge > 0 && r.overpaymentRefundedCents) {
+    try { overpayCents = Math.max(0, Math.round(Number(await r.overpaymentRefundedCents()) || 0)); }
+    catch (e) { console.error("[refund] couldn't read the charge's refunds; treating it as a refund the owner made:", e); }
+  }
+  const refunded = refundJobShareCents(r.refundedCents, r.chargeCents, tipOnCharge, overpayCents) / 100;
 
   // Prorate THIS charge's own fee — never the job's cumulative fee,
   // which on a multi-payment job also contains other charges' fees.
@@ -514,17 +598,24 @@ export async function recordJobRefund(
 
 /**
  * How much of a refund comes off the job's paid-to-date, in cents. With no tip
- * it's the whole refund. With a tip, the refund counts against the job part
- * first and is capped at it: a full refund removes exactly the job amount (the
- * tip was never counted toward paid-to-date), and the automatic overpayment
- * refund (always job money) comes off in full.
+ * it's the whole refund. With a tip:
+ *   - a refund the OWNER makes comes off the tip first (the tip was never
+ *     counted toward paid-to-date), and only what's left comes off the job.
+ *     Refunding just the tip used to count against the job, so a paid job
+ *     dropped back to "invoiced" with the tip amount showing as owed;
+ *   - Creed's own automatic overpayment refund (`overpayCents`) is always job
+ *     money and comes off in full;
+ *   - never more than the job part of the charge: a full refund removes
+ *     exactly the job amount.
  */
-export function refundJobShareCents(refundedCents: number, chargeCents: number, tipCents: number): number {
+export function refundJobShareCents(refundedCents: number, chargeCents: number, tipCents: number, overpayCents = 0): number {
   const refunded = Math.max(0, Math.round(Number(refundedCents) || 0));
   const charge = Math.max(0, Math.round(Number(chargeCents) || 0));
   const tip = Math.max(0, Math.round(Number(tipCents) || 0));
   if (!tip || charge <= 0 || tip >= charge) return refunded;
-  return Math.min(refunded, charge - tip);
+  const over = Math.min(refunded, Math.max(0, Math.round(Number(overpayCents) || 0)));
+  const byOwner = refunded - over;
+  return Math.min(charge - tip, over + Math.max(0, byOwner - tip));
 }
 
 /**
