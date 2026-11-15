@@ -6,6 +6,7 @@ import { autoTextConsent, residentTextConsent } from "@/lib/sms-consent";
 import { loadCustomersWithConsent } from "@/lib/sms-consent-server";
 import { normalizePhone, sendSms, smsConfigured } from "@/lib/sms";
 import { cronAuth } from "@/lib/cron-auth";
+import { claimReviewRequest, failStaleClaims } from "@/lib/review-claim";
 
 export const dynamic = "force-dynamic";
 
@@ -216,10 +217,13 @@ async function handleDispatch(req: NextRequest): Promise<NextResponse> {
   );
 
   const nowIso = new Date().toISOString();
+  // A run that died mid-send left its claims behind: close those out first.
+  await failStaleClaims(supabase).catch(() => 0);
   const { data: pending, error: pErr } = await supabase
     .from("review_requests")
     .select("id, org_id, job_id, customer_id, channel")
     .eq("status", "scheduled")
+    .is("sent_at", null)
     .lte("scheduled_for", nowIso)
     .order("scheduled_for", { ascending: true })
     .limit(MAX_PER_RUN);
@@ -256,6 +260,9 @@ async function handleDispatch(req: NextRequest): Promise<NextResponse> {
 
   const results: DispatchResult[] = [];
   for (const row of rows) {
+    // Claim it first: an overlapping run that read the same row gets nothing
+    // back here and skips it, so the customer is asked once (lib/review-claim).
+    if (!(await claimReviewRequest(supabase, row.id, new Date().toISOString()))) continue;
     try {
       const r = await dispatchOne(supabase, row, orgsById, jobsById, customersById);
       results.push(r);
