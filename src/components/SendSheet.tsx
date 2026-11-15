@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Icon } from "./Icon";
 import { t } from "@/lib/i18n";
+import { smsHref } from "@/lib/job-send";
+import { TIER_NAME, type SendTierKey } from "@/lib/tiers";
 
 /**
  * Bottom sheet for sending something to a customer from the owner's own
@@ -25,6 +27,24 @@ export interface SendTierOption {
   /** The client message for this choice (price line differs). */
   message: string;
 }
+/** The send menu's tier row for a tiered quote — ONE builder for both Send
+ *  buttons (QuoteForge + Jobs). `choices` from lib/tiers sendTierChoices;
+ *  `msgFor` turns a price line into the full message; `allLine` is the
+ *  all-tiers price line. */
+export function tierSendOptions(
+  choices: { key: SendTierKey; total: number | null }[],
+  msgFor: (line: string) => string,
+  allLine: string,
+): SendTierOption[] {
+  return choices.map((c) => c.key === "all"
+    ? { key: c.key, label: t("send.allTiers"), message: msgFor(allLine) }
+    : {
+        key: c.key,
+        label: `${t("send.tierOnly").replace("{name}", TIER_NAME[c.key])} · $${Math.round(c.total ?? 0).toLocaleString()}`,
+        message: msgFor(`Total: $${(c.total ?? 0).toFixed(2)}`),
+      });
+}
+
 export interface SendRecipient {
   label: string;
   phone: string;
@@ -66,13 +86,12 @@ export default function SendSheet({ title, phone: phoneProp = "", email: emailPr
   useEffect(() => setMsg(startMsg), [startMsg]);
   const toast = useStore.getState().showToast;
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
-  const digits = phone.replace(/[^\d+]/g, "");
 
   const sent = (via: "text" | "email" | "copy" | "share") => { onSent(via, to, tierOpt ? tierOpt.key : null); onClose(); };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(5,5,12,.72)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={(e) => e.stopPropagation()} className="cd" style={{ width: "100%", maxWidth: 520, borderRadius: "18px 18px 0 0", padding: "16px 16px calc(16px + env(safe-area-inset-bottom))", margin: 0 }}>
+    <div onClick={onClose} className="sheet-overlay">
+      <div onClick={(e) => e.stopPropagation()} className="sheet cd" style={{ margin: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <h3 style={{ fontFamily: "Oswald", fontSize: 18, textTransform: "uppercase" }}>{title}</h3>
           <button className="iconbtn" onClick={onClose} aria-label={t("common.close")}><Icon name="close" size={16} /></button>
@@ -130,7 +149,7 @@ export default function SendSheet({ title, phone: phoneProp = "", email: emailPr
         <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={7}
           style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 10, resize: "vertical", fontFamily: "Source Sans 3, sans-serif" }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-          <a className="bb" href={`sms:${digits}?&body=${encodeURIComponent(msg)}`} onClick={() => sent("text")}
+          <a className="bb" href={smsHref(phone, msg)} onClick={() => sent("text")}
             style={{ textAlign: "center", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: 11 }}>
             <Icon name="send" size={15} color="#fff" /> {t("send.text")}
           </a>

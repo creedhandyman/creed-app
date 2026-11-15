@@ -1,6 +1,6 @@
 // The tier builder's AI call (see tier-build.ts for what it asks and how the
-// reply is read). Same request shape as AI Assist: Sonnet 5.5, the cached
-// pricing rules + the builder addendum, logged in ai_usage as "tiers".
+// reply is read). Sonnet 5.5, the cached pricing rules (same first block as
+// the parse) + the builder addendum, logged in ai_usage as "tiers".
 
 import { apiFetch } from "./api";
 import { AI_SYSTEM_PROMPT_BASE, aiText } from "./parser";
@@ -22,8 +22,12 @@ export async function aiBuildTiers(
         thinking: { type: "between_tools" },
         output_config: { effort: "high" },
         max_tokens: 4000,
+        // BASE alone first, exactly like the parse's first block, so this
+        // call reads the cache entry the parse wrote seconds earlier; the
+        // builder addendum is its own (small) cached block after it.
         system: [
-          { type: "text", text: AI_SYSTEM_PROMPT_BASE + TIER_BUILD_ADDENDUM, cache_control: { type: "ephemeral" } },
+          { type: "text", text: AI_SYSTEM_PROMPT_BASE, cache_control: { type: "ephemeral" } },
+          { type: "text", text: TIER_BUILD_ADDENDUM, cache_control: { type: "ephemeral" } },
           {
             type: "text",
             text:

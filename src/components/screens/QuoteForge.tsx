@@ -12,7 +12,7 @@ import type { Room, RoomItem, Material, JobDiscount, Job } from "@/lib/types";
 import { itemInTier, itemTiers, itemLevel, tiersForLevel, shouldOfferTiers, tiersDefaultOn, sendTierChoices, sentTierValue, type SendTierKey, sharedSuppliesLines, tierPriceLine, TIER_NAME, TIER_NAMES, RECOMMENDED_TIER, type TierKey } from "@/lib/tiers";
 import { buildAssistJobContext, type AssistInspection } from "@/lib/assist-context";
 import { applyAssistOps, optionDiffSummary, type AssistAdd, type AssistPatch } from "@/lib/assist-ops";
-import { quoteHasTierSplit } from "@/lib/tier-build";
+import { quoteHasTierSplit, appendRooms } from "@/lib/tier-build";
 import { aiBuildTiers } from "@/lib/tier-build-client";
 import {
   readPdf,
@@ -56,7 +56,7 @@ import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
 import { getUsage, incrementUsage } from "@/lib/inspection-usage";
 import { stripAiHrs } from "@/lib/ai-hours";
-import SendSheet, { type SendTierOption } from "../SendSheet";
+import SendSheet, { tierSendOptions, type SendTierOption } from "../SendSheet";
 import { patchBlob } from "@/lib/job-write-client";
 import { markQuoteSent } from "@/lib/quote-send";
 import { estimateDays, planningCrew } from "@/lib/job-duration";
@@ -629,7 +629,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setCustomWorkOrder(d.customWorkOrder ?? null);
       setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
       setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
-      setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true;
+      setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true; cancelTierBuild();
       setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
       setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
       setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
@@ -690,7 +690,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setCustomWorkOrder(d.customWorkOrder ?? null);
         setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
         setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
-        setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true;
+        setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true; cancelTierBuild();
         setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
         setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
         setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
@@ -777,6 +777,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // Pre-load job data when editing
   useEffect(() => {
     if (!editJobId) return;
+    // Opening a saved quote: a tier build still running for the previous
+    // quote must not land in this one.
+    cancelTierBuild();
     const job = jobs.find((j) => j.id === editJobId);
     if (!job) return;
 
@@ -1108,6 +1111,11 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // Adds go on top of whatever is on screen when the answer lands (the owner
   // may have kept editing); nothing existing is changed. Undo = the AI Assist
   // undo button.
+  // Pricing as of the LATEST render — the build's undo snapshot is taken when
+  // its answer lands, not when it started (the owner may change a rate or
+  // discount in between).
+  const latestPricingRef = useRef({ laborRate, discount, minLaborHours, taxMode });
+  latestPricingRef.current = { laborRate, discount, minLaborHours, taxMode };
   const runTierBuild = async (base: Room[]) => {
     const seq = ++tierBuildSeq.current;
     setTierBuild({ state: "running" });
@@ -1126,13 +1134,18 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       return;
     }
     const current = roomsRef.current;
-    setAssistUndo({ rooms: current, tieredQuote: true, tierNames, laborRate, discount, minLaborHours, taxMode });
-    const applied = applyAssistOps(current, { add: r.adds }, { newId: () => crypto.randomUUID().slice(0, 8), defaultAddTiers: null });
-    setRooms(validateQuote(applied.rooms, { skipCaps: true }));
+    setAssistUndo({ rooms: current, tieredQuote: true, tierNames, ...latestPricingRef.current });
+    // The new lines are FRESH AI output: validate them on their own with the
+    // AI-defense caps ON (the existing lines were already validated +
+    // calibrated, so they keep skipCaps), then append.
+    const fresh = validateQuote(
+      applyAssistOps([], { add: r.adds }, { newId: () => crypto.randomUUID().slice(0, 8), defaultAddTiers: null }).rooms,
+    );
+    setRooms(validateQuote(appendRooms(current, fresh), { skipCaps: true }));
     setTieredQuote(true);
     setTierBuild(null);
     const n = r.adds.length;
-    useStore.getState().showToast(`Added ${n} Complete / Premium option${n === 1 ? "" : "s"} — check them before sending`, "success");
+    useStore.getState().showToast(t(n === 1 ? "qf.tiers.added1" : "qf.tiers.addedN").replace("{n}", String(n)), "success");
   };
   // After the AI builds a new quote: tiers per the default rule, and the
   // builder when every line came back must-fix.
@@ -1946,7 +1959,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   const headlineHrs = tieredQuote ? tierBreakdown[headlineKey].hrs : th;
   // "Has the user differentiated the options yet" — true once any line is not
   // in all three options (membership set ≠ {base,better,best}).
-  const hasSplit = all.some((i) => itemTiers(i).length !== 3);
+  const hasSplit = quoteHasTierSplit(rooms);
 
   const issues = classify(rooms);
   const guide = makeGuide(rooms);
@@ -1958,6 +1971,12 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // resetting and jumping to Jobs. Resolves the saved job's id, or null if it
   // didn't save (validation, cancelled confirm, or a failed write).
   const saveJob = async (opts?: { stay?: boolean }): Promise<string | null> => {
+    // The tier builder is still adding Complete / Premium lines: saving (or
+    // sending) now would put out a one-price quote that changes seconds later.
+    if (tierBuild?.state === "running") {
+      useStore.getState().showToast(t("qf.tiers.wait"), "info");
+      return null;
+    }
     if (!prop.trim()) {
       useStore.getState().showToast("Enter a property address", "warning");
       return null;
@@ -2974,23 +2993,23 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(46,117,182,.5)", background: "rgba(46,117,182,.10)", fontSize: 13, lineHeight: 1.45 }}>
             {tierBuild?.state === "running" ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Icon name="sparkle" size={14} /> Building Complete and Premium options for this scope…
+                <Icon name="sparkle" size={14} /> {t("qf.tiers.building")}
               </span>
             ) : (
               <>
                 <div>
-                  Every line is must-fix, so Essential, Complete and Premium all cost the same. Until a line moves up a tier, the customer sees <b>one price</b>.
-                  {tierBuild?.state === "failed" && <span style={{ color: "var(--color-warning, #f5b400)" }}> Couldn&apos;t build tiers just now — try again.</span>}
+                  {t("qf.tiers.noSplit")}
+                  {tierBuild?.state === "failed" && <span style={{ color: "var(--color-warning, #f5b400)" }}> {t("qf.tiers.failed")}</span>}
                 </div>
                 <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                   <button className="bb" style={{ fontSize: 12.5, padding: "5px 12px", display: "inline-flex", alignItems: "center", gap: 5 }}
                     disabled={rooms.every((r) => r.items.length === 0)}
                     onClick={() => { void runTierBuild(rooms); }}>
-                    <Icon name="sparkle" size={13} color="#fff" /> Build tiers with AI
+                    <Icon name="sparkle" size={13} color="#fff" /> {t("qf.tiers.build")}
                   </button>
                   <button className="bo" style={{ fontSize: 12.5, padding: "5px 12px" }}
                     onClick={() => { tierChoiceRef.current = true; cancelTierBuild(); setTieredQuote(false); }}>
-                    Use one price
+                    {t("qf.tiers.onePrice")}
                   </button>
                 </div>
               </>
@@ -2999,7 +3018,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         )}
         {!tieredQuote && tierBuild?.state === "tooSmall" && (
           <div className="dim" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.45 }}>
-            Too small to tier{tierBuild.reason ? ` — ${tierBuild.reason}` : " — nothing genuine to add for Complete or Premium"}. This quote goes out as one price.
+            {t("qf.tiers.tooSmall").replace("{reason}", tierBuild.reason || t("qf.tiers.tooSmallDefault"))}
           </div>
         )}
         {tieredQuote && hasSplit && (
@@ -3670,7 +3689,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                   const optsOn = parsed.setOptions === true || (parsed.setOptions === false && !activeScope)
                     ? parsed.setOptions
                     : (tiersTouched > 0 && !tieredQuote ? true : undefined);
-                  if (optsOn !== undefined) tierChoiceRef.current = true;
+                  if (optsOn !== undefined) { tierChoiceRef.current = true; cancelTierBuild(); }
                   if (optsOn !== undefined && optsOn !== tieredQuote) {
                     setTieredQuote(optsOn);
                     summary.push(optsOn ? "tiers on" : "tiers off");
@@ -3752,7 +3771,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             style={{ fontSize: 12, padding: "3px 10px", marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }}
             onClick={() => {
               const u = assistUndo;
-              setRooms(u.rooms); setTieredQuote(u.tieredQuote); tierChoiceRef.current = true;
+              setRooms(u.rooms); setTieredQuote(u.tieredQuote); tierChoiceRef.current = true; cancelTierBuild();
               setLaborRate(u.laborRate); setDiscount(u.discount); setMinLaborHours(u.minLaborHours); setTaxMode(u.taxMode);
               setAssistUndo(null);
               useStore.getState().showToast("Undid the last AI Assist change", "success");
@@ -3935,27 +3954,31 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
             const o = useStore.getState().org;
             const statusUrl = await getStatusLink(id);
             const validDays = Number(o?.quote_valid_days) > 0 ? Number(o?.quote_valid_days) : 30;
-            const tierLine = tieredQuote ? tierPriceLine(tierTotals) : null;
+            // A quote the customer already accepted is locked to their tier:
+            // no tier list, no "send one tier" choice (same rule as Jobs).
+            const savedBlob = jobBlob(useStore.getState().jobs.find((j) => j.id === id));
+            const accepted = savedBlob.acceptedTier === "base" || savedBlob.acceptedTier === "better" || savedBlob.acceptedTier === "best"
+              ? (savedBlob.acceptedTier as TierKey) : null;
+            const openTiers = tieredQuote && !accepted;
+            const tierLine = openTiers ? tierPriceLine(tierTotals) : null;
             const totalLine = tierLine
               ? `${tierLine} — pick the one you want on the page.`
-              : `Total: $${headlineTotal.toFixed(2)}`;
+              : `Total: $${(accepted && tieredQuote ? tierTotals[accepted] : headlineTotal).toFixed(2)}`;
             const msgFor = (line: string) =>
               `Hi ${client || "there"}! Here's your quote from ${o?.name || "us"} for ${prop}.\n\n` +
               `${line}\n\n` +
               `Review, approve & sign here:\n${statusUrl}\n\n` +
               `This quote is good for ${validDays} days. Thank you!`;
             // Tiered: send all tiers, or just one (one price on the page).
-            const choices = tieredQuote ? sendTierChoices(rooms.flatMap((r) => r.items), tierTotals) : null;
+            const choices = openTiers ? sendTierChoices(rooms.flatMap((r) => r.items), tierTotals) : null;
             setSendSheet({
               jobId: id,
               phone: customerData?.phone || "",
               email: customerData?.email || "",
               subject: `Quote — ${prop}`,
               message: msgFor(totalLine),
-              tierStart: readSentTier(jobBlob(useStore.getState().jobs.find((j) => j.id === id))),
-              tierOptions: choices?.map((c) => c.key === "all"
-                ? { key: c.key, label: t("send.allTiers"), message: msgFor(totalLine) }
-                : { key: c.key, label: `${t("send.tierOnly").replace("{name}", TIER_NAME[c.key])} · $${Math.round(c.total ?? 0).toLocaleString()}`, message: msgFor(`Total: $${(c.total ?? 0).toFixed(2)}`) }),
+              tierStart: readSentTier(savedBlob),
+              tierOptions: choices ? tierSendOptions(choices, msgFor, totalLine) : undefined,
             });
           }}
           style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 13, fontWeight: 600, padding: "11px 4px", borderRadius: 11, border: darkMode ? "1px solid var(--color-border-dark-2)" : "1px solid var(--color-border-light)", background: darkMode ? "var(--color-card-dark-2)" : "var(--color-card-light-2)", color: "inherit", cursor: "pointer" }}

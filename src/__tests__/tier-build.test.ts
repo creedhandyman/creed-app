@@ -1,4 +1,9 @@
-import { parseTierBuild, quoteHasTierSplit, tierBuildUserMessage, MAX_TIER_ADDS_PER_LEVEL } from "@/lib/tier-build";
+// parser.ts imports the Supabase client, which throws without env vars.
+jest.mock("@/lib/supabase", () => ({ db: {}, supabase: {} }));
+jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+
+import { parseTierBuild, quoteHasTierSplit, tierBuildUserMessage, appendRooms, MAX_TIER_ADDS_PER_LEVEL } from "@/lib/tier-build";
+import { validateQuote } from "@/lib/parser";
 import { sendTierChoices, sentTierValue } from "@/lib/tiers";
 import { readSentTier } from "@/lib/quote-blob";
 import { applyApproval } from "@/lib/approve-job";
@@ -36,6 +41,22 @@ describe("tier builder", () => {
     const items = out.flatMap((x) => x.items);
     expect(items.find((i) => i.id === "a")).toEqual(patio()[0].items[0]);
     expect(items.find((i) => i.id === "n1")?.tiers).toEqual(["better", "best"]);
+  });
+
+  it("fresh builder lines get the AI caps; existing lines are appended to untouched", () => {
+    const r = parseTierBuild(`{"add":[
+      {"trade":"General","detail":"Patio — Steel edging upgrade","laborHrs":250,"materials":[{"n":"Edging","c":80}],"level":"upgrade"},
+      {"trade":"Landscaping","detail":"Patio — Weed barrier","laborHrs":1,"materials":[{"n":"Fabric","c":45}],"level":"recommended"}
+    ]}`);
+    let n = 0;
+    const fresh = validateQuote(applyAssistOps([], { add: r.adds }, { newId: () => `n${++n}`, defaultAddTiers: null }).rooms);
+    const out = appendRooms(patio(), fresh);
+    const items = out.flatMap((x) => x.items);
+    expect(items.find((i) => i.id === "n1")!.laborHrs).toBe(100); // runaway hours capped like a parsed line
+    expect(out.slice(0, 2).map((x) => x.items[0])).toEqual(patio().map((x) => x.items[0]));
+    // existing line first, the new ones after it ("Landscaping" folds into a canonical trade)
+    expect(out.find((x) => x.name === "General")!.items[0].id).toBe("b");
+    expect(items.map((i) => i.id).sort()).toEqual(["a", "b", "n1", "n2"]);
   });
 
   it("too small: no usable lines reads as tooSmall with the AI's reason", () => {

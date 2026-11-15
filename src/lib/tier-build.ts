@@ -15,6 +15,19 @@ import { itemTiers, tiersForLevel, type TierKey } from "./tiers";
 /** Most add-on lines one build may add (per level). */
 export const MAX_TIER_ADDS_PER_LEVEL = 3;
 
+/** Append the builder's lines (already validated on their own, caps ON) to
+ *  the quote: into the room of the same name, else as a new room. Existing
+ *  lines and rooms are untouched and keep their order. */
+export function appendRooms(base: Room[], added: Room[]): Room[] {
+  const out = base.map((r) => ({ ...r, items: [...r.items] }));
+  for (const a of added) {
+    const target = out.find((r) => r.name === a.name);
+    if (target) target.items.push(...a.items);
+    else out.push({ ...a, items: [...a.items] });
+  }
+  return out;
+}
+
 /** Is there anything a customer could choose between? (a line outside Essential,
  *  or one Essential-only line Premium replaces) */
 export function quoteHasTierSplit(rooms: { items: { tiers?: TierKey[] | null; tier?: string | null }[] }[]): boolean {

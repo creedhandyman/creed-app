@@ -51,10 +51,10 @@ import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
-import { tierPriceLine, sendTierChoices, sentTierValue, TIER_NAME, type SendTierKey } from "@/lib/tiers";
+import { tierPriceLine, sendTierChoices, sentTierValue, type SendTierKey } from "@/lib/tiers";
 import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
 import { readDiscount, readSentTier } from "@/lib/quote-blob";
-import SendSheet, { type SendRecipient, type SendTierOption } from "../SendSheet";
+import SendSheet, { tierSendOptions, type SendRecipient, type SendTierOption } from "../SendSheet";
 
 /** A send-menu recipient plus who they are (only the client counts as "sent"). */
 type StripRecipient = SendRecipient & { pick: MessagePick };
@@ -726,9 +726,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
             ? sendTierChoices(((Array.isArray(d.rooms) ? d.rooms : []) as Room[]).flatMap((r) => r?.items || []), d.tierTotals as Record<string, unknown> | null)
             : null;
           if (choices) {
-            tierOptions = choices.map((c) => c.key === "all"
-              ? { key: c.key, label: t("send.allTiers"), message: quoteMsg(totalLine) }
-              : { key: c.key, label: `${t("send.tierOnly").replace("{name}", TIER_NAME[c.key])} · $${Math.round(c.total ?? 0).toLocaleString()}`, message: quoteMsg(`Total: $${(c.total ?? 0).toFixed(2)}`) });
+            tierOptions = tierSendOptions(choices, quoteMsg, totalLine);
             tierStart = readSentTier(d);
           }
         }
