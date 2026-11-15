@@ -144,6 +144,55 @@ export function billedMaterial(raw: number, o: { materialTaxPct?: number | null;
   return Math.round(raw * (1 + tax / 100) * (1 + mk / 100) * 100) / 100;
 }
 
+/** One trade section of a quote's price breakdown. */
+export interface QuoteSection {
+  name: string;
+  hrs: number;
+  labor: number;
+  /** Billed materials (purchase tax + markup). */
+  mat: number;
+  total: number;
+  count: number;
+  details: string[];
+}
+
+/**
+ * The per-trade price breakdown the printed quote and the customer's quote
+ * page both show: rooms folded by trade name (case-insensitive), labor at
+ * that trade's rate (rateForRoom: override → trade rate → default) and
+ * billed materials. One helper so the customer's page can't price a section
+ * differently from the PDF (it once used raw materials and the org default
+ * rate, so its sections didn't add up).
+ */
+export function quoteSections(
+  rooms: { name: string; items: { laborHrs?: number; materials?: { c?: number }[]; detail?: string }[] }[],
+  o: { rate: number; override?: number | null; tradeRates?: Record<string, number> | null; materialTaxPct?: number | null; markupPct?: number | null },
+  keep: (item: { laborHrs?: number; materials?: { c?: number }[]; detail?: string; tiers?: unknown }) => boolean = () => true,
+): QuoteSection[] {
+  const byKey: Record<string, { name: string; items: { laborHrs?: number; materials?: { c?: number }[]; detail?: string }[] }> = {};
+  const order: string[] = [];
+  for (const rm of rooms) {
+    const items = (rm?.items || []).filter(keep);
+    if (!items.length) continue;
+    const key = rm.name.trim().toLowerCase();
+    if (!byKey[key]) { byKey[key] = { name: rm.name, items: [] }; order.push(key); }
+    byKey[key].items.push(...items);
+  }
+  return order.map((k) => {
+    const { name, items } = byKey[k];
+    const hrs = items.reduce((s, it) => s + (it.laborHrs || 0), 0);
+    const labor = hrs * rateForRoom(name, { defaultRate: o.rate, override: o.override, tradeRates: o.tradeRates });
+    const mat = items.reduce(
+      (s, it) => s + billedMaterial((it.materials || []).reduce((ss, m) => ss + (m.c || 0), 0), o),
+      0,
+    );
+    return {
+      name, hrs, labor, mat, total: labor + mat, count: items.length,
+      details: items.map((it) => it.detail || "").filter(Boolean),
+    };
+  });
+}
+
 export interface CascadeDiscount {
   type: "percent" | "fixed";
   value: number;

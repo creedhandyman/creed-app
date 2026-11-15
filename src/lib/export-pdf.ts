@@ -1,7 +1,7 @@
 import type { Room, RoomItem, JobDiscount } from "./types";
 import { wrapPrint, openPrint } from "./print-template";
 import { resolveTaxMode, type TaxMode } from "./tax";
-import { priceCascade, rateForRoom, billedMaterial } from "./pricing";
+import { priceCascade, rateForRoom, billedMaterial, quoteSections } from "./pricing";
 import { itemInTier, itemTiers, tierMembershipLabel, TIER_NAME, TIER_NAMES, type TierKey } from "./tiers";
 import { approvalState, approvalPhrase, type QuoteApproval } from "./approval";
 import { estimateDays, planningCrew } from "./job-duration";
@@ -401,16 +401,10 @@ export function exportQuotePdf(opts: ExportOptions) {
   };
   const optHrs = (idx: number) => (tierCols[idx]?.items || []).reduce((s, p) => s + p.it.laborHrs, 0);
 
-  const summaryRows = categories.map((cat) => {
-    const hrs = cat.items.reduce((s, it) => s + it.laborHrs, 0);
-    const labor = hrs * roomRate(cat.name);
-    // Billed materials (purchase tax + markup) so the rows add up to the total.
-    const mat = cat.items.reduce(
-      (s, it) => s + matCost(it.materials.reduce((ss, m) => ss + (m.c || 0), 0)),
-      0,
-    );
-    return { name: cat.name, hrs, labor, mat, total: labor + mat, itemCount: cat.items.length };
-  });
+  // Billed materials (purchase tax + markup) so the rows add up to the total.
+  // Shared with the customer's quote page (pricing.ts quoteSections).
+  const summaryRows = quoteSections(rooms, { rate, tradeRates, materialTaxPct, markupPct })
+    .map((s) => ({ name: s.name, hrs: s.hrs, labor: s.labor, mat: s.mat, total: s.total, itemCount: s.count }));
 
   // Virtual "Minimum service charge" row inserted between per-trade rows
   // and the SUBTOTAL. It bridges the gap between the actual sum of

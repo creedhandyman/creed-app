@@ -13,6 +13,7 @@ import { cardConsentText } from "@/lib/payments/saved-card";
 import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
 import { readQuoteSettings, readSentTier } from "@/lib/quote-blob";
+import { pricingInputs, quoteSections } from "@/lib/pricing";
 import { apiFetch } from "@/lib/api";
 
 const STATUS_STEPS = [
@@ -54,6 +55,8 @@ function StatusContent() {
   // category aggregation the quote PDF uses (export-pdf.ts).
   const [quoteRooms, setQuoteRooms] = useState<Room[]>([]);
   const [laborRate, setLaborRate] = useState<number | null>(null);
+  // Materials purchase tax this quote was priced with (none on older quotes).
+  const [matTaxPct, setMatTaxPct] = useState(0);
   // Drives the status-timeline reveal (steps light up + bar fills on load).
   const [revealed, setRevealed] = useState(false);
   // Three-tier quote (Essential / Complete / Premium): tier prices off the
@@ -93,6 +96,7 @@ function StatusContent() {
             if (q.discount) setDiscount(q.discount);
             if (Array.isArray(blob?.rooms)) setQuoteRooms(blob.rooms as Room[]);
             if (q.laborRate) setLaborRate(q.laborRate);
+            setMatTaxPct(q.materialTax && q.materialTax.pct > 0 ? q.materialTax.pct : 0);
             // Three-tier options (computed totals live on the blob).
             const tt = blob?.tierTotals;
             if (blob?.tieredQuote === true && tt && typeof tt.base === "number") {
@@ -407,32 +411,16 @@ function StatusContent() {
   // tiered quote with nothing tagged better/best has three identical totals.
   const showTierPicker = tiered && !sentOnly && !!tierTotals && (tierSplit || tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
 
-  // Per-category quote breakdown (same aggregation as the PDF estimate
-  // summary): collapse rooms by name, section total = hrs × rate + raw
-  // materials. rate resolves per-quote override → org default → $55.
-  const rate = laborRate || org?.default_rate || 55;
-  const breakdown = (() => {
-    const byCat: Record<string, { name: string; hrs: number; mat: number; count: number; details: string[] }> = {};
-    const order: string[] = [];
-    for (const rm of quoteRooms) {
-      if (!rm?.items?.length) continue;
-      const key = rm.name.trim().toLowerCase();
-      if (!byCat[key]) { byCat[key] = { name: rm.name, hrs: 0, mat: 0, count: 0, details: [] }; order.push(key); }
-      for (const it of rm.items) {
-        // Tiered quote: show only the selected option's scope so the itemized
-        // breakdown matches the headline total (options can be exclusive).
-        if (tiered && !itemInTier(it, selectedTier)) continue;
-        byCat[key].hrs += it.laborHrs || 0;
-        byCat[key].mat += (it.materials || []).reduce((s, m) => s + (m.c || 0), 0);
-        byCat[key].count += 1;
-        if (it.detail) byCat[key].details.push(it.detail);
-      }
-    }
-    return order.filter((k) => byCat[k].count > 0).map((k) => {
-      const c = byCat[k];
-      return { name: c.name, total: c.hrs * rate + c.mat, blurb: c.details.slice(0, 3).join(", "), count: c.count };
-    });
-  })();
+  // Per-category quote breakdown — the SAME section math as the printed
+  // quote (pricing.ts quoteSections: per-trade rate, billed materials).
+  // Tiered quote: only the selected option's scope, so the itemized
+  // breakdown matches the headline total (options can be exclusive).
+  const priceIn = pricingInputs(org, { laborRate });
+  const breakdown = quoteSections(
+    quoteRooms,
+    { rate: priceIn.rate, override: laborRate, tradeRates: priceIn.tradeRates, materialTaxPct: matTaxPct, markupPct: priceIn.markupPct },
+    (it) => !tiered || itemInTier(it as Room["items"][number], selectedTier),
+  ).map((s) => ({ name: s.name, total: s.total, blurb: s.details.slice(0, 3).join(", "), count: s.count }));
   const itemCount = breakdown.reduce((s, b) => s + b.count, 0);
   // What the picked tier changes vs the one before it (Complete vs Essential,
   // Premium vs Complete) — the price cards alone didn't show the difference.
