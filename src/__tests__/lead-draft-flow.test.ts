@@ -46,7 +46,12 @@ test("drafts, stores leadDraft on the lead and alerts the owner", async () => {
   const r = await draftLeadQuote(db.client, lead);
   expect(r.ok).toBe(true);
   expect(callClaude).toHaveBeenCalledTimes(1);
-  const blob = JSON.parse(db.updates[0].rooms as string);
+  // The attempt is stamped BEFORE the AI is called (what the daily cap counts)…
+  expect(JSON.parse(db.updates[0].rooms as string).leadDraftTry).toEqual(expect.any(String));
+  // …then the draft is saved, with what makes up its total.
+  const blob = JSON.parse(db.updates[db.updates.length - 1].rooms as string);
+  expect(blob.leadDraft.labor).toBeGreaterThan(0);
+  expect(blob.leadDraft.hours).toBeGreaterThan(0);
   expect(blob.leadDescription).toBe(lead.description);
   expect(blob.leadDraft.rooms[0].items[0].detail).toMatch(/faucet/i);
   expect(blob.leadDraft.total).toBeGreaterThan(0);
@@ -58,7 +63,10 @@ test("leaves a lead alone once it moved on, and respects the daily cap", async (
   const moved = fakeDb({ jobRooms: "{}", status: "quoted" });
   expect((await draftLeadQuote(moved.client, lead)).ok).toBe(false);
   expect(moved.updates).toHaveLength(0);
-  const capped = fakeDb({ jobRooms: "{}", draftsToday: 25 });
+  // The count includes this attempt's own stamp, so 26 = 25 others + this one.
+  const capped = fakeDb({ jobRooms: "{}", draftsToday: 26 });
   expect(await draftLeadQuote(capped.client, lead)).toMatchObject({ ok: false, reason: "daily cap" });
-  expect(callClaude).toHaveBeenCalledTimes(1); // only the "moved on" run reached the AI
+  const under = fakeDb({ jobRooms: "{}", draftsToday: 25 });
+  expect((await draftLeadQuote(under.client, lead)).ok).toBe(true);
+  expect(callClaude).toHaveBeenCalledTimes(1); // neither the moved-on lead nor the capped one paid for the AI
 });

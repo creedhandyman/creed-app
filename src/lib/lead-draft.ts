@@ -16,8 +16,12 @@ import { callClaude } from "./anthropic-server";
 import { rateForRoom, billedMaterial, priceCascade, pricingInputs } from "./pricing";
 import { materialTaxFor } from "./material-tax";
 import { dispatchNotifications } from "./notify-server";
+import { tryReadBlob } from "./job-blob";
 
-/** Most AI drafts per business per day — a public form can't run up the bill. */
+/** Most AI drafts per business per day — a public form can't run up the bill.
+ *  Counts ATTEMPTS (the `leadDraftTry` stamp written before the AI call), not
+ *  finished drafts: a burst of leads used to all pass the check while their
+ *  drafts were still running, and a failed draft never counted at all. */
 export const DRAFTS_PER_DAY = 25;
 
 export interface DraftOrg {
@@ -38,6 +42,12 @@ export interface DraftOrg {
  * tax + markup, then the shared min-labor → trip fee → tax cascade.
  */
 export function draftTotal(rooms: Room[], org: DraftOrg, property: string): number {
+  return draftTotals(rooms, org, property).total;
+}
+
+/** The same math, with the labor / materials / hours that make up the total
+ *  (what the lead's Money card shows before the draft is saved as a quote). */
+export function draftTotals(rooms: Room[], org: DraftOrg, property: string): { total: number; labor: number; materials: number; hours: number } {
   const p = pricingInputs(org); // same org-settings rules as QuoteForge + the printed quote
   const { defaultRate, markupPct } = p;
   const tradeRates = p.tradeRates ?? {};
@@ -52,7 +62,7 @@ export function draftTotal(rooms: Room[], org: DraftOrg, property: string): numb
       subtotalRaw += Math.round((c.lc + mc) * 100) / 100;
     }
   }
-  return priceCascade({
+  const c = priceCascade({
     laborRaw, hoursRaw, materials, rate: defaultRate,
     minHrs: p.minHrs,
     tripFee: p.tripFee,
@@ -60,7 +70,9 @@ export function draftTotal(rooms: Room[], org: DraftOrg, property: string): numb
     taxPct: p.taxPct,
     taxMode: p.taxMode,
     subtotalRaw,
-  }).grandTotal;
+  });
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  return { total: c.grandTotal, labor: r2(c.tl), materials: r2(materials), hours: r2(c.th) };
 }
 
 export async function draftLeadQuote(supabase: SupabaseClient, lead: {
@@ -75,11 +87,22 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
     .eq("id", orgId).maybeSingle();
   if (!org) return { ok: false, reason: "no org" };
 
-  // Daily cap per business (counts drafts stamped today).
+  // Only an untouched lead gets a draft — checked BEFORE the AI is paid for.
+  const { data: first } = await supabase.from("jobs").select("status, rooms").eq("id", jobId).maybeSingle();
+  if (!first || first.status !== "lead") return { ok: false, reason: "lead moved on" };
+  const firstBlob = tryReadBlob(first.rooms) || {};
+  if (Array.isArray(firstBlob.rooms) && firstBlob.rooms.length) return { ok: false, reason: "already quoted" };
+
+  // Daily cap per business. Stamp this attempt FIRST, then count every
+  // attempt in the last day (this one included), so a burst of leads arriving
+  // together can't all slip under the cap. `"leadDraft` also matches the
+  // finished drafts made before the stamp existed.
+  firstBlob.leadDraftTry = new Date().toISOString();
+  await supabase.from("jobs").update({ rooms: JSON.stringify(firstBlob) }).eq("id", jobId).eq("status", "lead");
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   const { count } = await supabase.from("jobs").select("id", { count: "exact", head: true })
-    .eq("org_id", orgId).gte("created_at", since).like("rooms", "%\"leadDraft\"%");
-  if ((count || 0) >= DRAFTS_PER_DAY) return { ok: false, reason: "daily cap" };
+    .eq("org_id", orgId).gte("created_at", since).like("rooms", "%\"leadDraft%");
+  if ((count || 0) > DRAFTS_PER_DAY) return { ok: false, reason: "daily cap" };
 
   let licensedTrades: string[] = [];
   try { licensedTrades = org.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
@@ -113,7 +136,8 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   });
   if (!result?.rooms?.length) return { ok: false, reason: "AI returned nothing" };
   const rooms = validateQuote(result.rooms, { skipCaps: true });
-  const total = draftTotal(rooms, org, lead.property);
+  const totals = draftTotals(rooms, org, lead.property);
+  const total = totals.total;
 
   // Write onto the lead — only while it's still an untouched lead (the owner
   // may already have built/sent a quote by hand while this ran).
@@ -124,6 +148,10 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   if (Array.isArray(blob.rooms) && blob.rooms.length) return { ok: false, reason: "already quoted" };
   blob.leadDraft = {
     v: 1, rooms, estDays: result.estDays > 0 ? result.estDays : null, total, at: new Date().toISOString(),
+    // What makes up the total — the lead's Money card shows these instead of
+    // $0 labor / $0 materials (the job row's own totals stay 0 until the
+    // draft is saved as a quote).
+    labor: totals.labor, materials: totals.materials, hours: totals.hours,
     // What the AI flagged (sub work, adjusted hours, possible double-charge)
     // — the editor shows it when the owner opens the draft.
     notes: (result.notes || []).slice(0, 12),

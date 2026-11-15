@@ -7,6 +7,7 @@ import { recordCustomerSmsConsent } from "@/lib/sms-consent-server";
 import { draftLeadQuote } from "@/lib/lead-draft";
 import { findReferrer, recordReferralLead } from "@/lib/referrals-server";
 import { ymdInZone } from "@/lib/dates";
+import { clientIp, addressTag, memoryLimit, publicFormLimit, formLimitMessage } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 // The AI draft quote runs after the response (see `after` below) — a parse
@@ -51,7 +52,10 @@ interface Body {
   referral_code?: string;
 }
 
-const trim = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+// Every field is cut to a sane length — this endpoint is public, and what it
+// stores is shown in the app, texted to the crew and sent to the AI.
+const trim = (v: unknown, max = 500): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // The marketing site (creedhandyman.com) posts its quote form here
 // cross-origin. Browsers preflight the JSON POST, so we answer OPTIONS
@@ -88,27 +92,39 @@ export async function POST(req: NextRequest) {
 async function handlePost(req: NextRequest): Promise<NextResponse> {
   try {
     const body = (await req.json()) as Body;
-    const slug = trim(body.slug);
-    const name = trim(body.name);
-    const phone = trim(body.phone);
-    const email = trim(body.email);
-    const street = trim(body.street);
-    const city = trim(body.city);
-    const state = trim(body.state);
-    const zip = trim(body.zip);
-    const description = trim(body.description);
-    const photos = Array.isArray(body.photos) ? body.photos.filter((p) => typeof p === "string") : [];
+    const slug = trim(body.slug, 80);
+    const name = trim(body.name, 120);
+    const phone = trim(body.phone, 40);
+    const email = trim(body.email, 200);
+    const street = trim(body.street, 200);
+    const city = trim(body.city, 100);
+    const state = trim(body.state, 40);
+    const zip = trim(body.zip, 20);
+    const description = trim(body.description, 4000);
+    // Photos are links the form uploaded — https only, a handful at most.
+    const photos = (Array.isArray(body.photos) ? body.photos : [])
+      .filter((p): p is string => typeof p === "string" && /^https:\/\//i.test(p) && p.length <= 600)
+      .slice(0, 12);
     // referrer_tech_id is a UUID of a profile row. We don't validate it
     // against the profiles table here — invalid values will simply not
     // match anything when Quests/leaderboards filter by it. Trust-but-
     // verify is fine because this is non-financial attribution data.
-    const referrerTechId = trim(body.referrer_tech_id);
+    // (Anything that isn't a UUID is dropped: it would fail the insert.)
+    const rawTech = trim(body.referrer_tech_id, 64);
+    const referrerTechId = UUID_RE.test(rawTech) ? rawTech : "";
 
     if (!slug || !name || !description) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     if (!phone && !email) {
       return NextResponse.json({ error: "Need a phone or email so we can reach you" }, { status: 400 });
+    }
+
+    // Rate limit, layer 1: a burst from one address on this server instance.
+    const ip = clientIp(req);
+    const fromTag = addressTag(ip);
+    if (fromTag && !memoryLimit(`lead:${fromTag}`, 6, 60_000)) {
+      return NextResponse.json({ error: formLimitMessage("burst") }, { status: 429 });
     }
 
     const supabase = createClient(
@@ -129,6 +145,15 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "This business isn't accepting leads online" }, { status: 403 });
     }
     const orgId = org.id;
+
+    // Rate limit, layer 2 (shared by every server instance): how many leads
+    // this address — and everyone together — already sent this business.
+    // Checked BEFORE any row is written (lib/rate-limit.ts).
+    const limit = await publicFormLimit(supabase, { orgId, tag: fromTag });
+    if (!limit.ok) {
+      console.warn(`[leads] rate limited (${limit.why}) org ${orgId}`);
+      return NextResponse.json({ error: formLimitMessage(limit.why) }, { status: 429 });
+    }
 
     // Existing-customer match: phone first (more unique in the trade),
     // then email. Both case-insensitive on email; phone exact-match.
@@ -212,6 +237,8 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       rooms: JSON.stringify({
         leadDescription: description,
         leadPhotos: photos,
+        // A one-way tag of the sender's address — what the rate limit counts.
+        leadFrom: fromTag || "unknown",
         ...(referrer && createdNewCustomer && referrer.id !== customerId ? { leadReferredBy: referrer.name || "a customer" } : {}),
         // Consent record per CTIA 5.1.2: when, where, the exact wording
         // shown, and the requester's IP (phone + name are on the lead).
@@ -221,7 +248,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
               at: new Date().toISOString(),
               source: "website quote form",
               text: trim(body.sms_consent_text),
-              ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("x-real-ip") || "",
+              ip,
             })
           : {}),
       }),
@@ -249,7 +276,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
         source: "website quote form",
         phone: phone || undefined,
         text: trim(body.sms_consent_text),
-        ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("x-real-ip") || "",
+        ip,
         jobId: jobRow.id,
       }, "form");
     }

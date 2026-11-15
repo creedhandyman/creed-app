@@ -7,6 +7,7 @@ import { draftLeadQuote } from "@/lib/lead-draft";
 import { sendEmail } from "@/lib/email";
 import { loadBookingOrg, loadBusyVisits } from "@/lib/booking-server";
 import { openSlots, isSlotOpen, localNow, fmt12, fmtDay, fromMin, toMin } from "@/lib/booking";
+import { clientIp, addressTag, memoryLimit, publicFormLimit, formLimitMessage } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 // The AI draft quote runs after the response, like /api/leads.
@@ -91,11 +92,27 @@ export async function POST(req: NextRequest) {
     if (!phone && !email) return NextResponse.json({ error: "Please add a phone number or email so we can reach you." }, { status: 400 });
     if (!street) return NextResponse.json({ error: "Please add the address where the work is." }, { status: 400 });
 
+    // Rate limit, layer 1: a burst from one address on this server instance.
+    const ip = clientIp(req);
+    const fromTag = addressTag(ip);
+    if (fromTag && !memoryLimit(`book:${fromTag}`, 6, 60_000)) {
+      return NextResponse.json({ error: formLimitMessage("burst") }, { status: 429 });
+    }
+
     const supabase = serviceClient();
     const org = await loadBookingOrg(supabase, slug);
     if (!org) return NextResponse.json({ error: "Online booking isn't available for this business." }, { status: 404 });
     const orgId = org.id;
     const s = org.settings;
+
+    // Layer 2 (shared by every instance): leads this address / everyone
+    // already sent this business, counted before a slot is held. Without it a
+    // script could hold every open time on the calendar (lib/rate-limit.ts).
+    const limit = await publicFormLimit(supabase, { orgId, tag: fromTag });
+    if (!limit.ok) {
+      console.warn(`[booking] rate limited (${limit.why}) org ${orgId}`);
+      return NextResponse.json({ error: formLimitMessage(limit.why) }, { status: 429 });
+    }
 
     // Re-check the time right before holding it.
     const now = localNow(new Date(), s.tz);
@@ -170,10 +187,11 @@ export async function POST(req: NextRequest) {
 
       // 3) The lead. The owner quotes it from leadDescription like any web
       //    lead; `booking` records the time asked for and links the hold.
-      const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("x-real-ip") || "";
       const blob: Record<string, unknown> = {
         leadDescription: `Booked online for ${when}.\n\n${description}`,
         leadPhotos: [],
+        // A one-way tag of the sender's address — what the rate limit counts.
+        leadFrom: fromTag || "unknown",
         booking: {
           status: "requested",
           date,
