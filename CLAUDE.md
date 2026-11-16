@@ -401,6 +401,18 @@ When you ship a feature or add a migration, add the entry THERE, not here.
 
 ## Things that still bug me / open follow-ups
 
+- **Dejavoo / iPOSPays card payments (PLANNING 2026-11-16, no code yet, waiting
+  on API docs + Bernard's OK).** Sandbox only; per-org merchant credentials.
+  Plan: hosted payment page for pay links (and keyed in on the tech's phone in
+  the field); the callback is never trusted alone, the server re-queries the
+  transaction, then calls the existing `fulfillJobPayment` (no second
+  mark-paid path). DB: `org_payment_processors` (RLS on, no client policies,
+  token AES-encrypted with Vercel env `PROCESSOR_CREDS_KEY`) + `payments` gets
+  `processor` / `processor_txn_id` (unique pair = idempotency). UI: Ops →
+  Settings → Payments category; Pay button follows the org's processor;
+  "Take card payment" on the job. Full plan + questions for the Dejavoo dev
+  call: `docs/claude/dejavoo-payments.md`.
+
 - **BUG (logged 2026-11-16, not started): material price lookup matches on
   one shared word.** A quote's material "Hole saw / drill bit" pulled $113.48
   from a price_corrections row "Lowe's: Drill" (a June receipt — a TOOL
