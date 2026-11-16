@@ -401,6 +401,19 @@ When you ship a feature or add a migration, add the entry THERE, not here.
 
 ## Things that still bug me / open follow-ups
 
+- **BUG (logged 2026-11-16, not started): material price lookup matches on
+  one shared word.** A quote's material "Hole saw / drill bit" pulled $113.48
+  from a price_corrections row "Lowe's: Drill" (a June receipt — a TOOL
+  purchase). The bad row is already deleted in Supabase; the fix is the logic.
+  Likely spot: `lib/quote-grounding.ts rankByRequest` (via `receiptPricesFrom`)
+  — a 1-2 word candidate qualifies when ALL its words match
+  (`sharedCount === ts.length`), so a one-word item like "Drill" matches any
+  request finding containing "drill". Confirm that's the path that priced the
+  line before changing it. Wanted: (1) require a stronger name match than one
+  common word; (2) tool purchases never learned as material prices — filter
+  them when receipts are learned (`lib/receipt-scan.ts learnFromReceipt`) and/or
+  when read (`NOT_MATERIAL` in quote-grounding). Add a regression test.
+
 - **Walkthrough batch 1 (2026-11-10)**: (1) **Texts tab hidden** — texting isn't
   live yet. `lib/texts-client.ts TEXTS_TAB_VISIBLE = false` hides the side-menu
   item, the More hub tile, the unread dot and its poll; the screen still opens
