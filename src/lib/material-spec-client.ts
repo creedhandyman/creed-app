@@ -7,7 +7,9 @@
  */
 import { supabase, getOrgId } from "./supabase";
 import { normalizeSpecItems, type SpecItem } from "./material-spec";
-import { draftToRow, type SpecDraft } from "./spec-import";
+import {
+  draftToRow, readSpecFiles, specFileContentType, specFileKind, specFilePath, type SpecDraft, type SpecFile,
+} from "./spec-import";
 import { useStore } from "./store";
 
 export interface MaterialSpec {
@@ -18,6 +20,9 @@ export interface MaterialSpec {
   active: boolean;
   source: string | null;
   notes: string | null;
+  /** Original uploaded files (migration 20261118_material_spec_files.sql);
+   *  missing before it runs. Read with readSpecFiles. */
+  files?: unknown;
   created_at?: string;
   updated_at?: string;
 }
@@ -88,9 +93,12 @@ export async function updateSpec(id: string, patch: Partial<Pick<MaterialSpec, "
   return true;
 }
 
-export async function deleteSpec(id: string): Promise<boolean> {
+export async function deleteSpec(id: string, files: unknown = []): Promise<boolean> {
   const { error } = await supabase.from("material_specs").delete().eq("id", id);
   if (error) { toast(`Couldn't delete: ${error.message}`); return false; }
+  // Its stored originals go too (best effort; the row is already gone).
+  const paths = readSpecFiles(files).map((f) => f.path);
+  if (paths.length) await supabase.storage.from(SPEC_FILES_BUCKET).remove(paths).catch(() => undefined);
   return true;
 }
 
@@ -132,5 +140,70 @@ export async function updateSpecItem(id: string, d: Partial<SpecDraft>): Promise
 export async function deleteSpecItem(id: string): Promise<boolean> {
   const { error } = await supabase.from("material_spec_items").delete().eq("id", id);
   if (error) { toast(`Couldn't delete the item: ${error.message}`); return false; }
+  return true;
+}
+
+/* ── original files (private bucket "spec-files") ─────────────────────── */
+
+export const SPEC_FILES_BUCKET = "spec-files";
+/** The bucket's per-file limit (migration sets 25 MB). */
+export const SPEC_FILE_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Keep the original files with a spec: upload each to
+ * spec-files/{org}/{spec}/…, then add them to material_specs.files. Called
+ * only AFTER the reviewed items are saved, so nothing is stored before the
+ * owner confirms. Never throws; a failure here never undoes the saved
+ * items. Returns how many were stored and why the rest weren't.
+ */
+export async function storeSpecFiles(spec: MaterialSpec, files: File[]): Promise<{ stored: number; failed: string[]; notSetUp: boolean }> {
+  const failed: string[] = [];
+  const added: SpecFile[] = [];
+  let notSetUp = false;
+  for (const f of files) {
+    const kind = specFileKind(f.name, f.type);
+    if (!kind || f.size > SPEC_FILE_MAX_BYTES) { failed.push(f.name); continue; }
+    const path = specFilePath(spec.org_id, spec.id, f.name);
+    try {
+      const { error } = await supabase.storage.from(SPEC_FILES_BUCKET).upload(path, f, {
+        contentType: specFileContentType(kind, f.type), upsert: false,
+      });
+      if (error) {
+        if (/bucket not found|not found/i.test(error.message || "")) notSetUp = true;
+        failed.push(f.name);
+        continue;
+      }
+      added.push({ path, name: f.name.slice(0, 160), size: f.size, type: specFileContentType(kind, f.type), uploaded_at: new Date().toISOString() });
+    } catch {
+      failed.push(f.name);
+    }
+  }
+  if (!added.length) return { stored: 0, failed, notSetUp };
+  // Merge onto the server's current list (another import may have added one).
+  const { data } = await supabase.from("material_specs").select("files").eq("id", spec.id).maybeSingle();
+  const current = readSpecFiles((data as { files?: unknown } | null)?.files);
+  const { error } = await supabase.from("material_specs")
+    .update({ files: [...current, ...added], updated_at: new Date().toISOString() }).eq("id", spec.id);
+  if (error) {
+    // Column not there yet: don't leave orphans in the bucket.
+    await supabase.storage.from(SPEC_FILES_BUCKET).remove(added.map((a) => a.path)).catch(() => undefined);
+    return { stored: 0, failed: [...failed, ...added.map((a) => a.name)], notSetUp: true };
+  }
+  return { stored: added.length, failed, notSetUp };
+}
+
+/** A short-lived link to open a stored spec file. */
+export async function specFileUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(SPEC_FILES_BUCKET).createSignedUrl(path, 300);
+  if (error || !data?.signedUrl) { toast("Couldn't open the file."); return null; }
+  return data.signedUrl;
+}
+
+/** Remove one stored file from a spec (bucket + list). */
+export async function removeSpecFile(spec: MaterialSpec, path: string): Promise<boolean> {
+  const next = readSpecFiles(spec.files).filter((f) => f.path !== path);
+  const { error } = await supabase.from("material_specs").update({ files: next, updated_at: new Date().toISOString() }).eq("id", spec.id);
+  if (error) { toast(`Couldn't remove the file: ${error.message}`); return false; }
+  await supabase.storage.from(SPEC_FILES_BUCKET).remove([path]).catch(() => undefined);
   return true;
 }

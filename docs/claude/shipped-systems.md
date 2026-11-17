@@ -33,6 +33,21 @@ Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, wh
     use spec products" + "Apply client spec" (runs `applySpec` on hand-built
     lines), spec items suggested first in the Materials sheet (typing over the name
     drops the tag), and a "client spec" badge on the quote PDF materials table.
+  - **Upload (2026-11-18)**: several files at once + a Take photo button.
+    PDFs: text PDFs over ~40k chars and big ones are read page by page in chunks
+    (`readPdfPages` → `chunkPages`, `part: "pages 9-16 of 40"`); small ones go
+    whole, and if that answer runs out of room the text is re-read in chunks;
+    big scanned PDFs are rendered (`renderPdfPages` quality option, ≤60 pages)
+    and sent ≤4 images per call. Workbooks: EVERY sheet (`readXlsxSheets` →
+    `planSheets`; a real tab name fills an empty category). Photos: shrunk to
+    2000px, ≤4 per call (`imageBlocks` validates on the server). All parts are
+    merged + de-duplicated (`mergeDrafts`); a part that fails is listed in the
+    notes, the rest still load. Review table: every field editable (incl. trade,
+    SKU, keywords, notes), Add row, remove row. NOTHING is written until Save;
+    then the items, then the originals go to the private `spec-files` bucket
+    (`material-spec-client.ts storeSpecFiles`, `{org}/{spec}/{time}-{name}`) and
+    are listed on the spec (open via a 5-minute signed link, remove, deleted with
+    the spec). Migration `20261118_material_spec_files.sql`.
   - **Rules**: saved quotes keep their spec tag + price on each material
     (`Material.spec: MaterialSpecTag`), so editing / turning off a spec never
     changes a saved quote. Customers with no active spec see no change at all.

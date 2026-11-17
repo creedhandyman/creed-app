@@ -2,6 +2,15 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
+- Material spec original files (2026-11-18, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261118_material_spec_files.sql` (safe to re-run; run
+  AFTER 20261117). Adds `material_specs.files JSONB` (list of stored originals)
+  and a PRIVATE storage bucket `spec-files` (25 MB, PDF / xlsx / xls / csv / txt
+  / images) with storage RLS: org members read their `{org_id}/…` folder,
+  owners / managers add or remove. Until it runs, importing still works and the
+  items save; only the original file isn't kept (a toast says so, nothing is
+  left in storage). In preflight `DB_CHECKS` as `material_specs.files`.
+
 - Per-customer material specs (2026-11-17, **being applied by Bernard separately**;
   not run from code): `supabase/migrations/20261117_customer_material_specs.sql`
   (safe to re-run). Tables `material_specs` (one per customer, `active` switch)

@@ -59,11 +59,18 @@ export async function loadPdf(): Promise<typeof window.pdfjsLib> {
 const PDF_OPEN_TIMEOUT_MS = 45000;
 
 export async function readPdf(file: File): Promise<string> {
+  return (await readPdfPages(file)).map((p) => p + "\n").join("");
+}
+
+/** Each page's text (lines top to bottom), one string per page, in order.
+ *  readPdf is these joined with a blank line after each page. */
+export async function readPdfPages(file: File): Promise<string[]> {
   const lib = await loadPdf();
   const buf = await file.arrayBuffer();
   const pdf = await withTimeout(lib.getDocument({ data: buf }).promise, PDF_OPEN_TIMEOUT_MS, "The PDF took too long to open");
-  let txt = "";
+  const pages: string[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {
+    let txt = "";
     const pg = await pdf.getPage(i);
     const c = await pg.getTextContent();
     const byY: Record<number, { x: number; s: string }[]> = {};
@@ -83,9 +90,9 @@ export async function readPdf(file: File): Promise<string> {
           .trim();
         if (l) txt += l + "\n";
       });
-    txt += "\n";
+    pages.push(txt);
   }
-  return txt;
+  return pages;
 }
 
 /* ====== PDF PAGE RENDERING ====== */
@@ -129,14 +136,17 @@ export async function renderPdfPages(
   // raster image AND has real text — so photo pages and scanned pages (which
   // are themselves images) are always kept. Detection failures fall through to
   // rendering, so this can never silently drop a page's content.
-  skipTextOnly = true
+  skipTextOnly = true,
+  // Sharper pages for reading small print (material spec tables). The
+  // defaults keep the inspection path exactly as it was.
+  quality: { maxDim?: number; jpeg?: number } = {},
 ): Promise<string[]> {
   const lib = await loadPdf();
   const buf = await file.arrayBuffer();
   const pdf = await withTimeout(lib.getDocument({ data: buf }).promise, PDF_OPEN_TIMEOUT_MS, "The PDF took too long to open");
   const images: string[] = [];
   const count = Math.min(pdf.numPages, maxPages);
-  const MAX_DIM = 1200; // cap page dimensions for API size limits
+  const MAX_DIM = quality.maxDim ?? 1200; // cap page dimensions for API size limits
 
   // pdf.js operator ids for the image-painting ops. Resolved from the lib so a
   // version mismatch just disables the optimization (empty set → render all).
@@ -179,7 +189,7 @@ export async function renderPdfPages(
     canvas.height = viewport.height;
     const ctx = canvas.getContext("2d")!;
     await page.render({ canvasContext: ctx, viewport }).promise;
-    images.push(canvas.toDataURL("image/jpeg", 0.4));
+    images.push(canvas.toDataURL("image/jpeg", quality.jpeg ?? 0.4));
     canvas.remove();
     onProgress?.(i, count);
   }

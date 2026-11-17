@@ -92,6 +92,8 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   // Per-customer material specs (supabase/migrations/20261117_customer_material_specs.sql).
   { key: "material_specs", table: "material_specs", column: "id" },
   { key: "material_spec_items", table: "material_spec_items", column: "companions" },
+  // Original spec files (supabase/migrations/20261118_material_spec_files.sql).
+  { key: "material_specs.files", table: "material_specs", column: "files" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

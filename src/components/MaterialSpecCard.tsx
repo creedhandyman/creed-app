@@ -12,11 +12,11 @@ import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 import MaterialSpecImport from "./MaterialSpecImport";
 import {
-  deleteSpec, deleteSpecItem, listSpecs, loadSpecItems, specItemCounts, updateSpec, updateSpecItem,
+  deleteSpec, deleteSpecItem, listSpecs, loadSpecItems, removeSpecFile, specFileUrl, specItemCounts, updateSpec, updateSpecItem,
   type MaterialSpec,
 } from "@/lib/material-spec-client";
 import { specDisplayName, type SpecItem } from "@/lib/material-spec";
-import { companionsToText, textToCompanions } from "@/lib/spec-import";
+import { companionsToText, fileSizeLabel, readSpecFiles, textToCompanions } from "@/lib/spec-import";
 import type { Customer } from "@/lib/types";
 
 const fmtDate = (s?: string) => {
@@ -142,6 +142,7 @@ function SpecEditor({ spec, onClose, onImport, onDeleted, showConfirm }: {
   const [name, setName] = useState(spec.name);
   const [editing, setEditing] = useState<SpecItem | null>(null);
   const [q, setQ] = useState("");
+  const [files, setFiles] = useState(() => readSpecFiles(spec.files));
 
   const load = useCallback(async () => setItems(await loadSpecItems([spec.id])), [spec.id]);
   useEffect(() => { void load(); }, [load]);
@@ -151,7 +152,7 @@ function SpecEditor({ spec, onClose, onImport, onDeleted, showConfirm }: {
   };
   const removeSpec = async () => {
     if (!(await showConfirm(t("spec.deleteTitle"), t("spec.deleteBody").replace("{name}", spec.name)))) return;
-    if (await deleteSpec(spec.id)) { showToast(t("spec.deleted"), "success"); onDeleted(); }
+    if (await deleteSpec(spec.id, spec.files)) { showToast(t("spec.deleted"), "success"); onDeleted(); }
   };
 
   const shown = (items || []).filter((it) => {
@@ -171,6 +172,36 @@ function SpecEditor({ spec, onClose, onImport, onDeleted, showConfirm }: {
             <Icon name="delete" size={13} /> {t("spec.deleteSpec")}
           </button>
         </div>
+
+        {files.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <div className="sl">{t("spec.files")}</div>
+            {files.map((f) => (
+              <div key={f.path} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, padding: "5px 0", borderTop: "1px solid var(--color-border-dark)" }}>
+                <Icon name={f.type.startsWith("image/") ? "photo" : "doc"} size={14} />
+                <button
+                  onClick={async () => { const url = await specFileUrl(f.path); if (url) window.open(url, "_blank", "noopener"); }}
+                  style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, color: "var(--color-primary)", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13.5 }}
+                  title={t("spec.openFile")}
+                >
+                  {f.name}
+                </button>
+                <span className="dim" style={{ fontSize: 12, flexShrink: 0 }}>{[f.size ? fileSizeLabel(f.size) : "", fmtDate(f.uploaded_at)].filter(Boolean).join(" · ")}</span>
+                <button
+                  className="bo"
+                  aria-label={t("spec.removeFileTitle")}
+                  onClick={async () => {
+                    if (!(await showConfirm(t("spec.removeFileTitle"), t("spec.removeFileBody").replace("{name}", f.name)))) return;
+                    if (await removeSpecFile({ ...spec, files }, f.path)) setFiles((cur) => cur.filter((x) => x.path !== f.path));
+                  }}
+                  style={{ width: "auto", fontSize: 12, padding: "3px 7px", flexShrink: 0 }}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {(items?.length || 0) > 8 && (
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("spec.search")} style={{ width: "100%", marginBottom: 8 }} />

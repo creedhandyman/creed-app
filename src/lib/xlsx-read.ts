@@ -1,9 +1,9 @@
 /**
- * Minimal .xlsx reader for importing a material spec: the FIRST sheet's
- * cells as rows of strings. No dependency — an .xlsx file is a zip of XML,
+ * Minimal .xlsx reader for importing a material spec: every sheet's cells
+ * as rows of strings (`readXlsxSheets`), or just the first (`readXlsx`). No dependency — an .xlsx file is a zip of XML,
  * and browsers inflate with DecompressionStream("deflate-raw").
  *
- * The XML parts (`sheetRows`, `sharedStrings`, `firstSheetPath`) are pure
+ * The XML parts (`sheetRows`, `sharedStrings`, `sheetList`, `firstSheetPath`) are pure
  * and tested (src/__tests__/xlsx-read.test.ts); `readXlsx` does the zip I/O.
  * Formulas give their cached value; dates come through as Excel serial
  * numbers (fine for a product list). .xls (old binary) is not supported:
@@ -74,6 +74,34 @@ export function sheetRows(xml: string, strings: string[]): string[][] {
   return rows;
 }
 
+/** Every worksheet in workbook order: its tab name and zip path (from
+ *  workbook.xml + its rels). Hidden sheets are included; chart sheets and
+ *  sheets whose part is missing are skipped. Falls back to the
+ *  xl/worksheets/sheetN.xml files when the workbook can't be read. */
+export function sheetList(workbookXml: string, relsXml: string, names: string[]): Array<{ name: string; path: string }> {
+  const out: Array<{ name: string; path: string }> = [];
+  const seen = new Set<string>();
+  const sheetRe = /<sheet\b([^>]*)\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = sheetRe.exec(workbookXml || ""))) {
+    const attrs = m[1];
+    const rid = attrs.match(/\br:id="([^"]+)"/)?.[1];
+    const name = decodeEntities(attrs.match(/\bname="([^"]*)"/)?.[1] || "");
+    if (!rid) continue;
+    const rel = new RegExp(`<Relationship\\b[^>]*\\bId="${rid}"[^>]*>`).exec(relsXml || "")?.[0];
+    const target = rel?.match(/\bTarget="([^"]+)"/)?.[1];
+    if (!target) continue;
+    const path = target.startsWith("/") ? target.slice(1) : `xl/${target.replace(/^\.\//, "")}`;
+    if (!names.includes(path) || !/worksheets\//.test(path) || seen.has(path)) continue;
+    seen.add(path);
+    out.push({ name, path });
+  }
+  if (out.length) return out;
+  return names.filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))
+    .sort((a, b) => Number(a.match(/\d+/)![0]) - Number(b.match(/\d+/)![0]))
+    .map((path, i) => ({ name: `Sheet${i + 1}`, path }));
+}
+
 /** The first sheet's zip path, from workbook.xml + its rels. */
 export function firstSheetPath(workbookXml: string, relsXml: string, names: string[]): string | null {
   const rid = workbookXml.match(/<sheet\b[^>]*\br:id="([^"]+)"/)?.[1];
@@ -131,6 +159,24 @@ async function entryText(buf: ArrayBuffer, e: ZipEntry): Promise<string> {
   if (e.method !== 8) throw new Error("unsupported zip compression");
   const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
   return await new Response(stream).text();
+}
+
+/** Every sheet of an .xlsx file (tab name + rows), empty sheets dropped.
+ *  Throws on a file that isn't an .xlsx. */
+export async function readXlsxSheets(file: Blob): Promise<Array<{ name: string; rows: string[][] }>> {
+  const buf = await file.arrayBuffer();
+  const entries = zipEntries(buf);
+  const byName = new Map(entries.map((e) => [e.name, e]));
+  const read = async (n: string) => { const e = byName.get(n); return e ? entryText(buf, e) : ""; };
+  const list = sheetList(await read("xl/workbook.xml"), await read("xl/_rels/workbook.xml.rels"), entries.map((e) => e.name));
+  if (!list.length) throw new Error("no worksheet");
+  const strings = sharedStrings(await read("xl/sharedStrings.xml"));
+  const out: Array<{ name: string; rows: string[][] }> = [];
+  for (const s of list) {
+    const rows = sheetRows(await read(s.path), strings);
+    if (rows.length) out.push({ name: s.name, rows });
+  }
+  return out;
 }
 
 /** First sheet of an .xlsx file as rows of strings. Throws on a file that

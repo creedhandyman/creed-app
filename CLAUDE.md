@@ -405,6 +405,8 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   "Per-customer material specs". Needs the SQL
   `20261117_customer_material_specs.sql` (Bernard applying it separately);
   until then the customer card says "not set up" and quoting is unchanged.
+  File upload (photos, every sheet, long / scanned PDFs, original file kept)
+  added 2026-11-18; its SQL `20261118_material_spec_files.sql` is NOT run yet.
   Not done: old Excel `.xls` (save as .xlsx / CSV); a scanned PDF with no text
   layer over 3 MB can't be read.
 
