@@ -38,7 +38,7 @@ import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom, billedMaterial, pricingInputs, parseTradeRates, type PricedRates } from "@/lib/pricing";
-import { readQuoteSettings, readEstDays, readSentTier, readPricedRates } from "@/lib/quote-blob";
+import { readQuoteSettings, readEstDays, readSentTier, readPricedRates, readTierRooms } from "@/lib/quote-blob";
 import { buildQuoteSave, dominantTrade } from "@/lib/quote-save";
 import { materialTaxFor, zipTaxMap } from "@/lib/material-tax";
 import Inspector from "./Inspector";
@@ -858,7 +858,9 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         // AI-defense layer; re-applying them here would scale a Bernard-
         // edited material price back down to the cap (the bug Bernard
         // hit where the materials list edit "didn't save").
-        loadedRooms = validateQuote(data.rooms, { skipCaps: true });
+        // Option tags from the work order when an older save left them off the
+        // lines (readTierRooms); the next save writes them onto the lines.
+        loadedRooms = validateQuote(readTierRooms<Room>(data), { skipCaps: true });
         setRooms(loadedRooms);
       } else if (leadDraftRooms) {
         loadedRooms = validateQuote(leadDraftRooms, { skipCaps: true });

@@ -12,7 +12,7 @@ import { TIP_PCTS, tipAllowed, tipCentsFor } from "@/lib/tips";
 import { cardConsentText } from "@/lib/payments/saved-card";
 import { smsConsentGranted } from "@/lib/sms-consent";
 import { readBlob, tryReadBlob } from "@/lib/job-blob";
-import { readQuoteSettings, readSentTier } from "@/lib/quote-blob";
+import { readQuoteSettings, readSentTier, readTierRooms } from "@/lib/quote-blob";
 import { pricingInputs, quoteSections } from "@/lib/pricing";
 import { readPricedRates } from "@/lib/quote-blob";
 import { apiFetch } from "@/lib/api";
@@ -55,6 +55,8 @@ function StatusContent() {
   // Quote scope for the customer-facing line-item breakdown. Mirrors the
   // category aggregation the quote PDF uses (export-pdf.ts).
   const [quoteRooms, setQuoteRooms] = useState<Room[]>([]);
+  // The lines exactly as saved — the approval fingerprint is computed on these.
+  const [savedRooms, setSavedRooms] = useState<Room[]>([]);
   const [laborRate, setLaborRate] = useState<number | null>(null);
   // Materials purchase tax this quote was priced with (none on older quotes).
   const [matTaxPct, setMatTaxPct] = useState(0);
@@ -95,7 +97,11 @@ function StatusContent() {
             })));
             const q = readQuoteSettings(blob); // same validity rules as the editor + printed quote
             if (q.discount) setDiscount(q.discount);
-            if (Array.isArray(blob?.rooms)) setQuoteRooms(blob.rooms as Room[]);
+            if (Array.isArray(blob?.rooms)) {
+              // Option tags from the work order when the lines lack them.
+              setQuoteRooms(readTierRooms<Room>(blob));
+              setSavedRooms(blob.rooms as Room[]);
+            }
             if (q.laborRate) setLaborRate(q.laborRate);
             setMatTaxPct(q.materialTax && q.materialTax.pct > 0 ? q.materialTax.pct : 0);
             // Three-tier options (computed totals live on the blob).
@@ -116,7 +122,7 @@ function StatusContent() {
               else {
                 // Preselect Complete, unless it adds nothing over Essential
                 // (then it isn't shown, and Essential is the same price).
-                const items = (Array.isArray(blob?.rooms) ? (blob.rooms as Room[]) : []).flatMap((rm) => rm?.items || []);
+                const items = readTierRooms<Room>(blob).flatMap((rm) => rm?.items || []);
                 const vis = visibleTiers(items);
                 setSelectedTier(vis.includes(RECOMMENDED_TIER) ? RECOMMENDED_TIER : (vis[0] ?? "base"));
               }
@@ -257,7 +263,7 @@ function StatusContent() {
           jobId, token, signatureType, signatureValue, tier: tiered ? selectedTier : undefined,
           // What THIS page showed — the server refuses the approval if the
           // quote was revised after the page loaded (then we reload).
-          scopeFp: scopeFingerprint(quoteRooms),
+          scopeFp: scopeFingerprint(savedRooms),
           smsConsent: smsOptIn,
           smsConsentText: smsConsentRef.current?.innerText.replace(/\s+/g, " ").trim() || "",
           shownTotal: tiered && tierTotals ? tierTotals[selectedTier] : (job.total || 0),
@@ -419,7 +425,10 @@ function StatusContent() {
     && (billing || !!job.client_signature);
   // Only surface the picker when the options actually differ in price — a
   // tiered quote with nothing tagged better/best has three identical totals.
-  const showTierPicker = tiered && !sentOnly && !!tierTotals && (tierSplit || tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
+  // The saved tierSplit flag is not required: an older save could leave it
+  // false while the lines (or their work-order tasks) are in different options.
+  const linesSplit = visibleTiers(quoteRooms.flatMap((rm) => rm?.items || [])).length > 1;
+  const showTierPicker = tiered && !sentOnly && !!tierTotals && (tierSplit || linesSplit || tierTotals.best !== tierTotals.base || tierTotals.better !== tierTotals.base);
 
   // Per-category quote breakdown — the SAME section math as the printed
   // quote (pricing.ts quoteSections: per-trade rate, billed materials).

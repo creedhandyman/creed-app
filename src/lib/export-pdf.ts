@@ -90,6 +90,10 @@ interface ExportOptions {
    *  earlier approval; record lost → unsigned with a neutral "on file" note.
    *  Null/undefined = blank signature lines. */
   approval?: QuoteApproval | null;
+  /** The quote lines exactly as saved (before readTierRooms filled option tags
+   *  in from the work order) — the approval fingerprint is checked against
+   *  these. Absent = `rooms`. */
+  scopeRooms?: Room[];
 }
 
 const esc = (s: string) =>
@@ -266,7 +270,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   // about the earlier approval. `unverified` = approved, but the record of
   // which version was lost → no signature, a neutral "on file" note.
   const approval = opts.approval && opts.approval.signature ? opts.approval : null;
-  const approvalAs = approval ? approvalState(approval, rooms, { tiersShown: showTiers }) : null;
+  const approvalAs = approval ? approvalState(approval, opts.scopeRooms ?? rooms, { tiersShown: showTiers }) : null;
   const signed = approvalAs === "signed" ? approval : null;
   const revisedAfter = approvalAs === "revised" ? approval : null;
   const unverified = approvalAs === "unverified" ? approval : null;

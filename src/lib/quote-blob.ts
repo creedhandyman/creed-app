@@ -152,3 +152,57 @@ export function readQuoteSettings(blob: RoomsBlob | null | undefined): QuoteSett
     estDays: readEstDays(blob?.estDays),
   };
 }
+
+type TierTagged = { id?: string; detail?: string; tiers?: unknown; tier?: unknown };
+const TIER_SET = new Set(["base", "better", "best"]);
+const tierList = (v: unknown): ("base" | "better" | "best")[] | null => {
+  if (!Array.isArray(v)) return null;
+  const out = v.filter((t): t is "base" | "better" | "best" => typeof t === "string" && TIER_SET.has(t));
+  return out.length ? Array.from(new Set(out)) : null;
+};
+const keyOf = (room: unknown, detail: unknown) =>
+  `${String(room ?? "").toLowerCase().replace(/\s+/g, " ").trim()}|${String(detail ?? "").toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+/**
+ * The quote's lines with their three-tier OPTION membership filled in — the
+ * way every reader that prices or shows options must read `blob.rooms`
+ * (printed quote, /status approve page, approve route, editor load).
+ *
+ * A tiered quote (`tieredQuote: true`) can carry the option tags only on its
+ * WORK ORDER (Grid 603-605, job 71b12f98: two exclusive shade options with no
+ * `tiers` on the quote lines, so the PDF read both lines as "in every option"
+ * and charged both). An item with no `tiers` / `tier` of its own takes them
+ * from its work-order task (by itemId, else trade + detail); an item with tags
+ * nowhere stays untagged, which `itemTiers` reads as shared by all options.
+ * Not tiered → the rooms exactly as saved. Pure; never mutates the blob.
+ *
+ * Do NOT use this for the approval fingerprint (approval.ts scopeFingerprint):
+ * signatures were recorded against the saved lines.
+ */
+export function readTierRooms<R = { name: string; items: TierTagged[] }>(blob: RoomsBlob | null | undefined): R[] {
+  const rooms = (Array.isArray(blob?.rooms) ? blob!.rooms : []) as { name?: unknown; items?: unknown }[];
+  if (blob?.tieredQuote !== true) return rooms as unknown as R[];
+  const wo = (Array.isArray(blob?.workOrder) ? blob!.workOrder : []) as { itemId?: unknown; room?: unknown; detail?: unknown; tiers?: unknown }[];
+  const byId = new Map<string, ("base" | "better" | "best")[]>();
+  const byKey = new Map<string, ("base" | "better" | "best")[]>();
+  for (const w of wo) {
+    const t = w && typeof w === "object" ? tierList(w.tiers) : null;
+    if (!t) continue;
+    if (typeof w.itemId === "string" && w.itemId) byId.set(w.itemId, t);
+    const k = keyOf(w.room, w.detail);
+    if (!byKey.has(k)) byKey.set(k, t);
+  }
+  if (!byId.size && !byKey.size) return rooms as unknown as R[];
+  return rooms.map((r) => {
+    if (!r || typeof r !== "object" || !Array.isArray(r.items)) return r;
+    return {
+      ...r,
+      items: (r.items as TierTagged[]).map((it) => {
+        if (!it || typeof it !== "object") return it;
+        if (tierList(it.tiers) || (typeof it.tier === "string" && TIER_SET.has(it.tier))) return it;
+        const t = (typeof it.id === "string" && byId.get(it.id)) || byKey.get(keyOf(r.name, it.detail));
+        return t ? { ...it, tiers: t } : it;
+      }),
+    };
+  }) as unknown as R[];
+}

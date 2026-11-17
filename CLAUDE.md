@@ -247,6 +247,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     Better/Best…). Used by the QuoteForge load, quote-pdf, the Jobs invoice and
     /status — never re-check these inline. Photos are NOT in it on purpose (the
     PDF keeps `rendered`, the editor clamps types).
+  - `lib/quote-blob.ts readTierRooms(blob)` — the quote lines WITH their option
+    tags: on a tiered quote an untagged line takes its tiers from its work-order
+    task (itemId, else trade + detail); untagged everywhere = in all options.
+    Every reader that prices or shows options uses it (PDF, /status, approve
+    route, editor load, job summary); tierSplit is never required. The approval
+    fingerprint stays on the SAVED lines (job 71b12f98 fix, 2026-11-17).
   - `lib/quote-save.ts` `buildQuoteSave(input)` → `{row, blob, droppedDone}` —
     what QuoteForge's `saveJob` WRITES, pure (2026-10-29): work-order merge
     (editable fields from the new step; only `done`/`completed_at` inherited from

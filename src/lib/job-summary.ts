@@ -21,6 +21,7 @@ import { isSuppliesOnlyLine } from "./line-canon";
 import { rowTier } from "./quote-totals";
 import { itemInTier, type TierKey } from "./tiers";
 import type { RoomsBlob } from "./job-blob";
+import { readTierRooms } from "./quote-blob";
 
 type LineLike = { id?: string; detail?: unknown; laborHrs?: unknown; tiers?: TierKey[] | null; tier?: string | null };
 type RoomLike = { name?: unknown; items?: unknown };
@@ -63,7 +64,7 @@ export function summaryTier(blob: RoomsBlob): TierKey | null {
 
 /** The quote lines a summary describes, in quote order. */
 export function summaryTasks(blob: RoomsBlob): SummaryTask[] {
-  const rooms = Array.isArray(blob?.rooms) ? (blob.rooms as RoomLike[]) : [];
+  const rooms = readTierRooms<RoomLike>(blob);
   const tier = summaryTier(blob);
   const all: (LineLike & { _trade: string })[] = [];
   for (const r of rooms) {

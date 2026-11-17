@@ -3,7 +3,7 @@ import { exportQuotePdf } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
 import { readBlob } from "./job-blob";
 import { pricingInputs, type PricedRates } from "./pricing";
-import { readQuoteSettings, readSentTier, readPricedRates } from "./quote-blob";
+import { readQuoteSettings, readSentTier, readPricedRates, readTierRooms } from "./quote-blob";
 import { itemInTier } from "./tiers";
 
 /**
@@ -60,9 +60,14 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   let estDays: number | null = null;
   let tierNames: { better: string; best: string } | undefined;
   let priced: PricedRates | null = null;
+  // The lines as saved — what an approval signature was recorded against.
+  let scopeRooms: Room[] = [];
   try {
     const data = readBlob(job.rooms);
-    rooms = (data?.rooms || []) as Room[];
+    scopeRooms = (data?.rooms || []) as Room[];
+    // Option tags filled in from the work order when the lines lack them
+    // (readTierRooms) — otherwise exclusive options print as one stacked total.
+    rooms = readTierRooms<Room>(data);
     workers = (data?.workers || []).map((w: { id?: string; name?: string }) => ({
       id: w.id || "",
       name: w.name || "",
@@ -128,6 +133,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     quoteTerms: org?.quote_terms,
     tieredQuote,
     tierNames,
+    scopeRooms,
     crewSize,
     estDays,
     orgPhone: org?.phone,
