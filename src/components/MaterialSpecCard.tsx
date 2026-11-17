@@ -11,6 +11,7 @@ import { useStore } from "@/lib/store";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 import MaterialSpecImport from "./MaterialSpecImport";
+import PurchasePriceImport from "./PurchasePriceImport";
 import {
   deleteSpec, deleteSpecItem, listSpecs, loadSpecItems, removeSpecFile, specFileUrl, specItemCounts, updateSpec, updateSpecItem,
   type MaterialSpec,
@@ -36,6 +37,7 @@ export default function MaterialSpecCard({ customer }: { customer: Customer }) {
   const [loaded, setLoaded] = useState(false);
   const [importFor, setImportFor] = useState<string | null>(null); // "new" or a spec id
   const [open, setOpen] = useState<MaterialSpec | null>(null);
+  const [pricesOpen, setPricesOpen] = useState(false);
 
   const reload = useCallback(async () => {
     const r = await listSpecs(customer.id);
@@ -104,6 +106,13 @@ export default function MaterialSpecCard({ customer }: { customer: Customer }) {
           ))}
         </>
       )}
+
+      {!missing && specs.length > 0 && (
+        <button className="bo" onClick={() => setPricesOpen(true)} style={{ width: "auto", fontSize: 13, padding: "5px 10px", marginTop: 8 }}>
+          <Icon name="receipt" size={13} /> {t("pp.fromStore")}
+        </button>
+      )}
+      {pricesOpen && <PurchasePriceImport onClose={() => setPricesOpen(false)} onSaved={() => void reload()} />}
 
       {importFor && (
         <MaterialSpecImport

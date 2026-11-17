@@ -2,6 +2,16 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
+- Store purchase prices (2026-11-19, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261119_store_purchase_prices.sql` (safe to re-run; run
+  AFTER 20261117). Tables `material_price_history` (every imported purchase
+  line, unique `(org_id, line_hash)` so re-imports add nothing; no UPDATE
+  policy) and `material_prices` (current price per product, unique
+  `(org_id, product_key)`), plus `material_spec_items.price_updated_at /
+  price_source`. RLS: org reads, owners / managers write. Until it runs the
+  Pricing & taxes card says "not set up", the import can read files but not
+  save, and quotes are unchanged. In preflight `DB_CHECKS`.
+
 - Material spec original files (2026-11-18, **NOT run** — needs Bernard's yes):
   `supabase/migrations/20261118_material_spec_files.sql` (safe to re-run; run
   AFTER 20261117). Adds `material_specs.files JSONB` (list of stored originals)

@@ -4,7 +4,7 @@ import { apiFetch } from "./api";
 import { MATERIALS_DB } from "./materials-db";
 import { TRADE_CATEGORY_LIST, canonicalDetail, isSuppliesOnlyLine } from "./line-canon";
 import { withTimeout } from "./pdf-detect";
-import { buildGrounding, type KbRow } from "./quote-grounding";
+import { buildGrounding, type KbRow, type StorePrice } from "./quote-grounding";
 import { applySpec, specNotes, specPromptBlock, type SpecItem } from "./material-spec";
 import { salvageJson } from "./json-salvage";
 import { completionJobIds, dropUnfinishedJobRows } from "./learning-rows";
@@ -1581,6 +1581,16 @@ export interface ParserDeps {
   getPriceBook?: () => Promise<KbRow[]>;
   /** Current status of these jobs, by id (see learning-rows.ts). */
   getJobStatuses?: (ids: string[]) => Promise<Record<string, string>>;
+  /** The org's latest store prices (material_prices). */
+  getStorePrices?: () => Promise<StorePrice[]>;
+}
+
+/** Latest store prices for the signed-in app (RLS = own org). Silent: [] when
+ *  the table isn't there yet or the read fails. Not cached — an import should
+ *  show up in the very next quote. */
+async function loadStorePrices(): Promise<StorePrice[]> {
+  const { loadLatestStorePrices } = await import("./purchase-import-client");
+  return loadLatestStorePrices();
 }
 
 /** Job statuses for the signed-in app (RLS = own org). Silent on failure:
@@ -1830,7 +1840,8 @@ async function aiParsePdfSingle(
     let groundingPrompt = "";
     try {
       const kb = deps ? (deps.getPriceBook ? await deps.getPriceBook() : []) : await loadPriceBook();
-      groundingPrompt = buildGrounding({ request: text, corrections: groundingRows, kb, zip: propertyZip }).prompt;
+      const storePrices = deps ? (deps.getStorePrices ? await deps.getStorePrices() : []) : await loadStorePrices();
+      groundingPrompt = buildGrounding({ request: text, corrections: groundingRows, kb, zip: propertyZip, storePrices }).prompt;
     } catch { /* grounding is optional */ }
 
     // Build content array with text + images. Each image is either a

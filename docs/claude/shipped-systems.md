@@ -2,6 +2,41 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Store purchase prices (2026-11-19)**. Import Home Depot / Lowe's purchases
+  so quotes and customer specs use what the shop really paid.
+  - **Where**: Ops → Settings → Pricing & taxes → "Store purchase prices"
+    (`StorePricesCard` → `PurchasePriceImport`), and "Update prices from store
+    purchases" on a customer's Material spec card.
+  - **Reading** (`lib/purchase-import.ts`, pure, tested): HD Pro "Purchase
+    Tracking" ITEM export is mapped directly — 6-row preamble, header found in
+    the first 20 rows; per-unit price = **Extended Retail (before discount) ÷
+    Quantity** (that column is really AFTER the discount; "Net Unit Price" is
+    the line total before it; "Unit Price" is empty). Any other sheet with
+    description + price headers maps too. ORDER-only exports (HD transaction
+    list, the Lowe's Pro export — totals, no items) are recognized and noted,
+    never guessed at. Everything else (receipt PDFs / photos, odd text) goes to
+    `/api/prices/extract` (call_type `price_import`), chunked like the spec
+    upload (`lib/file-read.ts`). Lines are classified: returns, fees,
+    snacks/drinks skipped; tools (HD "TOOLS" depts, drill/saw/… words) off unless
+    ticked; bits/blades/screws stay materials.
+  - **Rules**: newest price per product (`productKey` = store + SKU, else
+    model, else description); an older or undated line never replaces a dated
+    price ("older"), same price = unchanged. Spec items match by SKU → model
+    (column or a ≥4-char token in the description) → brand in the description
+    + ≥2 name words covering ≥70%; a spec `store` naming another store blocks
+    the match; returns never match. Unmatched spec items are never touched.
+    History hashes the purchase, not the file (`lineHash` + per-file
+    occurrence), so overlapping exports don't double up.
+  - **Review**: every product change (old → new, store · SKU · date · job/PO)
+    and every spec match (customer, how it matched) with a checkbox; spec
+    matches older than the spec's price start unticked. Save writes history
+    (lines of kept products), current prices, then spec items
+    (`unit_price` + `price_updated_at` + `price_source`).
+  - **Quotes**: `buildGrounding` gets `storePrices` (app: `loadLatestStorePrices`,
+    lead drafts: service role filtered by org) and adds "Latest store prices"
+    above the shop list (rankByRequest, 40% share, ≥2 shared words). Spec
+    items already price spec materials.
+
 - **Per-customer material specs (2026-11-17)**. A customer can require exact
   products (brand / model / store). Plan + SQL: `customer-material-specs.md`;
   tables `material_specs` + `material_spec_items` (migrations.md).

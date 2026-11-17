@@ -410,6 +410,12 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   Not done: old Excel `.xls` (save as .xlsx / CSV); a scanned PDF with no text
   layer over 3 MB can't be read.
 
+- **Store purchase prices SHIPPED (2026-11-19)** — Home Depot / Lowe's
+  purchase exports + receipts → org prices (newest per product, with history)
+  + matching customer spec items; see shipped-systems.md. SQL
+  `20261119_store_purchase_prices.sql` NOT run yet. Lowe's Pro's export has
+  no item lines (orders only); Lowe's prices come from receipts for now.
+
 - **Dejavoo / iPOSPays card payments (PLAN v2 2026-11-16, from the API docs;
   no code yet, waiting on Bernard's OK).** Sandbox only; per-org merchant
   credentials. Hosted Payment Page for pay links and in the field (QR code or

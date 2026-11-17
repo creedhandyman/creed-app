@@ -25,10 +25,11 @@ import { apiFetch } from "@/lib/api";
 import { t } from "@/lib/i18n";
 import { Icon } from "./Icon";
 import {
-  batches, blankDraft, chunkPages, cleanDrafts, fileSizeLabel, mergeDrafts, parseCsv, planSheets,
+  blankDraft, chunkPages, cleanDrafts, fileSizeLabel, mergeDrafts, parseCsv, planSheets,
   savableDrafts, specFileKind, SPEC_TRADES, type SpecDraft,
 } from "@/lib/spec-import";
 import { createSpec, saveDrafts, storeSpecFiles, type MaterialSpec } from "@/lib/material-spec-client";
+import { dataUriToImg, fileToBase64, imageCalls, imagesBody, photoToImg, type Img } from "@/lib/file-read";
 
 /** PDFs up to this size go to the AI whole (base64 must fit Vercel's body cap). */
 const PDF_INLINE_MAX = 3_000_000;
@@ -36,10 +37,6 @@ const PDF_INLINE_MAX = 3_000_000;
 const CHUNK_CHARS = 40_000;
 /** Scanned pages rendered for a big scanned PDF (the rest are noted). */
 const MAX_SCAN_PAGES = 60;
-/** Images per AI call, and their combined size (decoded). */
-const IMAGES_PER_CALL = 4;
-const IMAGE_BATCH_BYTES = 2_400_000;
-
 interface Props {
   customerId: string;
   customerName: string;
@@ -53,39 +50,6 @@ interface Props {
 type Stage = "source" | "working" | "review";
 interface Row { key: number; d: SpecDraft }
 interface AiCall { body: Record<string, unknown>; label: string }
-interface Img { data: string; media_type: string; bytes: number }
-
-const fileToBase64 = (f: Blob) =>
-  new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || "").replace(/^data:[^,]*,/, ""));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(f);
-  });
-
-const dataUriToImg = (uri: string): Img => {
-  const m = uri.match(/^data:(image\/[a-z]+);base64,(.*)$/);
-  const data = m ? m[2] : uri;
-  return { data, media_type: m ? m[1] : "image/jpeg", bytes: Math.round(data.length * 0.75) };
-};
-
-/** Group images into AI calls by count and size. */
-function imageCalls(imgs: Img[]): Img[][] {
-  const out: Img[][] = [];
-  let cur: Img[] = [];
-  let bytes = 0;
-  for (const im of imgs) {
-    if (cur.length && (cur.length >= IMAGES_PER_CALL || bytes + im.bytes > IMAGE_BATCH_BYTES)) {
-      out.push(cur);
-      cur = [];
-      bytes = 0;
-    }
-    cur.push(im);
-    bytes += im.bytes;
-  }
-  if (cur.length) out.push(cur);
-  return out;
-}
 
 export default function MaterialSpecImport({ customerId, customerName, specs, initialSpecId, onClose, onSaved }: Props) {
   const showToast = useStore((s) => s.showToast);
@@ -163,10 +127,7 @@ export default function MaterialSpecImport({ customerId, customerName, specs, in
         try { sheets = await readXlsxSheets(file); } catch { throw new Error(t("spec.xlsxFailed")); }
         sheetCalls(sheets, file.name);
       } else if (kind === "image") {
-        const { compressImage } = await import("@/lib/image");
-        const small = await compressImage(file, 2000, 0.85);
-        const data = await fileToBase64(small);
-        photos.push({ data, media_type: small.type && small.type.startsWith("image/") ? small.type : "image/jpeg", bytes: Math.round(data.length * 0.75) });
+        photos.push(await photoToImg(file));
       } else if (kind === "pdf") {
         const { readPdfPages, renderPdfPages } = await import("@/lib/parser");
         let pages: string[] = [];
@@ -206,7 +167,7 @@ export default function MaterialSpecImport({ customerId, customerName, specs, in
             const last = first + group.length - 1;
             const pg = first === last ? `page ${first}` : `pages ${first}-${last}`;
             calls.push({
-              body: { images: group.map(({ data, media_type }) => ({ data, media_type })), fileName: file.name, part: `${pg} of ${pages.length || uris.length}` },
+              body: { images: imagesBody(group), fileName: file.name, part: `${pg} of ${pages.length || uris.length}` },
               label: `${file.name} · ${pg}`,
             });
             first = last + 1;
@@ -218,7 +179,7 @@ export default function MaterialSpecImport({ customerId, customerName, specs, in
     if (photos.length) {
       const groups = imageCalls(photos);
       groups.forEach((g, i) => calls.push({
-        body: { images: g.map(({ data, media_type }) => ({ data, media_type })), part: groups.length > 1 ? `photo set ${i + 1} of ${groups.length}` : undefined },
+        body: { images: imagesBody(g), part: groups.length > 1 ? `photo set ${i + 1} of ${groups.length}` : undefined },
         label: groups.length > 1 ? `${t("spec.photos")} (${i + 1}/${groups.length})` : t("spec.photos"),
       }));
     }

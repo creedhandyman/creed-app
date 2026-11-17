@@ -317,13 +317,30 @@ export interface GroundingInput {
   /** price_book rows (any scope — filtered here). */
   kb?: KbRow[];
   zip?: string;
+  /** The org's latest store prices (material_prices, from imported Home
+   *  Depot / Lowe's purchases), newest first. */
+  storePrices?: StorePrice[];
+}
+
+/** One product's latest store price (lib/purchase-import.ts). */
+export interface StorePrice {
+  description: string;
+  store: string | null;
+  unit_price: number;
+  purchased_on: string | null;
 }
 
 export interface Grounding {
   prompt: string;
   /** Counts per source, for tests and debugging. */
-  used: { pastWork: number; receipts: number; kb: number; shop: number };
+  used: { pastWork: number; receipts: number; kb: number; shop: number; store: number };
 }
+
+/** "Jul 2026" for a YYYY-MM-DD date. */
+const monthYear = (d: string | null) => {
+  const m = d?.match(/^(\d{4})-(\d{2})/);
+  return m ? `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(m[2]) - 1]} ${m[1]}` : "";
+};
 
 /**
  * The per-request grounding block for the quoter's system prompt. Empty
@@ -337,6 +354,14 @@ export function buildGrounding(input: GroundingInput): Grounding {
   const receipts = rankByRequest(receiptPricesFrom(rows, input.zip), (p) => p.name, request, 12);
   const kb = rankByRequest(usableKbRows(input.kb || []), kbTask, request, 25);
   const shop = shopPricesFor(request);
+  // Latest store prices: product descriptions are long ("1 gal. Pure White
+  // Base 1 Semi-Gloss Interior Paint") and carry words a request never uses,
+  // so a lower share (40%) — the ≥2-shared-words rule still applies, so one
+  // common word ("drill") never pulls a product in.
+  const store = rankByRequest(
+    (input.storePrices || []).filter((p) => p.unit_price > 0 && !NOT_MATERIAL.test(p.description)),
+    (p) => p.description, request, 15, 0.4,
+  );
 
   const parts: string[] = [];
   if (past.length) {
@@ -371,8 +396,14 @@ export function buildGrounding(input: GroundingInput): Grounding {
           .join("\n"),
     );
   }
-  if (shop.length || receipts.length) {
+  if (shop.length || receipts.length || store.length) {
     const lines: string[] = [];
+    if (store.length) {
+      lines.push(
+        `Latest store prices (per unit, the newest purchase — prefer these over the shop list and receipts for the same product): ` +
+          store.map((p) => `${clip(p.description, 70)} $${p.unit_price}${p.store || p.purchased_on ? ` (${[p.store, monthYear(p.purchased_on)].filter(Boolean).join(", ")})` : ""}`).join("; "),
+      );
+    }
     if (shop.length) lines.push(`Shop list (use only the items your lines need): ${shop.map((s) => `${s.name} $${s.price}`).join(", ")}`);
     if (receipts.length) {
       lines.push(`Recent receipts (per unit): ${receipts.map((r) => `${clip(r.name, 60)} $${r.price}`).join(", ")}`);
@@ -385,6 +416,6 @@ export function buildGrounding(input: GroundingInput): Grounding {
   }
   return {
     prompt: parts.length ? `\n${parts.join("\n\n")}\n\n` : "",
-    used: { pastWork: past.length, receipts: receipts.length, kb: kb.length, shop: shop.length },
+    used: { pastWork: past.length, receipts: receipts.length, kb: kb.length, shop: shop.length, store: store.length },
   };
 }

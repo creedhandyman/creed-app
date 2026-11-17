@@ -94,6 +94,10 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "material_spec_items", table: "material_spec_items", column: "companions" },
   // Original spec files (supabase/migrations/20261118_material_spec_files.sql).
   { key: "material_specs.files", table: "material_specs", column: "files" },
+  // Store purchase prices (supabase/migrations/20261119_store_purchase_prices.sql).
+  { key: "material_prices", table: "material_prices", column: "product_key" },
+  { key: "material_price_history", table: "material_price_history", column: "line_hash" },
+  { key: "material_spec_items.price_updated_at", table: "material_spec_items", column: "price_updated_at" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

@@ -21,6 +21,7 @@ import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
 import BookingSettings from "../BookingSettings";
+import StorePricesCard from "../StorePricesCard";
 import Campaigns from "./Campaigns";
 import { CampaignsCard, ReferralsCard } from "../MarketingSettings";
 import { tiersDefaultOn } from "@/lib/tiers";
@@ -474,7 +475,7 @@ function OpsSettings() {
         },
         {
           id: "pricing", icon: "money", title: t("ops.cat.pricing"), sub: t("ops.cat.pricingSub"),
-          content: (<>{quoteSettingsCard}{tradeRatesCard}</>),
+          content: (<>{quoteSettingsCard}{tradeRatesCard}<StorePricesCard /></>),
         },
         {
           id: "terms", icon: "doc", title: t("ops.cat.terms"), sub: t("ops.cat.termsSub"),

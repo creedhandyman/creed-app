@@ -149,6 +149,16 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
         .eq("active", true).or(`org_id.is.null,org_id.eq.${orgId}`).limit(1000);
       return (data || []) as Awaited<ReturnType<NonNullable<ParserDeps["getPriceBook"]>>>;
     },
+    getStorePrices: async () => {
+      // Latest imported store prices (material_prices). Missing table → [].
+      const { data, error } = await supabase.from("material_prices")
+        .select("description, store, unit_price, purchased_on").eq("org_id", orgId)
+        .order("purchased_on", { ascending: false, nullsFirst: false }).limit(1500);
+      if (error || !Array.isArray(data)) return [];
+      return (data as Array<{ description: string; store: string | null; unit_price: number | string; purchased_on: string | null }>)
+        .map((r) => ({ ...r, unit_price: Number(r.unit_price) }))
+        .filter((r) => Number.isFinite(r.unit_price) && r.unit_price > 0);
+    },
     callAi: async (body) => {
       // The lead route has already spent part of its 300s saving the lead.
       const { status, data } = await callClaude(body, { orgId, callType: "lead_draft" }, { deadlineMs: 230_000 });

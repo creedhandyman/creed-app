@@ -188,3 +188,26 @@ describe("buildGrounding", () => {
     expect(buildGrounding({ request: "", corrections: [], kb: [] }).prompt).toBe("");
   });
 });
+
+describe("latest store prices (imported purchases)", () => {
+  const storePrices = [
+    { description: "1 gal. Pure White Base 1 Semi-Gloss Interior Paint", store: "Home Depot", unit_price: 34.98, purchased_on: "2026-07-02" },
+    { description: "Perfect Seal Toilet Wax Ring with Bolts", store: "Home Depot", unit_price: 9.33, purchased_on: "2026-07-01" },
+    { description: "DEWALT Cordless Drill", store: "Lowe's", unit_price: 113.48, purchased_on: "2026-06-01" },
+    { description: "Mountain Dew 20 Oz. Soda", store: "Home Depot", unit_price: 2.58, purchased_on: "2026-04-15" },
+  ];
+
+  it("lists the matching products with price, store and month", () => {
+    const g = buildGrounding({ request: "Replace toilet wax ring and bolts. Paint bedroom walls semi-gloss interior paint.", storePrices });
+    expect(g.used.store).toBe(2);
+    expect(g.prompt).toContain("Latest store prices");
+    expect(g.prompt).toContain("Perfect Seal Toilet Wax Ring with Bolts $9.33 (Home Depot, Jul 2026)");
+    expect(g.prompt).toContain("Semi-Gloss Interior Paint $34.98");
+  });
+
+  it("never pulls a product in on one shared word, and skips snacks", () => {
+    const g = buildGrounding({ request: "Drill a hole for the dryer vent. Grab a soda.", storePrices });
+    expect(g.used.store).toBe(0);
+    expect(g.prompt).not.toContain("Latest store prices");
+  });
+});
