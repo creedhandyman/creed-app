@@ -401,6 +401,15 @@ When you ship a feature or add a migration, add the entry THERE, not here.
 
 ## Things that still bug me / open follow-ups
 
+- **Per-customer material specs (PLAN 2026-11-17, not built; waiting on
+  Bernard's OK, SQL not run).** A customer (e.g. Grid PM) gets its own
+  material spec, imported from CSV / Excel / PDF / pasted text (AI extracts,
+  owner reviews before save). Quotes for that customer use spec items first
+  (prompt block + a deterministic after-AI `applySpec` pass with pack rounding
+  and companion items), then the normal flow; spec name/model shows on quote
+  lines and the PDF. Tables `material_specs` + `material_spec_items`, org RLS.
+  Plan + SQL: `docs/claude/customer-material-specs.md`.
+
 - **Dejavoo / iPOSPays card payments (PLAN v2 2026-11-16, from the API docs;
   no code yet, waiting on Bernard's OK).** Sandbox only; per-org merchant
   credentials. Hosted Payment Page for pay links and in the field (QR code or
