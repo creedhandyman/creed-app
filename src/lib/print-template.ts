@@ -304,6 +304,14 @@ tr:nth-child(even) td { background: #fafbfd; }
      page and leave huge gaps. */
   .box, .head { break-inside: avoid; }
   tr { break-inside: avoid; }
+  /* Three-tier quotes: an option box may split across pages (a long one used
+     to jump whole to the next page and leave the page before half empty);
+     only a single line item, and the box's name + price header, stay whole.
+     Each option's "What this option adds" section flows on after the one
+     before it instead of starting a new page. */
+  .tier-grid, .tier-box, .tier-section { break-inside: auto; }
+  .tier-box li { break-inside: avoid; }
+  .tier-section h2 { break-after: avoid; }
 }
 `;
 }

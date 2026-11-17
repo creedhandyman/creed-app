@@ -314,7 +314,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   const tiersHtml = showTiers
     ? `
 <h2>${acceptedIdx >= 0 ? "Your Selected Option" : "Choose Your Option"}</h2>
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px;page-break-inside:avoid">
+<div class="tier-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px">
   ${tierCols
     .map((col, idx) => {
       const hue = idx === 0 ? "#666" : idx === 1 ? accent : "#7a3fb8";
@@ -345,7 +345,7 @@ export function exportQuotePdf(opts: ExportOptions) {
             + (added.length ? ul(li(added, 10, kept > 0 || keptAll ? "+ " : ""), kept > 0 || keptAll) : "")
             + (removed.length && kept > 0 ? ul(li(removed, 6, "− ", "color:#999;text-decoration:line-through"), true) : "");
       }
-      return `<div style="border:${picked ? 3 : 2}px solid ${hue};border-radius:10px;padding:12px;page-break-inside:avoid;${acceptedIdx >= 0 && !picked ? "opacity:.55;" : ""}">
+      return `<div class="tier-box" style="border:${picked ? 3 : 2}px solid ${hue};border-radius:10px;padding:12px;${acceptedIdx >= 0 && !picked ? "opacity:.55;" : ""}">
       <div style="font-family:Oswald,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:${hue};font-weight:700">${esc(col.name)}${picked ? ` <span style="font-size:10px;background:${hue};color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px;letter-spacing:.08em">✓ Selected</span>` : acceptedIdx < 0 && idx === 1 ? ` <span style="font-size:10px;background:${hue};color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px;letter-spacing:.08em">Recommended</span>` : ""}</div>
       <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:${hue};margin:4px 0 2px">$${col.total.toFixed(0)}</div>
       <div style="font-size:11px;color:#666">${col.items.length} line item${col.items.length === 1 ? "" : "s"}</div>
@@ -596,7 +596,7 @@ ${buildBreakdown(shared, true)}` : "";
               Math.abs(adj) >= 0.01 ? `charges, discount &amp; tax ${adj < 0 ? "−" : ""}$${Math.abs(adj).toFixed(2)}` : "",
             ].filter(Boolean).join(" + ").replace("+ charges, discount &amp; tax −", "− charges, discount &amp; tax ");
             return `
-<div style="page-break-before:always">
+<div class="tier-section" style="margin-top:22px">
   <h2 style="color:${hue};border-color:${hue}">${esc(col.name)} — What This Option Adds <span style="float:right">$${col.total.toFixed(2)}</span></h2>
   <div style="font-size:12px;margin:-4px 0 10px;color:${hue};font-weight:600">${math} = <b>$${col.total.toFixed(2)}</b></div>
   ${extra.length ? buildBreakdown(extra, true) : `<div class="dim" style="margin-bottom:12px">No work beyond the shared scope — this option is the work in every option.</div>`}
