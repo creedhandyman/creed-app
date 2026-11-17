@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "./Icon";
 import { searchMaterials } from "@/lib/materials-db";
 import type { Material } from "@/lib/types";
+import { searchSpec, specDisplayName, specTag, type SpecItem } from "@/lib/material-spec";
 
 /**
  * Materials editor for ONE quote line (= one work-order task), opened from the
@@ -23,11 +24,14 @@ interface Props {
   darkMode: boolean;
   onChange: (mats: Material[]) => void;
   onClose: () => void;
+  /** The customer's material spec: suggested first, tagged "Spec". */
+  spec?: SpecItem[];
+  specLabel?: string;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export default function MaterialsSheet({ title, materials, darkMode, onChange, onClose }: Props) {
+export default function MaterialsSheet({ title, materials, darkMode, onChange, onClose, spec = [], specLabel = "Spec" }: Props) {
   const [focusIdx, setFocusIdx] = useState<number | null>(null);
   const [pendingFocus, setPendingFocus] = useState<number | null>(null);
   const nameRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -93,14 +97,23 @@ export default function MaterialsSheet({ title, materials, darkMode, onChange, o
   };
 
   const query = focusIdx !== null ? (rows[focusIdx]?.n || "").trim() : "";
-  const suggestions = useMemo(
-    () => (query.length >= 2 ? searchMaterials(query).filter((m) => m.name.toLowerCase() !== query.toLowerCase()).slice(0, 5) : []),
-    [query],
-  );
+  // The customer's spec products first, then the shop list.
+  type Suggestion = { name: string; price: number | null; item?: SpecItem };
+  const suggestions = useMemo((): Suggestion[] => {
+    if (query.length < 2) return [];
+    const fromSpec: Suggestion[] = searchSpec(spec, query, 5).map((it) => ({ name: specDisplayName(it), price: it.unit_price ?? null, item: it }));
+    const shop = searchMaterials(query)
+      .filter((m) => m.name.toLowerCase() !== query.toLowerCase())
+      .map((m): Suggestion => ({ name: m.name, price: m.price }));
+    return [...fromSpec, ...shop].filter((s) => s.name.toLowerCase() !== query.toLowerCase()).slice(0, Math.max(5, fromSpec.length));
+  }, [query, spec]);
 
-  const pick = (i: number, name: string, price: number) => {
+  const pick = (i: number, name: string, price: number | null, item?: SpecItem) => {
     const q = rows[i].qty && rows[i].qty! > 0 ? rows[i].qty! : 1;
-    setRow(i, { ...rows[i], n: name, unitPrice: price, qty: q, c: round2(q * price) });
+    const { spec: _old, ...base } = rows[i];
+    void _old;
+    const unit = price ?? base.unitPrice ?? 0;
+    setRow(i, { ...base, n: name, unitPrice: unit, qty: q, c: round2(q * unit), ...(item ? { spec: specTag(item) } : {}) });
     setFocusIdx(null);
   };
 
@@ -155,24 +168,39 @@ export default function MaterialsSheet({ title, materials, darkMode, onChange, o
                   placeholder="What material? e.g. GFCI outlet"
                   onFocus={() => setFocusIdx(i)}
                   onBlur={() => setTimeout(() => setFocusIdx((f) => (f === i ? null : f)), 150)}
-                  onChange={(e) => setRow(i, { ...m, n: e.target.value })}
+                  onChange={(e) => {
+                    // Typing over a spec product's name makes it an ordinary material.
+                    const { spec: _s, ...rest } = m;
+                    void _s;
+                    setRow(i, { ...rest, n: e.target.value });
+                  }}
                   style={{ ...fieldStyle, flex: 1 }}
                 />
                 <button onClick={() => remove(i)} aria-label={`Remove ${m.n || "material"}`} style={{ ...stepBtn, color: "var(--color-accent-red)", fontSize: 16 }}>
                   <Icon name="delete" size={16} />
                 </button>
               </div>
+              {m.spec && (
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 5, fontSize: 12 }}>
+                  <span style={{ fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".05em", fontSize: 10.5, padding: "1px 7px", borderRadius: 99, border: "1px solid var(--color-primary)", color: "var(--color-primary)" }}>{specLabel}</span>
+                  {m.spec.priceNeeded && <span style={{ color: "var(--color-warning)" }}>price not on the spec</span>}
+                  {m.spec.companionOf && <span className="dim">added with a spec item</span>}
+                </div>
+              )}
               {focusIdx === i && suggestions.length > 0 && (
                 <div style={{ marginTop: 6, border: `1px solid ${border}`, borderRadius: 9, overflow: "hidden" }}>
                   {suggestions.map((s) => (
                     <button
-                      key={s.name}
+                      key={(s.item ? "spec:" : "") + s.name}
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => pick(i, s.name, s.price)}
+                      onClick={() => pick(i, s.name, s.price, s.item)}
                       style={{ display: "flex", width: "100%", justifyContent: "space-between", gap: 8, padding: "9px 10px", background: darkMode ? "#0d0d14" : "#fff", border: 0, borderBottom: `1px solid ${border}`, color: ink, fontSize: 14, textAlign: "left", textTransform: "none", fontFamily: "inherit", cursor: "pointer" }}
                     >
-                      <span>{s.name}</span>
-                      <span style={{ color: "var(--color-warning)", fontFamily: "Oswald" }}>${s.price}</span>
+                      <span>
+                        {s.item && <span style={{ fontFamily: "Oswald", fontSize: 10.5, color: "var(--color-primary)", marginRight: 6, textTransform: "uppercase" }}>{specLabel}</span>}
+                        {s.name}
+                      </span>
+                      <span style={{ color: "var(--color-warning)", fontFamily: "Oswald" }}>{s.price == null ? "—" : `$${s.price}`}</span>
                     </button>
                   ))}
                 </div>

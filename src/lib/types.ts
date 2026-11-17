@@ -763,6 +763,21 @@ export interface Material {
   c: number;          // line total (= qty × unitPrice when both are set)
   qty?: number;       // quantity, defaults to 1 if absent
   unitPrice?: number; // per-unit price, defaults to c (lump sum) if absent
+  /** Set when the material came from the customer's material spec
+   *  (lib/material-spec.ts applySpec). Kept on the saved quote. */
+  spec?: MaterialSpecTag;
+}
+
+/** What a quote material remembers about the customer-spec item it came
+ *  from (lib/material-spec.ts). */
+export interface MaterialSpecTag {
+  itemId: string;
+  brand?: string;
+  model?: string;
+  /** The spec has no price for it: the cost is an estimate. */
+  priceNeeded?: boolean;
+  /** On a companion material: the spec item id it was added for. */
+  companionOf?: string;
 }
 
 /** Inspection findings (Inspector + Voice Walk both produce these). */

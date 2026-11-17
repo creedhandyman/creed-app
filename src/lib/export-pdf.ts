@@ -450,7 +450,7 @@ export function exportQuotePdf(opts: ExportOptions) {
 
     const matMap: Record<
       string,
-      { n: string; unitPrice: number; qty: number; total: number; notes: string[]; tag: string | null }
+      { n: string; unitPrice: number; qty: number; total: number; notes: string[]; tag: string | null; spec: boolean }
     > = {};
     // Tiered quote: tag lines that aren't in every option ("Better & Best
     // only") so the breakdown shows what each option adds.
@@ -489,6 +489,8 @@ export function exportQuotePdf(opts: ExportOptions) {
               total: m.c,
               notes: it.detail ? [it.detail] : [],
               tag,
+              // From the customer's material spec (lib/material-spec.ts).
+              spec: !!m.spec?.itemId,
             };
           }
         }
@@ -496,7 +498,10 @@ export function exportQuotePdf(opts: ExportOptions) {
     });
     let matRows = "";
     Object.values(matMap).forEach((m) => {
-      matRows += `<tr><td>${esc(m.n)}</td><td class="r">${m.qty}</td><td class="r">$${m.unitPrice.toFixed(2)}</td><td class="r">$${m.total.toFixed(2)}</td><td class="dim">${esc(m.notes.join(", "))}${tagHtml(m.tag)}</td></tr>`;
+      const specHtml = m.spec
+        ? ` <span style="display:inline-block;font-size:9.5px;font-weight:700;color:#1f5fa8;border:1px solid #1f5fa8;border-radius:4px;padding:0 4px;margin-left:3px;white-space:nowrap">client spec</span>`
+        : "";
+      matRows += `<tr><td>${esc(m.n)}${specHtml}</td><td class="r">${m.qty}</td><td class="r">$${m.unitPrice.toFixed(2)}</td><td class="r">$${m.total.toFixed(2)}</td><td class="dim">${esc(m.notes.join(", "))}${tagHtml(m.tag)}</td></tr>`;
     });
     // Items with no billable materials never reach matMap, so their scope
     // used to be invisible on the printed quote — a verification-only

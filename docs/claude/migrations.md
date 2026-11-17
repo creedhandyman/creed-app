@@ -2,6 +2,16 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
+- Per-customer material specs (2026-11-17, **being applied by Bernard separately**;
+  not run from code): `supabase/migrations/20261117_customer_material_specs.sql`
+  (safe to re-run). Tables `material_specs` (one per customer, `active` switch)
+  and `material_spec_items` (product, brand/model, store, unit + price, pack,
+  coverage, keywords, `companions` JSONB). RLS: everyone in the org reads; owners
+  / managers write; a spec must point at a customer of the same org, an item at
+  a spec of the same org. Until it runs, the customer page shows "not set up"
+  and quoting works exactly as before (`material-spec-client.ts isMissingTable`).
+  In preflight `DB_CHECKS` as `material_specs` and `material_spec_items`.
+
 - Duplicate guards + photo bucket limits (**run in prod 2026-11-15**):
   `supabase/migrations/20261115_duplicate_guards_and_bucket_limits.sql`. Unique
   index on `review_requests(job_id)` and on

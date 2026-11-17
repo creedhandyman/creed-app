@@ -25,6 +25,7 @@ import EquipmentSection from "./EquipmentSection";
 import TextsCard from "../TextsCard";
 import CustomerMarketingCard from "../CustomerMarketingCard";
 import TextConsentCard from "../TextConsentCard";
+import MaterialSpecCard from "../MaterialSpecCard";
 
 interface Props {
   customerId: string;
@@ -505,6 +506,9 @@ export default function CustomerDetail({ customerId, onBack, embedded, onOpenJob
 
       {/* Automatic texts — may Creed's number text this customer (consent on file) */}
       <TextConsentCard customer={customer} jobs={allRelated} />
+
+      {/* Material spec: this client's required products, used first when quoting (owner/manager) */}
+      <MaterialSpecCard customer={customer} />
 
       {/* Portal */}
       <div className="cd mb">

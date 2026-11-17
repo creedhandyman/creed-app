@@ -5,6 +5,7 @@ import { MATERIALS_DB } from "./materials-db";
 import { TRADE_CATEGORY_LIST, canonicalDetail, isSuppliesOnlyLine } from "./line-canon";
 import { withTimeout } from "./pdf-detect";
 import { buildGrounding, type KbRow } from "./quote-grounding";
+import { applySpec, specNotes, specPromptBlock, type SpecItem } from "./material-spec";
 import { salvageJson } from "./json-salvage";
 import { completionJobIds, dropUnfinishedJobRows } from "./learning-rows";
 import { applyAiLevels } from "./tiers";
@@ -1548,6 +1549,15 @@ const setAiError = (m: string) => { _lastAiError = m; };
 /** Output room for one quote parse. /api/ai clamps to its own ceiling. */
 export const PARSE_MAX_TOKENS = 32000;
 
+/** Per-quote options that are not data loaders. */
+export interface ParseOptions {
+  /** The job's customer's active material-spec items
+   *  (lib/material-spec.ts): sent to the AI first and applied after it. */
+  spec?: SpecItem[];
+  /** The customer's name, for the spec prompt + notes. */
+  customerName?: string;
+}
+
 export interface ParserDeps {
   /** This org's price_corrections rows (learned pricing + labor calibration). */
   getCorrections?: () => Promise<Array<{
@@ -1607,6 +1617,7 @@ export async function aiParsePdf(
   propertyZip?: string,
   onProgress?: (msg: string) => void,
   deps?: ParserDeps,
+  opts?: ParseOptions,
 ): Promise<AiParseResult | null> {
   setAiError("");
   // Single API call, with images trimmed to fit one request body. We do NOT
@@ -1644,7 +1655,7 @@ export async function aiParsePdf(
       onProgress?.(`Sending ${trimmed.length} of ${images.length} pages (${dropped} skipped to fit one call)...`);
     }
   }
-  return aiParsePdfSingle(text, trimmed, laborRate, licensedTrades, propertyZip, deps);
+  return aiParsePdfSingle(text, trimmed, laborRate, licensedTrades, propertyZip, deps, opts);
 }
 
 async function aiParsePdfSingle(
@@ -1654,7 +1665,9 @@ async function aiParsePdfSingle(
   licensedTrades?: string[],
   propertyZip?: string,
   deps?: ParserDeps,
+  opts?: ParseOptions,
 ): Promise<AiParseResult | null> {
+  const spec = opts?.spec?.length ? opts.spec : [];
   try {
     // Load recent price corrections for AI learning. When a propertyZip is
     // passed, partition the corrections into "local" (same ZIP) and "regional"
@@ -2031,7 +2044,9 @@ ${cleanText.slice(0, INPUT_TEXT_CAP)}`
           ? [{ type: "text", text: correctionsPrompt, cache_control: { type: "ephemeral" } }]
           : []),
         // Per-request grounding — changes with every request, so it sits
-        // AFTER the cached blocks and carries no cache breakpoint.
+        // AFTER the cached blocks and carries no cache breakpoint. The
+        // customer's material spec goes first: it outranks the shop prices.
+        ...(spec.length ? [{ type: "text", text: specPromptBlock(spec, text, opts?.customerName) }] : []),
         ...(groundingPrompt ? [{ type: "text", text: groundingPrompt }] : []),
         {
           type: "text",
@@ -2060,7 +2075,7 @@ ${cleanText.slice(0, INPUT_TEXT_CAP)}`
       if ((res.status === 413 || res.status === 400) && images.length > 1) {
         const half = Math.floor(images.length / 2);
         console.log(`Retrying with fewer pages (${images.length} → ${half})...`);
-        return aiParsePdfSingle(text, images.slice(0, half), laborRate, licensedTrades, propertyZip, deps);
+        return aiParsePdfSingle(text, images.slice(0, half), laborRate, licensedTrades, propertyZip, deps, opts);
       }
       setAiError(`Anthropic API HTTP ${res.status}`);
       return null;
@@ -2227,10 +2242,22 @@ ${cleanText.slice(0, INPUT_TEXT_CAP)}`
     // Warn, never auto-delete — rule-5a splits can look similar.
     notes.push(...crossTradeEchoWarnings(calibratedRooms));
 
+    // ── CUSTOMER MATERIAL SPEC (deterministic) ──
+    // The prompt asked for the spec products; this makes it so: every
+    // material is matched to a spec item, takes its name + price, is rounded
+    // up to how it is sold, and gets its companion items. Unmatched
+    // materials are left exactly as the AI priced them.
+    let finalRooms = calibratedRooms;
+    if (spec.length) {
+      const applied = applySpec(calibratedRooms, spec);
+      finalRooms = applied.rooms;
+      notes.push(...specNotes(applied.stats, opts?.customerName));
+    }
+
     return {
       property: parsed.property || "",
       client: parsed.client || "",
-      rooms: calibratedRooms.filter((r) => r.items.length > 0),
+      rooms: finalRooms.filter((r) => r.items.length > 0),
       notes,
       crewSize: parsed.crewSize || 2,
       estDays: parsed.estDays || 0,
@@ -2460,7 +2487,8 @@ export async function aiParseInspection(
   inspection: InspectionInput,
   laborRate?: number,
   licensedTrades?: string[],
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  opts?: ParseOptions,
 ): Promise<AiParseResult | null> {
   const zip = extractZip(inspection.property);
 
@@ -2526,7 +2554,7 @@ export async function aiParseInspection(
   if (batches.length === 0) {
     onProgress?.("Identifying repairs from findings...");
     const text = compileInspectionText(inspection.rooms, inspection.property, inspection.client, inspection.inspectionType);
-    return aiParsePdf(text, [], laborRate, licensedTrades, zip);
+    return aiParsePdf(text, [], laborRate, licensedTrades, zip, undefined, undefined, opts);
   }
 
   // Run batches sequentially so the user sees per-batch progress and we don't
@@ -2549,7 +2577,7 @@ export async function aiParseInspection(
     const imageData = b.photos.length
       ? (usingUrls ? b.photos : await fetchPhotosAsBase64(b.photos))
       : [];
-    const r = await aiParsePdf(text, imageData, laborRate, licensedTrades, zip);
+    const r = await aiParsePdf(text, imageData, laborRate, licensedTrades, zip, undefined, undefined, opts);
     if (r) partials.push(r);
   }
 

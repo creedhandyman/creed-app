@@ -51,6 +51,8 @@ import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import AiNote from "../AiNote";
 import MaterialsSheet from "../MaterialsSheet";
+import { applySpec, specMatchCount, specNotes, type SpecItem } from "@/lib/material-spec";
+import { loadCustomerSpec } from "@/lib/material-spec-client";
 import CameraModal from "../CameraModal";
 import { logCorrection } from "@/lib/learning";
 import { wrapPrint, openPrint } from "@/lib/print-template";
@@ -335,6 +337,15 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // job is linked structurally; the legacy free-text `prop`/`client`
   // strings stay populated alongside for back-compat.
   const [customerId, setCustomerId] = useState<string | undefined>(undefined);
+  // The customer's material spec (active specs' items; [] = none / no tables
+  // yet). Sent to the AI and applied after it; suggested first in Materials.
+  const [specItems, setSpecItems] = useState<SpecItem[]>([]);
+  useEffect(() => {
+    let live = true;
+    setSpecItems([]);
+    if (customerId) void loadCustomerSpec(customerId).then((items) => { if (live) setSpecItems(items); });
+    return () => { live = false; };
+  }, [customerId]);
   const [addressId, setAddressId] = useState<string | undefined>(undefined);
   // Contact info typed into the description (ContactFound card): the text it
   // was read from, and a resident confirmed this session (saved with the quote).
@@ -1277,7 +1288,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       };
       let licensedTradesInsp: string[] = [];
       try { licensedTradesInsp = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
-      const result = await aiParseInspection(input, rate, licensedTradesInsp, setParseStatus);
+      const result = await aiParseInspection(input, rate, licensedTradesInsp, setParseStatus, { spec: specItems, customerName: client || data.client });
       if (result && result.rooms.length > 0) {
         setParseStatus("Building quote...");
         // Already validated (caps + floors) and labor-calibrated inside the
@@ -1435,7 +1446,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
       let licensedTrades: string[] = [];
       try { licensedTrades = org?.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
-      const result = await aiParsePdf(rawText, images, rate, licensedTrades, extractZip(prop), setParseStatus);
+      const result = await aiParsePdf(rawText, images, rate, licensedTrades, extractZip(prop), setParseStatus, undefined, { spec: specItems, customerName: client });
 
       if (result && result.rooms.length > 0) {
         if (result.property && !prop) setProp(result.property);
@@ -3387,6 +3398,35 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         </div>
       )}
 
+      {/* Client material spec: how much of the quote uses it + apply it to
+          lines built before the customer was picked / added by hand. */}
+      {specItems.length > 0 && rooms.length > 0 && (() => {
+        const { matched, total } = specMatchCount(rooms);
+        return (
+          <div className="cd mb" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <Icon name="package" size={16} color="var(--color-primary)" />
+            <div style={{ flex: 1, minWidth: 180, fontSize: 13.5 }}>
+              <b>{t("qf.specTitle").replace("{name}", client || t("qf.specClient"))}</b>
+              <div className="dim" style={{ fontSize: 12.5 }}>
+                {t("qf.specCount").replace("{m}", String(matched)).replace("{n}", String(total))}
+              </div>
+            </div>
+            <button
+              className="bo"
+              style={{ width: "auto", fontSize: 13, padding: "6px 11px" }}
+              onClick={() => {
+                const { rooms: next, stats } = applySpec(rooms, specItems);
+                setRooms(next);
+                const notes = specNotes(stats, client);
+                useStore.getState().showToast(notes[0] || t("qf.specNone"), stats.matched ? "success" : "info");
+              }}
+            >
+              {t("qf.specApply")}
+            </button>
+          </div>
+        );
+      })()}
+
       {/* What the AI flagged while building the quote */}
       {aiNotes.length > 0 && (
         <div className="cd mb">
@@ -4127,7 +4167,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       />
 
       {/* QUOTE TAB */}
-      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} matCost={(raw: number) => billedMaterial(raw, { materialTaxPct, markupPct })} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} />}
+      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} matCost={(raw: number) => billedMaterial(raw, { materialTaxPct, markupPct })} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} specItems={specItems} />}
 
       {/* GUIDE TAB */}
       {tab === "guide" && (
@@ -4378,6 +4418,7 @@ function QuoteTab({
   tieredQuote,
   tierNames,
   editTier,
+  specItems = [],
 }: {
   rooms: Room[];
   rate: number;
@@ -4392,6 +4433,8 @@ function QuoteTab({
   tieredQuote?: boolean;
   tierNames?: { better: string; best: string };
   editTier?: "base" | "better" | "best";
+  /** The customer's material spec (suggested first in Materials). */
+  specItems?: SpecItem[];
 }) {
   const [expandedMat, setExpandedMat] = useState<string | null>(null);
   // Colored trade dot for each room/area header (matches the mock's tradehdr).
@@ -4440,6 +4483,24 @@ function QuoteTab({
                       onChange={(v) => upItem(rm.name, it.id, "comment", v)}
                       style={{ marginTop: 3, color: "var(--color-dim)" }}
                     />
+                    {it.materials.some((m) => m.spec) && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
+                        {it.materials.filter((m) => m.spec).map((m, mi) => (
+                          <span
+                            key={mi}
+                            title={m.spec?.priceNeeded ? t("qf.specPriceNeeded") : undefined}
+                            style={{
+                              fontSize: 11.5, padding: "2px 8px", borderRadius: 999, lineHeight: 1.35,
+                              border: `1px solid ${m.spec?.priceNeeded ? "var(--color-warning)" : "var(--color-primary)"}`,
+                              color: m.spec?.priceNeeded ? "var(--color-warning)" : "var(--color-primary)",
+                            }}
+                          >
+                            <b style={{ fontFamily: "Oswald", textTransform: "uppercase", fontWeight: 500, marginRight: 4 }}>{t("qf.specTag")}</b>
+                            {m.qty && m.qty > 1 ? `${m.qty} × ` : ""}{m.n}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {tieredQuote && (() => {
                       // Move this line between tiers: one chip per tier, the
                       // line sits in the picked tier AND every tier above it
@@ -4532,6 +4593,8 @@ function QuoteTab({
                           darkMode={darkMode}
                           onChange={(mats) => upItem(rm.name, it.id, "materials", mats)}
                           onClose={() => { logItemEdit(rm.name, it.id); setExpandedMat(null); }}
+                          spec={specItems}
+                          specLabel={t("qf.specTag")}
                         />
                       )}
                     </div>

@@ -13,7 +13,7 @@ const NO_CREATED_AT = new Set(["time_entries", "crew_locations"]);
 const NO_ORG_ID = new Set(["organizations", "profiles"]);
 
 // Get current org_id from localStorage (avoids circular import with store)
-function getOrgId(): string | null {
+export function getOrgId(): string | null {
   if (typeof window === "undefined") return null;
   try {
     const user = JSON.parse(localStorage.getItem("c_user") || "null");

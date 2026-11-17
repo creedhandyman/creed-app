@@ -2,6 +2,42 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Per-customer material specs (2026-11-17)**. A customer can require exact
+  products (brand / model / store). Plan + SQL: `customer-material-specs.md`;
+  tables `material_specs` + `material_spec_items` (migrations.md).
+  - **Where**: Customers → a customer → "Material spec" card
+    (`components/MaterialSpecCard.tsx`, owner/manager only): list of specs with
+    an On/Off switch, Import, and an editor (rename, search, edit / delete items,
+    companions as text lines "1 Shaw 4151 adhesive per 400").
+  - **Import** (`components/MaterialSpecImport.tsx`): CSV / tab paste and
+    `.xlsx` map straight to fields when a header row is recognized
+    (`lib/spec-import.ts rowsToDrafts`, `lib/xlsx-read.ts` = our own zip reader,
+    no npm dependency); anything else (PDF, free text, sheets with odd headers) goes
+    to `/api/specs/extract` (owner-only, `callClaude` call_type `spec_import`).
+    Everything lands on a review screen first; `cleanDrafts` never invents a price
+    ("call", "N/A" → no price = "price needed").
+  - **Quoting**: `lib/material-spec.ts` (pure, tested). QuoteForge loads the
+    customer's ACTIVE specs (`material-spec-client.ts loadCustomerSpec`, never
+    throws, [] when the tables are missing) and passes `{spec, customerName}` to
+    `aiParsePdf` / `aiParseInspection` (`ParseOptions`); the lead draft does the
+    same server-side (`lead-draft.ts loadSpecForCustomer`, service role filtered by
+    org). The parser adds `specPromptBlock` to the system prompt and, after
+    calibration, runs `applySpec`: each material is matched (model # → name →
+    owner keywords → ≥2 shared words AND ≥70% of the item's words; ONE shared word
+    never matches), renamed to brand + name + model (+ pack), priced from the spec,
+    its quantity rounded UP to whole selling units (`toSellingUnits`: ft / sqft via
+    pack size or coverage), and companions added per line (`per` measure units,
+    rounded up; computed companions replace AI-written ones). Idempotent. No spec
+    price → AI price kept and `spec.priceNeeded` set.
+  - **Shows**: a "Spec" chip under each quote line, a banner with "m of n materials
+    use spec products" + "Apply client spec" (runs `applySpec` on hand-built
+    lines), spec items suggested first in the Materials sheet (typing over the name
+    drops the tag), and a "client spec" badge on the quote PDF materials table.
+  - **Rules**: saved quotes keep their spec tag + price on each material
+    (`Material.spec: MaterialSpecTag`), so editing / turning off a spec never
+    changes a saved quote. Customers with no active spec see no change at all.
+    Tests: `material-spec.test.ts`, `spec-import.test.ts`, `xlsx-read.test.ts`.
+
 - **Sign-up alerts for Creed itself (2026-11-13, branch `signup-notify`)**. Hourly
   cron `/api/admin/signups` (vercel.json, minute 5) emails the platform owner when a
   new business signs up. A sign-up = a new `organizations` row (someone finished

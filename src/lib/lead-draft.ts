@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Room } from "./types";
 import { aiParsePdf, validateQuote, calculateCost, extractZip, type ParserDeps } from "./parser";
+import { normalizeSpecItems, type SpecItem } from "./material-spec";
 import { callClaude } from "./anthropic-server";
 import { rateForRoom, billedMaterial, priceCascade, pricingInputs } from "./pricing";
 import { materialTaxFor } from "./material-tax";
@@ -75,6 +76,23 @@ export function draftTotals(rooms: Room[], org: DraftOrg, property: string): { t
   return { total: c.grandTotal, labor: r2(c.tl), materials: r2(materials), hours: r2(c.th) };
 }
 
+/** Active spec items of one customer, read with the service role. Silent:
+ *  [] on no customer, no spec, or no tables yet. */
+async function loadSpecForCustomer(supabase: SupabaseClient, orgId: string, customerId: string | null | undefined): Promise<SpecItem[]> {
+  if (!customerId) return [];
+  try {
+    const { data: specs } = await supabase.from("material_specs").select("id")
+      .eq("org_id", orgId).eq("customer_id", customerId).eq("active", true);
+    const ids = (specs || []).map((s: { id: string }) => s.id);
+    if (!ids.length) return [];
+    const { data: items } = await supabase.from("material_spec_items").select("*")
+      .eq("org_id", orgId).in("spec_id", ids).order("sort", { ascending: true }).limit(2000);
+    return normalizeSpecItems(items || []);
+  } catch {
+    return [];
+  }
+}
+
 export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   orgId: string; jobId: string; description: string; photos: string[]; property: string; client: string;
 }): Promise<{ ok: boolean; reason?: string; total?: number }> {
@@ -88,7 +106,7 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   if (!org) return { ok: false, reason: "no org" };
 
   // Only an untouched lead gets a draft — checked BEFORE the AI is paid for.
-  const { data: first } = await supabase.from("jobs").select("status, rooms").eq("id", jobId).maybeSingle();
+  const { data: first } = await supabase.from("jobs").select("status, rooms, customer_id").eq("id", jobId).maybeSingle();
   if (!first || first.status !== "lead") return { ok: false, reason: "lead moved on" };
   const firstBlob = tryReadBlob(first.rooms) || {};
   if (Array.isArray(firstBlob.rooms) && firstBlob.rooms.length) return { ok: false, reason: "already quoted" };
@@ -110,6 +128,9 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   const text = lead.description.trim()
     ? `Customer's request from the website quote form:\n${lead.description.trim()}`
     : "Analyze these photos and quote all repairs needed.";
+  // The customer's material spec, when the lead is tied to a customer that
+  // has one (service role: filtered by org + customer explicitly).
+  const spec = await loadSpecForCustomer(supabase, orgId, (first as { customer_id?: string | null }).customer_id);
   const result = await aiParsePdf(text, images, org.default_rate || 55, licensedTrades, extractZip(lead.property), undefined, {
     getCorrections: async () => {
       // Newest first, like the app's own read — the calibration and the
@@ -133,7 +154,7 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
       const { status, data } = await callClaude(body, { orgId, callType: "lead_draft" }, { deadlineMs: 230_000 });
       return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
     },
-  });
+  }, { spec, customerName: lead.client });
   if (!result?.rooms?.length) return { ok: false, reason: "AI returned nothing" };
   const rooms = validateQuote(result.rooms, { skipCaps: true });
   const totals = draftTotals(rooms, org, lead.property);
