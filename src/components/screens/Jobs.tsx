@@ -51,6 +51,7 @@ import { crewNow } from "@/lib/dispatch-week";
 import { liveFixLabel } from "../LocationSharingNote";
 import { peekNavIntent, clearNavIntent } from "@/lib/nav-intent";
 import { readBlob, woKey } from "@/lib/job-blob";
+import { jobSummary, summaryLine, summaryEditDelta } from "@/lib/job-summary";
 import { tierPriceLine, sendTierChoices, sentTierValue, visibleTiers, type SendTierKey } from "@/lib/tiers";
 import { sendRowPatch, jobMoney } from "@/lib/quote-totals";
 import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
@@ -397,6 +398,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const [statusSheet, setStatusSheet] = useState<"job" | "bulk" | null>(null);
   // The job view's Print button: quote PDF or invoice.
   const [printSheet, setPrintSheet] = useState(false);
+  // Job summary edit sheet (owner / manager): the card line + the paragraph.
+  const [summarySheet, setSummarySheet] = useState<{ jobId: string; short: string; long: string; busy?: boolean } | null>(null);
   const toggleSelected = (id: string) =>
     setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   // Drives the review-request modal. Set to a job when status transitions
@@ -1172,6 +1175,7 @@ ${invoicePhotosHtml}
       // migration), same pattern as jobNotes / workOrder.
       const djRoomsData: Record<string, unknown> = readBlob(dj.rooms);
       const djJobNumber = typeof djRoomsData.jobNumber === "string" ? djRoomsData.jobNumber : "";
+      const djSummary = jobSummary(djRoomsData);
       return (
         <>
           {/* Topbar — back · JOB · print */}
@@ -1347,6 +1351,42 @@ ${invoicePhotosHtml}
                 if (sendStrip.recipients[to]?.pick === "client") markSent(sendStrip.jobId, sendStrip.kind, via === "copy");
               }}
             />
+          )}
+
+          {/* What this job covers — the summary paragraph (job-summary.ts), so
+              nobody has to open the quote to see the scope. A lead without a
+              quote shows its request card below instead. */}
+          {djSummary.source !== "none" && !(djSummary.source === "lead" && djLead) && (
+            <div className="section">
+              <div className="seclabel" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon name="doc" size={13} /> {t("jobs.summaryTitle")}
+                {djSummary.source === "edited" && <span className="dim" style={{ fontSize: 11, textTransform: "none", letterSpacing: 0 }}>· {t("jobs.summaryEdited")}</span>}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="bo"
+                    onClick={() => setSummarySheet({ jobId: dj.id, short: djSummary.short, long: djSummary.long })}
+                    style={{ marginLeft: "auto", fontSize: 12, padding: "3px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}
+                  >
+                    <Icon name="edit" size={12} /> {t("jobs.summaryEdit")}
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: 15, lineHeight: 1.45, whiteSpace: "pre-wrap", paddingBottom: 4 }}>{djSummary.long || djSummary.short}</div>
+              {djSummary.stale && isAdmin && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, color: "var(--color-warning)", padding: "4px 0" }}>
+                  <Icon name="warn" size={13} /> {t("jobs.summaryStale")}
+                  <button
+                    type="button"
+                    className="bo"
+                    onClick={() => { void patchBlob(dj.id, { summaryEdit: null }); }}
+                    style={{ fontSize: 12, padding: "3px 9px" }}
+                  >
+                    {t("jobs.summaryUseNew")}
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Lead context — the prospect's request + photos (lead jobs only) */}
@@ -2361,9 +2401,8 @@ ${invoicePhotosHtml}
                 // The server already drafted a quote from the request.
                 const draft = leadDraftTotal(j.rooms);
                 if (draft !== null) return { icon: "sparkle", text: t("jobs.hintDraftReady").replace("{amt}", `$${Math.round(draft).toLocaleString()}`) };
-                const ld = readBlob(j.rooms).leadDescription;
-                const desc = typeof ld === "string" ? ld.replace(/\s+/g, " ").trim() : "";
-                return { icon: "quote", text: desc ? (desc.length > 40 ? `${desc.slice(0, 40).trimEnd()}…` : desc) : t("jobs.hintNewLead") };
+                // The request itself shows as the card's summary line.
+                return { icon: "quote", text: t("jobs.hintNewLead") };
               }
               case "quoted":    return j.quote_sent_at
                 ? (Number(j.quote_view_count) > 0
@@ -2379,6 +2418,10 @@ ${invoicePhotosHtml}
               default:          return { icon: "dot", text: j.status || "" };
             }
           })();
+
+          // One-sentence "what is this job" line (job-summary.ts): the owner's
+          // edit, else built from the quote lines, else the lead's request.
+          const cardSummary = summaryLine(readBlob(j.rooms));
 
           return (
             <div key={j.id} id={`job-row-${j.id}`} className="cd mb statusstrip" style={{ ["--c" as any]: statusColor(j.status), ...(isSel ? { outline: "2px solid var(--color-primary)", outlineOffset: -2 } : {}) }}>
@@ -2440,6 +2483,17 @@ ${invoicePhotosHtml}
                     </div>
                   )}
                 </div>
+
+                {cardSummary && (
+                  <div
+                    style={{
+                      fontSize: 13.5, lineHeight: 1.35, marginTop: 6, opacity: 0.85,
+                      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                    }}
+                  >
+                    {cardSummary}
+                  </div>
+                )}
 
                 {/* Row 2 — status chip · next-action hint + chevron */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 9, gap: 8 }}>
@@ -2691,6 +2745,60 @@ ${invoicePhotosHtml}
                 <button
                   type="button"
                   onClick={() => setPaidChoice(null)}
+                  className="dim"
+                  style={{ background: "none", border: "none", fontSize: 13, padding: 6, cursor: "pointer" }}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Edit the job summary — the card line + the paragraph. An empty box
+          (or the automatic text) follows the quote again. */}
+      {summarySheet && (() => {
+        const sj = jobs.find((j) => j.id === summarySheet.jobId);
+        const auto = sj ? jobSummary(readBlob(sj.rooms)).auto : { short: "", long: "" };
+        const save = async (short: string, long: string) => {
+          setSummarySheet((s) => (s ? { ...s, busy: true } : s));
+          await patchBlob(summarySheet.jobId, (b) => summaryEditDelta(b, short, long));
+          setSummarySheet(null);
+        };
+        const field = { width: "100%", fontSize: 15, padding: "8px 10px", borderRadius: 8, fontFamily: "inherit" } as const;
+        return (
+          <div onClick={() => !summarySheet.busy && setSummarySheet(null)} className="sheet-overlay">
+            <div onClick={(e) => e.stopPropagation()} className="cd sheet" style={{ maxWidth: 480, paddingTop: 20 }}>
+              <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 4 }}>{t("jobs.summaryTitle")}</h3>
+              <p className="dim" style={{ fontSize: 13, margin: "0 0 12px", lineHeight: 1.4 }}>{t("jobs.summaryHelp")}</p>
+              <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>{t("jobs.summaryShort")}</label>
+              <input
+                value={summarySheet.short}
+                placeholder={auto.short}
+                maxLength={200}
+                onChange={(e) => setSummarySheet({ ...summarySheet, short: e.target.value })}
+                style={{ ...field, marginBottom: 12 }}
+              />
+              <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 4 }}>{t("jobs.summaryLong")}</label>
+              <textarea
+                value={summarySheet.long}
+                placeholder={auto.long}
+                rows={5}
+                maxLength={1500}
+                onChange={(e) => setSummarySheet({ ...summarySheet, long: e.target.value })}
+                style={{ ...field, resize: "vertical", marginBottom: 14 }}
+              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button className="bb" disabled={summarySheet.busy} onClick={() => { void save(summarySheet.short, summarySheet.long); }} style={{ width: "100%", padding: "10px", fontSize: 15 }}>
+                  {t("common.save")}
+                </button>
+                <button className="bo" disabled={summarySheet.busy} onClick={() => { void save("", ""); }} style={{ width: "100%", padding: "10px", fontSize: 15 }}>
+                  {t("jobs.summaryReset")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => !summarySheet.busy && setSummarySheet(null)}
                   className="dim"
                   style={{ background: "none", border: "none", fontSize: 13, padding: 6, cursor: "pointer" }}
                 >

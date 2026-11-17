@@ -2,6 +2,27 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Job summaries (2026-11-17)**. A one-sentence line on every collapsed job
+  card (Jobs list) and a "What this job covers" paragraph on the job detail
+  screen, so nobody has to open the quote to see the scope.
+  - **Code**: `lib/job-summary.ts` (pure, tested in `job-summary.test.ts`);
+    wired in `screens/Jobs.tsx` (card line, detail section, edit sheet).
+  - **Auto text is computed on read** from the saved quote lines, so it is always
+    current with the quote; nothing is stored or regenerated on save. Lines come
+    from ONE option of a three-tier quote (accepted → sent as → recommended,
+    `rowTier`); overhead ("Job setup … cleanup") and supplies-only lines are
+    skipped; `detail` is split "Place — Task". Card line = up to 3 biggest tasks
+    + "and N more" (≤150 chars, place named when the job is in 1-2 places).
+    Paragraph = tasks grouped by place + item count and labor hours.
+  - **No quote lines yet** (a lead) → the customer's own words
+    (`leadDescription`): first sentence on the card, the full request card on
+    the detail screen (the lead card's hint now just says "New lead").
+  - **Owner / manager edits** save `rooms.summaryEdit {short?, long?, sig}` via
+    `patchBlob`. Text equal to the auto text isn't stored; empty = back to
+    automatic. An edit always wins; when the quote lines change after it (`sig`
+    differs) the detail screen says so and offers "Use the new summary" —
+    the owner's words are never silently overwritten.
+
 - **Store purchase prices (2026-11-19)**. Import Home Depot / Lowe's purchases
   so quotes and customer specs use what the shop really paid.
   - **Where**: Ops → Settings → Pricing & taxes → "Store purchase prices"
