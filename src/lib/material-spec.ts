@@ -225,16 +225,81 @@ export function toSellingUnits(qty: number, u: string | undefined, it: SpecItem)
 
 const STOP = new Set(["and", "the", "for", "with", "per", "each", "inch", "in", "ft", "x"]);
 const words = (s: string) => norm(s).split(" ").filter((w) => w.length >= 2 && !STOP.has(w));
+/** "pads" → "pad", "tiles" → "tile" (crude, enough for the guards below). */
+const stem = (w: string) => (w.length > 3 && /s$/.test(w) && !/ss$/.test(w) ? w.slice(0, -1) : w);
+const stems = (s: string) => new Set(words(s).map(stem));
+
+/** Unit / quantity words a material name carries that say nothing about WHAT it is. */
+const UNIT_WORDS = new Set(["sf", "sq", "sqft", "lf", "gal", "gallon", "pail", "ea", "qt", "quart", "box", "case", "pack", "pk", "coil", "lot", "pc", "pcs", "yd", "sy"]);
+
+/**
+ * Accessory / supply words. A material that names one ("carpet PAD", "cove
+ * base ADHESIVE", "toilet WAX RING", "faucet SUPPLY line") is that accessory,
+ * not the spec product it mentions — unless the spec item itself is one.
+ */
+const ACCESSORY = new Set([
+  "adhesive", "glue", "mastic", "cement", "pad", "padding", "cushion", "underlayment", "tack", "seam", "tape",
+  "sealer", "sealant", "caulk", "primer", "screw", "nail", "fastener", "wax", "kit", "plate", "roller", "brush",
+  "tray", "clip", "bracket", "cartridge", "stopper", "supply", "transition", "reducer", "grout", "thinset",
+  "trowel", "flapper", "spacer", "stripper", "remover", "cleaner",
+]);
+
+/** Product FORMS that exclude each other: roll / broadloom carpet is not carpet tile. */
+const FORMS: string[][] = [
+  ["roll", "broadloom", "stretch", "stretched"],
+  ["tile", "square", "plank"],
+  ["sheet"],
+];
+
+/** Every word the spec item is known by (name, brand, model, category, keywords, pack). */
+function itemVocab(it: SpecItem): Set<string> {
+  return stems(`${it.brand || ""} ${it.name} ${it.model || ""} ${it.category || ""} ${(it.keywords || []).join(" ")} ${it.pack_label || ""}`);
+}
+
+/**
+ * Is this material really a DIFFERENT product from the spec item, whatever
+ * words they share? True when the material names an accessory the item isn't
+ * (carpet pad vs carpet tile), or a product form the item isn't (roll carpet
+ * vs carpet tile).
+ */
+export function specConflict(materialName: string, it: SpecItem): boolean {
+  const m = stems(materialName);
+  const v = itemVocab(it);
+  for (const w of m) if (ACCESSORY.has(w) && !v.has(w)) return true;
+  // "tack strip": "strip" alone is too common (LED strip fixture) — only with tack.
+  for (const group of FORMS) {
+    const mHas = group.some((w) => m.has(stem(w)));
+    if (!mHas) continue;
+    const vHas = group.some((w) => v.has(stem(w)));
+    const vOther = FORMS.some((g) => g !== group && g.some((w) => v.has(stem(w))));
+    if (!vHas && vOther) return true;
+  }
+  return false;
+}
+
+/** Share of the material's describing words (units / numbers left out) the spec item is known by. */
+function coverage(materialName: string, it: SpecItem): number {
+  const ws = [...stems(materialName)].filter((w) => !UNIT_WORDS.has(w) && !/^\d/.test(w));
+  if (!ws.length) return 0;
+  const v = itemVocab(it);
+  return ws.filter((w) => v.has(w)).length / ws.length;
+}
 
 /**
  * The spec item a material name refers to, or null. In order:
- *   1. its model number appears in the name (≥3 chars, has a digit or is
- *      the whole name) — "Elan F51A" finds the Schlage Elan item;
+ *   1. its model number appears in the name (≥3 chars, has a digit) — "Elan
+ *      F51A" finds the Schlage Elan item;
  *   2. the name equals / contains the item's product name (with or without
  *      brand) — what the AI writes when it follows the prompt;
- *   3. one of the owner's keywords (≥4 chars) appears in the name;
+ *   3. one of the owner's keywords appears in the name. A MULTI-word keyword
+ *      ("carpet tile", "cove base") is enough; a ONE-word keyword ("carpet",
+ *      "base", "paint") only when the spec item covers ≥80% of the material's
+ *      words — "Carpet" or "Carpet sf" can be the spec carpet, "Commercial
+ *      level-loop roll carpet (allowance)" is not. Longer keywords win.
  *   4. word overlap: ≥2 shared words AND ≥70% of the item's name words, so
  *      ONE shared common word ("drill", "paint") is never enough.
+ * Steps 2-4 never pair a material with an item it conflicts with
+ * (`specConflict`: an accessory or a different product form).
  * Ties go to the earlier item in the spec.
  */
 export function matchSpecItem(materialName: string, items: SpecItem[]): SpecItem | null {
@@ -247,6 +312,7 @@ export function matchSpecItem(materialName: string, items: SpecItem[]): SpecItem
   const nameWords = new Set(words(materialName));
   for (const it of items) {
     if (it.model && norm(it.model).length >= 3 && /\d/.test(it.model) && has(it.model)) { consider(it, 100); continue; }
+    if (specConflict(materialName, it)) continue;
     const product = norm(specProductName(it));
     const plain = norm(it.name);
     if (name === product || name === plain || name === norm(specDisplayName(it))) { consider(it, 90); continue; }
@@ -254,7 +320,12 @@ export function matchSpecItem(materialName: string, items: SpecItem[]): SpecItem
       consider(it, 80 + Math.min(9, plain.length / 10));
       continue;
     }
-    if ((it.keywords || []).some((k) => norm(k).length >= 4 && has(k))) { consider(it, 60); continue; }
+    const kw = (it.keywords || [])
+      .map((k) => norm(k))
+      .filter((k) => k.length >= 4 && has(k))
+      .filter((k) => k.includes(" ") || coverage(materialName, it) >= 0.8)
+      .sort((a, b) => b.length - a.length)[0];
+    if (kw) { consider(it, 60 + Math.min(19, kw.length / 2)); continue; }
     const iw = Array.from(new Set(words(`${it.brand || ""} ${it.name}`)));
     if (iw.length) {
       const shared = iw.filter((w) => nameWords.has(w)).length;
@@ -267,7 +338,32 @@ export function matchSpecItem(materialName: string, items: SpecItem[]): SpecItem
 /* ── applying a spec to a quote ────────────────────────────────────────── */
 
 type SpecMaterial = Material & { spec?: MaterialSpecTag; u?: string };
-interface RoomLike { name: string; items: Array<{ materials: Material[] }> }
+interface LineLike { id?: string; detail?: string; comment?: string; tiers?: string[] | null; tier?: string | null; materials: Material[] }
+interface RoomLike { name: string; items: LineLike[] }
+
+/** Where a material sits: room index, line index, and index among the line's own (non-companion) materials. */
+export type SpecMatKey = string;
+export const specMatKey = (ri: number, li: number, mi: number): SpecMatKey => `${ri}:${li}:${mi}`;
+
+const ALT_LINE_RE = /\b(non[\s-]?spec|not (?:the )?spec|off[\s-]?spec|alternates?|alternative|allowances?|budget option|in place of (?:the |grid'?s? )?spec|instead of (?:the )?spec|close to [^.;]{0,40}spec)\b/i;
+
+/**
+ * A deliberate non-spec choice the owner made: a material priced as an
+ * ALLOWANCE, or a line written as an alternate to the spec ("close to Grid's
+ * tile spec", "non-spec option", "budget alternate"). Apply-spec leaves these
+ * alone unless the owner ticks them in the preview.
+ */
+export function isSpecAlternate(line: Pick<LineLike, "detail" | "comment">, material: Pick<Material, "n">): boolean {
+  if (/\ballowances?\b/i.test(material.n || "")) return true;
+  return ALT_LINE_RE.test(`${line.detail || ""} ${line.comment || ""}`);
+}
+
+export interface SpecApplyOptions {
+  /** Which own (non-companion) materials may change. Default: everything but
+   *  deliberate alternates (`isSpecAlternate`). Excluded materials are left as
+   *  they are, and so are the companions they already carry. */
+  include?: (key: SpecMatKey, line: LineLike, material: Material) => boolean;
+}
 
 export interface SpecApplyStats {
   /** Materials looked at (companions not counted). */
@@ -346,20 +442,28 @@ function companionsFor(parent: SpecItem, sellingUnits: number, measure: number |
  * line (added before, or written by the AI) is replaced with the computed
  * quantity, never doubled.
  */
-export function applySpec<R extends RoomLike>(rooms: R[], items: SpecItem[]): { rooms: R[]; stats: SpecApplyStats } {
+export function applySpec<R extends RoomLike>(rooms: R[], items: SpecItem[], opts: SpecApplyOptions = {}): { rooms: R[]; stats: SpecApplyStats } {
   const stats: SpecApplyStats = { materials: 0, matched: 0, companionsAdded: 0, priceNeeded: [] };
   if (!items.length) return { rooms, stats };
+  const include = opts.include ?? ((_k: SpecMatKey, line: LineLike, m: Material) => !isSpecAlternate(line, m));
   const needed = new Set<string>();
-  const outRooms = rooms.map((room) => ({
+  const outRooms = rooms.map((room, ri) => ({
     ...room,
-    items: room.items.map((line) => {
+    items: room.items.map((line, li) => {
       const mats = (line.materials || []) as SpecMaterial[];
       // Companions we add are recomputed from their parents each run.
       const own = mats.filter((m) => !m.spec?.companionOf);
       const next: SpecMaterial[] = [];
       const companions: SpecMaterial[] = [];
-      for (const m of own) {
+      // Companions of a parent left out this run stay exactly as they were.
+      const keepOf = new Set<string>();
+      for (const [mi, m] of own.entries()) {
         stats.materials += 1;
+        if (!include(specMatKey(ri, li, mi), line, m)) {
+          next.push(m);
+          if (m.spec?.itemId) { stats.matched += 1; keepOf.add(m.spec.itemId); }
+          continue;
+        }
         const { mat, item, measure } = specMaterial(m, items);
         next.push(mat);
         if (!item) continue;
@@ -383,11 +487,80 @@ export function applySpec<R extends RoomLike>(rooms: R[], items: SpecItem[]): { 
       }
       const before = new Set(mats.filter((m) => m.spec?.companionOf).map((m) => m.spec!.itemId));
       for (const k of merged.keys()) if (!before.has(k)) stats.companionsAdded += 1;
-      return { ...line, materials: [...kept, ...merged.values()] as Material[] };
+      const held = mats.filter((m) => m.spec?.companionOf && keepOf.has(m.spec.companionOf) && !merged.has(m.spec.itemId));
+      return { ...line, materials: [...kept, ...merged.values(), ...held] as Material[] };
     }),
   })) as R[];
   stats.priceNeeded = Array.from(needed);
   return { rooms: outRooms, stats };
+}
+
+/** One material Apply-spec would change, for the preview. */
+export interface SpecChange {
+  key: SpecMatKey;
+  /** Room (trade) + line the material is on. */
+  room: string;
+  lineId?: string;
+  lineDetail: string;
+  /** The line's options on a three-tier quote (raw; the screen names them). */
+  tiers: string[] | null;
+  before: Material;
+  after: Material;
+  /** Companion items this material brings along. */
+  companions: Material[];
+  /** A deliberate non-spec choice — shown, but unticked by default. */
+  alternate: boolean;
+}
+
+const sameMat = (a: SpecMaterial, b: SpecMaterial) =>
+  a.n === b.n && (a.qty ?? null) === (b.qty ?? null) && (a.unitPrice ?? null) === (b.unitPrice ?? null) &&
+  r2(Number(a.c) || 0) === r2(Number(b.c) || 0) && (a.spec?.itemId ?? null) === (b.spec?.itemId ?? null);
+
+/**
+ * What Apply-spec WOULD change, material by material, across every line and
+ * every option — nothing is changed. Materials that match no spec item, or are
+ * already exactly the spec version, are not listed. Deliberate alternates
+ * (allowances, "non-spec" lines) are listed with `alternate: true`.
+ */
+export function planSpec(rooms: RoomLike[], items: SpecItem[]): SpecChange[] {
+  const out: SpecChange[] = [];
+  if (!items.length) return out;
+  rooms.forEach((room, ri) => room.items.forEach((line, li) => {
+    const own = ((line.materials || []) as SpecMaterial[]).filter((m) => !m.spec?.companionOf);
+    own.forEach((m, mi) => {
+      const { mat, item, measure } = specMaterial(m, items);
+      if (!item || sameMat(m, mat)) return;
+      const tiers = Array.isArray(line.tiers) ? line.tiers : line.tier ? [line.tier] : null;
+      out.push({
+        key: specMatKey(ri, li, mi),
+        room: room.name,
+        ...(line.id ? { lineId: line.id } : {}),
+        lineDetail: line.detail || "",
+        tiers,
+        before: m,
+        after: mat,
+        companions: companionsFor(item, mat.qty || 1, measure, items),
+        alternate: isSpecAlternate(line, m),
+      });
+    });
+  }));
+  return out;
+}
+
+/** Apply only the picked changes from a `planSpec` preview. */
+export function applySpecPicked<R extends RoomLike>(rooms: R[], items: SpecItem[], picked: Set<SpecMatKey>): { rooms: R[]; stats: SpecApplyStats } {
+  return applySpec(rooms, items, { include: (k) => picked.has(k) });
+}
+
+/** Material cost change of a set of picked changes (raw, before markup / tax). */
+export function specPlanDelta(changes: SpecChange[], picked: Set<SpecMatKey>): number {
+  let d = 0;
+  for (const c of changes) {
+    if (!picked.has(c.key)) continue;
+    d += (Number(c.after.c) || 0) - (Number(c.before.c) || 0);
+    for (const x of c.companions) d += Number(x.c) || 0;
+  }
+  return r2(d);
 }
 
 /** "18 of 20 materials match Grid's spec" style counts for a built quote. */

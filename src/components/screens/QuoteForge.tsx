@@ -51,7 +51,7 @@ import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import AiNote from "../AiNote";
 import MaterialsSheet from "../MaterialsSheet";
-import { applySpec, specMatchCount, specNotes, type SpecItem } from "@/lib/material-spec";
+import { applySpecPicked, planSpec, specMatchCount, specNotes, specPlanDelta, type SpecChange, type SpecItem } from "@/lib/material-spec";
 import { loadCustomerSpec } from "@/lib/material-spec-client";
 import CameraModal from "../CameraModal";
 import { logCorrection } from "@/lib/learning";
@@ -340,6 +340,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // The customer's material spec (active specs' items; [] = none / no tables
   // yet). Sent to the AI and applied after it; suggested first in Materials.
   const [specItems, setSpecItems] = useState<SpecItem[]>([]);
+  // Apply-client-spec preview: what would change (every option), ticked rows apply.
+  const [specPlan, setSpecPlan] = useState<{ changes: SpecChange[]; picked: Set<string> } | null>(null);
   useEffect(() => {
     let live = true;
     setSpecItems([]);
@@ -3436,14 +3438,98 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
               className="bo"
               style={{ width: "auto", fontSize: 13, padding: "6px 11px" }}
               onClick={() => {
-                const { rooms: next, stats } = applySpec(rooms, specItems);
-                setRooms(next);
-                const notes = specNotes(stats, client);
-                useStore.getState().showToast(notes[0] || t("qf.specNone"), stats.matched ? "success" : "info");
+                // Preview first — nothing changes until the owner confirms.
+                const changes = planSpec(rooms, specItems);
+                if (!changes.length) { useStore.getState().showToast(t("qf.specNothing"), "info"); return; }
+                setSpecPlan({ changes, picked: new Set(changes.filter((c) => !c.alternate).map((c) => c.key)) });
               }}
             >
               {t("qf.specApply")}
             </button>
+          </div>
+        );
+      })()}
+
+      {specPlan && (() => {
+        const { changes, picked } = specPlan;
+        const money = (n: number) => `$${(Number(n) || 0).toFixed(2)}`;
+        const line = (m: { n?: string; qty?: number; unitPrice?: number; c?: number }) =>
+          `${m.n || ""} · ${m.qty && m.unitPrice != null ? `${m.qty} × ${money(m.unitPrice)} = ` : ""}${money(m.c || 0)}`;
+        const toggle = (k: string) => {
+          const next = new Set(picked);
+          if (next.has(k)) next.delete(k); else next.add(k);
+          setSpecPlan({ changes, picked: next });
+        };
+        const delta = specPlanDelta(changes, picked);
+        // Group by quote line (key = room:line).
+        const groups: { id: string; c: SpecChange[] }[] = [];
+        for (const c of changes) {
+          const id = c.key.split(":").slice(0, 2).join(":");
+          const g = groups.find((x) => x.id === id);
+          if (g) g.c.push(c); else groups.push({ id, c: [c] });
+        }
+        const apply = () => {
+          const { rooms: next, stats } = applySpecPicked(rooms, specItems, picked);
+          setRooms(next);
+          setSpecPlan(null);
+          const notes = specNotes(stats, client);
+          useStore.getState().showToast(notes[0] || t("qf.specNone"), stats.matched ? "success" : "info");
+        };
+        return (
+          <div className="sheet-overlay" onClick={() => setSpecPlan(null)}>
+            <div className="cd sheet" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560, paddingTop: 18 }}>
+              <h3 style={{ fontFamily: "Oswald", fontSize: 19, textTransform: "uppercase", marginBottom: 4 }}>{t("qf.specPreviewTitle")}</h3>
+              <p className="dim" style={{ fontSize: 13, margin: "0 0 10px", lineHeight: 1.4 }}>{t("qf.specPreviewBody")}</p>
+              <div style={{ maxHeight: "55vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+                {groups.map((g) => {
+                  const first = g.c[0];
+                  return (
+                    <div key={g.id} style={{ border: "1px solid var(--color-border-dark)", borderRadius: 8, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {first.lineDetail || first.room}
+                      </div>
+                      {tieredQuote && first.tiers && first.tiers.length > 0 && (
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "4px 0 2px" }}>
+                          {(["base", "better", "best"] as TierKey[]).filter((k) => first.tiers!.includes(k)).map((k) => (
+                            <span key={k} style={{ fontSize: 10.5, fontFamily: "Oswald", textTransform: "uppercase", padding: "1px 7px", borderRadius: 999, border: "1px solid var(--color-border-dark-2)" }}>{TIER_NAME[k]}</span>
+                          ))}
+                        </div>
+                      )}
+                      {g.c.map((c) => (
+                        <label key={c.key} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 7, cursor: "pointer" }}>
+                          <input type="checkbox" checked={picked.has(c.key)} onChange={() => toggle(c.key)} style={{ marginTop: 3, width: 18, height: 18, flexShrink: 0 }} />
+                          <span style={{ fontSize: 12.5, lineHeight: 1.4, minWidth: 0 }}>
+                            <span className="dim" style={{ textDecoration: picked.has(c.key) ? "line-through" : "none" }}>{line(c.before)}</span>
+                            <br />
+                            <span style={{ color: "var(--color-primary)" }}>→ {line(c.after)}</span>
+                            {c.companions.map((x, i) => (
+                              <span key={i} style={{ display: "block", color: "var(--color-primary)" }}>+ {line(x)}</span>
+                            ))}
+                            {c.alternate && (
+                              <span style={{ display: "block", color: "var(--color-warning)", fontSize: 12 }}>{t("qf.specAltNote")}</span>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "12px 0 10px", fontSize: 13.5 }}>
+                <span className="dim">{t("qf.specDelta")}</span>
+                <b style={{ fontFamily: "Oswald", fontSize: 16, color: delta > 0 ? "var(--color-warning)" : "var(--color-success)" }}>
+                  {delta >= 0 ? "+" : "−"}{money(Math.abs(delta))}
+                </b>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button className="bb" disabled={picked.size === 0} onClick={apply} style={{ width: "100%", padding: "10px", fontSize: 15 }}>
+                  {t("qf.specApplyN").replace("{n}", String(picked.size))}
+                </button>
+                <button type="button" className="dim" onClick={() => setSpecPlan(null)} style={{ background: "none", border: "none", fontSize: 13, padding: 6, cursor: "pointer" }}>
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </div>
           </div>
         );
       })()}

@@ -2,6 +2,27 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Apply client spec: preview + tiers (2026-11-17)**. Fix for Grid 606 carpet
+  job eb5985e2, where the Shaw tile spec item's one-word keyword "carpet"
+  turned the Complete option's roll-carpet and pad allowances into Shaw tile.
+  - **Matching** (`lib/material-spec.ts matchSpecItem`): a ONE-word keyword
+    ("carpet", "base", "toilet") only counts when the spec item covers ≥80% of
+    the material's describing words; multi-word keywords win over shorter
+    ones. `specConflict` blocks any name/keyword/overlap match when the
+    material names an accessory the item isn't (pad, adhesive, tape, wax,
+    supply, tack…) or a different form (roll / broadloom vs tile / square /
+    plank vs sheet). Model-number matches skip the guard.
+  - **Alternates** (`isSpecAlternate`): a material named as an allowance, or a
+    line written as a non-spec alternate ("close to Grid's tile spec",
+    "non-spec", "budget option", "instead of spec") is left alone by
+    `applySpec` (also the automatic pass after the AI) unless the owner ticks it.
+  - **Preview**: the "Apply client spec" button now runs `planSpec` over EVERY
+    line / option (no tier filter) and opens a sheet: per line (with its option
+    chips), each material old → new (qty × price) + companions, ticked except
+    alternates, and the materials cost change (`specPlanDelta`, before markup).
+    Apply runs `applySpecPicked` with the ticked keys (`room:line:material`).
+    Nothing changes until Apply. Tests: `spec-apply-tiers.test.ts`.
+
 - **Quote line trades (2026-11-17)**. Which trade bucket a quote line sits in.
   - **One home**: `lib/trade-classify.ts` (`pickTrade`, `overrideTrade`,
     `scoreTrades`, `rescueTrade`), called by validateQuote for every line;
