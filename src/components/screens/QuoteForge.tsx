@@ -1795,6 +1795,27 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     );
   };
 
+  // Move a line to another trade by hand (the trade picker on each line). The
+  // line is stamped `userClassified`, so validateQuote (lib/trade-classify.ts
+  // pickTrade) never re-guesses it — on this screen, on save, or on reopen.
+  const moveItem = (rn: string, id: string, to: string) => {
+    if (!id || !to || rn === to) return;
+    const item = rooms.find((r) => r.name === rn)?.items.find((i) => i.id === id);
+    if (!item) return;
+    const moved: RoomItem = { ...item, userClassified: true };
+    let next = rooms
+      .map((r) => (r.name === rn ? { ...r, items: r.items.filter((i) => i.id !== id) } : r))
+      .filter((r) => r.items.length > 0);
+    next = next.some((r) => r.name === to)
+      ? next.map((r) => (r.name === to ? { ...r, items: [...r.items, moved] } : r))
+      : [...next, { name: to, items: [moved] }];
+    const rank = (n: string) => {
+      const i = (TRADE_CATEGORY_LIST as readonly string[]).indexOf(n);
+      return i < 0 ? TRADE_CATEGORY_LIST.length : i;
+    };
+    setRooms(next.slice().sort((a, b) => rank(a.name) - rank(b.name)));
+  };
+
   // Keep a live ref to rooms so the on-blur edit logger reads the FINAL value,
   // not a stale render closure.
   const roomsRef = useRef(rooms);
@@ -4167,7 +4188,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       />
 
       {/* QUOTE TAB */}
-      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} getRateForRoom={getRateForRoom} matCost={(raw: number) => billedMaterial(raw, { materialTaxPct, markupPct })} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} specItems={specItems} />}
+      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} moveItem={moveItem} getRateForRoom={getRateForRoom} matCost={(raw: number) => billedMaterial(raw, { materialTaxPct, markupPct })} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} specItems={specItems} />}
 
       {/* GUIDE TAB */}
       {tab === "guide" && (
@@ -4411,6 +4432,7 @@ function QuoteTab({
   darkMode,
   upItem,
   rmItem,
+  moveItem,
   getRateForRoom,
   matCost,
   snapItemEdit,
@@ -4425,6 +4447,8 @@ function QuoteTab({
   darkMode: boolean;
   upItem: (rn: string, id: string, field: string, value: number | string | string[] | Material[]) => void;
   rmItem: (rn: string, id: string) => void;
+  /** Move a line to another trade by hand (sticks: stamps userClassified). */
+  moveItem?: (rn: string, id: string, to: string) => void;
   getRateForRoom?: (roomName: string) => number;
   /** shelf materials $ → billed (purchase tax + markup), so line totals add up */
   matCost?: (raw: number) => number;
@@ -4483,6 +4507,23 @@ function QuoteTab({
                       onChange={(v) => upItem(rm.name, it.id, "comment", v)}
                       style={{ marginTop: 3, color: "var(--color-dim)" }}
                     />
+                    {moveItem && (
+                      // Trade picker — the auto label is a guess; the owner's
+                      // pick sticks (saved with the line as userClassified).
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, fontSize: 12 }} onClick={(e) => e.stopPropagation()}>
+                        <span className="dim">{t("qf.tradeLabel")}</span>
+                        <select
+                          value={rm.name}
+                          aria-label={t("qf.tradeLabel")}
+                          onChange={(e) => moveItem(rm.name, it.id, e.target.value)}
+                          style={{ fontSize: 12.5, padding: "2px 6px", borderRadius: 6, minHeight: 0, width: "auto" }}
+                        >
+                          {!(TRADE_CATEGORY_LIST as readonly string[]).includes(rm.name) && <option value={rm.name}>{rm.name}</option>}
+                          {TRADE_CATEGORY_LIST.map((tr) => <option key={tr} value={tr}>{tr}</option>)}
+                        </select>
+                        {it.userClassified === true && <span className="dim" style={{ fontSize: 11 }}>{t("qf.tradeSetByYou")}</span>}
+                      </div>
+                    )}
                     {it.materials.some((m) => m.spec) && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
                         {it.materials.filter((m) => m.spec).map((m, mi) => (

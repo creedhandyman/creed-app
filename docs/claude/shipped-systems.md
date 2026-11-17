@@ -2,6 +2,30 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Quote line trades (2026-11-17)**. Which trade bucket a quote line sits in.
+  - **One home**: `lib/trade-classify.ts` (`pickTrade`, `overrideTrade`,
+    `scoreTrades`, `rescueTrade`), called by validateQuote for every line;
+    tested in `trade-classify.test.ts` (Grid 606 water-damage job eabb353f +
+    misses pulled from saved quotes). The old inline scorer in parser.ts is gone.
+  - **Precedence**: owner's pick (`userClassified`) → deterministic overrides →
+    keep the AI's / saved bucket unless the whole-line scorer has ≥8 points for
+    another trade AND the bucket has 0 (or is out-scored by more than 2× + 6) →
+    scorer → General.
+  - **Scorer rules**: objects and materials decide. Damage context (water
+    damage, moisture, leak, wet, flood, mold) scores no trade by itself; only a
+    plumbing OBJECT (pipe, faucet, supply line, drain, valve, clean-out…) makes a
+    line Plumbing, word-bounded (drainage / caulk tube / disposal bags / paint
+    sprayer don't count). Drywall / flood cut / tape / mud / texture /
+    insulation → Carpentry; slab / concrete / soil / rock / regrade → General;
+    caulk or sealant on concrete / masonry → General (else Painting).
+  - **Trade picker**: each line in the quote editor has a Trade dropdown
+    (`QuoteForge moveItem`); picking one moves the line and stamps
+    `userClassified`, so it sticks through save and reopen.
+  - Reopening a saved quote re-runs validateQuote, so a line the rules now
+    read differently moves bucket on reopen (the approval fingerprint ignores
+    trades). Price only changes if the org's trade rates differ between the two
+    trades.
+
 - **Job summaries (2026-11-17)**. A one-sentence line on every collapsed job
   card (Jobs list) and a "What this job covers" paragraph on the job detail
   screen, so nobody has to open the quote to see the scope.
