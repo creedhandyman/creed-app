@@ -28,7 +28,7 @@ interface Section {
   body: { heading?: string; lines: string[] }[];
 }
 
-const SECTIONS: Section[] = [
+export const SECTIONS: Section[] = [
   {
     id: "start",
     icon: "rocket",
@@ -40,6 +40,19 @@ const SECTIONS: Section[] = [
           "More → Business settings: upload your logo and add your business name, license #, address, phone and email. These appear on every quote, invoice and PDF.",
           "Set your hourly labor rate, materials markup % and tax % there too (Quote Settings). Per-trade rates override the hourly rate for that trade.",
           "More → Operations → Team → Invite a teammate: send the link by text. When they sign up you'll get a request — tap Approve, then set their pay rate.",
+        ],
+      },
+      {
+        heading: "Settings are short lists",
+        lines: [
+          "Your settings (gear on Home) and Business settings (More → Operations → Settings) open as a short list of categories — Business info, Brand & public card, Pricing & taxes, Quote terms, Online booking, Customer messages. Tap one to open just those settings; the back arrow returns to the list.",
+          "Online booking is off until you turn it on. When it's on, customers pick a time on your public booking page, and the request shows on your Schedule for you to Confirm or Decline.",
+        ],
+      },
+      {
+        heading: "Promo code",
+        lines: [
+          "Got a promo code? Enter it in the optional promo code box on Create account. It applies once your business is set up and adds free time to your trial.",
         ],
       },
       {
@@ -65,6 +78,21 @@ const SECTIONS: Section[] = [
           "Quick Quote — type in what needs doing (or snap a photo) and the AI prices it instantly. Best for callbacks where you already know the scope.",
           "Full Inspection — tap through each room, mark conditions, attach photos. Inside, hit Voice Walk to narrate damage out loud — AI listens and fills in every item automatically. Best for walk-throughs and property-manager turnovers.",
           "Upload Report — paste in a customer's existing scope-of-work PDF and the AI pulls the line items straight out.",
+        ],
+      },
+      {
+        heading: "Leads from your website",
+        lines: [
+          "A request from your website form or lead page lands in Jobs as a Lead and you get an alert. If it has enough detail, Grizz drafts a quote for you automatically — you'll see \"Grizz drafted a quote\" and \"Review draft quote\" on the lead.",
+          "Open the draft, check the lines and prices, then Save or Send. To change the scope, tap Edit request & rebuild on the draft — it reopens the customer's own words and photos and rebuilds the lines.",
+          "A lead with no draft opens Quick Quote showing the customer's request. Read it, edit it if you need to, then tap Generate.",
+        ],
+      },
+      {
+        heading: "Material specs and store prices",
+        lines: [
+          "Customers who require exact products (brand, model, store): Customers → the customer → Material spec. Import a CSV, Excel or PDF list, or paste text, then review it before it saves. Quotes for that customer use the spec items first and show a Spec chip on each line.",
+          "To price from what you really paid: Operations → Settings → Pricing & taxes → Store purchase prices. Import a Home Depot or Lowe's purchase export and review the changes before they save. Quotes then use your latest store prices.",
         ],
       },
       {
@@ -105,6 +133,12 @@ const SECTIONS: Section[] = [
         ],
       },
       {
+        heading: "Safety warnings",
+        lines: [
+          "If a line on the quote is a critical safety item (missing smoke or CO alarm, ungrounded outlet, water damage, structural, mold, or work needing an electrician or code compliance), a red \"Safety — read before you start\" card sits at the top of the Tasks tab in Work Mode. Read it before you start the job.",
+        ],
+      },
+      {
         heading: "Work Mode tabs",
         lines: [
           "Tasks — checklist grouped by trade. Tap a task to snap a photo of your progress.",
@@ -134,10 +168,26 @@ const SECTIONS: Section[] = [
         ],
       },
       {
+        heading: "Print the quote or invoice",
+        lines: [
+          "On any job, tap the Print button at the top of the job view and pick the Quote or the Invoice. The invoice shows what's been paid and the balance still owed.",
+        ],
+      },
+      {
         heading: "Stripe payments",
         lines: [
           "Connect Stripe once under More → Operations → Payments & plan. The customer's job page then shows a Pay button.",
           "When they pay, the job auto-flips to Paid via the Stripe webhook — you don't have to touch it.",
+          "A deposit or part-payment is recorded but doesn't mark the job Paid; the job is Paid only when the money covers the total. A job paid up front stays open and closes when the work is completed.",
+        ],
+      },
+      {
+        heading: "Bank transfer, tips and card on file",
+        lines: [
+          "These are off until you turn them on: More → Operations → Payments & plan → Checkout options. You choose each one — \"Let customers pay by bank transfer\", \"Ask for a tip on final payments\" and \"Let customers save a card for later\".",
+          "Bank transfer (ACH): the customer chooses bank transfer on the pay page. Bank payments take a few days to clear, so the customer sees \"Bank payment started\", you get a \"Bank payment on its way\" alert, and the job flips to Paid only when the money lands. If the bank payment fails you get a \"Bank payment failed\" alert. Stripe's ACH Direct Debit must be turned on in your Stripe account.",
+          "Tips: the customer can add 10, 15 or 20% when paying the whole balance on a finished job. The tip is separate — it never reduces what they owe.",
+          "Card on file: a customer linked to a customer record can tick a box when paying online to save their card. After that, open their job and tap the Charge button for their saved card to bill what they owe. Stripe keeps the card; Creed only shows the brand and last 4 digits.",
         ],
       },
       {
@@ -162,6 +212,13 @@ const SECTIONS: Section[] = [
           "Financials — revenue, profit, A/R aging, by-trade breakdown, top clients. Print a P&L for any period.",
           "HR — approve or deny time-off requests.",
           "Recurring — set up automated service schedules (weekly, monthly, etc.) that fire new jobs on their own.",
+        ],
+      },
+      {
+        heading: "Job summaries",
+        lines: [
+          "Every job card in Jobs shows a one-line summary of the work, and the job detail has a \"What this job covers\" paragraph, so you don't have to open the quote to see the scope. It follows the quote automatically.",
+          "Owners and managers can edit the summary. If you change the quote after editing it, the job offers \"Use the new summary\" — your own words are never overwritten without asking.",
         ],
       },
       {
@@ -215,6 +272,12 @@ const SECTIONS: Section[] = [
         heading: "Crew activity looks wrong",
         lines: [
           "If someone shows as clocked in but they're not, check for an open time entry from a previous day. You can close it manually from Time → Crew → their card → Force clock out.",
+        ],
+      },
+      {
+        heading: "Remove a wrong photo",
+        lines: [
+          "Owners and managers: open the job → Receipts & photos and tap the X on the photo. After one confirm it comes off the job and the stored file is deleted too (unless another job still uses it).",
         ],
       },
       {

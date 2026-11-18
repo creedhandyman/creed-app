@@ -23,6 +23,19 @@ export const SECTIONS_ES: Record<string, GuideCopy> = {
         ],
       },
       {
+        heading: "Los ajustes son listas cortas",
+        lines: [
+          "Tus ajustes (el engranaje en Inicio) y los Ajustes del negocio (Más → Operaciones → Ajustes) se abren como una lista corta de categorías — Datos del negocio, Marca y tarjeta pública, Precios e impuestos, Términos de cotización, Reservas en línea, Mensajes a clientes. Toca una para abrir solo esos ajustes; la flecha de regreso te devuelve a la lista.",
+          "Las Reservas en línea están apagadas hasta que las actives. Cuando están activas, los clientes eligen un horario en tu página pública de reservas, y la solicitud aparece en tu Agenda para que la Confirmes o la Rechaces.",
+        ],
+      },
+      {
+        heading: "Código promocional",
+        lines: [
+          "¿Tienes un código promocional? Escríbelo en el cuadro opcional de código promocional al Crear cuenta. Se aplica cuando tu negocio queda configurado y suma tiempo gratis a tu prueba.",
+        ],
+      },
+      {
         heading: "La barra de navegación",
         lines: [
           "Cotizar — empieza un presupuesto nuevo con tres opciones: Cotización rápida, Inspección completa o Subir reporte.",
@@ -43,6 +56,21 @@ export const SECTIONS_ES: Record<string, GuideCopy> = {
           "Cotización rápida — escribe lo que hay que hacer (o toma una foto) y la IA lo calcula al instante. Ideal para visitas de seguimiento donde ya conoces el trabajo.",
           "Inspección completa — recorre cada cuarto, marca el estado y adjunta fotos. Adentro, toca Voice Walk para narrar los daños en voz alta — la IA escucha y llena cada punto automáticamente. Ideal para recorridos y entregas de propiedades de administradores.",
           "Subir reporte — pega el PDF de alcance de trabajo que ya tenga el cliente y la IA saca los conceptos directamente.",
+        ],
+      },
+      {
+        heading: "Solicitudes de tu sitio web",
+        lines: [
+          "Una solicitud del formulario de tu sitio web o de tu página de solicitudes llega a Trabajos como Prospecto y recibes una alerta. Si trae suficiente detalle, Grizz te prepara una cotización automáticamente — verás \"Grizz preparó una cotización\" y \"Revisar borrador\" en el prospecto.",
+          "Abre el borrador, revisa los conceptos y precios, y luego Guarda o Envía. Para cambiar el alcance, toca Editar solicitud y rehacer en el borrador — reabre las palabras y fotos del propio cliente y reconstruye los conceptos.",
+          "Un prospecto sin borrador abre la Cotización rápida mostrando la solicitud del cliente. Léela, edítala si hace falta y toca Generar.",
+        ],
+      },
+      {
+        heading: "Especificaciones de materiales y precios de tienda",
+        lines: [
+          "Clientes que exigen productos exactos (marca, modelo, tienda): Clientes → el cliente → Especificación de materiales. Importa una lista en CSV, Excel o PDF, o pega texto, y revísala antes de guardar. Las cotizaciones de ese cliente usan primero los productos de la especificación y muestran una etiqueta Spec en cada concepto.",
+          "Para cotizar con lo que de verdad pagaste: Operaciones → Ajustes → Precios e impuestos → Precios de compra en tienda. Importa un reporte de compras de Home Depot o Lowe's y revisa los cambios antes de guardar. Las cotizaciones usan entonces tus precios de tienda más recientes.",
         ],
       },
       {
@@ -81,6 +109,12 @@ export const SECTIONS_ES: Record<string, GuideCopy> = {
         ],
       },
       {
+        heading: "Avisos de seguridad",
+        lines: [
+          "Si un concepto de la cotización es un punto crítico de seguridad (falta alarma de humo o de CO, tomacorriente sin tierra, daño por agua, estructural, moho, o trabajo que requiere electricista o cumplir el código), una tarjeta roja \"Seguridad — lee antes de empezar\" aparece arriba en la pestaña Tareas del Modo Trabajo. Léela antes de empezar el trabajo.",
+        ],
+      },
+      {
         heading: "Pestañas del Modo Trabajo",
         lines: [
           "Tareas — lista agrupada por oficio. Toca una tarea para tomar una foto de tu avance.",
@@ -108,10 +142,26 @@ export const SECTIONS_ES: Record<string, GuideCopy> = {
         ],
       },
       {
+        heading: "Imprime la cotización o la factura",
+        lines: [
+          "En cualquier trabajo, toca el botón Imprimir arriba en la vista del trabajo y elige la Cotización o la Factura. La factura muestra lo que ya se pagó y el saldo pendiente.",
+        ],
+      },
+      {
         heading: "Pagos con Stripe",
         lines: [
           "Conecta Stripe una sola vez en Más → Operaciones → Pagos y plan. Después, la página del trabajo del cliente muestra un botón de Pagar.",
           "Cuando pagan, el trabajo pasa solo a Pagado mediante el webhook de Stripe — no tienes que tocar nada.",
+          "Un depósito o pago parcial se registra pero no marca el trabajo como Pagado; el trabajo queda Pagado solo cuando el dinero cubre el total. Un trabajo pagado por adelantado sigue abierto y se cierra cuando se completa el trabajo.",
+        ],
+      },
+      {
+        heading: "Transferencia bancaria, propinas y tarjeta guardada",
+        lines: [
+          "Están apagadas hasta que las actives: Más → Operaciones → Pagos y plan → Opciones de pago. Tú eliges cada una — \"Permitir pago por transferencia bancaria\", \"Pedir propina en pagos finales\" y \"Permitir que los clientes guarden una tarjeta\".",
+          "Transferencia bancaria (ACH): el cliente elige transferencia bancaria en la página de pago. Los pagos bancarios tardan unos días en confirmarse, así que el cliente ve \"Bank payment started\", tú recibes una alerta \"Bank payment on its way\" y el trabajo pasa a Pagado solo cuando llega el dinero. Si el pago bancario falla, recibes una alerta \"Bank payment failed\". El ACH Direct Debit de Stripe debe estar activado en tu cuenta de Stripe.",
+          "Propinas: el cliente puede agregar 10, 15 o 20 % al pagar todo el saldo de un trabajo terminado. La propina va aparte — nunca reduce lo que debe.",
+          "Tarjeta guardada: un cliente vinculado a un registro de cliente puede marcar una casilla al pagar en línea para guardar su tarjeta. Después, abre su trabajo y toca el botón Cobrar de su tarjeta guardada para cobrar lo que debe. Stripe guarda la tarjeta; Creed solo muestra la marca y los últimos 4 dígitos.",
         ],
       },
       {
@@ -134,6 +184,13 @@ export const SECTIONS_ES: Record<string, GuideCopy> = {
           "Finanzas — ingresos, ganancias, antigüedad de cuentas por cobrar, desglose por oficio y mejores clientes. Imprime un estado de resultados de cualquier periodo.",
           "RR. HH. — aprueba o rechaza solicitudes de tiempo libre.",
           "Recurrentes — configura calendarios de servicio automáticos (semanales, mensuales, etc.) que crean trabajos nuevos por sí solos.",
+        ],
+      },
+      {
+        heading: "Resúmenes de trabajos",
+        lines: [
+          "Cada tarjeta de Trabajos muestra un resumen de una línea del trabajo, y el detalle del trabajo tiene un párrafo \"Qué incluye este trabajo\", para que no tengas que abrir la cotización para ver el alcance. Sigue a la cotización automáticamente.",
+          "Los dueños y gerentes pueden editar el resumen. Si cambias la cotización después de editarlo, el trabajo ofrece \"Usar el resumen nuevo\" — tus propias palabras nunca se sobrescriben sin preguntar.",
         ],
       },
       {
@@ -185,6 +242,12 @@ export const SECTIONS_ES: Record<string, GuideCopy> = {
         heading: "La actividad del equipo se ve mal",
         lines: [
           "Si alguien aparece fichado pero no lo está, busca un registro de tiempo abierto de un día anterior. Puedes cerrarlo manualmente desde Tiempo → Equipo → su tarjeta → Forzar salida.",
+        ],
+      },
+      {
+        heading: "Quita una foto equivocada",
+        lines: [
+          "Dueños y gerentes: abre el trabajo → Recibos y fotos y toca la X en la foto. Tras una confirmación sale del trabajo y también se borra el archivo guardado (a menos que otro trabajo aún lo use).",
         ],
       },
       {
