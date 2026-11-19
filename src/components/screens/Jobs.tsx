@@ -17,7 +17,7 @@ import PrintSheet from "../PrintSheet";
 import { openJobQuotePdf } from "@/lib/quote-pdf";
 import { statusColor } from "@/lib/status";
 import { t } from "@/lib/i18n";
-import { entriesForJob, isOldestAtAddress, receiptsForJob } from "@/lib/job-entries";
+import { entriesForJob, isOldestAtAddress, payRunDeletedEntries, receiptsForJob, recoverDeletedHours } from "@/lib/job-entries";
 import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
@@ -209,6 +209,9 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const historicalByJobByUser = useMemo(() => {
     const out: Record<string, Record<string, { name: string; hrs: number; cost: number }>> = {};
     for (const ph of payHistory) {
+      // Only pay runs that deleted their entries (before the fix) — a later
+      // run kept its rows, so they already show, edits included.
+      if (!payRunDeletedEntries(ph)) continue;
       let details: { jobs?: { job?: string; hrs?: number; amount?: number }[] } = {};
       try { details = ph.details ? JSON.parse(ph.details) : {}; } catch { /* */ }
       if (!details.jobs) continue;
@@ -247,13 +250,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     // Live-paid totals per user (post-fix payruns where rows are kept).
     // These are already in `loggedHrs` — we use them only to compute the
     // gap, NOT to add again.
-    const livePaidByUser: Record<string, { hrs: number; cost: number }> = {};
+    const livePaidByUser: Record<string, typeof entries> = {};
     for (const e of entries) {
       if (!e.paid_at) continue;
       const k = userKey(e.user_id, e.user_name);
-      if (!livePaidByUser[k]) livePaidByUser[k] = { hrs: 0, cost: 0 };
-      livePaidByUser[k].hrs += e.hours || 0;
-      livePaidByUser[k].cost += e.amount || 0;
+      (livePaidByUser[k] ||= []).push(e);
     }
 
     // Recover the gap per user — historical (from pay_history) minus
@@ -268,9 +269,7 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     let recoveredHrs = 0;
     let recoveredCost = 0;
     for (const [uid, h] of Object.entries(histForJob)) {
-      const livePaid = livePaidByUser[uid] || { hrs: 0, cost: 0 };
-      const gapHrs = Math.max(0, h.hrs - livePaid.hrs);
-      const gapCost = Math.max(0, h.cost - livePaid.cost);
+      const { hrs: gapHrs, cost: gapCost } = recoverDeletedHours(h, livePaidByUser[uid] || []);
       if (gapHrs > 0 || gapCost > 0) {
         recoveredByUser[uid] = { name: h.name, hrs: gapHrs, cost: gapCost };
         recoveredHrs += gapHrs;

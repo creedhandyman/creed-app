@@ -50,6 +50,41 @@ export function entriesForJob<T extends Pick<TimeEntry, "job_id" | "job">>(
   return entries.filter((e) => entryBelongsTo(e, job, oldest));
 }
 
+/**
+ * Payroll used to DELETE a job's time entries when it paid them (fixed in
+ * c99d286, 2026-04-26); since then it only stamps `paid_at`. The Jobs hours
+ * card adds back hours from `pay_history` to cover the deleted rows — but only
+ * pay runs from BEFORE the fix may count. A later run kept its rows, so the
+ * live entries are the truth, including an owner's later edit to their hours
+ * (counting those runs put a lowered entry's old hours back on the card).
+ * The day of the fix itself counts as "before"; any rows such a run kept are
+ * subtracted by `recoverDeletedHours`.
+ */
+export const PAYROLL_KEEPS_ENTRIES_FROM = "2026-04-27";
+
+/** This pay run deleted the time entries it paid. No date = an old row. */
+export function payRunDeletedEntries(ph: { created_at?: string | null; pay_date?: string | null }): boolean {
+  const when = ph.created_at || ph.pay_date || "";
+  return when.slice(0, 10) < PAYROLL_KEEPS_ENTRIES_FROM;
+}
+
+/** Hours (and cost) to add back for one person on one job: what the pre-fix
+ *  pay runs paid them there, minus any of their live rows paid in that window
+ *  (rows a run kept are already counted). Never negative. */
+export function recoverDeletedHours(
+  hist: { hrs: number; cost: number },
+  livePaid: { paid_at?: string | null; hours?: number; amount?: number }[],
+): { hrs: number; cost: number } {
+  let hrs = 0;
+  let cost = 0;
+  for (const e of livePaid) {
+    if (!e.paid_at || e.paid_at.slice(0, 10) >= PAYROLL_KEEPS_ENTRIES_FROM) continue;
+    hrs += e.hours || 0;
+    cost += e.amount || 0;
+  }
+  return { hrs: Math.max(0, hist.hrs - hrs), cost: Math.max(0, hist.cost - cost) };
+}
+
 /** Every receipt filed against `job`. */
 export function receiptsForJob<T extends Pick<Receipt, "job_id">>(job: Pick<Job, "id">, receipts: T[]): T[] {
   return receipts.filter((r) => r.job_id === job.id);
