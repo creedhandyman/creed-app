@@ -22,6 +22,7 @@ import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
 import BookingSettings from "../BookingSettings";
 import AgentConnectionSettings from "../AgentConnectionSettings";
+import GoogleCalendarSync, { useGcalStatus } from "../GoogleCalendarSync";
 import StorePricesCard from "../StorePricesCard";
 import Campaigns from "./Campaigns";
 import { CampaignsCard, ReferralsCard } from "../MarketingSettings";
@@ -183,6 +184,7 @@ function OpsSettings() {
   const userEmail = useStore((s) => s.user?.email);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+  const gcal = useGcalStatus();
 
   if (!org) return null;
 
@@ -510,6 +512,13 @@ function OpsSettings() {
           // after a Stripe-paid invoice; follow-up nudges unanswered quotes; the
           // text-messaging links go in the approval page's consent box.
           content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><AutoTextsCard org={org} saveOrg={saveOrg} /><CampaignsCard org={org} saveOrg={saveOrg} /><ReferralsCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
+        },
+        {
+          // Two-way sync with a "Creed jobs" calendar in Google (lib/gcal/*).
+          id: "gcal", icon: "schedule", title: t("gcal.title"), sub: t("gcal.sub"),
+          badge: gcal?.connected ? (gcal.status === "needs_reconnect" ? t("gcal.reconnect") : t("gcal.on")) : undefined,
+          badgeTone: gcal?.status === "needs_reconnect" ? "warn" : undefined,
+          content: <GoogleCalendarSync />,
         },
         {
           // API keys for AI assistants (REST /api/agent/v1 + MCP /api/mcp).

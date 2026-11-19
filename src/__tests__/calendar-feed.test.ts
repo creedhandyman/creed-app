@@ -13,13 +13,14 @@ const jobs = [
 ];
 const opts = { name: "Ann's jobs", appUrl: "https://www.creedhm.com", now };
 
-test("personal feed: only my visits, timed + floating local", () => {
+test("personal feed: only my visits, timed as exact UTC from Central time", () => {
   const ics = buildCalendar(rows, jobs, { ...opts, forName: "ann lee" });
   expect(ics).toContain("UID:a-20261026@creedhm.com");
-  expect(ics).toContain("DTSTART:20261026T080000");
-  expect(ics).toContain("DTEND:20261026T120000"); // 8h ÷ 2 crew
+  expect(ics).toContain("DTSTART:20261026T130000Z"); // 8:00 AM CDT
+  expect(ics).toContain("DTEND:20261026T170000Z"); // 8h ÷ 2 crew = noon CDT
   expect(ics).toContain("SUMMARY:12 Oak St — Smith");
-  expect(ics).toContain("DTSTART:20261027T130000"); // requested tech counts
+  expect(ics).toContain("DTSTART:20261027T180000Z"); // 1 PM CDT; requested tech counts
+  expect(ics).toContain("X-WR-TIMEZONE:America/Chicago");
   expect(ics).not.toContain("9 Elm");
   expect(ics.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
   expect(ics).toContain("Notes: gate code 4");
@@ -43,4 +44,12 @@ test("helpers", () => {
   const long = "DESCRIPTION:" + "x".repeat(200);
   expect(foldLine(long).split("\r\n ").map((p) => p.length).every((n) => n <= 75)).toBe(true);
   expect(foldLine(long).replace(/\r\n /g, "")).toBe(long);
+});
+
+test("Google read the old floating times as UTC: times now carry Z and follow DST", () => {
+  const winter = buildCalendar([{ id: "w", job: "1 A St", sched_date: "2026-12-07", note: "🕐 08:00 · 👷 Ann Lee" }], [], { ...opts, forName: null });
+  expect(winter).toContain("DTSTART:20261207T140000Z"); // CST = UTC-6
+  expect(winter.split(/\r?\n/).filter((l) => /^DTSTART:\d{8}T\d{6}$/.test(l))).toEqual([]); // never floating
+  const pacific = buildCalendar([{ id: "p", job: "1 A St", sched_date: "2026-12-07", note: "🕐 08:00" }], [], { ...opts, forName: null, tz: "America/Los_Angeles" });
+  expect(pacific).toContain("DTSTART:20261207T160000Z");
 });

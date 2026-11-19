@@ -108,6 +108,10 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "api_keys.kind", table: "api_keys", column: "kind" },
   { key: "oauth_clients", table: "oauth_clients", column: "client_id" },
   { key: "oauth_codes", table: "oauth_codes", column: "code_hash" },
+  // Two-way Google Calendar sync (supabase/migrations/20261122_google_calendar_sync.sql).
+  { key: "google_calendar_links", table: "google_calendar_links", column: "sync_token" },
+  { key: "google_calendar_events", table: "google_calendar_events", column: "event_id" },
+  { key: "schedule.updated_at", table: "schedule", column: "updated_at" },
   { key: "oauth_tokens", table: "oauth_tokens", column: "token_hash" },
 ];
 

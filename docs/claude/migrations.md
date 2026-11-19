@@ -2,7 +2,19 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
-- Sign in with Creed / MCP OAuth (2026-11-21, **NOT run** — needs Bernard's yes):
+- Two-way Google Calendar sync (2026-11-22, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261122_google_calendar_sync.sql` (safe to re-run).
+  Tables `google_calendar_links` (one per org: Google email, refresh/access
+  tokens AES-256-GCM encrypted, calendar_id, sync_token, push channel id /
+  resource id / token SHA-256 / expiry, status 'active' | 'needs_reconnect',
+  last_error, last_synced_at, sync_lock_until) and `google_calendar_events`
+  (org_id + schedule_id PK → event_id UNIQUE per org, etag, creed_hash). RLS
+  ON, no client policies. Adds `schedule.updated_at` (default now()) + a
+  BEFORE UPDATE trigger `schedule_touch_updated_at` (for "latest edit wins").
+  Until it runs: the Settings card says "not set up yet" and nothing syncs;
+  the .ics feed fix doesn't need it. In preflight `DB_CHECKS`.
+
+- Sign in with Creed / MCP OAuth (2026-11-21, **run** 2026-11-21):
   `supabase/migrations/20261121_mcp_oauth.sql` (safe to re-run; run AFTER
   20261120). `api_keys.kind` ('key' | 'oauth') + `oauth_client_id`, and
   `key_hash` / `key_prefix` become nullable (a connected app has no pasted

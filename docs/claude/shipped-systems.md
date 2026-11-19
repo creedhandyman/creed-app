@@ -2,6 +2,49 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Google Calendar two-way sync (2026-11-22)**. Ops → Settings → Google
+  Calendar (`components/GoogleCalendarSync.tsx`; red "Reconnect" badge on the
+  list row via `SettingsCategory.badgeTone`). Needs SQL
+  `20261122_google_calendar_sync.sql` + env `GOOGLE_CLIENT_ID` /
+  `GOOGLE_CLIENT_SECRET` (+ optional `GOOGLE_TOKEN_KEY`, else derived from
+  `PORTAL_SESSION_SECRET`); redirect URI `https://www.creedhm.com/api/gcal/callback`.
+  - **Scope** `calendar.app.created` (+ openid email): Creed makes its own
+    "Creed jobs" calendar and only touches that. One connection per business
+    (owner/manager connects; state HMAC-signed + nonce cookie).
+  - **Rules** (`lib/gcal/core.ts`, pure): one event per schedule row, id =
+    `eventIdFor(org, row)` (deterministic → a retried insert 409s and is
+    patched, never duplicated). Timed single-day visit = timed event in the
+    org's `booking_tz`; untimed or multi-day = all-day span (a timed multi-day
+    visit puts the time in the title and keeps it when the span is moved).
+    Only date / time / end day come back from Google (`applyVisit` keeps crew
+    + free note); title/description edits in Google are not read. Pending
+    online-booking requests and archived jobs are not on Google.
+  - **Loop guard + conflicts**: `google_calendar_events` keeps the etag of our
+    last write/read (same etag back = our own echo) and the hash of what Creed
+    last rendered (same hash = nothing to push). Both changed → `decidePull`:
+    later of Google's `updated` vs `schedule.updated_at` wins. Deleted in
+    Google → visit deleted + job status back via `statusAfterUnschedule`
+    (unless Creed edited it later, then the event is restored).
+  - **Engine** (`lib/gcal/engine.ts`, injected Store/Api, tested with fakes in
+    `gcal-sync.test.ts`): pull with the sync token (410 → full resync; token
+    saved only after the pass handled it), then push today−30..+183, then
+    remove events whose visit is gone / excluded. Calendar deleted in Google →
+    a new one, maps cleared.
+  - **Triggers**: app writes (`supabase.ts` fires `creed:db-write` →
+    `lib/gcal-kick.ts`, 2.5 s debounce → `/api/gcal/kick`); Google push
+    channel → `/api/gcal/webhook` (channel id + hashed token checked; renewed
+    weekly by `ensureWatch`); cron `/api/gcal/cron` every 10 min (fallback +
+    server-side writes); Settings "Sync now". One pass per org at a time
+    (`sync_lock_until`); `syncSoon` retries a busy kick.
+  - **Revoked / expired**: Google `invalid_grant` / 401 → `AuthError` → status
+    `needs_reconnect`, ONE bell alert to owners/managers (type job_scheduled),
+    red banner + Reconnect in Settings. Reconnecting with the same Google
+    account keeps the calendar and links; another account starts fresh.
+  - **.ics feed fix (same day)**: the subscribe feed wrote floating local
+    times, which Google subscriptions read as UTC (jobs 5–6 h early); it now
+    writes UTC instants from the org's zone (`lib/tz.ts`) + X-WR-TIMEZONE.
+    Subscriptions still only refresh every few hours (Google's side).
+
 - **Sign in with Creed — MCP OAuth 2.1 (2026-11-21)**. Lets claude.ai (and
   Claude Duet / any MCP client) add `https://www.creedhm.com/api/mcp` as a
   custom connector without pasting a key.

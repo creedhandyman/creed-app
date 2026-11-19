@@ -40,6 +40,10 @@
     {
       "path": "/api/admin/signups",
       "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/gcal/cron",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

@@ -24,6 +24,7 @@ import OfflineBanner from "./OfflineBanner";
 import { t } from "@/lib/i18n";
 import { setNavIntent } from "@/lib/nav-intent";
 import { useCrewHeartbeat } from "@/lib/crew-heartbeat";
+import { installGcalKick } from "@/lib/gcal-kick";
 import { useTextsUnreadPoll, TEXTS_TAB_VISIBLE } from "@/lib/texts-client";
 
 export default function AppShell() {
@@ -55,6 +56,8 @@ export default function AppShell() {
   // Live crew location: a fix every few minutes while THIS phone is on the
   // clock with the app open (never off the clock / in the background).
   useCrewHeartbeat(!!user.org_id);
+  // Schedule writes → sync Google Calendar soon (no-op when not connected).
+  useEffect(() => installGcalKick(), []);
   // Unread customer texts on the More tab (only businesses that text).
   useTextsUnreadPoll(textingOn && TEXTS_TAB_VISIBLE);
 

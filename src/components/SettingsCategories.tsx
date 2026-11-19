@@ -20,6 +20,8 @@ export interface SettingsCategory {
   sub?: string;
   /** Small status shown at the right of the row (e.g. "On"). */
   badge?: string;
+  /** "warn" = the badge is a red call to action (e.g. Reconnect). */
+  badgeTone?: "warn";
   /** The settings themselves — only mounted while the category is open. */
   content: ReactNode;
 }
@@ -79,7 +81,9 @@ export default function SettingsCategories({
               <span style={{ display: "block", fontFamily: "Oswald", fontSize: 16, fontWeight: 600, letterSpacing: ".3px" }}>{c.title}</span>
               {c.sub && <span className="dim" style={{ display: "block", fontSize: 12.5, marginTop: 1 }}>{c.sub}</span>}
             </span>
-            {c.badge && <span className="dim" style={{ fontSize: 12.5, flexShrink: 0 }}>{c.badge}</span>}
+            {c.badge && (c.badgeTone === "warn"
+              ? <span style={{ fontSize: 12.5, flexShrink: 0, fontWeight: 700, color: "#fff", background: "var(--color-accent-red)", borderRadius: 999, padding: "3px 9px", display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="warn" size={12} color="#fff" />{c.badge}</span>
+              : <span className="dim" style={{ fontSize: 12.5, flexShrink: 0 }}>{c.badge}</span>)}
             <Icon name="next" size={16} color="var(--color-dim)" />
           </button>
         ))}

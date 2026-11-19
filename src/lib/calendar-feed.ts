@@ -2,13 +2,16 @@
  * Schedule → iCalendar (.ics) for the phone-calendar subscribe link
  * (/api/calendar/feed/<token>.ics). PURE (tested in calendar-feed.test.ts).
  *
- * Times are FLOATING local times (no Z / TZID): "8:00 AM" in the app shows as
- * 8:00 AM on the phone, which is what a local crew wants. Untimed visits are
- * all-day events (a multi-day one spans its days); timed multi-day visits get
- * one event per day at that time.
+ * Timed visits are written as exact UTC times worked out from the business's
+ * time zone (fix 2026-11-22). They used to be FLOATING local times (no Z /
+ * TZID), which Google's calendar subscriptions read as UTC: an 8:00 AM visit
+ * showed at 2:00 AM in Wichita, so the feed "didn't line up". Untimed visits
+ * are all-day events (a multi-day one spans its days); timed multi-day visits
+ * get one event per day at that time.
  */
 import { visitSnap } from "./schedule-notify";
 import { stripNoteParts } from "./dispatch-week";
+import { icsUtc, zonedToUtc } from "./tz";
 
 export interface FeedRow { id: string; job?: string | null; job_id?: string | null; sched_date: string; end_date?: string | null; note?: string | null }
 export interface FeedJob { id: string; client?: string | null; requested_tech?: string | null; total_hrs?: number | null; trade?: string | null; archived?: boolean | null }
@@ -58,6 +61,8 @@ export interface FeedOptions {
   forName: string | null;
   appUrl: string;
   now?: Date;
+  /** The business's time zone (IANA). Default America/Chicago. */
+  tz?: string;
 }
 
 export function buildCalendar(rows: FeedRow[], jobs: FeedJob[], opts: FeedOptions): string {
@@ -68,6 +73,7 @@ export function buildCalendar(rows: FeedRow[], jobs: FeedJob[], opts: FeedOption
   const lines: string[] = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Creed//Schedule//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
     `X-WR-CALNAME:${icsText(opts.name)}`,
+    `X-WR-TIMEZONE:${opts.tz || "America/Chicago"}`,
     "REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H",
   ];
   for (const row of rows) {
@@ -100,14 +106,13 @@ export function buildCalendar(rows: FeedRow[], jobs: FeedJob[], opts: FeedOption
         ...common, "TRANSP:TRANSPARENT", "END:VEVENT");
       continue;
     }
-    const [h, m] = v.time.split(":").map(Number);
     const mins = Math.round(visitHours(job, v.crew.length, days.length) * 60);
     for (const d of days) {
-      const start = new Date(Date.UTC(2000, 0, 1, h, m + mins));
-      const endDay = addDays(d, start.getUTCDate() - 1);
+      const start = zonedToUtc(d, v.time, opts.tz || "America/Chicago");
+      const end = new Date(start.getTime() + mins * 60000);
       lines.push("BEGIN:VEVENT", `UID:${row.id}-${dateOnly(d)}@creedhm.com`,
-        `DTSTART:${dateOnly(d)}T${pad(h)}${pad(m)}00`,
-        `DTEND:${dateOnly(endDay)}T${pad(start.getUTCHours())}${pad(start.getUTCMinutes())}00`,
+        `DTSTART:${icsUtc(start)}`,
+        `DTEND:${icsUtc(end)}`,
         ...common, "END:VEVENT");
     }
   }

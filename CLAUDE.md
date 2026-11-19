@@ -9,8 +9,9 @@ A Next.js 15 + React 19 + TypeScript app for handyman / field-service
 crews. Multi-tenant. Customers run quotes, schedule, clock in, get paid
 via Stripe. Backend is Supabase (Postgres + Auth + Storage + RLS).
 Hosted on Vercel (**Pro** plan) — `main` auto-deploys. All the
-`vercel.json` crons run (8 as of 2026-11-11; the file is the source of
-truth), including the **hourly** `reviews/dispatch`:
+`vercel.json` crons run (11 as of 2026-11-22; the file is the source of
+truth), including the **hourly** `reviews/dispatch` and the every-10-min
+`gcal/cron`:
 Hobby caps cron frequency at once/day (an hourly schedule fails the
 build), so hourly needs Pro. The old 2-cron Hobby *count* cap was
 removed Jan 2026 (now 100/project on every plan), so the count is a
@@ -394,6 +395,12 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `RESEND_FROM_EMAIL`) and `RESEND_WEBHOOK_SECRET` (the `whsec_…` signing
   secret of the Resend webhook pointed at `/api/resend/webhook`; the route
   401s without it, so opens / clicks / bounces just aren't recorded).
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar two-way sync
+  (Google Cloud OAuth client, Web, redirect URI
+  `https://www.creedhm.com/api/gcal/callback`, Calendar API enabled). Optional
+  `GOOGLE_TOKEN_KEY` encrypts stored Google tokens (else derived from
+  `PORTAL_SESSION_SECRET`; changing either forces a reconnect). Unset = the
+  Settings card says sign-in isn't set up.
 - (Stripe / Supabase keys per existing setup.)
 
 ## Reference docs (read on demand, not loaded by default)
@@ -418,6 +425,12 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   ends in the code. Leads to verify, not settled facts.
 
 ## Things that still bug me / open follow-ups
+
+- **Google Calendar two-way sync SHIPPED (2026-11-22)** — see
+  shipped-systems.md. SQL `20261122_google_calendar_sync.sql` NOT run yet;
+  needs the Google env vars + OAuth client. Same day: the .ics subscribe feed
+  now writes UTC times (it was floating, so Google showed jobs 5–6 h early).
+  Not done: visits moved in Google don't send the crew schedule alerts.
 
 - **Job summaries SHIPPED (2026-11-17)** — one line on each job card, a
   paragraph on the job screen, built from the quote lines on read (leads use

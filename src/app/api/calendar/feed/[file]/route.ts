@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { serviceClient } from "@/lib/api-auth";
 import { buildCalendar, type FeedJob, type FeedRow } from "@/lib/calendar-feed";
 import { siteOrigin } from "@/lib/site-url";
+import { isValidTimeZone } from "@/lib/tz";
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +40,16 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ file: stri
     jobs = (data || []) as FeedJob[];
   }
   const { data: org } = await supabase.from("organizations").select("name").eq("id", feed.org_id).maybeSingle();
+  // The business's time zone (online booking's setting; Central by default),
+  // read on its own so a missing column can't break the feed.
+  const { data: tzRow } = await supabase.from("organizations").select("booking_tz").eq("id", feed.org_id).maybeSingle();
+  const tz = isValidTimeZone(tzRow?.booking_tz) ? tzRow!.booking_tz : "America/Chicago";
   const biz = org?.name || "Creed";
   const ics = buildCalendar(recent, jobs, {
     name: team ? `${biz} — crew schedule` : `${biz} — my jobs`,
     forName: team ? null : prof.name || "",
     appUrl: siteOrigin(),
+    tz,
   });
   // Best-effort "last synced" stamp.
   try { await supabase.from("calendar_feeds").update({ last_fetched_at: new Date().toISOString() }).eq("token", token); } catch { /* */ }
