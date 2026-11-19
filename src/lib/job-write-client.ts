@@ -9,6 +9,7 @@ import { db, supabase } from "./supabase";
 import { useStore } from "./store";
 import { tryReadBlob } from "./job-blob";
 import { createBlobWriter, type BlobLocal, type BlobRemote } from "./job-write";
+import { jobSerial } from "./job-serial";
 
 export { SKIP, addPhoto, removePhoto, type Change, type WriteResult } from "./job-write";
 
@@ -43,7 +44,8 @@ const local: BlobLocal = {
   },
 };
 
-const writer = createBlobWriter(remote, local);
+// The shared queue: wo-queue's tick flush waits behind these writes too.
+const writer = createBlobWriter(remote, local, jobSerial);
 export const patchBlob = writer.patchBlob;
 export const runSerialized = writer.runSerialized;
 export const settled = writer.settled;

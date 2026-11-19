@@ -278,7 +278,16 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     twice (store copy, then server blob) so keep it pure; return only the keys
     you touched. `addPhoto(photo)` = append deduped by url; `runSerialized(jobId,
     task)` / `settled(jobId)` for anything else that must not interleave (the
-    wo-queue flush). A failed write leaves the optimistic value until the 15s
+    wo-queue flush). **One shared queue (2026-11-21)**: `lib/job-serial.ts
+    jobSerial` is the per-job queue for patchBlob AND wo-queue's flush (which
+    queues each job's read-merge-write itself — never wrap `flushWoQueue` in
+    `runSerialized`, it would wait on itself); flushes chain app-wide. loadAll
+    keeps the screen's `rooms` for any job written since its reads went out
+    (`blobWrittenSince`), and synced ticks stay as a guard for 2 min
+    (`wo-queue tapsForRead`). Fixed "checked boxes flip back" (the 15s poll's
+    flush raced the tap's flush; a poll read sent before a write landed
+    replaced the screen copy). Tests `wo-tick-stale-poll.test.ts`.
+    A failed write leaves the optimistic value until the 15s
     poll reconciles (as before). NOT moved onto it: wo-queue's offline ticks,
     QuoteForge's whole-blob saves, and the server routes (approve /
     record-approval / lead-draft keep their own status-guarded writes).

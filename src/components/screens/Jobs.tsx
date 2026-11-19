@@ -54,7 +54,7 @@ import { readBlob, woKey } from "@/lib/job-blob";
 import { jobSummary, summaryLine, summaryEditDelta } from "@/lib/job-summary";
 import { tierPriceLine, sendTierChoices, sentTierValue, visibleTiers, type SendTierKey } from "@/lib/tiers";
 import { sendRowPatch, jobMoney } from "@/lib/quote-totals";
-import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
+import { patchBlob, removePhoto } from "@/lib/job-write-client";
 import { readDiscount, readSentTier, flatPricingFor } from "@/lib/quote-blob";
 import SendSheet, { tierSendOptions, type SendRecipient, type SendTierOption } from "../SendSheet";
 
@@ -2001,7 +2001,7 @@ ${invoicePhotosHtml}
                     // Durable: queued first, then synced against the job's
                     // current server blob (replays on reconnect when offline).
                     enqueueWoToggle(sj.id, targetKey, nextDone);
-                    void runSerialized(sj.id, () => flushWoQueue(sj.id)).catch((err) => console.warn("[Jobs] work-order sync failed:", err));
+                    void flushWoQueue(sj.id).catch((err) => console.warn("[Jobs] work-order sync failed:", err));
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--color-card-dark-2)", border: "1px solid var(--color-border-dark)", borderRadius: 12, padding: "9px 10px", marginBottom: 7, cursor: "pointer", opacity: w.done ? 0.6 : 1 }}
                 >
