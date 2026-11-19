@@ -2,6 +2,34 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Quote-form spam protection (2026-11-23)**. Every public quote request
+  (`/api/leads`: creedhm.com `/lead/[slug]` and the creedhandyman.com
+  QuoteForm) runs, in order: (1) `lib/lead-spam.ts botCheck` — hidden
+  honeypot (`hp`) filled, or sent < 3 s after the form appeared
+  (`started_at`) → dropped silently, the bot is told "ok"; a missing timer is
+  only a +1 signal (old cached forms / scripts). (2) Rate limits: the old
+  per-address burst + `publicFormLimit`, plus per-email (3 / 10 min in memory;
+  `EMAIL_LIMITS` 3/h, 6/day counted from `rooms.leadMail` hashes + held rows)
+  and held rows per address (`lib/lead-guard.ts guardCounts`). (3) Optional
+  Cloudflare Turnstile: ON only when `TURNSTILE_SECRET_KEY` is set (app form
+  reads `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, website reads `LEADS.turnstileSiteKey`
+  in site.ts — set all together). (4) `classifyLead` heuristics: links, pitch
+  phrases ("we offer", SEO, Google ranking, marketing / web design / leads /
+  backlinks / partnership / financing, cold-email openers, unsubscribe lines,
+  monthly pricing), company-ish name or marketing email domain, no address;
+  repair words count down (max −3). Score ≥ 5 = held, 2–4 = the AI decides
+  (`aiSolicitationCheck`, call_type `lead_spam`; no answer = a lead), < 2 =
+  lead. Held → `lead_review` row: no lead, no alert, no text, no AI draft, the
+  sender sees the normal "got it". Owner view: Jobs list banner "N website
+  requests held as possible spam" (`components/HeldLeads.tsx`, owners /
+  managers) → sheet with reasons; "Make it a lead" (`/api/leads/review`
+  restore: claims the row, then `lib/lead-intake.ts createLead` — the SAME
+  path a fresh submission takes — with no alert, AI draft on) or "Spam"
+  (dismissed, kept). Lead creation moved out of the route into
+  `lib/lead-intake.ts` (unchanged behavior). Tests: `lead-spam.test.ts`.
+  Not covered: the online booking form (`/api/public/booking`) and portal
+  work orders.
+
 - **Google Calendar two-way sync (2026-11-22)**. Ops → Settings → Google
   Calendar (`components/GoogleCalendarSync.tsx`; red "Reconnect" badge on the
   list row via `SettingsCategory.badgeTone`). Needs SQL

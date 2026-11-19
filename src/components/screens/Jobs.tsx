@@ -21,6 +21,7 @@ import { entriesForJob, isOldestAtAddress, payRunDeletedEntries, receiptsForJob,
 import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
+import HeldLeads from "@/components/HeldLeads";
 import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
 import ReceiptScanSheet from "../ReceiptScanSheet";
 import PropertySearch from "../PropertySearch";
@@ -2132,6 +2133,9 @@ ${invoicePhotosHtml}
           {selectMode ? t("common.cancel") : t("jobs.select")}
         </button>
       } />
+
+      {/* Website quote requests held as possible spam (owners / managers). */}
+      {isAdmin && <HeldLeads onRestored={() => { void loadAll(); }} />}
 
       {/* Job tabs */}
       {(() => {

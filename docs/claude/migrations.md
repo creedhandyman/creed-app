@@ -2,6 +2,16 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
+- Quote-form spam review (2026-11-23, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261123_lead_review.sql` (safe to re-run). Table
+  `lead_review` (org_id, status 'flagged' | 'restored' | 'dismissed', the
+  request's name / phone / email / address / description, payload jsonb with
+  photos + referral + text consent, from_tag / email_tag hashes, score,
+  reasons[], ai_verdict, job_id of a restored lead, reviewed_at / by). RLS ON,
+  no client policies. Until it runs: a submission the spam check would hold is
+  saved as a QUIET lead instead (rooms.leadFlagged, no alert / text / AI draft)
+  and the Jobs review banner stays hidden. In preflight `DB_CHECKS`.
+
 - Two-way Google Calendar sync (2026-11-22, **NOT run** — needs Bernard's yes):
   `supabase/migrations/20261122_google_calendar_sync.sql` (safe to re-run).
   Tables `google_calendar_links` (one per org: Google email, refresh/access

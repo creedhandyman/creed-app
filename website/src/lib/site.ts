@@ -435,6 +435,10 @@ export const WORK_ORDER = {
 export const LEADS = {
   endpoint: "https://www.creedhm.com/api/leads",
   slug: "creedhandyman",
+  /** Cloudflare Turnstile site key (public). Empty = no widget. Set it only
+   *  together with the app's TURNSTILE_SECRET_KEY (and add this domain to
+   *  the widget's hostnames), or every quote request is refused. */
+  turnstileSiteKey: "",
 };
 
 // Customer reviews (verified on Angi). Shown on the homepage; add new ones

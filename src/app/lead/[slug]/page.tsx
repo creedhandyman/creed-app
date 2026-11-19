@@ -9,11 +9,12 @@
  * system (globals.css) — same dark brand, Oswald headings, glow CTA.
  * Mobile-first since prospects are typically on a phone.
  */
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { db, supabase } from "@/lib/supabase";
 import type { Organization } from "@/lib/types";
 import { Icon, type IconName } from "@/components/Icon";
+import Turnstile, { TURNSTILE_SITE_KEY } from "@/components/Turnstile";
 
 // Job-type quick picker (from the render). Folded into the description on
 // submit so it's captured without an /api/leads contract change.
@@ -79,6 +80,12 @@ function LeadIntakeInner() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  // Spam checks (lib/lead-spam.ts): when the form appeared, a hidden
+  // honeypot a person never fills, and the optional Turnstile token.
+  const startedAt = useRef(Date.now());
+  const [hp, setHp] = useState("");
+  const [captcha, setCaptcha] = useState("");
+  const onCaptcha = useCallback((tok: string) => setCaptcha(tok), []);
 
   useEffect(() => {
     if (!slug) { setOrgLoading(false); return; }
@@ -130,6 +137,10 @@ function LeadIntakeInner() {
       setError("Please add a phone number or email so we can reach you.");
       return;
     }
+    if (TURNSTILE_SITE_KEY && !captcha) {
+      setError("Please complete the \"I'm not a robot\" check.");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch("/api/leads", {
@@ -149,6 +160,9 @@ function LeadIntakeInner() {
           photos,
           referrer_tech_id: techId || undefined,
           referral_code: refCode || undefined,
+          hp,
+          started_at: startedAt.current,
+          turnstile_token: captcha || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -287,6 +301,12 @@ function LeadIntakeInner() {
             </label>
           )}
         </div>
+
+        {/* Honeypot: hidden from people (and screen readers), filled by bots. */}
+        <div aria-hidden="true" style={{ position: "absolute", left: -5000, width: 1, height: 1, overflow: "hidden" }}>
+          <label>Leave this empty<input tabIndex={-1} autoComplete="off" name="company_site" value={hp} onChange={(e) => setHp(e.target.value)} /></label>
+        </div>
+        <Turnstile onToken={onCaptcha} />
 
         {error && (
           <div style={{ background: "#3a0d0d", border: "1px solid #C00000", borderRadius: 8, padding: "8px 10px", marginBottom: 11, fontSize: 14, color: "#ff8888" }}>

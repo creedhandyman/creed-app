@@ -401,6 +401,11 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `GOOGLE_TOKEN_KEY` encrypts stored Google tokens (else derived from
   `PORTAL_SESSION_SECRET`; changing either forces a reconnect). Unset = the
   Settings card says sign-in isn't set up.
+- `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — optional
+  Cloudflare Turnstile on the public quote forms. OFF unless the secret is
+  set; when on, set the site key in BOTH the app env and
+  `website/src/lib/site.ts LEADS.turnstileSiteKey`, and list creedhm.com +
+  creedhandyman.com as widget hostnames, or every quote request is refused.
 - (Stripe / Supabase keys per existing setup.)
 
 ## Reference docs (read on demand, not loaded by default)
@@ -425,6 +430,12 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   ends in the code. Leads to verify, not settled facts.
 
 ## Things that still bug me / open follow-ups
+
+- **Quote-form spam protection SHIPPED (2026-11-23)** — honeypot + 3 s timer,
+  per-address / per-email limits, solicitation classifier (+ AI for borderline),
+  held requests in Jobs → "held as possible spam" with one-tap restore,
+  optional Turnstile. See shipped-systems.md. SQL `20261123_lead_review.sql`
+  NOT run yet (until then held requests become quiet, tagged leads).
 
 - **Google Calendar two-way sync SHIPPED (2026-11-22)** — see
   shipped-systems.md. SQL `20261122_google_calendar_sync.sql` NOT run yet;

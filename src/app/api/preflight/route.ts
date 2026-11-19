@@ -112,6 +112,8 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "google_calendar_links", table: "google_calendar_links", column: "sync_token" },
   { key: "google_calendar_events", table: "google_calendar_events", column: "event_id" },
   { key: "schedule.updated_at", table: "schedule", column: "updated_at" },
+  // Quote-form spam held for review (supabase/migrations/20261123_lead_review.sql).
+  { key: "lead_review", table: "lead_review", column: "reasons" },
   { key: "oauth_tokens", table: "oauth_tokens", column: "token_hash" },
 ];
 
