@@ -1,5 +1,5 @@
 import type { Job, Room, JobDiscount } from "./types";
-import { exportQuotePdf } from "./export-pdf";
+import { exportQuotePdf, buildQuotePdfHtml } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
 import { readBlob } from "./job-blob";
 import { pricingInputs, type PricedRates } from "./pricing";
@@ -46,6 +46,15 @@ export interface QuotePdfOrg {
  * drift apart on pricing.
  */
 export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
+  exportQuotePdf(jobQuotePdfOptions(job, org, typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : ""));
+}
+
+/** The same quote as printable HTML, built without a browser (server routes). */
+export function jobQuotePdfHtml(job: Job, org: QuotePdfOrg | null, statusUrl = ""): string {
+  return buildQuotePdfHtml(jobQuotePdfOptions(job, org, statusUrl));
+}
+
+function jobQuotePdfOptions(job: Job, org: QuotePdfOrg | null, statusUrl: string): Parameters<typeof exportQuotePdf>[0] {
   let rooms: Room[] = [];
   let workers: { id: string; name: string }[] = [];
   let photos: { url: string; label: string; type: string }[] = [];
@@ -115,7 +124,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   // and the AI lead draft do — one shared function (lib/pricing.ts).
   const p = pricingInputs(org, { laborRate: laborRateOverride, minLaborHours: minLaborHoursOverride, taxMode: taxModeOverride, priced });
 
-  exportQuotePdf({
+  return {
     property: job.property,
     client: job.client,
     rooms,
@@ -154,8 +163,8 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     discount,
     minLaborHours: p.minHrs,
     taxMode: p.taxMode,
-    statusUrl: typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : "",
+    statusUrl,
     // A signed quote prints the customer's signature (unless revised since).
     approval: quoteApprovalFromJob(job),
-  });
+  };
 }

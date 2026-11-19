@@ -427,7 +427,16 @@ When you ship a feature or add a migration, add the entry THERE, not here.
 - **Flat-price quotes SHIPPED (2026-11-19)** — customers see one price per
   line, never hours / hourly rate (PDF, /status, portal, invoice); org default
   + per-quote switch; see shipped-systems.md. SQL `20261119_flat_pricing.sql`
-  NOT run yet (until then the org switch can't save; the per-quote switch works).
+  has been run (2026-11-19).
+
+- **Agent API SHIPPED (2026-11-20)** — per-business API keys (Ops → Settings →
+  AI assistant connection: name, scopes, shown once, Replace key, revoke, last
+  used, recent activity) for 5 tools — find_customer, add_work_order (→ lead),
+  draft_quote (draft only), get_open_slots, schedule_job — served as REST
+  `/api/agent/v1/<tool>` AND MCP `/api/mcp`, one shared runner
+  (`lib/agent/server.ts runTool`: scope → rate limit → tool → api_activity).
+  Business ALWAYS from the key. See shipped-systems.md "Agent API". SQL
+  `20261120_agent_api_keys.sql` NOT run yet.
 
 - **Store purchase prices SHIPPED (2026-11-19)** — Home Depot / Lowe's
   purchase exports + receipts → org prices (newest per product, with history)

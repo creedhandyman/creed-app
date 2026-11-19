@@ -116,7 +116,22 @@ export function pdfPhotos<T extends { type?: string }>(photos: T[]): T[] {
   return [...before, ...rest].slice(0, MAX_PDF_PHOTOS);
 }
 
+/** Open the customer quote PDF in a new tab (print → Save as PDF). */
 export function exportQuotePdf(opts: ExportOptions) {
+  const html = buildQuotePdfHtml(opts);
+  if (!openPrint(html)) {
+    if (typeof window !== "undefined") {
+      const toast = (
+        window as unknown as { __dbToast?: (m: string, t: "error") => void }
+      ).__dbToast;
+      if (toast) toast("Allow popups to export PDF", "error");
+    }
+  }
+}
+
+/** The quote PDF as one printable HTML page. Pure (no window), so a server
+ *  route can serve it too (the agent API's draft PDF link). */
+export function buildQuotePdfHtml(opts: ExportOptions): string {
   const {
     property,
     client,
@@ -910,7 +925,7 @@ ${unverified ? `<div style="font-size:11px;color:#555;background:#f5f7fa;border:
 `}
 `;
 
-  const html = wrapPrint(
+  return wrapPrint(
     {
       orgName,
       orgPhone,
@@ -927,13 +942,4 @@ ${unverified ? `<div style="font-size:11px;color:#555;background:#f5f7fa;border:
     },
     body,
   );
-
-  if (!openPrint(html)) {
-    if (typeof window !== "undefined") {
-      const toast = (
-        window as unknown as { __dbToast?: (m: string, t: "error") => void }
-      ).__dbToast;
-      if (toast) toast("Allow popups to export PDF", "error");
-    }
-  }
 }

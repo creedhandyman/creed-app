@@ -21,6 +21,7 @@ import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
 import BookingSettings from "../BookingSettings";
+import AgentConnectionSettings from "../AgentConnectionSettings";
 import StorePricesCard from "../StorePricesCard";
 import Campaigns from "./Campaigns";
 import { CampaignsCard, ReferralsCard } from "../MarketingSettings";
@@ -509,6 +510,11 @@ function OpsSettings() {
           // after a Stripe-paid invoice; follow-up nudges unanswered quotes; the
           // text-messaging links go in the approval page's consent box.
           content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><AutoTextsCard org={org} saveOrg={saveOrg} /><CampaignsCard org={org} saveOrg={saveOrg} /><ReferralsCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
+        },
+        {
+          // API keys for AI assistants (REST /api/agent/v1 + MCP /api/mcp).
+          id: "agent", icon: "ai", title: t("ops.cat.agent"), sub: t("ops.cat.agentSub"),
+          content: <AgentConnectionSettings />,
         },
         // Beta preflight — one-tap deployment readiness check. Platform
         // operators only: customers shouldn't see env vars / migrations.

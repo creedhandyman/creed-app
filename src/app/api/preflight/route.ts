@@ -100,6 +100,10 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "material_prices", table: "material_prices", column: "product_key" },
   { key: "material_price_history", table: "material_price_history", column: "line_hash" },
   { key: "material_spec_items.price_updated_at", table: "material_spec_items", column: "price_updated_at" },
+  // Agent API keys + activity + work-order source (supabase/migrations/20261120_agent_api_keys.sql).
+  { key: "api_keys", table: "api_keys", column: "key_hash" },
+  { key: "api_activity", table: "api_activity", column: "tool" },
+  { key: "jobs.external_id", table: "jobs", column: "external_id" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

@@ -2,6 +2,59 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Agent API (2026-11-20)**. Lets an AI assistant work for ONE business.
+  - **Keys**: Ops → Settings → AI assistant connection
+    (`components/AgentConnectionSettings.tsx`, server `/api/agent/keys`,
+    owner/manager via `requireOwner`, org from the profile). Name + scopes
+    (`lib/agent/scopes.ts`: customers:read, work_orders:write, quotes:draft,
+    schedule:read, schedule:write). The key (`creed_sk_` + 40 hex) is shown
+    ONCE; only its SHA-256 is stored (`lib/agent/keys.ts`). **Replace key** =
+    revoke old + new key with the same name/scopes, shown once, logged as
+    `key.replace` (the recovery path for a lost key). Revoke logged too. Max 10
+    active keys.
+  - **Serving**: REST `POST /api/agent/v1/<tool>` (JSON args; `GET
+    /api/agent/v1` lists the key's tools) and MCP `POST /api/mcp`
+    (`lib/agent/mcp.ts`, hand-written JSON-RPC: initialize, ping, tools/list,
+    tools/call; JSON responses, no SSE; tool errors come back as `isError`).
+    Both auth with `Authorization: Bearer creed_sk_…` (or `x-api-key`) and go
+    through `runTool`: scope check → 30/min per instance (`memoryLimit`) →
+    600/h per key (count of `api_activity`) → handler → one `api_activity` row
+    (also for refusals). The business ALWAYS comes from the key's org_id.
+  - **Tools** (`lib/agent/server.ts`, pure rules in `lib/agent/plan.ts` and
+    `customer-match.ts`):
+    - `find_customer` — the ONE matcher: phone = last 10 digits, email =
+      lower/trim, name = folded (name only when nothing else matched, and a
+      name alone never links a new work order).
+    - `add_work_order` — creates a LEAD (never scheduled): source
+      appfolio|angi|buildium|email + external_id on `jobs.source` /
+      `jobs.external_id` (and `leadSource` / `leadExternalId` on the blob);
+      same source + id again returns the existing lead (unique index catches
+      races); https photo links (≤12, no internal hosts) → `leadPhotos`; links
+      the customer by phone/email or adds one; alerts managers (in-app, like a
+      website lead).
+    - `draft_quote` — leads only, never one with a saved quote. Runs
+      `draftLeadQuote` (same AI engine as website leads, request labelled with
+      the source) and waits; an existing `leadDraft` is returned without a
+      second AI run. Cap: 25 AI drafts/business/day (activity rows "AI draft…"
+      + draftLeadQuote's own lead count). Returns total, hours, est days,
+      Good/Better/Best options (`lead-draft.ts draftSummary`, follows
+      `tiered_quotes_default`), ≤15 lines (no per-line hours when flat
+      pricing), `quote_link` = `/?job=<id>` (AppShell opens that job on the
+      Jobs tab) and `pdf_link` = `/api/agent/draft-pdf?…` — the real quote PDF
+      HTML (`quote-pdf.ts jobQuotePdfHtml`, now server-safe via
+      `export-pdf.ts buildQuotePdfHtml`) marked DRAFT, from a 7-day HMAC link
+      with its own purpose (`lib/agent/draft-link.ts`; never the approval
+      token). Nothing is sent.
+    - `get_open_slots` — booking settings read by org id (booking page need
+      NOT be on) + `loadBusyVisits` + `openSlots`, same as /book.
+    - `schedule_job` — by job_id only; one schedule row per day
+      (`start_date`+`days` or `dates`, ≤14) with note `🕐 HH:MM · 👷 crew ·
+      note` (crew must be real team names); a day the job already has is
+      updated, not duplicated; job → scheduled from lead/quoted/accepted.
+  - **Left out on purpose**: sending to customers, payments, deleting, bulk
+    imports. SQL `20261120_agent_api_keys.sql`. Tests:
+    `agent-api.test.ts`, `agent-keys-route.test.ts`.
+
 - **Flat-price quotes (2026-11-19)**. The customer sees one price per line,
   never hours or an hourly rate; hours × rate still price every line and the
   totals don't change. Hours stay on the job (work order, scheduling, costing).

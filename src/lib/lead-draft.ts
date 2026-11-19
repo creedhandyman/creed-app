@@ -18,6 +18,7 @@ import { rateForRoom, billedMaterial, priceCascade, pricingInputs } from "./pric
 import { materialTaxFor } from "./material-tax";
 import { dispatchNotifications } from "./notify-server";
 import { tryReadBlob } from "./job-blob";
+import { TIER_KEYS, TIER_NAME, itemInTier, shouldOfferTiers, visibleTiers, type TierKey } from "./tiers";
 
 /** Most AI drafts per business per day — a public form can't run up the bill.
  *  Counts ATTEMPTS (the `leadDraftTry` stamp written before the AI call), not
@@ -76,6 +77,43 @@ export function draftTotals(rooms: Room[], org: DraftOrg, property: string): { t
   return { total: c.grandTotal, labor: r2(c.tl), materials: r2(materials), hours: r2(c.th) };
 }
 
+export interface DraftLine { room: string; detail: string; price: number; hours: number }
+
+/**
+ * A draft's line list + its Good/Better/Best options, priced with the same
+ * rules as the totals above (min charge, trip fee, tax). `tiered` follows the
+ * business's "three options by default" switch, like the editor does when it
+ * opens the draft; only options that change the scope are listed.
+ */
+export function draftSummary(rooms: Room[], org: DraftOrg & { tiered_quotes_default?: boolean | null }, property: string): {
+  lines: DraftLine[];
+  tiered: boolean;
+  tiers: { key: TierKey; name: string; total: number; hours: number }[];
+} {
+  const p = pricingInputs(org);
+  const tradeRates = p.tradeRates ?? {};
+  const materialTaxPct = materialTaxFor(org as Parameters<typeof materialTaxFor>[0], extractZip(property)).rate;
+  const lines: DraftLine[] = [];
+  for (const r of rooms) {
+    const rate = rateForRoom(r.name, { defaultRate: p.defaultRate, tradeRates });
+    for (const it of r.items) {
+      const c = calculateCost(it, rate);
+      const mc = billedMaterial(c.mc, { materialTaxPct, markupPct: p.markupPct });
+      lines.push({ room: r.name, detail: it.detail, price: Math.round((c.lc + mc) * 100) / 100, hours: Math.round(it.laborHrs * 100) / 100 });
+    }
+  }
+  const tiered = shouldOfferTiers(rooms, org.tiered_quotes_default !== false);
+  const shown = tiered ? visibleTiers(rooms.flatMap((r) => r.items)) : [];
+  const tiers = shown.length > 1
+    ? TIER_KEYS.filter((k) => shown.includes(k)).map((k) => {
+        const sub = rooms.map((r) => ({ ...r, items: r.items.filter((it) => itemInTier(it, k)) })).filter((r) => r.items.length);
+        const t = draftTotals(sub, org, property);
+        return { key: k, name: TIER_NAME[k], total: t.total, hours: t.hours };
+      })
+    : [];
+  return { lines, tiered: tiers.length > 1, tiers };
+}
+
 /** Active spec items of one customer, read with the service role. Silent:
  *  [] on no customer, no spec, or no tables yet. */
 async function loadSpecForCustomer(supabase: SupabaseClient, orgId: string, customerId: string | null | undefined): Promise<SpecItem[]> {
@@ -95,7 +133,9 @@ async function loadSpecForCustomer(supabase: SupabaseClient, orgId: string, cust
 
 export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   orgId: string; jobId: string; description: string; photos: string[]; property: string; client: string;
-}): Promise<{ ok: boolean; reason?: string; total?: number }> {
+  /** Where the request came from, for the AI ("the website quote form"). */
+  requestFrom?: string;
+}): Promise<{ ok: boolean; reason?: string; total?: number; rooms?: Room[]; estDays?: number | null }> {
   const { orgId, jobId } = lead;
   const images = lead.photos.filter((p) => /^https:\/\//.test(p)).slice(0, 10);
   if (lead.description.trim().length < 8 && !images.length) return { ok: false, reason: "too little to quote" };
@@ -126,7 +166,7 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   try { licensedTrades = org.licensed_trades ? JSON.parse(org.licensed_trades) : []; } catch { /* */ }
 
   const text = lead.description.trim()
-    ? `Customer's request from the website quote form:\n${lead.description.trim()}`
+    ? `Customer's request from ${lead.requestFrom || "the website quote form"}:\n${lead.description.trim()}`
     : "Analyze these photos and quote all repairs needed.";
   // The customer's material spec, when the lead is tied to a customer that
   // has one (service role: filtered by org + customer explicitly).
@@ -212,5 +252,5 @@ export async function draftLeadQuote(supabase: SupabaseClient, lead: {
   } catch (e) {
     console.error("[lead-draft] notify failed (draft saved):", e);
   }
-  return { ok: true, total };
+  return { ok: true, total, rooms, estDays: result.estDays > 0 ? result.estDays : null };
 }

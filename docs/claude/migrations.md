@@ -2,7 +2,19 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
-- Flat-price quotes (2026-11-19, **NOT run** — needs Bernard's yes):
+- Agent API keys (2026-11-20, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261120_agent_api_keys.sql` (safe to re-run). Tables
+  `api_keys` (org_id, name, scopes text[], key_hash UNIQUE — SHA-256 only,
+  key_prefix, created_by, last_used_at, revoked_at, replaced_by) and
+  `api_activity` (one row per agent call / key change: org_id, key_id, tool,
+  via rest|mcp|app, ok, status, summary, job_id). RLS ON with NO client
+  policies — only the server routes (service role) touch them. Also
+  `jobs.source` + `jobs.external_id` with a partial unique index on
+  `(org_id, source, external_id)` so the same outside work order lands on one
+  lead. Until it runs: the AI assistant connection page says "not set up",
+  every agent call 401s. In preflight `DB_CHECKS`.
+
+- Flat-price quotes (2026-11-19, **run** — Bernard added the column 2026-11-19):
   `supabase/migrations/20261119_flat_pricing.sql` (safe to re-run). Adds
   `organizations.flat_pricing BOOLEAN NOT NULL DEFAULT false` — the org default
   for showing customers one price per quote line (no hours / hourly rate).
