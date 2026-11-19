@@ -15,8 +15,11 @@ import { Icon } from "@/components/Icon";
 
 const SCOPE_LABEL: Record<AgentScope, string> = {
   "customers:read": "agent.scope.customers",
+  "jobs:read": "agent.scope.jobsRead",
+  "jobs:write": "agent.scope.jobsWrite",
   "work_orders:write": "agent.scope.workOrders",
   "quotes:draft": "agent.scope.quotes",
+  "billing:read": "agent.scope.billing",
   "schedule:read": "agent.scope.slots",
   "schedule:write": "agent.scope.schedule",
 };

@@ -84,6 +84,24 @@ Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, wh
     `20261121_mcp_oauth.sql`. Tests `mcp-oauth.test.ts`.
 
 - **Agent API (2026-11-20)**. Lets an AI assistant work for ONE business.
+  - **Read tools + update_job (2026-11-22)**, `lib/agent/tools-read.ts` (pure
+    rules in `lib/agent/read.ts`, tested in `agent-read.test.ts`):
+    business_summary (start here), list_schedule, list_jobs, get_job,
+    list_customers, get_customer, list_quotes, get_quote, list_invoices,
+    update_job. New scopes `jobs:read`, `jobs:write`, `billing:read` — an
+    existing key / claude.ai connection must be reconnected or replaced to get
+    them (list_schedule + list_customers / get_customer work on the old
+    schedule:read / customers:read). Money amounts (balances, unpaid totals,
+    quote values in the summary) only with billing:read. update_job: status to
+    accepted / scheduled / active / complete only (never quoted — starts quote
+    follow-ups; invoiced — starts invoice reminders; paid — that's a payment),
+    never on invoiced / paid / archived jobs, guarded on the old status; notes
+    are APPENDED to `rooms.jobNotes` with a stamp (blob re-read right before the
+    write). Completing via the API does NOT run the app's completion learning /
+    equipment stamp. get_open_slots now lists every day with a `why` (closed /
+    minimum notice / all-day or untimed visit / fully booked) + the settings it
+    used + a one-line `summary`; accepts from / to. Note: a visit with NO start
+    time blocks its whole day for booking (the usual cause of "no slots").
   - **Keys**: Ops → Settings → AI assistant connection
     (`components/AgentConnectionSettings.tsx`, server `/api/agent/keys`,
     owner/manager via `requireOwner`, org from the profile). Name + scopes

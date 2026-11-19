@@ -3,8 +3,11 @@
  *  takes payments, deletes or bulk-imports (left out on purpose). */
 export const AGENT_SCOPES = [
   "customers:read",
+  "jobs:read",
+  "jobs:write",
   "work_orders:write",
   "quotes:draft",
+  "billing:read",
   "schedule:read",
   "schedule:write",
 ] as const;

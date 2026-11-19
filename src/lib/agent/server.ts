@@ -1,7 +1,7 @@
 /**
  * Agent API — the server side shared by the REST routes (/api/agent/v1/<tool>)
  * and the MCP endpoint (/api/mcp). One key check, one scope check, one rate
- * limit, one activity log, five tools. The business ALWAYS comes from the
+ * limit, one activity log, every tool (the read tools live in tools-read.ts). The business ALWAYS comes from the
  * key's org_id; nothing in a request can name another business.
  *
  * Left out on purpose: sending anything to customers, payments, deleting,
@@ -15,7 +15,7 @@ import { tryReadBlob } from "../job-blob";
 import { ymdInZone } from "../dates";
 import { dispatchNotifications, resolveRecipients } from "../notify-server";
 import { DRAFTS_PER_DAY, draftLeadQuote, draftSummary, draftTotals } from "../lead-draft";
-import { addDays, localNow, openSlots, readBookingSettings } from "../booking";
+import { addDays, localNow, readBookingSettings } from "../booking";
 import { loadBusyVisits } from "../booking-server";
 import type { Room } from "../types";
 import { hashKey, looksLikeKey, type AgentScope } from "./keys";
@@ -23,6 +23,9 @@ import { matchCustomers, sameCustomer, type CustomerLike } from "./customer-matc
 import { SCHEDULABLE, SOURCE_LABEL, checkSchedule, checkWorkOrder, isUuid, scheduleRows } from "./plan";
 import { draftPdfQuery } from "./draft-link";
 import { accessTokenGrant } from "../oauth/server";
+import { READ_HANDLERS } from "./tools-read";
+import { explainDays, isYmd, slotsHeadline, WEEKDAYS, type LabeledVisit } from "./read";
+import { parseSchedTime } from "../day-plan";
 import { isAccessToken } from "../oauth/core";
 
 export interface AgentCtx {
@@ -47,20 +50,105 @@ export const RATE = { perMinute: 30, perHour: 600 };
 
 const prop = (type: string, description: string, extra: Record<string, unknown> = {}) => ({ type, description, ...extra });
 
+const RANGE_ENUM = ["today", "tomorrow", "this_week", "next_week", "next_7_days", "next_30_days"];
+
 export const TOOLS: ToolDef[] = [
+  // ── Start here ──
   {
-    name: "find_customer",
-    scope: "customers:read",
-    description: "Find an existing customer of this business by phone, email or name. Phone and email are normalized, so any format matches. Returns up to 5 matches with their addresses.",
+    name: "business_summary",
+    scope: "jobs:read",
+    description: "START HERE for \"how's business\", \"what's on today\" or \"what needs attention\". One call returns today's visits, this week's visits (through Sunday), open leads, quotes awaiting the customer's approval, quotes not sent yet, approved jobs with nothing on the calendar, finished jobs not invoiced, and unpaid invoices (amounts need billing:read). Dates are in the business's time zone.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  // ── Schedule ──
+  {
+    name: "list_schedule",
+    scope: "schedule:read",
+    description: "What is ON the calendar: every visit in a date range with its time (or \"all day\"), crew, address, customer, job id and job status. Use for \"am I booked tomorrow?\" or \"what is Ann doing this week?\". Default range: today. To find FREE times use get_open_slots.",
     inputSchema: {
       type: "object",
-      properties: { phone: prop("string", "Any phone format"), email: prop("string", "Email address"), name: prop("string", "Full name (weakest match)") },
+      properties: {
+        range: prop("string", "Named range in the business's time zone (default today)", { enum: RANGE_ENUM }),
+        from: prop("string", "Or: first day, YYYY-MM-DD (overrides range)"),
+        to: prop("string", "Last day, YYYY-MM-DD (default = from; max 62 days)"),
+        crew: prop("string", "Only visits with this team member (name or part of it)"),
+      },
+    },
+  },
+  {
+    name: "get_open_slots",
+    scope: "schedule:read",
+    description: "FREE appointment start times, using the online booking page's rules (working hours, appointment length, travel buffer, minimum notice) minus visits already booked. Every day in the range is listed; a day with no times says WHY (no working hours that weekday, inside the minimum notice, blocked by an all-day or untimed visit, or fully booked), and the settings used are returned. To see what is booked use list_schedule.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: prop("string", "First day, YYYY-MM-DD (default today)"),
+        to: prop("string", "Last day, YYYY-MM-DD (default from + 6 days; max 60 days ahead)"),
+        days_ahead: prop("integer", "Or: how many days from today (1-30; default the business's booking setting)"),
+      },
+    },
+  },
+  {
+    name: "schedule_job",
+    scope: "schedule:write",
+    description: "Put an existing job on the calendar: one visit per day, optional start time and crew. A lead, quoted or approved job becomes scheduled. Calling again for a day the job is already on updates that visit instead of adding a second. Check get_open_slots or list_schedule first. Never notifies the customer.",
+    inputSchema: {
+      type: "object",
+      required: ["job_id"],
+      properties: {
+        job_id: prop("string", "The job id"),
+        start_date: prop("string", "First day, YYYY-MM-DD"),
+        days: prop("integer", "Consecutive days from start_date (default 1, max 14)"),
+        dates: prop("array", "Or: exact days, YYYY-MM-DD", { items: { type: "string" } }),
+        time: prop("string", "Start time, e.g. 09:00 or 2:30 pm (omit for all day)"),
+        crew: prop("array", "Team member names, exactly as in Creed", { items: { type: "string" } }),
+        note: prop("string", "Short note for the crew"),
+      },
+    },
+  },
+  // ── Jobs ──
+  {
+    name: "list_jobs",
+    scope: "jobs:read",
+    description: "Find jobs by status, customer and/or dates (a job matches the dates when one of its visits falls in the range, or, with no visit, its job date does). Each job: id, one-line title, customer, address, status, total, scheduled visits and crew. Archived jobs are left out unless include_archived. For one job's full detail use get_job.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { description: "One status or a list: lead, quoted, accepted (approved), scheduled, active (in progress), complete, invoiced, paid, inspection", anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] },
+        customer: prop("string", "Customer name, phone or email (or part of it)"),
+        customer_id: prop("string", "Exact customer id"),
+        range: prop("string", "Named date range", { enum: RANGE_ENUM }),
+        from: prop("string", "First day, YYYY-MM-DD"),
+        to: prop("string", "Last day, YYYY-MM-DD"),
+        include_archived: prop("boolean", "Include archived jobs (default false)"),
+        limit: prop("integer", "Max jobs (1-100, default 25). Newest first, or by date when dates are given"),
+      },
+    },
+  },
+  {
+    name: "get_job",
+    scope: "jobs:read",
+    description: "Everything about one job: title and summary, the customer's original request, customer contact, address, every visit with time and crew, the work checklist (done or not), job notes, photo count, quote state (not sent / awaiting approval / approved, with sent, viewed and signed) and invoice state (the balance due needs billing:read).",
+    inputSchema: { type: "object", required: ["job_id"], properties: { job_id: prop("string", "The job id (from list_jobs, list_schedule or business_summary)") } },
+  },
+  {
+    name: "update_job",
+    scope: "jobs:write",
+    description: "Change a job's status and/or add a note to its job notes (appended with a date stamp, never replacing what is there). Status can be set to accepted, scheduled, active or complete only: quoted, invoiced and paid stay in Creed (they start customer follow-ups or record money), and invoiced, paid or archived jobs can't be changed here. Nothing is deleted and the customer is never contacted.",
+    inputSchema: {
+      type: "object",
+      required: ["job_id"],
+      properties: {
+        job_id: prop("string", "The job id"),
+        status: prop("string", "New status", { enum: ["accepted", "scheduled", "active", "complete"] }),
+        note: prop("string", "Note to add (max 2000 characters)"),
+      },
     },
   },
   {
     name: "add_work_order",
     scope: "work_orders:write",
-    description: "Add a work order as a new LEAD (not a scheduled job). Links it to the matching customer (by phone or email) or adds the customer. Sending the same source + external_id again returns the existing lead.",
+    description: "Bring in a NEW request from a property manager or marketplace as a LEAD (not a scheduled job). Links it to the matching customer by phone or email, or adds the customer; the owner is alerted in Creed. Sending the same source + external_id again returns the existing lead instead of a duplicate. Next step: draft_quote.",
     inputSchema: {
       type: "object",
       required: ["source", "description"],
@@ -76,35 +164,71 @@ export const TOOLS: ToolDef[] = [
       },
     },
   },
+  // ── Customers ──
+  {
+    name: "find_customer",
+    scope: "customers:read",
+    description: "Exact lookup of one customer by phone or email (any format) or full name, e.g. before add_work_order. Returns up to 5 matches with addresses. For browsing or partial names use list_customers.",
+    inputSchema: {
+      type: "object",
+      properties: { phone: prop("string", "Any phone format"), email: prop("string", "Email address"), name: prop("string", "Full name (weakest match)") },
+    },
+  },
+  {
+    name: "list_customers",
+    scope: "customers:read",
+    description: "Browse or search customers (part of a name or email, or phone digits). Each: id, contact, number of jobs, last job date. Newest first; page with offset. For one customer's job history use get_customer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: prop("string", "Search text (empty = everyone)"),
+        limit: prop("integer", "1-100, default 25"),
+        offset: prop("integer", "Skip this many (paging)"),
+      },
+    },
+  },
+  {
+    name: "get_customer",
+    scope: "customers:read",
+    description: "One customer: contact, addresses and job history (the 50 newest jobs with status and total). With billing:read also lifetime billed and unpaid balance.",
+    inputSchema: { type: "object", required: ["customer_id"], properties: { customer_id: prop("string", "The customer id (from list_customers or find_customer)") } },
+  },
+  // ── Quotes and invoices (read-only) ──
+  {
+    name: "list_quotes",
+    scope: "billing:read",
+    description: "Quotes by state: awaiting_approval (sent, not yet approved by the customer; the default), not_sent (saved but never sent), approved, or all. Each: job id, customer, total, sent / viewed / approved dates, plus the total value. Read-only: sending and follow-ups happen in Creed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        state: prop("string", "Which quotes", { enum: ["awaiting_approval", "not_sent", "approved", "all"] }),
+        limit: prop("integer", "1-100, default 25"),
+      },
+    },
+  },
+  {
+    name: "get_quote",
+    scope: "billing:read",
+    description: "One saved quote: its lines (area, work, hours, materials; option tags on Good/Better/Best quotes), the saved totals and the approval state. Read-only. For a lead with no quote yet use draft_quote.",
+    inputSchema: { type: "object", required: ["job_id"], properties: { job_id: prop("string", "The job id") } },
+  },
+  {
+    name: "list_invoices",
+    scope: "billing:read",
+    description: "Invoices: unpaid (the default; includes partly paid, with the balance due), paid, or all, plus the total still owed across every unpaid invoice. Read-only: payments and reminders happen in Creed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        state: prop("string", "Which invoices", { enum: ["unpaid", "paid", "all"] }),
+        limit: prop("integer", "1-100, default 25"),
+      },
+    },
+  },
   {
     name: "draft_quote",
     scope: "quotes:draft",
-    description: "Run Creed's AI quote engine on a lead and save the result as a DRAFT for the owner to review (nothing is sent). Uses the business's rates, minimum charge, trip fee, tax, Good/Better/Best options and flat-price setting. Returns total, hours, a short line list, a link to the quote in Creed and a PDF link. Limited to 25 AI drafts per business per day.",
-    inputSchema: { type: "object", required: ["job_id"], properties: { job_id: prop("string", "The lead's job id (from add_work_order)") } },
-  },
-  {
-    name: "get_open_slots",
-    scope: "schedule:read",
-    description: "Open appointment times from the business's working hours minus what is already on its schedule (the same rules as its online booking page).",
-    inputSchema: { type: "object", properties: { days_ahead: prop("integer", "How many days to look ahead (1-30, default: the business's booking setting)") } },
-  },
-  {
-    name: "schedule_job",
-    scope: "schedule:write",
-    description: "Put a job on the schedule: one schedule entry per day with an optional start time and crew, tied to the job by id. Sets the job to scheduled. Calling again for the same day updates that day's entry.",
-    inputSchema: {
-      type: "object",
-      required: ["job_id"],
-      properties: {
-        job_id: prop("string", "The job id"),
-        start_date: prop("string", "First day, YYYY-MM-DD"),
-        days: prop("integer", "Consecutive days from start_date (default 1, max 14)"),
-        dates: prop("array", "Or: exact days, YYYY-MM-DD", { items: { type: "string" } }),
-        time: prop("string", "Start time, e.g. 09:00 or 2:30 pm"),
-        crew: prop("array", "Team member names", { items: { type: "string" } }),
-        note: prop("string", "Short note for the crew"),
-      },
-    },
+    description: "Run Creed's AI quote engine on a LEAD and save the result as a DRAFT for the owner to review (nothing is sent). Uses the business's rates, minimum charge, trip fee, tax, Good/Better/Best and flat-price settings. Returns total, hours, a short line list, a link to the quote in Creed and a PDF link. Takes up to a minute or two; 25 AI drafts per business per day.",
+    inputSchema: { type: "object", required: ["job_id"], properties: { job_id: prop("string", "The lead's job id (from add_work_order, or list_jobs with status lead)") } },
   },
 ];
 
@@ -363,15 +487,53 @@ const getOpenSlots: Handler = async (ctx, a) => {
   const { data } = await ctx.supabase.from("organizations")
     .select("booking_hours, booking_slot_min, booking_buffer_min, booking_min_notice_hours, booking_days_ahead, booking_tz")
     .eq("id", ctx.orgId).maybeSingle();
-  const s = readBookingSettings((data || {}) as Record<string, unknown>);
-  const want = Number(a.days_ahead);
-  if (Number.isInteger(want) && want >= 1) s.daysAhead = Math.min(want, 30);
+  const org = (data || {}) as Record<string, unknown>;
+  const s = readBookingSettings(org);
+  const hoursSet = org.booking_hours != null && org.booking_hours !== "";
   const now = localNow(new Date(), s.tz);
-  const visits = await loadBusyVisits(ctx.supabase, ctx.orgId, now.date, s.daysAhead);
-  const days = openSlots(s, visits, now);
+  let from = now.date;
+  let to: string;
+  if (a.from !== undefined || a.to !== undefined) {
+    if (a.from !== undefined && !isYmd(a.from)) return fail(400, "from must be YYYY-MM-DD");
+    if (a.to !== undefined && !isYmd(a.to)) return fail(400, "to must be YYYY-MM-DD");
+    from = typeof a.from === "string" && a.from > now.date ? a.from : now.date;
+    to = typeof a.to === "string" ? a.to : addDays(from, 6);
+    if (to < from) return fail(400, "to is before from (or in the past)");
+    if (to > addDays(now.date, 60)) return fail(400, "at most 60 days ahead");
+  } else {
+    const want = Number(a.days_ahead);
+    to = addDays(now.date, Number.isInteger(want) && want >= 1 ? Math.min(want, 30) : s.daysAhead);
+  }
+  const span = Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(now.date + "T00:00:00Z")) / 86400000);
+  const busy = await loadBusyVisits(ctx.supabase, ctx.orgId, now.date, span);
+  // Name the visits so a blocked day can say which one blocks it.
+  const { data: rows } = await ctx.supabase.from("schedule").select("sched_date, end_date, note, start_time, job")
+    .eq("org_id", ctx.orgId).gte("sched_date", addDays(from, -60)).lte("sched_date", to).limit(3000);
+  const labels = new Map<string, string>();
+  for (const r of (rows || []) as { sched_date: string; end_date?: string | null; note?: string | null; job?: string | null }[]) {
+    const k = `${r.sched_date}|${r.end_date || ""}|${parseSchedTime(r.note) || ""}`;
+    if (r.job && !labels.has(k)) labels.set(k, r.job);
+  }
+  const visits: LabeledVisit[] = busy.map((v) => ({ ...v, label: labels.get(`${v.date}|${v.endDate || ""}|${v.start || ""}`) }));
+  const days = explainDays(s, visits, now, from, to);
+  const hours: Record<string, string> = {};
+  for (let d = 0; d < 7; d++) {
+    const w = s.hours[String(d)] || [];
+    hours[WEEKDAYS[d]] = w.length ? w.map(([x, y]) => `${x}-${y}`).join(", ") : "closed";
+  }
+  const open = days.reduce((n, d) => n + d.slots.length, 0);
   return {
-    result: { ok: true, data: { timezone: s.tz, slot_minutes: s.slotMin, from: now.date, to: addDays(now.date, s.daysAhead), days } },
-    summary: `${days.reduce((n, d) => n + d.slots.length, 0)} open times`,
+    result: { ok: true, data: {
+      summary: slotsHeadline(days, hoursSet),
+      timezone: s.tz, today: now.date, from, to,
+      settings: {
+        working_hours: hours, working_hours_set_by_owner: hoursSet, appointment_minutes: s.slotMin,
+        travel_buffer_minutes: s.bufferMin, minimum_notice_hours: s.minNoticeHours,
+        where_to_change: "Creed: Operations → Settings → Online booking",
+      },
+      days,
+    } },
+    summary: `${open} open times ${from}..${to}`,
   };
 };
 
@@ -414,6 +576,7 @@ const scheduleJob: Handler = async (ctx, a) => {
 };
 
 const HANDLERS: Record<string, Handler> = {
+  ...READ_HANDLERS,
   find_customer: findCustomer,
   add_work_order: addWorkOrder,
   draft_quote: draftQuote,

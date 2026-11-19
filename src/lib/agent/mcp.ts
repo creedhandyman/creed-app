@@ -1,6 +1,6 @@
 /**
  * A small MCP server (JSON-RPC 2.0 over Streamable HTTP, JSON responses
- * only — no streaming needed for five quick tools). Hand-written so the app
+ * only — no streaming needed for quick tools). Hand-written so the app
  * carries no SDK; covers initialize, ping, tools/list, tools/call and the
  * notifications a client sends. Transport-free: the route passes the parsed
  * body in and the tool runner, and sends back what this returns.
@@ -45,7 +45,7 @@ export async function handleRpc(
         protocolVersion: MCP_PROTOCOL_VERSIONS.includes(asked) ? asked : MCP_PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER_INFO,
-        instructions: "Creed tools for one handyman business (the one this key belongs to). Work orders become leads; quotes are drafts the owner reviews and sends. Nothing here contacts customers, takes payments or deletes anything.",
+        instructions: "Creed tools for ONE handyman / field-service business (the one this connection belongs to). Start with business_summary for an overview. What is booked: list_schedule. Free times: get_open_slots (an empty day says why). Jobs: list_jobs, then get_job; update_job changes a status or adds a note. People: list_customers / get_customer (find_customer for an exact phone or email match). Money, read-only: list_quotes, get_quote, list_invoices. New requests: add_work_order (becomes a lead), then draft_quote (a draft the owner reviews), then schedule_job. Dates are in the business's time zone. Nothing here contacts customers, takes payments or deletes anything.",
       });
     }
     case "ping":

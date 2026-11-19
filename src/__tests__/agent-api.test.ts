@@ -255,8 +255,8 @@ describe("MCP", () => {
   });
   it("lists only the tools this key's scopes allow", async () => {
     const r = await handleRpc({ jsonrpc: "2.0", id: 3, method: "tools/list" }, ["customers:read", "schedule:read"], call);
-    expect((r as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name)).toEqual(["find_customer", "get_open_slots"]);
-    expect(TOOLS).toHaveLength(5);
+    expect((r as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name)).toEqual(["list_schedule", "get_open_slots", "find_customer", "list_customers", "get_customer"]);
+    expect(TOOLS).toHaveLength(15);
   });
   it("tools/call: results as text + structured content; tool errors as isError", async () => {
     const ok = await handleRpc({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "find_customer", arguments: { phone: "1" } } }, [], call);
