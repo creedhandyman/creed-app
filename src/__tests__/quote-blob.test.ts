@@ -72,24 +72,24 @@ describe("readQuoteSettings", () => {
   it("is all-defaults for an empty, missing or hostile blob", () => {
     const empty = {
       discount: null, laborRate: null, minLaborHours: null, taxMode: null, materialTax: null,
-      tieredQuote: false, tierNames: { better: "Complete", best: "Premium" }, crewSize: null, estDays: null,
+      tieredQuote: false, tierNames: { better: "Complete", best: "Premium" }, crewSize: null, estDays: null, flatPricing: null,
     };
     expect(readQuoteSettings({})).toEqual(empty);
     expect(readQuoteSettings(null)).toEqual(empty);
     expect(readQuoteSettings(undefined)).toEqual(empty);
-    expect(readQuoteSettings({ discount: "x", laborRate: "x", minLaborHours: {}, taxMode: [], tieredQuote: "true", crewSize: "2" })).toEqual(empty);
+    expect(readQuoteSettings({ discount: "x", laborRate: "x", minLaborHours: {}, taxMode: [], tieredQuote: "true", crewSize: "2", flatPricing: "yes" })).toEqual(empty);
   });
 
   it("reads a fully populated quote", () => {
     const s = readQuoteSettings({
       discount: { type: "percent", value: 10, label: "Promo" }, laborRate: 90, minLaborHours: 0, taxMode: "materials",
       materialTaxPct: 7.5, materialTaxZip: "67202", tieredQuote: true, tierNames: { better: "Plus", best: "Max" },
-      crewSize: 2.4, estDays: 3,
+      crewSize: 2.4, estDays: 3, flatPricing: true,
     });
     expect(s).toEqual({
       discount: { type: "percent", value: 10, label: "Promo" }, laborRate: 90, minLaborHours: 0, taxMode: "materials",
       materialTax: { pct: 7.5, zip: "67202" }, tieredQuote: true, tierNames: { better: "Complete", best: "Premium" },
-      crewSize: 2, estDays: 3,
+      crewSize: 2, estDays: 3, flatPricing: true,
     });
   });
 

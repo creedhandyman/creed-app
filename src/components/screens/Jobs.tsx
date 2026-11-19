@@ -55,7 +55,7 @@ import { jobSummary, summaryLine, summaryEditDelta } from "@/lib/job-summary";
 import { tierPriceLine, sendTierChoices, sentTierValue, visibleTiers, type SendTierKey } from "@/lib/tiers";
 import { sendRowPatch, jobMoney } from "@/lib/quote-totals";
 import { patchBlob, runSerialized, removePhoto } from "@/lib/job-write-client";
-import { readDiscount, readSentTier } from "@/lib/quote-blob";
+import { readDiscount, readSentTier, flatPricingFor } from "@/lib/quote-blob";
 import SendSheet, { tierSendOptions, type SendRecipient, type SendTierOption } from "../SendSheet";
 
 /** A send-menu recipient plus who they are (only the client counts as "sent"). */
@@ -967,6 +967,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
     const subtotal = Math.round(((j.total_labor || 0) + (j.total_mat || 0)) * 100) / 100;
     // Malformed rooms → readBlob's {} → no discount line.
     const discParsed = readDiscount(readBlob(j.rooms).discount);
+    // Flat-price quote: the invoice shows one price, never hours / labor split.
+    const flatInv = flatPricingFor(readBlob(j.rooms), org);
     const tripFee = org?.trip_fee || 0;
     const preBase = subtotal + tripFee;
     const discountAmount = discParsed
@@ -1042,18 +1044,18 @@ ${pics.map((p) => `  <figure style="margin:0;break-inside:avoid;page-break-insid
   <thead>
     <tr>
       <th>Description</th>
-      <th class="r" style="width:80px">Hours</th>
+      ${flatInv ? "" : `<th class="r" style="width:80px">Hours</th>
       <th class="r" style="width:90px">Labor</th>
-      <th class="r" style="width:90px">Materials</th>
+      <th class="r" style="width:90px">Materials</th>`}
       <th class="r" style="width:90px">Total</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td><b>Property repairs at ${escapeHtml(j.property)}</b><br/><span class="dim" style="font-size:11px">Per accepted estimate, work completed ${escapeHtml(j.job_date || "")}</span></td>
-      <td class="r">${(j.total_hrs || 0).toFixed(1)}</td>
+      ${flatInv ? "" : `<td class="r">${(j.total_hrs || 0).toFixed(1)}</td>
       <td class="r">$${(j.total_labor || 0).toFixed(2)}</td>
-      <td class="r">$${(j.total_mat || 0).toFixed(2)}</td>
+      <td class="r">$${(j.total_mat || 0).toFixed(2)}</td>`}
       <td class="r">$${subtotal.toFixed(2)}</td>
     </tr>
   </tbody>

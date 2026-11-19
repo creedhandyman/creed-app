@@ -2,6 +2,15 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
+- Flat-price quotes (2026-11-19, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261119_flat_pricing.sql` (safe to re-run). Adds
+  `organizations.flat_pricing BOOLEAN NOT NULL DEFAULT false` — the org default
+  for showing customers one price per quote line (no hours / hourly rate).
+  Until it runs the default reads as OFF everywhere (the public quote page and
+  portal read it best-effort), the Pricing & taxes switch can't save, and the
+  per-quote switch in the editor still works (saved on the quote blob). In
+  preflight `DB_CHECKS`.
+
 - Store purchase prices (2026-11-19, **NOT run** — needs Bernard's yes):
   `supabase/migrations/20261119_store_purchase_prices.sql` (safe to re-run; run
   AFTER 20261117). Tables `material_price_history` (every imported purchase

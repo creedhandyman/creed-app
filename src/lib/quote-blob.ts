@@ -123,6 +123,23 @@ export function readPricedRates(
   return rate >= 5 && rate <= 1000 ? { rate, trades: null } : null;
 }
 
+/**
+ * Flat-price quote: the customer sees one price per line — never hours or an
+ * hourly rate (the PDF, /status, the portal copy, the invoice). The hours and
+ * rates still price every line and stay on the job for scheduling and costing.
+ * Saved on the quote as a boolean once it's set; absent (an older quote, or a
+ * new one before its first save) = the org default (`organizations.flat_pricing`).
+ */
+export const readFlatPricing = (v: unknown): boolean | null => (v === true || v === false ? v : null);
+
+/** Whether this quote shows flat line prices: its own choice, else the org's. */
+export function flatPricingFor(
+  blob: RoomsBlob | null | undefined,
+  org: { flat_pricing?: boolean | null } | null | undefined,
+): boolean {
+  return readFlatPricing(blob?.flatPricing) ?? org?.flat_pricing === true;
+}
+
 export const readCrewSize = (v: unknown): number | null => (isNum(v) && v > 0 ? Math.round(v) : null);
 
 export const readEstDays = (v: unknown): number | null => (isNum(v) && v > 0 ? v : null);
@@ -137,6 +154,8 @@ export interface QuoteSettings {
   tierNames: { better: string; best: string };
   crewSize: number | null;
   estDays: number | null;
+  /** The quote's own flat-price choice; null = follow the org (flatPricingFor). */
+  flatPricing: boolean | null;
 }
 
 export function readQuoteSettings(blob: RoomsBlob | null | undefined): QuoteSettings {
@@ -150,6 +169,7 @@ export function readQuoteSettings(blob: RoomsBlob | null | undefined): QuoteSett
     tierNames: readTierNames(blob?.tierNames),
     crewSize: readCrewSize(blob?.crewSize),
     estDays: readEstDays(blob?.estDays),
+    flatPricing: readFlatPricing(blob?.flatPricing),
   };
 }
 

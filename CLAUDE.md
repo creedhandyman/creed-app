@@ -424,6 +424,11 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   Not done: old Excel `.xls` (save as .xlsx / CSV); a scanned PDF with no text
   layer over 3 MB can't be read.
 
+- **Flat-price quotes SHIPPED (2026-11-19)** — customers see one price per
+  line, never hours / hourly rate (PDF, /status, portal, invoice); org default
+  + per-quote switch; see shipped-systems.md. SQL `20261119_flat_pricing.sql`
+  NOT run yet (until then the org switch can't save; the per-quote switch works).
+
 - **Store purchase prices SHIPPED (2026-11-19)** — Home Depot / Lowe's
   purchase exports + receipts → org prices (newest per product, with history)
   + matching customer spec items; see shipped-systems.md. SQL

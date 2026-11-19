@@ -3,7 +3,7 @@ import { exportQuotePdf } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
 import { readBlob } from "./job-blob";
 import { pricingInputs, type PricedRates } from "./pricing";
-import { readQuoteSettings, readSentTier, readPricedRates, readTierRooms } from "./quote-blob";
+import { readQuoteSettings, readSentTier, readPricedRates, readTierRooms, flatPricingFor } from "./quote-blob";
 import { itemInTier } from "./tiers";
 
 /**
@@ -32,6 +32,8 @@ export interface QuotePdfOrg {
   deposit_pct?: number;
   quote_valid_days?: number;
   quote_terms?: string;
+  /** Org default for flat line prices (the quote's own choice wins). */
+  flat_pricing?: boolean;
 }
 
 /**
@@ -62,8 +64,10 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   let priced: PricedRates | null = null;
   // The lines as saved — what an approval signature was recorded against.
   let scopeRooms: Room[] = [];
+  let flatPricing = org?.flat_pricing === true;
   try {
     const data = readBlob(job.rooms);
+    flatPricing = flatPricingFor(data, org);
     scopeRooms = (data?.rooms || []) as Room[];
     // Option tags filled in from the work order when the lines lack them
     // (readTierRooms) — otherwise exclusive options print as one stacked total.
@@ -134,6 +138,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     tieredQuote,
     tierNames,
     scopeRooms,
+    flatPricing,
     crewSize,
     estDays,
     orgPhone: org?.phone,

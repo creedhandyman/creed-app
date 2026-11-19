@@ -89,6 +89,8 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "customers.sms_consent", table: "customers", column: "sms_consent" },
   // Three-tier default switch (supabase/migrations/20261114_tiered_quotes_default.sql).
   { key: "organizations.tiered_quotes_default", table: "organizations", column: "tiered_quotes_default" },
+  // Flat-price quotes default (supabase/migrations/20261119_flat_pricing.sql).
+  { key: "organizations.flat_pricing", table: "organizations", column: "flat_pricing" },
   // Per-customer material specs (supabase/migrations/20261117_customer_material_specs.sql).
   { key: "material_specs", table: "material_specs", column: "id" },
   { key: "material_spec_items", table: "material_spec_items", column: "companions" },

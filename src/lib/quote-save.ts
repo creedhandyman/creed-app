@@ -83,6 +83,10 @@ export interface QuoteSaveInput {
     materialTaxPct: number; materialTaxZip: string;
     tieredQuote: boolean; tierNames: { better: string; best: string };
     crewSize: number | null; estDays: number | null;
+    /** Flat line prices for the customer (no hours / rate shown). Saved as the
+     *  resolved choice, so a later change to the org default can't change a
+     *  quote that was already sent. */
+    flatPricing: boolean;
     /** The default + trade labor rates these prices use (kept with the quote). */
     pricedRates: PricedRates;
   };
@@ -242,6 +246,7 @@ export function buildQuoteSave(input: QuoteSaveInput): QuoteSaveResult {
     tierNames: s.tierNames,
     crewSize: s.crewSize,
     estDays: s.estDays,
+    flatPricing: s.flatPricing,
     tierTotals: s.tieredQuote ? p.tierTotals : null,
     tierBreakdown: s.tieredQuote ? p.tierBreakdown : null,
     // Whether the options differ in SCOPE (not just price), so the customer picker

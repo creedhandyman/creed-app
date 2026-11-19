@@ -38,7 +38,7 @@ import { exportQuotePdf } from "@/lib/export-pdf";
 import { quoteApprovalFromJob } from "@/lib/approval";
 import { resolveTaxMode, type TaxMode } from "@/lib/tax";
 import { priceCascade, rateForRoom, billedMaterial, pricingInputs, parseTradeRates, type PricedRates } from "@/lib/pricing";
-import { readQuoteSettings, readEstDays, readSentTier, readPricedRates, readTierRooms } from "@/lib/quote-blob";
+import { readQuoteSettings, readEstDays, readSentTier, readPricedRates, readTierRooms, readFlatPricing } from "@/lib/quote-blob";
 import { buildQuoteSave, dominantTrade } from "@/lib/quote-save";
 import { materialTaxFor, zipTaxMap } from "@/lib/material-tax";
 import Inspector from "./Inspector";
@@ -531,6 +531,10 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
   // can move a line between tiers, or switch tiers off for one price. Names
   // are fixed (lib/tiers.ts TIER_NAME) — the old renameable options are gone.
   const [tieredQuote, setTieredQuote] = useState(false);
+  // Flat-price quote: the customer sees one price per line, never hours or a
+  // rate (PDF, /status, invoice). null = follow the org default; saved as the
+  // resolved choice (quote-blob.ts flatPricingFor).
+  const [flatChoice, setFlatChoice] = useState<boolean | null>(null);
   const tierNames = TIER_NAMES;
   // Tiers are the DEFAULT on a new quote (2026-11-14) unless the business
   // turned "three tiers by default" off (Pricing & taxes, tiersDefaultOn):
@@ -621,7 +625,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     v: 1, savedAt: Date.now(),
     mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos,
     rooms, workers, jobPhotos, customWorkOrder,
-    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates,
+    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates, flatChoice,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop, tab,
     templateEdit,
     contactSource, residentPatch,
@@ -649,7 +653,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       setDiscount(d.discount ?? null); setLaborRate(d.laborRate ?? null);
       setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
       setPricedRates(d.pricedRates ?? null);
-      setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true; cancelTierBuild();
+      setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true; cancelTierBuild(); setFlatChoice(readFlatPricing(d.flatChoice));
       setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
       setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
       setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
@@ -688,7 +692,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     prop, client, customerId, addressId, rooms, workers, jobPhotos,
     // `src` is the sync's session-only baseline, not an edit.
     customWorkOrder: customWorkOrder ? customWorkOrder.map(({ src: _src, ...s }) => s) : null,
-    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates,
+    discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates, flatChoice,
     customTools, customShop, checkedTools, checkedShop, removedGuideShop,
     residentPatch,
   });
@@ -712,7 +716,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
         setMinLaborHours(d.minLaborHours ?? null); setTaxMode(d.taxMode ?? null);
         // Drafts written before this key keep the rates the quote loaded with.
         if ("pricedRates" in d) setPricedRates(d.pricedRates ?? null);
-        setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true; cancelTierBuild();
+        setTieredQuote(!!d.tieredQuote); tierChoiceRef.current = true; cancelTierBuild(); setFlatChoice(readFlatPricing(d.flatChoice));
         setCrewSize(typeof d.crewSize === "number" && d.crewSize > 0 ? d.crewSize : null);
         setAiEstDays(typeof d.aiEstDays === "number" && d.aiEstDays > 0 ? d.aiEstDays : null);
         setCustomTools(d.customTools || []); setCustomShop(d.customShop || []);
@@ -753,7 +757,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const t = setTimeout(() => writeEditDraft(id, snap), 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, prop, client, customerId, addressId, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates, customTools, customShop, checkedTools, checkedShop, removedGuideShop, residentPatch, editingId, editDraftOffer]);
+  }, [mode, prop, client, customerId, addressId, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates, flatChoice, customTools, customShop, checkedTools, checkedShop, removedGuideShop, residentPatch, editingId, editDraftOffer]);
 
   // Show the "resume" card whenever we land on the hub with a saved draft.
   useEffect(() => {
@@ -772,7 +776,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     const t = setTimeout(() => { try { localStorage.setItem(DRAFT_KEY, snapshot); } catch { /* */ } }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates, customTools, customShop, checkedTools, checkedShop, removedGuideShop, contactSource, residentPatch, tab, editJobId, editingId]);
+  }, [mode, prop, client, customerId, addressId, text, quickDesc, quickPhotos, rooms, workers, jobPhotos, customWorkOrder, discount, laborRate, minLaborHours, taxMode, tieredQuote, tierNames, crewSize, aiEstDays, pricedRates, flatChoice, customTools, customShop, checkedTools, checkedShop, removedGuideShop, contactSource, residentPatch, tab, editJobId, editingId]);
 
   // Flush immediately when the app is backgrounded/closed — the 600ms debounce
   // may not fire if the user leaves right after typing. Ref keeps the latest
@@ -921,6 +925,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       // the same way as a fresh Quick Quote until the first save.
       setTieredQuote(q.tieredQuote || (!!leadDraftRooms && shouldOfferTiers(leadDraftRooms, tierDefault)));
       setCrewSize(q.crewSize);
+      setFlatChoice(q.flatPricing);
       // A lead's AI draft carries its own estimate until the first save.
       setAiEstDays(q.estDays ?? readEstDays(data?.leadDraft?.estDays));
       setAiNotes(
@@ -994,6 +999,8 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
 
   const fileRef = useRef<HTMLInputElement>(null);
   const org = useStore((s) => s.org);
+  // This quote's flat-price choice, else the org default (quote-blob.ts flatPricingFor).
+  const flatPricing = flatChoice ?? org?.flat_pricing === true;
 
   // ── Service templates: save a finished quote and reuse its line items as a
   //    one-tap starter (the "From Template" hub CTA). Org-scoped; template_rooms
@@ -1093,7 +1100,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setEditingId(null);
     setProp(""); setClient(""); setCustomerId(undefined); setAddressId(undefined); resetContact();
     setCustomWorkOrder(null); setDiscount(null); setLaborRate(null); setPricedRates(null); setMinLaborHours(null); setTaxMode(null); setQuoteMatTax(null);
-    setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild(); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
+    setTieredQuote(false); setFlatChoice(null); tierChoiceRef.current = false; cancelTierBuild(); setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     setCustomTools([]); setCustomShop([]); setCheckedTools([]); setCheckedShop([]);
     setJobPhotos([]); setWorkers([]);
     setRooms(validateQuote(parsed));
@@ -2063,7 +2070,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
       steps: syncedSteps,
       guideSteps: guide.steps,
       guideState: { customTools, customShop, checkedTools, checkedShop, removedGuideShop },
-      settings: { discount, laborRate, minLaborHours, taxMode, materialTaxPct, materialTaxZip: jobZip, tieredQuote, tierNames, crewSize, estDays: aiEstDays, pricedRates: { rate: defaultRate, trades: priceIn.tradeRates } },
+      settings: { discount, laborRate, minLaborHours, taxMode, materialTaxPct, materialTaxZip: jobZip, tieredQuote, tierNames, crewSize, estDays: aiEstDays, flatPricing, pricedRates: { rate: defaultRate, trades: priceIn.tradeRates } },
       pricing: { gt, tl, tm, th, tierTotals, tierBreakdown, headlineKey, hasSplit },
       inspection: inspectionData,
       prev: prevJob ? { blob: jobBlob(prevJob), status: prevJob.status } : null,
@@ -2162,7 +2169,7 @@ export default function QuoteForge({ setPage, editJobId, clearEditJob }: Props) 
     setLaborRate(null);
     setPricedRates(null);
     setMinLaborHours(null);
-    setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild();
+    setTieredQuote(false); setFlatChoice(null); tierChoiceRef.current = false; cancelTierBuild();
     setCrewSize(null); setAiEstDays(null); setAiNotes([]);
     savingRef.current = false;
     // Land on the job just saved (Jobs opens its detail from this intent).
@@ -2353,7 +2360,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
     setLaborRate(null);
     setPricedRates(null);
     setMinLaborHours(null);
-    setTieredQuote(false); tierChoiceRef.current = false; cancelTierBuild();
+    setTieredQuote(false); setFlatChoice(null); tierChoiceRef.current = false; cancelTierBuild();
     setCrewSize(null); setAiEstDays(null); setAiNotes([]);
   };
   // Inspector registers its own "leave the walkthrough" (keeps findings in the
@@ -3009,11 +3016,14 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           boxShadow: "0 0 26px -4px rgba(245,180,0,.5), inset 0 0 26px -10px rgba(245,180,0,.4)",
         }}
       >
-        {[
+        {(flatPricing
+          // Flat prices: nothing here a customer could read hours or a rate off.
+          ? [{ l: t("qf.flatItems"), v: String(rooms.reduce((s, r) => s + r.items.length, 0)) }]
+          : [
           { l: "Labor", v: "$" + headlineLabor.toFixed(0) },
           { l: "Mat'l" + (materialTaxPct > 0 ? ` +${materialTaxPct}% tax` : "") + (markupPct > 0 ? ` +${markupPct}%` : ""), v: "$" + headlineMat.toFixed(0) },
           { l: "Hours", v: headlineHrs.toFixed(1) },
-        ].map((x) => (
+        ]).map((x) => (
           <div key={x.l} style={{ flex: 1, textAlign: "center" }}>
             <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#e9c879", fontWeight: 600 }}>{x.l}</div>
             <div style={{ fontSize: 15, fontFamily: "Oswald", fontWeight: 600, color: "#fff", marginTop: 2 }}>{x.v}</div>
@@ -3023,6 +3033,25 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
           <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "#ffce3a", fontWeight: 700 }}>Total</div>
           <div style={{ fontSize: 24, fontFamily: "Oswald", fontWeight: 700, color: "#ffce3a", lineHeight: 1.05, marginTop: 1 }}><CountUp value={headlineTotal} prefix="$" decimals={2} /></div>
         </div>
+      </div>
+
+      {/* Flat prices — per quote, defaulting to the org setting (Pricing &
+          taxes). Prices don't change; only what the customer sees does. */}
+      <div style={{ marginTop: 8 }}>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <span style={{ fontSize: 12, color: "#888", fontFamily: "Oswald", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            {t("qf.flatLabel")}
+          </span>
+          <button
+            onClick={() => setFlatChoice(!flatPricing)}
+            aria-pressed={flatPricing}
+            className={flatPricing ? "bb" : "bo"}
+            style={{ fontSize: 12, padding: "3px 12px" }}
+          >
+            {flatPricing ? t("qf.flatOn") : t("qf.flatOff")}
+          </button>
+        </div>
+        {flatPricing && <div className="dim" style={{ fontSize: 11.5, marginTop: 4, lineHeight: 1.4 }}>{t("qf.flatHint")}</div>}
       </div>
 
       {/* Three-tier quote — Essential / Complete / Premium (per-quote, on the
@@ -3417,8 +3446,9 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
         >
           <Icon name="info" size={14} />
           <span>
-            Minimum service charge applied — {effectiveMinHrs} hr min
-            (actual labor: {thRaw.toFixed(2)} hr).
+            {flatPricing
+              ? t("qf.flatMinCharge")
+              : <>Minimum service charge applied — {effectiveMinHrs} hr min (actual labor: {thRaw.toFixed(2)} hr).</>}
           </span>
         </div>
       )}
@@ -4091,6 +4121,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
                 minLaborHours: effectiveMinHrs,
                 taxMode: effectiveTaxMode,
                 tieredQuote,
+                flatPricing,
                 tierNames,
                 crewSize,
                 estDays: aiEstDays,
@@ -4276,7 +4307,7 @@ ${areasHtml || '<div class="dim" style="text-align:center;padding:18px">No areas
       />
 
       {/* QUOTE TAB */}
-      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} moveItem={moveItem} getRateForRoom={getRateForRoom} matCost={(raw: number) => billedMaterial(raw, { materialTaxPct, markupPct })} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} specItems={specItems} />}
+      {tab === "quote" && <QuoteTab rooms={rooms} rate={rate} darkMode={darkMode} upItem={upItem} rmItem={rmItem} moveItem={moveItem} getRateForRoom={getRateForRoom} matCost={(raw: number) => billedMaterial(raw, { materialTaxPct, markupPct })} snapItemEdit={snapItemEdit} logItemEdit={logItemEdit} tieredQuote={tieredQuote} tierNames={tierNames} editTier={editTier} specItems={specItems} flatPricing={flatPricing} />}
 
       {/* GUIDE TAB */}
       {tab === "guide" && (
@@ -4529,6 +4560,7 @@ function QuoteTab({
   tierNames,
   editTier,
   specItems = [],
+  flatPricing = false,
 }: {
   rooms: Room[];
   rate: number;
@@ -4547,8 +4579,17 @@ function QuoteTab({
   editTier?: "base" | "better" | "best";
   /** The customer's material spec (suggested first in Materials). */
   specItems?: SpecItem[];
+  /** Flat prices: each line shows its price; hours / sqft / materials fold
+   *  behind a per-line "Hours & materials" button (they still set the price). */
+  flatPricing?: boolean;
 }) {
   const [expandedMat, setExpandedMat] = useState<string | null>(null);
+  const [openCost, setOpenCost] = useState<Set<string>>(() => new Set());
+  const toggleCost = (id: string) => setOpenCost((cur) => {
+    const next = new Set(cur);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   // Colored trade dot for each room/area header (matches the mock's tradehdr).
   const TRADE_DOT: Record<string, string> = { plumbing: "#3aa0ff", electrical: "#ffcc00", carpentry: "#ff8800", hvac: "#9d4edd", painting: "#00cc66", flooring: "#ff5b5b", general: "#8a8a99", drywall: "#06b6d4" };
   const dotFor = (n: string) => TRADE_DOT[(n || "").toLowerCase().trim()] || "var(--color-primary)";
@@ -4667,6 +4708,18 @@ function QuoteTab({
                     })()}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    {flatPricing && (
+                      <button
+                        type="button"
+                        className="bo"
+                        aria-expanded={openCost.has(it.id)}
+                        onClick={() => toggleCost(it.id)}
+                        style={{ fontSize: 11.5, padding: "3px 8px", minHeight: 0, width: "auto", whiteSpace: "nowrap" }}
+                      >
+                        {openCost.has(it.id) ? t("qf.flatHideCost") : t("qf.flatShowCost")}
+                      </button>
+                    )}
+                    {(!flatPricing || openCost.has(it.id)) && <>
                     <div style={{ textAlign: "center" }}>
                       <div style={{ fontSize: 10 }} className="dim">SQFT</div>
                       <input
@@ -4727,11 +4780,12 @@ function QuoteTab({
                         />
                       )}
                     </div>
+                    </>}
                     <div style={{ minWidth: 50, textAlign: "right" }}>
-                      <div style={{ fontSize: 10 }} className="dim">TOT</div>
+                      <div style={{ fontSize: 10 }} className="dim">{flatPricing ? t("qf.flatPrice") : "TOT"}</div>
                       <div
                         style={{
-                          fontSize: 15,
+                          fontSize: flatPricing ? 17 : 15,
                           fontFamily: "Oswald",
                           color: "var(--color-success)",
                         }}

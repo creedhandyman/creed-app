@@ -368,6 +368,23 @@ function OpsSettings() {
             {tiersDefaultOn(org) ? t("ops.on") : t("ops.off")}
           </button>
         </div>
+        {/* Flat prices default (2026-11-19). OFF unless turned on; each quote
+            has its own switch in the editor. Prices don't change — the
+            customer just never sees hours or the hourly rate. */}
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 14 }}>
+          <div>
+            <label className="sl">{t("ops.flatDefault")}</label>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.flatDefaultHelp")}</div>
+          </div>
+          <button
+            className={org.flat_pricing === true ? "bb" : "bo"}
+            aria-pressed={org.flat_pricing === true}
+            style={{ fontSize: 13, padding: "4px 14px", flexShrink: 0 }}
+            onClick={() => saveOrg({ flat_pricing: org.flat_pricing !== true })}
+          >
+            {org.flat_pricing === true ? t("ops.on") : t("ops.off")}
+          </button>
+        </div>
       </div>
   );
 

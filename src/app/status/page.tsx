@@ -58,6 +58,8 @@ function StatusContent() {
   // The lines exactly as saved — the approval fingerprint is computed on these.
   const [savedRooms, setSavedRooms] = useState<Room[]>([]);
   const [laborRate, setLaborRate] = useState<number | null>(null);
+  // The quote's own flat-price choice (null = follow the org's default).
+  const [flatChoice, setFlatChoice] = useState<boolean | null>(null);
   // Materials purchase tax this quote was priced with (none on older quotes).
   const [matTaxPct, setMatTaxPct] = useState(0);
   // Drives the status-timeline reveal (steps light up + bar fills on load).
@@ -103,6 +105,7 @@ function StatusContent() {
               setSavedRooms(blob.rooms as Room[]);
             }
             if (q.laborRate) setLaborRate(q.laborRate);
+            setFlatChoice(q.flatPricing);
             setMatTaxPct(q.materialTax && q.materialTax.pct > 0 ? q.materialTax.pct : 0);
             // Three-tier options (computed totals live on the blob).
             const tt = blob?.tierTotals;
@@ -442,7 +445,10 @@ function StatusContent() {
     quoteRooms,
     { rate: priceIn.rate, override: laborRate, tradeRates: priceIn.tradeRates, materialTaxPct: matTaxPct, markupPct: priceIn.markupPct },
     (it) => !tiered || itemInTier(it as Room["items"][number], selectedTier),
-  ).map((s) => ({ name: s.name, total: s.total, blurb: s.details.slice(0, 3).join(", "), count: s.count }));
+  ).map((s) => ({ name: s.name, total: s.total, blurb: s.details.slice(0, 3).join(", "), count: s.count, lines: s.lines }));
+  // Flat-price quote: list every line with its own price (hours and rate are
+  // never shown here either way).
+  const flatPrices = flatChoice ?? org?.flat_pricing === true;
   const itemCount = breakdown.reduce((s, b) => s + b.count, 0);
   // What the picked tier changes vs the one before it (Complete vs Essential,
   // Premium vs Complete) — the price cards alone didn't show the difference.
@@ -557,7 +563,17 @@ function StatusContent() {
         {breakdown.length > 0 && (
           <div className="card">
             <div className="lbl">Quote breakdown{itemCount > 0 ? ` · ${itemCount} item${itemCount === 1 ? "" : "s"}` : ""}</div>
-            {breakdown.map((b, i) => (
+            {flatPrices ? breakdown.map((b, i) => (
+              <div key={i} style={{ marginTop: i ? 10 : 4 }}>
+                <b style={{ color: "#7fb6ff", fontSize: 13 }}>{b.name}</b>
+                {b.lines.map((ln, j) => (
+                  <div className="wo" key={j} style={{ alignItems: "flex-start" }}>
+                    <span style={{ flex: 1, color: "#cfd2da", lineHeight: 1.35 }}>{ln.detail}</span>
+                    <span style={{ fontFamily: "Oswald, sans-serif", marginLeft: 8, flexShrink: 0 }}>${ln.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+              </div>
+            )) : breakdown.map((b, i) => (
               <div className="wo" key={i}>
                 <b style={{ color: "#7fb6ff", minWidth: 84, display: "inline-block", flexShrink: 0 }}>{b.name}</b>
                 <span style={{ flex: 1, color: "#cfd2da", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.blurb}</span>

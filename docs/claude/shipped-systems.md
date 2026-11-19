@@ -2,6 +2,31 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Flat-price quotes (2026-11-19)**. The customer sees one price per line,
+  never hours or an hourly rate; hours × rate still price every line and the
+  totals don't change. Hours stay on the job (work order, scheduling, costing).
+  - **Setting**: org default `organizations.flat_pricing` (Ops → Settings →
+    Pricing & taxes, "Flat prices on quotes"; migration
+    `20261119_flat_pricing.sql`). Per quote: the "Customer sees" switch in
+    QuoteForge (`flatChoice`, null = org default). Every save writes the
+    RESOLVED boolean as `blob.flatPricing` (`buildQuoteSave`), so a sent quote
+    can't change when the org default does. Readers call `quote-blob.ts
+    flatPricingFor(blob, org)` — quote's choice, else org's.
+  - **Where it shows**: quote PDF (`export-pdf.ts` `flatPricing`: summary =
+    Category · Items · Price, breakdown = Work · Price per line, no Man-Hrs
+    column, labor equations, "Labor hours" tier row, rate / man-hour note,
+    hours in the min-charge note or the completion estimate — days only);
+    /status (lists each line with its price from `quoteSections(...).lines`);
+    portal copy (same PDF; `portal/me` reads `flat_pricing` best-effort); the
+    invoice (Jobs `generateInvoice`: Description · Total only). QuoteForge:
+    lines show PRICE with hours / sqft / materials behind "Hours & materials";
+    the totals card shows item count + total.
+  - **Not hidden**: the public quote page's JSON still carries each line's
+    `laborHrs` and the org's rates — the approval fingerprint
+    (`approval.ts scopeFingerprint`) is computed on the hours, so they can't be
+    stripped without breaking signed quotes. Display-only.
+  - Tests: `flat-pricing.test.ts`.
+
 - **Apply client spec: preview + tiers (2026-11-17)**. Fix for Grid 606 carpet
   job eb5985e2, where the Shaw tile spec item's one-word keyword "carpet"
   turned the Complete option's roll-carpet and pad allowances into Shaw tile.

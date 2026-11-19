@@ -20,7 +20,7 @@ function input(over: Partial<QuoteSaveInput> = {}): QuoteSaveInput {
     guideState: { customTools: [], customShop: [], checkedTools: [], checkedShop: [], removedGuideShop: [] },
     settings: {
       discount: null, laborRate: null, minLaborHours: null, taxMode: null, materialTaxPct: 7.5, materialTaxZip: "67202",
-      tieredQuote: false, tierNames: { better: "Better", best: "Best" }, crewSize: null, estDays: null,
+      tieredQuote: false, tierNames: { better: "Better", best: "Best" }, crewSize: null, estDays: null, flatPricing: false,
       pricedRates: { rate: 55, trades: null },
     },
     pricing: {
