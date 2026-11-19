@@ -104,6 +104,11 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "api_keys", table: "api_keys", column: "key_hash" },
   { key: "api_activity", table: "api_activity", column: "tool" },
   { key: "jobs.external_id", table: "jobs", column: "external_id" },
+  // "Sign in with Creed" for MCP (supabase/migrations/20261121_mcp_oauth.sql).
+  { key: "api_keys.kind", table: "api_keys", column: "kind" },
+  { key: "oauth_clients", table: "oauth_clients", column: "client_id" },
+  { key: "oauth_codes", table: "oauth_codes", column: "code_hash" },
+  { key: "oauth_tokens", table: "oauth_tokens", column: "token_hash" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   if (prof instanceof NextResponse) return prof;
   const sb = serviceClient();
   const { data: keys, error } = await sb.from("api_keys")
-    .select("id, name, scopes, key_prefix, created_at, last_used_at, revoked_at")
+    .select("id, name, scopes, key_prefix, created_at, last_used_at, revoked_at, kind")
     .eq("org_id", prof.orgId).order("created_at", { ascending: false }).limit(50);
   if (error) return NextResponse.json({ error: "setup", detail: error.message }, { status: 503 });
   const { data: activity } = await sb.from("api_activity")
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   if (body.action === "revoke" || body.action === "replace") {
     if (!isUuid(body.id)) return NextResponse.json({ error: "bad id" }, { status: 400 });
-    const { data: old } = await sb.from("api_keys").select("id, name, scopes, revoked_at")
+    const { data: old } = await sb.from("api_keys").select("id, name, scopes, revoked_at, kind")
       .eq("id", body.id).eq("org_id", orgId).maybeSingle();
     if (!old) return NextResponse.json({ error: "not found" }, { status: 404 });
     if (body.action === "revoke") {
@@ -58,6 +58,8 @@ export async function POST(req: NextRequest) {
       await logActivity(sb, { orgId, keyId: old.id, tool: "key.revoke", via: "app", ok: true, status: 200, summary: `revoked "${old.name}"` });
       return NextResponse.json({ ok: true });
     }
+    // A "Sign in with Creed" connection has no key to replace: reconnect from the app.
+    if (old.kind === "oauth") return NextResponse.json({ error: "Connected apps can't be replaced. Revoke it and connect again from the app." }, { status: 400 });
     // Replace: the old key stops working the moment the new one exists.
     const made = await issue(old.name, cleanScopes(old.scopes));
     if ("error" in made) return NextResponse.json({ error: made.error }, { status: 500 });

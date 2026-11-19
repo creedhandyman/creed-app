@@ -13,8 +13,9 @@ const nextConfig: NextConfig = {
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
         ],
       },
-      // The pages where a customer signs or pays must not be framed by another site.
-      ...["/status", "/portal/:path*", "/payment/:path*"].map((source) => ({
+      // The pages where a customer signs or pays (or an owner approves an AI app)
+      // must not be framed by another site.
+      ...["/status", "/portal/:path*", "/payment/:path*", "/oauth/:path*"].map((source) => ({
         source,
         headers: [{ key: "X-Frame-Options", value: "DENY" }],
       })),

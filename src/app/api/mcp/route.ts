@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateKey, bearerKey, runTool } from "@/lib/agent/server";
 import { handleRpc, type RpcRequest } from "@/lib/agent/mcp";
+import { trustedOrigin } from "@/lib/oauth/core";
+import { siteOrigin } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 // draft_quote waits for the AI (~30–90 s).
@@ -12,11 +14,18 @@ export const maxDuration = 300;
  * Ops → Settings → AI assistant connection. Tools: lib/agent/server.ts.
  */
 export async function POST(req: NextRequest) {
-  const ctx = await authenticateKey(bearerKey(req.headers));
+  const presented = bearerKey(req.headers);
+  const ctx = await authenticateKey(presented);
   if (!ctx) {
+    // Points an OAuth client (claude.ai) at "Sign in with Creed" (MCP
+    // authorization spec / RFC 9728). A bad or expired token says so, so the
+    // client refreshes instead of starting over.
+    const origin = trustedOrigin(req.headers.get("host"), siteOrigin());
+    const meta = `${origin}/.well-known/oauth-protected-resource/api/mcp`;
+    const challenge = `Bearer realm="creed", resource_metadata="${meta}"${presented ? ', error="invalid_token"' : ""}`;
     return NextResponse.json(
-      { jsonrpc: "2.0", id: null, error: { code: -32001, message: "invalid or revoked API key" } },
-      { status: 401, headers: { "WWW-Authenticate": 'Bearer realm="creed"' } },
+      { jsonrpc: "2.0", id: null, error: { code: -32001, message: presented ? "invalid, expired or revoked credentials" : "sign in with Creed or use an API key" } },
+      { status: 401, headers: { "WWW-Authenticate": challenge } },
     );
   }
   let body: unknown;

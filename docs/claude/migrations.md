@@ -2,7 +2,18 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
-- Agent API keys (2026-11-20, **NOT run** — needs Bernard's yes):
+- Sign in with Creed / MCP OAuth (2026-11-21, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261121_mcp_oauth.sql` (safe to re-run; run AFTER
+  20261120). `api_keys.kind` ('key' | 'oauth') + `oauth_client_id`, and
+  `key_hash` / `key_prefix` become nullable (a connected app has no pasted
+  key). Tables `oauth_clients` (dynamic registration; secret hash or NULL for
+  public clients), `oauth_codes` (one-time, 10 min, PKCE challenge, hashed)
+  and `oauth_tokens` (access 1 h / refresh 60 d, hashed, cascade-deleted with
+  their api_keys grant). RLS ON, no client policies. Until it runs:
+  claude.ai can find the server but registration fails, so only pasted API
+  keys work. In preflight `DB_CHECKS`.
+
+- Agent API keys (2026-11-20, **run** 2026-11-20):
   `supabase/migrations/20261120_agent_api_keys.sql` (safe to re-run). Tables
   `api_keys` (org_id, name, scopes text[], key_hash UNIQUE — SHA-256 only,
   key_prefix, created_by, last_used_at, revoked_at, replaced_by) and

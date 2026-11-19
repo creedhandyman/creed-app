@@ -2,6 +2,44 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Sign in with Creed — MCP OAuth 2.1 (2026-11-21)**. Lets claude.ai (and
+  Claude Duet / any MCP client) add `https://www.creedhm.com/api/mcp` as a
+  custom connector without pasting a key.
+  - **Discovery**: `/api/mcp` 401s with `WWW-Authenticate: Bearer
+    resource_metadata=".../.well-known/oauth-protected-resource/api/mcp"`
+    (`error="invalid_token"` when a token was sent, so the client refreshes).
+    `/.well-known/oauth-protected-resource[/…]` (RFC 9728),
+    `/.well-known/oauth-authorization-server[/…]` (RFC 8414) and
+    `/.well-known/openid-configuration` (same JSON). URLs follow the Host
+    asked (www or apex) but only for our own hosts (`oauth/core.ts
+    trustedOrigin`); everything else gets `siteOrigin()`.
+  - **Flow** (`lib/oauth/core.ts` pure rules, `lib/oauth/server.ts` DB):
+    `POST /api/oauth/register` (RFC 7591, open, 10/h per address; public
+    clients by default, `client_secret_post|basic` allowed; redirect URIs https
+    or http://localhost, no fragments) → browser to `/oauth/authorize`
+    (`app/oauth/authorize/Consent.tsx`; signs in with a non-persisting
+    Supabase client if this browser has no session; X-Frame-Options DENY) →
+    `POST /api/oauth/authorize` (check / approve / deny; approve needs an
+    owner/manager JWT of the chosen org; scopes ⊆ what the app asked, or any
+    when it asked none; PKCE S256 required; `resource` must be our MCP URL) →
+    redirect with `code`, `state`, `iss` (RFC 9207). A bad client or redirect
+    URI never redirects. `POST /api/oauth/token`: authorization_code (single
+    use; a replayed code revokes the connection it made; client, redirect,
+    PKCE, expiry, resource checked) and refresh_token (rotated: the presented
+    token is spent). `POST /api/oauth/revoke` (RFC 7009; a refresh token ends
+    the connection). Tokens: `creed_at_` 1 h, `creed_rt_` 60 d; codes 10 min;
+    all stored as SHA-256 only.
+  - **Same as a key**: the exchange creates an `api_keys` row `kind='oauth'`
+    (name = client name, the approved org + scopes, `created_by` = approver)
+    and logs `oauth.connect`. `agent/server.ts authenticateKey` takes
+    `creed_sk_` keys OR `creed_at_` tokens and ends at that row, so scopes,
+    rate limits and `api_activity` are unchanged. The AI assistant connection
+    page shows it as "Connected app" (Revoke only; Replace is refused — reconnect
+    from the app). Revoking the row kills every token at once.
+  - **Not done**: only one business per login is offered (profiles have one
+    org); no refresh-token reuse detection beyond "spent = refused". SQL
+    `20261121_mcp_oauth.sql`. Tests `mcp-oauth.test.ts`.
+
 - **Agent API (2026-11-20)**. Lets an AI assistant work for ONE business.
   - **Keys**: Ops → Settings → AI assistant connection
     (`components/AgentConnectionSettings.tsx`, server `/api/agent/keys`,

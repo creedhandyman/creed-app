@@ -436,7 +436,15 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   `/api/agent/v1/<tool>` AND MCP `/api/mcp`, one shared runner
   (`lib/agent/server.ts runTool`: scope → rate limit → tool → api_activity).
   Business ALWAYS from the key. See shipped-systems.md "Agent API". SQL
-  `20261120_agent_api_keys.sql` NOT run yet.
+  `20261120_agent_api_keys.sql` has been run (2026-11-20).
+
+- **Sign in with Creed (MCP OAuth 2.1) SHIPPED (2026-11-21)** — so the MCP
+  server can be a claude.ai custom connector: RFC 9728 / 8414 metadata under
+  `/.well-known/`, open client registration, PKCE S256, consent screen
+  `/oauth/authorize` (owner/manager signs in, picks business + scopes). The
+  approved connection is an `api_keys` row with kind 'oauth', so it lists,
+  revokes and logs like a key; pasted keys still work. See shipped-systems.md
+  "Sign in with Creed". SQL `20261121_mcp_oauth.sql` NOT run yet.
 
 - **Store purchase prices SHIPPED (2026-11-19)** — Home Depot / Lowe's
   purchase exports + receipts → org prices (newest per product, with history)

@@ -39,6 +39,10 @@ export const config = {
     "/api/portal/send-link",
     "/api/campaigns/draft",
     "/api/unsubscribe",
+    // "Sign in with Creed" (MCP OAuth): registration + consent. Not the token
+    // endpoint: claude.ai refreshes every user's token from a few shared IPs.
+    "/api/oauth/register",
+    "/api/oauth/authorize",
   ],
 };
 
@@ -69,6 +73,8 @@ const LIMITS: Record<string, number> = {
   // AI-written campaign draft (cost-bearing) and the public unsubscribe.
   "/api/campaigns/draft": 5,
   "/api/unsubscribe": 10,
+  "/api/oauth/register": 10,
+  "/api/oauth/authorize": 30,
 };
 const DEFAULT_LIMIT = 12; // e.g. /api/stripe/* (connect, portal, …)
 const WINDOW_SEC = 60;

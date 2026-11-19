@@ -22,6 +22,8 @@ import { hashKey, looksLikeKey, type AgentScope } from "./keys";
 import { matchCustomers, sameCustomer, type CustomerLike } from "./customer-match";
 import { SCHEDULABLE, SOURCE_LABEL, checkSchedule, checkWorkOrder, isUuid, scheduleRows } from "./plan";
 import { draftPdfQuery } from "./draft-link";
+import { accessTokenGrant } from "../oauth/server";
+import { isAccessToken } from "../oauth/core";
 
 export interface AgentCtx {
   supabase: SupabaseClient;
@@ -115,12 +117,22 @@ export function bearerKey(h: { get(n: string): string | null }): string {
   return m ? m[1] : (h.get("x-api-key") || "").trim();
 }
 
-/** The business + scopes behind a key, or null (unknown, revoked, malformed). */
+/** The business + scopes behind a pasted key (creed_sk_…) or a "Sign in
+ *  with Creed" access token (creed_at_…), or null (unknown, revoked, expired,
+ *  malformed). Both end at an api_keys row: its org and scopes rule. */
 export async function authenticateKey(key: string): Promise<AgentCtx | null> {
-  if (!looksLikeKey(key)) return null;
+  const oauth = isAccessToken(key);
+  if (!oauth && !looksLikeKey(key)) return null;
   const supabase = serviceClient();
-  const { data, error } = await supabase.from("api_keys")
-    .select("id, org_id, scopes, revoked_at").eq("key_hash", hashKey(key)).maybeSingle();
+  let q = supabase.from("api_keys").select("id, org_id, scopes, revoked_at");
+  if (oauth) {
+    const grantId = await accessTokenGrant(supabase, key);
+    if (!grantId) return null;
+    q = q.eq("id", grantId);
+  } else {
+    q = q.eq("key_hash", hashKey(key));
+  }
+  const { data, error } = await q.maybeSingle();
   if (error || !data || data.revoked_at) return null;
   // Best-effort: "last used" on the settings page.
   await supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", data.id);

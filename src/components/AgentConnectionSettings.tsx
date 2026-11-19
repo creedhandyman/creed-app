@@ -21,6 +21,8 @@ interface KeyRow {
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
+  /** "oauth" = connected with Sign in with Creed (no pasted key). */
+  kind?: string | null;
 }
 interface ActivityRow {
   id: number;
@@ -139,6 +141,7 @@ export default function AgentConnectionSettings() {
         <div className="dim" style={{ fontSize: 13, marginTop: 6 }}>{t("agent.limits")}</div>
         {urlRow(t("agent.mcpUrl"), `${origin}/api/mcp`, "mcp")}
         {urlRow(t("agent.restUrl"), `${origin}/api/agent/v1`, "rest")}
+        <div className="dim" style={{ fontSize: 12.5, marginTop: 8 }}>{t("agent.connectHelp")}</div>
       </div>
 
       {notSetUp ? (
@@ -169,17 +172,22 @@ export default function AgentConnectionSettings() {
               : !active.length ? <div className="dim" style={{ fontSize: 14 }}>{t("agent.noKeys")}</div>
               : active.map((k) => (
                 <div key={k.id} style={{ padding: "10px 0", borderTop: "1px solid var(--color-border-dark-2, rgba(128,128,128,.25))" }}>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{k.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>
+                    {k.name}
+                    {k.kind === "oauth" && <span className="dim" style={{ fontSize: 12, fontWeight: 600, marginLeft: 8 }}><Icon name="link" size={12} /> {t("agent.connectedApp")}</span>}
+                  </div>
                   <div className="dim" style={{ fontSize: 12.5 }}>
-                    <code>{k.key_prefix}…</code> · {t("agent.lastUsed")}: {when(k.last_used_at)}
+                    {k.kind === "oauth" ? null : <><code>{k.key_prefix}…</code> · </>}{t("agent.lastUsed")}: {when(k.last_used_at)}
                   </div>
                   <div className="dim" style={{ fontSize: 12.5, marginTop: 2 }}>
                     {k.scopes.filter((s): s is AgentScope => s in SCOPE_LABEL).map((s) => t(SCOPE_LABEL[s])).join(" · ")}
                   </div>
                   <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                    <button type="button" className="bo" disabled={busy === k.id} onClick={() => replace(k)} style={{ fontSize: 13, padding: "6px 12px" }}>
-                      <Icon name="refresh" size={14} /> {t("agent.replace")}
-                    </button>
+                    {k.kind !== "oauth" && (
+                      <button type="button" className="bo" disabled={busy === k.id} onClick={() => replace(k)} style={{ fontSize: 13, padding: "6px 12px" }}>
+                        <Icon name="refresh" size={14} /> {t("agent.replace")}
+                      </button>
+                    )}
                     <button type="button" className="br" disabled={busy === k.id} onClick={() => revoke(k)} style={{ fontSize: 13, padding: "6px 12px" }}>
                       {t("agent.revoke")}
                     </button>
@@ -188,7 +196,7 @@ export default function AgentConnectionSettings() {
               ))}
             {revoked.length > 0 && (
               <div className="dim" style={{ fontSize: 12.5, marginTop: 10 }}>
-                {t("agent.revokedList")}: {revoked.slice(0, 8).map((k) => `${k.name} (${k.key_prefix}…)`).join(", ")}
+                {t("agent.revokedList")}: {revoked.slice(0, 8).map((k) => (k.kind === "oauth" ? `${k.name} (${t("agent.connectedApp")})` : `${k.name} (${k.key_prefix}…)`)).join(", ")}
               </div>
             )}
           </div>
