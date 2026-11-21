@@ -22,7 +22,8 @@ import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
 import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import HeldLeads from "@/components/HeldLeads";
-import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
+import { pickReceiptPhotos } from "@/lib/image";
+import CameraModal from "../CameraModal";
 import ReceiptScanSheet from "../ReceiptScanSheet";
 import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
@@ -409,9 +410,11 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const [approvalJob, setApprovalJob] = useState<Job | null>(null);
   // Add-receipt sheet (same scan → review → save flow as Work mode).
   const [receiptSheet, setReceiptSheet] = useState<{ jobId: string; files?: File[] } | null>(null);
-  // Receipts use the device's NATIVE camera/photo picker (HD) via
-  // pickReceiptPhoto — reliable on iOS where the in-app camera can't open,
-  // and high-res enough for the AI scan to read line items.
+  // "Take photo" for a receipt opens the in-app camera (rear lens, HD), the
+  // same one Work mode's Scan receipt uses. The phone's own camera app, which
+  // this used to hand off to, opens on the selfie lens on Samsung phones and
+  // ignores the request for the rear one. Upload still uses the native picker.
+  const [receiptCam, setReceiptCam] = useState<string | null>(null);
   const [signedReceipts, setSignedReceipts] = useState<Record<string, string>>({});
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
 
@@ -2033,7 +2036,7 @@ ${invoicePhotosHtml}
                 <button
                   type="button"
                   className="bo"
-                  onClick={async () => { const f = await pickReceiptPhoto(true); if (f) setReceiptSheet({ jobId: sj.id, files: [f] }); }}
+                  onClick={() => setReceiptCam(sj.id)}
                   style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14 }}
                 >
                   <Icon name="camera" size={15} /> {t("common.takePhoto")}
@@ -2944,6 +2947,14 @@ ${invoicePhotosHtml}
       {/* Photo viewer overlay — full-screen lightbox with close button.
           touch-action:pinch-zoom lets the browser handle pinch-to-zoom on
           mobile; double-tap on iOS / Android also zooms by default. */}
+      <CameraModal
+        open={!!receiptCam}
+        onClose={() => setReceiptCam(null)}
+        onCapture={(fs) => { if (receiptCam && fs.length) setReceiptSheet({ jobId: receiptCam, files: fs }); }}
+        title={t("jobs.addReceipt")}
+        maxSize={2400}
+        quality={0.9}
+      />
       {receiptSheet && (() => {
         const rj = jobs.find((j) => j.id === receiptSheet.jobId);
         return rj ? (

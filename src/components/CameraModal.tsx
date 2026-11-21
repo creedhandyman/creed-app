@@ -75,6 +75,11 @@ export function CameraModal({
     setTorchAvailable(false);
   }, []);
 
+  // A caller that keeps more than the default 1600px (receipts) needs a
+  // sharper stream too: without a size hint phones hand back 640x480, too soft
+  // to read a receipt's small print. `ideal` never fails on a lesser camera.
+  const sharp = maxSize > 1600 ? { width: { ideal: 3840 }, height: { ideal: 2160 } } : {};
+
   const startStream = useCallback(async (mode: Facing) => {
     setError(null);
     setReady(false);
@@ -83,7 +88,7 @@ export function CameraModal({
     streamRef.current = null;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: mode } },
+        video: { facingMode: { ideal: mode }, ...sharp },
         audio: false,
       });
       streamRef.current = stream;
@@ -106,7 +111,7 @@ export function CameraModal({
         if (torchId && streamRef.current === stream) {
           try {
             const better = await navigator.mediaDevices.getUserMedia({
-              video: { deviceId: { exact: torchId } },
+              video: { deviceId: { exact: torchId }, ...sharp },
               audio: false,
             });
             if (streamRef.current === stream) {
@@ -134,7 +139,8 @@ export function CameraModal({
           : "Camera unavailable on this device."
       );
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maxSize]);
 
   // Open / close lifecycle. We key only off `open` so the stream isn't torn
   // down and rebuilt on unrelated re-renders; `facing` restarts go through

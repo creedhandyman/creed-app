@@ -17,7 +17,8 @@ import { db } from "@/lib/supabase";
 import { scanReceipt, receiptNote, learnFromReceipt, logReceiptItems, scanMismatch, type ReceiptItem } from "@/lib/receipt-scan";
 import { useStore } from "@/lib/store";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
-import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
+import { pickReceiptPhotos } from "@/lib/image";
+import CameraModal from "./CameraModal";
 import { t } from "@/lib/i18n";
 
 type Item = ReceiptItem;
@@ -47,6 +48,9 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
   const [scanErr, setScanErr] = useState("");
   const [mathWarn, setMathWarn] = useState("");
   const started = useRef(false);
+  // "Add page" uses the in-app camera (rear lens, HD) — the phone's own camera
+  // app opens on the selfie lens on Samsung phones.
+  const [cam, setCam] = useState(false);
 
   const scan = async (urls: string[]) => {
     if (!urls.length) return;
@@ -146,6 +150,7 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
 
   const busy = scanning || saving;
   return (
+    <>
     <div className="sheet-overlay" onClick={() => { if (!busy) onClose(); }}>
       <div className="sheet cd" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -158,7 +163,7 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
         </div>
 
         <div style={{ display: "flex", gap: 7 }}>
-          <button type="button" className="bo" disabled={busy} onClick={async () => { const f = await pickReceiptPhoto(true); if (f) void addPages([f]); }}
+          <button type="button" className="bo" disabled={busy} onClick={() => setCam(true)}
             style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, opacity: busy ? 0.5 : 1 }}>
             <Icon name="camera" size={15} /> {pages.length ? "Add page" : t("common.takePhoto")}
           </button>
@@ -227,5 +232,15 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
         </button>
       </div>
     </div>
+    {/* Outside the overlay: a tap in the camera must not close the sheet. */}
+    <CameraModal
+      open={cam}
+      onClose={() => setCam(false)}
+      onCapture={(fs) => { if (fs.length) void addPages(fs); }}
+      title={t("jobs.addReceipt")}
+      maxSize={2400}
+      quality={0.9}
+    />
+    </>
   );
 }
