@@ -107,7 +107,11 @@ export async function GET(req: NextRequest) {
     let orgPublic: Record<string, unknown> | null = null;
     if (orgRow) {
       const { stripe_account_id: _drop, ...rest } = orgRow;
-      orgPublic = rest;
+      // Flat line prices on the quote PDF — read on its own, best-effort, so
+      // the portal still loads before the flat_pricing migration (off then).
+      const { data: fp, error: fpErr } = await supabase
+        .from("organizations").select("flat_pricing").eq("id", session.org_id).maybeSingle();
+      orgPublic = { ...rest, flat_pricing: !fpErr && fp?.flat_pricing === true };
     }
 
     // Upsell data: when the customer has no live membership, return the org's

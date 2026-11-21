@@ -1,9 +1,9 @@
 import type { Job, Room, JobDiscount } from "./types";
-import { exportQuotePdf } from "./export-pdf";
+import { exportQuotePdf, buildQuotePdfHtml } from "./export-pdf";
 import { quoteApprovalFromJob } from "./approval";
 import { readBlob } from "./job-blob";
 import { pricingInputs, type PricedRates } from "./pricing";
-import { readQuoteSettings, readSentTier, readPricedRates, readTierRooms } from "./quote-blob";
+import { readQuoteSettings, readSentTier, readPricedRates, readTierRooms, flatPricingFor } from "./quote-blob";
 import { itemInTier } from "./tiers";
 
 /**
@@ -32,6 +32,8 @@ export interface QuotePdfOrg {
   deposit_pct?: number;
   quote_valid_days?: number;
   quote_terms?: string;
+  /** Org default for flat line prices (the quote's own choice wins). */
+  flat_pricing?: boolean;
 }
 
 /**
@@ -44,6 +46,15 @@ export interface QuotePdfOrg {
  * drift apart on pricing.
  */
 export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
+  exportQuotePdf(jobQuotePdfOptions(job, org, typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : ""));
+}
+
+/** The same quote as printable HTML, built without a browser (server routes). */
+export function jobQuotePdfHtml(job: Job, org: QuotePdfOrg | null, statusUrl = ""): string {
+  return buildQuotePdfHtml(jobQuotePdfOptions(job, org, statusUrl));
+}
+
+function jobQuotePdfOptions(job: Job, org: QuotePdfOrg | null, statusUrl: string): Parameters<typeof exportQuotePdf>[0] {
   let rooms: Room[] = [];
   let workers: { id: string; name: string }[] = [];
   let photos: { url: string; label: string; type: string }[] = [];
@@ -62,8 +73,10 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   let priced: PricedRates | null = null;
   // The lines as saved — what an approval signature was recorded against.
   let scopeRooms: Room[] = [];
+  let flatPricing = org?.flat_pricing === true;
   try {
     const data = readBlob(job.rooms);
+    flatPricing = flatPricingFor(data, org);
     scopeRooms = (data?.rooms || []) as Room[];
     // Option tags filled in from the work order when the lines lack them
     // (readTierRooms) — otherwise exclusive options print as one stacked total.
@@ -111,7 +124,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
   // and the AI lead draft do — one shared function (lib/pricing.ts).
   const p = pricingInputs(org, { laborRate: laborRateOverride, minLaborHours: minLaborHoursOverride, taxMode: taxModeOverride, priced });
 
-  exportQuotePdf({
+  return {
     property: job.property,
     client: job.client,
     rooms,
@@ -134,6 +147,7 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     tieredQuote,
     tierNames,
     scopeRooms,
+    flatPricing,
     crewSize,
     estDays,
     orgPhone: org?.phone,
@@ -149,8 +163,8 @@ export function openJobQuotePdf(job: Job, org: QuotePdfOrg | null) {
     discount,
     minLaborHours: p.minHrs,
     taxMode: p.taxMode,
-    statusUrl: typeof window !== "undefined" ? `${window.location.origin}/status?job=${job.id}` : "",
+    statusUrl,
     // A signed quote prints the customer's signature (unless revised since).
     approval: quoteApprovalFromJob(job),
-  });
+  };
 }

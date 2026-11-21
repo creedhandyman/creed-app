@@ -21,6 +21,8 @@ import { isPlatformAdmin } from "@/lib/platform-admin";
 import { useBackLayer } from "@/lib/back-layer";
 import ZipTaxRates from "../ZipTaxRates";
 import BookingSettings from "../BookingSettings";
+import AgentConnectionSettings from "../AgentConnectionSettings";
+import GoogleCalendarSync, { useGcalStatus } from "../GoogleCalendarSync";
 import StorePricesCard from "../StorePricesCard";
 import Campaigns from "./Campaigns";
 import { CampaignsCard, ReferralsCard } from "../MarketingSettings";
@@ -182,6 +184,7 @@ function OpsSettings() {
   const userEmail = useStore((s) => s.user?.email);
   const loadAll = useStore((s) => s.loadAll);
   const darkMode = useStore((s) => s.darkMode);
+  const gcal = useGcalStatus();
 
   if (!org) return null;
 
@@ -368,6 +371,23 @@ function OpsSettings() {
             {tiersDefaultOn(org) ? t("ops.on") : t("ops.off")}
           </button>
         </div>
+        {/* Flat prices default (2026-11-19). OFF unless turned on; each quote
+            has its own switch in the editor. Prices don't change — the
+            customer just never sees hours or the hourly rate. */}
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 14 }}>
+          <div>
+            <label className="sl">{t("ops.flatDefault")}</label>
+            <div className="dim" style={{ fontSize: 14, marginTop: 2 }}>{t("ops.flatDefaultHelp")}</div>
+          </div>
+          <button
+            className={org.flat_pricing === true ? "bb" : "bo"}
+            aria-pressed={org.flat_pricing === true}
+            style={{ fontSize: 13, padding: "4px 14px", flexShrink: 0 }}
+            onClick={() => saveOrg({ flat_pricing: org.flat_pricing !== true })}
+          >
+            {org.flat_pricing === true ? t("ops.on") : t("ops.off")}
+          </button>
+        </div>
       </div>
   );
 
@@ -492,6 +512,18 @@ function OpsSettings() {
           // after a Stripe-paid invoice; follow-up nudges unanswered quotes; the
           // text-messaging links go in the approval page's consent box.
           content: (<><QuoteFollowupCard org={org} saveOrg={saveOrg} /><ReviewAutomationCard org={org} saveOrg={saveOrg} /><AutoTextsCard org={org} saveOrg={saveOrg} /><CampaignsCard org={org} saveOrg={saveOrg} /><ReferralsCard org={org} saveOrg={saveOrg} /><BrandingSettings part="texting" /></>),
+        },
+        {
+          // Two-way sync with a "Creed jobs" calendar in Google (lib/gcal/*).
+          id: "gcal", icon: "schedule", title: t("gcal.title"), sub: t("gcal.sub"),
+          badge: gcal?.connected ? (gcal.status === "needs_reconnect" ? t("gcal.reconnect") : t("gcal.on")) : undefined,
+          badgeTone: gcal?.status === "needs_reconnect" ? "warn" : undefined,
+          content: <GoogleCalendarSync />,
+        },
+        {
+          // API keys for AI assistants (REST /api/agent/v1 + MCP /api/mcp).
+          id: "agent", icon: "ai", title: t("ops.cat.agent"), sub: t("ops.cat.agentSub"),
+          content: <AgentConnectionSettings />,
         },
         // Beta preflight — one-tap deployment readiness check. Platform
         // operators only: customers shouldn't see env vars / migrations.

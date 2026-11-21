@@ -22,7 +22,9 @@ import Texts from "./screens/Texts";
 import Coachmark from "./Coachmark";
 import OfflineBanner from "./OfflineBanner";
 import { t } from "@/lib/i18n";
+import { setNavIntent } from "@/lib/nav-intent";
 import { useCrewHeartbeat } from "@/lib/crew-heartbeat";
+import { installGcalKick } from "@/lib/gcal-kick";
 import { useTextsUnreadPoll, TEXTS_TAB_VISIBLE } from "@/lib/texts-client";
 
 export default function AppShell() {
@@ -54,6 +56,8 @@ export default function AppShell() {
   // Live crew location: a fix every few minutes while THIS phone is on the
   // clock with the app open (never off the clock / in the background).
   useCrewHeartbeat(!!user.org_id);
+  // Schedule writes → sync Google Calendar soon (no-op when not connected).
+  useEffect(() => installGcalKick(), []);
   // Unread customer texts on the More tab (only businesses that text).
   useTextsUnreadPoll(textingOn && TEXTS_TAB_VISIBLE);
 
@@ -82,7 +86,17 @@ export default function AppShell() {
       if (sp === "qf") { window.history.pushState({ ...cur, creedPage: "qf" }, ""); setPage("qf"); }
       // A text-reply push opens "/?texts=<phone>": land on that conversation
       // (on top of Home, so back returns there) and tidy the address.
-      const tp = new URLSearchParams(window.location.search).get("texts");
+      const qs = new URLSearchParams(window.location.search);
+      const tp = qs.get("texts");
+      // An agent's quote link opens "/?job=<id>": land on that job (Jobs tab,
+      // on top of Home) and tidy the address.
+      const jp = qs.get("job");
+      if (!tp && jp && /^[0-9a-f-]{36}$/i.test(jp)) {
+        window.history.replaceState({ ...cur, creedPage: "dash" }, "", "/");
+        window.history.pushState({ ...cur, creedPage: "jobs" }, "");
+        setNavIntent({ page: "jobs", jobId: jp });
+        setPage("jobs");
+      }
       if (tp) {
         window.history.replaceState({ ...cur, creedPage: "dash" }, "", "/");
         window.history.pushState({ ...cur, creedPage: "texts" }, "");

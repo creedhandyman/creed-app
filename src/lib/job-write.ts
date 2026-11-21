@@ -30,6 +30,7 @@
  * wiring (Supabase + the Zustand store) is job-write-client.ts.
  */
 import { tryReadBlob, type RoomsBlob } from "./job-blob";
+import { createSerializer, type Serializer } from "./job-serial";
 
 export const SKIP: unique symbol = Symbol("job-write.skip");
 
@@ -77,25 +78,14 @@ export const removePhoto = (url: string): Change => (blob) => {
   return photos.some((p) => p?.url === url) ? { photos: photos.filter((p) => p?.url !== url) } : SKIP;
 };
 
-export function createBlobWriter(remote: BlobRemote, local?: BlobLocal) {
-  // One chain per job. Each entry is a promise that never rejects.
-  const chains = new Map<string, Promise<unknown>>();
-
-  /** Run `task` after everything already queued for this job. Anything else that
-   *  reads-merges-writes the same blob (wo-queue's flush) goes through here too
-   *  so it can't interleave with a patchBlob. */
-  function runSerialized<T>(jobId: string, task: () => Promise<T>): Promise<T> {
-    const prev = chains.get(jobId) ?? Promise.resolve();
-    const next = prev.then(task);
-    const tail = next.then(() => undefined, () => undefined);
-    chains.set(jobId, tail);
-    void tail.then(() => { if (chains.get(jobId) === tail) chains.delete(jobId); });
-    return next;
-  }
-
+/** `serial` = the per-job write queue. The app passes the shared one
+ *  (job-serial.ts `jobSerial`) so wo-queue's flush queues behind the same
+ *  writes; tests get a private one. */
+export function createBlobWriter(remote: BlobRemote, local?: BlobLocal, serial: Serializer = createSerializer()) {
+  /** Run `task` after everything already queued for this job. */
+  const runSerialized = serial.runSerialized;
   /** Resolves once everything queued for this job so far has been written. */
-  const settled = (jobId: string): Promise<void> =>
-    (chains.get(jobId) ?? Promise.resolve()).then(() => undefined);
+  const settled = serial.settled;
 
   function patchBlob(jobId: string, change: Change): Promise<WriteResult> {
     if (local) {

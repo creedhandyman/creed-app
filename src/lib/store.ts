@@ -10,6 +10,7 @@ import { getFix } from "./geo";
 import { t } from "./i18n";
 import { flushUploads, pendingUploadCount, clearUploads } from "./offline-uploads";
 import { flushWoQueue, applyWoPending, woPendingCount, clearWoQueue } from "./wo-queue";
+import { jobSerial } from "./job-serial";
 import type {
   Organization,
   Profile,
@@ -529,6 +530,9 @@ export const useStore = create<AppState>((set, get) => ({
       return loadAllTrailing;
     }
     loadAllInFlight = (async () => {
+    // When this load's reads go out: a work-order tap synced AFTER this
+    // moment may be missing from what comes back (wo-queue.ts tapsForRead).
+    const readStartedAt = Date.now();
     const orgId = get().user?.org_id;
     const userId = get().user?.id;
 
@@ -550,7 +554,7 @@ export const useStore = create<AppState>((set, get) => ({
         const data = snap.data as unknown as Partial<AppState>;
         set({
           ...data,
-          jobs: applyWoPending((data.jobs as Job[]) || []),
+          jobs: applyWoPending((data.jobs as Job[]) || [], snap.at),
           // Materialize queued offline writes on top of the snapshot so a
           // reload mid-airplane-mode still shows the clock-out that hasn't
           // synced yet.
@@ -675,7 +679,16 @@ export const useStore = create<AppState>((set, get) => ({
     const notificationsF = notifications ?? cur.notifications;
 
     set({
-      customers: customersF, addresses: addressesF, profiles: profilesF, pendingMembers: pendingMembersF, jobs: applyWoPending(jobsF),
+      customers: customersF, addresses: addressesF, profiles: profilesF, pendingMembers: pendingMembersF,
+      // A job whose blob was written (or is being written) since this load's
+      // reads went out keeps the screen's copy of `rooms`: the read may predate
+      // that write, and taking it would undo a tick / note / photo on screen
+      // until the next poll (or for good, if something saved from it).
+      jobs: applyWoPending(jobsF.map((j) => {
+        if (!jobSerial.blobWrittenSince(j.id, readStartedAt)) return j;
+        const mine = cur.jobs.find((x) => x.id === j.id);
+        return mine ? { ...j, rooms: mine.rooms } : j;
+      }), readStartedAt),
       // Materialize any not-yet-synced offline writes on top of server truth so
       // an optimistic clock-out isn't clobbered by a poll that lands before the
       // queue flushes. Once flushed, the queue is empty and this is a no-op.

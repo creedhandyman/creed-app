@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LEADS, SITE } from "@/lib/site";
 
@@ -16,15 +16,42 @@ export default function QuoteForm() {
   const [state, setState] = useState<FormState>("idle");
   const [error, setError] = useState("");
   const [textsOk, setTextsOk] = useState(false);
+  // When the form appeared: the server drops anything sent faster than a
+  // person could type it (the Creed app's lib/lead-spam.ts).
+  const startedAt = useRef(Date.now());
+  const captchaBox = useRef<HTMLDivElement>(null);
+  const [captcha, setCaptcha] = useState("");
+
+  // Optional Cloudflare Turnstile (LEADS.turnstileSiteKey).
+  useEffect(() => {
+    const key = LEADS.turnstileSiteKey;
+    if (!key || !captchaBox.current) return;
+    type TS = { render: (el: HTMLElement, o: Record<string, unknown>) => string };
+    const w = window as unknown as { turnstile?: TS };
+    const draw = () => {
+      if (!w.turnstile || !captchaBox.current) return;
+      w.turnstile.render(captchaBox.current, {
+        sitekey: key, theme: "dark",
+        callback: (t: string) => setCaptcha(t),
+        "expired-callback": () => setCaptcha(""),
+      });
+    };
+    if (w.turnstile) { draw(); return; }
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    s.async = true;
+    s.onload = draw;
+    document.head.appendChild(s);
+  }, []);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
     const f = new FormData(form);
 
-    // Honeypot — bots fill every field; humans never see this one.
-    if (String(f.get("company") || "").trim()) {
-      setState("ok");
+    if (LEADS.turnstileSiteKey && !captcha) {
+      setError("Please complete the \"I'm not a robot\" check");
+      setState("err");
       return;
     }
 
@@ -41,6 +68,11 @@ export default function QuoteForm() {
       // text-message consent (carriers require it for business texting).
       sms_consent: f.get("sms_consent") === "yes",
       sms_consent_text: (form.querySelector("#qf-sms")?.closest("label") as HTMLElement | null)?.innerText.replace(/\s+/g, " ").trim() || "",
+      // Spam checks: the honeypot (sent so the server decides), the form
+      // timer and the optional Turnstile token.
+      hp: String(f.get("company") || ""),
+      started_at: startedAt.current,
+      turnstile_token: captcha || undefined,
     };
     setTextsOk(body.sms_consent);
 
@@ -134,6 +166,7 @@ export default function QuoteForm() {
       <div style={{ position: "absolute", left: "-5000px" }} aria-hidden="true">
         <input tabIndex={-1} name="company" autoComplete="off" />
       </div>
+      {LEADS.turnstileSiteKey ? <div ref={captchaBox} style={{ margin: "4px 0 12px", minHeight: 65 }} /> : null}
       <div className="btn-row" style={{ alignItems: "center", gap: 18 }}>
         <button type="submit" className="btn btn-red" disabled={state === "sending"}>
           {state === "sending" ? "Sending…" : "Send it"}

@@ -9,8 +9,9 @@ A Next.js 15 + React 19 + TypeScript app for handyman / field-service
 crews. Multi-tenant. Customers run quotes, schedule, clock in, get paid
 via Stripe. Backend is Supabase (Postgres + Auth + Storage + RLS).
 Hosted on Vercel (**Pro** plan) — `main` auto-deploys. All the
-`vercel.json` crons run (8 as of 2026-11-11; the file is the source of
-truth), including the **hourly** `reviews/dispatch`:
+`vercel.json` crons run (11 as of 2026-11-22; the file is the source of
+truth), including the **hourly** `reviews/dispatch` and the every-10-min
+`gcal/cron`:
 Hobby caps cron frequency at once/day (an hourly schedule fails the
 build), so hourly needs Pro. The old 2-cron Hobby *count* cap was
 removed Jan 2026 (now 100/project on every plan), so the count is a
@@ -278,7 +279,16 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
     twice (store copy, then server blob) so keep it pure; return only the keys
     you touched. `addPhoto(photo)` = append deduped by url; `runSerialized(jobId,
     task)` / `settled(jobId)` for anything else that must not interleave (the
-    wo-queue flush). A failed write leaves the optimistic value until the 15s
+    wo-queue flush). **One shared queue (2026-11-21)**: `lib/job-serial.ts
+    jobSerial` is the per-job queue for patchBlob AND wo-queue's flush (which
+    queues each job's read-merge-write itself — never wrap `flushWoQueue` in
+    `runSerialized`, it would wait on itself); flushes chain app-wide. loadAll
+    keeps the screen's `rooms` for any job written since its reads went out
+    (`blobWrittenSince`), and synced ticks stay as a guard for 2 min
+    (`wo-queue tapsForRead`). Fixed "checked boxes flip back" (the 15s poll's
+    flush raced the tap's flush; a poll read sent before a write landed
+    replaced the screen copy). Tests `wo-tick-stale-poll.test.ts`.
+    A failed write leaves the optimistic value until the 15s
     poll reconciles (as before). NOT moved onto it: wo-queue's offline ticks,
     QuoteForge's whole-blob saves, and the server routes (approve /
     record-approval / lead-draft keep their own status-guarded writes).
@@ -385,6 +395,17 @@ Excluded from the app's tsconfig; has its own package.json/node_modules.
   `RESEND_FROM_EMAIL`) and `RESEND_WEBHOOK_SECRET` (the `whsec_…` signing
   secret of the Resend webhook pointed at `/api/resend/webhook`; the route
   401s without it, so opens / clicks / bounces just aren't recorded).
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar two-way sync
+  (Google Cloud OAuth client, Web, redirect URI
+  `https://www.creedhm.com/api/gcal/callback`, Calendar API enabled). Optional
+  `GOOGLE_TOKEN_KEY` encrypts stored Google tokens (else derived from
+  `PORTAL_SESSION_SECRET`; changing either forces a reconnect). Unset = the
+  Settings card says sign-in isn't set up.
+- `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — optional
+  Cloudflare Turnstile on the public quote forms. OFF unless the secret is
+  set; when on, set the site key in BOTH the app env and
+  `website/src/lib/site.ts LEADS.turnstileSiteKey`, and list creedhm.com +
+  creedhandyman.com as widget hostnames, or every quote request is refused.
 - (Stripe / Supabase keys per existing setup.)
 
 ## Reference docs (read on demand, not loaded by default)
@@ -410,6 +431,18 @@ When you ship a feature or add a migration, add the entry THERE, not here.
 
 ## Things that still bug me / open follow-ups
 
+- **Quote-form spam protection SHIPPED (2026-11-23)** — honeypot + 3 s timer,
+  per-address / per-email limits, solicitation classifier (+ AI for borderline),
+  held requests in Jobs → "held as possible spam" with one-tap restore,
+  optional Turnstile. See shipped-systems.md. SQL `20261123_lead_review.sql`
+  NOT run yet (until then held requests become quiet, tagged leads).
+
+- **Google Calendar two-way sync SHIPPED (2026-11-22)** — see
+  shipped-systems.md. SQL `20261122_google_calendar_sync.sql` NOT run yet;
+  needs the Google env vars + OAuth client. Same day: the .ics subscribe feed
+  now writes UTC times (it was floating, so Google showed jobs 5–6 h early).
+  Not done: visits moved in Google don't send the crew schedule alerts.
+
 - **Job summaries SHIPPED (2026-11-17)** — one line on each job card, a
   paragraph on the job screen, built from the quote lines on read (leads use
   their request), owner-editable (`rooms.summaryEdit`); see shipped-systems.md.
@@ -423,6 +456,32 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   added 2026-11-18; its SQL `20261118_material_spec_files.sql` is NOT run yet.
   Not done: old Excel `.xls` (save as .xlsx / CSV); a scanned PDF with no text
   layer over 3 MB can't be read.
+
+- **Flat-price quotes SHIPPED (2026-11-19)** — customers see one price per
+  line, never hours / hourly rate (PDF, /status, portal, invoice); org default
+  + per-quote switch; see shipped-systems.md. SQL `20261119_flat_pricing.sql`
+  has been run (2026-11-19).
+
+- **Agent API SHIPPED (2026-11-20)** — per-business API keys (Ops → Settings →
+  AI assistant connection: name, scopes, shown once, Replace key, revoke, last
+  used, recent activity) for 5 tools — find_customer, add_work_order (→ lead),
+  draft_quote (draft only), get_open_slots, schedule_job — served as REST
+  `/api/agent/v1/<tool>` AND MCP `/api/mcp`, one shared runner
+  (`lib/agent/server.ts runTool`: scope → rate limit → tool → api_activity).
+  Business ALWAYS from the key. See shipped-systems.md "Agent API". SQL
+  `20261120_agent_api_keys.sql` has been run (2026-11-20). 2026-11-22: 10
+  more tools (business_summary, list_schedule, list_jobs, get_job,
+  list_customers, get_customer, list_quotes, get_quote, list_invoices,
+  update_job) + scopes jobs:read / jobs:write / billing:read (no migration);
+  get_open_slots explains empty days.
+
+- **Sign in with Creed (MCP OAuth 2.1) SHIPPED (2026-11-21)** — so the MCP
+  server can be a claude.ai custom connector: RFC 9728 / 8414 metadata under
+  `/.well-known/`, open client registration, PKCE S256, consent screen
+  `/oauth/authorize` (owner/manager signs in, picks business + scopes). The
+  approved connection is an `api_keys` row with kind 'oauth', so it lists,
+  revokes and logs like a key; pasted keys still work. See shipped-systems.md
+  "Sign in with Creed". SQL `20261121_mcp_oauth.sql` NOT run yet.
 
 - **Store purchase prices SHIPPED (2026-11-19)** — Home Depot / Lowe's
   purchase exports + receipts → org prices (newest per product, with history)

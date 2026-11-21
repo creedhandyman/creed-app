@@ -166,6 +166,10 @@ export interface QuoteSection {
   total: number;
   count: number;
   details: string[];
+  /** Each line's own price (its hours × the section rate + its billed
+   *  materials) — what a flat-price quote shows the customer. They add up to
+   *  `total`. */
+  lines: { detail: string; price: number }[];
 }
 
 /**
@@ -193,14 +197,14 @@ export function quoteSections(
   return order.map((k) => {
     const { name, items } = byKey[k];
     const hrs = items.reduce((s, it) => s + (it.laborHrs || 0), 0);
-    const labor = hrs * rateForRoom(name, { defaultRate: o.rate, override: o.override, tradeRates: o.tradeRates });
-    const mat = items.reduce(
-      (s, it) => s + billedMaterial((it.materials || []).reduce((ss, m) => ss + (m.c || 0), 0), o),
-      0,
-    );
+    const rate = rateForRoom(name, { defaultRate: o.rate, override: o.override, tradeRates: o.tradeRates });
+    const labor = hrs * rate;
+    const lineMat = (it: (typeof items)[number]) => billedMaterial((it.materials || []).reduce((ss, m) => ss + (m.c || 0), 0), o);
+    const mat = items.reduce((s, it) => s + lineMat(it), 0);
     return {
       name, hrs, labor, mat, total: labor + mat, count: items.length,
       details: items.map((it) => it.detail || "").filter(Boolean),
+      lines: items.map((it) => ({ detail: it.detail || "", price: (it.laborHrs || 0) * rate + lineMat(it) })),
     };
   });
 }

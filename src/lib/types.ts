@@ -78,6 +78,10 @@ export interface Organization {
    *  min_labor_hours × effective rate instead. Per-quote override lives
    *  on the rooms JSON blob as `data.minLaborHours`. Default 1. */
   min_labor_hours?: number;
+  /** New quotes show customers one flat price per line — no hours or hourly
+   *  rate (the hours still price them). Per-quote choice lives on the blob as
+   *  `flatPricing` (quote-blob.ts flatPricingFor). Migration 20261119_flat_pricing. */
+  flat_pricing?: boolean;
   gallery_photos?: string; // JSON: [{url, caption}]
   site_theme?: string; // JSON: {primaryColor, showGallery, showReviews, showAbout, showServices, showWhyUs}
   // Auto Payroll — server-side scheduled processing. Cron hits

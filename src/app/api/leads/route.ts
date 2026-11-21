@@ -1,15 +1,10 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { dispatchNotifications, resolveRecipients } from "@/lib/notify-server";
-import { siteOrigin } from "@/lib/site-url";
-import { applySmsConsent } from "@/lib/sms-consent";
-import { recordCustomerSmsConsent } from "@/lib/sms-consent-server";
-import { draftLeadQuote } from "@/lib/lead-draft";
-import { findReferrer, recordReferralLead } from "@/lib/referrals-server";
-import { ymdInZone } from "@/lib/dates";
 import { isSupabaseStorageUrl } from "@/lib/api-auth";
-import { escapeLike } from "@/lib/like-escape";
-import { clientIp, addressTag, memoryLimit, publicFormLimit, formLimitMessage } from "@/lib/rate-limit";
+import { clientIp, addressTag, memoryLimit, publicFormLimit, formLimitMessage, LEAD_LIMITS } from "@/lib/rate-limit";
+import { botCheck, classifyLead, emailVerdict } from "@/lib/lead-spam";
+import { aiSolicitationCheck, emailTag, guardCounts, turnstileOn, verifyTurnstile } from "@/lib/lead-guard";
+import { createLead, heldPayload, type LeadInput } from "@/lib/lead-intake";
 
 export const dynamic = "force-dynamic";
 // The AI draft quote runs after the response (see `after` below) — a parse
@@ -17,8 +12,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * Public lead intake endpoint. Called from /lead/[slug] when a prospect
- * submits the quote-request form. Resolves the org by slug, finds (or
+ * Public lead intake endpoint. Called from /lead/[slug] (creedhm.com) and the
+ * creedhandyman.com quote form. Spam layers first (2026-11-22): honeypot +
+ * time-to-submit, per-address and per-email rate limits, optional Turnstile,
+ * then the solicitation classifier (heuristics, AI for borderline). A held
+ * submission goes to `lead_review` (no lead, no alert, no text); everything
+ * else becomes a lead via lib/lead-intake.ts. The rest of this note: Resolves the org by slug, finds (or
  * creates) a Customer by phone/email match scoped to that org, attaches
  * an Address, and creates a Job with status="lead". Returns minimal
  * status — the caller doesn't need any of the IDs back.
@@ -52,6 +51,12 @@ interface Body {
   /** A customer's referral code (the ?ref=… on their share link). Only
    *  counts while the business has referrals on (lib/referrals-server.ts). */
   referral_code?: string;
+  /** Hidden honeypot field: a person leaves it empty. */
+  hp?: string;
+  /** When the form appeared (ms since epoch) — the time-to-submit check. */
+  started_at?: number;
+  /** Cloudflare Turnstile token (only checked when TURNSTILE_SECRET_KEY is set). */
+  turnstile_token?: string;
 }
 
 // Every field is cut to a sane length — this endpoint is public, and what it
@@ -91,6 +96,11 @@ export async function POST(req: NextRequest) {
   return res;
 }
 
+
+/** What a held or dropped submission is told: the same as a real one, so a
+ *  bot or a vendor learns nothing from the answer. */
+const looksSent = (business?: string) => NextResponse.json({ ok: true, ...(business ? { business } : {}) });
+
 async function handlePost(req: NextRequest): Promise<NextResponse> {
   try {
     const body = (await req.json()) as Body;
@@ -107,11 +117,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     const photos = (Array.isArray(body.photos) ? body.photos : [])
       .filter((p): p is string => typeof p === "string" && p.length <= 600 && !/["'<>\s]/.test(p) && isSupabaseStorageUrl(p))
       .slice(0, 12);
-    // referrer_tech_id is a UUID of a profile row. We don't validate it
-    // against the profiles table here — invalid values will simply not
-    // match anything when Quests/leaderboards filter by it. Trust-but-
-    // verify is fine because this is non-financial attribution data.
-    // (Anything that isn't a UUID is dropped: it would fail the insert.)
+    // referrer_tech_id: attribution only; anything that isn't a UUID is dropped.
     const rawTech = trim(body.referrer_tech_id, 64);
     const referrerTechId = UUID_RE.test(rawTech) ? rawTech : "";
 
@@ -122,11 +128,28 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Need a phone or email so we can reach you" }, { status: 400 });
     }
 
-    // Rate limit, layer 1: a burst from one address on this server instance.
+    // Spam layer 1: honeypot + time-to-submit (lib/lead-spam.ts). Dropped
+    // silently — nothing stored, nobody alerted, the bot is told "ok".
+    const bot = botCheck({ hp: body.hp, startedAt: body.started_at });
+    if (bot.bot) {
+      console.warn(`[leads] dropped (${bot.why}) for ${slug}`);
+      return looksSent();
+    }
+
+    // Rate limit, layer 1: a burst from one address / one email on this instance.
     const ip = clientIp(req);
     const fromTag = addressTag(ip);
+    const mailTag = emailTag(email);
     if (fromTag && !memoryLimit(`lead:${fromTag}`, 6, 60_000)) {
       return NextResponse.json({ error: formLimitMessage("burst") }, { status: 429 });
+    }
+    if (mailTag && !memoryLimit(`leadmail:${mailTag}`, 3, 600_000)) {
+      return NextResponse.json({ error: formLimitMessage("address") }, { status: 429 });
+    }
+
+    // Optional Cloudflare Turnstile (only when TURNSTILE_SECRET_KEY is set).
+    if (turnstileOn() && !(await verifyTurnstile(body.turnstile_token, ip))) {
+      return NextResponse.json({ error: "Please complete the \"I'm not a robot\" check and send again." }, { status: 400 });
     }
 
     const supabase = createClient(
@@ -146,189 +169,67 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     if (org.site_published === false) {
       return NextResponse.json({ error: "This business isn't accepting leads online" }, { status: 403 });
     }
-    const orgId = org.id;
+    const orgId = org.id as string;
 
-    // Rate limit, layer 2 (shared by every server instance): how many leads
-    // this address — and everyone together — already sent this business.
-    // Checked BEFORE any row is written (lib/rate-limit.ts).
+    // Rate limit, layer 2 (shared by every instance), checked BEFORE any row
+    // is written: leads already saved from this address (lib/rate-limit.ts),
+    // plus this email's leads and everything held for review from either.
+    const g = await guardCounts(supabase, { orgId, fromTag, mailTag });
     const limit = await publicFormLimit(supabase, { orgId, tag: fromTag });
-    if (!limit.ok) {
-      console.warn(`[leads] rate limited (${limit.why}) org ${orgId}`);
-      return NextResponse.json({ error: formLimitMessage(limit.why) }, { status: 429 });
+    if (!limit.ok || g.heldFromHour >= LEAD_LIMITS.perAddressHour || g.heldFromDay >= LEAD_LIMITS.perAddressDay) {
+      const why = limit.ok ? "address" : limit.why;
+      console.warn(`[leads] rate limited (${why}) org ${orgId}`);
+      return NextResponse.json({ error: formLimitMessage(why) }, { status: 429 });
+    }
+    if (!emailVerdict({ hour: g.mailHour, day: g.mailDay })) {
+      console.warn(`[leads] rate limited (email) org ${orgId}`);
+      return NextResponse.json({ error: formLimitMessage("address") }, { status: 429 });
     }
 
-    // Existing-customer match: phone first (more unique in the trade),
-    // then email. Both case-insensitive on email; phone exact-match.
-    let customerId: string | null = null;
-    if (phone) {
-      const { data } = await supabase
-        .from("customers")
-        .select("id")
-        .eq("org_id", orgId)
-        .eq("phone", phone)
-        .limit(1);
-      if (data?.length) customerId = data[0].id;
-    }
-    if (!customerId && email) {
-      const { data } = await supabase
-        .from("customers")
-        .select("id")
-        .eq("org_id", orgId)
-        .ilike("email", escapeLike(email))
-        .limit(1);
-      if (data?.length) customerId = data[0].id;
+    const input: LeadInput = {
+      name, phone, email, street, city, state, zip, description, photos, referrerTechId,
+      referralCode: trim(body.referral_code, 80),
+      smsConsent: typeof body.sms_consent === "boolean" ? body.sms_consent : undefined,
+      smsConsentText: trim(body.sms_consent_text),
+      ip, fromTag, mailTag,
+    };
+
+    // Spam layer 3: is this a vendor pitch? Heuristics first; the AI only
+    // decides the borderline ones. No AI answer = treated as a real request.
+    const spam = classifyLead({ name, email, street, city, description }, { noTimer: bot.noTimer });
+    let hold = spam.verdict === "spam";
+    let ai: { verdict: "job" | "solicitation"; reason: string } | null = null;
+    if (spam.verdict === "borderline") {
+      ai = await aiSolicitationCheck(orgId, { name, email, street, city, description });
+      hold = ai?.verdict === "solicitation";
     }
 
-    const createdNewCustomer = !customerId;
-    if (!customerId) {
-      const { data, error } = await supabase
-        .from("customers")
-        .insert({
-          org_id: orgId,
-          name,
-          type: "individual",
-          phone: phone || null,
-          email: email || null,
-        })
-        .select("id")
-        .single();
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      customerId = data.id;
-    }
-
-    // Address — always insert a fresh row tied to this lead. Two leads
-    // for the same property under the same customer would create two
-    // address rows; the Backfill flow (or Bernard manually in
-    // CustomerDetail) can dedupe later if needed.
-    const addressLine = [street, city, state, zip].filter(Boolean).join(", ");
-    let addressId: string | null = null;
-    if (street || city) {
-      const { data, error } = await supabase
-        .from("addresses")
-        .insert({
-          org_id: orgId,
-          customer_id: customerId,
-          street: street || null,
-          city: city || null,
-          state: state || null,
-          zip: zip || null,
-        })
-        .select("id")
-        .single();
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      addressId = data.id;
-    }
-
-    // Referral (best-effort, off unless the business turned referrals on):
-    // who shared the link this lead came in on.
-    const referrer = body.referral_code
-      ? await findReferrer(supabase, orgId, body.referral_code)
-      : null;
-
-    // Lead job. Free-text `property` and `client` fields stay populated
-    // so existing print templates and Jobs-list rendering work unchanged.
-    // The structured link lives at customer_id / address_id.
-    const today = ymdInZone(Date.now()); // the business's date, not UTC's
-    const { data: jobRow, error: jobErr } = await supabase.from("jobs").insert({
-      org_id: orgId,
-      property: addressLine || street || "(address pending)",
-      client: name,
-      customer_id: customerId,
-      address_id: addressId,
-      job_date: today,
-      rooms: JSON.stringify({
-        leadDescription: description,
-        leadPhotos: photos,
-        // A one-way tag of the sender's address — what the rate limit counts.
-        leadFrom: fromTag || "unknown",
-        ...(referrer && createdNewCustomer && referrer.id !== customerId ? { leadReferredBy: referrer.name || "a customer" } : {}),
-        // Consent record per CTIA 5.1.2: when, where, the exact wording
-        // shown, and the requester's IP (phone + name are on the lead).
-        ...(typeof body.sms_consent === "boolean"
-          ? applySmsConsent({}, {
-              granted: body.sms_consent,
-              at: new Date().toISOString(),
-              source: "website quote form",
-              text: trim(body.sms_consent_text),
-              ip,
-            })
-          : {}),
-      }),
-      total: 0,
-      total_labor: 0,
-      total_mat: 0,
-      total_hrs: 0,
-      status: "lead",
-      created_by: name,
-      ...(referrerTechId ? { referrer_tech_id: referrerTechId } : {}),
-    }).select("id").single();
-    if (jobErr) return NextResponse.json({ error: jobErr.message }, { status: 500 });
-
-    const referral = referrer
-      ? await recordReferralLead(supabase, {
-          orgId, referrer, leadCustomerId: customerId, createdNewCustomer, leadJobId: jobRow.id,
-        })
-      : null;
-    const referredBy = referral?.credited ? (referral.referrerName || "a customer") : null;
-    // The quote form's text box, onto the customer too (see sms-consent).
-    if (typeof body.sms_consent === "boolean") {
-      await recordCustomerSmsConsent(supabase, customerId, orgId, {
-        granted: body.sms_consent,
-        at: new Date().toISOString(),
-        source: "website quote form",
-        phone: phone || undefined,
-        text: trim(body.sms_consent_text),
-        ip,
-        jobId: jobRow.id,
-      }, "form");
-    }
-
-    // Notify the team a new lead landed. Owners/managers triage leads; the
-    // referring tech (if the lead came in via their share link) gets it too
-    // for attribution. Best-effort — never fail the lead capture if this
-    // throws (the lead is the thing that matters).
-    try {
-      const recipients = await resolveRecipients(supabase, orgId, {
-        managers: true,
-        ids: referrerTechId ? [referrerTechId] : [],
-        event: "leads",
+    if (hold) {
+      const { error: heldErr } = await supabase.from("lead_review").insert({
+        org_id: orgId, status: "flagged",
+        name, phone: phone || null, email: email || null, street: street || null, city: city || null,
+        state: state || null, zip: zip || null, description,
+        payload: heldPayload(input), from_tag: fromTag || null, email_tag: mailTag || null,
+        score: spam.score, reasons: spam.reasons, ai_verdict: ai ? `${ai.verdict}: ${ai.reason}` : null,
       });
-      if (recipients.length) {
-        // Trusted origin — NOT the request Host/Origin header. /api/leads is
-        // public + unauthenticated, so a spoofed Host must not be able to plant
-        // an attacker URL into a lead-notification SMS sent to the crew.
-        const origin = siteOrigin();
-        const summary = description.length > 90 ? `${description.slice(0, 90)}…` : description;
-        await dispatchNotifications(supabase, {
-          orgId,
-          type: "new_lead",
-          title: "New lead",
-          body: (addressLine ? `${name} · ${addressLine}` : name) + (referredBy ? ` · referred by ${referredBy}` : ""),
-          jobId: jobRow.id,
-          smsBody: `New lead: ${name}${phone ? ` (${phone})` : ""} — ${summary}.${origin ? ` ${origin}` : ""}`,
-          recipients,
-        });
+      if (!heldErr) {
+        console.log(`[leads] held for review (score ${spam.score}${ai ? `, AI ${ai.verdict}` : ""}) org ${orgId}`);
+        return looksSent(org.name);
       }
-    } catch (notifyErr) {
-      // eslint-disable-next-line no-console
-      console.error("leads notify failed (lead still saved):", notifyErr);
+      // The review table isn't there yet (migration not run): keep the
+      // request as a QUIET lead — tagged, no alert, no text, no AI draft —
+      // rather than lose a possible customer.
+      console.warn(`[leads] could not hold for review (${heldErr.message}); saving a quiet lead`);
+      const quiet = await createLead(supabase, orgId, input, {
+        notify: false, draft: false,
+        extraBlob: { leadFlagged: { score: spam.score, reasons: spam.reasons, ai: ai ? `${ai.verdict}: ${ai.reason}` : null } },
+      });
+      if (!quiet.ok) return NextResponse.json({ error: quiet.error }, { status: 500 });
+      return looksSent(org.name);
     }
 
-    // Draft a quote from the customer's words + photos while the owner is
-    // still reading the "New lead" alert — after the response, so the form
-    // never waits on the AI. Best-effort (lib/lead-draft.ts).
-    after(async () => {
-      try {
-        const r = await draftLeadQuote(supabase, {
-          orgId, jobId: jobRow.id, description, photos,
-          property: addressLine || street || "", client: name,
-        });
-        if (!r.ok) console.log(`[leads] no AI draft for ${jobRow.id}: ${r.reason}`);
-      } catch (e) {
-        console.error("[leads] AI draft failed (lead still saved):", e);
-      }
-    });
-
+    const made = await createLead(supabase, orgId, input, { notify: true, draft: true });
+    if (!made.ok) return NextResponse.json({ error: made.error }, { status: 500 });
     return NextResponse.json({ ok: true, business: org.name });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

@@ -89,6 +89,8 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "customers.sms_consent", table: "customers", column: "sms_consent" },
   // Three-tier default switch (supabase/migrations/20261114_tiered_quotes_default.sql).
   { key: "organizations.tiered_quotes_default", table: "organizations", column: "tiered_quotes_default" },
+  // Flat-price quotes default (supabase/migrations/20261119_flat_pricing.sql).
+  { key: "organizations.flat_pricing", table: "organizations", column: "flat_pricing" },
   // Per-customer material specs (supabase/migrations/20261117_customer_material_specs.sql).
   { key: "material_specs", table: "material_specs", column: "id" },
   { key: "material_spec_items", table: "material_spec_items", column: "companions" },
@@ -98,6 +100,21 @@ const DB_CHECKS: { key: string; table: string; column: string }[] = [
   { key: "material_prices", table: "material_prices", column: "product_key" },
   { key: "material_price_history", table: "material_price_history", column: "line_hash" },
   { key: "material_spec_items.price_updated_at", table: "material_spec_items", column: "price_updated_at" },
+  // Agent API keys + activity + work-order source (supabase/migrations/20261120_agent_api_keys.sql).
+  { key: "api_keys", table: "api_keys", column: "key_hash" },
+  { key: "api_activity", table: "api_activity", column: "tool" },
+  { key: "jobs.external_id", table: "jobs", column: "external_id" },
+  // "Sign in with Creed" for MCP (supabase/migrations/20261121_mcp_oauth.sql).
+  { key: "api_keys.kind", table: "api_keys", column: "kind" },
+  { key: "oauth_clients", table: "oauth_clients", column: "client_id" },
+  { key: "oauth_codes", table: "oauth_codes", column: "code_hash" },
+  // Two-way Google Calendar sync (supabase/migrations/20261122_google_calendar_sync.sql).
+  { key: "google_calendar_links", table: "google_calendar_links", column: "sync_token" },
+  { key: "google_calendar_events", table: "google_calendar_events", column: "event_id" },
+  { key: "schedule.updated_at", table: "schedule", column: "updated_at" },
+  // Quote-form spam held for review (supabase/migrations/20261123_lead_review.sql).
+  { key: "lead_review", table: "lead_review", column: "reasons" },
+  { key: "oauth_tokens", table: "oauth_tokens", column: "token_hash" },
 ];
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {

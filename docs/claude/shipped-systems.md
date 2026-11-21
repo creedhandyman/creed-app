@@ -2,6 +2,211 @@
 
 Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, where the code lives, and the rules to keep.
 
+- **Quote-form spam protection (2026-11-23)**. Every public quote request
+  (`/api/leads`: creedhm.com `/lead/[slug]` and the creedhandyman.com
+  QuoteForm) runs, in order: (1) `lib/lead-spam.ts botCheck` — hidden
+  honeypot (`hp`) filled, or sent < 3 s after the form appeared
+  (`started_at`) → dropped silently, the bot is told "ok"; a missing timer is
+  only a +1 signal (old cached forms / scripts). (2) Rate limits: the old
+  per-address burst + `publicFormLimit`, plus per-email (3 / 10 min in memory;
+  `EMAIL_LIMITS` 3/h, 6/day counted from `rooms.leadMail` hashes + held rows)
+  and held rows per address (`lib/lead-guard.ts guardCounts`). (3) Optional
+  Cloudflare Turnstile: ON only when `TURNSTILE_SECRET_KEY` is set (app form
+  reads `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, website reads `LEADS.turnstileSiteKey`
+  in site.ts — set all together). (4) `classifyLead` heuristics: links, pitch
+  phrases ("we offer", SEO, Google ranking, marketing / web design / leads /
+  backlinks / partnership / financing, cold-email openers, unsubscribe lines,
+  monthly pricing), company-ish name or marketing email domain, no address;
+  repair words count down (max −3). Score ≥ 5 = held, 2–4 = the AI decides
+  (`aiSolicitationCheck`, call_type `lead_spam`; no answer = a lead), < 2 =
+  lead. Held → `lead_review` row: no lead, no alert, no text, no AI draft, the
+  sender sees the normal "got it". Owner view: Jobs list banner "N website
+  requests held as possible spam" (`components/HeldLeads.tsx`, owners /
+  managers) → sheet with reasons; "Make it a lead" (`/api/leads/review`
+  restore: claims the row, then `lib/lead-intake.ts createLead` — the SAME
+  path a fresh submission takes — with no alert, AI draft on) or "Spam"
+  (dismissed, kept). Lead creation moved out of the route into
+  `lib/lead-intake.ts` (unchanged behavior). Tests: `lead-spam.test.ts`.
+  Not covered: the online booking form (`/api/public/booking`) and portal
+  work orders.
+
+- **Google Calendar two-way sync (2026-11-22)**. Ops → Settings → Google
+  Calendar (`components/GoogleCalendarSync.tsx`; red "Reconnect" badge on the
+  list row via `SettingsCategory.badgeTone`). Needs SQL
+  `20261122_google_calendar_sync.sql` + env `GOOGLE_CLIENT_ID` /
+  `GOOGLE_CLIENT_SECRET` (+ optional `GOOGLE_TOKEN_KEY`, else derived from
+  `PORTAL_SESSION_SECRET`); redirect URI `https://www.creedhm.com/api/gcal/callback`.
+  - **Scope** `calendar.app.created` (+ openid email): Creed makes its own
+    "Creed jobs" calendar and only touches that. One connection per business
+    (owner/manager connects; state HMAC-signed + nonce cookie).
+  - **Rules** (`lib/gcal/core.ts`, pure): one event per schedule row, id =
+    `eventIdFor(org, row)` (deterministic → a retried insert 409s and is
+    patched, never duplicated). Timed single-day visit = timed event in the
+    org's `booking_tz`; untimed or multi-day = all-day span (a timed multi-day
+    visit puts the time in the title and keeps it when the span is moved).
+    Only date / time / end day come back from Google (`applyVisit` keeps crew
+    + free note); title/description edits in Google are not read. Pending
+    online-booking requests and archived jobs are not on Google.
+  - **Loop guard + conflicts**: `google_calendar_events` keeps the etag of our
+    last write/read (same etag back = our own echo) and the hash of what Creed
+    last rendered (same hash = nothing to push). Both changed → `decidePull`:
+    later of Google's `updated` vs `schedule.updated_at` wins. Deleted in
+    Google → visit deleted + job status back via `statusAfterUnschedule`
+    (unless Creed edited it later, then the event is restored).
+  - **Engine** (`lib/gcal/engine.ts`, injected Store/Api, tested with fakes in
+    `gcal-sync.test.ts`): pull with the sync token (410 → full resync; token
+    saved only after the pass handled it), then push today−30..+183, then
+    remove events whose visit is gone / excluded. Calendar deleted in Google →
+    a new one, maps cleared.
+  - **Triggers**: app writes (`supabase.ts` fires `creed:db-write` →
+    `lib/gcal-kick.ts`, 2.5 s debounce → `/api/gcal/kick`); Google push
+    channel → `/api/gcal/webhook` (channel id + hashed token checked; renewed
+    weekly by `ensureWatch`); cron `/api/gcal/cron` every 10 min (fallback +
+    server-side writes); Settings "Sync now". One pass per org at a time
+    (`sync_lock_until`); `syncSoon` retries a busy kick.
+  - **Revoked / expired**: Google `invalid_grant` / 401 → `AuthError` → status
+    `needs_reconnect`, ONE bell alert to owners/managers (type job_scheduled),
+    red banner + Reconnect in Settings. Reconnecting with the same Google
+    account keeps the calendar and links; another account starts fresh.
+  - **.ics feed fix (same day)**: the subscribe feed wrote floating local
+    times, which Google subscriptions read as UTC (jobs 5–6 h early); it now
+    writes UTC instants from the org's zone (`lib/tz.ts`) + X-WR-TIMEZONE.
+    Subscriptions still only refresh every few hours (Google's side).
+
+- **Sign in with Creed — MCP OAuth 2.1 (2026-11-21)**. Lets claude.ai (and
+  Claude Duet / any MCP client) add `https://www.creedhm.com/api/mcp` as a
+  custom connector without pasting a key.
+  - **Discovery**: `/api/mcp` 401s with `WWW-Authenticate: Bearer
+    resource_metadata=".../.well-known/oauth-protected-resource/api/mcp"`
+    (`error="invalid_token"` when a token was sent, so the client refreshes).
+    `/.well-known/oauth-protected-resource[/…]` (RFC 9728),
+    `/.well-known/oauth-authorization-server[/…]` (RFC 8414) and
+    `/.well-known/openid-configuration` (same JSON). URLs follow the Host
+    asked (www or apex) but only for our own hosts (`oauth/core.ts
+    trustedOrigin`); everything else gets `siteOrigin()`.
+  - **Flow** (`lib/oauth/core.ts` pure rules, `lib/oauth/server.ts` DB):
+    `POST /api/oauth/register` (RFC 7591, open, 10/h per address; public
+    clients by default, `client_secret_post|basic` allowed; redirect URIs https
+    or http://localhost, no fragments) → browser to `/oauth/authorize`
+    (`app/oauth/authorize/Consent.tsx`; signs in with a non-persisting
+    Supabase client if this browser has no session; X-Frame-Options DENY) →
+    `POST /api/oauth/authorize` (check / approve / deny; approve needs an
+    owner/manager JWT of the chosen org; scopes ⊆ what the app asked, or any
+    when it asked none; PKCE S256 required; `resource` must be our MCP URL) →
+    redirect with `code`, `state`, `iss` (RFC 9207). A bad client or redirect
+    URI never redirects. `POST /api/oauth/token`: authorization_code (single
+    use; a replayed code revokes the connection it made; client, redirect,
+    PKCE, expiry, resource checked) and refresh_token (rotated: the presented
+    token is spent). `POST /api/oauth/revoke` (RFC 7009; a refresh token ends
+    the connection). Tokens: `creed_at_` 1 h, `creed_rt_` 60 d; codes 10 min;
+    all stored as SHA-256 only.
+  - **Same as a key**: the exchange creates an `api_keys` row `kind='oauth'`
+    (name = client name, the approved org + scopes, `created_by` = approver)
+    and logs `oauth.connect`. `agent/server.ts authenticateKey` takes
+    `creed_sk_` keys OR `creed_at_` tokens and ends at that row, so scopes,
+    rate limits and `api_activity` are unchanged. The AI assistant connection
+    page shows it as "Connected app" (Revoke only; Replace is refused — reconnect
+    from the app). Revoking the row kills every token at once.
+  - **Not done**: only one business per login is offered (profiles have one
+    org); no refresh-token reuse detection beyond "spent = refused". SQL
+    `20261121_mcp_oauth.sql`. Tests `mcp-oauth.test.ts`.
+
+- **Agent API (2026-11-20)**. Lets an AI assistant work for ONE business.
+  - **Read tools + update_job (2026-11-22)**, `lib/agent/tools-read.ts` (pure
+    rules in `lib/agent/read.ts`, tested in `agent-read.test.ts`):
+    business_summary (start here), list_schedule, list_jobs, get_job,
+    list_customers, get_customer, list_quotes, get_quote, list_invoices,
+    update_job. New scopes `jobs:read`, `jobs:write`, `billing:read` — an
+    existing key / claude.ai connection must be reconnected or replaced to get
+    them (list_schedule + list_customers / get_customer work on the old
+    schedule:read / customers:read). Money amounts (balances, unpaid totals,
+    quote values in the summary) only with billing:read. update_job: status to
+    accepted / scheduled / active / complete only (never quoted — starts quote
+    follow-ups; invoiced — starts invoice reminders; paid — that's a payment),
+    never on invoiced / paid / archived jobs, guarded on the old status; notes
+    are APPENDED to `rooms.jobNotes` with a stamp (blob re-read right before the
+    write). Completing via the API does NOT run the app's completion learning /
+    equipment stamp. get_open_slots now lists every day with a `why` (closed /
+    minimum notice / all-day or untimed visit / fully booked) + the settings it
+    used + a one-line `summary`; accepts from / to. Note: a visit with NO start
+    time blocks its whole day for booking (the usual cause of "no slots").
+  - **Keys**: Ops → Settings → AI assistant connection
+    (`components/AgentConnectionSettings.tsx`, server `/api/agent/keys`,
+    owner/manager via `requireOwner`, org from the profile). Name + scopes
+    (`lib/agent/scopes.ts`: customers:read, work_orders:write, quotes:draft,
+    schedule:read, schedule:write). The key (`creed_sk_` + 40 hex) is shown
+    ONCE; only its SHA-256 is stored (`lib/agent/keys.ts`). **Replace key** =
+    revoke old + new key with the same name/scopes, shown once, logged as
+    `key.replace` (the recovery path for a lost key). Revoke logged too. Max 10
+    active keys.
+  - **Serving**: REST `POST /api/agent/v1/<tool>` (JSON args; `GET
+    /api/agent/v1` lists the key's tools) and MCP `POST /api/mcp`
+    (`lib/agent/mcp.ts`, hand-written JSON-RPC: initialize, ping, tools/list,
+    tools/call; JSON responses, no SSE; tool errors come back as `isError`).
+    Both auth with `Authorization: Bearer creed_sk_…` (or `x-api-key`) and go
+    through `runTool`: scope check → 30/min per instance (`memoryLimit`) →
+    600/h per key (count of `api_activity`) → handler → one `api_activity` row
+    (also for refusals). The business ALWAYS comes from the key's org_id.
+  - **Tools** (`lib/agent/server.ts`, pure rules in `lib/agent/plan.ts` and
+    `customer-match.ts`):
+    - `find_customer` — the ONE matcher: phone = last 10 digits, email =
+      lower/trim, name = folded (name only when nothing else matched, and a
+      name alone never links a new work order).
+    - `add_work_order` — creates a LEAD (never scheduled): source
+      appfolio|angi|buildium|email + external_id on `jobs.source` /
+      `jobs.external_id` (and `leadSource` / `leadExternalId` on the blob);
+      same source + id again returns the existing lead (unique index catches
+      races); https photo links (≤12, no internal hosts) → `leadPhotos`; links
+      the customer by phone/email or adds one; alerts managers (in-app, like a
+      website lead).
+    - `draft_quote` — leads only, never one with a saved quote. Runs
+      `draftLeadQuote` (same AI engine as website leads, request labelled with
+      the source) and waits; an existing `leadDraft` is returned without a
+      second AI run. Cap: 25 AI drafts/business/day (activity rows "AI draft…"
+      + draftLeadQuote's own lead count). Returns total, hours, est days,
+      Good/Better/Best options (`lead-draft.ts draftSummary`, follows
+      `tiered_quotes_default`), ≤15 lines (no per-line hours when flat
+      pricing), `quote_link` = `/?job=<id>` (AppShell opens that job on the
+      Jobs tab) and `pdf_link` = `/api/agent/draft-pdf?…` — the real quote PDF
+      HTML (`quote-pdf.ts jobQuotePdfHtml`, now server-safe via
+      `export-pdf.ts buildQuotePdfHtml`) marked DRAFT, from a 7-day HMAC link
+      with its own purpose (`lib/agent/draft-link.ts`; never the approval
+      token). Nothing is sent.
+    - `get_open_slots` — booking settings read by org id (booking page need
+      NOT be on) + `loadBusyVisits` + `openSlots`, same as /book.
+    - `schedule_job` — by job_id only; one schedule row per day
+      (`start_date`+`days` or `dates`, ≤14) with note `🕐 HH:MM · 👷 crew ·
+      note` (crew must be real team names); a day the job already has is
+      updated, not duplicated; job → scheduled from lead/quoted/accepted.
+  - **Left out on purpose**: sending to customers, payments, deleting, bulk
+    imports. SQL `20261120_agent_api_keys.sql`. Tests:
+    `agent-api.test.ts`, `agent-keys-route.test.ts`.
+
+- **Flat-price quotes (2026-11-19)**. The customer sees one price per line,
+  never hours or an hourly rate; hours × rate still price every line and the
+  totals don't change. Hours stay on the job (work order, scheduling, costing).
+  - **Setting**: org default `organizations.flat_pricing` (Ops → Settings →
+    Pricing & taxes, "Flat prices on quotes"; migration
+    `20261119_flat_pricing.sql`). Per quote: the "Customer sees" switch in
+    QuoteForge (`flatChoice`, null = org default). Every save writes the
+    RESOLVED boolean as `blob.flatPricing` (`buildQuoteSave`), so a sent quote
+    can't change when the org default does. Readers call `quote-blob.ts
+    flatPricingFor(blob, org)` — quote's choice, else org's.
+  - **Where it shows**: quote PDF (`export-pdf.ts` `flatPricing`: summary =
+    Category · Items · Price, breakdown = Work · Price per line, no Man-Hrs
+    column, labor equations, "Labor hours" tier row, rate / man-hour note,
+    hours in the min-charge note or the completion estimate — days only);
+    /status (lists each line with its price from `quoteSections(...).lines`);
+    portal copy (same PDF; `portal/me` reads `flat_pricing` best-effort); the
+    invoice (Jobs `generateInvoice`: Description · Total only). QuoteForge:
+    lines show PRICE with hours / sqft / materials behind "Hours & materials";
+    the totals card shows item count + total.
+  - **Not hidden**: the public quote page's JSON still carries each line's
+    `laborHrs` and the org's rates — the approval fingerprint
+    (`approval.ts scopeFingerprint`) is computed on the hours, so they can't be
+    stripped without breaking signed quotes. Display-only.
+  - Tests: `flat-pricing.test.ts`.
+
 - **Apply client spec: preview + tiers (2026-11-17)**. Fix for Grid 606 carpet
   job eb5985e2, where the Shaw tile spec item's one-word keyword "carpet"
   turned the Complete option's roll-carpet and pad allowances into Shaw tile.

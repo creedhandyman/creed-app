@@ -30,7 +30,7 @@ import PhotoTypePicker, { photoTagTint } from "../PhotoTypePicker";
 import { uploadJobPhoto, type JobPhotoTag } from "@/lib/job-photo-upload";
 import { defaultPhotoTag } from "@/lib/photo-tag";
 import { enqueueWoToggle, flushWoQueue } from "@/lib/wo-queue";
-import { patchBlob, runSerialized, settled, addPhoto } from "@/lib/job-write-client";
+import { patchBlob, settled, addPhoto } from "@/lib/job-write-client";
 import { readLocalClock, clockIn as runClockIn, clockOut as runClockOut, resolveClockInJobId, pickableJobs } from "@/lib/clock";
 import { newRowId } from "@/lib/offline-queue";
 import { unpaidFor } from "@/lib/pay";
@@ -352,9 +352,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     // reconnect; until then loadAll keeps the tick on screen.
     const jobId = activeJob.id;
     enqueueWoToggle(jobId, targetKey, nextDone);
-    // In the job's write queue so the flush's read-merge-write can't interleave
-    // with a guide / photo / notes write.
-    void runSerialized(jobId, () => flushWoQueue(jobId)).catch((err) => console.warn("[WorkVision] work-order sync failed:", err));
+    // The flush runs each read-merge-write in the job's shared write queue, so
+    // it can't interleave with a guide / photo / notes write or another flush.
+    void flushWoQueue(jobId).catch((err) => console.warn("[WorkVision] work-order sync failed:", err));
   };
 
   // Upload work photo. Same fresh-read + queue pattern so a photo upload

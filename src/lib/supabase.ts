@@ -160,6 +160,14 @@ function isOperator(): boolean {
   }
 }
 
+/** Tell listeners (lib/gcal-kick.ts) a write landed. An event, not an import:
+ *  this module can't import the API client without a cycle. */
+function wrote(table: string, fields: Record<string, unknown>): void {
+  try {
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("creed:db-write", { detail: { table, fields } }));
+  } catch { /* */ }
+}
+
 export const db = {
   get: async <T = Record<string, unknown>>(
     table: string,
@@ -209,6 +217,7 @@ export const db = {
       }
       const { data: result, error } = await supabase.from(table).insert(data as never).select();
       if (error) throw error;
+      wrote(table, data);
       // Some RLS configs let inserts succeed but return an empty result from
       // the trailing SELECT (no SELECT policy for the anon role). Return an
       // empty array in that case so callers can decide whether to refetch
@@ -231,6 +240,7 @@ export const db = {
     try {
       const { error } = await supabase.from(table).update(updates).eq("id", id);
       if (error) throw error;
+      wrote(table, updates);
       return true;
     } catch (err) {
       reportDbError(table, "update", err);
@@ -244,6 +254,7 @@ export const db = {
     try {
       const { error } = await supabase.from(table).delete().eq("id", id);
       if (error) throw error;
+      wrote(table, {});
       return true;
     } catch (err) {
       reportDbError(table, "delete", err);

@@ -2,6 +2,60 @@
 
 Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether it has been run in prod.
 
+- Quote-form spam review (2026-11-23, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261123_lead_review.sql` (safe to re-run). Table
+  `lead_review` (org_id, status 'flagged' | 'restored' | 'dismissed', the
+  request's name / phone / email / address / description, payload jsonb with
+  photos + referral + text consent, from_tag / email_tag hashes, score,
+  reasons[], ai_verdict, job_id of a restored lead, reviewed_at / by). RLS ON,
+  no client policies. Until it runs: a submission the spam check would hold is
+  saved as a QUIET lead instead (rooms.leadFlagged, no alert / text / AI draft)
+  and the Jobs review banner stays hidden. In preflight `DB_CHECKS`.
+
+- Two-way Google Calendar sync (2026-11-22, **NOT run** — needs Bernard's yes):
+  `supabase/migrations/20261122_google_calendar_sync.sql` (safe to re-run).
+  Tables `google_calendar_links` (one per org: Google email, refresh/access
+  tokens AES-256-GCM encrypted, calendar_id, sync_token, push channel id /
+  resource id / token SHA-256 / expiry, status 'active' | 'needs_reconnect',
+  last_error, last_synced_at, sync_lock_until) and `google_calendar_events`
+  (org_id + schedule_id PK → event_id UNIQUE per org, etag, creed_hash). RLS
+  ON, no client policies. Adds `schedule.updated_at` (default now()) + a
+  BEFORE UPDATE trigger `schedule_touch_updated_at` (for "latest edit wins").
+  Until it runs: the Settings card says "not set up yet" and nothing syncs;
+  the .ics feed fix doesn't need it. In preflight `DB_CHECKS`.
+
+- Sign in with Creed / MCP OAuth (2026-11-21, **run** 2026-11-21):
+  `supabase/migrations/20261121_mcp_oauth.sql` (safe to re-run; run AFTER
+  20261120). `api_keys.kind` ('key' | 'oauth') + `oauth_client_id`, and
+  `key_hash` / `key_prefix` become nullable (a connected app has no pasted
+  key). Tables `oauth_clients` (dynamic registration; secret hash or NULL for
+  public clients), `oauth_codes` (one-time, 10 min, PKCE challenge, hashed)
+  and `oauth_tokens` (access 1 h / refresh 60 d, hashed, cascade-deleted with
+  their api_keys grant). RLS ON, no client policies. Until it runs:
+  claude.ai can find the server but registration fails, so only pasted API
+  keys work. In preflight `DB_CHECKS`.
+
+- Agent API keys (2026-11-20, **run** 2026-11-20):
+  `supabase/migrations/20261120_agent_api_keys.sql` (safe to re-run). Tables
+  `api_keys` (org_id, name, scopes text[], key_hash UNIQUE — SHA-256 only,
+  key_prefix, created_by, last_used_at, revoked_at, replaced_by) and
+  `api_activity` (one row per agent call / key change: org_id, key_id, tool,
+  via rest|mcp|app, ok, status, summary, job_id). RLS ON with NO client
+  policies — only the server routes (service role) touch them. Also
+  `jobs.source` + `jobs.external_id` with a partial unique index on
+  `(org_id, source, external_id)` so the same outside work order lands on one
+  lead. Until it runs: the AI assistant connection page says "not set up",
+  every agent call 401s. In preflight `DB_CHECKS`.
+
+- Flat-price quotes (2026-11-19, **run** — Bernard added the column 2026-11-19):
+  `supabase/migrations/20261119_flat_pricing.sql` (safe to re-run). Adds
+  `organizations.flat_pricing BOOLEAN NOT NULL DEFAULT false` — the org default
+  for showing customers one price per quote line (no hours / hourly rate).
+  Until it runs the default reads as OFF everywhere (the public quote page and
+  portal read it best-effort), the Pricing & taxes switch can't save, and the
+  per-quote switch in the editor still works (saved on the quote blob). In
+  preflight `DB_CHECKS`.
+
 - Store purchase prices (2026-11-19, **run in prod 2026-11-20**, tables + 7 policies confirmed):
   `supabase/migrations/20261119_store_purchase_prices.sql` (safe to re-run; run
   AFTER 20261117). Tables `material_price_history` (every imported purchase

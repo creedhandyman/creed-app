@@ -94,6 +94,10 @@ interface ExportOptions {
    *  in from the work order) — the approval fingerprint is checked against
    *  these. Absent = `rooms`. */
   scopeRooms?: Room[];
+  /** Flat-price quote (quote-blob.ts flatPricingFor): every line prints as one
+   *  price — no man-hours, labor equations, hourly rates or hour counts
+   *  anywhere. Prices are unchanged (hours × rate + billed materials). */
+  flatPricing?: boolean;
 }
 
 const esc = (s: string) =>
@@ -112,7 +116,22 @@ export function pdfPhotos<T extends { type?: string }>(photos: T[]): T[] {
   return [...before, ...rest].slice(0, MAX_PDF_PHOTOS);
 }
 
+/** Open the customer quote PDF in a new tab (print → Save as PDF). */
 export function exportQuotePdf(opts: ExportOptions) {
+  const html = buildQuotePdfHtml(opts);
+  if (!openPrint(html)) {
+    if (typeof window !== "undefined") {
+      const toast = (
+        window as unknown as { __dbToast?: (m: string, t: "error") => void }
+      ).__dbToast;
+      if (toast) toast("Allow popups to export PDF", "error");
+    }
+  }
+}
+
+/** The quote PDF as one printable HTML page. Pure (no window), so a server
+ *  route can serve it too (the agent API's draft PDF link). */
+export function buildQuotePdfHtml(opts: ExportOptions): string {
   const {
     property,
     client,
@@ -148,6 +167,7 @@ export function exportQuotePdf(opts: ExportOptions) {
   const tripFee = opts.tripFee || 0;
   const jobId = opts.jobId || "";
   const discount = opts.discount && opts.discount.value > 0 ? opts.discount : null;
+  const flat = opts.flatPricing === true;
   const minLaborHours = typeof opts.minLaborHours === "number" && opts.minLaborHours > 0
     ? opts.minLaborHours
     : 0;
@@ -531,6 +551,31 @@ export function exportQuotePdf(opts: ExportOptions) {
     const shownHrs = Math.round(sectionHrs * 10) / 10;
     const clockHrs = String(Math.round((shownHrs / crewSize) * 100) / 100);
 
+    if (flat) {
+      // One row per line: the work and its price (labor + billed materials).
+      const rows = cat.items.map((it) => {
+        const price = lineCost(cat.name, it);
+        return `<tr><td>${esc(it.detail || "")}${tagHtml(tagOf(it))}</td><td class="r" style="white-space:nowrap">$${price.toFixed(2)}</td></tr>`;
+      }).join("");
+      const secTotal = cat.items.reduce((s, it) => s + lineCost(cat.name, it), 0);
+      breakdownHtml += `
+    <div style="margin-bottom:10px">
+      <h3>${esc(cat.name)}</h3>
+      <table>
+        <thead><tr><th>Work</th><th class="r" style="width:100px">Price</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="box" style="background:#f5f7fa;border-radius:6px;padding:6px 12px;font-size:12px;margin-top:4px;color:${accent};font-weight:600">
+        <b>${showTiers && !perOption ? "All lines" : "Section Total"}: $${secTotal.toFixed(2)}</b>
+        ${showTiers && !perOption ? `<div style="margin-top:3px;font-weight:600">${tierCols.map((c, i) => {
+          const o = optCat(i, cat.name.trim().toLowerCase());
+          return `${esc(c.name)}: ${o.count ? `$${o.total.toFixed(2)}` : "not included"}`;
+        }).join(" &nbsp;·&nbsp; ")}</div>` : ""}
+      </div>
+    </div>`;
+      return;
+    }
+
     breakdownHtml += `
     <div style="margin-bottom:10px">
       <h3>${esc(cat.name)}</h3>
@@ -676,7 +721,7 @@ ${showTiers ? (() => {
   </thead>
   <tbody>
     ${catRows.map((r) => `<tr><td>${esc(r.name)}</td>${r.per.map((o, i) => cell(o.count ? `$${o.total.toFixed(2)}` : "—", i)).join("")}</tr>`).join("")}
-    <tr class="dim"><td>Labor hours</td>${cols.map((_, i) => cell(optHrs(i).toFixed(1), i)).join("")}</tr>
+    ${flat ? "" : `<tr class="dim"><td>Labor hours</td>${cols.map((_, i) => cell(optHrs(i).toFixed(1), i)).join("")}</tr>`}
     ${adj.some((a) => Math.abs(a) >= 0.01) ? `<tr class="dim"><td>${adjParts.length ? adjParts.join(", ").replace(/^./, (m) => m.toUpperCase()) : "Adjustments"}</td>${adj.map((a, i) => cell(`${a < 0 ? "-" : ""}$${Math.abs(a).toFixed(2)}`, i)).join("")}</tr>` : ""}
     <tr style="font-weight:700;background:#f0f4f8;border-top:2px solid ${accent};color:${accent}">
       <td>OPTION TOTAL</td>
@@ -685,7 +730,37 @@ ${showTiers ? (() => {
   </tbody>
 </table>
 <div class="dim" style="font-size:11px;margin:-4px 0 14px">Each column is a complete, standalone price.${matNote ? ` Materials ${matNote.startsWith("incl.") ? matNote : `incl. ${matNote}`} in each section.` : ""}${acceptedIdx >= 0 ? " The breakdown below is the approved option's work." : " The breakdown below lists work shared by every option once, then what each option adds."}</div>`;
-})() : `<h2>Estimate Summary</h2>
+})() : flat ? `<h2>Estimate Summary</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Category</th>
+      <th class="r" style="width:70px">Items</th>
+      <th class="r" style="width:110px">Price</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${summaryRows.map((r) => `<tr><td>${esc(r.name)}</td><td class="r">${r.itemCount}</td><td class="r">$${r.total.toFixed(2)}</td></tr>`).join("")}
+    ${minRow ? `<tr style="color:#666;font-style:italic"><td>Minimum service charge</td><td class="r">—</td><td class="r">$${minRow.labor.toFixed(2)}</td></tr>` : ""}
+    <tr style="font-weight:700;background:#f0f4f8;border-top:2px solid ${accent};color:${accent}">
+      <td>SUBTOTAL</td>
+      <td class="r">${summaryRows.reduce((s, r) => s + r.itemCount, 0)}</td>
+      <td class="r">$${subtotal.toFixed(2)}</td>
+    </tr>
+  </tbody>
+</table>
+
+${(tripFee > 0 || taxPct > 0 || discount) ? `
+<table style="width:auto;margin-left:auto;font-size:12px;margin-bottom:14px">
+  ${tripFee > 0 ? `<tr><td class="dim">Trip Fee</td><td class="r" style="padding-left:24px">$${tripFee.toFixed(2)}</td></tr>` : ""}
+  ${discount ? `<tr style="color:#C00000"><td>${esc(discountLabel)}</td><td class="r" style="padding-left:24px">-$${discountAmount.toFixed(2)}</td></tr>` : ""}
+  ${taxPct > 0 && taxMode !== "none" ? `<tr><td class="dim">${esc(taxLabel)}</td><td class="r" style="padding-left:24px">$${taxAmount.toFixed(2)}</td></tr>` : ""}
+  <tr style="font-weight:700;font-size:16px;color:${accent};font-family:Oswald,sans-serif">
+    <td>GRAND TOTAL</td>
+    <td class="r" style="padding-left:24px">$${grandTotal.toFixed(2)}</td>
+  </tr>
+</table>
+` : ""}` : `<h2>Estimate Summary</h2>
 <table>
   <thead>
     <tr>
@@ -735,7 +810,7 @@ ${(() => {
     if (!per.some((p) => p.days)) return "";
     return `<div class="box" style="background:#f5f7fa;border-left:4px solid ${accent};border-radius:6px;padding:8px 12px;margin:0 0 14px;font-size:13px">
   <b style="color:${accent}">Estimated completion</b>
-  <span class="dim"> · ${per.map((p) => `${esc(p.name)}: about ${p.days} working day${p.days > 1 ? "s" : ""} (${p.hrs.toFixed(1)} hrs, crew of ${planningCrew(p.hrs, opts.crewSize)})`).join(" · ")}</span>
+  <span class="dim"> · ${per.map((p) => `${esc(p.name)}: about ${p.days} working day${p.days > 1 ? "s" : ""}${flat ? "" : ` (${p.hrs.toFixed(1)} hrs, crew of ${planningCrew(p.hrs, opts.crewSize)})`}`).join(" · ")}</span>
   <div class="dim" style="font-size:11px;margin-top:2px">Start date set when scheduled. Weather, material availability, inspections and drying times can extend this.</div>
 </div>`;
   }
@@ -744,7 +819,7 @@ ${(() => {
   const crew = planningCrew(totalHrs, opts.crewSize);
   return `<div class="box" style="background:#f5f7fa;border-left:4px solid ${accent};border-radius:6px;padding:8px 12px;margin:0 0 14px;font-size:13px">
   <b style="color:${accent}">Estimated completion: about ${days} working day${days > 1 ? "s" : ""}</b>
-  <span class="dim"> · crew of ${crew} · ${totalHrs.toFixed(1)} labor hours</span>
+  ${flat ? "" : `<span class="dim"> · crew of ${crew} · ${totalHrs.toFixed(1)} labor hours</span>`}
   <div class="dim" style="font-size:11px;margin-top:2px">Start date set when scheduled. Weather, material availability, inspections and drying times can extend this.</div>
 </div>`;
 })()}
@@ -782,7 +857,7 @@ ${renders
 <h2>Notes &amp; Exclusions</h2>
 <div style="font-size:12px;color:#444;line-height:1.8">
   <ul style="padding-left:20px">
-    <li>${(() => {
+    ${flat ? "<li>Each line is a flat price that includes its labor and materials.</li>" : `<li>${(() => {
       // With per-trade rates in play, name each section's rate instead of
       // printing one flat figure that no section line matches.
       const catRates = categories.map((c) => ({ n: c.name, r: roomRate(c.name) }));
@@ -790,9 +865,11 @@ ${renders
       return mixed
         ? `Labor rates by trade: <b>${catRates.map((c) => `${esc(c.n)} $${c.r}/hr`).join(" · ")}</b>. Man-hours = clock hours × crew size (2-man crew tasks billed at 2× clock time).`
         : `Labor rate: <b>$${rate}.00/man-hour</b>. Man-hours = clock hours × crew size (2-man crew tasks billed at 2× clock time).`;
-    })()}</li>
-    ${minRow ? `<li><b>Minimum service charge applied — ${minLaborHours} hr min.</b> Actual labor on this scope is ${rawTotalHrs.toFixed(2)} hr; quotes never bill less than ${minLaborHours} hr to cover trip time and overhead.</li>` : ""}
-    <li>Materials priced at current Home Depot/Lowe's retail. All material quantities and unit prices listed per line item above.</li>
+    })()}</li>`}
+    ${minRow ? (flat
+      ? `<li><b>Minimum service charge applied.</b> Small jobs carry a minimum charge to cover trip time and overhead.</li>`
+      : `<li><b>Minimum service charge applied — ${minLaborHours} hr min.</b> Actual labor on this scope is ${rawTotalHrs.toFixed(2)} hr; quotes never bill less than ${minLaborHours} hr to cover trip time and overhead.</li>`) : ""}
+    ${flat ? "" : `<li>Materials priced at current Home Depot/Lowe's retail. All material quantities and unit prices listed per line item above.</li>`}
     <li>Quote valid <b>${validDays} days</b> from issue date.${depositPct > 0 ? ` <b>${depositPct}% deposit</b> to begin; balance due on completion.` : " Payment due on completion."}</li>
     <li>Any unforeseen conditions (mold, hidden water damage, structural issues) will be documented and quoted as a separate change order before proceeding.</li>
     ${licensedDisclaimer}
@@ -848,7 +925,7 @@ ${unverified ? `<div style="font-size:11px;color:#555;background:#f5f7fa;border:
 `}
 `;
 
-  const html = wrapPrint(
+  return wrapPrint(
     {
       orgName,
       orgPhone,
@@ -865,13 +942,4 @@ ${unverified ? `<div style="font-size:11px;color:#555;background:#f5f7fa;border:
     },
     body,
   );
-
-  if (!openPrint(html)) {
-    if (typeof window !== "undefined") {
-      const toast = (
-        window as unknown as { __dbToast?: (m: string, t: "error") => void }
-      ).__dbToast;
-      if (toast) toast("Allow popups to export PDF", "error");
-    }
-  }
 }

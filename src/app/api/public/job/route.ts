@@ -92,7 +92,13 @@ export async function GET(req: NextRequest) {
             .from("organizations").select("card_on_file_enabled").eq("id", job.org_id).maybeSingle();
           if (!cofErr && cof) card_on_file_enabled = cof.card_on_file_enabled === true;
         }
-        org = { ...rest, privacy_url, sms_terms_url, tips_enabled, card_on_file_enabled };
+        // Flat line prices (org default; the quote's own choice wins on the
+        // page). Best-effort too: before the flat_pricing migration it's off.
+        let flat_pricing = false;
+        const { data: fp, error: fpErr } = await supabase
+          .from("organizations").select("flat_pricing").eq("id", job.org_id).maybeSingle();
+        if (!fpErr && fp) flat_pricing = fp.flat_pricing === true;
+        org = { ...rest, privacy_url, sms_terms_url, tips_enabled, card_on_file_enabled, flat_pricing };
       }
     }
 
