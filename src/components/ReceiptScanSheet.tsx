@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { db } from "@/lib/supabase";
-import { scanReceipt, receiptNote, learnFromReceipt, scanMismatch, type ReceiptItem } from "@/lib/receipt-scan";
+import { scanReceipt, receiptNote, learnFromReceipt, logReceiptItems, scanMismatch, type ReceiptItem } from "@/lib/receipt-scan";
 import { useStore } from "@/lib/store";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { pickReceiptPhoto, pickReceiptPhotos } from "@/lib/image";
@@ -130,6 +130,8 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
       if (!result) return; // db.post toasted why; keep the sheet so they can retry
 
       const learned = await learnFromReceipt({ vendor, items }, job);
+      // Every line item → the material log (price paid, store item number).
+      await logReceiptItems({ vendor, items, date: rdate }, job.id);
 
       await useStore.getState().loadAll();
       useStore.getState().showToast(

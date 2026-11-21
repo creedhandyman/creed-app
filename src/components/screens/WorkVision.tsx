@@ -5,7 +5,7 @@ import { useStore, clockDeps } from "@/lib/store";
 import { db } from "@/lib/supabase";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
-import { makeGuide, extractZip, classify } from "@/lib/parser";
+import { makeGuide, classify } from "@/lib/parser";
 import { formatHours, parseEntryDate } from "@/lib/dates";
 import { transitionJob, shouldPromptReview } from "@/lib/job-transition";
 import { balanceOf, invoiceText, smsHref } from "@/lib/job-send";
@@ -17,6 +17,7 @@ import { Icon } from "../Icon";
 import TopBar from "@/components/TopBar";
 import GuideShopTools from "../GuideShopTools";
 import ReceiptScanSheet from "../ReceiptScanSheet";
+import { learnFromReceipt, logReceiptItems, type ReceiptItem } from "@/lib/receipt-scan";
 import MileageQuickTrack from "../MileageQuickTrack";
 import { startDrive, directionsUrl } from "@/lib/drive-tracker";
 import RenderModal from "../RenderModal";
@@ -481,7 +482,7 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     if (!data || !Array.isArray(data.items) || data.items.length === 0) return;
 
     const vendor = (data.vendor as string | undefined)?.trim() || "";
-    const items = data.items as { name?: string; qty?: number; price?: number }[];
+    const items = data.items as ReceiptItem[];
 
     const itemSummary = items
       .filter((it) => it?.name)
@@ -500,27 +501,14 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     if (amountFromItems > 0) patch.amount = parseFloat(amountFromItems.toFixed(2));
     await db.patch("receipts", receiptId, patch);
 
+    // Materials only, per-unit (lib/receipt-scan.ts), then every line item
+    // to the material log with the price paid + the store's item number.
     const job = jobs.find((j) => j.id === jobId);
-    const trade = job?.trade || "General";
-    const zip = extractZip(job?.property || "");
-    const logs = items
-      .filter((it) => it?.name && typeof it.price === "number" && it.price > 0)
-      .map((it) => ({
-        item_name: it.name!.slice(0, 120),
-        material_name: vendor ? `${vendor}: ${it.name}`.slice(0, 160) : it.name!.slice(0, 160),
-        original_mat_cost: 0,
-        corrected_mat_cost: Number(it.price),
-        original_hours: 0,
-        corrected_hours: 0,
-        trade,
-        zip,
-      }));
-    for (const entry of logs) {
-      await db.post("price_corrections", entry);
-    }
+    const learned = await learnFromReceipt({ vendor, items }, { property: job?.property, trade: job?.trade });
+    await logReceiptItems({ vendor, items, date: typeof data.date === "string" ? data.date : "" }, jobId);
     await loadAll();
     useStore.getState().showToast(
-      `Scanned: ${logs.length} item${logs.length !== 1 ? "s" : ""} logged for AI learning`,
+      `Scanned: ${learned} item${learned !== 1 ? "s" : ""} logged for AI learning`,
       "success",
     );
   };

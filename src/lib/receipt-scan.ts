@@ -9,8 +9,11 @@
 import { apiFetch } from "./api";
 import { db } from "./supabase";
 import { extractZip } from "./parser";
+import { learnableItems, type ScannedItem } from "./receipt-lines";
 
-export type ReceiptItem = { name?: string; qty?: number; price?: number };
+/** name = as printed; product = plain product name; sku = the store's item
+ *  number; price = the LINE total. */
+export type ReceiptItem = ScannedItem;
 export type ReceiptScan = {
   vendor: string;
   items: ReceiptItem[];
@@ -89,27 +92,50 @@ export function receiptNote(scan: Pick<ReceiptScan, "vendor" | "items">): string
   return (scan.vendor ? `${scan.vendor}${summary ? ` — ${summary}${more}` : ""}` : `${summary}${more}`).trim();
 }
 
-/** Write each priced item to price_corrections so the quoting AI learns real
- *  supply costs (ZIP-tagged so same-area pricing wins). Costs are per UNIT —
- *  "10 × 2x4 … $35.00" teaches $3.50, not $35. Returns the count. */
+/** Write each MATERIAL line to price_corrections so the quoting AI learns
+ *  real supply costs (ZIP-tagged so same-area pricing wins). Costs are per
+ *  UNIT — "10 × 2x4 … $35.00" teaches $3.50, not $35. Tools, fees, snacks,
+ *  returns and discount lines are never learned (a drill is not a material
+ *  price). Returns the count. */
 export async function learnFromReceipt(
   scan: Pick<ReceiptScan, "vendor" | "items">,
   job: { property?: string | null; trade?: string | null },
 ): Promise<number> {
   const trade = job.trade || "General";
   const zip = extractZip(job.property || "");
-  const logs = scan.items
-    .filter((it) => it?.name && typeof it.price === "number" && it.price > 0)
-    .map((it) => ({
-      item_name: it.name!.slice(0, 120),
-      material_name: (scan.vendor ? `${scan.vendor}: ${it.name}` : it.name!).slice(0, 160),
-      original_mat_cost: 0,
-      corrected_mat_cost: unitPrice(it),
-      original_hours: 0,
-      corrected_hours: 0,
-      trade,
-      zip,
-    }));
+  const logs = learnableItems(scan).map((l) => ({
+    item_name: l.description.slice(0, 120),
+    material_name: (scan.vendor ? `${scan.vendor}: ${l.description}` : l.description).slice(0, 160),
+    original_mat_cost: 0,
+    corrected_mat_cost: l.unit_price,
+    original_hours: 0,
+    corrected_hours: 0,
+    trade,
+    zip,
+  }));
   for (const entry of logs) await db.post("price_corrections", entry);
   return logs.length;
+}
+
+/** Save the receipt's line items to the material log (purchase history +
+ *  newest store prices) through /api/receipts/log-items. Best-effort: the
+ *  receipt itself is already saved, so this never throws. Returns how many
+ *  lines were logged. */
+export async function logReceiptItems(
+  scan: Pick<ReceiptScan, "vendor" | "items"> & { date?: string },
+  jobId?: string | null,
+): Promise<number> {
+  if (!scan.items.length) return 0;
+  try {
+    const res = await apiFetch("/api/receipts/log-items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vendor: scan.vendor, date: scan.date || "", items: scan.items, jobId: jobId || null }),
+    });
+    if (!res.ok) return 0;
+    const data = await res.json().catch(() => ({}));
+    return typeof data?.saved === "number" ? data.saved : 0;
+  } catch {
+    return 0;
+  }
 }

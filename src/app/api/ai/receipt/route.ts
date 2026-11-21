@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   "total": 0,
   "tax": 0,
   "items": [
-    { "name": "item description", "qty": 1, "price": 0 }
+    { "name": "item as printed", "product": "plain product name", "sku": "store item number", "qty": 1, "price": 0 }
   ]
 }
 
@@ -61,7 +61,9 @@ Rules:
 - price: the LINE total as printed (qty x unit price), not the unit price
 - discounts, coupons, refunds and returned items are line items with a NEGATIVE price
 - REFUND / RETURN receipt (money given BACK to the customer — "REFUND", "RETURN", "CREDIT", "AMOUNT REFUNDED", a negative or parenthesized total): report total and tax as NEGATIVE numbers (e.g. -42.18). A normal purchase total is positive.
-- transcribe item names as printed (abbreviations are fine); if a line is truly unreadable, skip it rather than guessing
+- name: transcribe the item as printed (abbreviations are fine); if a line is truly unreadable, skip it rather than guessing
+- product: the plain product name a person would say, spelled out from the printed abbreviation ("2X4X8 SPF #2" -> "2 in. x 4 in. x 8 ft. SPF #2 stud lumber", "PVC CPLG 1/2" -> "1/2 in. PVC coupling"). Keep the size, material and brand that are printed. Only when you are sure what the item is; otherwise an empty string. Never guess a brand or size that is not printed.
+- sku: the store's item / SKU / UPC number printed on or beside that line, digits exactly as printed; empty string if none. Never invent one.
 - sanity-check yourself: the item prices plus tax should come close to the total — re-read any digits that don't add up
 - Return ONLY the JSON object, no prose, no code fences, no markdown.`;
 

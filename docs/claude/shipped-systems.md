@@ -102,6 +102,25 @@ Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, wh
     lead drafts: service role filtered by org) and adds "Latest store prices"
     above the shop list (rankByRequest, 40% share, ≥2 shared words). Spec
     items already price spec materials.
+  - **Receipt scans feed it (2026-11-20)**. `/api/ai/receipt` now returns, per
+    line, `name` (as printed), `product` (plain name, "" when unsure) and `sku`
+    (store item number). After a receipt saves, all three scan paths
+    (`ReceiptScanSheet`, Work mode's `scanReceiptAndLearn`, the offline replay)
+    call `receipt-scan.ts logReceiptItems` → `POST /api/receipts/log-items`
+    (any org member; service role; org from the caller's profile, never the
+    body). Rules in `lib/receipt-lines.ts` (pure, `receipt-lines.test.ts`):
+    supply stores only (`isSupplyStore`: HD, Lowe's, Menards, Sherwin, Ace,
+    names with supply / lumber / hardware / paint…; gas and lunch receipts log
+    nothing); description = "plain name (AS PRINTED)"; unit price = line total ÷
+    qty; materials AND tools go to `material_price_history` (tools marked
+    department "TOOLS"), only materials to `material_prices` and only when new
+    or newer (`planPriceChanges`); returns, discount lines, fees, snacks
+    skipped. `job_ref` = the job's address. Same receipt scanned twice adds
+    nothing (`line_hash`). Known limit: the same item, qty and price bought
+    twice in one day for one job on two receipts logs once. A separate
+    discount line (Pro Xtra) is not spread over the items.
+    `learnFromReceipt` (price_corrections) now learns materials only, per
+    unit, in all three paths; Work mode used to teach the LINE total and tools.
 
 - **Per-customer material specs (2026-11-17)**. A customer can require exact
   products (brand / model / store). Plan + SQL: `customer-material-specs.md`;

@@ -427,8 +427,11 @@ When you ship a feature or add a migration, add the entry THERE, not here.
 - **Store purchase prices SHIPPED (2026-11-19)** — Home Depot / Lowe's
   purchase exports + receipts → org prices (newest per product, with history)
   + matching customer spec items; see shipped-systems.md. SQL
-  `20261119_store_purchase_prices.sql` NOT run yet. Lowe's Pro's export has
-  no item lines (orders only); Lowe's prices come from receipts for now.
+  `20261119_store_purchase_prices.sql` run in prod 2026-11-20. Scanned
+  receipts (HD / Lowe's / Menards / other supply stores) now log every line
+  item there too (`lib/receipt-lines.ts`, `/api/receipts/log-items`); not yet
+  tried on a real receipt photo. Lowe's Pro's export has no item lines
+  (orders only); Lowe's prices come from receipts.
 
 - **Dejavoo / iPOSPays card payments (PLAN v2 2026-11-16, from the API docs;
   no code yet, waiting on Bernard's OK).** Sandbox only; per-org merchant
@@ -455,6 +458,9 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   common word; (2) tool purchases never learned as material prices — filter
   them when receipts are learned (`lib/receipt-scan.ts learnFromReceipt`) and/or
   when read (`NOT_MATERIAL` in quote-grounding). Add a regression test.
+  DONE 2026-11-20: part (2) at learn time (`learnFromReceipt` uses
+  `receipt-lines.ts learnableItems`: no tools, fees, returns). Part (1), the
+  one-shared-word match, is still open.
 
 - **Walkthrough batch 1 (2026-11-10)**: (1) **Texts tab hidden** — texting isn't
   live yet. `lib/texts-client.ts TEXTS_TAB_VISIBLE = false` hides the side-menu

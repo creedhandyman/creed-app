@@ -18,7 +18,7 @@
 "use client";
 import { supabase } from "./supabase";
 import { uploadReceiptPrivate } from "./receipt-storage";
-import { scanReceipt, receiptNote, learnFromReceipt } from "./receipt-scan";
+import { scanReceipt, receiptNote, learnFromReceipt, logReceiptItems } from "./receipt-scan";
 import { patchBlob, addPhoto } from "./job-write-client";
 
 const DB_NAME = "creed-uploads";
@@ -239,6 +239,7 @@ async function replayReceipt(item: QueuedUpload): Promise<void> {
       property: item.meta.property ? String(item.meta.property) : null,
       trade: item.meta.trade ? String(item.meta.trade) : null,
     });
+    await logReceiptItems(scan, jobId);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("[offline-uploads] receipt saved; scan skipped:", err);
