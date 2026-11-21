@@ -483,6 +483,11 @@ When you ship a feature or add a migration, add the entry THERE, not here.
   revokes and logs like a key; pasted keys still work. See shipped-systems.md
   "Sign in with Creed". SQL `20261121_mcp_oauth.sql` NOT run yet.
 
+- **Receipts keep their item list SHIPPED (2026-11-21)** — tap a saved receipt
+  in Jobs → Receipts to reopen the scanned items; see shipped-systems.md
+  ("Receipts keep their item list"). SQL `20261124_receipt_items.sql` NOT run
+  yet (until then nothing is kept and the sheet shows no list).
+
 - **Store purchase prices SHIPPED (2026-11-19)** — Home Depot / Lowe's
   purchase exports + receipts → org prices (newest per product, with history)
   + matching customer spec items; see shipped-systems.md. SQL

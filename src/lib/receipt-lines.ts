@@ -57,6 +57,38 @@ export function receiptDescription(it: ScannedItem): string {
   return `${plain} (${printed})`.slice(0, 240);
 }
 
+const MAX_STORED_ITEMS = 300;
+
+/**
+ * The item list as it is kept on the receipt row (receipts.items), so the
+ * receipt can be opened again later. Also the way to READ that column: never
+ * throws, [] for anything that isn't a list. Keeps every line that has a name
+ * or a price (returns and discount lines too: this is what the receipt said,
+ * not what a quote may learn from).
+ */
+export function storedItems(raw: unknown): ScannedItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ScannedItem[] = [];
+  for (const r of raw.slice(0, MAX_STORED_ITEMS)) {
+    if (!r || typeof r !== "object") continue;
+    const it = r as Record<string, unknown>;
+    const name = squash(it.name).slice(0, 160);
+    const product = squash(it.product).slice(0, 160);
+    const price = typeof it.price === "number" && Number.isFinite(it.price) ? Math.round(it.price * 100) / 100 : undefined;
+    if (!name && !product && price === undefined) continue;
+    const qty = typeof it.qty === "number" && Number.isFinite(it.qty) && it.qty > 0 ? it.qty : undefined;
+    const sku = cleanSku(it.sku);
+    out.push({
+      ...(name ? { name } : {}),
+      ...(product ? { product } : {}),
+      ...(sku ? { sku } : {}),
+      ...(qty !== undefined ? { qty } : {}),
+      ...(price !== undefined ? { price } : {}),
+    });
+  }
+  return out;
+}
+
 /** Every line of a scanned receipt as a purchase line (classified). */
 export function receiptPurchaseLines(
   scan: { vendor?: string | null; date?: string | null; items?: ScannedItem[] | null },

@@ -49,6 +49,7 @@ const PUSH_ENV = ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "NEXT_PUBLIC_VAPID_PU
 // limit 1 via the service role. Success = table + column exist; a
 // 42P01/42703-style error = the migration hasn't run.
 const DB_CHECKS: { key: string; table: string; column: string }[] = [
+  { key: "receipts.items", table: "receipts", column: "items" },
   // organizations.brand_color intentionally NOT preflighted — it's an optional
   // branding migration; without it the app just defaults to #2E75B6 and nothing
   // breaks, so a missing brand_color should never block beta readiness.

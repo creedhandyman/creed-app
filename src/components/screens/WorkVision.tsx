@@ -2,7 +2,8 @@
 import { apiFetch, getStatusLink } from "@/lib/api";
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useStore, clockDeps } from "@/lib/store";
-import { db } from "@/lib/supabase";
+import { db, supabase } from "@/lib/supabase";
+import { storedItems } from "@/lib/receipt-lines";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { t } from "@/lib/i18n";
 import { makeGuide, classify } from "@/lib/parser";
@@ -500,6 +501,9 @@ export default function WorkVision({ setPage }: { setPage: (p: string) => void }
     const patch: Record<string, unknown> = { note: newNote };
     if (amountFromItems > 0) patch.amount = parseFloat(amountFromItems.toFixed(2));
     await db.patch("receipts", receiptId, patch);
+    // The item list + store, kept so the receipt can be opened again. Its own
+    // write: without 20261124_receipt_items.sql only this one fails.
+    await supabase.from("receipts").update({ items: storedItems(items), vendor: vendor.slice(0, 80) || null } as never).eq("id", receiptId);
 
     // Materials only, per-unit (lib/receipt-scan.ts), then every line item
     // to the material log with the price paid + the store's item number.

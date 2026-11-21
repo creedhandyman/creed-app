@@ -20,6 +20,7 @@ import { supabase } from "./supabase";
 import { uploadReceiptPrivate } from "./receipt-storage";
 import { scanReceipt, receiptNote, learnFromReceipt, logReceiptItems } from "./receipt-scan";
 import { patchBlob, addPhoto } from "./job-write-client";
+import { storedItems } from "./receipt-lines";
 
 const DB_NAME = "creed-uploads";
 const STORE = "uploads";
@@ -234,6 +235,12 @@ async function replayReceipt(item: QueuedUpload): Promise<void> {
     if (Object.keys(patch).length) {
       // amount = 0 → only while nobody has typed a total in the meantime.
       await supabase.from("receipts").update(patch as never).eq("id", receiptId).eq("amount", 0);
+    }
+    // The item list + store, kept so the receipt can be opened again. Its own
+    // write: without 20261124_receipt_items.sql only this one fails.
+    const kept = storedItems(scan.items);
+    if (kept.length) {
+      await supabase.from("receipts").update({ items: kept, vendor: scan.vendor.slice(0, 80) || null } as never).eq("id", receiptId);
     }
     await learnFromReceipt(scan, {
       property: item.meta.property ? String(item.meta.property) : null,

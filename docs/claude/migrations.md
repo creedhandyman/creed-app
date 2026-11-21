@@ -56,6 +56,11 @@ Moved out of CLAUDE.md to keep it short. Newest first. Each entry says whether i
   per-quote switch in the editor still works (saved on the quote blob). In
   preflight `DB_CHECKS`.
 
+- Receipt item list (2026-11-21, **NOT run yet**):
+  `supabase/migrations/20261124_receipt_items.sql` (safe to re-run) adds
+  `receipts.items JSONB` + `receipts.vendor TEXT`. Until it runs, receipts
+  save as before and the saved-receipt sheet shows no item list. In preflight
+  `DB_CHECKS`.
 - Store purchase prices (2026-11-19, **run in prod 2026-11-20**, tables + 7 policies confirmed):
   `supabase/migrations/20261119_store_purchase_prices.sql` (safe to re-run; run
   AFTER 20261117). Tables `material_price_history` (every imported purchase

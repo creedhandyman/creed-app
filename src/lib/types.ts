@@ -500,6 +500,10 @@ export interface Receipt {
   /** Multi-page receipt: object-paths for ALL pages (page 1 === photo_url).
    *  Optional/migration-safe — needs `ALTER TABLE receipts ADD COLUMN pages JSONB`. */
   pages?: string[];
+  /** The item list the scan read (lib/receipt-lines.ts readStoredItems) and
+   *  the store name. Null on receipts saved before 20261124_receipt_items.sql. */
+  items?: unknown;
+  vendor?: string | null;
 }
 
 export interface QuestPayout {

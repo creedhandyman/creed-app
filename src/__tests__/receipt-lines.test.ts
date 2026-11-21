@@ -1,4 +1,5 @@
 import {
+  storedItems,
   cleanSku, isSupplyStore, learnableItems, receiptDescription, receiptLog, receiptPurchaseLines, type ScannedItem,
 } from "@/lib/receipt-lines";
 import { productKey } from "@/lib/purchase-import";
@@ -121,5 +122,21 @@ describe("Lowe's and Menards receipts", () => {
     const men = receiptPurchaseLines({ vendor: "MENARDS WICHITA WEST", date: "", items: [{ name: "JOINT COMPOUND 4.5G", sku: "1311650", qty: 1, price: 16.98 }] });
     expect(men[0]).toMatchObject({ store: "Menards", date: null, unit_price: 16.98 });
     expect(productKey(men[0])).toBe("menards:sku:1311650");
+  });
+});
+
+describe("storedItems (the item list kept on the receipt row)", () => {
+  it("keeps name, plain name, item number, quantity and line price", () => {
+    expect(storedItems([{ name: "STRT CPLG", product: "1/2 in. SharkBite coupling", sku: "SKU: 1001234", qty: 2, price: 18.72, junk: 1 }]))
+      .toEqual([{ name: "STRT CPLG", product: "1/2 in. SharkBite coupling", sku: "1001234", qty: 2, price: 18.72 }]);
+  });
+  it("keeps returns and discount lines (it is what the receipt said)", () => {
+    expect(storedItems([{ name: "PRO XTRA DISCOUNT", price: -4.5 }])).toEqual([{ name: "PRO XTRA DISCOUNT", price: -4.5 }]);
+  });
+  it("drops empty lines and bad values, and never throws on a bad column", () => {
+    expect(storedItems([null, {}, { name: "  " }, { name: "Elbow", qty: -1, price: "5" }])).toEqual([{ name: "Elbow" }]);
+    expect(storedItems(null)).toEqual([]);
+    expect(storedItems("oops")).toEqual([]);
+    expect(storedItems({ a: 1 })).toEqual([]);
   });
 });

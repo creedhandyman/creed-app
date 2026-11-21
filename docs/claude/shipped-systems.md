@@ -324,6 +324,22 @@ Moved out of CLAUDE.md to keep it short. One entry per feature: how it works, wh
     nothing (`line_hash`). Known limit: the same item, qty and price bought
     twice in one day for one job on two receipts logs once. A separate
     discount line (Pro Xtra) is not spread over the items.
+  - **Receipts keep their item list (2026-11-21)**. `receipts.items` (JSONB:
+    `[{name, product, sku, qty, price}]`, price = LINE total) + `receipts.vendor`
+    (`20261124_receipt_items.sql`). Written by all three scan paths as a
+    SEPARATE quiet update after the receipt row saves, so a missing column
+    never blocks a receipt. `receipt-lines.ts storedItems` is the one way to
+    write AND read the column (never throws; keeps returns / discount lines).
+    Jobs → Receipts: tapping a receipt's text opens `ReceiptItemsSheet`
+    (store, date, every item with item number and each-price, total, View
+    photo); tapping the thumbnail still opens the photo. A receipt with no
+    list offers "Read the items from the photo" (re-scans, fills only items +
+    vendor, never note / amount, logs nothing to the material log). The
+    customer portal strips `items`, `vendor`, `pages` (`/api/portal/me`).
+    Same day: the Jobs tab's receipt "Take photo" + the sheet's "Add page" use
+    `CameraModal` (rear lens; the phone's camera app via capture=environment
+    opened the selfie lens on the owner's Samsung); CameraModal asks for a
+    4K-ideal stream when `maxSize > 1600`.
     `learnFromReceipt` (price_corrections) now learns materials only, per
     unit, in all three paths; Work mode used to teach the LINE total and tools.
 

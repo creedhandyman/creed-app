@@ -84,8 +84,9 @@ export async function GET(req: NextRequest) {
       ? (await supabase.from("receipts").select("*").in("job_id", jobIds)).data || []
       : [];
     // The portal only shows a receipt COUNT, never the image. Strip photo_url
-    // so the contractor's private receipt paths aren't exposed to customers.
-    const receipts = receiptsRaw.map((r) => ({ ...r, photo_url: "" }));
+    // so the contractor's private receipt paths aren't exposed to customers,
+    // and the scanned item list + store (what the contractor paid for what).
+    const receipts = receiptsRaw.map((r) => ({ ...r, photo_url: "", pages: undefined, items: undefined, vendor: undefined }));
 
     // Enrich memberships with plan name/price/interval + perks for display.
     const memberships = membershipsRes.data || [];

@@ -24,6 +24,8 @@ import TopBar from "@/components/TopBar";
 import HeldLeads from "@/components/HeldLeads";
 import { pickReceiptPhotos } from "@/lib/image";
 import CameraModal from "../CameraModal";
+import ReceiptItemsSheet from "../ReceiptItemsSheet";
+import { storedItems } from "@/lib/receipt-lines";
 import ReceiptScanSheet from "../ReceiptScanSheet";
 import PropertySearch from "../PropertySearch";
 import ReviewRequestModal from "../ReviewRequestModal";
@@ -417,6 +419,8 @@ export default function Jobs({ setPage, onEditJob, onScheduleJob, initialDetailJ
   const [receiptCam, setReceiptCam] = useState<string | null>(null);
   const [signedReceipts, setSignedReceipts] = useState<Record<string, string>>({});
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
+  // The saved receipt whose item list is open (ReceiptItemsSheet).
+  const [receiptOpen, setReceiptOpen] = useState<string | null>(null);
 
   // Sign private-bucket receipt photos for display (legacy public URLs pass
   // through unchanged). Only signs paths not already cached, so the 15s store
@@ -2086,9 +2090,13 @@ ${invoicePhotosHtml}
                       {src && (
                         <img src={src} alt="" onClick={() => setViewPhoto(src)} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", cursor: "pointer", flexShrink: 0, border: "1px solid var(--color-border-dark)" }} />
                       )}
-                      <span style={{ minWidth: 0 }}>
+                      {/* Tap the receipt (not its photo) to open the item list. */}
+                      <span role="button" tabIndex={0} onClick={() => setReceiptOpen(r.id)} style={{ minWidth: 0, cursor: "pointer" }}>
                         <span style={{ fontSize: 14.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.note || t("jobs.receiptSingular")}</span>
-                        <span className="dim" style={{ fontSize: 12 }}>{r.receipt_date}{r.pages && r.pages.length > 1 ? ` · ${r.pages.length} pages` : ""}</span>
+                        <span className="dim" style={{ fontSize: 12 }}>
+                          {r.receipt_date}{r.pages && r.pages.length > 1 ? ` · ${r.pages.length} pages` : ""}
+                          {(() => { const n = storedItems(r.items).length; return n ? ` · ${n} ${n === 1 ? t("jobs.receiptItemOne") : t("jobs.receiptItemMany")}` : ""; })()}
+                        </span>
                       </span>
                     </span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
@@ -2947,6 +2955,17 @@ ${invoicePhotosHtml}
       {/* Photo viewer overlay — full-screen lightbox with close button.
           touch-action:pinch-zoom lets the browser handle pinch-to-zoom on
           mobile; double-tap on iOS / Android also zooms by default. */}
+      {receiptOpen && (() => {
+        const r = receipts.find((x) => x.id === receiptOpen);
+        const src = r && (isPrivatePath(r.photo_url) ? signedReceipts[r.photo_url] : r.photo_url);
+        return r ? (
+          <ReceiptItemsSheet
+            receipt={r}
+            onViewPhoto={src ? () => setViewPhoto(src) : undefined}
+            onClose={() => setReceiptOpen(null)}
+          />
+        ) : null;
+      })()}
       <CameraModal
         open={!!receiptCam}
         onClose={() => setReceiptCam(null)}

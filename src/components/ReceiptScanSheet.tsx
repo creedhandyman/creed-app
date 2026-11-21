@@ -13,12 +13,13 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
-import { db } from "@/lib/supabase";
+import { db, supabase } from "@/lib/supabase";
 import { scanReceipt, receiptNote, learnFromReceipt, logReceiptItems, scanMismatch, type ReceiptItem } from "@/lib/receipt-scan";
 import { useStore } from "@/lib/store";
 import { uploadReceiptPrivate } from "@/lib/receipt-storage";
 import { pickReceiptPhotos } from "@/lib/image";
 import CameraModal from "./CameraModal";
+import { storedItems } from "@/lib/receipt-lines";
 import { t } from "@/lib/i18n";
 
 type Item = ReceiptItem;
@@ -132,6 +133,16 @@ export default function ReceiptScanSheet({ job, initialFiles, onClose }: {
       let result = await db.post<{ id: string }>("receipts", paths.length > 1 ? { ...base, pages: paths } : base);
       if (!result && paths.length > 1) result = await db.post<{ id: string }>("receipts", base);
       if (!result) return; // db.post toasted why; keep the sheet so they can retry
+
+      // The item list + store stay on the receipt so it can be opened again
+      // (Jobs → Receipts → tap it). Its own quiet write: until
+      // 20261124_receipt_items.sql has run, only this fails and the receipt
+      // is still saved.
+      const kept = storedItems(items);
+      const newId = result[0]?.id;
+      if (newId && (kept.length || vendor.trim())) {
+        await supabase.from("receipts").update({ items: kept, vendor: vendor.trim().slice(0, 80) || null } as never).eq("id", newId);
+      }
 
       const learned = await learnFromReceipt({ vendor, items }, job);
       // Every line item → the material log (price paid, store item number).
