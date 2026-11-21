@@ -485,8 +485,8 @@ When you ship a feature or add a migration, add the entry THERE, not here.
 
 - **Receipts keep their item list SHIPPED (2026-11-21)** — tap a saved receipt
   in Jobs → Receipts to reopen the scanned items; see shipped-systems.md
-  ("Receipts keep their item list"). SQL `20261124_receipt_items.sql` NOT run
-  yet (until then nothing is kept and the sheet shows no list).
+  ("Receipts keep their item list"). SQL `20261124_receipt_items.sql` has been
+  run (2026-11-21). Not yet tried on a real phone.
 
 - **Store purchase prices SHIPPED (2026-11-19)** — Home Depot / Lowe's
   purchase exports + receipts → org prices (newest per product, with history)
